@@ -96,6 +96,19 @@ HORO_BEHAVIOR(Movement, "game.tests.build_movement")
         std::ifstream stream{path, std::ios::binary};
         return {std::istreambuf_iterator<char>{stream}, std::istreambuf_iterator<char>{}};
     }
+
+    class CompilerDiagnosticProcessRunner final : public IExternalProcessRunner {
+    public:
+        Result<ExternalProcessResult> Run(const ExternalProcessRequest &request, const CancellationToken &) override {
+            const std::filesystem::path absoluteSource = request.workingDirectory / "source/gameplay/Movement.cpp";
+            request.onOutput(
+                {ProcessOutputStream::StandardError, "source/gameplay/Movement.cpp:12:7: warning: deprecated gameplay declaration"});
+            request.onOutput({ProcessOutputStream::StandardError, absoluteSource.string() + ":14:3: error: invalid gameplay declaration"});
+            request.onOutput(
+                {ProcessOutputStream::StandardError, "source/gameplay/Movement.cpp:99999999999999999999:1: error: invalid coordinate"});
+            return Result<ExternalProcessResult>::Success({ProcessTerminationReason::Exited, 1});
+        }
+    };
 }  // namespace
 
 TEST_CASE("Gameplay build service consumes exported SDK and preserves last success on failure", "[integration][gameplay][build]") {
@@ -165,6 +178,58 @@ TEST_CASE("Gameplay build service consumes exported SDK and preserves last succe
     REQUIRE(Read(successfulState) == beforeFailure);
     REQUIRE(std::filesystem::is_regular_file(project.root / ".horo/local/gameplay_module.json"));
     REQUIRE_FALSE(service.IsUpToDate(request));
+
+    service.Shutdown();
+    jobs.Shutdown(ShutdownPolicy::Cancel);
+}
+
+TEST_CASE("Gameplay build output classifies bounded GCC and Clang diagnostics", "[unit][gameplay][build]") {
+    TemporaryProject project;
+    project.WriteValid();
+    CompilerDiagnosticProcessRunner processes;
+    JobSystem jobs{{1, 4}};
+    NativeDurableFileSystem files;
+    BuildOutputStore output{16};
+    GameplayBuildService service{processes, jobs, files, &output, nullptr};
+    const GameplayBuildRequest request{
+        .projectRoot = project.root,
+        .environment = {.gameplaySdkPackage = HORO_GAMEPLAY_SDK_PACKAGE_DIR},
+    };
+
+    const auto started = service.Start(request);
+    REQUIRE(started.HasValue());
+    REQUIRE((AwaitTerminal(service, started.Value()).state == GameplayBuildState::Failed));
+    const auto snapshot = output.SnapshotIfChanged(0);
+    REQUIRE(snapshot.has_value());
+
+    const auto findCode = [&](const std::string_view code) {
+        return std::ranges::find_if(snapshot->records, [&](const BuildOutputRecord &record) {
+            return record.code.Value() == code;
+        });
+    };
+    const auto warning = findCode("gameplay.build.compiler_warning");
+    REQUIRE((warning != snapshot->records.end()));
+    REQUIRE((warning->severity == DiagnosticSeverity::Warning));
+    REQUIRE(warning->source.has_value());
+    REQUIRE((std::filesystem::path{warning->source->absolutePath} == (project.root / "source/gameplay/Movement.cpp").lexically_normal()));
+    REQUIRE((warning->source->line == 12U));
+    REQUIRE((warning->source->column == 7U));
+
+    const auto error = findCode("gameplay.build.compiler_error");
+    REQUIRE((error != snapshot->records.end()));
+    REQUIRE((error->severity == DiagnosticSeverity::Error));
+    REQUIRE(error->source.has_value());
+    REQUIRE(std::filesystem::path{error->source->absolutePath}.is_absolute());
+    REQUIRE((error->source->line == 14U));
+    REQUIRE((error->source->column == 3U));
+
+    const auto malformed = std::ranges::find_if(snapshot->records, [](const BuildOutputRecord &record) {
+        return record.message.find("invalid coordinate") != std::string::npos;
+    });
+    REQUIRE((malformed != snapshot->records.end()));
+    REQUIRE_FALSE(malformed->source.has_value());
+    REQUIRE((malformed->severity == DiagnosticSeverity::Note));
+    REQUIRE((malformed->code.Value() == "gameplay.build.output"));
 
     service.Shutdown();
     jobs.Shutdown(ShutdownPolicy::Cancel);

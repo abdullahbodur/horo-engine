@@ -46,12 +46,14 @@ namespace Horo::Editor {
                 case None:
                     break;
             }
+            using enum DiagnosticSeverity;
             switch (record.severity) {
-                case DiagnosticSeverity::Error:
+                case Fatal:
+                case Error:
                     return Theme::Err();
-                case DiagnosticSeverity::Warning:
+                case Warning:
                     return Theme::Warn();
-                case DiagnosticSeverity::Note:
+                case Note:
                     return Theme::Accent();
             }
             return Theme::Text();
@@ -73,12 +75,15 @@ namespace Horo::Editor {
                 case None:
                     break;
             }
+            using enum DiagnosticSeverity;
             switch (record.severity) {
-                case DiagnosticSeverity::Error:
+                case Fatal:
+                    return "FATAL";
+                case Error:
                     return "ERROR";
-                case DiagnosticSeverity::Warning:
+                case Warning:
                     return "WARNING";
-                case DiagnosticSeverity::Note:
+                case Note:
                     return "INFO";
             }
             return "INFO";
@@ -100,12 +105,15 @@ namespace Horo::Editor {
                 case None:
                     break;
             }
+            using enum DiagnosticSeverity;
             switch (record.severity) {
-                case DiagnosticSeverity::Error:
+                case Fatal:
+                    return "workspace.global_dock.build_output.row_status.fatal";
+                case Error:
                     return "workspace.global_dock.build_output.row_status.failed";
-                case DiagnosticSeverity::Warning:
+                case Warning:
                     return "workspace.global_dock.build_output.row_status.warning";
-                case DiagnosticSeverity::Note:
+                case Note:
                     return "workspace.global_dock.build_output.row_status.info";
             }
             return "workspace.global_dock.build_output.row_status.info";
@@ -117,9 +125,10 @@ namespace Horo::Editor {
         }
 
         [[nodiscard]] bool IsFailedRecord(const BuildOutputRecord &record) noexcept {
+            using enum DiagnosticSeverity;
             return record.result == BuildOutputResult::Failed || record.result == BuildOutputResult::Cancelled ||
                    record.result == BuildOutputResult::TimedOut ||
-                   (record.result == BuildOutputResult::None && record.severity == DiagnosticSeverity::Error);
+                   (record.result == BuildOutputResult::None && (record.severity == Error || record.severity == Fatal));
         }
 
         [[nodiscard]] bool ContainsCaseInsensitive(const std::string_view text, const std::string_view needle) {

@@ -107,6 +107,10 @@ namespace {
                               .stage = "Compile",
                               .code = DiagnosticCode{"shader.compile.deprecated"},
                               .message = "Deprecated syntax"},
+            BuildOutputRecord{.severity = DiagnosticSeverity::Fatal,
+                              .stage = "Validate",
+                              .code = DiagnosticCode{"shader.validation.fatal"},
+                              .message = "Compiler process cannot continue"},
         };
         REQUIRE((GlobalDockBuildOutputPane::ProjectRecords(buildRecords, GlobalDockBuildOutputPane::StatusFilter::Failed, "MATERIAL") ==
                  std::vector<std::size_t>{1}));
@@ -116,6 +120,8 @@ namespace {
                      .empty()));
         REQUIRE((GlobalDockBuildOutputPane::ProjectRecords(buildRecords, GlobalDockBuildOutputPane::StatusFilter::All,
                                                            "shader.compile.deprecated") == std::vector<std::size_t>{3}));
+        REQUIRE((GlobalDockBuildOutputPane::ProjectRecords(buildRecords, GlobalDockBuildOutputPane::StatusFilter::Failed, "FATAL") ==
+                 std::vector<std::size_t>{4}));
 
         const std::array operations{
             OperationRecord{.id = 1, .kind = OperationKind::Import, .state = OperationState::Running, .title = "Import assets"},
@@ -410,10 +416,9 @@ TEST_CASE("Content browser renders responsive layouts and every dock tab", "[uni
 
     BuildOutputStore buildOutputStore{8};
     buildOutputStore.Append({.timestampUtc = std::chrono::system_clock::now(),
-                             .severity = DiagnosticSeverity::Error,
-                             .result = BuildOutputResult::Failed,
+                             .severity = DiagnosticSeverity::Fatal,
                              .stage = "compile",
-                             .code = DiagnosticCode{"shader.compile.failed"},
+                             .code = DiagnosticCode{"shader.compile.fatal"},
                              .message = "Unable to compile shader",
                              .source = DiagnosticSourceLocation{.absolutePath = "/tmp/HoroProject/assets/shader.glsl", .line = 12}});
     OperationStore operationStore{8, 8};

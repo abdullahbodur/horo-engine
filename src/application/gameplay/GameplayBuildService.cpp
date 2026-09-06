@@ -8,6 +8,7 @@
 #include "Horo/Platform/ExternalProcess.h"
 
 #include <algorithm>
+#include <charconv>
 #include <exception>
 #include <format>
 #include <fstream>
@@ -398,14 +399,35 @@ namespace Horo::Application {
             state.output->Append(std::move(record));
         }
 
-        void ClassifyCompilerDiagnostic(BuildOutputRecord &record) {
+        [[nodiscard]] std::optional<std::uint32_t> ParseDiagnosticCoordinate(const std::string_view digits) noexcept {
+            std::uint32_t value{};
+            const auto [end, error] = std::from_chars(digits.data(), digits.data() + digits.size(), value);
+            if (error != std::errc{} || end != digits.data() + digits.size())
+                return std::nullopt;
+            return value;
+        }
+
+        void ClassifyCompilerDiagnostic(BuildOutputRecord &record, const std::filesystem::path &projectRoot) {
             static const std::regex diagnostic{R"(^(.+):(\d+):(\d+):\s*(error|warning):\s*(.*)$)"};
             std::smatch match;
             if (!std::regex_match(record.message, match, diagnostic))
                 return;
 
-            record.source = DiagnosticSourceLocation{match[1].str(), static_cast<std::uint32_t>(std::stoul(match[2].str())),
-                                                     static_cast<std::uint32_t>(std::stoul(match[3].str()))};
+            const std::string lineDigits = match[2].str();
+            const std::string columnDigits = match[3].str();
+            const std::optional<std::uint32_t> line = ParseDiagnosticCoordinate(lineDigits);
+            const std::optional<std::uint32_t> column = ParseDiagnosticCoordinate(columnDigits);
+            if (!line.has_value() || !column.has_value())
+                return;
+
+            std::filesystem::path sourcePath{match[1].str()};
+            std::error_code pathError;
+            if (sourcePath.is_relative())
+                sourcePath = std::filesystem::absolute(projectRoot / sourcePath, pathError);
+            if (pathError || !sourcePath.is_absolute())
+                return;
+
+            record.source = DiagnosticSourceLocation{sourcePath.lexically_normal().string(), *line, *column};
             const bool isError = match[4].str() == "error";
             record.severity = isError ? DiagnosticSeverity::Error : DiagnosticSeverity::Warning;
             record.code = DiagnosticCode{isError ? "gameplay.build.compiler_error" : "gameplay.build.compiler_warning"};
@@ -427,7 +449,7 @@ namespace Horo::Application {
                                      .stage = phase,
                                      .code = DiagnosticCode{"gameplay.build.output"},
                                      .message = std::move(message)};
-            ClassifyCompilerDiagnostic(record);
+            ClassifyCompilerDiagnostic(record, session->request.projectRoot);
             const bool diagnosticRecord = record.source.has_value();
             const bool byteBudgetAvailable = budget.bytes + record.message.size() <= MaximumBytes;
             const bool recordBudgetAvailable = budget.records < MaximumRecords;
@@ -964,13 +986,17 @@ namespace Horo::Application {
             DiagnosticCode code{"gameplay.build.succeeded"};
             std::string message{"Gameplay module built successfully."};
             if (result.HasError()) {
-                severity = terminal == GameplayBuildState::Cancelled ? DiagnosticSeverity::Warning : DiagnosticSeverity::Error;
-                outputResult = terminal == GameplayBuildState::Cancelled  ? BuildOutputResult::Cancelled
-                               : terminal == GameplayBuildState::TimedOut ? BuildOutputResult::TimedOut
-                                                                          : BuildOutputResult::Failed;
-                code = DiagnosticCode{terminal == GameplayBuildState::Cancelled  ? "gameplay.build.cancelled"
-                                      : terminal == GameplayBuildState::TimedOut ? "gameplay.build.timed_out"
-                                                                                 : "gameplay.build.failed"};
+                severity = DiagnosticSeverity::Error;
+                outputResult = BuildOutputResult::Failed;
+                code = DiagnosticCode{"gameplay.build.failed"};
+                if (terminal == GameplayBuildState::Cancelled) {
+                    severity = DiagnosticSeverity::Warning;
+                    outputResult = BuildOutputResult::Cancelled;
+                    code = DiagnosticCode{"gameplay.build.cancelled"};
+                } else if (terminal == GameplayBuildState::TimedOut) {
+                    outputResult = BuildOutputResult::TimedOut;
+                    code = DiagnosticCode{"gameplay.build.timed_out"};
+                }
                 message = result.ErrorValue().message;
             }
             PublishRecord(*state, session,

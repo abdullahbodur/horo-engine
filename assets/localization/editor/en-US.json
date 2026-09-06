@@ -1010,6 +1010,7 @@
     },
     "workspace.global_dock.build_output.row_status.info": {"text": "Info"},
     "workspace.global_dock.build_output.row_status.warning": {"text": "Warning"},
+    "workspace.global_dock.build_output.row_status.fatal": {"text": "Fatal"},
     "workspace.global_dock.build_output.row_status.succeeded": {"text": "OK"},
     "workspace.global_dock.build_output.row_status.failed": {"text": "Failed"},
     "workspace.global_dock.build_output.row_status.cached": {"text": "Cached"},

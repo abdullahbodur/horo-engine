@@ -1011,6 +1011,7 @@
     },
     "workspace.global_dock.build_output.row_status.info": {"text": "Bilgi"},
     "workspace.global_dock.build_output.row_status.warning": {"text": "Uyarı"},
+    "workspace.global_dock.build_output.row_status.fatal": {"text": "Kritik"},
     "workspace.global_dock.build_output.row_status.succeeded": {"text": "Tamam"},
     "workspace.global_dock.build_output.row_status.failed": {"text": "Başarısız"},
     "workspace.global_dock.build_output.row_status.cached": {"text": "Önbellekte"},

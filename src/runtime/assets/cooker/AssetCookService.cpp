@@ -311,6 +311,7 @@ namespace Horo::Assets {
                     if (request.buildOutputStore != nullptr) {
                         operation.Publish(BuildOutputRecord{
                             .timestampUtc = std::chrono::system_clock::now(),
+                            .result = BuildOutputResult::Cached,
                             .stage = "cache_check",
                             .code = DiagnosticCode{"asset.cook.cache_hit"},
                             .message = slot.record.sourcePath.String(),
@@ -322,6 +323,16 @@ namespace Horo::Assets {
                 }
             }
             return Result<std::size_t>::Success(cacheHits);
+        }
+
+        /** @brief Allocates the optional build-output identity before admitting an operation row. */
+        [[nodiscard]] Result<std::optional<BuildOutputSessionId>> BeginOutputSession(BuildOutputStore *output) {
+            if (output == nullptr)
+                return Result<std::optional<BuildOutputSessionId>>::Success(std::nullopt);
+            std::optional<BuildOutputSessionId> sessionId = output->BeginSession();
+            if (!sessionId.has_value())
+                return Result<std::optional<BuildOutputSessionId>>::Failure(MakeError(CookErrors::OutputIdentityExhausted));
+            return Result<std::optional<BuildOutputSessionId>>::Success(std::move(sessionId));
         }
     }  // namespace
 
@@ -337,13 +348,9 @@ namespace Horo::Assets {
 
         auto records = request.registry.Records();
 
-        BuildOutputSessionId outputSessionId;
-        if (request.buildOutputStore != nullptr) {
-            const std::optional<BuildOutputSessionId> allocated = request.buildOutputStore->BeginSession();
-            if (!allocated.has_value())
-                return Result<AssetCookReport>::Failure(MakeError(CookErrors::OutputIdentityExhausted));
-            outputSessionId = *allocated;
-        }
+        Result<std::optional<BuildOutputSessionId>> outputSession = BeginOutputSession(request.buildOutputStore);
+        if (outputSession.HasError())
+            return Result<AssetCookReport>::Failure(outputSession.ErrorValue());
         std::optional<OperationId> operationId;
         if (request.operationStore != nullptr) {
             operationId = request.operationStore->Begin(OperationDescriptor{.kind = OperationKind::Cook,
@@ -354,7 +361,8 @@ namespace Horo::Assets {
                                                                             .cancellable = static_cast<bool>(request.requestCancel),
                                                                             .requestCancel = request.requestCancel});
         }
-        CookOperationScope operation{request.operationStore, request.buildOutputStore, cancellation, outputSessionId, operationId};
+        CookOperationScope operation{request.operationStore, request.buildOutputStore, cancellation,
+                                     outputSession.Value().value_or(BuildOutputSessionId{}), operationId};
 
         if (request.buildOutputStore != nullptr) {
             const auto now = std::chrono::system_clock::now();

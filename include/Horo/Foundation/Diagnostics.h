@@ -24,7 +24,8 @@ namespace Horo {
     enum class DiagnosticSeverity : std::uint8_t {
         Note,
         Warning,
-        Error
+        Error,
+        Fatal
     };
 
     /** @brief A source location within a user-visible input. */
@@ -34,7 +35,7 @@ namespace Horo {
         std::uint32_t column = 0;
     };
 
-    /** @brief Structured, non-fatal validation finding. */
+    /** @brief Structured validation finding. */
     struct Diagnostic {
         DiagnosticCode code;
         DiagnosticSeverity severity = DiagnosticSeverity::Error;

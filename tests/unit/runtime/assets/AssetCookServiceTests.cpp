@@ -185,3 +185,52 @@ TEST_CASE("AssetCookService honours cancellation before work", "[native]") {
     auto result = service.Cook(request, cancellation);
     REQUIRE((result.HasError()));
 }
+
+TEST_CASE("AssetCookService publishes cache hits as cached scoped results", "[native]") {
+    TestProject project;
+    TempDir cacheDir;
+    TempDir cookedDir;
+    JobSystem jobs;
+
+    AssetRegistry registry;
+    const auto sourcePath = ProjectPath::Parse("assets/test_mesh.fbx");
+    const auto metadataPath = ProjectPath::Parse("assets/test_mesh.fbx.horo");
+    REQUIRE(sourcePath.HasValue());
+    REQUIRE(metadataPath.HasValue());
+    const AssetRegistryBuildReport registryBuild = registry.Publish({AssetRecord{.id = Id("00000000-0000-0000-0000-0000000000a1"),
+                                                                                 .type = Type("core.mesh"),
+                                                                                 .sourcePath = sourcePath.Value(),
+                                                                                 .metadataPath = metadataPath.Value()}});
+    REQUIRE((registryBuild.status == AssetRegistryBuildStatus::Complete));
+
+    CookerCatalog catalog;
+    REQUIRE((RegisterHeadlessMeshCooker(catalog).HasValue()));
+    const auto catalogSnapshot = catalog.Publish();
+    REQUIRE(catalogSnapshot.HasValue());
+    AssetCookService service(jobs, catalogSnapshot.Value());
+    BuildOutputStore buildOutput{16};
+    AssetCookRequest request{
+        .sourceRoot = project.dir.path,
+        .cacheRoot = cacheDir.path,
+        .cookedRoot = cookedDir.path,
+        .registry = registry.Snapshot(),
+        .target = Target("headless-null"),
+        .buildOutputStore = &buildOutput,
+    };
+    CancellationToken cancellation;
+
+    REQUIRE(service.Cook(request, cancellation).HasValue());
+    const auto firstSnapshot = buildOutput.SnapshotIfChanged(0);
+    REQUIRE(firstSnapshot.has_value());
+    REQUIRE(service.Cook(request, cancellation).HasValue());
+    const auto secondSnapshot = buildOutput.SnapshotIfChanged(firstSnapshot->revision);
+    REQUIRE(secondSnapshot.has_value());
+    const auto cached = std::ranges::find_if(secondSnapshot->records, [](const BuildOutputRecord &record) {
+        return record.code.Value() == "asset.cook.cache_hit";
+    });
+    REQUIRE((cached != secondSnapshot->records.end()));
+    REQUIRE((cached->result == BuildOutputResult::Cached));
+    REQUIRE(cached->sessionId.has_value());
+    REQUIRE((cached->sessionId == secondSnapshot->records.back().sessionId));
+    REQUIRE((secondSnapshot->records.back().result == BuildOutputResult::Succeeded));
+}
