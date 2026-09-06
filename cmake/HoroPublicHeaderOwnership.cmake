@@ -68,6 +68,7 @@ horo_configure_target_header_boundary(HoroRuntime PUBLIC_HEADERS
     Horo/Runtime/Save/SaveErrors.h
     Horo/Runtime/Save/SaveIdentity.h
     Horo/Runtime/Save/SaveParticipantRegistry.h
+    Horo/Runtime/Save/SaveArchiveMetadata.h
 )
 horo_configure_target_header_boundary(HoroRuntimeUi PUBLIC_HEADERS
     Horo/Runtime/Ui/UiErrors.h

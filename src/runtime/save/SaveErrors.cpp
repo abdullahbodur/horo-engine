@@ -51,4 +51,13 @@ namespace Horo::Runtime::SaveErrors {
                                                                      ErrorSeverity::Critical,
                                                                      "The save participant registry generation is exhausted.",
                                                                      "Stop the owning runtime instead of reusing a registry generation."};
+    const ErrorCodeDescriptor ArchiveHeaderInvalid{kDomain, ErrorCode{"save.archive.header_invalid"}, kError,
+                                                   "Save archive header metadata is invalid.",
+                                                   "Use the exact bounded canonical header schema and required fields."};
+    const ErrorCodeDescriptor ArchiveManifestInvalid{kDomain, ErrorCode{"save.archive.manifest_invalid"}, kError,
+                                                     "Save archive manifest metadata is invalid.",
+                                                     "Use unique stable-sorted participant and chunk identities with valid schemas."};
+    const ErrorCodeDescriptor ArchiveMetadataLimitExceeded{kDomain, ErrorCode{"save.archive.metadata_limit_exceeded"}, kError,
+                                                           "Save archive metadata exceeds an admission bound.",
+                                                           "Reduce metadata size or revise the trusted product limits."};
 }  // namespace Horo::Runtime::SaveErrors

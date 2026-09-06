@@ -38,4 +38,10 @@ namespace Horo::Runtime::SaveErrors {
     extern const ErrorCodeDescriptor ParticipantDependencyCycle;
     /** @brief The registry generation cannot advance without reusing a value. */
     extern const ErrorCodeDescriptor ParticipantRegistryGenerationExhausted;
+    /** @brief Save header JSON was malformed, noncanonical, or had an invalid exact shape. */
+    extern const ErrorCodeDescriptor ArchiveHeaderInvalid;
+    /** @brief Save manifest JSON was malformed, noncanonical, duplicated, or out of order. */
+    extern const ErrorCodeDescriptor ArchiveManifestInvalid;
+    /** @brief Save metadata exceeded an explicit byte, string, participant, or chunk bound. */
+    extern const ErrorCodeDescriptor ArchiveMetadataLimitExceeded;
 }  // namespace Horo::Runtime::SaveErrors

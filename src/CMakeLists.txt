@@ -132,11 +132,13 @@ add_library(HoroRuntime STATIC
         runtime/save/SaveErrors.cpp
         runtime/save/SaveIdentity.cpp
         runtime/save/SaveParticipantRegistry.cpp
+        runtime/save/SaveArchiveMetadata.cpp
+        runtime/save/SaveCompatibility.cpp
 )
 add_library(HoroEngine::Runtime ALIAS HoroRuntime)
 target_compile_features(HoroRuntime PUBLIC cxx_std_20)
 target_include_directories(HoroRuntime PUBLIC ${PROJECT_SOURCE_DIR}/include)
-target_link_libraries(HoroRuntime PUBLIC HoroEngine::Foundation)
+target_link_libraries(HoroRuntime PUBLIC HoroEngine::Foundation PRIVATE nlohmann_json::nlohmann_json)
 
 add_library(HoroRuntimeUi STATIC
         runtime/ui/UiErrors.cpp
