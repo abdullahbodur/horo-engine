@@ -1205,6 +1205,22 @@ Horo Engine strictly isolates runtime gameplay AI (`HoroAI` / `HoroEngine::AI`) 
 
 ### AI Runtime Ownership And Scene Generation Safety
 
+`HoroAI` / `HoroEngine::AI` owns the canonical gameplay-AI identity contract.
+`AgentId`, `ControllerTypeId`, `TaskId`, `BlackboardSchemaId`, and
+`BlackboardKeyId` are distinct, persistent non-zero identities with one fixed-width
+network-byte-order encoding. Display names, graph order, and array indices never
+define them. Rename and reorder preserve identity; authoring duplication must issue
+a different identity. Descriptor-set validation is bounded and rejects invalid or
+duplicate values within each strong identity domain before activation, without
+registering state or consulting an ambient service.
+
+`AgentHandle` and `TaskHandle` are process-local runtime identities containing the
+exact `SceneRuntime` incarnation plus slot and non-zero generation. They are never
+serialized. A scene replacement, slot generation mismatch, malformed handle, or
+generation exhaustion rejects access; exhausted slots retire instead of wrapping.
+Stable authored identities and runtime handles therefore remain separate sources of
+truth.
+
 All gameplay AI runtime state is owned strictly by the active `SceneRuntime` generation:
 
 ```cpp
