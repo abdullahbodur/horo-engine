@@ -6,6 +6,7 @@
  */
 
 #include "Horo/Assets/AssetId.h"
+#include "Horo/Foundation/StrongId.h"
 #include "Horo/Gameplay/Component.h"
 #include "Horo/Prefab/PrefabErrors.h"
 
@@ -20,53 +21,16 @@ namespace Horo::Prefab {
     /** @brief Maximum nested placement segments in one persisted object address. */
     inline constexpr std::size_t MaximumPrefabObjectScopeDepth = 16;
 
-    namespace Detail {
-        /** @brief Non-zero persisted 64-bit identity distinguished by its domain tag. */
-        template <typename Tag> class StrongId64 final {
-        public:
-            /** @brief Constructs the invalid zero identity. */
-            StrongId64() = default;
-
-            /**
-             * @brief Validates a persistent identity value.
-             * @param value Persisted non-zero value.
-             * @return Typed identity or PrefabErrors::IdentityInvalid.
-             */
-            [[nodiscard]] static Result<StrongId64> Create(const std::uint64_t value) {
-                if (value == 0)
-                    return Result<StrongId64>::Failure(MakeError(PrefabErrors::IdentityInvalid));
-                return Result<StrongId64>::Success(StrongId64{value});
-            }
-
-            /** @brief Returns the persistent integer. @return Zero for the invalid state, otherwise the stable value. */
-            [[nodiscard]] constexpr std::uint64_t Value() const noexcept {
-                return value_;
-            }
-
-            /** @brief Reports whether the identity is usable. @return True when the value is non-zero. */
-            [[nodiscard]] constexpr bool IsValid() const noexcept {
-                return value_ != 0;
-            }
-
-            [[nodiscard]] constexpr auto operator<=>(const StrongId64 &) const noexcept = default;
-
-        private:
-            explicit constexpr StrongId64(const std::uint64_t value) noexcept : value_(value) {}
-
-            std::uint64_t value_{};
-        };
-    }  // namespace Detail
-
     struct PrefabInstanceIdTag;
     struct PrefabComponentInstanceIdTag;
     struct PrefabPropertyIdTag;
 
     /** @brief Stable identity of one authored prefab occurrence in a containing document. */
-    using PrefabInstanceId = Detail::StrongId64<PrefabInstanceIdTag>;
+    using PrefabInstanceId = Foundation::Detail::NonZeroId64<PrefabInstanceIdTag, PrefabErrors::IdentityInvalid>;
     /** @brief Stable identity of one component occurrence on a prefab-local object. */
-    using PrefabComponentInstanceId = Detail::StrongId64<PrefabComponentInstanceIdTag>;
+    using PrefabComponentInstanceId = Foundation::Detail::NonZeroId64<PrefabComponentInstanceIdTag, PrefabErrors::IdentityInvalid>;
     /** @brief Stable registered identity of one prefab-addressable property. */
-    using PrefabPropertyId = Detail::StrongId64<PrefabPropertyIdTag>;
+    using PrefabPropertyId = Foundation::Detail::NonZeroId64<PrefabPropertyIdTag, PrefabErrors::IdentityInvalid>;
 
     /** @brief Persisted local slot identifying one authored prefab object; zero is the root slot. */
     struct LocalObjectId final {

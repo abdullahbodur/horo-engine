@@ -5,7 +5,7 @@
  * @brief Stable world, cell, layer, source, epoch, and generation identities.
  */
 
-#include "Horo/Foundation/Result.h"
+#include "Horo/Foundation/StrongId.h"
 #include "Horo/WorldStreaming/WorldStreamingErrors.h"
 
 #include <array>
@@ -23,40 +23,6 @@ namespace Horo::WorldStreaming {
         /** @brief Tag that keeps streaming generations distinct from other non-zero counters. */
         struct StreamingGenerationTag;
 
-        /** @brief Strong, non-zero 64-bit identity shared by domain-specific tagged specializations. */
-        template <typename Tag> class StrongId64 final {
-        public:
-            /** @brief Constructs the reserved invalid identity. */
-            constexpr StrongId64() = default;
-
-            /**
-             * @brief Validates a domain-issued identity.
-             * @param value Non-zero identity value.
-             * @return Typed identity or WorldStreamingErrors::IdentityInvalid.
-             */
-            [[nodiscard]] static Result<StrongId64> Create(const std::uint64_t value) {
-                if (value == 0)
-                    return Result<StrongId64>::Failure(MakeError(WorldStreamingErrors::IdentityInvalid));
-                return Result<StrongId64>::Success(StrongId64{value});
-            }
-
-            /** @brief Returns the domain-issued value. @return Zero only for the invalid identity. */
-            [[nodiscard]] constexpr std::uint64_t Value() const noexcept {
-                return value_;
-            }
-
-            /** @brief Checks representation. @return Whether the value is non-zero. */
-            [[nodiscard]] constexpr bool IsValid() const noexcept {
-                return value_ != 0;
-            }
-
-            [[nodiscard]] constexpr auto operator<=>(const StrongId64 &) const noexcept = default;
-
-        private:
-            explicit constexpr StrongId64(const std::uint64_t value) noexcept : value_(value) {}
-
-            std::uint64_t value_{};
-        };
     }  // namespace Detail
 
     /** @brief Canonical 16-byte world GUID representation used by world.index. */
@@ -129,13 +95,13 @@ namespace Horo::WorldStreaming {
     };
 
     /** @brief Stable host-authored streaming relevance source identity; zero is reserved as invalid. */
-    using StreamingSourceId = Detail::StrongId64<Detail::StreamingSourceIdTag>;
+    using StreamingSourceId = Foundation::Detail::NonZeroId64<Detail::StreamingSourceIdTag, WorldStreamingErrors::IdentityInvalid>;
 
     /** @brief Mounted partition incarnation; zero is invalid and issued values never wrap or repeat. */
-    using PartitionEpoch = Detail::StrongId64<Detail::PartitionEpochTag>;
+    using PartitionEpoch = Foundation::Detail::NonZeroId64<Detail::PartitionEpochTag, WorldStreamingErrors::IdentityInvalid>;
 
     /** @brief One cell residency attempt; zero is invalid and issued values never wrap or repeat. */
-    using StreamingGeneration = Detail::StrongId64<Detail::StreamingGenerationTag>;
+    using StreamingGeneration = Foundation::Detail::NonZeroId64<Detail::StreamingGenerationTag, WorldStreamingErrors::IdentityInvalid>;
 
     /** @brief Exact ADR-023 cell tuple within one partition. */
     struct StreamingCellId final {
