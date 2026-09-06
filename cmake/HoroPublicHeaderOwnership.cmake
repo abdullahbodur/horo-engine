@@ -29,12 +29,14 @@ horo_configure_target_header_boundary(HoroFoundation PUBLIC_HEADERS
     Horo/Foundation/Progress.h
     Horo/Foundation/Result.h
     Horo/Foundation/Sha256.h
+    Horo/Foundation/StrongId.h
     Horo/Foundation/String.h
     Horo/Foundation/Telemetry/Operation.h
     Horo/Foundation/Telemetry/Telemetry.h
     Horo/Foundation/Time.h
     Horo/Foundation/TransparentString.h
     Horo/Math/SceneMath.h
+    Horo/Math/WorldCoordinate64.h
 )
 
 horo_configure_target_header_boundary(HoroOpenTelemetry PUBLIC_HEADERS
@@ -63,6 +65,16 @@ horo_configure_target_header_boundary(HoroRuntime PUBLIC_HEADERS
     Horo/Runtime/FrameScheduler.h
     Horo/Runtime/RuntimeHost.h
     Horo/Runtime/RuntimeLifecycle.h
+    Horo/Runtime/Save/SaveErrors.h
+    Horo/Runtime/Save/SaveIdentity.h
+    Horo/Runtime/Save/SaveParticipantRegistry.h
+    Horo/Runtime/Save/SaveArchiveMetadata.h
+    Horo/Runtime/Save/SaveArchiveFraming.h
+)
+horo_configure_target_header_boundary(HoroRuntimeUi PUBLIC_HEADERS
+    Horo/Runtime/Ui/UiErrors.h
+    Horo/Runtime/Ui/UiIdentity.h
+    Horo/Runtime/Ui/UiDocument.h
 )
 
 horo_configure_target_header_boundary(HoroGameplayApi PUBLIC_HEADERS
@@ -144,8 +156,10 @@ horo_configure_target_header_boundary(HoroPhysics PUBLIC_HEADERS
     Horo/Physics/PhysicsConstraintDescriptor.h
     Horo/Physics/PhysicsCookedShapeDescriptor.h
     Horo/Physics/PhysicsErrors.h
+    Horo/Physics/PhysicsFilterIdentity.h
     Horo/Physics/PhysicsIdentity.h
     Horo/Physics/PhysicsPose.h
+    Horo/Physics/PhysicsQuery.h
     Horo/Physics/PhysicsShapeDescriptor.h
     Horo/Physics/PhysicsStepPolicy.h
     Horo/Physics/PhysicsTickPipeline.h
@@ -156,6 +170,7 @@ horo_configure_target_header_boundary(HoroPhysics PUBLIC_HEADERS
 )
 horo_configure_target_header_boundary(HoroNavigationApi PUBLIC_HEADERS
     Horo/Navigation/NavigationAreas.h
+    Horo/Navigation/NavigationAgentProfiles.h
     Horo/Navigation/NavigationBackend.h
     Horo/Navigation/NavigationCapabilities.h
     Horo/Navigation/NavigationErrors.h
@@ -165,9 +180,25 @@ horo_configure_target_header_boundary(HoroNavigationApi PUBLIC_HEADERS
 horo_configure_target_header_boundary(HoroNavigationNull PUBLIC_HEADERS
     Horo/Navigation/Backends/NullProvider.h
 )
+horo_configure_target_header_boundary(HoroWorldStreaming PUBLIC_HEADERS
+    Horo/WorldStreaming/WorldCellQuantization.h
+    Horo/WorldStreaming/WorldStreamingErrors.h
+    Horo/WorldStreaming/WorldStreamingIdentity.h
+)
+
+horo_configure_target_header_boundary(HoroPrefab PUBLIC_HEADERS
+    Horo/Prefab/PrefabErrors.h
+    Horo/Prefab/PrefabIdentity.h
+)
+
+horo_configure_target_header_boundary(HoroPrefabAuthoring PUBLIC_HEADERS
+    Horo/Prefab/PrefabDocument.h
+)
 
 horo_configure_target_header_boundary(HoroRenderApi PUBLIC_HEADERS
     Horo/Runtime/Render/Mesh.h
+    Horo/Runtime/Render/RenderAdapter.h
+    Horo/Runtime/Render/RenderAdapterErrors.h
     Horo/Runtime/Render/RenderBackend.h
     Horo/Runtime/Render/RenderGraph.h
     Horo/Runtime/Render/RenderGraphErrors.h

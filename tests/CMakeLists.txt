@@ -193,6 +193,7 @@ add_executable(HoroPhysicsTests
         unit/runtime/physics/PhysicsHandleRegistryTests.cpp
         unit/runtime/physics/PhysicsIdentityTests.cpp
         unit/runtime/physics/PhysicsPoseTests.cpp
+        unit/runtime/physics/PhysicsQueryTests.cpp
         unit/runtime/physics/PhysicsShapeDescriptorTests.cpp
         unit/runtime/physics/PhysicsStepPolicyTests.cpp
         unit/runtime/physics/PhysicsWorldBudgetsTests.cpp
@@ -209,6 +210,7 @@ horo_register_catch_test(HoroPhysicsTests LABELS "unit;physics;headless")
 add_executable(HoroNavigationApiTests
         support/navigation/DeterministicNavigationProvider.cpp
         unit/runtime/navigation/NavigationAreaRegistryTests.cpp
+        unit/runtime/navigation/NavigationAgentProfileTests.cpp
         unit/runtime/navigation/NavigationCapabilitiesTests.cpp
         unit/runtime/navigation/NavigationIdentityTests.cpp
         unit/runtime/navigation/NavigationOutcomesTests.cpp
@@ -218,6 +220,22 @@ target_compile_features(HoroNavigationApiTests PRIVATE cxx_std_20)
 target_include_directories(HoroNavigationApiTests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/support)
 target_link_libraries(HoroNavigationApiTests PRIVATE HoroEngine::NavigationApi HoroEngine::NavigationNull)
 horo_register_catch_test(HoroNavigationApiTests LABELS "unit;navigation;headless")
+
+add_executable(HoroWorldStreamingTests
+        unit/runtime/world_streaming/WorldCellQuantizationTests.cpp
+        unit/runtime/world_streaming/WorldStreamingIdentityTests.cpp
+)
+target_compile_features(HoroWorldStreamingTests PRIVATE cxx_std_20)
+target_link_libraries(HoroWorldStreamingTests PRIVATE HoroEngine::WorldStreaming)
+horo_register_catch_test(HoroWorldStreamingTests LABELS "unit;world_streaming;headless")
+
+add_executable(HoroPrefabTests
+        unit/runtime/prefab/PrefabDocumentTests.cpp
+        unit/runtime/prefab/PrefabIdentityTests.cpp
+)
+target_compile_features(HoroPrefabTests PRIVATE cxx_std_20)
+target_link_libraries(HoroPrefabTests PRIVATE HoroEngine::PrefabAuthoring)
+horo_register_catch_test(HoroPrefabTests LABELS "unit;prefab;headless")
 
 foreach(horo_physics_probe IN ITEMS iOS Linux Darwin)
     set(horo_physics_expected "Canonical Physics is not qualified for this target")
@@ -857,6 +875,11 @@ add_executable(HoroRenderSubmissionTests
 )
 target_compile_features(HoroRenderSubmissionTests PRIVATE cxx_std_20)
 target_link_libraries(HoroRenderSubmissionTests PRIVATE HoroEngine::RenderApi)
+add_executable(HoroRenderAdapterTests
+        unit/runtime/renderer/RenderAdapterTests.cpp
+)
+target_compile_features(HoroRenderAdapterTests PRIVATE cxx_std_20)
+target_link_libraries(HoroRenderAdapterTests PRIVATE HoroEngine::RenderApi)
 add_executable(HoroRenderFrontendTests
         unit/runtime/renderer/RenderFrontendTests.cpp
         unit/runtime/renderer/RenderResourceRegistryTests.cpp
@@ -882,6 +905,36 @@ target_link_libraries(HoroRuntimeLifecycleTests
         HoroEngine::RenderFrontend
         HoroEngine::RenderNull
 )
+add_executable(HoroRuntimeSaveIdentityTests
+        unit/runtime/save/SaveIdentityTests.cpp
+)
+target_compile_features(HoroRuntimeSaveIdentityTests PRIVATE cxx_std_20)
+target_link_libraries(HoroRuntimeSaveIdentityTests PRIVATE HoroEngine::Runtime)
+add_executable(HoroRuntimeSaveParticipantRegistryTests
+        unit/runtime/save/SaveParticipantRegistryTests.cpp
+)
+target_compile_features(HoroRuntimeSaveParticipantRegistryTests PRIVATE cxx_std_20)
+target_link_libraries(HoroRuntimeSaveParticipantRegistryTests PRIVATE HoroEngine::Runtime)
+add_executable(HoroRuntimeUiIdentityTests
+        unit/runtime/ui/UiIdentityTests.cpp
+)
+target_compile_features(HoroRuntimeUiIdentityTests PRIVATE cxx_std_20)
+target_link_libraries(HoroRuntimeUiIdentityTests PRIVATE HoroEngine::RuntimeUi)
+add_executable(HoroRuntimeUiDocumentTests
+        unit/runtime/ui/UiDocumentTests.cpp
+)
+target_compile_features(HoroRuntimeUiDocumentTests PRIVATE cxx_std_20)
+target_link_libraries(HoroRuntimeUiDocumentTests PRIVATE HoroEngine::RuntimeUi)
+add_executable(HoroRuntimeSaveArchiveMetadataTests
+        unit/runtime/save/SaveArchiveMetadataTests.cpp
+)
+target_compile_features(HoroRuntimeSaveArchiveMetadataTests PRIVATE cxx_std_20)
+target_link_libraries(HoroRuntimeSaveArchiveMetadataTests PRIVATE HoroEngine::Runtime)
+add_executable(HoroRuntimeSaveArchiveFramingTests
+        unit/runtime/save/SaveArchiveFramingTests.cpp
+)
+target_compile_features(HoroRuntimeSaveArchiveFramingTests PRIVATE cxx_std_20)
+target_link_libraries(HoroRuntimeSaveArchiveFramingTests PRIVATE HoroEngine::Runtime)
 add_executable(HoroRuntimeSceneTests
         unit/runtime/scene/RuntimeSceneTests.cpp
 )
@@ -1196,11 +1249,18 @@ set(HORO_CATCH_TEST_TARGETS
         HoroEditorViewportPickingTests
         HoroAssetSceneDropTests
         HoroRenderBackendRegistryTests
+        HoroRenderAdapterTests
         HoroRenderGraphTests
         HoroRenderSubmissionTests
         HoroRenderFrontendTests
         HoroEditorViewportResourceTests
         HoroRuntimeLifecycleTests
+        HoroRuntimeSaveIdentityTests
+        HoroRuntimeSaveParticipantRegistryTests
+        HoroRuntimeUiIdentityTests
+        HoroRuntimeUiDocumentTests
+        HoroRuntimeSaveArchiveMetadataTests
+        HoroRuntimeSaveArchiveFramingTests
         HoroRuntimeSceneTests
         HoroAssetRegistryTests
         HoroAssetProviderTests

@@ -86,6 +86,12 @@ namespace {
         return parsed.Value();
     }
 
+    template <typename Id> Id UiId(const std::uint8_t marker) {
+        Runtime::Ui::SerializedUiId bytes{};
+        bytes.back() = marker;
+        return Id::Create(bytes).Value();
+    }
+
     AssetTypeId AssetType(const std::string_view value = "core.mesh") {
         auto parsed = AssetTypeId::Parse(value);
         Check(parsed.HasValue());
@@ -219,6 +225,19 @@ namespace {
         SceneDefinitionBuilder numeric{SceneDefinitionId{1}, {}};
         numeric.Add(std::move(invalid));
         Check(std::move(numeric).Build().HasError());
+
+        RuntimeEntityDefinition uiEntity = Entity(1);
+        uiEntity.components.uiCanvas =
+            UiCanvasComponent{{Asset("00112233-4455-6677-8899-aabbccddeeff"), UiId<Runtime::Ui::UiDocumentId>(1),
+                               UiId<Runtime::Ui::UiCanvasId>(2), Runtime::Ui::UiDocumentRevision::Create(3).Value()}};
+        SceneDefinitionBuilder validUi{SceneDefinitionId{1}, {}};
+        validUi.Add(uiEntity);
+        Check(std::move(validUi).Build().HasValue());
+
+        uiEntity.components.uiCanvas->canvas.document = {};
+        SceneDefinitionBuilder invalidUi{SceneDefinitionId{1}, {}};
+        invalidUi.Add(std::move(uiEntity));
+        Check(std::move(invalidUi).Build().HasError());
     }
 
     TEST_CASE("Asset Definition Contract", "[unit][runtime][scene]") {

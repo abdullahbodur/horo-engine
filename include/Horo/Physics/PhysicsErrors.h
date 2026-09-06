@@ -35,6 +35,8 @@ namespace Horo::Physics::PhysicsErrors {
     extern const ErrorCodeDescriptor CapacityExceeded;
     /** @brief Admission evidence changed after the caller captured its capability revision. */
     extern const ErrorCodeDescriptor CapabilityStale;
+    /** @brief A query targets a retired scene or filter/broadphase snapshot generation. */
+    extern const ErrorCodeDescriptor QuerySnapshotStale;
     /** @brief Candidate or process initialization failed after releasing acquired resources. */
     extern const ErrorCodeDescriptor InitializationFailed;
 }  // namespace Horo::Physics::PhysicsErrors

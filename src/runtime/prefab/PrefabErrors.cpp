@@ -1,0 +1,62 @@
+#include "Horo/Prefab/PrefabErrors.h"
+
+namespace Horo::Prefab::PrefabErrors {
+    namespace {
+        const ErrorDomainId Domain{"horo.prefab"};
+
+        /** @brief Builds an immutable descriptor in the prefab error domain. */
+        [[nodiscard]] ErrorCodeDescriptor Describe(const char *code, const char *summary, const char *remediationHint) {
+            return {
+                .domain = Domain,
+                .code = ErrorCode{code},
+                .defaultSeverity = ErrorSeverity::Error,
+                .summary = summary,
+                .remediationHint = remediationHint,
+                .retryable = false,
+                .userActionable = true,
+            };
+        }
+    }  // namespace
+
+    const ErrorCodeDescriptor IdentityInvalid = Describe("prefab.identity.invalid", "A prefab identity is invalid.",
+                                                         "Provide the stable persisted identity required by the prefab contract.");
+
+    const ErrorCodeDescriptor AddressInvalid = Describe("prefab.address.invalid", "A prefab-local address is invalid.",
+                                                        "Use a bounded non-root placement scope and valid registered target identities.");
+
+    const ErrorCodeDescriptor ReferenceInvalid = Describe("prefab.reference.invalid", "A prefab asset reference is invalid.",
+                                                          "Use the non-zero AssetId from the Asset Registry sidecar.");
+
+    const ErrorCodeDescriptor DocumentInvalid = Describe("prefab.document.invalid", "A prefab authoring document is invalid.",
+                                                         "Use a canonical project version, valid AssetId and exactly one document mode.");
+
+    const ErrorCodeDescriptor HierarchyInvalid =
+        Describe("prefab.hierarchy.invalid", "A prefab hierarchy is invalid.",
+                 "Use one root followed by uniquely identified children whose parents precede them.");
+
+    const ErrorCodeDescriptor ObjectCountExceeded = Describe("prefab.object_count.exceeded", "A prefab document contains too many objects.",
+                                                             "Reduce the authored hierarchy to the declared object-count bound.");
+
+    const ErrorCodeDescriptor NestedPlacementCountExceeded =
+        Describe("prefab.nested_placement_count.exceeded", "A prefab document contains too many nested placements.",
+                 "Reduce direct prefab composition edges to the declared count bound.");
+
+    const ErrorCodeDescriptor ReferenceCountExceeded =
+        Describe("prefab.reference_count.exceeded", "A prefab document contains too many asset references.",
+                 "Reduce explicit Asset Registry dependencies to the declared count bound.");
+
+    const ErrorCodeDescriptor HierarchyDepthExceeded = Describe("prefab.hierarchy_depth.exceeded", "A prefab hierarchy is too deep.",
+                                                                "Flatten the hierarchy to the declared root-inclusive depth bound.");
+
+    const ErrorCodeDescriptor ComponentCountExceeded =
+        Describe("prefab.component_count.exceeded", "A prefab object contains too many components or behaviors.",
+                 "Reduce the object's combined component and behavior count to the declared bound.");
+
+    const ErrorCodeDescriptor PayloadTooLarge =
+        Describe("prefab.payload.too_large", "A prefab document payload is too large.",
+                 "Reduce names, component payloads, behavior fields or reference data to the declared byte bound.");
+
+    const ErrorCodeDescriptor CompositionInvalid =
+        Describe("prefab.composition.invalid", "Prefab composition data is invalid.",
+                 "Use unique bounded placements for concrete prefabs or one exclusive variant parent.");
+}  // namespace Horo::Prefab::PrefabErrors

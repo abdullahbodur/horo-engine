@@ -132,6 +132,15 @@ namespace Horo::Physics::PhysicsErrors {
         .retryable = true,
         .userActionable = false,
     };
+    const ErrorCodeDescriptor QuerySnapshotStale{
+        .domain = PhysicsDomain,
+        .code = ErrorCode{"physics.query.snapshot_stale"},
+        .defaultSeverity = ErrorSeverity::Error,
+        .summary = "The physics query snapshot generation is stale.",
+        .remediationHint = "Capture the active world, scene and filter generations again before submitting the query.",
+        .retryable = true,
+        .userActionable = false,
+    };
     const ErrorCodeDescriptor InitializationFailed{
         .domain = PhysicsDomain,
         .code = ErrorCode{"physics.initialization.failed"},

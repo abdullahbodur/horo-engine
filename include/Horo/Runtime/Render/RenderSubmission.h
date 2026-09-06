@@ -60,6 +60,8 @@ namespace Horo::Render {
         [[nodiscard]] constexpr bool IsValid() const noexcept {
             return IsRenderQueueRoleValid(role) && queue.IsValid();
         }
+
+        [[nodiscard]] constexpr auto operator<=>(const RenderQueueAssignment &) const noexcept = default;
     };
 
     /**
@@ -106,14 +108,16 @@ namespace Horo::Render {
     /**
      * @brief One deterministic queue submission with GPU-side waits and one completion signal.
      *
-     * `waits` is borrowed synchronously while a compiled plan is admitted. A wait on the
+     * `waits` is borrowed synchronously while a compiled plan is admitted. The compiled
+     * RenderExecutionPlan or RenderGraph that owns its backing storage must outlive every
+     * submission view and the complete synchronous backend-admission call. A wait on the
      * submission's own queue must precede its signal; cross-queue ordering is expressed only
      * through explicit timeline points. The backend must not reorder descriptors by queue.
      */
     struct RenderQueueSubmission {
         RenderQueueId queue;                        /**< Logical queue that executes this submission. */
         RenderSubmissionOrder order;                /**< Frontend-issued total admission order. */
-        std::span<const RenderTimelinePoint> waits; /**< GPU completion points required before execution. */
+        std::span<const RenderTimelinePoint> waits; /**< Borrowed points whose plan-owned storage must outlive backend admission. */
         RenderTimelinePoint signal;                 /**< Completion point signaled on this submission's queue. */
 
         /**

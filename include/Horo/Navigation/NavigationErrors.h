@@ -50,4 +50,8 @@ namespace Horo::Navigation::NavigationErrors {
     extern const ErrorCodeDescriptor AreaUnknown;
     /** @brief An exact filter identity is absent and cannot be replaced by a default filter. */
     extern const ErrorCodeDescriptor FilterUnknown;
+    /** @brief A grounded-agent profile identity, name, dimension, or bake resolution value is invalid. */
+    extern const ErrorCodeDescriptor AgentProfileInvalid;
+    /** @brief Profile deletion would leave one or more stable authored references dangling. */
+    extern const ErrorCodeDescriptor AgentProfileReferenced;
 }  // namespace Horo::Navigation::NavigationErrors

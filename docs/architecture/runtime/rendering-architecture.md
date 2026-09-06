@@ -170,6 +170,15 @@ silently switch to `null`.
 
 ## Capabilities, Limits And Product Profiles
 
+[ADR-174](../../adr/174-render-adapter-and-device-discovery-contract.md) owns the
+backend-neutral adapter discovery and device-selection boundary. The selected
+backend publishes a finite owned snapshot in canonical adapter-identity order;
+host constraints select deterministically without native handles or silent
+fallback. An explicit selection is paired with its discovery revision through
+device creation, and unavailable, unsupported, stale, cancelled, shutdown, and
+native creation failures remain typed and actionable. Discovery creates no
+device or surface and closes admission before backend shutdown.
+
 [ADR-032](../../adr/032-d3d12-baseline-and-agility-sdk-policy.md) owns the planned
 `d3d12` component's native baseline: Windows 11 x86_64, feature level 12_0,
 Shader Model 6.0, and host-owned Agility activation. The SDK package pin, runtime

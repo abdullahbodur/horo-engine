@@ -9,6 +9,7 @@ add_library(HoroFoundation STATIC
         foundation/diagnostics/DiagnosticBundle.cpp
         foundation/hashing/Sha256.cpp
         foundation/math/SceneMath.cpp
+        foundation/math/WorldCoordinate64.cpp
         foundation/text/String.cpp
         foundation/logging/Logger.cpp
         foundation/logging/LogContext.cpp
@@ -128,11 +129,26 @@ add_library(HoroRuntime STATIC
         runtime/lifecycle/RuntimeLifecycle.cpp
         runtime/lifecycle/RuntimeHost.cpp
         runtime/lifecycle/RuntimeErrors.cpp
+        runtime/save/SaveErrors.cpp
+        runtime/save/SaveIdentity.cpp
+        runtime/save/SaveParticipantRegistry.cpp
+        runtime/save/SaveArchiveMetadata.cpp
+        runtime/save/SaveCompatibility.cpp
+        runtime/save/SaveArchiveFraming.cpp
 )
 add_library(HoroEngine::Runtime ALIAS HoroRuntime)
 target_compile_features(HoroRuntime PUBLIC cxx_std_20)
 target_include_directories(HoroRuntime PUBLIC ${PROJECT_SOURCE_DIR}/include)
-target_link_libraries(HoroRuntime PUBLIC HoroEngine::Foundation)
+target_link_libraries(HoroRuntime PUBLIC HoroEngine::Foundation PRIVATE nlohmann_json::nlohmann_json)
+
+add_library(HoroRuntimeUi STATIC
+        runtime/ui/UiErrors.cpp
+        runtime/ui/UiIdentity.cpp
+        runtime/ui/UiDocument.cpp
+)
+add_library(HoroEngine::RuntimeUi ALIAS HoroRuntimeUi)
+target_compile_features(HoroRuntimeUi PUBLIC cxx_std_20)
+target_link_libraries(HoroRuntimeUi PUBLIC HoroEngine::Foundation HoroEngine::Assets)
 
 add_library(HoroGameplayApi STATIC
         gameplay/api/BehaviorTypes.cpp
@@ -174,7 +190,7 @@ add_library(HoroRuntimeScene STATIC
 add_library(HoroEngine::RuntimeScene ALIAS HoroRuntimeScene)
 target_compile_features(HoroRuntimeScene PUBLIC cxx_std_20)
 target_include_directories(HoroRuntimeScene PUBLIC ${PROJECT_SOURCE_DIR}/include)
-target_link_libraries(HoroRuntimeScene PUBLIC HoroEngine::Foundation HoroEngine::Runtime HoroEngine::GameplayApi)
+target_link_libraries(HoroRuntimeScene PUBLIC HoroEngine::Foundation HoroEngine::Runtime HoroEngine::GameplayApi HoroEngine::RuntimeUi)
 
 add_library(HoroGameplayRuntime STATIC
         gameplay/runtime/BehaviorRegistry.cpp
@@ -315,9 +331,11 @@ add_library(HoroPhysics STATIC
         physics/PhysicsConstraintDescriptor.cpp
         physics/PhysicsCookedShapeDescriptor.cpp
         physics/PhysicsErrors.cpp
+        physics/PhysicsFilterIdentity.cpp
         physics/PhysicsHandleRegistry.h
         physics/PhysicsIdentity.cpp
         physics/PhysicsPose.cpp
+        physics/PhysicsQuery.cpp
         physics/PhysicsShapeDescriptor.cpp
         physics/PhysicsStepPolicy.cpp
         physics/PhysicsWorld.cpp
@@ -346,6 +364,7 @@ endif()
 
 add_library(HoroNavigationApi STATIC
         runtime/navigation/api/NavigationAreas.cpp
+        runtime/navigation/api/NavigationAgentProfiles.cpp
         runtime/navigation/api/NavigationCapabilities.cpp
         runtime/navigation/api/NavigationErrors.cpp
         runtime/navigation/api/NavigationIdentity.cpp
@@ -362,6 +381,30 @@ add_library(HoroEngine::NavigationNull ALIAS HoroNavigationNull)
 target_compile_features(HoroNavigationNull PUBLIC cxx_std_20)
 target_link_libraries(HoroNavigationNull PUBLIC HoroEngine::NavigationApi)
 
+add_library(HoroWorldStreaming STATIC
+        runtime/world_streaming/WorldCellQuantization.cpp
+        runtime/world_streaming/WorldStreamingErrors.cpp
+        runtime/world_streaming/WorldStreamingIdentity.cpp
+)
+add_library(HoroEngine::WorldStreaming ALIAS HoroWorldStreaming)
+target_compile_features(HoroWorldStreaming PUBLIC cxx_std_20)
+target_link_libraries(HoroWorldStreaming PUBLIC HoroEngine::Foundation)
+
+add_library(HoroPrefab STATIC
+        runtime/prefab/PrefabErrors.cpp
+        runtime/prefab/PrefabIdentity.cpp
+)
+add_library(HoroEngine::Prefab ALIAS HoroPrefab)
+target_compile_features(HoroPrefab PUBLIC cxx_std_20)
+target_link_libraries(HoroPrefab PUBLIC HoroEngine::Foundation HoroEngine::Assets HoroEngine::GameplayApi)
+
+add_library(HoroPrefabAuthoring STATIC
+        runtime/prefab/PrefabDocument.cpp
+)
+add_library(HoroEngine::PrefabAuthoring ALIAS HoroPrefabAuthoring)
+target_compile_features(HoroPrefabAuthoring PUBLIC cxx_std_20)
+target_link_libraries(HoroPrefabAuthoring PUBLIC HoroEngine::Prefab HoroEngine::Application PRIVATE utf8proc)
+
 add_library(HoroInput STATIC
         runtime/input/Input.cpp
         runtime/input/InputErrors.cpp
@@ -372,6 +415,8 @@ target_include_directories(HoroInput PUBLIC ${PROJECT_SOURCE_DIR}/include)
 target_link_libraries(HoroInput PUBLIC HoroEngine::Foundation PRIVATE nlohmann_json::nlohmann_json)
 
 add_library(HoroRenderApi STATIC
+        runtime/renderer/api/RenderAdapter.cpp
+        runtime/renderer/api/RenderAdapterErrors.cpp
         runtime/renderer/api/RenderGraph.cpp
         runtime/renderer/api/RenderGraphErrors.cpp
 )
@@ -429,7 +474,7 @@ target_include_directories(HoroSceneModel
         PUBLIC
         ${PROJECT_SOURCE_DIR}/include
 )
-target_link_libraries(HoroSceneModel PUBLIC HoroEngine::Foundation HoroEngine::RenderApi)
+target_link_libraries(HoroSceneModel PUBLIC HoroEngine::Foundation HoroEngine::RenderApi HoroEngine::RuntimeUi)
 
 # RuntimeSceneDefinition exposes PrimitiveMeshDescriptor in its public scene
 # contract, so the owning SceneModel dependency is part of the public edge.

@@ -45,10 +45,10 @@ namespace Horo::Navigation {
                 return Result<void>::Failure(MakeError(NavigationErrors::FilterDescriptorInvalid));
             if (!SortUnique(filter.costOverrides, &NavigationAreaCostOverride::area))
                 return Result<void>::Failure(MakeError(NavigationErrors::DescriptorConflict));
-            for (const NavigationAreaCostOverride &override : filter.costOverrides) {
-                if (!override.area.IsValid() || !IsValidCost(override.traversalCost))
+            for (const NavigationAreaCostOverride &costOverride : filter.costOverrides) {
+                if (!costOverride.area.IsValid() || !IsValidCost(costOverride.traversalCost))
                     return Result<void>::Failure(MakeError(NavigationErrors::FilterDescriptorInvalid));
-                if (Find(areas, override.area, &NavigationAreaDescriptor::id) == nullptr)
+                if (Find(areas, costOverride.area, &NavigationAreaDescriptor::id) == nullptr)
                     return Result<void>::Failure(MakeError(NavigationErrors::AreaUnknown));
             }
             return Result<void>::Success();
@@ -98,11 +98,11 @@ namespace Horo::Navigation {
     }
 
     /** @copydoc NavigationAreaRegistry::ResolveFilter */
-    Result<NavigationQueryFilterDescriptor> NavigationAreaRegistry::ResolveFilter(const NavigationFilterId id) const {
+    Result<const NavigationQueryFilterDescriptor *> NavigationAreaRegistry::ResolveFilter(NavigationFilterId id) const {
         const auto found = Find(std::span{filters_}, id, &NavigationQueryFilterDescriptor::id);
         if (found == nullptr)
-            return Result<NavigationQueryFilterDescriptor>::Failure(MakeError(NavigationErrors::FilterUnknown));
-        return Result<NavigationQueryFilterDescriptor>::Success(*found);
+            return Result<const NavigationQueryFilterDescriptor *>::Failure(MakeError(NavigationErrors::FilterUnknown));
+        return Result<const NavigationQueryFilterDescriptor *>::Success(found);
     }
 
     /** @copydoc NavigationAreaRegistry::ResolveTraversal */
@@ -118,8 +118,9 @@ namespace Horo::Navigation {
         const bool included = foundFilter->includedFlags.Empty() || foundArea->flags.Intersects(foundFilter->includedFlags);
         const bool excluded = foundArea->flags.Intersects(foundFilter->excludedFlags);
         float traversalCost = foundArea->traversalCost;
-        if (const auto override = Find(std::span{foundFilter->costOverrides}, area, &NavigationAreaCostOverride::area); override != nullptr)
-            traversalCost = override->traversalCost;
+        if (const auto costOverride = Find(std::span{foundFilter->costOverrides}, area, &NavigationAreaCostOverride::area);
+            costOverride != nullptr)
+            traversalCost = costOverride->traversalCost;
         return Result<NavigationTraversalPolicy>::Success({.traversable = included && !excluded, .traversalCost = traversalCost});
     }
 

@@ -9,6 +9,7 @@ horo_allow_target_dependencies(TARGET HoroPackages DEPENDENCIES HoroFoundation)
 horo_allow_target_dependencies(TARGET HoroApplication DEPENDENCIES HoroFoundation)
 horo_allow_target_dependencies(TARGET HoroProjectMigrations DEPENDENCIES HoroApplication)
 horo_allow_target_dependencies(TARGET HoroRuntime DEPENDENCIES HoroFoundation)
+horo_allow_target_dependencies(TARGET HoroRuntimeUi DEPENDENCIES HoroFoundation HoroAssets)
 horo_allow_target_dependencies(TARGET HoroAssets DEPENDENCIES HoroFoundation)
 horo_allow_target_dependencies(TARGET HoroAudioApi DEPENDENCIES HoroFoundation HoroAssets)
 horo_allow_target_dependencies(TARGET HoroAudioDsp DEPENDENCIES HoroAudioApi)
@@ -18,12 +19,15 @@ horo_allow_target_dependencies(TARGET HoroAudioBackendContract DEPENDENCIES Horo
 horo_allow_target_dependencies(TARGET HoroPhysics DEPENDENCIES HoroFoundation HoroAssets)
 horo_allow_target_dependencies(TARGET HoroNavigationApi DEPENDENCIES HoroFoundation)
 horo_allow_target_dependencies(TARGET HoroNavigationNull DEPENDENCIES HoroNavigationApi)
+horo_allow_target_dependencies(TARGET HoroWorldStreaming DEPENDENCIES HoroFoundation)
+horo_allow_target_dependencies(TARGET HoroPrefab DEPENDENCIES HoroFoundation HoroAssets HoroGameplayApi)
+horo_allow_target_dependencies(TARGET HoroPrefabAuthoring DEPENDENCIES HoroPrefab HoroApplication)
 horo_allow_target_dependencies(TARGET HoroInput DEPENDENCIES HoroFoundation)
 horo_allow_target_dependencies(TARGET HoroInputSdl DEPENDENCIES HoroInput)
 
 horo_allow_target_dependencies(TARGET HoroGameplayApi DEPENDENCIES HoroFoundation)
 horo_allow_target_dependencies(TARGET HoroRuntimeScene
-    DEPENDENCIES HoroFoundation HoroRuntime HoroAssets HoroGameplayApi HoroSceneModel)
+    DEPENDENCIES HoroFoundation HoroRuntime HoroAssets HoroGameplayApi HoroSceneModel HoroRuntimeUi)
 horo_allow_target_dependencies(TARGET HoroGameplayRuntime
     DEPENDENCIES HoroGameplayApi HoroRuntimeScene)
 horo_allow_target_dependencies(TARGET HoroGameplayModuleHost
@@ -36,7 +40,7 @@ horo_allow_target_dependencies(TARGET HoroRenderApi DEPENDENCIES HoroFoundation)
 horo_allow_target_dependencies(TARGET HoroRenderBackendRegistry DEPENDENCIES HoroRenderApi)
 horo_allow_target_dependencies(TARGET HoroRenderFrontend
     DEPENDENCIES HoroRenderApi HoroRenderBackendRegistry)
-horo_allow_target_dependencies(TARGET HoroSceneModel DEPENDENCIES HoroFoundation)
+horo_allow_target_dependencies(TARGET HoroSceneModel DEPENDENCIES HoroFoundation HoroRuntimeUi)
 horo_allow_target_dependencies(TARGET HoroRenderNull DEPENDENCIES HoroRenderApi)
 horo_allow_target_dependencies(TARGET HoroRenderOpenGL)
 horo_allow_target_dependencies(TARGET HoroRenderMetal)
