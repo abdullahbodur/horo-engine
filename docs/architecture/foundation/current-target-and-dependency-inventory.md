@@ -210,7 +210,7 @@ conflicts are recorded rather than treated as additional implementations.
 | `HoroEngine::AudioCommands` | Implemented | Buffer-boundary typed commands and bounded MPSC/control/SPSC staging with critical reserves and barriers; clock-mapped scheduling and runtime execution remain separate. |
 | `HoroEngine::AudioPlatform` | Absent | No target or implementation path. |
 | `HoroEngine::AudioNull` | Absent | No target or implementation path. |
-| `HoroEngine::NetworkApi` | Partial | Foundation-only target owns stable protocol/message/schema/feature/close-reason identities, bounded immutable protocol and replication registries, canonical replication fingerprints, and exact transport delivery capability negotiation/admission; transport handles, sessions and runtime remain planned. |
+| `HoroEngine::NetworkApi` | Partial | Foundation-only target owns stable protocol/message/schema/feature/close-reason identities, bounded immutable protocol/codec/replication registries, canonical bounded message framing and replication fingerprints, and exact transport delivery capability negotiation/admission; transport handles, sessions and runtime remain planned. |
 | `HoroEngine::NetworkRuntime` | Planned | Architecture exists; no production target. |
 | `HoroEngine::NetworkTransportNull` | Planned | Null transport peer behind `NetworkApi`; Foundation-only, no `Platform`; no production target yet. |
 | `HoroEngine::NetworkTransportGNS` | Planned | ADR-097 production direct-IP GNS transport peer behind `NetworkApi`; no production target yet. |
