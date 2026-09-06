@@ -4,6 +4,7 @@
 #include <catch2/catch_test_macros.hpp>
 #include <chrono>
 #include <condition_variable>
+#include <cstdint>
 #include <functional>
 #include <mutex>
 #include <thread>
@@ -28,12 +29,21 @@ namespace {
         }
     };
 
-    void VerifyReentrantCaptureRelease(const bool shutdownCancellation) {
+    enum class ReentrantReleasePath : std::uint8_t {
+        Completed,
+        RequestCancel,
+        ShutdownCancel,
+    };
+
+    void VerifyReentrantCaptureRelease(const ReentrantReleasePath path) {
         Horo::JobSystem jobs{Horo::JobSystemConfig{.workerCount = 0, .maxQueuedJobs = 1}};
         std::optional<Horo::JobHandle> handle;
         bool destructorReentered{};
         auto capture = std::make_shared<ReentrantCaptureDestructor>([&] {
-            destructorReentered = handle->Wait().HasError() && jobs.Query(handle->Id()).state == Horo::JobState::Cancelled &&
+            const bool completed = path == ReentrantReleasePath::Completed;
+            const auto waited = handle->Wait();
+            const Horo::JobState expectedState = completed ? Horo::JobState::Succeeded : Horo::JobState::Cancelled;
+            destructorReentered = (completed ? waited.HasValue() : waited.HasError()) && jobs.Query(handle->Id()).state == expectedState &&
                                   jobs.RequestCancel(handle->Id()).HasValue();
         });
         auto submitted = jobs.Submit({}, [capture](const Horo::CancellationToken &) {
@@ -42,10 +52,14 @@ namespace {
         handle.emplace(std::move(submitted).Value());
         capture.reset();
 
-        if (shutdownCancellation)
+        if (path == ReentrantReleasePath::Completed) {
+            REQUIRE((handle->Wait({.waitPolicy = Horo::WaitPolicy::MainThreadPumpAllowed, .timeout = Horo::Duration::FromMilliseconds(100)})
+                         .HasValue()));
+        } else if (path == ReentrantReleasePath::ShutdownCancel) {
             jobs.Shutdown(Horo::ShutdownPolicy::Cancel);
-        else
+        } else {
             REQUIRE((jobs.RequestCancel(handle->Id()).HasValue()));
+        }
         REQUIRE((destructorReentered));
         jobs.Shutdown(Horo::ShutdownPolicy::Cancel);
     }
@@ -153,28 +167,12 @@ namespace {
     }
 
     TEST_CASE("Completed Job Releases Reentrant Capture After Publishing Terminal State", "[unit][foundation][jobs][lifetime]") {
-        Horo::JobSystem jobs{Horo::JobSystemConfig{.workerCount = 0, .maxQueuedJobs = 1}};
-        std::optional<Horo::JobHandle> handle;
-        bool destructorReentered{};
-        auto capture = std::make_shared<ReentrantCaptureDestructor>([&] {
-            destructorReentered = handle->Wait().HasValue() && jobs.Query(handle->Id()).state == Horo::JobState::Succeeded &&
-                                  jobs.RequestCancel(handle->Id()).HasValue();
-        });
-        auto submitted = jobs.Submit({}, [capture](const Horo::CancellationToken &) {
-        });
-        REQUIRE((submitted.HasValue()));
-        handle.emplace(std::move(submitted).Value());
-        capture.reset();
-
-        REQUIRE((handle->Wait({.waitPolicy = Horo::WaitPolicy::MainThreadPumpAllowed, .timeout = Horo::Duration::FromMilliseconds(100)})
-                     .HasValue()));
-        REQUIRE((destructorReentered));
-        jobs.Shutdown(Horo::ShutdownPolicy::Drain);
+        VerifyReentrantCaptureRelease(ReentrantReleasePath::Completed);
     }
 
     TEST_CASE("Queued Termination Releases Captures Outside Job System Locks", "[unit][foundation][jobs][lifetime]") {
-        VerifyReentrantCaptureRelease(false);
-        VerifyReentrantCaptureRelease(true);
+        VerifyReentrantCaptureRelease(ReentrantReleasePath::RequestCancel);
+        VerifyReentrantCaptureRelease(ReentrantReleasePath::ShutdownCancel);
     }
 
     TEST_CASE("Bounded Wait Times Out Without Changing Running Job State", "[unit][foundation][jobs][wait]") {
