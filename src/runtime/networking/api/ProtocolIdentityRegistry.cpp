@@ -14,8 +14,7 @@ namespace Horo::Network {
         }
 
         [[nodiscard]] bool ValidLimits(const ProtocolIdentityRegistryLimits &limits) noexcept {
-            return limits.maximumProtocols > 0 && limits.maximumMessages > 0 && limits.maximumFeatures > 0 &&
-                   limits.maximumCloseReasons > 0;
+            return limits.maximumProtocols > 0;
         }
 
         [[nodiscard]] bool WithinCapacity(const ProtocolIdentityContributions &contributions,
@@ -31,10 +30,6 @@ namespace Horo::Network {
 
         [[nodiscard]] auto MessageKey(const MessageIdentityDescriptor &value) noexcept {
             return std::tuple{value.protocol.Value(), value.id.Value()};
-        }
-
-        [[nodiscard]] auto SchemaKey(const MessageIdentityDescriptor &value) noexcept {
-            return std::tuple{value.protocol.Value(), value.schema.Value()};
         }
 
         [[nodiscard]] auto FeatureKey(const FeatureIdentityDescriptor &value) noexcept {
@@ -119,10 +114,6 @@ namespace Horo::Network {
             if (HasDuplicateIdentity(result.protocols_, result.messages_, result.features_, result.closeReasons_))
                 return Fail<ProtocolIdentityRegistry>(NetworkErrors::ProtocolIdentityConflict);
 
-            auto schemaOrder = result.messages_;
-            std::ranges::sort(schemaOrder, {}, SchemaKey);
-            if (HasAdjacentDuplicate(schemaOrder, SchemaKey))
-                return Fail<ProtocolIdentityRegistry>(NetworkErrors::ProtocolIdentityConflict);
             if (!ValidProtocols(result.protocols_) || !ValidMessages(result.protocols_, result.messages_) ||
                 !ValidFeatures(result.protocols_, result.features_) || !ValidCloseReasons(result.protocols_, result.closeReasons_))
                 return Fail<ProtocolIdentityRegistry>(NetworkErrors::ProtocolIdentityDescriptorInvalid);
