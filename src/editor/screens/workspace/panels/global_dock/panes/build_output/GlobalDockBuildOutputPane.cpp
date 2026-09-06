@@ -31,28 +31,35 @@ namespace Horo::Editor {
             return DesignSystem::MetricsFor(Theme::GetActiveTokens(), Ui::ComponentSize::Small).minimumHeight;
         }
 
-        [[nodiscard]] ImVec4 StatusColor(const BuildOutputStatus status) noexcept {
-            using enum BuildOutputStatus;
-            switch (status) {
+        [[nodiscard]] ImVec4 StatusColor(const BuildOutputRecord &record) noexcept {
+            using enum BuildOutputResult;
+            switch (record.result) {
                 case Failed:
+                case TimedOut:
                     return Theme::Err();
                 case Cached:
                     return Theme::Dim();
                 case Cancelled:
                     return Theme::Warn();
-                case Info:
-                    return Theme::Accent();
                 case Succeeded:
                     return Theme::Ok();
+                case None:
+                    break;
+            }
+            switch (record.severity) {
+                case DiagnosticSeverity::Error:
+                    return Theme::Err();
+                case DiagnosticSeverity::Warning:
+                    return Theme::Warn();
+                case DiagnosticSeverity::Note:
+                    return Theme::Accent();
             }
             return Theme::Text();
         }
 
-        [[nodiscard]] const char *TechnicalStatusText(const BuildOutputStatus status) noexcept {
-            using enum BuildOutputStatus;
-            switch (status) {
-                case Info:
-                    return "INFO";
+        [[nodiscard]] const char *TechnicalStatusText(const BuildOutputRecord &record) noexcept {
+            using enum BuildOutputResult;
+            switch (record.result) {
                 case Succeeded:
                     return "OK";
                 case Failed:
@@ -61,15 +68,25 @@ namespace Horo::Editor {
                     return "CACHED";
                 case Cancelled:
                     return "CANCELLED";
+                case TimedOut:
+                    return "TIMED OUT";
+                case None:
+                    break;
+            }
+            switch (record.severity) {
+                case DiagnosticSeverity::Error:
+                    return "ERROR";
+                case DiagnosticSeverity::Warning:
+                    return "WARNING";
+                case DiagnosticSeverity::Note:
+                    return "INFO";
             }
             return "INFO";
         }
 
-        [[nodiscard]] const char *StatusLocalizationKey(const BuildOutputStatus status) noexcept {
-            using enum BuildOutputStatus;
-            switch (status) {
-                case Info:
-                    return "workspace.global_dock.build_output.row_status.info";
+        [[nodiscard]] const char *StatusLocalizationKey(const BuildOutputRecord &record) noexcept {
+            using enum BuildOutputResult;
+            switch (record.result) {
                 case Succeeded:
                     return "workspace.global_dock.build_output.row_status.succeeded";
                 case Failed:
@@ -78,8 +95,31 @@ namespace Horo::Editor {
                     return "workspace.global_dock.build_output.row_status.cached";
                 case Cancelled:
                     return "workspace.global_dock.build_output.row_status.cancelled";
+                case TimedOut:
+                    return "workspace.global_dock.build_output.row_status.timed_out";
+                case None:
+                    break;
+            }
+            switch (record.severity) {
+                case DiagnosticSeverity::Error:
+                    return "workspace.global_dock.build_output.row_status.failed";
+                case DiagnosticSeverity::Warning:
+                    return "workspace.global_dock.build_output.row_status.warning";
+                case DiagnosticSeverity::Note:
+                    return "workspace.global_dock.build_output.row_status.info";
             }
             return "workspace.global_dock.build_output.row_status.info";
+        }
+
+        [[nodiscard]] bool IsOkRecord(const BuildOutputRecord &record) noexcept {
+            return record.result == BuildOutputResult::Succeeded ||
+                   (record.result == BuildOutputResult::None && record.severity == DiagnosticSeverity::Note);
+        }
+
+        [[nodiscard]] bool IsFailedRecord(const BuildOutputRecord &record) noexcept {
+            return record.result == BuildOutputResult::Failed || record.result == BuildOutputResult::Cancelled ||
+                   record.result == BuildOutputResult::TimedOut ||
+                   (record.result == BuildOutputResult::None && record.severity == DiagnosticSeverity::Error);
         }
 
         [[nodiscard]] bool ContainsCaseInsensitive(const std::string_view text, const std::string_view needle) {
@@ -235,11 +275,10 @@ namespace Horo::Editor {
         rows.reserve(m_filteredIndices.size());
         for (const std::size_t recordIndex : m_filteredIndices) {
             const BuildOutputRecord &record = m_snapshot.records[recordIndex];
-            rows.push_back(
-                {.cells = {{FormatTimeOfDay(record.timestampUtc), Theme::Muted()},
-                           {context.localization.Get("editor", StatusLocalizationKey(record.status)), StatusColor(record.status)},
-                           {record.message, Theme::Text()},
-                           {FormatSource(record.source), record.source.has_value() ? Theme::Accent() : Theme::Muted()}}});
+            rows.push_back({.cells = {{FormatTimeOfDay(record.timestampUtc), Theme::Muted()},
+                                      {context.localization.Get("editor", StatusLocalizationKey(record)), StatusColor(record)},
+                                      {record.message, Theme::Text()},
+                                      {FormatSource(record.source), record.source.has_value() ? Theme::Accent() : Theme::Muted()}}});
         }
         if (const Ui::TableInteraction interaction =
                 Ui::DrawTable({.id = "##BuildOutputTable", .componentSize = Ui::ComponentSize::Small, .selectableCells = true}, columns,
@@ -273,16 +312,16 @@ namespace Horo::Editor {
         return true;
     }
 
-    bool GlobalDockBuildOutputPane::PassesStatusFilter(const BuildOutputStatus status, const StatusFilter filter) noexcept {
+    bool GlobalDockBuildOutputPane::PassesStatusFilter(const BuildOutputRecord &record, const StatusFilter filter) noexcept {
         switch (filter) {
             case StatusFilter::All:
                 return true;
             case StatusFilter::Ok:
-                return status == BuildOutputStatus::Info || status == BuildOutputStatus::Succeeded;
+                return IsOkRecord(record);
             case StatusFilter::Failed:
-                return status == BuildOutputStatus::Failed || status == BuildOutputStatus::Cancelled;
+                return IsFailedRecord(record);
             case StatusFilter::Cached:
-                return status == BuildOutputStatus::Cached;
+                return record.result == BuildOutputResult::Cached;
         }
         return true;
     }
@@ -294,10 +333,11 @@ namespace Horo::Editor {
         for (std::size_t index = 0; index < records.size(); ++index) {
             const BuildOutputRecord &record = records[index];
             const std::string source = FormatSource(record.source);
-            if (!PassesStatusFilter(record.status, statusFilter))
+            if (!PassesStatusFilter(record, statusFilter))
                 continue;
-            if (!search.empty() && !ContainsCaseInsensitive(record.phase, search) && !ContainsCaseInsensitive(record.message, search) &&
-                !ContainsCaseInsensitive(source, search) && !ContainsCaseInsensitive(TechnicalStatusText(record.status), search))
+            if (!search.empty() && !ContainsCaseInsensitive(record.stage, search) &&
+                !ContainsCaseInsensitive(record.code.Value(), search) && !ContainsCaseInsensitive(record.message, search) &&
+                !ContainsCaseInsensitive(source, search) && !ContainsCaseInsensitive(TechnicalStatusText(record), search))
                 continue;
             projected.push_back(index);
         }

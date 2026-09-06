@@ -853,6 +853,12 @@ Visible as the Workspace panel with the following tabs:
 - **Build Output tab**: bounded typed build and cook diagnostics.
   - Owner: `GlobalDockBuildOutputPane`
   - Queries: `IBuildOutputQuery`; it never parses log categories for status.
+  - Projects owned revision snapshots only. Diagnostic severity and terminal result
+    remain separate; result-less warnings and errors are not rewritten into operation
+    outcomes by the panel.
+  - Build session and operation identities correlate rows with their producer-owned
+    work. Hiding, closing, or detaching the tab stops observation only and never
+    cancels a producer or changes store retention.
   - Optional absolute source locations carry line and column metadata. The
     workspace validates that a target is a regular non-symlink beneath the
     active project before dispatching platform navigation. The validated request

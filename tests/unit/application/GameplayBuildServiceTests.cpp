@@ -2,6 +2,7 @@
 #include "Horo/Foundation/Platform.h"
 #include "Horo/Platform/ExternalProcess.h"
 
+#include <algorithm>
 #include <catch2/catch_test_macros.hpp>
 #include <chrono>
 #include <filesystem>
@@ -122,8 +123,22 @@ TEST_CASE("Gameplay build service consumes exported SDK and preserves last succe
     const std::optional<BuildOutputSnapshot> buildOutput = output.SnapshotIfChanged(0);
     REQUIRE(buildOutput.has_value());
     for (const BuildOutputRecord &record : buildOutput->records)
-        INFO(record.phase + ": " + record.message);
+        INFO(record.stage + ": " + record.message);
     REQUIRE(success.state == GameplayBuildState::Succeeded);
+    REQUIRE(success.operationId.has_value());
+    REQUIRE_FALSE(buildOutput->records.empty());
+    const auto successfulOutputSession = buildOutput->records.front().sessionId;
+    REQUIRE(successfulOutputSession.has_value());
+    REQUIRE(successfulOutputSession->IsValid());
+    for (const BuildOutputRecord &record : buildOutput->records) {
+        REQUIRE((record.sessionId == successfulOutputSession));
+        REQUIRE((record.operationId == success.operationId));
+    }
+    REQUIRE((std::ranges::count_if(buildOutput->records, [](const BuildOutputRecord &record) {
+        return record.result != BuildOutputResult::None;
+    }) == 1));
+    REQUIRE((buildOutput->records.back().result == BuildOutputResult::Succeeded));
+    REQUIRE((buildOutput->records.back().code.Value() == "gameplay.build.succeeded"));
     REQUIRE(service.IsUpToDate(request));
     REQUIRE(std::filesystem::is_regular_file(project.root / ".horo/local/gameplay_module.json"));
     const std::filesystem::path successfulState = project.root / ".horo/local/gameplay_build_state.json";
@@ -135,6 +150,18 @@ TEST_CASE("Gameplay build service consumes exported SDK and preserves last succe
     REQUIRE(broken.HasValue());
     const GameplayBuildSnapshot failure = AwaitTerminal(service, broken.Value());
     REQUIRE(failure.state == GameplayBuildState::Failed);
+    REQUIRE(failure.operationId.has_value());
+    const std::optional<BuildOutputSnapshot> failedOutput = output.SnapshotIfChanged(buildOutput->revision);
+    REQUIRE(failedOutput.has_value());
+    const auto failedOutputSession = failedOutput->records.back().sessionId;
+    REQUIRE(failedOutputSession.has_value());
+    REQUIRE((failedOutputSession != successfulOutputSession));
+    REQUIRE((std::ranges::count_if(failedOutput->records, [&](const BuildOutputRecord &record) {
+        return record.sessionId == failedOutputSession && record.result != BuildOutputResult::None;
+    }) == 1));
+    REQUIRE((failedOutput->records.back().result == BuildOutputResult::Failed));
+    REQUIRE((failedOutput->records.back().code.Value() == "gameplay.build.failed"));
+    REQUIRE((failedOutput->records.back().operationId == failure.operationId));
     REQUIRE(Read(successfulState) == beforeFailure);
     REQUIRE(std::filesystem::is_regular_file(project.root / ".horo/local/gameplay_module.json"));
     REQUIRE_FALSE(service.IsUpToDate(request));

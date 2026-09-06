@@ -40,6 +40,7 @@ namespace Horo::Assets::CookErrors {
     extern const ErrorCodeDescriptor Cancelled;
     extern const ErrorCodeDescriptor DependencyUnsupported;
     extern const ErrorCodeDescriptor SourceReadFailed;
+    extern const ErrorCodeDescriptor OutputIdentityExhausted;
 }  // namespace Horo::Assets::CookErrors
 
 namespace Horo::Assets::ImportErrors {

@@ -42,7 +42,7 @@ namespace Horo::Editor {
     private:
         [[nodiscard]] bool RefreshSnapshot();
         void RebuildFilter();
-        [[nodiscard]] static bool PassesStatusFilter(BuildOutputStatus status, StatusFilter filter) noexcept;
+        [[nodiscard]] static bool PassesStatusFilter(const BuildOutputRecord &record, StatusFilter filter) noexcept;
 
         const IBuildOutputQuery *m_buildOutputQuery{nullptr};
         BuildOutputSnapshot m_snapshot;

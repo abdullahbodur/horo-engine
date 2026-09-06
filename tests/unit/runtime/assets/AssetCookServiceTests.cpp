@@ -5,6 +5,7 @@
 #include "Horo/Foundation/CancellationToken.h"
 #include "Horo/Foundation/JobSystem.h"
 
+#include <algorithm>
 #include <catch2/catch_test_macros.hpp>
 #include <chrono>
 #include <filesystem>
@@ -134,11 +135,22 @@ TEST_CASE("AssetCookService empty registry publishes empty generation", "[native
     REQUIRE((report.cacheHits == 0));
     const auto buildSnapshot = buildOutput.SnapshotIfChanged(0);
     REQUIRE(buildSnapshot.has_value());
-    REQUIRE((buildSnapshot->records.back().status == BuildOutputStatus::Succeeded));
+    REQUIRE((buildSnapshot->records.size() == 2U));
+    REQUIRE((buildSnapshot->records.back().result == BuildOutputResult::Succeeded));
+    REQUIRE((buildSnapshot->records.back().code.Value() == "asset.cook.succeeded"));
+    REQUIRE((std::ranges::count_if(buildSnapshot->records, [](const BuildOutputRecord &record) {
+        return record.result != BuildOutputResult::None;
+    }) == 1));
     const auto operationSnapshot = operations.SnapshotIfChanged(0);
     REQUIRE(operationSnapshot.has_value());
     REQUIRE((operationSnapshot->operations.size() == 1));
     REQUIRE((operationSnapshot->operations.front().state == OperationState::Succeeded));
+    for (const BuildOutputRecord &record : buildSnapshot->records) {
+        REQUIRE(record.sessionId.has_value());
+        REQUIRE(record.sessionId->IsValid());
+        REQUIRE((record.sessionId == buildSnapshot->records.front().sessionId));
+        REQUIRE((record.operationId == operationSnapshot->operations.front().id));
+    }
 }
 
 TEST_CASE("AssetCookService honours cancellation before work", "[native]") {

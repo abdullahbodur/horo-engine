@@ -7,6 +7,16 @@ namespace Horo {
     /** @copydoc BuildOutputStore::BuildOutputStore */
     BuildOutputStore::BuildOutputStore(const std::size_t capacity) : capacity_(std::max<std::size_t>(capacity, 1U)) {}
 
+    /** @copydoc BuildOutputStore::BeginSession */
+    std::optional<BuildOutputSessionId> BuildOutputStore::BeginSession() {
+        std::lock_guard lock(mutex_);
+        if (nextSessionValue_ == 0U)
+            return std::nullopt;
+        const BuildOutputSessionId id{nextSessionValue_};
+        ++nextSessionValue_;
+        return id;
+    }
+
     /** @copydoc BuildOutputStore::Append */
     void BuildOutputStore::Append(BuildOutputRecord record) {
         std::lock_guard lock(mutex_);

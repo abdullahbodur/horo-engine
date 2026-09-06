@@ -90,17 +90,32 @@ namespace {
         using namespace Horo::Editor;
 
         const std::array buildRecords{
-            BuildOutputRecord{.status = BuildOutputStatus::Succeeded, .phase = "Compile", .message = "Shader complete"},
-            BuildOutputRecord{.status = BuildOutputStatus::Failed,
-                              .phase = "Validate",
+            BuildOutputRecord{.result = BuildOutputResult::Succeeded,
+                              .stage = "Compile",
+                              .code = DiagnosticCode{"shader.compile.succeeded"},
+                              .message = "Shader complete"},
+            BuildOutputRecord{.severity = DiagnosticSeverity::Error,
+                              .stage = "Validate",
+                              .code = DiagnosticCode{"shader.validation.syntax"},
                               .message = "Syntax error",
                               .source = DiagnosticSourceLocation{.absolutePath = "/project/assets/material.glsl", .line = 8}},
-            BuildOutputRecord{.status = BuildOutputStatus::Cached, .phase = "Cook", .message = "Mesh cached"},
+            BuildOutputRecord{.result = BuildOutputResult::Cached,
+                              .stage = "Cook",
+                              .code = DiagnosticCode{"mesh.cook.cache_hit"},
+                              .message = "Mesh cached"},
+            BuildOutputRecord{.severity = DiagnosticSeverity::Warning,
+                              .stage = "Compile",
+                              .code = DiagnosticCode{"shader.compile.deprecated"},
+                              .message = "Deprecated syntax"},
         };
         REQUIRE((GlobalDockBuildOutputPane::ProjectRecords(buildRecords, GlobalDockBuildOutputPane::StatusFilter::Failed, "MATERIAL") ==
                  std::vector<std::size_t>{1}));
         REQUIRE((GlobalDockBuildOutputPane::ProjectRecords(buildRecords, GlobalDockBuildOutputPane::StatusFilter::Cached, {}) ==
                  std::vector<std::size_t>{2}));
+        REQUIRE((GlobalDockBuildOutputPane::ProjectRecords(buildRecords, GlobalDockBuildOutputPane::StatusFilter::Failed, "deprecated")
+                     .empty()));
+        REQUIRE((GlobalDockBuildOutputPane::ProjectRecords(buildRecords, GlobalDockBuildOutputPane::StatusFilter::All,
+                                                           "shader.compile.deprecated") == std::vector<std::size_t>{3}));
 
         const std::array operations{
             OperationRecord{.id = 1, .kind = OperationKind::Import, .state = OperationState::Running, .title = "Import assets"},
@@ -395,8 +410,10 @@ TEST_CASE("Content browser renders responsive layouts and every dock tab", "[uni
 
     BuildOutputStore buildOutputStore{8};
     buildOutputStore.Append({.timestampUtc = std::chrono::system_clock::now(),
-                             .status = BuildOutputStatus::Failed,
-                             .phase = "compile",
+                             .severity = DiagnosticSeverity::Error,
+                             .result = BuildOutputResult::Failed,
+                             .stage = "compile",
+                             .code = DiagnosticCode{"shader.compile.failed"},
                              .message = "Unable to compile shader",
                              .source = DiagnosticSourceLocation{.absolutePath = "/tmp/HoroProject/assets/shader.glsl", .line = 12}});
     OperationStore operationStore{8, 8};

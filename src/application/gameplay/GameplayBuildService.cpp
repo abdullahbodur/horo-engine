@@ -326,6 +326,7 @@ namespace Horo::Application {
             }
 
             GameplayBuildSnapshot snapshot;
+            std::optional<BuildOutputSessionId> outputSessionId;
             GameplayBuildRequest request;
             std::optional<GameplayBuildRequest> pendingRequest;
             CancellationSource cancellation;
@@ -385,6 +386,31 @@ namespace Horo::Application {
             std::size_t suppressedLines{};
         };
 
+        void PublishRecord(GameplayBuildService::State &state, const std::shared_ptr<GameplayBuildService::State::Session> &session,
+                           BuildOutputRecord record) {
+            if (state.output == nullptr)
+                return;
+            {
+                std::lock_guard lock(session->Mutex());
+                record.sessionId = session->outputSessionId;
+                record.operationId = session->snapshot.operationId;
+            }
+            state.output->Append(std::move(record));
+        }
+
+        void ClassifyCompilerDiagnostic(BuildOutputRecord &record) {
+            static const std::regex diagnostic{R"(^(.+):(\d+):(\d+):\s*(error|warning):\s*(.*)$)"};
+            std::smatch match;
+            if (!std::regex_match(record.message, match, diagnostic))
+                return;
+
+            record.source = DiagnosticSourceLocation{match[1].str(), static_cast<std::uint32_t>(std::stoul(match[2].str())),
+                                                     static_cast<std::uint32_t>(std::stoul(match[3].str()))};
+            const bool isError = match[4].str() == "error";
+            record.severity = isError ? DiagnosticSeverity::Error : DiagnosticSeverity::Warning;
+            record.code = DiagnosticCode{isError ? "gameplay.build.compiler_error" : "gameplay.build.compiler_warning"};
+        }
+
         void PublishOutput(GameplayBuildService::State &state, const std::shared_ptr<GameplayBuildService::State::Session> &session,
                            OutputBudget &budget, const char *phase, ProcessOutputLine line) {
             constexpr std::size_t MaximumBytes = 8U * 1024U * 1024U;
@@ -397,16 +423,11 @@ namespace Horo::Application {
             if (line.truncated)
                 message = std::format("{} … [line truncated]", message);
             BuildOutputRecord record{.timestampUtc = std::chrono::system_clock::now(),
-                                     .status = BuildOutputStatus::Info,
-                                     .phase = phase,
+                                     .severity = DiagnosticSeverity::Note,
+                                     .stage = phase,
+                                     .code = DiagnosticCode{"gameplay.build.output"},
                                      .message = std::move(message)};
-            static const std::regex diagnostic{R"(^(.+):(\d+):(\d+):\s*(error|warning):\s*(.*)$)"};
-            if (std::smatch match; std::regex_match(record.message, match, diagnostic)) {
-                record.source = DiagnosticSourceLocation{match[1].str(), static_cast<std::uint32_t>(std::stoul(match[2].str())),
-                                                         static_cast<std::uint32_t>(std::stoul(match[3].str()))};
-                if (match[4].str() == "error")
-                    record.status = BuildOutputStatus::Failed;
-            }
+            ClassifyCompilerDiagnostic(record);
             const bool diagnosticRecord = record.source.has_value();
             const bool byteBudgetAvailable = budget.bytes + record.message.size() <= MaximumBytes;
             const bool recordBudgetAvailable = budget.records < MaximumRecords;
@@ -430,11 +451,7 @@ namespace Horo::Application {
                 budget.informationalBytes += record.message.size();
                 ++budget.informationalRecords;
             }
-            {
-                std::lock_guard lock(session->Mutex());
-                record.operationId = session->snapshot.operationId;
-            }
-            state.output->Append(std::move(record));
+            PublishRecord(state, session, std::move(record));
         }
 
         struct OutputSummaryGuard final {
@@ -463,17 +480,16 @@ namespace Horo::Application {
             void PublishSummary() const {
                 if (state == nullptr || state->output == nullptr || budget == nullptr || budget->suppressedLines == 0)
                     return;
-                BuildOutputRecord
-                    record{.timestampUtc = std::chrono::system_clock::now(),
-                           .status = BuildOutputStatus::Info,
-                           .phase = "output",
-                           .message = std::format("Suppressed {} build output lines ({} bytes) after the session budget was reached.",
-                                                  budget->suppressedLines, budget->suppressedBytes)};
-                {
-                    std::lock_guard lock(session->Mutex());
-                    record.operationId = session->snapshot.operationId;
-                }
-                state->output->Append(std::move(record));
+                PublishRecord(*state, session,
+                              BuildOutputRecord{
+                                  .timestampUtc = std::chrono::system_clock::now(),
+                                  .severity = DiagnosticSeverity::Warning,
+                                  .stage = "output",
+                                  .code = DiagnosticCode{"gameplay.build.output_suppressed"},
+                                  .message =
+                                      std::format("Suppressed {} build output lines ({} bytes) after the session budget was reached.",
+                                                  budget->suppressedLines, budget->suppressedBytes),
+                              });
             }
         };
 
@@ -867,6 +883,11 @@ namespace Horo::Application {
 
             auto session = std::make_shared<GameplayBuildService::State::Session>();
             session->snapshot.id = state->nextId++;
+            if (state->output != nullptr) {
+                session->outputSessionId = state->output->BeginSession();
+                if (!session->outputSessionId.has_value())
+                    return Result<SessionPreparation>::Failure(MakeError(BuildFailed, "Build-output session identity space is exhausted."));
+            }
             session->snapshot.activeInputHash = inputHash;
             session->snapshot.desiredInputHash = inputHash;
             session->request = std::move(request);
@@ -938,6 +959,27 @@ namespace Horo::Application {
                 Update(session, terminal, "complete");
                 UpdateOperation(*state, session, OperationState::Succeeded, "complete", "Gameplay module built successfully.");
             }
+            BuildOutputResult outputResult = BuildOutputResult::Succeeded;
+            DiagnosticSeverity severity = DiagnosticSeverity::Note;
+            DiagnosticCode code{"gameplay.build.succeeded"};
+            std::string message{"Gameplay module built successfully."};
+            if (result.HasError()) {
+                severity = terminal == GameplayBuildState::Cancelled ? DiagnosticSeverity::Warning : DiagnosticSeverity::Error;
+                outputResult = terminal == GameplayBuildState::Cancelled  ? BuildOutputResult::Cancelled
+                               : terminal == GameplayBuildState::TimedOut ? BuildOutputResult::TimedOut
+                                                                          : BuildOutputResult::Failed;
+                code = DiagnosticCode{terminal == GameplayBuildState::Cancelled  ? "gameplay.build.cancelled"
+                                      : terminal == GameplayBuildState::TimedOut ? "gameplay.build.timed_out"
+                                                                                 : "gameplay.build.failed"};
+                message = result.ErrorValue().message;
+            }
+            PublishRecord(*state, session,
+                          BuildOutputRecord{.timestampUtc = std::chrono::system_clock::now(),
+                                            .severity = severity,
+                                            .result = outputResult,
+                                            .stage = result.HasValue() ? "complete" : "terminal",
+                                            .code = std::move(code),
+                                            .message = std::move(message)});
             RemoveActiveProject(state, projectKey, session->snapshot.id);
             return result;
         }

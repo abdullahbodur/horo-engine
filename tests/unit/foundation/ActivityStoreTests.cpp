@@ -1,6 +1,8 @@
 #include "Horo/Foundation/BuildOutputStore.h"
 #include "Horo/Foundation/OperationStore.h"
 
+#include <algorithm>
+#include <array>
 #include <atomic>
 #include <catch2/catch_test_macros.hpp>
 #include <thread>
@@ -8,12 +10,26 @@
 
 TEST_CASE("Build output store retains a bounded typed snapshot", "[foundation][diagnostics]") {
     Horo::BuildOutputStore store{2};
-    store.Append({.status = Horo::BuildOutputStatus::Info, .phase = "prepare", .message = "one"});
-    store.Append({.status = Horo::BuildOutputStatus::Failed,
-                  .phase = "compile",
+    const auto session = store.BeginSession();
+    REQUIRE(session.has_value());
+    store.Append({.sessionId = session,
+                  .operationId = 41,
+                  .stage = "prepare",
+                  .code = Horo::DiagnosticCode{"build.prepare.started"},
+                  .message = "one"});
+    store.Append({.sessionId = session,
+                  .operationId = 41,
+                  .severity = Horo::DiagnosticSeverity::Warning,
+                  .stage = "compile",
+                  .code = Horo::DiagnosticCode{"build.compiler.warning"},
                   .message = "two",
                   .source = Horo::DiagnosticSourceLocation{.absolutePath = "/project/source.cpp", .line = 12, .column = 3}});
-    store.Append({.status = Horo::BuildOutputStatus::Succeeded, .phase = "link", .message = "three"});
+    store.Append({.sessionId = session,
+                  .operationId = 41,
+                  .result = Horo::BuildOutputResult::Succeeded,
+                  .stage = "link",
+                  .code = Horo::DiagnosticCode{"build.succeeded"},
+                  .message = "three"});
 
     const auto snapshot = store.SnapshotIfChanged(0);
     REQUIRE(snapshot.has_value());
@@ -21,7 +37,42 @@ TEST_CASE("Build output store retains a bounded typed snapshot", "[foundation][d
     REQUIRE((snapshot->droppedRecordCount == 1));
     REQUIRE((snapshot->records.front().message == "two"));
     REQUIRE((snapshot->records.front().source->line == 12));
+    REQUIRE((snapshot->records.front().severity == Horo::DiagnosticSeverity::Warning));
+    REQUIRE((snapshot->records.front().result == Horo::BuildOutputResult::None));
+    REQUIRE((snapshot->records.front().code.Value() == "build.compiler.warning"));
+    REQUIRE((snapshot->records.front().sessionId == session));
+    REQUIRE((snapshot->records.front().operationId == 41));
+    REQUIRE((snapshot->records.front().sequence + 1U == snapshot->records.back().sequence));
     REQUIRE((!store.SnapshotIfChanged(snapshot->revision).has_value()));
+}
+
+TEST_CASE("Build output store issues deterministic non-zero session identities", "[foundation][diagnostics]") {
+    Horo::BuildOutputStore store{0};
+    const auto first = store.BeginSession();
+    const auto second = store.BeginSession();
+    REQUIRE(first.has_value());
+    REQUIRE(second.has_value());
+    REQUIRE(first->IsValid());
+    REQUIRE(second->IsValid());
+    REQUIRE((first->Value() == 1U));
+    REQUIRE((second->Value() == 2U));
+
+    store.Append({.sessionId = first,
+                  .result = Horo::BuildOutputResult::Succeeded,
+                  .stage = "complete",
+                  .code = Horo::DiagnosticCode{"build.succeeded"},
+                  .message = "first"});
+    store.Append({.sessionId = second,
+                  .result = Horo::BuildOutputResult::Succeeded,
+                  .stage = "complete",
+                  .code = Horo::DiagnosticCode{"build.succeeded"},
+                  .message = "second"});
+    const auto snapshot = store.SnapshotIfChanged(0);
+    REQUIRE(snapshot.has_value());
+    REQUIRE((snapshot->capacity == 1U));
+    REQUIRE((snapshot->revision == 2U));
+    REQUIRE((snapshot->droppedRecordCount == 1U));
+    REQUIRE((snapshot->records.front().sequence == 2U));
 }
 
 TEST_CASE("Operation store enforces progress and terminal retention", "[foundation][jobs]") {
@@ -73,20 +124,31 @@ TEST_CASE("Build output producers publish bounded monotonic snapshots concurrent
     constexpr std::size_t recordsPerProducer = 100;
     constexpr std::size_t capacity = 64;
     Horo::BuildOutputStore store{capacity};
+    std::array<std::optional<Horo::BuildOutputSessionId>, producerCount> sessions;
 
     std::vector<std::thread> producers;
     producers.reserve(producerCount);
     for (std::size_t producer = 0; producer < producerCount; ++producer) {
-        producers.emplace_back([&store, producer] {
+        producers.emplace_back([&store, &sessions, producer] {
+            sessions[producer] = store.BeginSession();
             for (std::size_t record = 0; record < recordsPerProducer; ++record) {
-                store.Append({.status = Horo::BuildOutputStatus::Info,
-                              .phase = "concurrent",
+                store.Append({.sessionId = sessions[producer],
+                              .stage = "concurrent",
+                              .code = Horo::DiagnosticCode{"build.concurrent.output"},
                               .message = std::to_string(producer) + ':' + std::to_string(record)});
             }
         });
     }
     for (auto &producer : producers)
         producer.join();
+
+    std::array<std::uint64_t, producerCount> sessionValues;
+    for (std::size_t index = 0; index < producerCount; ++index) {
+        REQUIRE(sessions[index].has_value());
+        sessionValues[index] = sessions[index]->Value();
+    }
+    std::ranges::sort(sessionValues);
+    REQUIRE((sessionValues == std::array<std::uint64_t, producerCount>{1U, 2U, 3U, 4U}));
 
     const auto snapshot = store.SnapshotIfChanged(0);
     REQUIRE(snapshot.has_value());
