@@ -37,7 +37,7 @@ namespace Horo {
 
         [[nodiscard]] SchedulerIdentity NextSchedulerIdentity() noexcept {
             static std::atomic<std::uint64_t> next{1};
-            return SchedulerIdentity{next.fetch_add(1, std::memory_order_relaxed)};
+            return SchedulerIdentity{next.fetch_add(1)};
         }
     }  // namespace
 
@@ -62,10 +62,10 @@ namespace Horo {
     };
 
     struct JobSystem::State {
-        explicit State(const JobSystemConfig value) : config(value), schedulerIdentity(NextSchedulerIdentity()) {}
+        explicit State(const JobSystemConfig value) : config(value) {}
 
         JobSystemConfig config;
-        SchedulerIdentity schedulerIdentity;
+        SchedulerIdentity schedulerIdentity = NextSchedulerIdentity();
         std::mutex mutex;
         std::condition_variable workAvailable;
         bool accepting = true;
@@ -79,14 +79,16 @@ namespace Horo {
     };
 
     namespace {
-        thread_local std::optional<SchedulerIdentity> activeSchedulerIdentity;
+        // Mutable scheduler identity is isolated per worker thread.
+        thread_local std::optional<SchedulerIdentity> activeSchedulerIdentity;  // NOSONAR(cpp:S5421)
 
         struct JobExecutionFrame final {
             const JobRecord &record;
             std::optional<std::reference_wrapper<const JobExecutionFrame>> previous;
         };
 
-        thread_local std::optional<std::reference_wrapper<const JobExecutionFrame>> activeExecutionFrame;
+        // Mutable execution stack is isolated per worker thread.
+        thread_local std::optional<std::reference_wrapper<const JobExecutionFrame>> activeExecutionFrame;  // NOSONAR(cpp:S5421)
 
         /** @brief Tracks nested exact-record execution so synchronous wait cycles can be rejected. */
         class JobExecutionScope final {
@@ -272,7 +274,11 @@ namespace Horo {
     }
 
     JobSystem::~JobSystem() {
-        Shutdown(ShutdownPolicy::Cancel);
+        try {
+            Shutdown(ShutdownPolicy::Cancel);
+        } catch (...) {  // NOSONAR(cpp:S2486) A destructor cannot report or propagate cleanup failures.
+            // Destructors must swallow any unexpected exceptions per noexcept contract.
+        }
     }
 
     Result<JobHandle> JobSystem::Submit(JobDescriptor descriptor, std::function<void(const CancellationToken &)> work) const {
