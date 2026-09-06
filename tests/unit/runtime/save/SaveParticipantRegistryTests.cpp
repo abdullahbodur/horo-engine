@@ -53,21 +53,47 @@ namespace Horo::Runtime {
         TEST_CASE("Participant descriptors reject invalid metadata before snapshot publication", "[unit][save][registry]") {
             auto destructionCount = std::make_shared<int>();
             CanonicalStateParticipantRegistry registry;
+            const auto requireInvalid = [&](CanonicalStateParticipantDescriptor descriptor) {
+                REQUIRE(registry.Register(std::move(descriptor), Adapter(destructionCount)).ErrorValue().code.Value() ==
+                        SaveErrors::ParticipantDescriptorInvalid.code.Value());
+            };
+
             auto invalid = Descriptor("horo.test.invalid");
             invalid.schemaVersion = {};
-            REQUIRE(registry.Register(std::move(invalid), Adapter(destructionCount)).HasError());
+            requireInvalid(std::move(invalid));
             REQUIRE(registry.Register(Descriptor("horo.test.missing_adapter"), nullptr).ErrorValue().code.Value() ==
                     SaveErrors::ParticipantAdapterMissing.code.Value());
 
             invalid = Descriptor("horo.test.no_roles");
             invalid.roles = SaveParticipantRole::None;
-            REQUIRE(registry.Register(std::move(invalid), Adapter(destructionCount)).HasError());
+            requireInvalid(std::move(invalid));
             invalid = Descriptor("horo.test.unbounded");
             invalid.limits.maximumPayloadBytes = 0;
-            REQUIRE(registry.Register(std::move(invalid), Adapter(destructionCount)).HasError());
+            requireInvalid(std::move(invalid));
+            invalid = Descriptor("horo.test.no_record_capacity");
+            invalid.limits.maximumRecordCount = 0;
+            requireInvalid(std::move(invalid));
+            invalid = Descriptor("horo.test.no_nesting");
+            invalid.limits.maximumNestingDepth = 0;
+            requireInvalid(std::move(invalid));
+            invalid = Descriptor("horo.test.no_participant");
+            invalid.participant = {};
+            requireInvalid(std::move(invalid));
+            invalid = Descriptor("horo.test.no_records");
+            invalid.ownedRecords.clear();
+            requireInvalid(std::move(invalid));
             invalid = Descriptor("horo.test.duplicate_record");
             invalid.ownedRecords.push_back(invalid.ownedRecords.front());
-            REQUIRE(registry.Register(std::move(invalid), Adapter(destructionCount)).HasError());
+            requireInvalid(std::move(invalid));
+            invalid = Descriptor("horo.test.invalid_dependency");
+            invalid.dependencies = {SaveParticipantId{}};
+            requireInvalid(std::move(invalid));
+            invalid = Descriptor("horo.test.self_dependency");
+            invalid.dependencies = {invalid.participant};
+            requireInvalid(std::move(invalid));
+            invalid = Descriptor("horo.test.duplicate_dependency");
+            invalid.dependencies = {Participant("horo.test.provider"), Participant("horo.test.provider")};
+            requireInvalid(std::move(invalid));
         }
 
         TEST_CASE("Participant registration is unique bounded and generation checked", "[unit][save][registry]") {
@@ -157,6 +183,14 @@ namespace Horo::Runtime {
             REQUIRE(cyclic.Register(std::move(first), Adapter(destructionCount)).HasValue());
             REQUIRE(cyclic.Register(std::move(second), Adapter(destructionCount)).HasValue());
             REQUIRE(cyclic.Snapshot().ErrorValue().code.Value() == SaveErrors::ParticipantDependencyCycle.code.Value());
+
+            CanonicalStateParticipantRegistry acyclic;
+            auto consumer = Descriptor("horo.test.consumer");
+            consumer.dependencies = {Participant("horo.test.provider")};
+            REQUIRE(acyclic.Register(Descriptor("horo.test.provider", "20112233-4455-6677-8899-aabbccddeeff"), Adapter(destructionCount))
+                        .HasValue());
+            REQUIRE(acyclic.Register(std::move(consumer), Adapter(destructionCount)).HasValue());
+            REQUIRE(acyclic.Snapshot().HasValue());
         }
 
         TEST_CASE("Descriptors remain inert until explicit registry operations", "[unit][save][registry]") {

@@ -5,46 +5,69 @@
 #include <algorithm>
 #include <limits>
 #include <unordered_map>
+#include <unordered_set>
 
 namespace Horo::Runtime {
     namespace {
-        [[nodiscard]] Result<void> ValidateDescriptor(const CanonicalStateParticipantDescriptor &descriptor) {
-            if (!descriptor.participant.IsValid() || !descriptor.schemaVersion.IsValid() || descriptor.roles == SaveParticipantRole::None ||
-                descriptor.limits.maximumPayloadBytes == 0 || descriptor.limits.maximumRecordCount == 0 ||
-                descriptor.limits.maximumNestingDepth == 0 || descriptor.ownedRecords.empty())
-                return Result<void>::Failure(MakeError(SaveErrors::ParticipantDescriptorInvalid));
+        using ParticipantIndices = std::unordered_map<SaveParticipantId, std::size_t, SaveParticipantIdHash>;
 
-            for (std::size_t index = 0; index < descriptor.dependencies.size(); ++index) {
-                if (!descriptor.dependencies[index].IsValid() || descriptor.dependencies[index] == descriptor.participant)
-                    return Result<void>::Failure(MakeError(SaveErrors::ParticipantDescriptorInvalid));
-                if (std::ranges::find(descriptor.dependencies.begin(), descriptor.dependencies.begin() + index,
-                                      descriptor.dependencies[index]) != descriptor.dependencies.begin() + index)
-                    return Result<void>::Failure(MakeError(SaveErrors::ParticipantDescriptorInvalid));
+        enum class VisitState : std::uint8_t {
+            Unvisited,
+            Visiting,
+            Visited
+        };
+
+        /** @brief Validates required scalar and owned-record descriptor fields. */
+        [[nodiscard]] bool HasValidRequiredFields(const CanonicalStateParticipantDescriptor &descriptor) {
+            return descriptor.participant.IsValid() && descriptor.schemaVersion.IsValid() &&
+                   descriptor.roles != SaveParticipantRole::None && descriptor.limits.maximumPayloadBytes != 0 &&
+                   descriptor.limits.maximumRecordCount != 0 && descriptor.limits.maximumNestingDepth != 0 &&
+                   !descriptor.ownedRecords.empty();
+        }
+
+        /** @brief Validates dependency identity, self-reference, and uniqueness rules. */
+        [[nodiscard]] bool HasValidDependencies(const CanonicalStateParticipantDescriptor &descriptor) {
+            std::unordered_set<SaveParticipantId, SaveParticipantIdHash> uniqueDependencies;
+            uniqueDependencies.reserve(descriptor.dependencies.size());
+            for (const SaveParticipantId &dependency : descriptor.dependencies) {
+                if (!dependency.IsValid() || dependency == descriptor.participant || !uniqueDependencies.insert(dependency).second)
+                    return false;
             }
+            return true;
+        }
+
+        /** @brief Validates one inert descriptor before registry mutation. */
+        [[nodiscard]] Result<void> ValidateDescriptor(const CanonicalStateParticipantDescriptor &descriptor) {
+            if (!HasValidRequiredFields(descriptor) || !HasValidDependencies(descriptor))
+                return Result<void>::Failure(MakeError(SaveErrors::ParticipantDescriptorInvalid));
             if (const Result<void> records = ValidateUniqueSaveIdentities<SaveRecordIdentityTag>(descriptor.ownedRecords);
                 records.HasError())
                 return Result<void>::Failure(MakeError(SaveErrors::ParticipantDescriptorInvalid));
             return Result<void>::Success();
         }
 
-        [[nodiscard]] Result<void> ValidateDependencies(const std::vector<SaveParticipantBinding> &bindings) {
-            enum class VisitState : std::uint8_t {
-                Unvisited,
-                Visiting,
-                Visited
-            };
-            std::unordered_map<SaveParticipantId, std::size_t, SaveParticipantIdHash> indices;
+        /** @brief Builds the immutable participant-to-binding index used for graph validation. */
+        [[nodiscard]] ParticipantIndices BuildParticipantIndices(const std::vector<SaveParticipantBinding> &bindings) {
+            ParticipantIndices indices;
             indices.reserve(bindings.size());
             for (std::size_t index = 0; index < bindings.size(); ++index)
                 indices.emplace(bindings[index].Descriptor().participant, index);
+            return indices;
+        }
 
+        /** @brief Reports whether every declared dependency exists in the candidate snapshot. */
+        [[nodiscard]] bool ContainsAllDependencies(const std::vector<SaveParticipantBinding> &bindings, const ParticipantIndices &indices) {
             for (const SaveParticipantBinding &binding : bindings) {
                 for (const SaveParticipantId &dependency : binding.Descriptor().dependencies) {
                     if (!indices.contains(dependency))
-                        return Result<void>::Failure(MakeError(SaveErrors::ParticipantDependencyMissing));
+                        return false;
                 }
             }
+            return true;
+        }
 
+        /** @brief Reports whether the complete participant graph contains a dependency cycle. */
+        [[nodiscard]] bool HasDependencyCycle(const std::vector<SaveParticipantBinding> &bindings, const ParticipantIndices &indices) {
             std::vector<VisitState> states(bindings.size(), VisitState::Unvisited);
             const auto visit = [&](const auto &self, const std::size_t index) -> bool {
                 if (states[index] == VisitState::Visiting)
@@ -61,8 +84,18 @@ namespace Horo::Runtime {
             };
             for (std::size_t index = 0; index < bindings.size(); ++index) {
                 if (!visit(visit, index))
-                    return Result<void>::Failure(MakeError(SaveErrors::ParticipantDependencyCycle));
+                    return true;
             }
+            return false;
+        }
+
+        /** @brief Validates dependency presence and acyclicity for a candidate snapshot. */
+        [[nodiscard]] Result<void> ValidateDependencies(const std::vector<SaveParticipantBinding> &bindings) {
+            const ParticipantIndices indices = BuildParticipantIndices(bindings);
+            if (!ContainsAllDependencies(bindings, indices))
+                return Result<void>::Failure(MakeError(SaveErrors::ParticipantDependencyMissing));
+            if (HasDependencyCycle(bindings, indices))
+                return Result<void>::Failure(MakeError(SaveErrors::ParticipantDependencyCycle));
             return Result<void>::Success();
         }
     }  // namespace
