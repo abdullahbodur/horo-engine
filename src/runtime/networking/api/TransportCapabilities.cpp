@@ -52,9 +52,9 @@ namespace Horo::Network {
             if (requirements.deadline == DeadlineRequirement::None)
                 return Result<bool>::Success(false);
 
-            const bool supported = capabilities.deadlines == TransportSupport::Available &&
-                                   requirements.requiredMaximumDeadlineMilliseconds <= capabilities.maximumDeadlineMilliseconds;
-            if (supported)
+            if (const bool supported = capabilities.deadlines == TransportSupport::Available &&
+                                       requirements.requiredMaximumDeadlineMilliseconds <= capabilities.maximumDeadlineMilliseconds;
+                supported)
                 return Result<bool>::Success(true);
             if (requirements.deadline == DeadlineRequirement::Optional)
                 return Result<bool>::Success(false);
@@ -88,11 +88,12 @@ namespace Horo::Network {
         }
 
         [[nodiscard]] Result<void> AdmitState(const TransportAdmissionState state) {
-            if (!IsKnown(state, TransportAdmissionState::Count))
+            using enum TransportAdmissionState;
+            if (!IsKnown(state, Count))
                 return Result<void>::Failure(MakeError(NetworkErrors::TransportCapabilityDescriptorInvalid));
-            if (state == TransportAdmissionState::Cancelled)
+            if (state == Cancelled)
                 return Result<void>::Failure(MakeError(NetworkErrors::TransportOperationCancelled));
-            if (state == TransportAdmissionState::ShuttingDown)
+            if (state == ShuttingDown)
                 return Result<void>::Failure(MakeError(NetworkErrors::TransportShuttingDown));
             return Result<void>::Success();
         }
@@ -162,8 +163,7 @@ namespace Horo::Network {
         if (selection.capabilityRevision != expectedRevision)
             return Result<void>::Failure(MakeError(NetworkErrors::TransportCapabilityStale));
 
-        const std::size_t deliveryIndex = static_cast<std::size_t>(requirement.delivery);
-        if (!selection.admittedDelivery[deliveryIndex])
+        if (const auto deliveryIndex = static_cast<std::size_t>(requirement.delivery); !selection.admittedDelivery[deliveryIndex])
             return Unsupported<void>();
         return AdmitSendBounds(selection, requirement);
     }
