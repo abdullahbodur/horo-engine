@@ -98,6 +98,9 @@ TEST_CASE("Texture descriptors accept core policy and reject malformed structure
                                            .sampleCount = 4,
                                            .usage = RenderTextureUsage::RenderAttachment})
               .HasValue());
+}
+
+TEST_CASE("Texture descriptors reject malformed structural policy", "[runtime][renderer][resource-descriptor]") {
     CheckError(ValidateRenderTextureDescriptor(ColorTexture({0, 2})), RenderResourceDescriptorErrors::TextureInvalid);
 
     auto invalid = ColorTexture();
@@ -220,6 +223,11 @@ TEST_CASE("Texture views validate structure separately from source compatibility
     incompleteCubeArray.layerCount = 13;
     CheckError(ValidateRenderTextureViewCompatibility(incompleteCubeArray, cubeView),
                RenderResourceDescriptorErrors::TextureViewIncompatible);
+}
+
+TEST_CASE("Texture views reject malformed ranges and incompatible aspects", "[runtime][renderer][resource-descriptor]") {
+    const RenderTextureDescriptor color = ColorTexture();
+    const RenderTextureViewDescriptor colorView = ColorView();
 
     auto invalid = colorView;
     invalid.texture = {};
@@ -313,7 +321,9 @@ TEST_CASE("Texture initial data validates canonical subresources and checked pit
     invalid.bytes = std::span{bytes}.first<15>();
     const std::array shortBytes{invalid};
     CheckError(ValidateRenderTextureInitialData(descriptor, {shortBytes}), RenderResourceDescriptorErrors::TextureInitialDataInvalid);
+}
 
+TEST_CASE("Texture initial data rejects overflow and accepts volume layout", "[runtime][renderer][resource-descriptor]") {
     const RenderTextureDescriptor tall = ColorTexture({1, std::numeric_limits<std::uint32_t>::max()});
     std::array<std::byte, 1> sentinel{};
     const RenderTextureSubresourceInitialDataView overflowing{

@@ -3,6 +3,7 @@
 #include "Horo/Runtime/Render/RenderResourceDescriptorErrors.h"
 
 #include <algorithm>
+#include <array>
 #include <limits>
 
 namespace Horo::Render {
@@ -10,31 +11,10 @@ namespace Horo::Render {
         constexpr std::size_t MaximumInitialTextureSubresources = 1'024;
 
         [[nodiscard]] constexpr std::size_t BytesPerTexel(const RenderTextureFormat format) noexcept {
-            using enum RenderTextureFormat;
-            switch (format) {
-                case R8Unorm:
-                    return 1;
-                case Rg8Unorm:
-                case R16Float:
-                case Depth16Unorm:
-                    return 2;
-                case Rgba8Unorm:
-                case Rgba8UnormSrgb:
-                case Bgra8Unorm:
-                case Bgra8UnormSrgb:
-                case Rg16Float:
-                case R32Float:
-                case Depth24Stencil8:
-                case Depth32Float:
-                    return 4;
-                case Rgba16Float:
-                case Rg32Float:
-                case Depth32FloatStencil8:
-                    return 8;
-                case Rgba32Float:
-                    return 16;
-            }
-            return 0;
+            constexpr std::array<std::size_t, 16> bytesPerFormat{4, 4, 4, 1, 2, 4, 4, 4, 2, 4, 8, 4, 8, 16, 2, 8};
+            static_assert(bytesPerFormat.size() == static_cast<std::size_t>(RenderTextureFormat::Depth32FloatStencil8) + 1U);
+            const std::size_t index = static_cast<std::size_t>(format);
+            return index < bytesPerFormat.size() ? bytesPerFormat[index] : 0;
         }
 
         [[nodiscard]] constexpr bool CheckedMultiply(const std::size_t left, const std::size_t right, std::size_t &product) noexcept {
@@ -45,16 +25,27 @@ namespace Horo::Render {
         }
 
         [[nodiscard]] constexpr bool IsAspectCompatible(const RenderTextureFormat format, const RenderTextureAspect aspect) noexcept {
-            using enum RenderTextureAspect;
-            using enum RenderTextureFormat;
-            if (format != Depth16Unorm && format != Depth24Stencil8 && format != Depth32Float && format != Depth32FloatStencil8)
-                return aspect == Color;
-            if (format == Depth24Stencil8)
-                return aspect == Depth || aspect == Stencil || aspect == DepthStencil;
-            if (format == Depth32FloatStencil8)
-                return aspect == Depth || aspect == Stencil || aspect == DepthStencil;
-            if (format == Depth16Unorm || format == Depth32Float)
-                return aspect == Depth;
+            enum class AspectPolicy : std::uint8_t {
+                Color,
+                Depth,
+                DepthStencil,
+            };
+            using enum AspectPolicy;
+            constexpr std::array policies{Color, DepthStencil, Depth, Color, Color, Color, Color, Color,
+                                          Color, Color,        Color, Color, Color, Color, Depth, DepthStencil};
+            static_assert(policies.size() == static_cast<std::size_t>(RenderTextureFormat::Depth32FloatStencil8) + 1U);
+            const std::size_t index = static_cast<std::size_t>(format);
+            if (index >= policies.size())
+                return false;
+            switch (policies[index]) {
+                case Color:
+                    return aspect == RenderTextureAspect::Color;
+                case Depth:
+                    return aspect == RenderTextureAspect::Depth;
+                case DepthStencil:
+                    return aspect == RenderTextureAspect::Depth || aspect == RenderTextureAspect::Stencil ||
+                           aspect == RenderTextureAspect::DepthStencil;
+            }
             return false;
         }
 
@@ -66,23 +57,43 @@ namespace Horo::Render {
                    (texture == Bgra8Unorm && view == Bgra8UnormSrgb) || (texture == Bgra8UnormSrgb && view == Bgra8Unorm);
         }
 
+        [[nodiscard]] constexpr bool HasCubeSourceLayout(const RenderTextureDescriptor &texture,
+                                                         const RenderTextureViewDescriptor &view) noexcept {
+            const bool squareSource = texture.extent.width == texture.extent.height;
+            const bool cubeLayerLayout = texture.layerCount % 6 == 0 && view.baseLayer % 6 == 0;
+            return squareSource && cubeLayerLayout;
+        }
+
+        [[nodiscard]] constexpr bool IsTwoDimensionalViewCompatible(const RenderTextureDescriptor &texture,
+                                                                    const RenderTextureViewDescriptor &view) noexcept {
+            using enum RenderTextureViewDimension;
+            switch (view.dimension) {
+                case TwoD:
+                    return view.layerCount == 1;
+                case TwoDArray:
+                    return true;
+                case Cube:
+                    return HasCubeSourceLayout(texture, view) && view.layerCount == 6;
+                case CubeArray:
+                    return HasCubeSourceLayout(texture, view) && view.layerCount % 6 == 0;
+                case OneD:
+                case ThreeD:
+                    return false;
+            }
+            return false;
+        }
+
         [[nodiscard]] constexpr bool IsViewDimensionCompatible(const RenderTextureDescriptor &texture,
                                                                const RenderTextureViewDescriptor &view) noexcept {
             using enum RenderTextureDimension;
-            if (texture.dimension == OneD)
-                return view.dimension == RenderTextureViewDimension::OneD && view.layerCount == 1;
-            if (texture.dimension == ThreeD)
-                return view.dimension == RenderTextureViewDimension::ThreeD && view.baseLayer == 0 && view.layerCount == 1;
-            if (view.dimension == RenderTextureViewDimension::TwoD)
-                return view.layerCount == 1;
-            if (view.dimension == RenderTextureViewDimension::TwoDArray)
-                return true;
-            const bool squareSource = texture.extent.width == texture.extent.height;
-            const bool cubeLayerLayout = texture.layerCount % 6 == 0 && view.baseLayer % 6 == 0;
-            if (view.dimension == RenderTextureViewDimension::Cube)
-                return squareSource && cubeLayerLayout && view.layerCount == 6;
-            if (view.dimension == RenderTextureViewDimension::CubeArray)
-                return squareSource && cubeLayerLayout && view.layerCount % 6 == 0;
+            switch (texture.dimension) {
+                case OneD:
+                    return view.dimension == RenderTextureViewDimension::OneD && view.layerCount == 1;
+                case TwoD:
+                    return IsTwoDimensionalViewCompatible(texture, view);
+                case ThreeD:
+                    return view.dimension == RenderTextureViewDimension::ThreeD && view.baseLayer == 0 && view.layerCount == 1;
+            }
             return false;
         }
 
@@ -110,6 +121,27 @@ namespace Horo::Render {
 
         [[nodiscard]] Result<void> InitialDataFailure() {
             return Result<void>::Failure(MakeError(RenderResourceDescriptorErrors::TextureInitialDataInvalid));
+        }
+
+        [[nodiscard]] bool HasExpectedSubresourceCount(const RenderTextureDescriptor &descriptor,
+                                                       const RenderTextureInitialDataView initialData) noexcept {
+            std::size_t subresourceCount{};
+            return CheckedMultiply(descriptor.mipCount, descriptor.layerCount, subresourceCount) &&
+                   subresourceCount <= MaximumInitialTextureSubresources && initialData.subresources.size() == subresourceCount;
+        }
+
+        [[nodiscard]] bool IsInitialSubresourceValid(const RenderTextureDescriptor &descriptor,
+                                                     const RenderTextureSubresourceInitialDataView &subresource,
+                                                     const std::size_t index) noexcept {
+            const auto expectedLayer = static_cast<std::uint32_t>(index / descriptor.mipCount);
+            const auto expectedMip = static_cast<std::uint32_t>(index % descriptor.mipCount);
+            if (subresource.arrayLayer != expectedLayer || subresource.mipLevel != expectedMip)
+                return false;
+
+            TextureSubresourceLayout layout;
+            return TryCalculateSubresourceLayout(descriptor, subresource, expectedMip, layout) &&
+                   subresource.rowPitchBytes >= layout.minimumRowPitch && subresource.slicePitchBytes >= layout.minimumSlicePitch &&
+                   subresource.bytes.size() == layout.requiredBytes;
         }
     }  // namespace
 
@@ -157,22 +189,12 @@ namespace Horo::Render {
             return valid;
         if (initialData.subresources.empty())
             return Result<void>::Success();
-        if (std::size_t subresourceCount{}; !CheckedMultiply(descriptor.mipCount, descriptor.layerCount, subresourceCount) ||
-                                            subresourceCount > MaximumInitialTextureSubresources ||
-                                            initialData.subresources.size() != subresourceCount)
+        if (!HasExpectedSubresourceCount(descriptor, initialData))
             return InitialDataFailure();
 
         for (std::size_t index = 0; index < initialData.subresources.size(); ++index) {
             const auto &subresource = initialData.subresources[index];
-            const auto expectedLayer = static_cast<std::uint32_t>(index / descriptor.mipCount);
-            const auto expectedMip = static_cast<std::uint32_t>(index % descriptor.mipCount);
-            if (subresource.arrayLayer != expectedLayer || subresource.mipLevel != expectedMip)
-                return InitialDataFailure();
-
-            TextureSubresourceLayout layout;
-            if (!TryCalculateSubresourceLayout(descriptor, subresource, expectedMip, layout) ||
-                subresource.rowPitchBytes < layout.minimumRowPitch || subresource.slicePitchBytes < layout.minimumSlicePitch ||
-                subresource.bytes.size() != layout.requiredBytes)
+            if (!IsInitialSubresourceValid(descriptor, subresource, index))
                 return InitialDataFailure();
         }
         return Result<void>::Success();

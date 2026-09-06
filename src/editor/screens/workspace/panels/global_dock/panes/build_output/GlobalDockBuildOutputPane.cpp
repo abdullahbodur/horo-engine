@@ -5,6 +5,7 @@
 #include "editor/screens/workspace/EditorWorkspaceViewModel.h"
 
 #include <algorithm>
+#include <array>
 #include <cctype>
 #include <cstdio>
 #include <ctime>
@@ -31,92 +32,80 @@ namespace Horo::Editor {
             return DesignSystem::MetricsFor(Theme::GetActiveTokens(), Ui::ComponentSize::Small).minimumHeight;
         }
 
-        [[nodiscard]] ImVec4 StatusColor(const BuildOutputRecord &record) noexcept {
+        enum class PresentedBuildStatus : std::uint8_t {
+            Succeeded,
+            Failed,
+            Cached,
+            Cancelled,
+            TimedOut,
+            Fatal,
+            Error,
+            Warning,
+            Info,
+            Unknown,
+            UseSeverity,
+        };
+
+        [[nodiscard]] constexpr PresentedBuildStatus ResultStatus(const BuildOutputResult result) noexcept {
             using enum BuildOutputResult;
-            switch (record.result) {
-                case Failed:
-                case TimedOut:
-                    return Theme::Err();
-                case Cached:
-                    return Theme::Dim();
-                case Cancelled:
-                    return Theme::Warn();
+            switch (result) {
                 case Succeeded:
-                    return Theme::Ok();
+                    return PresentedBuildStatus::Succeeded;
+                case Failed:
+                    return PresentedBuildStatus::Failed;
+                case Cached:
+                    return PresentedBuildStatus::Cached;
+                case Cancelled:
+                    return PresentedBuildStatus::Cancelled;
+                case TimedOut:
+                    return PresentedBuildStatus::TimedOut;
                 case None:
-                    break;
+                    return PresentedBuildStatus::UseSeverity;
             }
+            return PresentedBuildStatus::UseSeverity;
+        }
+
+        [[nodiscard]] constexpr PresentedBuildStatus SeverityStatus(const DiagnosticSeverity severity) noexcept {
             using enum DiagnosticSeverity;
-            switch (record.severity) {
+            switch (severity) {
                 case Fatal:
+                    return PresentedBuildStatus::Fatal;
                 case Error:
-                    return Theme::Err();
+                    return PresentedBuildStatus::Error;
                 case Warning:
-                    return Theme::Warn();
+                    return PresentedBuildStatus::Warning;
                 case Note:
-                    return Theme::Accent();
+                    return PresentedBuildStatus::Info;
             }
-            return Theme::Text();
+            return PresentedBuildStatus::Unknown;
+        }
+
+        [[nodiscard]] constexpr PresentedBuildStatus PresentedStatus(const BuildOutputRecord &record) noexcept {
+            const PresentedBuildStatus result = ResultStatus(record.result);
+            return result == PresentedBuildStatus::UseSeverity ? SeverityStatus(record.severity) : result;
+        }
+
+        [[nodiscard]] ImVec4 StatusColor(const BuildOutputRecord &record) noexcept {
+            using ColorResolver = ImVec4 (*)();
+            constexpr std::array<ColorResolver, 10> resolvers{Theme::Ok,  Theme::Err, Theme::Dim,  Theme::Warn,   Theme::Err,
+                                                              Theme::Err, Theme::Err, Theme::Warn, Theme::Accent, Theme::Text};
+            return resolvers[static_cast<std::size_t>(PresentedStatus(record))]();
         }
 
         [[nodiscard]] const char *TechnicalStatusText(const BuildOutputRecord &record) noexcept {
-            using enum BuildOutputResult;
-            switch (record.result) {
-                case Succeeded:
-                    return "OK";
-                case Failed:
-                    return "FAILED";
-                case Cached:
-                    return "CACHED";
-                case Cancelled:
-                    return "CANCELLED";
-                case TimedOut:
-                    return "TIMED OUT";
-                case None:
-                    break;
-            }
-            using enum DiagnosticSeverity;
-            switch (record.severity) {
-                case Fatal:
-                    return "FATAL";
-                case Error:
-                    return "ERROR";
-                case Warning:
-                    return "WARNING";
-                case Note:
-                    return "INFO";
-            }
-            return "INFO";
+            constexpr std::array values{"OK", "FAILED", "CACHED", "CANCELLED", "TIMED OUT", "FATAL", "ERROR", "WARNING", "INFO", "INFO"};
+            return values[static_cast<std::size_t>(PresentedStatus(record))];
         }
 
         [[nodiscard]] const char *StatusLocalizationKey(const BuildOutputRecord &record) noexcept {
-            using enum BuildOutputResult;
-            switch (record.result) {
-                case Succeeded:
-                    return "workspace.global_dock.build_output.row_status.succeeded";
-                case Failed:
-                    return "workspace.global_dock.build_output.row_status.failed";
-                case Cached:
-                    return "workspace.global_dock.build_output.row_status.cached";
-                case Cancelled:
-                    return "workspace.global_dock.build_output.row_status.cancelled";
-                case TimedOut:
-                    return "workspace.global_dock.build_output.row_status.timed_out";
-                case None:
-                    break;
-            }
-            using enum DiagnosticSeverity;
-            switch (record.severity) {
-                case Fatal:
-                    return "workspace.global_dock.build_output.row_status.fatal";
-                case Error:
-                    return "workspace.global_dock.build_output.row_status.failed";
-                case Warning:
-                    return "workspace.global_dock.build_output.row_status.warning";
-                case Note:
-                    return "workspace.global_dock.build_output.row_status.info";
-            }
-            return "workspace.global_dock.build_output.row_status.info";
+            constexpr std::array values{
+                "workspace.global_dock.build_output.row_status.succeeded", "workspace.global_dock.build_output.row_status.failed",
+                "workspace.global_dock.build_output.row_status.cached",    "workspace.global_dock.build_output.row_status.cancelled",
+                "workspace.global_dock.build_output.row_status.timed_out", "workspace.global_dock.build_output.row_status.fatal",
+                "workspace.global_dock.build_output.row_status.failed",    "workspace.global_dock.build_output.row_status.warning",
+                "workspace.global_dock.build_output.row_status.info",      "workspace.global_dock.build_output.row_status.info",
+            };
+            return values[static_cast<std::size_t>(PresentedStatus(record))];
         }
 
         [[nodiscard]] bool IsOkRecord(const BuildOutputRecord &record) noexcept {

@@ -201,12 +201,9 @@ namespace Horo::Render {
         [[nodiscard]] constexpr bool IsValid() const noexcept {
             const auto formatValue = static_cast<std::uint8_t>(format);
             const bool formatValid = formatValue <= static_cast<std::uint8_t>(RenderTextureFormat::Depth32FloatStencil8);
-            const bool aspectValid = aspect == RenderTextureAspect::Color || aspect == RenderTextureAspect::Depth ||
-                                     aspect == RenderTextureAspect::DepthStencil || aspect == RenderTextureAspect::Stencil;
+            const bool aspectValid = static_cast<std::uint8_t>(aspect) <= static_cast<std::uint8_t>(RenderTextureAspect::Stencil);
             const bool dimensionValid =
-                dimension == RenderTextureViewDimension::OneD || dimension == RenderTextureViewDimension::TwoD ||
-                dimension == RenderTextureViewDimension::TwoDArray || dimension == RenderTextureViewDimension::Cube ||
-                dimension == RenderTextureViewDimension::CubeArray || dimension == RenderTextureViewDimension::ThreeD;
+                static_cast<std::uint8_t>(dimension) <= static_cast<std::uint8_t>(RenderTextureViewDimension::ThreeD);
             return texture.IsValid() && formatValid && aspectValid && dimensionValid && mipCount > 0 && layerCount > 0;
         }
     };
