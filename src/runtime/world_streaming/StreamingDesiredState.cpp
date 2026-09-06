@@ -15,7 +15,7 @@ namespace Horo::WorldStreaming {
     }  // namespace
 
     /** @copydoc StreamingSourceDesiredState::Create */
-    Result<StreamingSourceDesiredState> StreamingSourceDesiredState::Create(StreamingSourceDescriptor source,
+    Result<StreamingSourceDesiredState> StreamingSourceDesiredState::Create(const StreamingSourceDescriptor &source,
                                                                             const StreamingDesiredResidency residency,
                                                                             const StreamingRetention retention) {
         if (const auto valid = ValidateStreamingSourceDescriptor(source); valid.HasError())

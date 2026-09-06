@@ -42,7 +42,7 @@ namespace Horo::WorldStreaming {
          * @param retention Retention policy kept separate from residency.
          * @return Validated value, a source descriptor error, SourceDesiredStateInvalid, or SourceDesiredStateUnsupported.
          */
-        [[nodiscard]] static Result<StreamingSourceDesiredState> Create(StreamingSourceDescriptor source,
+        [[nodiscard]] static Result<StreamingSourceDesiredState> Create(const StreamingSourceDescriptor &source,
                                                                         StreamingDesiredResidency residency, StreamingRetention retention);
 
         /** @brief Returns the stable source descriptor. @return Descriptor owned by this value. */
@@ -76,7 +76,7 @@ namespace Horo::WorldStreaming {
         }
 
     private:
-        constexpr StreamingSourceDesiredState(StreamingSourceDescriptor source, const StreamingDesiredResidency residency,
+        constexpr StreamingSourceDesiredState(const StreamingSourceDescriptor &source, const StreamingDesiredResidency residency,
                                               const StreamingRetention retention) noexcept
             : source_(source), residency_(residency), retention_(retention) {}
 
