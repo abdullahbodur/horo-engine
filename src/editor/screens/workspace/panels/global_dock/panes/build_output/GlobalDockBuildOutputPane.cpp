@@ -125,10 +125,10 @@ namespace Horo::Editor {
         }
 
         [[nodiscard]] bool IsFailedRecord(const BuildOutputRecord &record) noexcept {
+            using enum BuildOutputResult;
             using enum DiagnosticSeverity;
-            return record.result == BuildOutputResult::Failed || record.result == BuildOutputResult::Cancelled ||
-                   record.result == BuildOutputResult::TimedOut ||
-                   (record.result == BuildOutputResult::None && (record.severity == Error || record.severity == Fatal));
+            return record.result == Failed || record.result == Cancelled || record.result == TimedOut ||
+                   (record.result == None && (record.severity == Error || record.severity == Fatal));
         }
 
         [[nodiscard]] bool ContainsCaseInsensitive(const std::string_view text, const std::string_view needle) {
