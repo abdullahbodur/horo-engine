@@ -13,7 +13,7 @@ namespace Horo::Render {
         [[nodiscard]] constexpr std::size_t BytesPerTexel(const RenderTextureFormat format) noexcept {
             constexpr std::array<std::size_t, 16> bytesPerFormat{4, 4, 4, 1, 2, 4, 4, 4, 2, 4, 8, 4, 8, 16, 2, 8};
             static_assert(bytesPerFormat.size() == static_cast<std::size_t>(RenderTextureFormat::Depth32FloatStencil8) + 1U);
-            const std::size_t index = static_cast<std::size_t>(format);
+            const auto index = static_cast<std::size_t>(format);
             return index < bytesPerFormat.size() ? bytesPerFormat[index] : 0;
         }
 
@@ -34,7 +34,7 @@ namespace Horo::Render {
             constexpr std::array policies{Color, DepthStencil, Depth, Color, Color, Color, Color, Color,
                                           Color, Color,        Color, Color, Color, Color, Depth, DepthStencil};
             static_assert(policies.size() == static_cast<std::size_t>(RenderTextureFormat::Depth32FloatStencil8) + 1U);
-            const std::size_t index = static_cast<std::size_t>(format);
+            const auto index = static_cast<std::size_t>(format);
             if (index >= policies.size())
                 return false;
             switch (policies[index]) {
