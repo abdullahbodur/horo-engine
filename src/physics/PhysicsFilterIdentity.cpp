@@ -1,0 +1,73 @@
+#include "Horo/Physics/PhysicsFilterIdentity.h"
+
+#include "Horo/Physics/PhysicsErrors.h"
+
+#include <algorithm>
+#include <array>
+#include <optional>
+#include <ranges>
+
+namespace Horo::Physics::Detail {
+    namespace {
+        /** @brief Converts one lowercase hexadecimal digit, rejecting uppercase and non-hex input. */
+        [[nodiscard]] std::optional<std::uint8_t> ParseHexDigit(const char value) noexcept {
+            if (value >= '0' && value <= '9')
+                return static_cast<std::uint8_t>(value - '0');
+            if (value >= 'a' && value <= 'f')
+                return static_cast<std::uint8_t>(value - 'a' + 10);
+            return std::nullopt;
+        }
+    }  // namespace
+
+    Result<std::array<std::uint8_t, 16>> ParsePhysicsProjectId(const std::string_view value) {
+        constexpr std::array HyphenOffsets{8U, 13U, 18U, 23U};
+        if (value.size() != 36)
+            return Result<std::array<std::uint8_t, 16>>::Failure(
+                MakeError(PhysicsErrors::DescriptorInvalid, "Physics project IDs require the canonical 36-character UUID form."));
+        for (const std::size_t offset : HyphenOffsets) {
+            if (value[offset] != '-')
+                return Result<std::array<std::uint8_t, 16>>::Failure(
+                    MakeError(PhysicsErrors::DescriptorInvalid, "Physics project IDs require UUID hyphens at canonical offsets."));
+        }
+
+        std::array<std::uint8_t, 16> bytes{};
+        std::size_t output{};
+        std::optional<std::uint8_t> high;
+        for (const char character : value) {
+            if (character == '-')
+                continue;
+            const auto digit = ParseHexDigit(character);
+            if (!digit.has_value())
+                return Result<std::array<std::uint8_t, 16>>::Failure(
+                    MakeError(PhysicsErrors::DescriptorInvalid, "Physics project IDs require lowercase hexadecimal UUID digits."));
+            if (!high.has_value()) {
+                high = digit;
+                continue;
+            }
+            bytes[output++] = static_cast<std::uint8_t>((*high << 4U) | *digit);
+            high.reset();
+        }
+        if (output != bytes.size() || high.has_value())
+            return Result<std::array<std::uint8_t, 16>>::Failure(
+                MakeError(PhysicsErrors::DescriptorInvalid, "Physics project IDs contain an unexpected UUID separator."));
+        if (std::ranges::all_of(bytes, [](const std::uint8_t byte) {
+            return byte == 0;
+        }))
+            return Result<std::array<std::uint8_t, 16>>::Failure(
+                MakeError(PhysicsErrors::DescriptorInvalid, "Physics project IDs must be non-zero."));
+        return Result<std::array<std::uint8_t, 16>>::Success(bytes);
+    }
+
+    std::string FormatPhysicsProjectId(const std::array<std::uint8_t, 16> &bytes) {
+        constexpr std::string_view Digits = "0123456789abcdef";
+        std::string result;
+        result.reserve(36);
+        for (std::size_t index{}; index < bytes.size(); ++index) {
+            if (index == 4 || index == 6 || index == 8 || index == 10)
+                result.push_back('-');
+            result.push_back(Digits[bytes[index] >> 4U]);
+            result.push_back(Digits[bytes[index] & 0x0FU]);
+        }
+        return result;
+    }
+}  // namespace Horo::Physics::Detail
