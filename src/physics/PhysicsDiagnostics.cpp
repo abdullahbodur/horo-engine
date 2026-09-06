@@ -2,6 +2,7 @@
 
 #include "Horo/Physics/PhysicsErrors.h"
 
+#include <array>
 #include <optional>
 #include <utility>
 
@@ -12,7 +13,7 @@ namespace Horo::Physics {
             if (error.domain.Value() != "horo.physics")
                 return std::nullopt;
 
-            static const ErrorCodeDescriptor *const descriptors[]{
+            static const std::array descriptors{
                 &PhysicsErrors::WorldInvalid,
                 &PhysicsErrors::HandleMalformed,
                 &PhysicsErrors::HandleWorldMismatch,
@@ -68,32 +69,33 @@ namespace Horo::Physics {
             };
 
             switch (entry.key) {
-                case PhysicsDiagnosticContextKey::World:
+                using enum PhysicsDiagnosticContextKey;
+                case World:
                     if (const auto *world = std::get_if<PhysicsWorldId>(&entry.value))
                         return acceptWorld(*world);
                     return false;
-                case PhysicsDiagnosticContextKey::Body:
+                case Body:
                     if (const auto *handle = std::get_if<BodyHandle>(&entry.value))
                         return handle->IsValid() && acceptWorld(handle->world);
                     return false;
-                case PhysicsDiagnosticContextKey::Shape:
+                case Shape:
                     if (const auto *handle = std::get_if<ShapeHandle>(&entry.value))
                         return handle->IsValid() && acceptWorld(handle->world);
                     return false;
-                case PhysicsDiagnosticContextKey::Constraint:
+                case Constraint:
                     if (const auto *handle = std::get_if<ConstraintHandle>(&entry.value))
                         return handle->IsValid() && acceptWorld(handle->world);
                     return false;
-                case PhysicsDiagnosticContextKey::Asset:
+                case Asset:
                     if (const auto *asset = std::get_if<Assets::AssetId>(&entry.value))
                         return asset->IsValid();
                     return false;
-                case PhysicsDiagnosticContextKey::SceneGeneration:
-                case PhysicsDiagnosticContextKey::SimulationTick:
-                case PhysicsDiagnosticContextKey::QuerySnapshotGeneration:
-                case PhysicsDiagnosticContextKey::OperationSequence:
-                case PhysicsDiagnosticContextKey::RequestedCount:
-                case PhysicsDiagnosticContextKey::Capacity:
+                case SceneGeneration:
+                case SimulationTick:
+                case QuerySnapshotGeneration:
+                case OperationSequence:
+                case RequestedCount:
+                case Capacity:
                     if (const auto *value = std::get_if<std::uint64_t>(&entry.value))
                         return !RequiresNonZeroScalar(entry.key) || *value != 0;
                     return false;
@@ -105,17 +107,18 @@ namespace Horo::Physics {
     /** @copydoc PhysicsDiagnosticCategoryName */
     std::string_view PhysicsDiagnosticCategoryName(const PhysicsDiagnosticCategory category) noexcept {
         switch (category) {
-            case PhysicsDiagnosticCategory::Configuration:
+            using enum PhysicsDiagnosticCategory;
+            case Configuration:
                 return "physics.configuration";
-            case PhysicsDiagnosticCategory::Cook:
+            case Cook:
                 return "physics.cook";
-            case PhysicsDiagnosticCategory::Runtime:
+            case Runtime:
                 return "physics.runtime";
-            case PhysicsDiagnosticCategory::Query:
+            case Query:
                 return "physics.query";
-            case PhysicsDiagnosticCategory::Event:
+            case Event:
                 return "physics.event";
-            case PhysicsDiagnosticCategory::Lifecycle:
+            case Lifecycle:
                 return "physics.lifecycle";
         }
         return {};
