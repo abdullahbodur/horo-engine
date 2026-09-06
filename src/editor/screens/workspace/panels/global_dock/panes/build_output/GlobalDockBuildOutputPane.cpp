@@ -46,27 +46,26 @@ namespace Horo::Editor {
             UseSeverity,
         };
 
-        using BuildStatusColorResolver = ImVec4 (*)();
-
-        struct PresentedBuildStatusMetadata {
-            BuildStatusColorResolver color;
-            const char *technicalText;
-            const char *localizationKey;
-        };
+        using BuildStatusColorRole = GlobalDockBuildOutputPane::BuildStatusColorRole;
+        using BuildStatusPresentation = GlobalDockBuildOutputPane::BuildStatusPresentation;
 
         constexpr std::array PresentedBuildStatuses{
-            PresentedBuildStatusMetadata{Theme::Ok, "OK", "workspace.global_dock.build_output.row_status.succeeded"},
-            PresentedBuildStatusMetadata{Theme::Err, "FAILED", "workspace.global_dock.build_output.row_status.failed"},
-            PresentedBuildStatusMetadata{Theme::Dim, "CACHED", "workspace.global_dock.build_output.row_status.cached"},
-            PresentedBuildStatusMetadata{Theme::Warn, "CANCELLED", "workspace.global_dock.build_output.row_status.cancelled"},
-            PresentedBuildStatusMetadata{Theme::Err, "TIMED OUT", "workspace.global_dock.build_output.row_status.timed_out"},
-            PresentedBuildStatusMetadata{Theme::Err, "FATAL", "workspace.global_dock.build_output.row_status.fatal"},
-            PresentedBuildStatusMetadata{Theme::Err, "ERROR", "workspace.global_dock.build_output.row_status.failed"},
-            PresentedBuildStatusMetadata{Theme::Warn, "WARNING", "workspace.global_dock.build_output.row_status.warning"},
-            PresentedBuildStatusMetadata{Theme::Accent, "INFO", "workspace.global_dock.build_output.row_status.info"},
-            PresentedBuildStatusMetadata{Theme::Text, "INFO", "workspace.global_dock.build_output.row_status.info"},
+            BuildStatusPresentation{BuildStatusColorRole::Positive, "OK", "workspace.global_dock.build_output.row_status.succeeded"},
+            BuildStatusPresentation{BuildStatusColorRole::Error, "FAILED", "workspace.global_dock.build_output.row_status.failed"},
+            BuildStatusPresentation{BuildStatusColorRole::Muted, "CACHED", "workspace.global_dock.build_output.row_status.cached"},
+            BuildStatusPresentation{BuildStatusColorRole::Warning, "CANCELLED", "workspace.global_dock.build_output.row_status.cancelled"},
+            BuildStatusPresentation{BuildStatusColorRole::Error, "TIMED OUT", "workspace.global_dock.build_output.row_status.timed_out"},
+            BuildStatusPresentation{BuildStatusColorRole::Error, "FATAL", "workspace.global_dock.build_output.row_status.fatal"},
+            BuildStatusPresentation{BuildStatusColorRole::Error, "ERROR", "workspace.global_dock.build_output.row_status.failed"},
+            BuildStatusPresentation{BuildStatusColorRole::Warning, "WARNING", "workspace.global_dock.build_output.row_status.warning"},
+            BuildStatusPresentation{BuildStatusColorRole::Accent, "INFO", "workspace.global_dock.build_output.row_status.info"},
+            BuildStatusPresentation{BuildStatusColorRole::Default, "INFO", "workspace.global_dock.build_output.row_status.info"},
         };
         static_assert(PresentedBuildStatuses.size() == static_cast<std::size_t>(PresentedBuildStatus::UseSeverity));
+
+        using BuildStatusColorResolver = ImVec4 (*)();
+        constexpr std::array BuildStatusColorResolvers{Theme::Ok, Theme::Err, Theme::Dim, Theme::Warn, Theme::Accent, Theme::Text};
+        static_assert(BuildStatusColorResolvers.size() == static_cast<std::size_t>(BuildStatusColorRole::Count));
 
         [[nodiscard]] constexpr PresentedBuildStatus ResultStatus(const BuildOutputResult result) noexcept {
             using enum BuildOutputResult;
@@ -108,15 +107,16 @@ namespace Horo::Editor {
         }
 
         [[nodiscard]] ImVec4 StatusColor(const BuildOutputRecord &record) noexcept {
-            return PresentedBuildStatuses[static_cast<std::size_t>(PresentedStatus(record))].color();
+            const auto presentation = GlobalDockBuildOutputPane::ProjectStatusPresentation(record);
+            return BuildStatusColorResolvers[static_cast<std::size_t>(presentation.colorRole)]();
         }
 
         [[nodiscard]] const char *TechnicalStatusText(const BuildOutputRecord &record) noexcept {
-            return PresentedBuildStatuses[static_cast<std::size_t>(PresentedStatus(record))].technicalText;
+            return GlobalDockBuildOutputPane::ProjectStatusPresentation(record).technicalText.data();
         }
 
         [[nodiscard]] const char *StatusLocalizationKey(const BuildOutputRecord &record) noexcept {
-            return PresentedBuildStatuses[static_cast<std::size_t>(PresentedStatus(record))].localizationKey;
+            return GlobalDockBuildOutputPane::ProjectStatusPresentation(record).localizationKey.data();
         }
 
         [[nodiscard]] bool IsOkRecord(const BuildOutputRecord &record) noexcept {
@@ -160,6 +160,12 @@ namespace Horo::Editor {
             return std::format("{}:{}:{}", source->absolutePath, source->line, source->column);
         }
     }  // namespace
+
+    /** @copydoc GlobalDockBuildOutputPane::ProjectStatusPresentation */
+    GlobalDockBuildOutputPane::BuildStatusPresentation GlobalDockBuildOutputPane::ProjectStatusPresentation(
+        const BuildOutputRecord &record) noexcept {
+        return PresentedBuildStatuses[static_cast<std::size_t>(PresentedStatus(record))];
+    }
 
     /** @copydoc GlobalDockBuildOutputPane::Attach */
     void GlobalDockBuildOutputPane::Attach(const IBuildOutputQuery *buildOutputQuery) noexcept {

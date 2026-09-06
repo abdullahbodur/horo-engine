@@ -25,6 +25,26 @@ namespace Horo::Editor {
             Cached
         };
 
+        /** @brief Theme-independent semantic color role for a projected build status. */
+        enum class BuildStatusColorRole : std::uint8_t {
+            Positive,
+            Error,
+            Muted,
+            Warning,
+            Accent,
+            Default,
+            Count
+        };
+
+        /** @brief Stable presentation metadata derived from a typed build-output record. */
+        struct BuildStatusPresentation {
+            BuildStatusColorRole colorRole;
+            std::string_view technicalText;
+            std::string_view localizationKey;
+
+            [[nodiscard]] friend constexpr bool operator==(const BuildStatusPresentation &, const BuildStatusPresentation &) = default;
+        };
+
         /** @brief Binds the shared typed build-output query source. */
         void Attach(const IBuildOutputQuery *buildOutputQuery) noexcept;
 
@@ -38,6 +58,13 @@ namespace Horo::Editor {
         /** @brief Projects immutable record indices through the active status and text filters. */
         [[nodiscard]] static std::vector<std::size_t> ProjectRecords(std::span<const BuildOutputRecord> records, StatusFilter statusFilter,
                                                                      std::string_view search);
+
+        /**
+         * @brief Projects a typed build-output record into theme-independent status metadata.
+         * @param record Build-output record to classify.
+         * @return Exact semantic color role, technical text, and localization key for the record.
+         */
+        [[nodiscard]] static BuildStatusPresentation ProjectStatusPresentation(const BuildOutputRecord &record) noexcept;
 
     private:
         [[nodiscard]] bool RefreshSnapshot();

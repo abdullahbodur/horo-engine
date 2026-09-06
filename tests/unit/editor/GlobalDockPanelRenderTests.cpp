@@ -85,6 +85,44 @@ namespace {
         REQUIRE((panel.ActiveTab() == GlobalDockTab::Assets));
     }
 
+    TEST_CASE("Build output status presentation maps every typed result and severity", "[unit][editor][gui]") {
+        using namespace Horo;
+        using Pane = Horo::Editor::GlobalDockBuildOutputPane;
+        using ColorRole = Pane::BuildStatusColorRole;
+        using Presentation = Pane::BuildStatusPresentation;
+
+        struct StatusExpectation {
+            BuildOutputRecord record;
+            Presentation presentation;
+        };
+
+        const std::array expectations{
+            StatusExpectation{BuildOutputRecord{.result = BuildOutputResult::Succeeded},
+                              Presentation{ColorRole::Positive, "OK", "workspace.global_dock.build_output.row_status.succeeded"}},
+            StatusExpectation{BuildOutputRecord{.result = BuildOutputResult::Failed},
+                              Presentation{ColorRole::Error, "FAILED", "workspace.global_dock.build_output.row_status.failed"}},
+            StatusExpectation{BuildOutputRecord{.result = BuildOutputResult::Cached},
+                              Presentation{ColorRole::Muted, "CACHED", "workspace.global_dock.build_output.row_status.cached"}},
+            StatusExpectation{BuildOutputRecord{.result = BuildOutputResult::Cancelled},
+                              Presentation{ColorRole::Warning, "CANCELLED", "workspace.global_dock.build_output.row_status.cancelled"}},
+            StatusExpectation{BuildOutputRecord{.result = BuildOutputResult::TimedOut},
+                              Presentation{ColorRole::Error, "TIMED OUT", "workspace.global_dock.build_output.row_status.timed_out"}},
+            StatusExpectation{BuildOutputRecord{.severity = DiagnosticSeverity::Fatal},
+                              Presentation{ColorRole::Error, "FATAL", "workspace.global_dock.build_output.row_status.fatal"}},
+            StatusExpectation{BuildOutputRecord{.severity = DiagnosticSeverity::Error},
+                              Presentation{ColorRole::Error, "ERROR", "workspace.global_dock.build_output.row_status.failed"}},
+            StatusExpectation{BuildOutputRecord{.severity = DiagnosticSeverity::Warning},
+                              Presentation{ColorRole::Warning, "WARNING", "workspace.global_dock.build_output.row_status.warning"}},
+            StatusExpectation{BuildOutputRecord{.severity = DiagnosticSeverity::Note},
+                              Presentation{ColorRole::Accent, "INFO", "workspace.global_dock.build_output.row_status.info"}},
+            StatusExpectation{BuildOutputRecord{.severity = static_cast<DiagnosticSeverity>(255)},
+                              Presentation{ColorRole::Default, "INFO", "workspace.global_dock.build_output.row_status.info"}},
+        };
+
+        for (const StatusExpectation &expectation : expectations)
+            REQUIRE((Pane::ProjectStatusPresentation(expectation.record) == expectation.presentation));
+    }
+
     TEST_CASE("Build and operation projections use typed status and case-insensitive text", "[unit][editor][gui]") {
         using namespace Horo;
         using namespace Horo::Editor;
