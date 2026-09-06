@@ -28,19 +28,6 @@ namespace {
         return result.HasError() && result.ErrorValue().code.Value() == "job.wait_capacity_deadlock";
     }
 
-    struct CancellationProbe {
-        std::atomic<bool> &started;
-        std::atomic<bool> &stopped;
-
-        Horo::Result<void> operator()(const Horo::CancellationToken &cancellation) const {
-            started.store(true, std::memory_order_release);
-            while (!cancellation.IsCancellationRequested())
-                std::this_thread::yield();
-            stopped.store(true, std::memory_order_release);
-            return Horo::Result<void>::Success();
-        }
-    };
-
     [[nodiscard]] Horo::Result<Horo::JobId> SpawnExecutionProbe(Horo::TaskGroup &group, std::atomic<bool> &executed) {
         return group.Spawn({}, [&executed](const Horo::CancellationToken &) {
             executed.store(true, std::memory_order_release);
@@ -409,7 +396,14 @@ namespace {
         std::atomic started{false};
         std::atomic stopped{false};
         auto group = std::make_unique<Horo::TaskGroup>(jobs);
-        REQUIRE((group->Spawn({}, CancellationProbe{started, stopped}).HasValue()));
+        const Horo::JobFunction cancellationProbe = [&](const Horo::CancellationToken &cancellation) {
+            started.store(true, std::memory_order_release);
+            for (; !cancellation.IsCancellationRequested(); std::this_thread::yield()) {
+            }
+            stopped.store(true, std::memory_order_release);
+            return Horo::Result<void>::Success();
+        };
+        REQUIRE((group->Spawn({}, cancellationProbe).HasValue()));
         while (!started.load(std::memory_order_acquire))
             std::this_thread::yield();
         const auto timedOut =
@@ -526,8 +520,15 @@ namespace {
         std::atomic stopped{false};
         {
             Horo::TaskGroup group(jobs);
-            REQUIRE((group.Spawn({}, CancellationProbe{started, stopped}).HasValue()));
-            while (!started.load(std::memory_order_acquire))
+            REQUIRE((group
+                         .Spawn({}, [&started, &stopped](const Horo::CancellationToken &cancellation) {
+                started.store(true);
+                while (!cancellation.IsCancellationRequested())
+                    std::this_thread::yield();
+                stopped.store(true);
+                return Horo::Result<void>::Success();
+            }).HasValue()));
+            while (!started.load())
                 std::this_thread::yield();
         }
         REQUIRE((stopped.load()));
