@@ -98,12 +98,15 @@ namespace Horo::Physics {
         class PublicationGuard final {
         public:
             explicit PublicationGuard(std::atomic_flag &lock) noexcept : lock_(lock) {
-                while (lock_.test_and_set(std::memory_order_acquire))
+                while (lock_.test_and_set())
                     std::this_thread::yield();
             }
 
+            PublicationGuard(const PublicationGuard &) = delete;
+            PublicationGuard &operator=(const PublicationGuard &) = delete;
+
             ~PublicationGuard() {
-                lock_.clear(std::memory_order_release);
+                lock_.clear();
             }
 
         private:
@@ -327,7 +330,7 @@ namespace Horo::Physics {
                 MakeError(PhysicsErrors::DescriptorInvalid,
                           "Physics structural commands require non-zero identities, a known kind and increasing sequence order."));
 
-        const std::uint32_t capacity = static_cast<std::uint32_t>(impl_->commands.size());
+        const auto capacity = static_cast<std::uint32_t>(impl_->commands.size());
         if (capacity == 0)
             return Result<PhysicsCommandAdmission>::Failure(
                 MakeError(PhysicsErrors::InvalidState, "Validated Physics command storage is unexpectedly unavailable."));
@@ -335,7 +338,7 @@ namespace Horo::Physics {
         if (const auto ordinaryLimit = capacity - 1; impl_->commandCount >= (destruction ? capacity : ordinaryLimit))
             return Result<PhysicsCommandAdmission>::Success(RejectFullCommand(*impl_, destruction));
 
-        const std::uint32_t tail = (impl_->commandHead + impl_->commandCount) % capacity;
+        const auto tail = (impl_->commandHead + impl_->commandCount) % capacity;
         impl_->commands[tail] = command;
         ++impl_->commandCount;
         impl_->lastAdmittedCommandSequence = command.sequence;
