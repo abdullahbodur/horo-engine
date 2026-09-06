@@ -60,4 +60,16 @@ namespace Horo::Runtime::SaveErrors {
     const ErrorCodeDescriptor ArchiveMetadataLimitExceeded{kDomain, ErrorCode{"save.archive.metadata_limit_exceeded"}, kError,
                                                            "Save archive metadata exceeds an admission bound.",
                                                            "Reduce metadata size or revise the trusted product limits."};
+    const ErrorCodeDescriptor ArchiveDirectoryInvalid{kDomain, ErrorCode{"save.archive.directory_invalid"}, kError,
+                                                      "Save archive chunk directory framing is invalid.",
+                                                      "Use bounded, contiguous, aligned, uniquely owned chunk records."};
+    const ErrorCodeDescriptor ArchiveFramingLimitExceeded{kDomain, ErrorCode{"save.archive.framing_limit_exceeded"}, kError,
+                                                          "Save archive framing exceeds an admission bound.",
+                                                          "Reduce entry or payload size or revise trusted product limits."};
+    const ErrorCodeDescriptor ArchivePayloadTruncated{kDomain, ErrorCode{"save.archive.payload_truncated"}, kError,
+                                                      "Save archive payload length contradicts its validated directory.",
+                                                      "Provide the exact complete payload region before selecting a chunk."};
+    const ErrorCodeDescriptor ArchiveChunkHashMismatch{kDomain, ErrorCode{"save.archive.chunk_hash_mismatch"}, kError,
+                                                       "Decoded save chunk bytes do not match their declared digest.",
+                                                       "Reject the archive and retain it for corruption diagnostics."};
 }  // namespace Horo::Runtime::SaveErrors

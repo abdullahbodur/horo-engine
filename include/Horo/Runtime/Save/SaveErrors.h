@@ -44,4 +44,12 @@ namespace Horo::Runtime::SaveErrors {
     extern const ErrorCodeDescriptor ArchiveManifestInvalid;
     /** @brief Save metadata exceeded an explicit byte, string, participant, or chunk bound. */
     extern const ErrorCodeDescriptor ArchiveMetadataLimitExceeded;
+    /** @brief A chunk directory has unsafe bounds, ordering, ownership, alignment, or correspondence. */
+    extern const ErrorCodeDescriptor ArchiveDirectoryInvalid;
+    /** @brief A chunk directory or payload exceeds a trusted framing admission bound. */
+    extern const ErrorCodeDescriptor ArchiveFramingLimitExceeded;
+    /** @brief The stored payload is shorter or longer than its validated directory declares. */
+    extern const ErrorCodeDescriptor ArchivePayloadTruncated;
+    /** @brief A selected decoded chunk does not match its manifest checksum. */
+    extern const ErrorCodeDescriptor ArchiveChunkHashMismatch;
 }  // namespace Horo::Runtime::SaveErrors
