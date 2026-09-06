@@ -1,0 +1,148 @@
+#include "Horo/Runtime/Save/SaveArchiveMetadata.h"
+
+#include <algorithm>
+#include <limits>
+#include <optional>
+#include <utility>
+
+namespace Horo::Runtime {
+    namespace {
+        enum class VersionAdmission : std::uint8_t {
+            Direct,
+            Migration,
+            Rejected,
+        };
+
+        /** @brief Classifies one independent version without conflating its schema authority. */
+        template <typename Tag>
+        [[nodiscard]] VersionAdmission ClassifyVersion(const SaveVersion<Tag> version, const SaveVersionSupport<Tag> &support) noexcept {
+            using enum VersionAdmission;
+            if (support.direct.Contains(version))
+                return Direct;
+            if (support.migrationSource && support.migrationSource->Contains(version))
+                return Migration;
+            return Rejected;
+        }
+
+        /** @brief Reports whether one version support declaration has valid, non-overlapping ranges. */
+        template <typename Tag> [[nodiscard]] bool IsValidSupport(const SaveVersionSupport<Tag> &support) noexcept {
+            if (!support.direct.minimum.IsValid() || !support.direct.maximum.IsValid() || support.direct.minimum > support.direct.maximum)
+                return false;
+            if (!support.migrationSource)
+                return true;
+            const auto &migration = *support.migrationSource;
+            const bool migrationRangeValid =
+                migration.minimum.IsValid() && migration.maximum.IsValid() && migration.minimum <= migration.maximum;
+            const bool rangesDisjoint = migration.maximum < support.direct.minimum || support.direct.maximum < migration.minimum;
+            return migrationRangeValid && rangesDisjoint;
+        }
+
+        /** @brief Creates a rejected compatibility decision. */
+        [[nodiscard]] SaveCompatibilityDecision Reject(const SaveCompatibilityReason reason,
+                                                       std::optional<SaveParticipantId> participant = std::nullopt) {
+            return {.disposition = SaveCompatibilityDisposition::Rejected, .reason = reason, .participant = std::move(participant)};
+        }
+
+        /** @brief Applies one root compatibility axis and records whether migration is required. */
+        [[nodiscard]] std::optional<SaveCompatibilityDecision> EvaluateRootVersion(const VersionAdmission admission,
+                                                                                   const SaveCompatibilityReason reason,
+                                                                                   bool &migrationRequired) {
+            if (admission == VersionAdmission::Rejected)
+                return Reject(reason);
+            migrationRequired |= admission == VersionAdmission::Migration;
+            return std::nullopt;
+        }
+
+        /** @brief Evaluates the three independent root version axes in their normative order. */
+        [[nodiscard]] std::optional<SaveCompatibilityDecision> EvaluateRootVersions(const ArchiveFormatVersion archiveVersion,
+                                                                                    const SaveArchiveHeader &header,
+                                                                                    const SaveGameManifest &manifest,
+                                                                                    const SaveCompatibilityPolicy &policy,
+                                                                                    bool &migrationRequired) {
+            if (auto rejected = EvaluateRootVersion(ClassifyVersion(archiveVersion, policy.archiveVersions),
+                                                    SaveCompatibilityReason::UnsupportedArchiveVersion, migrationRequired))
+                return rejected;
+            if (auto rejected = EvaluateRootVersion(ClassifyVersion(manifest.saveSchemaVersion, policy.saveSchemaVersions),
+                                                    SaveCompatibilityReason::UnsupportedSaveSchema, migrationRequired))
+                return rejected;
+            return EvaluateRootVersion(ClassifyVersion(header.productCompatibility, policy.productVersions),
+                                       SaveCompatibilityReason::UnsupportedProductVersion, migrationRequired);
+        }
+
+        /** @brief Validates stable participant policy order and independent version ranges. */
+        [[nodiscard]] bool HasValidParticipantPolicy(const SaveCompatibilityPolicy &policy) noexcept {
+            if (!std::ranges::is_sorted(policy.participants, {}, &SaveParticipantCompatibility::participant))
+                return false;
+            for (std::size_t index = 0; index < policy.participants.size(); ++index) {
+                const auto &support = policy.participants[index];
+                if (!support.participant.IsValid() || !IsValidSupport(support.versions) ||
+                    (index != 0 && policy.participants[index - 1].participant == support.participant))
+                    return false;
+            }
+            return true;
+        }
+
+        /** @brief Validates metadata and root policy ranges before compatibility classification. */
+        [[nodiscard]] bool HasValidCompatibilityInputs(const SaveArchiveHeader &header, const SaveGameManifest &manifest,
+                                                       const SaveCompatibilityPolicy &policy, const SaveArchiveMetadataLimits &limits) {
+            return ValidateSaveArchiveHeader(header, limits).HasValue() && ValidateSaveGameManifest(manifest, limits).HasValue() &&
+                   IsValidSupport(policy.archiveVersions) && IsValidSupport(policy.saveSchemaVersions) &&
+                   IsValidSupport(policy.productVersions) && HasValidParticipantPolicy(policy);
+        }
+
+        /** @brief Evaluates declared participant support and required current composition. */
+        [[nodiscard]] std::optional<SaveCompatibilityDecision> EvaluateDeclaredParticipants(const SaveGameManifest &manifest,
+                                                                                            const SaveCompatibilityPolicy &policy,
+                                                                                            bool &migrationRequired) {
+            for (const auto &support : policy.participants) {
+                const auto found =
+                    std::ranges::lower_bound(manifest.participants, support.participant, {}, &SaveManifestParticipant::participant);
+                if (found == manifest.participants.end() || found->participant != support.participant) {
+                    if (support.required)
+                        return Reject(SaveCompatibilityReason::MissingRequiredParticipant, support.participant);
+                    continue;
+                }
+                const VersionAdmission admission = ClassifyVersion(found->schemaVersion, support.versions);
+                if (admission == VersionAdmission::Rejected)
+                    return Reject(SaveCompatibilityReason::UnsupportedParticipantSchema, support.participant);
+                migrationRequired |= admission == VersionAdmission::Migration;
+            }
+            return std::nullopt;
+        }
+
+        /** @brief Rejects required manifest participants absent from the sealed policy. */
+        [[nodiscard]] std::optional<SaveCompatibilityDecision> FindUnknownRequiredParticipant(const SaveGameManifest &manifest,
+                                                                                              const SaveCompatibilityPolicy &policy) {
+            for (const SaveManifestParticipant &entry : manifest.participants) {
+                const auto found =
+                    std::ranges::lower_bound(policy.participants, entry.participant, {}, &SaveParticipantCompatibility::participant);
+                if (entry.required && (found == policy.participants.end() || found->participant != entry.participant))
+                    return Reject(SaveCompatibilityReason::UnknownRequiredParticipant, entry.participant);
+            }
+            return std::nullopt;
+        }
+    }  // namespace
+
+    /** @copydoc EvaluateSaveCompatibility */
+    SaveCompatibilityDecision EvaluateSaveCompatibility(const ArchiveFormatVersion archiveVersion, const SaveArchiveHeader &header,
+                                                        const SaveGameManifest &manifest, const SaveCompatibilityPolicy &policy) {
+        using enum SaveCompatibilityReason;
+        SaveArchiveMetadataLimits limits;
+        limits.supportedFeatureFlagsMask = std::numeric_limits<std::uint64_t>::max();
+        if (!HasValidCompatibilityInputs(header, manifest, policy, limits))
+            return Reject(InvalidMetadata);
+
+        bool migrationRequired = false;
+        if (auto rejected = EvaluateRootVersions(archiveVersion, header, manifest, policy, migrationRequired))
+            return *rejected;
+        if ((header.featureFlags & ~policy.supportedFeatureFlagsMask) != 0)
+            return Reject(UnsupportedFeature);
+        if (auto rejected = EvaluateDeclaredParticipants(manifest, policy, migrationRequired))
+            return *rejected;
+        const SaveCompatibilityDecision compatible{.disposition = migrationRequired ? SaveCompatibilityDisposition::MigrationRequired
+                                                                                    : SaveCompatibilityDisposition::DirectRead,
+                                                   .reason = None,
+                                                   .participant = std::nullopt};
+        return FindUnknownRequiredParticipant(manifest, policy).value_or(compatible);
+    }
+}  // namespace Horo::Runtime

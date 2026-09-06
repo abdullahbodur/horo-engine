@@ -98,15 +98,39 @@ namespace Horo::Runtime {
             }
         }
 
+        /** @brief Reports whether one participant JSON object has the exact required scalar shapes. */
+        [[nodiscard]] bool HasParticipantJsonShape(const Json &value) {
+            return HasExactFields(value, {"chunks", "participant", "required", "schemaVersion"}) && value.at("participant").is_string() &&
+                   value.at("required").is_boolean() && value.at("chunks").is_array();
+        }
+
+        /** @brief Reports whether one participant's chunk list fits local and aggregate bounds. */
+        [[nodiscard]] bool HasParticipantChunkBounds(const Json &chunks, const SaveArchiveMetadataLimits &limits,
+                                                     const std::size_t totalChunks) noexcept {
+            return !chunks.empty() && chunks.size() <= limits.maximumChunksPerParticipant &&
+                   chunks.size() <= limits.maximumTotalChunks - totalChunks;
+        }
+
+        /** @brief Decodes an already bounded JSON chunk-identity sequence. */
+        [[nodiscard]] Result<std::vector<SaveRecordId>> DecodeChunkIdentities(const Json &chunks) {
+            std::vector<SaveRecordId> decodedChunks;
+            decodedChunks.reserve(chunks.size());
+            for (const Json &chunk : chunks) {
+                auto decoded = ParseIdentity<SaveRecordId>(chunk);
+                if (decoded.HasError())
+                    return Result<std::vector<SaveRecordId>>::Failure(MakeError(SaveErrors::ArchiveManifestInvalid));
+                decodedChunks.push_back(std::move(decoded).Value());
+            }
+            return Result<std::vector<SaveRecordId>>::Success(std::move(decodedChunks));
+        }
+
         /** @brief Parses and validates one manifest participant entry. */
         [[nodiscard]] Result<SaveManifestParticipant> DecodeParticipant(const Json &value, const SaveArchiveMetadataLimits &limits,
                                                                         std::size_t &totalChunks) {
-            if (!HasExactFields(value, {"chunks", "participant", "required", "schemaVersion"}) || !value.at("participant").is_string() ||
-                !value.at("required").is_boolean() || !value.at("chunks").is_array())
+            if (!HasParticipantJsonShape(value))
                 return Result<SaveManifestParticipant>::Failure(MakeError(SaveErrors::ArchiveManifestInvalid));
             const auto &chunks = value.at("chunks");
-            if (chunks.empty() || chunks.size() > limits.maximumChunksPerParticipant ||
-                chunks.size() > limits.maximumTotalChunks - totalChunks)
+            if (!HasParticipantChunkBounds(chunks, limits, totalChunks))
                 return Result<SaveManifestParticipant>::Failure(MakeError(SaveErrors::ArchiveMetadataLimitExceeded));
 
             auto participant = SaveParticipantId::Parse(value.at("participant").get_ref<const std::string &>());
@@ -114,55 +138,14 @@ namespace Horo::Runtime {
             if (participant.HasError() || schema.HasError())
                 return Result<SaveManifestParticipant>::Failure(MakeError(SaveErrors::ArchiveManifestInvalid));
 
-            std::vector<SaveRecordId> decodedChunks;
-            decodedChunks.reserve(chunks.size());
-            for (const Json &chunk : chunks) {
-                auto decoded = ParseIdentity<SaveRecordId>(chunk);
-                if (decoded.HasError())
-                    return Result<SaveManifestParticipant>::Failure(MakeError(SaveErrors::ArchiveManifestInvalid));
-                decodedChunks.push_back(std::move(decoded).Value());
-            }
-            totalChunks += decodedChunks.size();
+            auto decodedChunks = DecodeChunkIdentities(chunks);
+            if (decodedChunks.HasError())
+                return Result<SaveManifestParticipant>::Failure(decodedChunks.ErrorValue());
+            totalChunks += decodedChunks.Value().size();
             return Result<SaveManifestParticipant>::Success({.participant = std::move(participant).Value(),
                                                              .schemaVersion = std::move(schema).Value(),
                                                              .required = value.at("required").get<bool>(),
-                                                             .chunks = std::move(decodedChunks)});
-        }
-
-        enum class VersionAdmission : std::uint8_t {
-            Direct,
-            Migration,
-            Rejected,
-        };
-
-        /** @brief Classifies one independent version without conflating its schema authority. */
-        template <typename Tag>
-        [[nodiscard]] VersionAdmission ClassifyVersion(const SaveVersion<Tag> version, const SaveVersionSupport<Tag> &support) noexcept {
-            using enum VersionAdmission;
-            if (support.direct.Contains(version))
-                return Direct;
-            if (support.migrationSource && support.migrationSource->Contains(version))
-                return Migration;
-            return Rejected;
-        }
-
-        /** @brief Reports whether one version support declaration has valid, non-overlapping ranges. */
-        template <typename Tag> [[nodiscard]] bool IsValidSupport(const SaveVersionSupport<Tag> &support) noexcept {
-            if (!support.direct.minimum.IsValid() || !support.direct.maximum.IsValid() || support.direct.minimum > support.direct.maximum)
-                return false;
-            if (!support.migrationSource)
-                return true;
-            const auto &migration = *support.migrationSource;
-            const bool migrationRangeValid =
-                migration.minimum.IsValid() && migration.maximum.IsValid() && migration.minimum <= migration.maximum;
-            const bool rangesDisjoint = migration.maximum < support.direct.minimum || support.direct.maximum < migration.minimum;
-            return migrationRangeValid && rangesDisjoint;
-        }
-
-        /** @brief Creates a rejected compatibility decision. */
-        [[nodiscard]] SaveCompatibilityDecision Reject(const SaveCompatibilityReason reason,
-                                                       std::optional<SaveParticipantId> participant = std::nullopt) {
-            return {.disposition = SaveCompatibilityDisposition::Rejected, .reason = reason, .participant = std::move(participant)};
+                                                             .chunks = std::move(decodedChunks).Value()});
         }
 
         /** @brief Reports whether every persistent identity in a header is valid. */
@@ -255,60 +238,86 @@ namespace Horo::Runtime {
                                                       .projectBuildId = std::move(projectBuildId).Value()});
         }
 
-        /** @brief Applies one root compatibility axis and records whether migration is required. */
-        [[nodiscard]] std::optional<SaveCompatibilityDecision> EvaluateRootVersion(const VersionAdmission admission,
-                                                                                   const SaveCompatibilityReason reason,
-                                                                                   bool &migrationRequired) {
-            if (admission == VersionAdmission::Rejected)
-                return Reject(reason);
-            migrationRequired |= admission == VersionAdmission::Migration;
-            return std::nullopt;
+        /** @brief Reports whether a header JSON object has the exact required outer shape. */
+        [[nodiscard]] bool HasHeaderJsonShape(const Json &root) {
+            return HasExactFields(root, {"baseScene", "capturedAtUnixMilliseconds", "engineVersion", "environment", "featureFlags",
+                                         "parentGeneration", "playTimeNanoseconds", "product", "productCompatibilityVersion", "profile",
+                                         "project", "projectBuildId", "slot", "slotGeneration", "user", "world"}) &&
+                   root.at("capturedAtUnixMilliseconds").is_number_unsigned() && root.at("playTimeNanoseconds").is_number_unsigned() &&
+                   root.at("featureFlags").is_number_unsigned();
         }
 
-        /** @brief Validates stable participant policy order and independent version ranges. */
-        [[nodiscard]] bool HasValidParticipantPolicy(const SaveCompatibilityPolicy &policy) noexcept {
-            if (!std::ranges::is_sorted(policy.participants, {}, &SaveParticipantCompatibility::participant))
-                return false;
-            for (std::size_t index = 0; index < policy.participants.size(); ++index) {
-                const auto &support = policy.participants[index];
-                if (!support.participant.IsValid() || !IsValidSupport(support.versions) ||
-                    (index != 0 && policy.participants[index - 1].participant == support.participant))
+        /** @brief Reports whether a manifest JSON object has the exact bounded outer shape. */
+        [[nodiscard]] bool HasManifestJsonShape(const Json &root, const SaveArchiveMetadataLimits &limits) {
+            return HasExactFields(root, {"canonicalStateHash", "participants", "saveSchemaVersion"}) &&
+                   root.at("canonicalStateHash").is_string() && root.at("participants").is_array() && !root.at("participants").empty() &&
+                   root.at("participants").size() <= limits.maximumParticipants;
+        }
+
+        /** @brief Decodes the bounded participant sequence while enforcing aggregate chunk admission. */
+        [[nodiscard]] Result<std::vector<SaveManifestParticipant>> DecodeManifestParticipants(const Json &values,
+                                                                                              const SaveArchiveMetadataLimits &limits) {
+            std::vector<SaveManifestParticipant> participants;
+            participants.reserve(values.size());
+            std::size_t totalChunks = 0;
+            for (const Json &value : values) {
+                auto participant = DecodeParticipant(value, limits, totalChunks);
+                if (participant.HasError())
+                    return Result<std::vector<SaveManifestParticipant>>::Failure(participant.ErrorValue());
+                participants.push_back(std::move(participant).Value());
+            }
+            return Result<std::vector<SaveManifestParticipant>>::Success(std::move(participants));
+        }
+
+        /** @brief Reports whether participant identity, version, and chunk presence are structurally valid. */
+        [[nodiscard]] bool HasValidManifestEntryIdentity(const SaveManifestParticipant &entry) noexcept {
+            return entry.participant.IsValid() && entry.schemaVersion.IsValid() && !entry.chunks.empty();
+        }
+
+        /** @brief Reports whether participant chunk counts fit local and aggregate bounds. */
+        [[nodiscard]] bool HasValidManifestEntryBounds(const SaveManifestParticipant &entry, const SaveArchiveMetadataLimits &limits,
+                                                       const std::size_t totalChunks) noexcept {
+            return entry.chunks.size() <= limits.maximumChunksPerParticipant &&
+                   entry.chunks.size() <= limits.maximumTotalChunks - totalChunks;
+        }
+
+        /** @brief Reports whether participant-local chunks are unique and canonically ordered. */
+        [[nodiscard]] bool HasCanonicalManifestChunks(const SaveManifestParticipant &entry) {
+            return ValidateUniqueSaveIdentities<SaveRecordIdentityTag>(entry.chunks).HasValue() && std::ranges::is_sorted(entry.chunks);
+        }
+
+        /** @brief Inserts one participant's chunks into the archive-wide ownership set. */
+        [[nodiscard]] bool InsertUniqueManifestChunks(
+            const SaveManifestParticipant &entry,
+            std::unordered_set<SaveRecordId, PersistentSaveIdentityHash<SaveRecordIdentityTag>> &uniqueChunks) {
+            for (const SaveRecordId &chunk : entry.chunks) {
+                if (!uniqueChunks.insert(chunk).second)
                     return false;
             }
             return true;
         }
 
-        /** @brief Evaluates declared participant support and required current composition. */
-        [[nodiscard]] std::optional<SaveCompatibilityDecision> EvaluateDeclaredParticipants(const SaveGameManifest &manifest,
-                                                                                            const SaveCompatibilityPolicy &policy,
-                                                                                            bool &migrationRequired) {
-            for (const auto &support : policy.participants) {
-                const auto found =
-                    std::ranges::lower_bound(manifest.participants, support.participant, {}, &SaveManifestParticipant::participant);
-                if (found == manifest.participants.end() || found->participant != support.participant) {
-                    if (support.required)
-                        return Reject(SaveCompatibilityReason::MissingRequiredParticipant, support.participant);
-                    continue;
-                }
-                const VersionAdmission admission = ClassifyVersion(found->schemaVersion, support.versions);
-                if (admission == VersionAdmission::Rejected)
-                    return Reject(SaveCompatibilityReason::UnsupportedParticipantSchema, support.participant);
-                migrationRequired |= admission == VersionAdmission::Migration;
+        /** @brief Validates canonical participant sequencing and archive-wide chunk ownership. */
+        [[nodiscard]] Result<void> ValidateManifestParticipants(const SaveGameManifest &manifest, const SaveArchiveMetadataLimits &limits) {
+            std::size_t totalChunks = 0;
+            std::unordered_set<SaveRecordId, PersistentSaveIdentityHash<SaveRecordIdentityTag>> uniqueChunks;
+            uniqueChunks.reserve(limits.maximumTotalChunks);
+            const SaveParticipantId *previousParticipant = nullptr;
+            for (const SaveManifestParticipant &entry : manifest.participants) {
+                if (!HasValidManifestEntryIdentity(entry))
+                    return Result<void>::Failure(MakeError(SaveErrors::ArchiveManifestInvalid));
+                if (!HasValidManifestEntryBounds(entry, limits, totalChunks))
+                    return Result<void>::Failure(MakeError(SaveErrors::ArchiveMetadataLimitExceeded));
+                if (previousParticipant != nullptr && *previousParticipant >= entry.participant)
+                    return Result<void>::Failure(MakeError(SaveErrors::ArchiveManifestInvalid));
+                if (!HasCanonicalManifestChunks(entry) || !InsertUniqueManifestChunks(entry, uniqueChunks))
+                    return Result<void>::Failure(MakeError(SaveErrors::ArchiveManifestInvalid));
+                totalChunks += entry.chunks.size();
+                previousParticipant = &entry.participant;
             }
-            return std::nullopt;
+            return Result<void>::Success();
         }
 
-        /** @brief Rejects required manifest participants absent from the sealed policy. */
-        [[nodiscard]] std::optional<SaveCompatibilityDecision> FindUnknownRequiredParticipant(const SaveGameManifest &manifest,
-                                                                                              const SaveCompatibilityPolicy &policy) {
-            for (const SaveManifestParticipant &entry : manifest.participants) {
-                const auto found =
-                    std::ranges::lower_bound(policy.participants, entry.participant, {}, &SaveParticipantCompatibility::participant);
-                if (entry.required && (found == policy.participants.end() || found->participant != entry.participant))
-                    return Reject(SaveCompatibilityReason::UnknownRequiredParticipant, entry.participant);
-            }
-            return std::nullopt;
-        }
     }  // namespace
 
     /** @copydoc ValidateSaveArchiveHeader */
@@ -328,28 +337,7 @@ namespace Horo::Runtime {
             return Result<void>::Failure(MakeError(SaveErrors::ArchiveMetadataLimitExceeded));
         if (!manifest.saveSchemaVersion.IsValid() || manifest.participants.empty())
             return Result<void>::Failure(MakeError(SaveErrors::ArchiveManifestInvalid));
-        std::size_t totalChunks = 0;
-        std::unordered_set<SaveRecordId, PersistentSaveIdentityHash<SaveRecordIdentityTag>> uniqueChunks;
-        uniqueChunks.reserve(std::min(limits.maximumTotalChunks, manifest.participants.size() * 2U));
-        const SaveParticipantId *previousParticipant = nullptr;
-        for (const SaveManifestParticipant &entry : manifest.participants) {
-            if (!entry.participant.IsValid() || !entry.schemaVersion.IsValid() || entry.chunks.empty())
-                return Result<void>::Failure(MakeError(SaveErrors::ArchiveManifestInvalid));
-            if (entry.chunks.size() > limits.maximumChunksPerParticipant || entry.chunks.size() > limits.maximumTotalChunks - totalChunks)
-                return Result<void>::Failure(MakeError(SaveErrors::ArchiveMetadataLimitExceeded));
-            if (previousParticipant != nullptr && *previousParticipant >= entry.participant)
-                return Result<void>::Failure(MakeError(SaveErrors::ArchiveManifestInvalid));
-            if (const auto unique = ValidateUniqueSaveIdentities<SaveRecordIdentityTag>(entry.chunks);
-                unique.HasError() || !std::ranges::is_sorted(entry.chunks))
-                return Result<void>::Failure(MakeError(SaveErrors::ArchiveManifestInvalid));
-            for (const SaveRecordId &chunk : entry.chunks) {
-                if (!uniqueChunks.insert(chunk).second)
-                    return Result<void>::Failure(MakeError(SaveErrors::ArchiveManifestInvalid));
-            }
-            totalChunks += entry.chunks.size();
-            previousParticipant = &entry.participant;
-        }
-        return Result<void>::Success();
+        return ValidateManifestParticipants(manifest, limits);
     }
 
     /** @copydoc EncodeSaveArchiveHeader */
@@ -390,11 +378,7 @@ namespace Horo::Runtime {
         if (decoded.HasError())
             return Result<SaveArchiveHeader>::Failure(decoded.ErrorValue());
         const Json &root = decoded.Value();
-        if (!HasExactFields(root, {"baseScene", "capturedAtUnixMilliseconds", "engineVersion", "environment", "featureFlags",
-                                   "parentGeneration", "playTimeNanoseconds", "product", "productCompatibilityVersion", "profile",
-                                   "project", "projectBuildId", "slot", "slotGeneration", "user", "world"}) ||
-            !root.at("capturedAtUnixMilliseconds").is_number_unsigned() || !root.at("playTimeNanoseconds").is_number_unsigned() ||
-            !root.at("featureFlags").is_number_unsigned())
+        if (!HasHeaderJsonShape(root))
             return Result<SaveArchiveHeader>::Failure(MakeError(SaveErrors::ArchiveHeaderInvalid));
 
         auto identities = DecodeHeaderIdentities(root);
@@ -458,65 +442,22 @@ namespace Horo::Runtime {
         if (decoded.HasError())
             return Result<SaveGameManifest>::Failure(decoded.ErrorValue());
         const Json &root = decoded.Value();
-        if (!HasExactFields(root, {"canonicalStateHash", "participants", "saveSchemaVersion"}) ||
-            !root.at("canonicalStateHash").is_string() || !root.at("participants").is_array() || root.at("participants").empty() ||
-            root.at("participants").size() > limits.maximumParticipants)
+        if (!HasManifestJsonShape(root, limits))
             return Result<SaveGameManifest>::Failure(MakeError(SaveErrors::ArchiveManifestInvalid));
 
         auto schema = ParseVersion<SaveSchemaVersion>(root.at("saveSchemaVersion"), SaveErrors::ArchiveManifestInvalid);
         auto digest = ParseSha256(root.at("canonicalStateHash").get_ref<const std::string &>());
         if (schema.HasError() || digest.HasError())
             return Result<SaveGameManifest>::Failure(MakeError(SaveErrors::ArchiveManifestInvalid));
-        std::vector<SaveManifestParticipant> participants;
-        participants.reserve(root.at("participants").size());
-        std::size_t totalChunks = 0;
-        for (const Json &value : root.at("participants")) {
-            auto participant = DecodeParticipant(value, limits, totalChunks);
-            if (participant.HasError())
-                return Result<SaveGameManifest>::Failure(participant.ErrorValue());
-            participants.push_back(std::move(participant).Value());
-        }
+        auto participants = DecodeManifestParticipants(root.at("participants"), limits);
+        if (participants.HasError())
+            return Result<SaveGameManifest>::Failure(participants.ErrorValue());
         SaveGameManifest manifest{.saveSchemaVersion = std::move(schema).Value(),
                                   .canonicalState = {std::move(digest).Value()},
-                                  .participants = std::move(participants)};
+                                  .participants = std::move(participants).Value()};
         if (const auto valid = ValidateSaveGameManifest(manifest, limits); valid.HasError())
             return Result<SaveGameManifest>::Failure(valid.ErrorValue());
         return Result<SaveGameManifest>::Success(std::move(manifest));
     }
 
-    /** @copydoc EvaluateSaveCompatibility */
-    SaveCompatibilityDecision EvaluateSaveCompatibility(const ArchiveFormatVersion archiveVersion, const SaveArchiveHeader &header,
-                                                        const SaveGameManifest &manifest, const SaveCompatibilityPolicy &policy) {
-        using enum SaveCompatibilityReason;
-        SaveArchiveMetadataLimits limits;
-        limits.supportedFeatureFlagsMask = std::numeric_limits<std::uint64_t>::max();
-        if (ValidateSaveArchiveHeader(header, limits).HasError() || ValidateSaveGameManifest(manifest, limits).HasError() ||
-            !IsValidSupport(policy.archiveVersions) || !IsValidSupport(policy.saveSchemaVersions) ||
-            !IsValidSupport(policy.productVersions))
-            return Reject(InvalidMetadata);
-
-        if (!HasValidParticipantPolicy(policy))
-            return Reject(InvalidMetadata);
-
-        bool migrationRequired = false;
-        if (auto rejected =
-                EvaluateRootVersion(ClassifyVersion(archiveVersion, policy.archiveVersions), UnsupportedArchiveVersion, migrationRequired))
-            return *rejected;
-        if (auto rejected = EvaluateRootVersion(ClassifyVersion(manifest.saveSchemaVersion, policy.saveSchemaVersions),
-                                                UnsupportedSaveSchema, migrationRequired))
-            return *rejected;
-        if (auto rejected = EvaluateRootVersion(ClassifyVersion(header.productCompatibility, policy.productVersions),
-                                                UnsupportedProductVersion, migrationRequired))
-            return *rejected;
-        if ((header.featureFlags & ~policy.supportedFeatureFlagsMask) != 0)
-            return Reject(UnsupportedFeature);
-
-        if (auto rejected = EvaluateDeclaredParticipants(manifest, policy, migrationRequired))
-            return *rejected;
-        const SaveCompatibilityDecision compatible{.disposition = migrationRequired ? SaveCompatibilityDisposition::MigrationRequired
-                                                                                    : SaveCompatibilityDisposition::DirectRead,
-                                                   .reason = None,
-                                                   .participant = std::nullopt};
-        return FindUnknownRequiredParticipant(manifest, policy).value_or(compatible);
-    }
 }  // namespace Horo::Runtime
