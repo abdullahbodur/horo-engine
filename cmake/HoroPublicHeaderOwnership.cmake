@@ -189,6 +189,10 @@ horo_configure_target_header_boundary(HoroPrefab PUBLIC_HEADERS
     Horo/Prefab/PrefabIdentity.h
 )
 
+horo_configure_target_header_boundary(HoroPrefabAuthoring PUBLIC_HEADERS
+    Horo/Prefab/PrefabDocument.h
+)
+
 horo_configure_target_header_boundary(HoroRenderApi PUBLIC_HEADERS
     Horo/Runtime/Render/Mesh.h
     Horo/Runtime/Render/RenderAdapter.h

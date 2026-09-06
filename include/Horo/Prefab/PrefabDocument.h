@@ -1,0 +1,105 @@
+#pragma once
+
+/**
+ * @file PrefabDocument.h
+ * @brief Versioned, bounded and backend-neutral prefab authoring document contract.
+ */
+
+#include "Horo/Application/ProjectVersion.h"
+#include "Horo/Foundation/Sha256.h"
+#include "Horo/Gameplay/BehaviorTypes.h"
+#include "Horo/Math/SceneMath.h"
+#include "Horo/Prefab/PrefabIdentity.h"
+
+#include <cstddef>
+#include <optional>
+#include <string>
+#include <utility>
+#include <vector>
+
+namespace Horo::Prefab {
+    /** @brief Maximum root-inclusive hierarchy depth in one prefab source document. */
+    inline constexpr std::size_t MaximumPrefabHierarchyDepth = 16;
+    /** @brief Maximum authored object count in one concrete prefab source document. */
+    inline constexpr std::size_t MaximumPrefabObjectCount = 256;
+    /** @brief Maximum dynamic payload bytes admitted by one prefab source document. */
+    inline constexpr std::size_t MaximumPrefabPayloadBytes = 4 * 1024 * 1024;
+    /** @brief Maximum combined component and behavior occurrences on one object. */
+    inline constexpr std::size_t MaximumPrefabComponentsPerObject = 64;
+    /** @brief Maximum UTF-8 bytes in one prefab-local display name. */
+    inline constexpr std::size_t MaximumPrefabObjectNameBytes = 256;
+    /** @brief Maximum direct nested placements in one concrete prefab. */
+    inline constexpr std::size_t MaximumDirectNestedPrefabPlacements = 256;
+    /** @brief Maximum distinct Asset Registry dependencies declared by one prefab. */
+    inline constexpr std::size_t MaximumPrefabReferencedAssets = 256;
+
+    /** @brief Exact semantic source revision used to author composition data. */
+    struct PrefabSourceRevision final {
+        Application::HoroVersion projectVersion; /**< Unified project version, not a prefab-specific counter. */
+        Sha256Digest contentDigest;              /**< SHA-256 of the canonical semantic source document. */
+
+        [[nodiscard]] bool operator==(const PrefabSourceRevision &) const noexcept = default;
+    };
+
+    /** @brief One authored prefab-local hierarchy object and its portable payloads. */
+    struct PrefabObjectNode final {
+        LocalObjectId localId;                              /**< Stable sparse slot; zero is reserved for the root. */
+        std::optional<LocalObjectId> parentLocalId;         /**< Empty only for the root object. */
+        std::string name;                                   /**< Advisory UTF-8 display name, never identity. */
+        Math::Transform localTransform;                     /**< Backend-neutral local transform. */
+        std::vector<RawComponentPayload> components;        /**< Typed or opaque project component envelopes. */
+        std::vector<Gameplay::BehaviorComponent> behaviors; /**< Portable schema-checked behavior payloads. */
+
+        [[nodiscard]] bool operator==(const PrefabObjectNode &) const noexcept = default;
+    };
+
+    /** @brief One direct nested prefab occurrence mounted under a concrete local object. */
+    struct NestedPrefabPlacement final {
+        LocalObjectId placementLocalId;             /**< Unique non-root slot in the containing source. */
+        std::optional<LocalObjectId> parentLocalId; /**< Containing object; empty mounts beneath the root. */
+        PrefabAssetReference sourcePrefab;          /**< Path-independent nested source identity. */
+        PrefabSourceRevision authoredAgainst;       /**< Exact project-versioned source revision. */
+        Math::Transform localRootTransform;         /**< Backend-neutral transform applied at the mount. */
+
+        [[nodiscard]] bool operator==(const NestedPrefabPlacement &) const noexcept = default;
+    };
+
+    /** @brief Optional composition envelope; an empty envelope is noncanonical. */
+    struct PrefabComposition final {
+        std::vector<NestedPrefabPlacement> nestedPlacements;        /**< Concrete-only direct nested occurrences. */
+        std::optional<PrefabAssetReference> variantParent;          /**< Variant-only immediate parent asset. */
+        std::optional<PrefabSourceRevision> variantAuthoredAgainst; /**< Required with @ref variantParent. */
+
+        [[nodiscard]] bool operator==(const PrefabComposition &) const noexcept = default;
+    };
+
+    /** @brief Mutable candidate data validated before immutable document publication. */
+    struct PrefabDocumentData final {
+        Application::HoroVersion projectVersion;       /**< Unified project schema version. */
+        Assets::AssetId assetId;                       /**< Sidecar-owned authoritative asset identity. */
+        std::vector<PrefabObjectNode> objects;         /**< Canonical parent-before-child order; root first. */
+        std::optional<PrefabComposition> composition;  /**< Optional concrete nesting or exclusive variant source. */
+        std::vector<Assets::AssetId> referencedAssets; /**< Unique explicit Asset Registry dependencies. */
+
+        [[nodiscard]] bool operator==(const PrefabDocumentData &) const noexcept = default;
+    };
+
+    /** @brief Immutable validated source document suitable for save, import and cook boundaries. */
+    class PrefabDocument final {
+    public:
+        /**
+         * @brief Validates and takes ownership of one complete authoring candidate transactionally.
+         * @param candidate Candidate project version, identity, hierarchy, payloads and optional composition.
+         * @return Immutable document or a stable prefab/gameplay/application validation error.
+         */
+        [[nodiscard]] static Result<PrefabDocument> Create(PrefabDocumentData candidate);
+
+        /** @brief Returns the immutable validated source data. @return Borrowed document data. */
+        [[nodiscard]] const PrefabDocumentData &Data() const noexcept;
+
+    private:
+        explicit PrefabDocument(PrefabDocumentData data) noexcept : data_(std::move(data)) {}
+
+        PrefabDocumentData data_;
+    };
+}  // namespace Horo::Prefab
