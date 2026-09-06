@@ -9,6 +9,7 @@
 #include <stdexcept>
 #include <type_traits>
 #include <utility>
+#include <vector>
 
 namespace {
     class TrackingStaticMeshExecutor final : public Horo::Render::IStaticMeshPassExecutor {
@@ -52,6 +53,7 @@ namespace {
         int destroyTextureCount{0};
         int destroyTextureViewCount{0};
         int destroyRenderTargetCount{0};
+        std::vector<std::byte> lastBufferInitialData;
         bool failPresentation{false};
         bool throwDuringInitialize{false};
         bool throwDuringResize{false};
@@ -94,8 +96,9 @@ namespace {
             return capabilities_;
         }
 
-        Result<std::uint64_t> CreateBuffer(const RenderBufferDescriptor &, std::span<const std::byte>) override {
+        Result<std::uint64_t> CreateBuffer(const RenderBufferDescriptor &, const std::span<const std::byte> initialData) override {
             ++lifecycleState.createBufferCount;
+            lifecycleState.lastBufferInitialData.assign(initialData.begin(), initialData.end());
             if (lifecycleState.throwDuringResourceCreation) {
                 throw std::runtime_error{"Injected resource creation exception."};
             }
@@ -354,6 +357,32 @@ namespace {
         Check(lifecycleState.destroyBufferCount == 2);
     }
 
+    TEST_CASE("Frontend Accepts Absent Buffer Initial Data And Copies Present Bytes", "[unit][runtime][renderer][resource]") {
+        lifecycleState = {};
+        std::unique_ptr<RenderFrontend> frontend = CreateTrackingFrontend();
+        const RenderBufferDescriptor descriptor{
+            .byteSize = 4,
+            .usage = RenderBufferUsage::Vertex,
+            .access = RenderBufferAccess::DeviceLocal,
+        };
+
+        const auto withoutInitialData = frontend->CreateBuffer(descriptor, {});
+        Check(withoutInitialData.HasValue());
+        Check(frontend->ProcessResourceRequests().Value() == 1);
+        Check(lifecycleState.lastBufferInitialData.empty());
+
+        std::array<std::byte, 4> bytes{std::byte{0x12}, std::byte{0x34}, std::byte{0x56}, std::byte{0x78}};
+        const auto withInitialData = frontend->CreateBuffer(descriptor, bytes);
+        Check(withInitialData.HasValue());
+        bytes[0] = std::byte{0xFF};
+        Check(frontend->ProcessResourceRequests().Value() == 1);
+        Check(lifecycleState.lastBufferInitialData.front() == std::byte{0x12});
+
+        const auto wrongSize = frontend->CreateBuffer(descriptor, std::span{bytes}.first<3>());
+        Check(wrongSize.HasError());
+        Check(wrongSize.ErrorValue().code.Value() == "render.frontend.resource.buffer_upload_size_mismatch");
+    }
+
     TEST_CASE("Frontend Publishes Texture Views And Targets With Dependency-Pinned Retirement", "[unit][runtime][renderer][resource]") {
         lifecycleState = {};
         std::unique_ptr<RenderFrontend> frontend = CreateTrackingFrontend();
@@ -550,6 +579,77 @@ namespace {
         Check(frontend->ReleaseMesh(pendingMesh.Value().handle).ErrorValue().code.Value() ==
               "render.frontend.resource.change_during_frame");
         frame.Cancel();
+    }
+
+    TEST_CASE("Frontend Separates Structural Validation From Current Resource Admission",
+              "[unit][runtime][renderer][resource][descriptor]") {
+        lifecycleState = {};
+        std::unique_ptr<RenderFrontend> frontend = CreateTrackingFrontend();
+        const std::array<std::byte, 16> bytes{};
+
+        const RenderBufferDescriptor storageBuffer{.byteSize = bytes.size(),
+                                                   .usage = RenderBufferUsage::Storage | RenderBufferUsage::CopyDestination,
+                                                   .access = RenderBufferAccess::DeviceLocal};
+        Check(ValidateRenderBufferDescriptor(storageBuffer).HasValue());
+        const auto unsupportedBuffer = frontend->CreateBuffer(storageBuffer, bytes);
+        Check(unsupportedBuffer.HasError());
+        Check(unsupportedBuffer.ErrorValue().code.Value() == "render.frontend.resource.unsupported");
+        Check(lifecycleState.createBufferCount == 0);
+
+        const auto malformedBuffer = frontend->CreateBuffer({.byteSize = 0, .usage = RenderBufferUsage::Storage}, {});
+        Check(malformedBuffer.HasError());
+        Check(malformedBuffer.ErrorValue().code.Value() == "render.frontend.resource.invalid_buffer_descriptor");
+
+        const auto baselineBuffer = frontend->CreateBuffer({.byteSize = bytes.size(),
+                                                            .usage = RenderBufferUsage::Vertex,
+                                                            .access = RenderBufferAccess::DeviceLocal},
+                                                           bytes);
+        Check(baselineBuffer.HasValue());
+        Check(baselineBuffer.Value().handle.slot == 1);
+        Check(baselineBuffer.Value().operation.value == 1);
+
+        const RenderTextureDescriptor volume{.dimension = RenderTextureDimension::ThreeD,
+                                             .extent = {8, 8},
+                                             .format = RenderTextureFormat::Rgba16Float,
+                                             .mipCount = 4,
+                                             .usage = RenderTextureUsage::Sampled | RenderTextureUsage::CopyDestination,
+                                             .depth = 8};
+        Check(ValidateRenderTextureDescriptor(volume).HasValue());
+        const auto unsupportedTexture = frontend->CreateTexture(volume);
+        Check(unsupportedTexture.HasError());
+        Check(unsupportedTexture.ErrorValue().code.Value() == "render.frontend.resource.unsupported");
+        Check(lifecycleState.createTextureCount == 0);
+
+        auto malformedTexture = volume;
+        malformedTexture.depth = 0;
+        const auto rejectedTexture = frontend->CreateTexture(malformedTexture);
+        Check(rejectedTexture.HasError());
+        Check(rejectedTexture.ErrorValue().code.Value() == "render.frontend.resource.invalid_texture_descriptor");
+
+        const auto baselineTexture =
+            frontend->CreateTexture({.extent = {8, 8}, .format = RenderTextureFormat::Rgba8Unorm, .usage = RenderTextureUsage::Sampled});
+        Check(baselineTexture.HasValue());
+        Check(frontend->ProcessResourceRequests().Value() == 2);
+        Check(lifecycleState.createBufferCount == 1);
+        Check(lifecycleState.createTextureCount == 1);
+
+        const RenderTextureViewDescriptor arrayView{.texture = baselineTexture.Value().handle,
+                                                    .format = RenderTextureFormat::Rgba8Unorm,
+                                                    .aspect = RenderTextureAspect::Color,
+                                                    .dimension = RenderTextureViewDimension::TwoDArray};
+        Check(ValidateRenderTextureViewDescriptor(arrayView).HasValue());
+        const auto unsupportedView = frontend->CreateTextureView(arrayView);
+        Check(unsupportedView.HasError());
+        Check(unsupportedView.ErrorValue().code.Value() == "render.frontend.resource.unsupported");
+        Check(lifecycleState.createTextureViewCount == 0);
+
+        const auto baselineView = frontend->CreateTextureView(
+            {.texture = baselineTexture.Value().handle, .format = RenderTextureFormat::Rgba8Unorm, .aspect = RenderTextureAspect::Color});
+        Check(baselineView.HasValue());
+        Check(baselineView.Value().handle.slot == 3);
+        Check(baselineView.Value().operation.value == 3);
+        Check(frontend->ProcessResourceRequests().Value() == 1);
+        Check(lifecycleState.createTextureViewCount == 1);
     }
 
     TEST_CASE("Frontend Stores Backend Resource Exceptions As Operation Results", "[unit][runtime][renderer][resource]") {
