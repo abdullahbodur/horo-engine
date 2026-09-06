@@ -9,24 +9,23 @@
 
 namespace Horo::Runtime::Ui {
     namespace {
+        template <typename Value> Value RequireValue(Result<Value> result) {
+            REQUIRE(result.HasValue());
+            return result.Value();
+        }
+
         template <typename Id> Id StableId(const std::uint8_t marker) {
             SerializedUiId bytes{};
             bytes.back() = marker;
-            auto result = Id::Create(bytes);
-            REQUIRE(result.HasValue());
-            return result.Value();
+            return RequireValue(Id::Create(bytes));
         }
 
         UiOwnershipGeneration Ownership(const std::uint64_t value) {
-            auto result = UiOwnershipGeneration::Create(value);
-            REQUIRE(result.HasValue());
-            return result.Value();
+            return RequireValue(UiOwnershipGeneration::Create(value));
         }
 
         template <typename Revision> Revision MakeRevision(const std::uint64_t value) {
-            auto result = Revision::Create(value);
-            REQUIRE(result.HasValue());
-            return result.Value();
+            return RequireValue(Revision::Create(value));
         }
 
         void ExpectError(const Result<void> &result, const ErrorCodeDescriptor &expected) {
@@ -47,6 +46,9 @@ namespace Horo::Runtime::Ui {
             REQUIRE(element.IsValid());
             REQUIRE(canvas.IsValid());
             REQUIRE(document.Bytes().back() == 1);
+            constexpr UiDocumentId invalid;
+            static_assert(!invalid.IsValid());
+            static_assert(invalid.Bytes() == SerializedUiId{});
             static_assert(!std::is_same_v<UiDocumentId, UiElementId>);
             static_assert(!std::is_same_v<UiElementId, UiCanvasId>);
             static_assert(std::is_trivially_copyable_v<UiDocumentId>);

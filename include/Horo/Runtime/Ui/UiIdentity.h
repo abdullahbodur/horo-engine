@@ -8,7 +8,6 @@
 #include "Horo/Foundation/Result.h"
 #include "Horo/Runtime/Ui/UiErrors.h"
 
-#include <algorithm>
 #include <array>
 #include <compare>
 #include <cstdint>
@@ -30,29 +29,25 @@ namespace Horo::Runtime::Ui {
          * @return Typed identity or UiErrors::IdentityInvalid for the all-zero value.
          */
         [[nodiscard]] static Result<UiStableId> Create(const SerializedUiId &bytes) {
-            if (std::ranges::none_of(bytes, [](const std::uint8_t byte) {
-                return byte != 0;
-            }))
+            if (bytes == SerializedUiId{})
                 return Result<UiStableId>::Failure(MakeError(UiErrors::IdentityInvalid));
             return Result<UiStableId>::Success(UiStableId{bytes});
         }
 
         /** @brief Checks representation, not document residency. @return Whether any identity byte is non-zero. */
-        [[nodiscard]] bool IsValid() const noexcept {
-            return std::ranges::any_of(bytes_, [](const std::uint8_t byte) {
-                return byte != 0;
-            });
+        [[nodiscard]] constexpr bool IsValid() const noexcept {
+            return bytes_ != SerializedUiId{};
         }
 
         /** @brief Returns the persistent representation. @return Borrowed immutable identity bytes. */
-        [[nodiscard]] const SerializedUiId &Bytes() const noexcept {
+        [[nodiscard]] constexpr const SerializedUiId &Bytes() const noexcept {
             return bytes_;
         }
 
         [[nodiscard]] auto operator<=>(const UiStableId &) const noexcept = default;
 
     private:
-        explicit UiStableId(const SerializedUiId &bytes) noexcept : bytes_(bytes) {}
+        explicit constexpr UiStableId(const SerializedUiId &bytes) noexcept : bytes_(bytes) {}
 
         SerializedUiId bytes_{};
     };
