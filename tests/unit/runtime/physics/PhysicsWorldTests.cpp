@@ -390,7 +390,7 @@ namespace Horo::Physics {
 
         std::atomic_bool cancellationObserved{};
         const PhysicsSolverJob solverJob{.context = &cancellationObserved, .execute = RunUntilCancelled};
-        const PhysicsSolverJobBatch batch{.jobs = &solverJob, .jobCount = 1, .joinTimeout = Duration::FromMilliseconds(10)};
+        const PhysicsSolverJobBatch batch{.jobs = &solverJob, .jobCount = 1, .joinTimeout = Duration::FromMilliseconds(500)};
         const auto stepped =
             world->AdvanceFixedTick({.simulationTick = 1, .fixedDelta = Duration::FromNanoseconds(16'666'667), .solverJobs = batch});
         REQUIRE(stepped.HasError());

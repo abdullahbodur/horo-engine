@@ -214,7 +214,10 @@ namespace Horo::Physics {
                 childIds.push_back(spawned.Value());
             }
 
-            const auto deadline = std::chrono::steady_clock::now() + std::chrono::nanoseconds(batch.joinTimeout.ToNanoseconds());
+            const auto now = std::chrono::steady_clock::now();
+            const auto remaining = std::chrono::nanoseconds(batch.joinTimeout.ToNanoseconds());
+            const auto available = std::chrono::steady_clock::time_point::max() - now;
+            const auto deadline = remaining >= available ? std::chrono::steady_clock::time_point::max() : now + remaining;
             for (;;) {
                 const bool complete = std::ranges::all_of(childIds, [&jobs](const JobId id) {
                     const JobState state = jobs.Query(id).state;
