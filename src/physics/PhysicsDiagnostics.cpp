@@ -55,8 +55,8 @@ namespace Horo::Physics {
 
         /** @brief Returns whether a scalar key requires non-zero generation/order evidence. */
         bool RequiresNonZeroScalar(const PhysicsDiagnosticContextKey key) noexcept {
-            return key == PhysicsDiagnosticContextKey::SceneGeneration || key == PhysicsDiagnosticContextKey::SimulationTick ||
-                   key == PhysicsDiagnosticContextKey::QuerySnapshotGeneration || key == PhysicsDiagnosticContextKey::OperationSequence;
+            using enum PhysicsDiagnosticContextKey;
+            return key == SceneGeneration || key == SimulationTick || key == QuerySnapshotGeneration || key == OperationSequence;
         }
 
         /** @brief Validates one key/value pair and captures its world identity when applicable. */
