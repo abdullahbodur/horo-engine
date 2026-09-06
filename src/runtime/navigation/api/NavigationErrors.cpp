@@ -149,4 +149,50 @@ namespace Horo::Navigation::NavigationErrors {
         .retryable = true,
         .userActionable = true,
     };
+    const ErrorCodeDescriptor AreaDescriptorInvalid{
+        .domain = NavigationDomain,
+        .code = ErrorCode{"navigation.area.descriptor_invalid"},
+        .defaultSeverity = ErrorSeverity::Error,
+        .summary = "A navigation area descriptor is invalid.",
+        .remediationHint = "Use stable non-zero identities, typed source provenance, and a finite non-negative traversal cost.",
+        .retryable = false,
+        .userActionable = true,
+    };
+    const ErrorCodeDescriptor FilterDescriptorInvalid{
+        .domain = NavigationDomain,
+        .code = ErrorCode{"navigation.filter.descriptor_invalid"},
+        .defaultSeverity = ErrorSeverity::Error,
+        .summary = "A navigation query-filter descriptor is invalid.",
+        .remediationHint = "Use stable identities, typed source provenance, and finite non-negative area cost overrides.",
+        .retryable = false,
+        .userActionable = true,
+    };
+    const ErrorCodeDescriptor DescriptorConflict{
+        .domain = NavigationDomain,
+        .code = ErrorCode{"navigation.registry.descriptor_conflict"},
+        .defaultSeverity = ErrorSeverity::Error,
+        .summary = "Navigation descriptors collide in one registry identity domain.",
+        .remediationHint =
+            "Assign unique stable area, filter, and per-filter override identities across project and package contributions.",
+        .retryable = false,
+        .userActionable = true,
+    };
+    const ErrorCodeDescriptor AreaUnknown{
+        .domain = NavigationDomain,
+        .code = ErrorCode{"navigation.area.unknown"},
+        .defaultSeverity = ErrorSeverity::Error,
+        .summary = "The requested navigation area identity is not registered.",
+        .remediationHint = "Restore the exact project or package area descriptor; do not substitute a default area.",
+        .retryable = false,
+        .userActionable = true,
+    };
+    const ErrorCodeDescriptor FilterUnknown{
+        .domain = NavigationDomain,
+        .code = ErrorCode{"navigation.filter.unknown"},
+        .defaultSeverity = ErrorSeverity::Error,
+        .summary = "The requested navigation query-filter identity is not registered.",
+        .remediationHint = "Restore the exact project or package filter descriptor; do not substitute a default filter.",
+        .retryable = false,
+        .userActionable = true,
+    };
 }  // namespace Horo::Navigation::NavigationErrors
