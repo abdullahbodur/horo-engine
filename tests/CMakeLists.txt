@@ -205,6 +205,14 @@ target_include_directories(HoroPhysicsTests PRIVATE ${PROJECT_SOURCE_DIR}/src/ph
 target_compile_definitions(HoroPhysicsTests PRIVATE HORO_TEST_PHYSICS_NATIVE=$<BOOL:${HORO_BUILD_PHYSICS_NATIVE}>)
 target_link_libraries(HoroPhysicsTests PRIVATE HoroEngine::Physics)
 horo_register_catch_test(HoroPhysicsTests LABELS "unit;physics;headless")
+
+add_executable(HoroNavigationApiTests
+        unit/runtime/navigation/NavigationIdentityTests.cpp
+)
+target_compile_features(HoroNavigationApiTests PRIVATE cxx_std_20)
+target_link_libraries(HoroNavigationApiTests PRIVATE HoroEngine::NavigationApi)
+horo_register_catch_test(HoroNavigationApiTests LABELS "unit;navigation;headless")
+
 foreach(horo_physics_probe IN ITEMS iOS Linux Darwin)
     set(horo_physics_expected "Canonical Physics is not qualified for this target")
     if(horo_physics_probe STREQUAL "Linux")

@@ -344,6 +344,14 @@ else()
     target_sources(HoroPhysics PRIVATE physics/CanonicalPhysicsRuntimeOmitted.cpp physics/CanonicalSolverOmitted.cpp)
 endif()
 
+add_library(HoroNavigationApi STATIC
+        runtime/navigation/api/NavigationErrors.cpp
+        runtime/navigation/api/NavigationIdentity.cpp
+)
+add_library(HoroEngine::NavigationApi ALIAS HoroNavigationApi)
+target_compile_features(HoroNavigationApi PUBLIC cxx_std_20)
+target_link_libraries(HoroNavigationApi PUBLIC HoroEngine::Foundation)
+
 add_library(HoroInput STATIC
         runtime/input/Input.cpp
         runtime/input/InputErrors.cpp
