@@ -183,6 +183,11 @@ horo_configure_target_header_boundary(HoroWorldStreaming PUBLIC_HEADERS
     Horo/WorldStreaming/WorldStreamingIdentity.h
 )
 
+horo_configure_target_header_boundary(HoroPrefab PUBLIC_HEADERS
+    Horo/Prefab/PrefabErrors.h
+    Horo/Prefab/PrefabIdentity.h
+)
+
 horo_configure_target_header_boundary(HoroRenderApi PUBLIC_HEADERS
     Horo/Runtime/Render/Mesh.h
     Horo/Runtime/Render/RenderAdapter.h

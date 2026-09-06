@@ -387,6 +387,14 @@ add_library(HoroEngine::WorldStreaming ALIAS HoroWorldStreaming)
 target_compile_features(HoroWorldStreaming PUBLIC cxx_std_20)
 target_link_libraries(HoroWorldStreaming PUBLIC HoroEngine::Foundation)
 
+add_library(HoroPrefab STATIC
+        runtime/prefab/PrefabErrors.cpp
+        runtime/prefab/PrefabIdentity.cpp
+)
+add_library(HoroEngine::Prefab ALIAS HoroPrefab)
+target_compile_features(HoroPrefab PUBLIC cxx_std_20)
+target_link_libraries(HoroPrefab PUBLIC HoroEngine::Foundation HoroEngine::Assets HoroEngine::GameplayApi)
+
 add_library(HoroInput STATIC
         runtime/input/Input.cpp
         runtime/input/InputErrors.cpp

@@ -229,6 +229,13 @@ target_compile_features(HoroWorldStreamingTests PRIVATE cxx_std_20)
 target_link_libraries(HoroWorldStreamingTests PRIVATE HoroEngine::WorldStreaming)
 horo_register_catch_test(HoroWorldStreamingTests LABELS "unit;world_streaming;headless")
 
+add_executable(HoroPrefabTests
+        unit/runtime/prefab/PrefabIdentityTests.cpp
+)
+target_compile_features(HoroPrefabTests PRIVATE cxx_std_20)
+target_link_libraries(HoroPrefabTests PRIVATE HoroEngine::Prefab)
+horo_register_catch_test(HoroPrefabTests LABELS "unit;prefab;headless")
+
 foreach(horo_physics_probe IN ITEMS iOS Linux Darwin)
     set(horo_physics_expected "Canonical Physics is not qualified for this target")
     if(horo_physics_probe STREQUAL "Linux")

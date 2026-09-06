@@ -20,6 +20,7 @@ horo_allow_target_dependencies(TARGET HoroPhysics DEPENDENCIES HoroFoundation Ho
 horo_allow_target_dependencies(TARGET HoroNavigationApi DEPENDENCIES HoroFoundation)
 horo_allow_target_dependencies(TARGET HoroNavigationNull DEPENDENCIES HoroNavigationApi)
 horo_allow_target_dependencies(TARGET HoroWorldStreaming DEPENDENCIES HoroFoundation)
+horo_allow_target_dependencies(TARGET HoroPrefab DEPENDENCIES HoroFoundation HoroAssets HoroGameplayApi)
 horo_allow_target_dependencies(TARGET HoroInput DEPENDENCIES HoroFoundation)
 horo_allow_target_dependencies(TARGET HoroInputSdl DEPENDENCIES HoroInput)
 
