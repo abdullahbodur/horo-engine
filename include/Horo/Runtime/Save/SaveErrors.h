@@ -20,4 +20,22 @@ namespace Horo::Runtime::SaveErrors {
     extern const ErrorCodeDescriptor VersionInvalid;
     /** @brief Input requires a newer schema or format version than the reader supports. */
     extern const ErrorCodeDescriptor VersionUnsupportedNewer;
+    /** @brief A save participant descriptor is incomplete or internally contradictory. */
+    extern const ErrorCodeDescriptor ParticipantDescriptorInvalid;
+    /** @brief A participant registration omitted its owned adapter lease. */
+    extern const ErrorCodeDescriptor ParticipantAdapterMissing;
+    /** @brief The registry already contains the participant identity. */
+    extern const ErrorCodeDescriptor ParticipantDuplicate;
+    /** @brief Two participants claim ownership of the same canonical record identity. */
+    extern const ErrorCodeDescriptor ParticipantRecordOwnershipDuplicate;
+    /** @brief Participant registration or publication was attempted after registry shutdown. */
+    extern const ErrorCodeDescriptor ParticipantRegistryClosed;
+    /** @brief The bounded participant registry has no remaining capacity. */
+    extern const ErrorCodeDescriptor ParticipantRegistryCapacityExceeded;
+    /** @brief A participant declares a dependency absent from the registry snapshot. */
+    extern const ErrorCodeDescriptor ParticipantDependencyMissing;
+    /** @brief Participant dependencies contain a cycle. */
+    extern const ErrorCodeDescriptor ParticipantDependencyCycle;
+    /** @brief The registry generation cannot advance without reusing a value. */
+    extern const ErrorCodeDescriptor ParticipantRegistryGenerationExhausted;
 }  // namespace Horo::Runtime::SaveErrors
