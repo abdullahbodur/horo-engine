@@ -61,14 +61,19 @@ namespace Horo {
     };
 
     namespace {
-        void SetTerminalState(const std::shared_ptr<JobRecord> &record, const JobState state, std::optional<Error> error = std::nullopt) {
-            std::lock_guard lock(record->Mutex());
-            if (IsTerminal(record->state))
-                return;
-            record->state = state;
-            record->error = std::move(error);
-            record->work = {};
-            record->completed.notify_all();
+        [[nodiscard]] JobFunction SetTerminalState(const std::shared_ptr<JobRecord> &record, const JobState state,
+                                                   std::optional<Error> error = std::nullopt) {
+            JobFunction releasedWork;
+            {
+                std::lock_guard lock(record->Mutex());
+                if (IsTerminal(record->state))
+                    return releasedWork;
+                record->state = state;
+                record->error = std::move(error);
+                releasedWork = std::move(record->work);
+                record->completed.notify_all();
+            }
+            return releasedWork;
         }
 
         void ExecuteJobRecord(const std::shared_ptr<JobRecord> &record) {
@@ -84,21 +89,23 @@ namespace Horo {
                 if (outcome.HasError()) {
                     const bool cancelled = record->cancellation.Token().IsCancellationRequested() &&
                                            outcome.ErrorValue().code.Value() == JobErrors::Cancelled.code.Value();
-                    SetTerminalState(record, cancelled ? JobState::Cancelled : JobState::Failed, outcome.ErrorValue());
+                    static_cast<void>(SetTerminalState(record, cancelled ? JobState::Cancelled : JobState::Failed, outcome.ErrorValue()));
                 } else if (record->cancellation.Token().IsCancellationRequested())
-                    SetTerminalState(record, JobState::Cancelled, MakeJobError(JobErrors::Cancelled, "Job cancellation was requested."));
+                    static_cast<void>(SetTerminalState(record, JobState::Cancelled,
+                                                       MakeJobError(JobErrors::Cancelled, "Job cancellation was requested.")));
                 else
-                    SetTerminalState(record, JobState::Succeeded);
+                    static_cast<void>(SetTerminalState(record, JobState::Succeeded));
             } catch (const std::runtime_error &exception) {  // NOSONAR(cpp:S1181)
-                SetTerminalState(record, JobState::Failed, MakeJobError(JobErrors::Failed, exception.what()));
+                static_cast<void>(SetTerminalState(record, JobState::Failed, MakeJobError(JobErrors::Failed, exception.what())));
             } catch (const std::logic_error &exception) {  // NOSONAR(cpp:S1181)
-                SetTerminalState(record, JobState::Failed, MakeJobError(JobErrors::Failed, exception.what()));
+                static_cast<void>(SetTerminalState(record, JobState::Failed, MakeJobError(JobErrors::Failed, exception.what())));
             } catch (const std::bad_alloc &exception) {  // NOSONAR(cpp:S1181)
-                SetTerminalState(record, JobState::Failed, MakeJobError(JobErrors::Failed, exception.what()));
+                static_cast<void>(SetTerminalState(record, JobState::Failed, MakeJobError(JobErrors::Failed, exception.what())));
             } catch (const std::exception &exception) {  // NOSONAR(cpp:S1181)
-                SetTerminalState(record, JobState::Failed, MakeJobError(JobErrors::Failed, exception.what()));
+                static_cast<void>(SetTerminalState(record, JobState::Failed, MakeJobError(JobErrors::Failed, exception.what())));
             } catch (...) {  // NOSONAR(cpp:S1181)
-                SetTerminalState(record, JobState::Failed, MakeJobError(JobErrors::Failed, "Job callback threw an unknown exception."));
+                static_cast<void>(SetTerminalState(record, JobState::Failed,
+                                                   MakeJobError(JobErrors::Failed, "Job callback threw an unknown exception.")));
             }
         }
     }  // namespace
@@ -173,12 +180,13 @@ namespace Horo {
             record = found->second;
         }
         record->cancellation.RequestCancellation();
+        JobFunction releasedWork;
         {
             std::lock_guard lock(record->Mutex());
             if (record->state == JobState::Queued) {
                 record->state = JobState::Cancelled;
                 record->error = MakeJobError(JobErrors::Cancelled, "Job was cancelled before execution.");
-                record->work = {};
+                releasedWork = std::move(record->work);
                 record->completed.notify_all();
             }
         }
@@ -205,15 +213,18 @@ namespace Horo {
     }
 
     void JobSystem::Shutdown(const ShutdownPolicy policy) const {
-        std::lock_guard shutdownLock(m_state->shutdownMutex);
+        std::unique_lock shutdownLock(m_state->shutdownMutex);
+        std::vector<JobFunction> releasedWork;
         {
             std::lock_guard lock(m_state->mutex);
             m_state->accepting = false;
             m_state->stopping = true;
             if (policy == ShutdownPolicy::Cancel) {
+                releasedWork.reserve(m_state->queue.size());
                 for (const auto &record : m_state->queue) {
                     record->cancellation.RequestCancellation();
-                    SetTerminalState(record, JobState::Cancelled, MakeJobError(JobErrors::Cancelled, "Job was cancelled during shutdown."));
+                    releasedWork.push_back(SetTerminalState(record, JobState::Cancelled,
+                                                            MakeJobError(JobErrors::Cancelled, "Job was cancelled during shutdown.")));
                 }
                 m_state->queue.clear();
                 for (const auto &[id, record] : m_state->jobs) {
@@ -229,6 +240,8 @@ namespace Horo {
                 worker.join();
             }
         });
+        shutdownLock.unlock();
+        releasedWork.clear();
     }
 
     Result<void> JobHandle::Wait() const {
