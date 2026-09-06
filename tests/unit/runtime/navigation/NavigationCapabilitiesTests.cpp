@@ -251,6 +251,95 @@ namespace Horo::Navigation {
             ExpectError(AdmitNavigationQuery(available, 7, excessive), NavigationErrors::QueryLimitExceeded);
         }
 
+        TEST_CASE("Navigation query admission rejects every malformed request boundary", "[navigation][admission][limits]") {
+            const auto available = AvailableCapabilities();
+            for (const auto query : {NavigationQueryKind::Count, static_cast<NavigationQueryKind>(255)}) {
+                auto malformed = Requirement();
+                malformed.query = query;
+                ExpectError(AdmitNavigationQuery(available, 7, malformed), NavigationErrors::CapabilityDescriptorInvalid);
+            }
+            for (const auto quality : {NavigationQualityLevel::Count, static_cast<NavigationQualityLevel>(255)}) {
+                auto malformed = Requirement();
+                malformed.quality = quality;
+                ExpectError(AdmitNavigationQuery(available, 7, malformed), NavigationErrors::CapabilityDescriptorInvalid);
+            }
+
+            using Mutation = void (*)(NavigationQueryLimits &);
+            const std::array<Mutation, 7> mutations{
+                [](auto &value) {
+                value.maximumNodeExpansions = 0;
+            },
+                [](auto &value) {
+                value.maximumResultPoints = 0;
+            },
+                [](auto &value) {
+                value.maximumSearchDistanceMeters = 0.0F;
+            },
+                [](auto &value) {
+                value.maximumSearchDistanceMeters = -1.0F;
+            },
+                [](auto &value) {
+                value.maximumSearchDistanceMeters = std::numeric_limits<float>::infinity();
+            },
+                [](auto &value) {
+                value.maximumSearchDistanceMeters = -std::numeric_limits<float>::infinity();
+            },
+                [](auto &value) {
+                value.maximumSearchDistanceMeters = std::numeric_limits<float>::quiet_NaN();
+            },
+            };
+            for (const auto mutate : mutations) {
+                auto malformed = Requirement();
+                mutate(malformed.limits);
+                ExpectError(AdmitNavigationQuery(available, 7, malformed), NavigationErrors::CapabilityDescriptorInvalid);
+            }
+        }
+
+        TEST_CASE("Navigation query admission rejects every malformed capability snapshot", "[navigation][admission][capability]") {
+            using Mutation = void (*)(NavigationProviderCapabilities &);
+            const std::array<Mutation, 8> mutations{
+                [](auto &value) {
+                value.contractVersion = 2;
+            },
+                [](auto &value) {
+                value.revision = 0;
+            },
+                [](auto &value) {
+                value.availability = NavigationProviderAvailability::Count;
+            },
+                [](auto &value) {
+                value.capabilities.back() = NavigationSupport::Count;
+            },
+                [](auto &value) {
+                value.querySupport.back().back() = NavigationSupport::Count;
+            },
+                [](auto &value) {
+                value.queryLimits.front().front() = SupportedLimits;
+            },
+                [](auto &value) {
+                value.capabilities[static_cast<std::size_t>(NavigationCapability::GroundedQueries)] = NavigationSupport::Unsupported;
+            },
+                [](auto &value) {
+                value.maximumConcurrentQueries = 0;
+            },
+            };
+            for (const auto mutate : mutations) {
+                auto malformed = AvailableCapabilities();
+                mutate(malformed);
+                ExpectError(AdmitNavigationQuery(malformed, 7, Requirement()), NavigationErrors::CapabilityDescriptorInvalid);
+            }
+
+            auto unknown = AvailableCapabilities();
+            unknown.querySupport[static_cast<std::size_t>(NavigationQueryKind::Path)]
+                                [static_cast<std::size_t>(NavigationQualityLevel::Balanced)] = NavigationSupport::Unknown;
+            unknown.queryLimits[static_cast<std::size_t>(NavigationQueryKind::Path)]
+                               [static_cast<std::size_t>(NavigationQualityLevel::Balanced)] = {};
+            unknown.capabilities[static_cast<std::size_t>(NavigationCapability::GroundedQueries)] = NavigationSupport::Unknown;
+            unknown.maximumConcurrentQueries = 0;
+            REQUIRE(ValidateNavigationProviderCapabilities(unknown));
+            ExpectError(AdmitNavigationQuery(unknown, 7, Requirement()), NavigationErrors::CapabilityUnavailable);
+        }
+
         TEST_CASE("Unsupported navigation work is rejected before caller dispatch", "[navigation][admission][dispatch]") {
             const auto capabilities = AvailableCapabilities();
             std::uint32_t dispatchCount = 0;
