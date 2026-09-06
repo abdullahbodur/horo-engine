@@ -138,6 +138,14 @@ target_compile_features(HoroRuntime PUBLIC cxx_std_20)
 target_include_directories(HoroRuntime PUBLIC ${PROJECT_SOURCE_DIR}/include)
 target_link_libraries(HoroRuntime PUBLIC HoroEngine::Foundation)
 
+add_library(HoroRuntimeUi STATIC
+        runtime/ui/UiErrors.cpp
+        runtime/ui/UiIdentity.cpp
+)
+add_library(HoroEngine::RuntimeUi ALIAS HoroRuntimeUi)
+target_compile_features(HoroRuntimeUi PUBLIC cxx_std_20)
+target_link_libraries(HoroRuntimeUi PUBLIC HoroEngine::Foundation)
+
 add_library(HoroGameplayApi STATIC
         gameplay/api/BehaviorTypes.cpp
         gameplay/api/Component.cpp
