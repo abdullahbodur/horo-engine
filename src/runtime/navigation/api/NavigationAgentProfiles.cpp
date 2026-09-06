@@ -78,7 +78,7 @@ namespace Horo::Navigation {
         const std::optional<NavigationAgentProfileId> replacement) {
         if (!removed.IsValid() || (replacement.has_value() && (!replacement->IsValid() || *replacement == removed)))
             return Result<NavigationProfileReferenceRepair>::Failure(MakeError(NavigationErrors::AgentProfileInvalid));
-        const std::size_t referenced = static_cast<std::size_t>(std::ranges::count(references, removed));
+        const auto referenced = static_cast<std::size_t>(std::ranges::count(references, removed));
         if (referenced != 0 && !replacement.has_value())
             return Result<NavigationProfileReferenceRepair>::Failure(MakeError(NavigationErrors::AgentProfileReferenced));
         try {
