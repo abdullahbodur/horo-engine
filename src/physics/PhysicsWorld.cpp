@@ -182,7 +182,7 @@ namespace Horo::Physics {
         }
 
         /** @brief Validates one solver-neutral batch before any tick phase is observed. */
-        [[nodiscard]] Result<void> ValidateSolverJobs(JobSystem *jobs, const PhysicsSolverJobBatch &batch) {
+        [[nodiscard]] Result<void> ValidateSolverJobs(const JobSystem *jobs, const PhysicsSolverJobBatch &batch) {
             if (batch.jobCount == 0)
                 return Result<void>::Success();
             if (jobs == nullptr)
