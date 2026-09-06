@@ -52,6 +52,7 @@ namespace Horo::Runtime {
         std::optional<LightComponent> light;
         std::optional<TriggerVolumeComponent> triggerVolume;
         std::optional<AudioSourceComponent> audioSource;
+        std::optional<UiCanvasComponent> uiCanvas; /**< Optional canvas asset instantiated by the Runtime UI owner. */
         std::vector<Gameplay::BehaviorComponent> behaviors;
         [[nodiscard]] bool operator==(const RuntimeComponentSet &) const noexcept = default;
     };

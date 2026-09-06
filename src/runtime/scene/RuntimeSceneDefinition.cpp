@@ -56,6 +56,8 @@ namespace Horo::Runtime {
             }
             if (components.audioSource && (!std::isfinite(components.audioSource->gain) || components.audioSource->gain < 0))
                 return false;
+            if (components.uiCanvas && Ui::ValidateUiCanvasAssetReference(components.uiCanvas->canvas).HasError())
+                return false;
             std::vector<Gameplay::BehaviorInstanceId> behaviorIds;
             behaviorIds.reserve(components.behaviors.size());
             for (const Gameplay::BehaviorComponent &behavior : components.behaviors) {

@@ -24,4 +24,18 @@ namespace Horo::Runtime::Ui::UiErrors {
     extern const ErrorCodeDescriptor RevisionStale;
     /** @brief A generation or revision cannot advance without wrapping. */
     extern const ErrorCodeDescriptor GenerationExhausted;
+    /** @brief Authored document or canvas metadata is invalid. */
+    extern const ErrorCodeDescriptor DocumentInvalid;
+    /** @brief A document repeats a stable canvas or root-element identity. */
+    extern const ErrorCodeDescriptor DocumentDuplicateIdentity;
+    /** @brief An asset dependency is malformed or conflicts with an earlier requirement. */
+    extern const ErrorCodeDescriptor DependencyInvalid;
+    /** @brief A bounded document or cooked payload limit was exceeded. */
+    extern const ErrorCodeDescriptor CapacityExceeded;
+    /** @brief Cooked bytes are empty or exceed the declared representation contract. */
+    extern const ErrorCodeDescriptor PayloadInvalid;
+    /** @brief A scene/component canvas reference lacks stable identity or revision evidence. */
+    extern const ErrorCodeDescriptor CanvasReferenceInvalid;
+    /** @brief A runtime instance cannot admit the requested lifecycle transition. */
+    extern const ErrorCodeDescriptor InstanceStateInvalid;
 }  // namespace Horo::Runtime::Ui::UiErrors

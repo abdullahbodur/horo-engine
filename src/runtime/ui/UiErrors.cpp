@@ -69,4 +69,60 @@ namespace Horo::Runtime::Ui::UiErrors {
                                                   "Close admission and replace the owning game runtime; never wrap the identity.",
                                                   false,
                                                   false};
+    /** @copydoc DocumentInvalid */
+    const ErrorCodeDescriptor DocumentInvalid{UiDomain,
+                                              ErrorCode{"runtime_ui.document.invalid"},
+                                              ErrorSeverity::Error,
+                                              "The Runtime UI document is invalid.",
+                                              "Provide valid document, revision, canvas, and root identities.",
+                                              false,
+                                              true};
+    /** @copydoc DocumentDuplicateIdentity */
+    const ErrorCodeDescriptor DocumentDuplicateIdentity{UiDomain,
+                                                        ErrorCode{"runtime_ui.document.duplicate_identity"},
+                                                        ErrorSeverity::Error,
+                                                        "The Runtime UI document repeats a stable identity.",
+                                                        "Assign unique canvas and root element identities.",
+                                                        false,
+                                                        true};
+    /** @copydoc DependencyInvalid */
+    const ErrorCodeDescriptor DependencyInvalid{UiDomain,
+                                                ErrorCode{"runtime_ui.dependency.invalid"},
+                                                ErrorSeverity::Error,
+                                                "The Runtime UI asset dependency is invalid or conflicting.",
+                                                "Provide one valid expected asset type for each stable asset identity.",
+                                                false,
+                                                true};
+    /** @copydoc CapacityExceeded */
+    const ErrorCodeDescriptor CapacityExceeded{UiDomain,
+                                               ErrorCode{"runtime_ui.capacity.exceeded"},
+                                               ErrorSeverity::Error,
+                                               "A bounded Runtime UI document limit was exceeded.",
+                                               "Reduce canvas, dependency, or cooked payload size.",
+                                               false,
+                                               true};
+    /** @copydoc PayloadInvalid */
+    const ErrorCodeDescriptor PayloadInvalid{UiDomain,
+                                             ErrorCode{"runtime_ui.payload.invalid"},
+                                             ErrorSeverity::Error,
+                                             "The cooked Runtime UI payload is invalid.",
+                                             "Rebuild the asset with non-empty deterministic bytes within the declared bound.",
+                                             false,
+                                             true};
+    /** @copydoc CanvasReferenceInvalid */
+    const ErrorCodeDescriptor CanvasReferenceInvalid{UiDomain,
+                                                     ErrorCode{"runtime_ui.canvas_reference.invalid"},
+                                                     ErrorSeverity::Error,
+                                                     "The Runtime UI canvas asset reference is invalid.",
+                                                     "Provide complete asset, document, canvas, and minimum revision evidence.",
+                                                     false,
+                                                     true};
+    /** @copydoc InstanceStateInvalid */
+    const ErrorCodeDescriptor InstanceStateInvalid{UiDomain,
+                                                   ErrorCode{"runtime_ui.instance.state_invalid"},
+                                                   ErrorSeverity::Error,
+                                                   "The Runtime UI instance cannot perform this lifecycle transition.",
+                                                   "Submit the transition only from its declared owner-thread lifecycle state.",
+                                                   false,
+                                                   false};
 }  // namespace Horo::Runtime::Ui::UiErrors
