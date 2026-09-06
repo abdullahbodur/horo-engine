@@ -90,6 +90,14 @@ namespace {
         imgui.EndFrame();
     }
 
+    struct AssetImportPresentationFixture {
+        AssetImportPresentationFixture() : modal{imgui.Fonts(), jobs.Get(), MakeCatalog()} {}
+
+        Horo::Editor::Tests::HeadlessEditorGuiFixture imgui;
+        Horo::Editor::Tests::ScopedJobSystem jobs;
+        Horo::Editor::AssetImportModal modal;
+    };
+
     void ClickTab(Horo::Editor::Tests::HeadlessEditorGuiFixture &imgui, Horo::Editor::AssetImportModal &modal, const std::size_t tabIndex) {
         static constexpr std::array labels{"Overview", "Diagnostics", "Importer Settings", "Destination"};
         REQUIRE(tabIndex < labels.size());
@@ -118,18 +126,16 @@ TEST_CASE("Asset import presentation renders queue diagnostics settings destinat
     using namespace Horo::Assets;
     using namespace Horo::Editor;
 
-    Tests::HeadlessEditorGuiFixture imgui;
-    Tests::ScopedJobSystem jobs;
-    AssetImportModal modal{imgui.Fonts(), jobs.Get(), MakeCatalog()};
-    auto &snapshot = modal.MutableSnapshot();
+    AssetImportPresentationFixture fixture;
+    auto &snapshot = fixture.modal.MutableSnapshot();
     snapshot.items = {MakeItem()};
     snapshot.phase = AssetImportPhase::Selecting;
     snapshot.canCancel = true;
 
-    DrawFrame(imgui, modal);
-    ClickTab(imgui, modal, 1);
-    ClickTab(imgui, modal, 2);
-    ClickTab(imgui, modal, 3);
+    DrawFrame(fixture.imgui, fixture.modal);
+    ClickTab(fixture.imgui, fixture.modal, 1);
+    ClickTab(fixture.imgui, fixture.modal, 2);
+    ClickTab(fixture.imgui, fixture.modal, 3);
 
     snapshot.items.front().result = PreparedAssetImport{.type = AssetTypeId::Parse("core.mesh").Value(), .editorPayload = {1, 2, 3}};
     snapshot.items.front().diagnostics.clear();
@@ -137,7 +143,7 @@ TEST_CASE("Asset import presentation renders queue diagnostics settings destinat
                                        AssetImportPhase::Completed, AssetImportPhase::Failed,        AssetImportPhase::Cancelled};
     for (const AssetImportPhase phase : phases) {
         snapshot.phase = phase;
-        DrawFrame(imgui, modal);
+        DrawFrame(fixture.imgui, fixture.modal);
     }
 
     REQUIRE(snapshot.items.size() == 1);
@@ -150,18 +156,16 @@ TEST_CASE("Asset import presentation handles empty and unresolved importer selec
     using namespace Horo::Assets;
     using namespace Horo::Editor;
 
-    Tests::HeadlessEditorGuiFixture imgui;
-    Tests::ScopedJobSystem jobs;
-    AssetImportModal modal{imgui.Fonts(), jobs.Get(), MakeCatalog()};
-    DrawFrame(imgui, modal);
+    AssetImportPresentationFixture fixture;
+    DrawFrame(fixture.imgui, fixture.modal);
 
     auto unresolved = MakeItem();
     unresolved.sourceFile = ProjectPath::Parse("source/material.unknown").Value();
     unresolved.sourceExtension = "unknown";
     unresolved.importerContributionId.clear();
-    modal.MutableSnapshot().items = {std::move(unresolved)};
-    modal.MutableSnapshot().selectedItemIndex = 0;
-    ClickTab(imgui, modal, 2);
+    fixture.modal.MutableSnapshot().items = {std::move(unresolved)};
+    fixture.modal.MutableSnapshot().selectedItemIndex = 0;
+    ClickTab(fixture.imgui, fixture.modal, 2);
 
-    REQUIRE(modal.Snapshot().items.front().importerContributionId.empty());
+    REQUIRE(fixture.modal.Snapshot().items.front().importerContributionId.empty());
 }

@@ -6,28 +6,39 @@
 
 #include <catch2/catch_test_macros.hpp>
 
+namespace {
+    struct SettingsPresentationFixture {
+        SettingsPresentationFixture()
+            : settings{Horo::Editor::DefaultEditorSettings(), configuration, gui.editorEvents, gui.localization},
+              modal{gui.context, settings, 0} {
+            Horo::Editor::LoadSettingsForModal(modal.Draft(), settings);
+        }
+
+        Horo::Editor::Tests::EditorGuiContextFixture gui;
+        Horo::ConfigurationService configuration = Horo::Editor::CreateEditorConfigurationService(Horo::Editor::DefaultEditorSettings());
+        Horo::Editor::EditorSettingsService settings;
+        Horo::Editor::SettingsModal modal;
+    };
+}  // namespace
+
 TEST_CASE("Settings presentation renders every settings category without mutating the authority", "[unit][editor][gui][settings]") {
     using namespace Horo;
     using namespace Horo::Editor;
 
-    Tests::EditorGuiContextFixture fixture;
-    ConfigurationService configuration = CreateEditorConfigurationService(DefaultEditorSettings());
-    EditorSettingsService settings{DefaultEditorSettings(), configuration, fixture.editorEvents, fixture.localization};
-    SettingsModal modal{fixture.context, settings, 0};
-    LoadSettingsForModal(modal.Draft(), settings);
-    const EditorSettings committed = modal.Draft().committed;
+    SettingsPresentationFixture fixture;
+    const EditorSettings committed = fixture.modal.Draft().committed;
 
     for (int activeTab = 0; activeTab < 8; ++activeTab) {
         DYNAMIC_SECTION("settings category " << activeTab) {
-            modal.Draft().activeTab = activeTab;
-            fixture.imgui.BeginFrame();
-            const ModalFrameResult result = modal.Draw();
-            fixture.imgui.EndFrame();
+            fixture.modal.Draft().activeTab = activeTab;
+            fixture.gui.imgui.BeginFrame();
+            const ModalFrameResult result = fixture.modal.Draw();
+            fixture.gui.imgui.EndFrame();
 
             REQUIRE_FALSE(result.CloseRequest().has_value());
-            REQUIRE(modal.Draft().activeTab == activeTab);
-            REQUIRE(CollectDraftSettings(modal.Draft()) == committed);
-            REQUIRE_FALSE(modal.Draft().dirty);
+            REQUIRE(fixture.modal.Draft().activeTab == activeTab);
+            REQUIRE(CollectDraftSettings(fixture.modal.Draft()) == committed);
+            REQUIRE_FALSE(fixture.modal.Draft().dirty);
         }
     }
 }
@@ -36,17 +47,13 @@ TEST_CASE("Settings presentation consumes a deferred theme selection before rend
     using namespace Horo;
     using namespace Horo::Editor;
 
-    Tests::EditorGuiContextFixture fixture;
-    ConfigurationService configuration = CreateEditorConfigurationService(DefaultEditorSettings());
-    EditorSettingsService settings{DefaultEditorSettings(), configuration, fixture.editorEvents, fixture.localization};
-    SettingsModal modal{fixture.context, settings, 0};
-    LoadSettingsForModal(modal.Draft(), settings);
-    modal.Draft().appearance.pendingThemeIndex = 0;
-    modal.Draft().activeTab = 1;
+    SettingsPresentationFixture fixture;
+    fixture.modal.Draft().appearance.pendingThemeIndex = 0;
+    fixture.modal.Draft().activeTab = 1;
 
-    fixture.imgui.BeginFrame();
-    static_cast<void>(modal.Draw());
-    fixture.imgui.EndFrame();
+    fixture.gui.imgui.BeginFrame();
+    static_cast<void>(fixture.modal.Draw());
+    fixture.gui.imgui.EndFrame();
 
-    REQUIRE(modal.Draft().appearance.pendingThemeIndex == -1);
+    REQUIRE(fixture.modal.Draft().appearance.pendingThemeIndex == -1);
 }
