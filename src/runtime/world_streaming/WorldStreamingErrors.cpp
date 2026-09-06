@@ -29,8 +29,8 @@ namespace Horo::WorldStreaming::WorldStreamingErrors {
                  "Rebuild the world index or source descriptor with canonical little-endian identity bytes.", true);
     const ErrorCodeDescriptor GenerationExhausted =
         Describe("world_streaming.generation.exhausted", ErrorSeverity::Critical,
-                 "A world-partition epoch or cell generation cannot advance without wrapping.",
-                 "Retire the exhausted incarnation or slot; never wrap or reuse an issued streaming generation.", false);
+                 "A world-partition epoch, cell generation, or source revision cannot advance without wrapping.",
+                 "Retire the exhausted incarnation, slot, or source; never wrap an issued streaming counter.", false);
     const ErrorCodeDescriptor QuantizationPolicyInvalid =
         Describe("world_streaming.quantization.policy_invalid", ErrorSeverity::Error,
                  "The world-cell quantization policy has invalid size, bounds, or LOD limits.",
@@ -46,4 +46,28 @@ namespace Horo::WorldStreaming::WorldStreamingErrors {
         Describe("world_streaming.quantization.cell_out_of_bounds", ErrorSeverity::Error,
                  "The quantized world cell is outside the manifest's inclusive grid bounds.",
                  "Reject the spatial request or use a validated partition whose bounds contain the coordinate.", false);
+    const ErrorCodeDescriptor SourceDescriptorInvalid =
+        Describe("world_streaming.source.descriptor_invalid", ErrorSeverity::Error,
+                 "A streaming source descriptor or admission context is structurally invalid.",
+                 "Provide valid source, owner and revision identities with a finite non-negative priority.", true);
+    const ErrorCodeDescriptor SourceIntentUnsupported =
+        Describe("world_streaming.source.intent_unsupported", ErrorSeverity::Error,
+                 "The streaming source intent is not supported by this contract version.",
+                 "Use a declared camera, gameplay, network-relevance or preload intent.", true);
+    const ErrorCodeDescriptor SourceOwnerStale =
+        Describe("world_streaming.source.owner_stale", ErrorSeverity::Warning,
+                 "The streaming source owner token no longer names the active owner lifetime.",
+                 "Discard the stale request and resolve the current partition owner token before retrying.", false);
+    const ErrorCodeDescriptor SourceRevisionStale =
+        Describe("world_streaming.source.revision_stale", ErrorSeverity::Warning,
+                 "The streaming source update does not advance the admitted revision.",
+                 "Issue a strictly newer non-wrapping revision for the same stable source identity.", false);
+    const ErrorCodeDescriptor SourceCapacityExceeded =
+        Describe("world_streaming.source.capacity_exceeded", ErrorSeverity::Error,
+                 "The bounded streaming source capacity cannot admit another identity.",
+                 "Release an existing source or increase the host-configured source capacity.", false);
+    const ErrorCodeDescriptor SourceLifecycleUnavailable =
+        Describe("world_streaming.source.lifecycle_unavailable", ErrorSeverity::Warning,
+                 "The streaming source owner is cancelling or closed to new admission.",
+                 "Finish owner retirement or submit the source to a new active owner lifetime.", false);
 }  // namespace Horo::WorldStreaming::WorldStreamingErrors

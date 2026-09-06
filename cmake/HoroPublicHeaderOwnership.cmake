@@ -194,6 +194,7 @@ horo_configure_target_header_boundary(HoroNavigationNull PUBLIC_HEADERS
     Horo/Navigation/Backends/NullProvider.h
 )
 horo_configure_target_header_boundary(HoroWorldStreaming PUBLIC_HEADERS
+    Horo/WorldStreaming/StreamingSourceDescriptor.h
     Horo/WorldStreaming/WorldCellQuantization.h
     Horo/WorldStreaming/WorldStreamingErrors.h
     Horo/WorldStreaming/WorldStreamingIdentity.h
