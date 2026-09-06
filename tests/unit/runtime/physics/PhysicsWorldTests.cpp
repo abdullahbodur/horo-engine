@@ -1,3 +1,4 @@
+#include "Horo/Foundation/JobSystem.h"
 #include "Horo/Physics/PhysicsWorld.h"
 #include "Horo/Runtime/RuntimeHost.h"
 #include "PhysicsTestUtils.h"
@@ -71,9 +72,11 @@ namespace Horo::Physics {
         bool rejectedActivation = false;
         std::thread foreign([&] {
             const auto prepared = runtime->PrepareWorld(settings);
-            rejectedPreparation = prepared.HasError() && prepared.ErrorValue().code.Value() == PhysicsErrors::InvalidState.code.Value();
+            rejectedPreparation =
+                prepared.HasError() && prepared.ErrorValue().code.Value() == PhysicsErrors::ThreadAffinityViolation.code.Value();
             const auto activated = candidate->Activate(PhysicsWorldId::Create(102).Value());
-            rejectedActivation = activated.HasError() && activated.ErrorValue().code.Value() == PhysicsErrors::InvalidState.code.Value();
+            rejectedActivation =
+                activated.HasError() && activated.ErrorValue().code.Value() == PhysicsErrors::ThreadAffinityViolation.code.Value();
         });
         foreign.join();
         REQUIRE(rejectedPreparation);
@@ -179,6 +182,27 @@ namespace Horo::Physics {
             REQUIRE(published.queryTick == published.completedTick);
             REQUIRE(published.eventTick == published.completedTick);
             REQUIRE(published.appliedCommands == expectedCommands);
+        }
+
+        struct SolverJobTrace final {
+            std::atomic_uint32_t completed{};
+            std::atomic_bool fail{};
+        };
+
+        Result<void> RunSolverJob(void *context, const CancellationToken &) noexcept {
+            auto &trace = *static_cast<SolverJobTrace *>(context);
+            trace.completed.fetch_add(1, std::memory_order_release);
+            if (trace.fail.load(std::memory_order_acquire))
+                return Result<void>::Failure(MakeError(PhysicsErrors::InitializationFailed, "Injected solver worker failure."));
+            return Result<void>::Success();
+        }
+
+        Result<void> RunUntilCancelled(void *context, const CancellationToken &cancellation) noexcept {
+            auto &cancelled = *static_cast<std::atomic_bool *>(context);
+            while (!cancellation.IsCancellationRequested())
+                std::this_thread::yield();
+            cancelled.store(true, std::memory_order_release);
+            return Result<void>::Success();
         }
 
         class PhysicsTickParticipant final : public Runtime::RuntimeLifecycleParticipant {
@@ -304,6 +328,79 @@ namespace Horo::Physics {
         REQUIRE(world->TickStatistics().pendingCommands == 0);
         REQUIRE(world->AdvanceFixedTick({.simulationTick = 2, .fixedDelta = fixedDelta}).HasError());
         REQUIRE(world->PublishedTick().completedTick == 2);
+    }
+
+    TEST_CASE("Physics joins solver jobs before publication and enters one terminal failure state", "[physics][tick][jobs]") {
+        JobSystem jobs({.workerCount = 2, .maxQueuedJobs = 4});
+        auto runtime = PhysicsRuntime::Create(PhysicsRuntimeMode::Canonical, &jobs).Value();
+        auto world = runtime->PrepareWorld(Test::SmallWorldSettings()).Value();
+        REQUIRE(world->Activate(PhysicsWorldId::Create(202).Value()).HasValue());
+
+        SolverJobTrace trace;
+        const std::array solverJobs{PhysicsSolverJob{.context = &trace, .execute = RunSolverJob},
+                                    PhysicsSolverJob{.context = &trace, .execute = RunSolverJob}};
+        constexpr Duration fixedDelta = Duration::FromNanoseconds(16'666'667);
+        const PhysicsSolverJobBatch batch{.jobs = solverJobs.data(),
+                                          .jobCount = static_cast<std::uint32_t>(solverJobs.size()),
+                                          .joinTimeout = Duration::FromMilliseconds(500)};
+        REQUIRE(world->AdvanceFixedTick({.simulationTick = 1, .fixedDelta = fixedDelta, .solverJobs = batch}).HasValue());
+        REQUIRE(trace.completed.load(std::memory_order_acquire) == solverJobs.size());
+        RequirePublishedTick(world->PublishedTick(), 1, 1, 0);
+
+        trace.fail.store(true, std::memory_order_release);
+        const auto failed = world->AdvanceFixedTick({.simulationTick = 2, .fixedDelta = fixedDelta, .solverJobs = batch});
+        REQUIRE(failed.HasError());
+        REQUIRE(failed.ErrorValue().code.Value() == PhysicsErrors::InitializationFailed.code.Value());
+        REQUIRE(world->State() == PhysicsWorldState::Failed);
+        REQUIRE(world->PublishedTick().completedTick == 1);
+        REQUIRE(world->AdvanceFixedTick({.simulationTick = 2, .fixedDelta = fixedDelta}).ErrorValue().code.Value() ==
+                PhysicsErrors::InvalidState.code.Value());
+        world.reset();
+        runtime.reset();
+        jobs.Shutdown(ShutdownPolicy::Cancel);
+    }
+
+    TEST_CASE("Physics rejects foreign-thread world mutation with a typed affinity error", "[physics][tick][threading]") {
+        std::unique_ptr<PhysicsRuntime> runtime;
+        auto world = ActiveCanonicalWorld(Test::SmallWorldSettings(), runtime);
+        std::atomic_bool queueRejected{};
+        std::atomic_bool tickRejected{};
+        std::thread foreign([&] {
+            const auto queued = world->QueueStructuralCommand({1, 1, 1, PhysicsStructuralCommandKind::Create});
+            queueRejected.store(queued.HasError() &&
+                                    queued.ErrorValue().code.Value() == PhysicsErrors::ThreadAffinityViolation.code.Value(),
+                                std::memory_order_release);
+            const auto stepped = world->AdvanceFixedTick({.simulationTick = 1, .fixedDelta = Duration::FromNanoseconds(16'666'667)});
+            tickRejected.store(stepped.HasError() &&
+                                   stepped.ErrorValue().code.Value() == PhysicsErrors::ThreadAffinityViolation.code.Value(),
+                               std::memory_order_release);
+        });
+        foreign.join();
+        REQUIRE(queueRejected.load(std::memory_order_acquire));
+        REQUIRE(tickRejected.load(std::memory_order_acquire));
+        REQUIRE(world->State() == PhysicsWorldState::ActiveSolver);
+        REQUIRE(world->PublishedTick().completedTick == 0);
+    }
+
+    TEST_CASE("Physics cancels and drains solver work before a failed world can be destroyed", "[physics][tick][jobs]") {
+        JobSystem jobs({.workerCount = 1, .maxQueuedJobs = 1});
+        auto runtime = PhysicsRuntime::Create(PhysicsRuntimeMode::Canonical, &jobs).Value();
+        auto world = runtime->PrepareWorld(Test::SmallWorldSettings()).Value();
+        REQUIRE(world->Activate(PhysicsWorldId::Create(203).Value()).HasValue());
+
+        std::atomic_bool cancellationObserved{};
+        const PhysicsSolverJob solverJob{.context = &cancellationObserved, .execute = RunUntilCancelled};
+        const PhysicsSolverJobBatch batch{.jobs = &solverJob, .jobCount = 1, .joinTimeout = Duration::FromMilliseconds(10)};
+        const auto stepped =
+            world->AdvanceFixedTick({.simulationTick = 1, .fixedDelta = Duration::FromNanoseconds(16'666'667), .solverJobs = batch});
+        REQUIRE(stepped.HasError());
+        REQUIRE(stepped.ErrorValue().code.Value() == PhysicsErrors::SolverDeadlineExceeded.code.Value());
+        REQUIRE(cancellationObserved.load(std::memory_order_acquire));
+        REQUIRE(world->State() == PhysicsWorldState::Failed);
+        REQUIRE(world->PublishedTick().publicationRevision == 0);
+        world.reset();
+        runtime.reset();
+        jobs.Shutdown(ShutdownPolicy::Cancel);
     }
 
     TEST_CASE("Physics command capacity reserves destruction and returns explicit retry ownership", "[physics][commands]") {

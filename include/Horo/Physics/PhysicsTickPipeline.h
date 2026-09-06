@@ -4,11 +4,30 @@
  * @brief Fixed-tick phase, deferred structural command and atomic publication contracts.
  */
 
+#include "Horo/Foundation/CancellationToken.h"
+#include "Horo/Foundation/Result.h"
 #include "Horo/Foundation/Time.h"
 
 #include <cstdint>
 
 namespace Horo::Physics {
+    /** @brief Hard admission bound for optional solver-neutral child work in one fixed tick. */
+    inline constexpr std::uint32_t MaximumPhysicsSolverJobsPerTick = 1'024;
+
+    /** @brief One solver-neutral child operation whose borrowed context remains valid through the enclosing fixed tick. */
+    struct PhysicsSolverJob final {
+        void *context{}; /**< Caller-owned immutable or privately synchronized state; never a PhysicsWorld reference. */
+        Result<void> (*execute)(void *context, const CancellationToken &cancellation) noexcept {};
+        /**< Required non-throwing operation; cancellation must be observed cooperatively. */
+    };
+
+    /** @brief Optional bounded child-work batch dispatched and joined as part of one fixed tick. */
+    struct PhysicsSolverJobBatch final {
+        const PhysicsSolverJob *jobs{}; /**< Borrowed contiguous jobs valid until AdvanceFixedTick returns. */
+        std::uint32_t jobCount{};       /**< Number of jobs up to MaximumPhysicsSolverJobsPerTick; zero disables dispatch. */
+        Duration joinTimeout{};         /**< Positive shared deadline for the complete batch. */
+    };
+
     /** @brief Ordered stages of one canonical Physics fixed tick. */
     enum class PhysicsTickPhase : std::uint8_t {
         ApplyDeferredPreStep,
@@ -84,9 +103,10 @@ namespace Horo::Physics {
 
     /** @brief Exact host-owned fixed-tick attempt; Physics never samples or accumulates wall time. */
     struct PhysicsFixedTickInput final {
-        std::uint64_t simulationTick{}; /**< One-based next tick supplied by Runtime. */
-        Duration fixedDelta{};          /**< Exact configured host quantum, never a measured frame delta. */
-        PhysicsTickObserver observer;   /**< Optional synchronous observation only. */
+        std::uint64_t simulationTick{};   /**< One-based next tick supplied by Runtime. */
+        Duration fixedDelta{};            /**< Exact configured host quantum, never a measured frame delta. */
+        PhysicsTickObserver observer;     /**< Optional synchronous observation only. */
+        PhysicsSolverJobBatch solverJobs; /**< Optional child work joined before native integration and publication. */
     };
 
     /** @brief Atomically replaced publication marker for transforms, queries and events from one completed tick. */

@@ -23,6 +23,10 @@ namespace Horo::Physics::PhysicsErrors {
     extern const ErrorCodeDescriptor OperationUnsupported;
     /** @brief The world lifecycle phase cannot admit the requested operation. */
     extern const ErrorCodeDescriptor InvalidState;
+    /** @brief A mutable Physics operation was attempted outside its owning thread. */
+    extern const ErrorCodeDescriptor ThreadAffinityViolation;
+    /** @brief Solver child work exceeded its fixed-tick deadline and was cooperatively cancelled. */
+    extern const ErrorCodeDescriptor SolverDeadlineExceeded;
     /** @brief Malformed or unsupported-version descriptor metadata. */
     extern const ErrorCodeDescriptor DescriptorInvalid;
     /** @brief Unknown or unsupported numerical/solver profile. */

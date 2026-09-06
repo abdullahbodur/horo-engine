@@ -78,6 +78,24 @@ namespace Horo::Physics::PhysicsErrors {
         .retryable = false,
         .userActionable = false,
     };
+    const ErrorCodeDescriptor ThreadAffinityViolation{
+        .domain = PhysicsDomain,
+        .code = ErrorCode{"physics.thread_affinity.violation"},
+        .defaultSeverity = ErrorSeverity::Error,
+        .summary = "A mutable physics operation ran outside its owning thread.",
+        .remediationHint = "Route world mutation and fixed-tick control through the Physics owner thread.",
+        .retryable = false,
+        .userActionable = false,
+    };
+    const ErrorCodeDescriptor SolverDeadlineExceeded{
+        .domain = PhysicsDomain,
+        .code = ErrorCode{"physics.solver.deadline_exceeded"},
+        .defaultSeverity = ErrorSeverity::Error,
+        .summary = "Physics solver child work exceeded its fixed-tick deadline.",
+        .remediationHint = "Reduce the admitted batch or make each child observe cooperative cancellation promptly.",
+        .retryable = false,
+        .userActionable = false,
+    };
     const ErrorCodeDescriptor DescriptorInvalid{
         .domain = PhysicsDomain,
         .code = ErrorCode{"physics.descriptor.invalid"},

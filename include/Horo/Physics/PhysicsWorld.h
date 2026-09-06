@@ -14,6 +14,10 @@
 #include <memory>
 #include <utility>
 
+namespace Horo {
+    class JobSystem;
+}
+
 namespace Horo::Physics {
     /** @brief Explicit process composition; headless hosts use Canonical when simulation is required. */
     enum class PhysicsRuntimeMode : std::uint8_t {
@@ -55,10 +59,11 @@ namespace Horo::Physics {
     public:
         /** @brief Starts the selected process Physics composition transactionally.
          * @param mode Canonical solver or explicit Null/omitted behavior.
+         * @param solverJobs Optional injected scheduler that must outlive this runtime and all retained worlds.
          * @return Ready runtime or a typed error after complete partial-startup rollback.
          * @pre Calls are serialized by the process composition root; no foreign Jolt owner is active.
          */
-        [[nodiscard]] static Result<std::unique_ptr<PhysicsRuntime>> Create(PhysicsRuntimeMode mode);
+        [[nodiscard]] static Result<std::unique_ptr<PhysicsRuntime>> Create(PhysicsRuntimeMode mode, JobSystem *solverJobs = nullptr);
         /** @brief Closes runtime admission; surviving world leases retain required native globals until retirement. */
         ~PhysicsRuntime();
         PhysicsRuntime(const PhysicsRuntime &) = delete;
@@ -107,7 +112,7 @@ namespace Horo::Physics {
 
         /** @brief Binds the host-issued identity and opens this candidate's lifecycle.
          * @param identity Non-zero process-unique world generation assigned at aggregate activation.
-         * @return Success or a typed state/invalid/duplicate-active identity error; successful binding allocates nothing.
+         * @return Success or a typed affinity/state/invalid/duplicate-active identity error; successful binding allocates nothing.
          * @post A successful candidate becomes ActiveSolver or ActiveNull exactly once.
          * The host remains responsible for never reusing a historical process-local generation.
          */
@@ -129,8 +134,10 @@ namespace Horo::Physics {
         [[nodiscard]] Result<PhysicsCommandAdmission> QueueStructuralCommand(const PhysicsStructuralCommand &command);
         /** @brief Executes one exact host-issued fixed tick and publishes its results atomically.
          * @param input One-based next tick, exact immutable world delta and optional synchronous observer.
-         * @return Success or typed lifecycle/sequence/delta/native-capacity error without partial publication.
+         * @return Success or typed affinity/lifecycle/sequence/delta/job/native-capacity error without partial publication.
          * @pre Active canonical world on its owner thread; reentrant stepping is rejected.
+         * Every admitted solver job is joined before native integration or publication. A child failure makes
+         * the world Failed exactly once; deadline expiry triggers cooperative cancellation and drains all accepted work.
          */
         [[nodiscard]] Result<void> AdvanceFixedTick(const PhysicsFixedTickInput &input);
         /** @brief Reads one coherent copy of the last atomically completed tick marker from any thread.

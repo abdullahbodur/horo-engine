@@ -428,8 +428,23 @@ side-effect and Network authority contracts remain separate.
 
 ## Threading
 
-The initial canonical model is one physics owner thread within the fixed tick.
-Internal parallelism may be added behind the world interface when:
+The initial canonical model has one physics owner thread within the fixed tick.
+Runtime creation, world activation, structural admission, native stepping and
+publication stay on that thread; foreign mutable calls return the typed
+`physics.thread_affinity.violation` error. Read-only published-tick snapshots are
+the only current cross-thread world call.
+
+Optional solver-neutral child work is admitted as an immutable per-tick batch and
+dispatched through an injected Horo `JobSystem`. Workers may touch only job-owned
+or privately synchronized data; they cannot mutate world structure, retain world
+or adapter references, publish results, or begin the next tick. The owning
+`TaskGroup` applies one finite deadline, cooperatively cancels on timeout/failure,
+and drains every accepted child before `AdvanceFixedTick` returns. Publication
+occurs only after a successful join. A child failure moves the world to `Failed`
+once, leaves the prior publication intact and clears the simulating guard before
+control returns; shutdown can then retire the world without live captures.
+
+Internal parallelism may be expanded behind the world interface when:
 
 - dependency order remains deterministic within the declared contract
 - component storage is not accessed concurrently without snapshots
