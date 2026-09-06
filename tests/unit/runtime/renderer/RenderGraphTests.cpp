@@ -1,4 +1,5 @@
 #include "Horo/Runtime/Render/RenderGraph.h"
+#include "Horo/Runtime/Render/RenderGraphErrors.h"
 
 #include <catch2/catch_test_macros.hpp>
 
@@ -37,4 +38,12 @@ TEST_CASE("Render graph finite limits enforce exact hard boundaries", "[runtime]
     RenderGraphLimits oversized = {};
     oversized.maxDependencies = RenderGraphLimits::HardMaxDependencies + 1;
     REQUIRE_FALSE(oversized.IsValid());
+}
+
+TEST_CASE("Render graph errors expose stable actionable identities", "[runtime][renderer][render-graph]") {
+    REQUIRE(RenderGraphErrors::WrongOwner.domain.Value() == "render.graph");
+    REQUIRE(RenderGraphErrors::WrongOwner.code.Value() == "render.graph.wrong_owner");
+    REQUIRE_FALSE(RenderGraphErrors::WrongOwner.summary.empty());
+    REQUIRE_FALSE(RenderGraphErrors::WrongOwner.remediationHint.empty());
+    REQUIRE(RenderGraphErrors::AllocationFailed.retryable);
 }
