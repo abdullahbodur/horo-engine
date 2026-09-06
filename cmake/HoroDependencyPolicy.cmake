@@ -18,6 +18,7 @@ horo_allow_target_dependencies(TARGET HoroAudioBackendContract DEPENDENCIES Horo
 horo_allow_target_dependencies(TARGET HoroPhysics DEPENDENCIES HoroFoundation HoroAssets)
 horo_allow_target_dependencies(TARGET HoroNavigationApi DEPENDENCIES HoroFoundation)
 horo_allow_target_dependencies(TARGET HoroNavigationNull DEPENDENCIES HoroNavigationApi)
+horo_allow_target_dependencies(TARGET HoroWorldStreaming DEPENDENCIES HoroFoundation)
 horo_allow_target_dependencies(TARGET HoroInput DEPENDENCIES HoroFoundation)
 horo_allow_target_dependencies(TARGET HoroInputSdl DEPENDENCIES HoroInput)
 
