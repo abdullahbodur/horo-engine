@@ -6,6 +6,7 @@
  */
 
 #include "Horo/Math/SceneMath.h"
+#include "Horo/Runtime/Ui/UiDocument.h"
 
 #include <cstdint>
 
@@ -74,5 +75,12 @@ namespace Horo::Runtime {
         bool spatial{true};
 
         [[nodiscard]] constexpr auto operator<=>(const AudioSourceComponent &) const noexcept = default;
+    };
+
+    /** @brief Authored scene component that instantiates one canvas asset without owning Runtime UI lifetime. */
+    struct UiCanvasComponent final {
+        Ui::UiCanvasAssetReference canvas; /**< Stable canvas asset reference resolved by the Runtime UI owner. */
+        /** @brief Compares serialized component evidence. @return Structural ordering and equality. */
+        [[nodiscard]] constexpr auto operator<=>(const UiCanvasComponent &) const noexcept = default;
     };
 }  // namespace Horo::Runtime
