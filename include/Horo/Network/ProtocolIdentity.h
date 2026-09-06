@@ -12,6 +12,20 @@
 #include <cstdint>
 
 namespace Horo::Network {
+    namespace Detail {
+        template <typename Version>
+        [[nodiscard]] constexpr bool IsValidSameMajorRange(const Version minimum, const Version maximum) noexcept {
+            return minimum.IsValid() && maximum.IsValid() && minimum.major == maximum.major && minimum <= maximum;
+        }
+
+        template <typename Version>
+        [[nodiscard]] constexpr bool ContainsSameMajorVersion(const Version minimum, const Version maximum,
+                                                              const Version candidate) noexcept {
+            return IsValidSameMajorRange(minimum, maximum) && candidate.major == minimum.major && candidate >= minimum &&
+                   candidate <= maximum;
+        }
+    }  // namespace Detail
+
     /** @brief Closed 16-bit wire namespace selected by the identity high bit. */
     enum class ProtocolIdentityNamespace : std::uint8_t {
         Engine,
@@ -92,11 +106,11 @@ namespace Horo::Network {
         ProtocolVersion maximum;
 
         [[nodiscard]] constexpr bool IsValid() const noexcept {
-            return minimum.IsValid() && maximum.IsValid() && minimum.major == maximum.major && minimum <= maximum;
+            return Detail::IsValidSameMajorRange(minimum, maximum);
         }
 
         [[nodiscard]] constexpr bool Contains(const ProtocolVersion version) const noexcept {
-            return IsValid() && version.major == minimum.major && version >= minimum && version <= maximum;
+            return Detail::ContainsSameMajorVersion(minimum, maximum, version);
         }
 
         constexpr auto operator<=>(const ProtocolVersionRange &) const noexcept = default;
@@ -121,12 +135,12 @@ namespace Horo::Network {
 
         /** @brief Validates the interval. @return Whether both endpoints are valid, same-major, and ordered. */
         [[nodiscard]] constexpr bool IsValid() const noexcept {
-            return minimum.IsValid() && maximum.IsValid() && minimum.major == maximum.major && minimum <= maximum;
+            return Detail::IsValidSameMajorRange(minimum, maximum);
         }
 
         /** @brief Tests exact interval membership. @param version Candidate version. @return Whether it is supported. */
         [[nodiscard]] constexpr bool Contains(const MessageSchemaVersion version) const noexcept {
-            return IsValid() && version.major == minimum.major && version >= minimum && version <= maximum;
+            return Detail::ContainsSameMajorVersion(minimum, maximum, version);
         }
 
         constexpr auto operator<=>(const MessageSchemaVersionRange &) const noexcept = default;

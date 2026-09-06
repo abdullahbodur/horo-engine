@@ -28,6 +28,11 @@ namespace Horo::Network {
             return true;
         }
 
+        [[nodiscard]] std::optional<std::size_t> CheckedSum(const std::size_t left, const std::size_t right) noexcept {
+            std::size_t sum{};
+            return CheckedAdd(left, right, sum) ? std::optional{sum} : std::nullopt;
+        }
+
         [[nodiscard]] auto CodecKey(const MessageCodecDescriptor &value) noexcept {
             return std::tuple{value.protocol.Value(), value.message.Value()};
         }
@@ -68,16 +73,17 @@ namespace Horo::Network {
         }
 
         [[nodiscard]] const ErrorCodeDescriptor *AdmissionError(const MessageEnvelopeAdmissionState state) noexcept {
+            using enum MessageEnvelopeAdmissionState;
             switch (state) {
-                case MessageEnvelopeAdmissionState::Accepting:
+                case Accepting:
                     return nullptr;
-                case MessageEnvelopeAdmissionState::Cancelled:
+                case Cancelled:
                     return &NetworkErrors::MessageEnvelopeCancelled;
-                case MessageEnvelopeAdmissionState::TimedOut:
+                case TimedOut:
                     return &NetworkErrors::MessageEnvelopeTimedOut;
-                case MessageEnvelopeAdmissionState::ShuttingDown:
+                case ShuttingDown:
                     return &NetworkErrors::MessageEnvelopeShuttingDown;
-                case MessageEnvelopeAdmissionState::Count:
+                case Count:
                     return &NetworkErrors::MessageEnvelopeInvalid;
             }
             return &NetworkErrors::MessageEnvelopeInvalid;
@@ -154,8 +160,8 @@ namespace Horo::Network {
                         return Fail<EncodingPlan>(NetworkErrors::MessageEnvelopeCapacityExceeded);
                     plan.fields.push_back(&field);
                 }
-                const Result<void> complete = CompleteEncodingPlan(plan, extensionBytes, envelope.payload.size(), limits);
-                if (complete.HasError())
+                if (const Result<void> complete = CompleteEncodingPlan(plan, extensionBytes, envelope.payload.size(), limits);
+                    complete.HasError())
                     return Result<EncodingPlan>::Failure(complete.ErrorValue());
 
                 std::ranges::sort(plan.fields, {}, [](const MessageEnvelopeField *field) {
@@ -257,8 +263,7 @@ namespace Horo::Network {
 
         [[nodiscard]] Result<FieldHeader> ParseFieldHeader(const std::span<const std::byte> frame, std::size_t &offset,
                                                            const std::size_t headerBytes) {
-            std::size_t headerEnd{};
-            if (!CheckedAdd(offset, FieldHeaderBytes, headerEnd) || headerEnd > headerBytes)
+            if (const auto headerEnd = CheckedSum(offset, FieldHeaderBytes); !headerEnd.has_value() || *headerEnd > headerBytes)
                 return Fail<FieldHeader>(NetworkErrors::MessageEnvelopeInvalid);
             const auto id = MessageEnvelopeFieldId::Create(ReadU16(frame, offset));
             const auto requirement = static_cast<MessageEnvelopeFieldRequirement>(ReadU8(frame, offset));
@@ -297,8 +302,7 @@ namespace Horo::Network {
 
         [[nodiscard]] Result<std::size_t> ValidateEncodedFields(const std::span<const std::byte> frame, const ParsedHeader &parsed,
                                                                 const MessageCodecRegistry &registry, const MessageEnvelopeLimits &limits) {
-            const Result<void> region = ValidateEncodedFieldRegion(frame, parsed, limits);
-            if (region.HasError())
+            if (const Result<void> region = ValidateEncodedFieldRegion(frame, parsed, limits); region.HasError())
                 return Result<std::size_t>::Failure(region.ErrorValue());
 
             std::size_t offset = FixedHeaderBytes;
@@ -330,8 +334,7 @@ namespace Horo::Network {
                     if (!registry.FindField(parsed.envelope.protocol, parsed.envelope.message, field.id).has_value())
                         continue;
                     const auto value = frame.subspan(field.valueOffset, field.valueBytes);
-                    parsed.envelope.fields.push_back(
-                        MessageEnvelopeField{field.id, field.requirement, std::vector<std::byte>{value.begin(), value.end()}});
+                    parsed.envelope.fields.emplace_back(field.id, field.requirement, std::vector<std::byte>{value.begin(), value.end()});
                 }
                 const auto payload = frame.subspan(parsed.headerBytes, parsed.payloadBytes);
                 parsed.envelope.payload.assign(payload.begin(), payload.end());
@@ -448,11 +451,10 @@ namespace Horo::Network {
         if (parsed.HasError())
             return Result<MessageEnvelope>::Failure(parsed.ErrorValue());
 
-        std::size_t totalBytes{};
-        if (!CheckedAdd(parsed.Value().headerBytes, parsed.Value().payloadBytes, totalBytes) || totalBytes != frame.size())
+        if (const auto totalBytes = CheckedSum(parsed.Value().headerBytes, parsed.Value().payloadBytes);
+            !totalBytes.has_value() || *totalBytes != frame.size())
             return Fail<MessageEnvelope>(NetworkErrors::MessageEnvelopeInvalid);
-        const Result<MessageCodecDescriptor> codec = ValidateDecodedCodec(parsed.Value(), registry, limits);
-        if (codec.HasError())
+        if (const Result<MessageCodecDescriptor> codec = ValidateDecodedCodec(parsed.Value(), registry, limits); codec.HasError())
             return Result<MessageEnvelope>::Failure(codec.ErrorValue());
 
         const auto knownFields = ValidateEncodedFields(frame, parsed.Value(), registry, limits);
