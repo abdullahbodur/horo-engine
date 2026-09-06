@@ -47,14 +47,17 @@ that affinity and synchronization are explicit.
 
 ## Job System Interface
 
-Implementation status on 1 August 2026: the FND-001A baseline implements the
+Implementation status on 6 September 2026: the FND-001A baseline implements the
 bounded worker queue, result-returning submissions, parent cancellation and the
 non-movable operation-owned `TaskGroup` below. A bounded `OperationStore`
 baseline also provides typed state, phase, monotonic per-phase progress,
 terminal retention, and cooperative cancellation. Priority, affinity,
-configuration snapshot capture, main-thread pumping, job aggregation, wait
-reasons, and revision notifications remain later Foundation work; examples of
-those capabilities below describe the target rather than implemented behavior.
+configuration snapshot capture, general continuation pumping, job aggregation,
+wait reasons, and revision notifications remain later Foundation work. The
+implemented bounded join subset accepts the typed `JoinOptions` below, validates
+worker/submitting-owner identity, and may help only the exact awaited queued
+record. It never pumps unrelated queue work. Examples of broader capabilities
+below otherwise describe the target rather than implemented behavior.
 
 ```cpp
 class JobSystem {
@@ -76,9 +79,24 @@ enum class WaitPolicy {
 struct JoinOptions {
     WaitPolicy waitPolicy;
     Duration timeout;
-    bool publishWaitReason = true;
 };
 ```
+
+`JobHandle::Wait(options)` and `TaskGroup::Join(options)` apply one monotonic
+deadline. `MainThreadPumpAllowed` is currently the narrow exact-record helping
+capability used by owner-bound internal adapters; it is not a general main-thread
+continuation pump. `WorkerOnly` requires a callback executing on the same
+scheduler and also permits exact-record helping. `ForbiddenOnOwnerThread` is a
+passive bounded wait and rejects the thread that submitted the record. Self-waits
+fail with `job.wait_capacity_deadlock`; forbidden callers and expired deadlines
+fail with distinct stable errors. A timed-out group remains closed to admission
+but is not marked joined, so its owner can cancel and safely retry the join.
+
+Exact-record helping bounds scheduler starvation and capacity deadlock, but it
+cannot preempt a callback after execution begins. Callbacks remain cooperatively
+cancellable and owners must retain callback state until terminal completion.
+The legacy unbounded overloads remain migration compatibility paths; new
+owner-bound integrations must use the bounded contract.
 
 `JobHandle` is move-only and refers to a durable in-process job record. Dropping
 the handle does not implicitly cancel a job unless the descriptor explicitly

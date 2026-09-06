@@ -192,4 +192,158 @@ namespace {
         REQUIRE((stopped.load()));
         jobs.Shutdown(Horo::ShutdownPolicy::Drain);
     }
+
+    TEST_CASE("Bounded Owner Wait Helps Only Its Exact Queued Record", "[unit][foundation][jobs][wait]") {
+        Horo::JobSystem jobs{Horo::JobSystemConfig{.workerCount = 0, .maxQueuedJobs = 2}};
+        std::atomic unrelatedExecuted{false};
+        std::atomic awaitedExecuted{false};
+        const auto unrelated = jobs.Submit({}, [&unrelatedExecuted](const Horo::CancellationToken &) {
+            unrelatedExecuted.store(true);
+        });
+        auto awaited = jobs.Submit({}, [&awaitedExecuted](const Horo::CancellationToken &) {
+            awaitedExecuted.store(true);
+        });
+        REQUIRE((unrelated.HasValue()));
+        REQUIRE((awaited.HasValue()));
+
+        const auto result =
+            awaited.Value().Wait({.waitPolicy = Horo::WaitPolicy::MainThreadPumpAllowed, .timeout = Horo::Duration::FromMilliseconds(100)});
+        REQUIRE((result.HasValue()));
+        REQUIRE((awaitedExecuted.load()));
+        REQUIRE_FALSE((unrelatedExecuted.load()));
+        REQUIRE((jobs.Query(unrelated.Value().Id()).state == Horo::JobState::Queued));
+
+        REQUIRE((jobs.RequestCancel(unrelated.Value().Id()).HasValue()));
+        jobs.Shutdown(Horo::ShutdownPolicy::Cancel);
+    }
+
+    TEST_CASE("Bounded Wait Enforces Worker And Submitting Owner Policies", "[unit][foundation][jobs][wait]") {
+        Horo::JobSystem jobs{Horo::JobSystemConfig{.workerCount = 0, .maxQueuedJobs = 1}};
+        auto submitted = jobs.Submit({}, [](const Horo::CancellationToken &) {
+        });
+        REQUIRE((submitted.HasValue()));
+
+        const auto workerOnly =
+            submitted.Value().Wait({.waitPolicy = Horo::WaitPolicy::WorkerOnly, .timeout = Horo::Duration::FromMilliseconds(10)});
+        REQUIRE((workerOnly.HasError()));
+        REQUIRE((workerOnly.ErrorValue().code.Value() == "job.wait_forbidden"));
+        const auto ownerForbidden = submitted.Value().Wait(
+            {.waitPolicy = Horo::WaitPolicy::ForbiddenOnOwnerThread, .timeout = Horo::Duration::FromMilliseconds(10)});
+        REQUIRE((ownerForbidden.HasError()));
+        REQUIRE((ownerForbidden.ErrorValue().code.Value() == "job.wait_forbidden"));
+        REQUIRE((jobs.Query(submitted.Value().Id()).state == Horo::JobState::Queued));
+
+        REQUIRE((jobs.RequestCancel(submitted.Value().Id()).HasValue()));
+        jobs.Shutdown(Horo::ShutdownPolicy::Cancel);
+    }
+
+    TEST_CASE("Worker Self Wait Returns Capacity Deadlock Without Blocking", "[unit][foundation][jobs][wait]") {
+        Horo::JobSystem jobs{Horo::JobSystemConfig{.workerCount = 1, .maxQueuedJobs = 2}};
+        std::atomic<const Horo::JobHandle *> selfHandle{};
+        std::atomic selfWaitRejected{false};
+        auto submitted = jobs.Submit({}, [&](const Horo::CancellationToken &) {
+            while (selfHandle.load() == nullptr)
+                std::this_thread::yield();
+            const auto result =
+                selfHandle.load()->Wait({.waitPolicy = Horo::WaitPolicy::WorkerOnly, .timeout = Horo::Duration::FromMilliseconds(100)});
+            selfWaitRejected.store(result.HasError() && result.ErrorValue().code.Value() == "job.wait_capacity_deadlock");
+        });
+        REQUIRE((submitted.HasValue()));
+        selfHandle.store(&submitted.Value());
+
+        REQUIRE((submitted.Value().Wait().HasValue()));
+        REQUIRE((selfWaitRejected.load()));
+        jobs.Shutdown(Horo::ShutdownPolicy::Drain);
+    }
+
+    TEST_CASE("Worker Wait Helps Its Exact Queued Dependency", "[unit][foundation][jobs][wait]") {
+        Horo::JobSystem jobs{Horo::JobSystemConfig{.workerCount = 1, .maxQueuedJobs = 3}};
+        std::atomic<const Horo::JobHandle *> dependencyHandle{};
+        std::atomic dependencyExecuted{false};
+        std::atomic unrelatedExecuted{false};
+        std::atomic unrelatedObservedDuringJoin{true};
+        std::atomic waitSucceeded{false};
+
+        auto parent = jobs.Submit({}, [&](const Horo::CancellationToken &) {
+            while (dependencyHandle.load() == nullptr)
+                std::this_thread::yield();
+            const auto waited = dependencyHandle.load()->Wait(
+                {.waitPolicy = Horo::WaitPolicy::WorkerOnly, .timeout = Horo::Duration::FromMilliseconds(100)});
+            waitSucceeded.store(waited.HasValue());
+            unrelatedObservedDuringJoin.store(unrelatedExecuted.load());
+        });
+        REQUIRE((parent.HasValue()));
+        while (jobs.Query(parent.Value().Id()).state != Horo::JobState::Running)
+            std::this_thread::yield();
+
+        const auto unrelated = jobs.Submit({}, [&unrelatedExecuted](const Horo::CancellationToken &) {
+            unrelatedExecuted.store(true);
+        });
+        auto dependency = jobs.Submit({}, [&dependencyExecuted](const Horo::CancellationToken &) {
+            dependencyExecuted.store(true);
+        });
+        REQUIRE((unrelated.HasValue()));
+        REQUIRE((dependency.HasValue()));
+        dependencyHandle.store(&dependency.Value());
+
+        REQUIRE((parent.Value().Wait().HasValue()));
+        REQUIRE((waitSucceeded.load()));
+        REQUIRE((dependencyExecuted.load()));
+        REQUIRE_FALSE((unrelatedObservedDuringJoin.load()));
+        REQUIRE((unrelated.Value().Wait().HasValue()));
+        jobs.Shutdown(Horo::ShutdownPolicy::Drain);
+    }
+
+    TEST_CASE("Timed Out Task Group Join Remains Retryable", "[unit][foundation][jobs][wait]") {
+        Horo::JobSystem jobs{Horo::JobSystemConfig{.workerCount = 1, .maxQueuedJobs = 3}};
+        std::mutex mutex;
+        std::condition_variable condition;
+        bool blockerStarted{};
+        bool releaseBlocker{};
+        auto blocker = jobs.Submit({}, [&](const Horo::CancellationToken &) {
+            std::unique_lock lock(mutex);
+            blockerStarted = true;
+            condition.notify_all();
+            condition.wait(lock, [&] {
+                return releaseBlocker;
+            });
+        });
+        REQUIRE((blocker.HasValue()));
+        {
+            std::unique_lock lock(mutex);
+            condition.wait(lock, [&] {
+                return blockerStarted;
+            });
+        }
+
+        Horo::TaskGroup group(jobs);
+        std::atomic childExecuted{false};
+        REQUIRE((group
+                     .Spawn({}, [&childExecuted](const Horo::CancellationToken &) {
+            childExecuted.store(true);
+            return Horo::Result<void>::Success();
+        }).HasValue()));
+
+        std::string waitError;
+        std::thread waiter([&] {
+            const auto joined =
+                group.Join({.waitPolicy = Horo::WaitPolicy::ForbiddenOnOwnerThread, .timeout = Horo::Duration::FromMilliseconds(10)});
+            if (joined.HasError())
+                waitError = joined.ErrorValue().code.Value();
+        });
+        waiter.join();
+        REQUIRE((waitError == "job.wait_timed_out"));
+        REQUIRE_FALSE((childExecuted.load()));
+
+        {
+            std::lock_guard lock(mutex);
+            releaseBlocker = true;
+        }
+        condition.notify_all();
+        REQUIRE((blocker.Value().Wait().HasValue()));
+        REQUIRE((group.Join().HasValue()));
+        REQUIRE((group.Join().HasValue()));
+        REQUIRE((childExecuted.load()));
+        jobs.Shutdown(Horo::ShutdownPolicy::Drain);
+    }
 }  // namespace

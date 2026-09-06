@@ -4,6 +4,7 @@
 #include "Horo/Foundation/Telemetry/Operation.h"
 
 #include <algorithm>
+#include <chrono>
 #include <condition_variable>
 #include <deque>
 #include <exception>
@@ -27,8 +28,9 @@ namespace Horo {
     }  // namespace
 
     struct JobRecord {
-        JobRecord(const JobId jobId, const JobDescriptor &descriptor, JobFunction jobWork)
-            : id(jobId), cancellation(descriptor.parentCancellation), work(std::move(jobWork)) {}
+        JobRecord(const JobId jobId, const JobDescriptor &descriptor, JobFunction jobWork, const void *scheduler)
+            : id(jobId), cancellation(descriptor.parentCancellation), work(std::move(jobWork)), schedulerIdentity(scheduler),
+              submittingThread(std::this_thread::get_id()) {}
 
         [[nodiscard]] std::mutex &Mutex() const noexcept {
             return mutex_;
@@ -41,6 +43,8 @@ namespace Horo {
         CancellationSource cancellation;
         JobFunction work;
         Telemetry::OperationContext operationContext = Telemetry::CaptureOperationContext();
+        const void *schedulerIdentity{};
+        std::thread::id submittingThread;
         mutable std::mutex mutex_;  // NOSONAR(cpp:S8379) Controlled via Mutex() accessor.
     };
 
@@ -61,6 +65,32 @@ namespace Horo {
     };
 
     namespace {
+        thread_local const void *activeSchedulerIdentity{};
+        thread_local const JobRecord *activeJobRecord{};
+
+        /** @brief Installs exact scheduler/job execution identity for nested wait validation and restores it afterward. */
+        class JobExecutionScope final {
+        public:
+            JobExecutionScope(const JobRecord &record, const bool schedulerWorker) noexcept
+                : previousScheduler_(activeSchedulerIdentity), previousJob_(activeJobRecord) {
+                if (schedulerWorker)
+                    activeSchedulerIdentity = record.schedulerIdentity;
+                activeJobRecord = &record;
+            }
+
+            ~JobExecutionScope() {
+                activeSchedulerIdentity = previousScheduler_;
+                activeJobRecord = previousJob_;
+            }
+
+            JobExecutionScope(const JobExecutionScope &) = delete;
+            JobExecutionScope &operator=(const JobExecutionScope &) = delete;
+
+        private:
+            const void *previousScheduler_{};
+            const JobRecord *previousJob_{};
+        };
+
         void SetTerminalState(const std::shared_ptr<JobRecord> &record, const JobState state, std::optional<Error> error = std::nullopt) {
             std::lock_guard lock(record->Mutex());
             if (IsTerminal(record->state))
@@ -70,8 +100,9 @@ namespace Horo {
             record->completed.notify_all();
         }
 
-        void ExecuteJobRecord(const std::shared_ptr<JobRecord> &record) {
+        void ExecuteJobRecord(const std::shared_ptr<JobRecord> &record, const bool schedulerWorker) {
             const Telemetry::ScopedOperationContext operationContext{record->operationContext};
+            const JobExecutionScope executionScope{*record, schedulerWorker};
             try {
                 Result<void> outcome = record->work(record->cancellation.Token());
                 if (outcome.HasError()) {
@@ -93,6 +124,62 @@ namespace Horo {
             } catch (...) {  // NOSONAR(cpp:S1181)
                 SetTerminalState(record, JobState::Failed, MakeJobError(JobErrors::Failed, "Job callback threw an unknown exception."));
             }
+        }
+
+        [[nodiscard]] bool TryClaimJobRecord(const std::shared_ptr<JobRecord> &record) {
+            std::lock_guard lock(record->Mutex());
+            if (record->state != JobState::Queued)
+                return false;
+            record->state = JobState::Running;
+            return true;
+        }
+
+        [[nodiscard]] Result<void> ValidateBoundedWait(const JobRecord &record, const WaitPolicy policy) {
+            if (activeJobRecord == &record)
+                return Result<void>::Failure(
+                    MakeJobError(JobErrors::WaitCapacityDeadlock, "A job cannot synchronously wait for its own completion."));
+            if (policy == WaitPolicy::WorkerOnly && activeSchedulerIdentity != record.schedulerIdentity)
+                return Result<void>::Failure(
+                    MakeJobError(JobErrors::WaitForbidden, "WorkerOnly requires a worker executing on the owning job system."));
+            if (policy == WaitPolicy::ForbiddenOnOwnerThread && record.submittingThread == std::this_thread::get_id())
+                return Result<void>::Failure(
+                    MakeJobError(JobErrors::WaitForbidden, "The submitting owner thread is forbidden from waiting for this job."));
+            return Result<void>::Success();
+        }
+
+        [[nodiscard]] std::chrono::steady_clock::time_point WaitDeadline(const Duration timeout) noexcept {
+            const auto now = std::chrono::steady_clock::now();
+            const auto remaining = std::chrono::nanoseconds(std::max<std::int64_t>(0, timeout.ToNanoseconds()));
+            const auto available = std::chrono::steady_clock::time_point::max() - now;
+            return remaining >= available ? std::chrono::steady_clock::time_point::max() : now + remaining;
+        }
+
+        [[nodiscard]] Result<void> WaitUntil(const std::shared_ptr<JobRecord> &record, const std::chrono::steady_clock::time_point deadline,
+                                             const WaitPolicy policy) {
+            {
+                std::lock_guard lock(record->Mutex());
+                if (IsTerminal(record->state))
+                    return record->state == JobState::Succeeded ? Result<void>::Success() : Result<void>::Failure(*record->error);
+            }
+            if (const Result<void> validated = ValidateBoundedWait(*record, policy); validated.HasError())
+                return validated;
+            if (policy != WaitPolicy::ForbiddenOnOwnerThread && TryClaimJobRecord(record))
+                ExecuteJobRecord(record, activeSchedulerIdentity == record->schedulerIdentity);
+
+            std::unique_lock lock(record->Mutex());
+            if (!record->completed.wait_until(lock, deadline, [&record] {
+                return IsTerminal(record->state);
+            }))
+                return Result<void>::Failure(MakeJobError(JobErrors::WaitTimedOut, "The job did not complete before its wait deadline."));
+            if (record->state == JobState::Succeeded)
+                return Result<void>::Success();
+            return Result<void>::Failure(*record->error);
+        }
+
+        [[nodiscard]] bool IsWaitControlError(const Error &error) {
+            const std::string_view code = error.code.Value();
+            return code == JobErrors::WaitForbidden.code.Value() || code == JobErrors::WaitTimedOut.code.Value() ||
+                   code == JobErrors::WaitCapacityDeadlock.code.Value();
         }
     }  // namespace
 
@@ -120,7 +207,7 @@ namespace Horo {
                 record->state = JobState::Running;
             }
 
-            ExecuteJobRecord(record);
+            ExecuteJobRecord(record, true);
         }
     }
 
@@ -149,7 +236,7 @@ namespace Horo {
         if (m_state->queue.size() >= m_state->config.maxQueuedJobs)
             return Result<JobHandle>::Failure(MakeJobError(JobErrors::QueueFull, "Job queue is at capacity."));
 
-        auto record = std::make_shared<JobRecord>(m_state->nextId++, descriptor, std::move(work));
+        auto record = std::make_shared<JobRecord>(m_state->nextId++, descriptor, std::move(work), m_state.get());
         m_state->jobs.try_emplace(record->id, record);
         m_state->queue.push_back(record);
         m_state->workAvailable.notify_one();
@@ -235,6 +322,13 @@ namespace Horo {
         if (record->state == JobState::Succeeded)
             return Result<void>::Success();
         return Result<void>::Failure(*record->error);
+    }
+
+    /** @copydoc JobHandle::Wait(const JoinOptions &) */
+    Result<void> JobHandle::Wait(const JoinOptions &options) const {
+        if (!m_record)
+            return Result<void>::Failure(MakeJobError(JobErrors::InvalidHandle, "Cannot wait on an invalid job handle."));
+        return WaitUntil(m_record, WaitDeadline(options.timeout), options.waitPolicy);
     }
 
     JobId JobHandle::Id() const noexcept {
@@ -330,6 +424,38 @@ namespace Horo {
         std::optional<Error> firstError;
         for (const auto &child : children) {
             const Result<void> waited = child->Wait();
+            if (waited.HasError() && !firstError.has_value())
+                firstError = waited.ErrorValue();
+        }
+        {
+            std::lock_guard lock(m_state->mutex);
+            m_state->joined = true;
+            m_state->joinError = firstError;
+        }
+        return firstError.has_value() ? Result<void>::Failure(*firstError) : Result<void>::Success();
+    }
+
+    /** @copydoc TaskGroup::Join(const JoinOptions &) */
+    Result<void> TaskGroup::Join(const JoinOptions &options) const {
+        std::lock_guard joinLock(m_state->joinMutex);
+        if (m_state->cancellation.Token().IsCancellationRequested())
+            CancelChildren(m_state);
+
+        std::vector<std::shared_ptr<JobHandle>> children;
+        {
+            std::lock_guard lock(m_state->mutex);
+            if (m_state->joined)
+                return m_state->joinError.has_value() ? Result<void>::Failure(*m_state->joinError) : Result<void>::Success();
+            m_state->accepting = false;
+            children = m_state->children;
+        }
+
+        const auto deadline = WaitDeadline(options.timeout);
+        std::optional<Error> firstError;
+        for (const auto &child : children) {
+            const Result<void> waited = WaitUntil(child->m_record, deadline, options.waitPolicy);
+            if (waited.HasError() && IsWaitControlError(waited.ErrorValue()))
+                return waited;
             if (waited.HasError() && !firstError.has_value())
                 firstError = waited.ErrorValue();
         }
