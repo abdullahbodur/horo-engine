@@ -35,6 +35,7 @@ horo_configure_target_header_boundary(HoroFoundation PUBLIC_HEADERS
     Horo/Foundation/Time.h
     Horo/Foundation/TransparentString.h
     Horo/Math/SceneMath.h
+    Horo/Math/WorldCoordinate64.h
 )
 
 horo_configure_target_header_boundary(HoroOpenTelemetry PUBLIC_HEADERS
@@ -170,6 +171,7 @@ horo_configure_target_header_boundary(HoroNavigationNull PUBLIC_HEADERS
     Horo/Navigation/Backends/NullProvider.h
 )
 horo_configure_target_header_boundary(HoroWorldStreaming PUBLIC_HEADERS
+    Horo/WorldStreaming/WorldCellQuantization.h
     Horo/WorldStreaming/WorldStreamingErrors.h
     Horo/WorldStreaming/WorldStreamingIdentity.h
 )

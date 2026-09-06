@@ -131,9 +131,10 @@ namespace Horo::WorldStreaming {
 
         TEST_CASE("World streaming errors expose unique stable descriptors", "[unit][world_streaming][errors]") {
             const std::array descriptors{
-                &WorldStreamingErrors::IdentityInvalid,
-                &WorldStreamingErrors::SerializedIdentityInvalid,
-                &WorldStreamingErrors::GenerationExhausted,
+                &WorldStreamingErrors::IdentityInvalid,      &WorldStreamingErrors::SerializedIdentityInvalid,
+                &WorldStreamingErrors::GenerationExhausted,  &WorldStreamingErrors::QuantizationPolicyInvalid,
+                &WorldStreamingErrors::CoordinateOutOfRange, &WorldStreamingErrors::LodUnsupported,
+                &WorldStreamingErrors::CellOutOfBounds,
             };
             std::set<std::string_view> codes;
             for (const ErrorCodeDescriptor *descriptor : descriptors) {
