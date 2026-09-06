@@ -2,15 +2,16 @@
 
 #include <string>
 #include <string_view>
+#include <utility>
 
 namespace Horo::Render::RenderGraphErrors {
     namespace {
         const ErrorDomainId Domain{"render.graph"};
 
         /** @brief Builds one immutable descriptor in the render-graph error domain. */
-        ErrorCodeDescriptor Descriptor(const std::string_view code, const ErrorSeverity severity, const std::string_view summary,
+        ErrorCodeDescriptor Descriptor(std::string code, const ErrorSeverity severity, const std::string_view summary,
                                        const std::string_view remediation, const bool retryable = false) {
-            return {Domain, ErrorCode{std::string{code}}, severity, summary, remediation, retryable, false};
+            return {Domain, ErrorCode{std::move(code)}, severity, summary, remediation, retryable, false};
         }
     }  // namespace
 
