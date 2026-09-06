@@ -5,8 +5,8 @@
 
 namespace Horo::Runtime::Ui {
     namespace {
-        [[nodiscard]] Result<void> Failure(const ErrorCodeDescriptor &descriptor) {
-            return Result<void>::Failure(MakeError(descriptor));
+        template <typename T = void> [[nodiscard]] Result<T> Failure(const ErrorCodeDescriptor &descriptor) {
+            return Result<T>::Failure(MakeError(descriptor));
         }
     }  // namespace
 
@@ -66,14 +66,14 @@ namespace Horo::Runtime::Ui {
     /** @copydoc UiDocumentBuilder::Build */
     Result<UiDocument> UiDocumentBuilder::Build() && {
         if (!id_.IsValid() || !revision_.IsValid() || canvases_.empty())
-            return Result<UiDocument>::Failure(MakeError(UiErrors::DocumentInvalid));
+            return Failure<UiDocument>(UiErrors::DocumentInvalid);
         for (std::size_t index = 0; index < canvases_.size(); ++index) {
             const auto &canvas = canvases_[index];
             if (!canvas.id.IsValid() || !canvas.rootElement.IsValid())
-                return Result<UiDocument>::Failure(MakeError(UiErrors::DocumentInvalid));
+                return Failure<UiDocument>(UiErrors::DocumentInvalid);
             for (std::size_t previous = 0; previous < index; ++previous)
                 if (canvases_[previous].id == canvas.id || canvases_[previous].rootElement == canvas.rootElement)
-                    return Result<UiDocument>::Failure(MakeError(UiErrors::DocumentDuplicateIdentity));
+                    return Failure<UiDocument>(UiErrors::DocumentDuplicateIdentity);
         }
         std::ranges::sort(dependencies_, {}, &UiAssetDependency::asset);
         return Result<UiDocument>::Success(UiDocument{id_, revision_, std::move(canvases_), std::move(dependencies_)});
@@ -87,9 +87,9 @@ namespace Horo::Runtime::Ui {
     /** @copydoc CookedUiDocument::Create */
     Result<CookedUiDocument> CookedUiDocument::Create(const UiDocument &document, std::vector<std::uint8_t> payload) {
         if (payload.empty())
-            return Result<CookedUiDocument>::Failure(MakeError(UiErrors::PayloadInvalid));
+            return Failure<CookedUiDocument>(UiErrors::PayloadInvalid);
         if (payload.size() > MaximumCookedUiDocumentBytes)
-            return Result<CookedUiDocument>::Failure(MakeError(UiErrors::CapacityExceeded));
+            return Failure<CookedUiDocument>(UiErrors::CapacityExceeded);
         return Result<CookedUiDocument>::Success(CookedUiDocument{document.Id(),
                                                                   document.Revision(),
                                                                   {document.Dependencies().begin(), document.Dependencies().end()},
@@ -133,9 +133,9 @@ namespace Horo::Runtime::Ui {
     /** @copydoc UiRuntimeInstance::Create */
     Result<UiRuntimeInstance> UiRuntimeInstance::Create(CookedUiDocument document, RuntimeUiInstanceId instance) {
         if (!instance.IsValid())
-            return Result<UiRuntimeInstance>::Failure(MakeError(UiErrors::HandleMalformed));
+            return Failure<UiRuntimeInstance>(UiErrors::HandleMalformed);
         if (!document.Id().IsValid() || !document.SourceRevision().IsValid() || document.Payload().empty())
-            return Result<UiRuntimeInstance>::Failure(MakeError(UiErrors::PayloadInvalid));
+            return Failure<UiRuntimeInstance>(UiErrors::PayloadInvalid);
         return Result<UiRuntimeInstance>::Success(UiRuntimeInstance{document.Id(), document.SourceRevision(),
                                                                     std::move(document.dependencies_), std::move(document.payload_),
                                                                     instance});
