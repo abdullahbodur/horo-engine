@@ -164,6 +164,8 @@ horo_configure_target_header_boundary(HoroNavigationApi PUBLIC_HEADERS
 horo_configure_target_header_boundary(HoroRenderApi PUBLIC_HEADERS
     Horo/Runtime/Render/Mesh.h
     Horo/Runtime/Render/RenderBackend.h
+    Horo/Runtime/Render/RenderGraph.h
+    Horo/Runtime/Render/RenderGraphErrors.h
     Horo/Runtime/Render/Texture.h
     Horo/Runtime/Render/RenderResource.h
     Horo/Runtime/Render/RenderScene.h
