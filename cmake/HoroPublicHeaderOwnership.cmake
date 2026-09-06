@@ -76,6 +76,12 @@ horo_configure_target_header_boundary(HoroRuntimeUi PUBLIC_HEADERS
     Horo/Runtime/Ui/UiIdentity.h
     Horo/Runtime/Ui/UiDocument.h
 )
+horo_configure_target_header_boundary(HoroNetworkApi PUBLIC_HEADERS
+    Horo/Network/NetworkErrors.h
+    Horo/Network/ReplicationDescriptor.h
+    Horo/Network/ReplicationDescriptorRegistry.h
+    Horo/Network/ReplicationIdentity.h
+)
 
 horo_configure_target_header_boundary(HoroGameplayApi PUBLIC_HEADERS
     Horo/Gameplay/Behavior.h
