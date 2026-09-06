@@ -2,7 +2,6 @@
 
 #include "Horo/Foundation/CancellationToken.h"
 #include "Horo/Foundation/Result.h"
-#include "Horo/Foundation/Time.h"
 
 #include <cstddef>
 #include <cstdint>
@@ -49,19 +48,6 @@ namespace Horo {
         Cancel,
     };
 
-    /** @brief Selects the caller-affinity rule for one bounded job or task-group join. */
-    enum class WaitPolicy : std::uint8_t {
-        WorkerOnly,
-        MainThreadPumpAllowed,
-        ForbiddenOnOwnerThread,
-    };
-
-    /** @brief Explicit finite policy for a bounded wait or structured join. */
-    struct JoinOptions {
-        WaitPolicy waitPolicy{WaitPolicy::WorkerOnly}; /**< Caller-affinity rule checked before waiting. */
-        Duration timeout{};                            /**< Maximum duration shared by the complete operation. */
-    };
-
     struct JobRecord;
 
     /** @brief Move-only reference to a durable accepted job record. */
@@ -75,20 +61,11 @@ namespace Horo {
 
         /** @brief Waits until the job reaches its single terminal state. */
         [[nodiscard]] Result<void> Wait() const;
-        /**
-         * @brief Waits under a finite affinity policy, optionally helping only this exact queued record.
-         * @param options Caller-affinity rule and maximum wait duration. MainThreadPumpAllowed and
-         * WorkerOnly may claim this record for inline execution; unrelated queued jobs are never pumped.
-         * @return Terminal job result, or a typed forbidden, deadlock-risk or timeout error. A timeout
-         * never changes the job's lifecycle and the handle remains safely retryable.
-         */
-        [[nodiscard]] Result<void> Wait(const JoinOptions &options) const;
         /** @brief Returns the stable identifier assigned at successful submission. */
         [[nodiscard]] JobId Id() const noexcept;
 
     private:
         friend class JobSystem;
-        friend class TaskGroup;
 
         explicit JobHandle(std::shared_ptr<JobRecord> record) : m_record(std::move(record)) {}
 
@@ -167,18 +144,10 @@ namespace Horo {
          * @return Success or the first child error in deterministic spawn order. Repeated calls return the same result.
          */
         [[nodiscard]] Result<void> Join() const;
-        /**
-         * @brief Closes admission and joins every accepted child under one absolute finite deadline.
-         * @param options Caller-affinity rule and timeout shared by all children in spawn order.
-         * @return Stable terminal group result, or a typed forbidden, deadlock-risk or timeout error.
-         * A timeout does not mark the group joined; a later call may safely resume joining it.
-         */
-        [[nodiscard]] Result<void> Join(const JoinOptions &options) const;
 
     private:
         struct State;
         static void CancelChildren(const std::shared_ptr<State> &state);
-        [[nodiscard]] Result<void> JoinImpl(const JoinOptions *options) const;
         std::shared_ptr<State> m_state;
     };
 }  // namespace Horo
