@@ -229,8 +229,7 @@ namespace Horo::Render {
 
     /** @copydoc RenderGraphBuilder::AddResource */
     Result<RenderGraphResourceId> RenderGraphBuilder::AddResource(const RenderGraphResourceKind kind) {
-        const Result<void> open = ValidateOpenOnOwnerThread();
-        if (open.HasError()) {
+        if (const Result<void> open = ValidateOpenOnOwnerThread(); open.HasError()) {
             return Result<RenderGraphResourceId>::Failure(open.ErrorValue());
         }
         if (!IsKnown(kind)) {
@@ -242,57 +241,51 @@ namespace Horo::Render {
         }
 
         const RenderGraphResourceId id{owner_, static_cast<std::uint32_t>(resources_.size() + 1)};
-        resources_.push_back(RenderGraphResource{id, kind});
+        resources_.emplace_back(id, kind);
         return Result<RenderGraphResourceId>::Success(id);
     }
 
     /** @copydoc RenderGraphBuilder::AddUsage */
     Result<void> RenderGraphBuilder::AddUsage(const RenderGraphResourceUsage &usage) {
-        const Result<void> open = ValidateOpenOnOwnerThread();
-        if (open.HasError()) {
+        if (const Result<void> open = ValidateOpenOnOwnerThread(); open.HasError()) {
             return open;
         }
         if (usages_.size() == limits_.maxUsages) {
             return Result<void>::Failure(MakeError(RenderGraphErrors::CapacityExceeded, "Graph-resource usage capacity is full."));
         }
-        const Result<void> references = ValidateUsageReferences(usage);
-        if (references.HasError()) {
+        if (const Result<void> references = ValidateUsageReferences(usage); references.HasError()) {
             return references;
         }
-        const Result<void> semantics = ValidateUsageSemantics(usage);
-        if (semantics.HasError()) {
+        if (const Result<void> semantics = ValidateUsageSemantics(usage); semantics.HasError()) {
             return semantics;
         }
 
-        usages_.push_back(usage);
+        usages_.emplace_back(usage);
         return Result<void>::Success();
     }
 
     /** @copydoc RenderGraphBuilder::AddDependency */
     Result<void> RenderGraphBuilder::AddDependency(const RenderGraphDependency &dependency) {
-        const Result<void> open = ValidateOpenOnOwnerThread();
-        if (open.HasError()) {
+        if (const Result<void> open = ValidateOpenOnOwnerThread(); open.HasError()) {
             return open;
         }
         if (dependencies_.size() == limits_.maxDependencies) {
             return Result<void>::Failure(MakeError(RenderGraphErrors::CapacityExceeded, "Render dependency capacity is full."));
         }
-        const Result<void> references = ValidateDependencyReferences(dependency);
-        if (references.HasError()) {
+        if (const Result<void> references = ValidateDependencyReferences(dependency); references.HasError()) {
             return references;
         }
         if (!IsKnown(dependency.kind)) {
             return Result<void>::Failure(MakeError(RenderGraphErrors::UnsupportedDependencyKind));
         }
 
-        dependencies_.push_back(dependency);
+        dependencies_.emplace_back(dependency);
         return Result<void>::Success();
     }
 
     /** @copydoc RenderGraphBuilder::Finalize */
     Result<RenderGraph> RenderGraphBuilder::Finalize() {
-        const Result<void> open = ValidateOpenOnOwnerThread();
-        if (open.HasError()) {
+        if (const Result<void> open = ValidateOpenOnOwnerThread(); open.HasError()) {
             return Result<RenderGraph>::Failure(open.ErrorValue());
         }
         if (passes_.empty()) {

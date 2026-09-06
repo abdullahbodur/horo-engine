@@ -22,6 +22,12 @@ namespace {
     RenderGraphLimits SmallLimits() {
         return {.maxPasses = 3, .maxResources = 2, .maxUsages = 3, .maxDependencies = 2};
     }
+
+    RenderGraphBuilder RequireBuilder(const RenderGraphLimits &limits = SmallLimits()) {
+        auto created = RenderGraphBuilder::Create(limits);
+        REQUIRE(created.HasValue());
+        return std::move(created).Value();
+    }
 }  // namespace
 
 TEST_CASE("Render graph records retain backend-neutral typed identities", "[runtime][renderer][render-graph]") {
@@ -86,9 +92,7 @@ TEST_CASE("Render graph storage is move-only and immutable through its views", "
 }
 
 TEST_CASE("Render graph builder owns finite storage and explicit lifecycle", "[runtime][renderer][render-graph]") {
-    auto created = RenderGraphBuilder::Create();
-    REQUIRE(created.HasValue());
-    RenderGraphBuilder builder = std::move(created).Value();
+    RenderGraphBuilder builder = RequireBuilder();
     const RenderGraphOwnerId owner = builder.Owner();
     REQUIRE(owner.IsValid());
     REQUIRE(builder.State() == RenderGraphBuilderState::Open);
@@ -112,9 +116,7 @@ TEST_CASE("Render graph builder owns finite storage and explicit lifecycle", "[r
 TEST_CASE("Render graph pass authoring rejects unsupported and incompatible queues", "[runtime][renderer][render-graph]") {
     RenderGraphLimits limits = {};
     limits.maxPasses = 1;
-    auto created = RenderGraphBuilder::Create(limits);
-    REQUIRE(created.HasValue());
-    RenderGraphBuilder builder = std::move(created).Value();
+    RenderGraphBuilder builder = RequireBuilder(limits);
 
     REQUIRE(builder.AddPass(RenderPassKind::Graphics, RenderQueueRole::Compute).ErrorValue().code.Value() ==
             "render.graph.queue_incompatible");
@@ -138,9 +140,7 @@ TEST_CASE("Render graph pass authoring rejects unsupported and incompatible queu
 }
 
 TEST_CASE("Render graph builder finalizes typed records in authoring order", "[runtime][renderer][render-graph]") {
-    auto created = RenderGraphBuilder::Create(SmallLimits());
-    REQUIRE(created.HasValue());
-    RenderGraphBuilder builder = std::move(created).Value();
+    RenderGraphBuilder builder = RequireBuilder();
 
     auto graphics = builder.AddPass(RenderPassKind::Graphics, RenderQueueRole::Graphics);
     auto compute = builder.AddPass(RenderPassKind::Compute, RenderQueueRole::Compute);
@@ -174,9 +174,7 @@ TEST_CASE("Render graph builder finalizes typed records in authoring order", "[r
 TEST_CASE("Render graph capacities bound every authored record", "[runtime][renderer][render-graph]") {
     SECTION("pass resource and usage capacities") {
         const RenderGraphLimits limits{.maxPasses = 1, .maxResources = 1, .maxUsages = 1, .maxDependencies = 1};
-        auto created = RenderGraphBuilder::Create(limits);
-        REQUIRE(created.HasValue());
-        RenderGraphBuilder builder = std::move(created).Value();
+        RenderGraphBuilder builder = RequireBuilder(limits);
         auto pass = builder.AddPass(RenderPassKind::Graphics, RenderQueueRole::Graphics);
         auto resource = builder.AddResource(RenderGraphResourceKind::Texture);
         REQUIRE(pass.HasValue());
@@ -191,9 +189,7 @@ TEST_CASE("Render graph capacities bound every authored record", "[runtime][rend
 
     SECTION("dependency capacity") {
         const RenderGraphLimits limits{.maxPasses = 2, .maxResources = 1, .maxUsages = 1, .maxDependencies = 1};
-        auto created = RenderGraphBuilder::Create(limits);
-        REQUIRE(created.HasValue());
-        RenderGraphBuilder builder = std::move(created).Value();
+        RenderGraphBuilder builder = RequireBuilder(limits);
         auto first = builder.AddPass(RenderPassKind::Graphics, RenderQueueRole::Graphics);
         auto second = builder.AddPass(RenderPassKind::Compute, RenderQueueRole::Compute);
         REQUIRE(first.HasValue());
@@ -205,12 +201,8 @@ TEST_CASE("Render graph capacities bound every authored record", "[runtime][rend
 }
 
 TEST_CASE("Render graph rejects invalid and foreign records without fallback", "[runtime][renderer][render-graph]") {
-    auto firstCreated = RenderGraphBuilder::Create(SmallLimits());
-    auto secondCreated = RenderGraphBuilder::Create(SmallLimits());
-    REQUIRE(firstCreated.HasValue());
-    REQUIRE(secondCreated.HasValue());
-    RenderGraphBuilder first = std::move(firstCreated).Value();
-    RenderGraphBuilder second = std::move(secondCreated).Value();
+    RenderGraphBuilder first = RequireBuilder();
+    RenderGraphBuilder second = RequireBuilder();
 
     RequireError(first.AddResource(static_cast<RenderGraphResourceKind>(255)), "render.graph.resource_kind_unsupported");
     auto firstPass = first.AddPass(RenderPassKind::Graphics, RenderQueueRole::Graphics);
@@ -249,9 +241,7 @@ TEST_CASE("Render graph rejects invalid and foreign records without fallback", "
 }
 
 TEST_CASE("Render graph supports depth read and explicit cancellation", "[runtime][renderer][render-graph]") {
-    auto created = RenderGraphBuilder::Create(SmallLimits());
-    REQUIRE(created.HasValue());
-    RenderGraphBuilder builder = std::move(created).Value();
+    RenderGraphBuilder builder = RequireBuilder();
     auto pass = builder.AddPass(RenderPassKind::Graphics, RenderQueueRole::Graphics);
     auto texture = builder.AddResource(RenderGraphResourceKind::Texture);
     REQUIRE(pass.HasValue());
@@ -263,16 +253,12 @@ TEST_CASE("Render graph supports depth read and explicit cancellation", "[runtim
     REQUIRE(builder.State() == RenderGraphBuilderState::Cancelled);
     RequireError(builder.Finalize(), "render.graph.builder_closed");
 
-    auto emptyCreated = RenderGraphBuilder::Create(SmallLimits());
-    REQUIRE(emptyCreated.HasValue());
-    RenderGraphBuilder empty = std::move(emptyCreated).Value();
+    RenderGraphBuilder empty = RequireBuilder();
     RequireError(empty.Finalize(), "render.graph.empty");
 }
 
 TEST_CASE("Render graph mutation and cancellation enforce owner-thread affinity", "[runtime][renderer][render-graph]") {
-    auto created = RenderGraphBuilder::Create(SmallLimits());
-    REQUIRE(created.HasValue());
-    RenderGraphBuilder builder = std::move(created).Value();
+    RenderGraphBuilder builder = RequireBuilder();
     auto pass = builder.AddPass(RenderPassKind::Graphics, RenderQueueRole::Graphics);
     auto resource = builder.AddResource(RenderGraphResourceKind::Texture);
     REQUIRE(pass.HasValue());
