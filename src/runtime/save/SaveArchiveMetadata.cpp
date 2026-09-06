@@ -138,11 +138,12 @@ namespace Horo::Runtime {
         /** @brief Classifies one independent version without conflating its schema authority. */
         template <typename Tag>
         [[nodiscard]] VersionAdmission ClassifyVersion(const SaveVersion<Tag> version, const SaveVersionSupport<Tag> &support) noexcept {
+            using enum VersionAdmission;
             if (support.direct.Contains(version))
-                return VersionAdmission::Direct;
+                return Direct;
             if (support.migrationSource && support.migrationSource->Contains(version))
-                return VersionAdmission::Migration;
-            return VersionAdmission::Rejected;
+                return Migration;
+            return Rejected;
         }
 
         /** @brief Reports whether one version support declaration has valid, non-overlapping ranges. */
@@ -481,36 +482,36 @@ namespace Horo::Runtime {
     /** @copydoc EvaluateSaveCompatibility */
     SaveCompatibilityDecision EvaluateSaveCompatibility(const ArchiveFormatVersion archiveVersion, const SaveArchiveHeader &header,
                                                         const SaveGameManifest &manifest, const SaveCompatibilityPolicy &policy) {
+        using enum SaveCompatibilityReason;
         SaveArchiveMetadataLimits limits;
         limits.supportedFeatureFlagsMask = std::numeric_limits<std::uint64_t>::max();
         if (ValidateSaveArchiveHeader(header, limits).HasError() || ValidateSaveGameManifest(manifest, limits).HasError() ||
             !IsValidSupport(policy.archiveVersions) || !IsValidSupport(policy.saveSchemaVersions) ||
             !IsValidSupport(policy.productVersions))
-            return Reject(SaveCompatibilityReason::InvalidMetadata);
+            return Reject(InvalidMetadata);
 
         if (!HasValidParticipantPolicy(policy))
-            return Reject(SaveCompatibilityReason::InvalidMetadata);
+            return Reject(InvalidMetadata);
 
         bool migrationRequired = false;
-        if (auto rejected = EvaluateRootVersion(ClassifyVersion(archiveVersion, policy.archiveVersions),
-                                                SaveCompatibilityReason::UnsupportedArchiveVersion, migrationRequired))
+        if (auto rejected =
+                EvaluateRootVersion(ClassifyVersion(archiveVersion, policy.archiveVersions), UnsupportedArchiveVersion, migrationRequired))
             return *rejected;
         if (auto rejected = EvaluateRootVersion(ClassifyVersion(manifest.saveSchemaVersion, policy.saveSchemaVersions),
-                                                SaveCompatibilityReason::UnsupportedSaveSchema, migrationRequired))
+                                                UnsupportedSaveSchema, migrationRequired))
             return *rejected;
         if (auto rejected = EvaluateRootVersion(ClassifyVersion(header.productCompatibility, policy.productVersions),
-                                                SaveCompatibilityReason::UnsupportedProductVersion, migrationRequired))
+                                                UnsupportedProductVersion, migrationRequired))
             return *rejected;
         if ((header.featureFlags & ~policy.supportedFeatureFlagsMask) != 0)
-            return Reject(SaveCompatibilityReason::UnsupportedFeature);
+            return Reject(UnsupportedFeature);
 
         if (auto rejected = EvaluateDeclaredParticipants(manifest, policy, migrationRequired))
             return *rejected;
-        if (auto rejected = FindUnknownRequiredParticipant(manifest, policy))
-            return *rejected;
-        return {.disposition =
-                    migrationRequired ? SaveCompatibilityDisposition::MigrationRequired : SaveCompatibilityDisposition::DirectRead,
-                .reason = SaveCompatibilityReason::None,
-                .participant = std::nullopt};
+        const SaveCompatibilityDecision compatible{.disposition = migrationRequired ? SaveCompatibilityDisposition::MigrationRequired
+                                                                                    : SaveCompatibilityDisposition::DirectRead,
+                                                   .reason = None,
+                                                   .participant = std::nullopt};
+        return FindUnknownRequiredParticipant(manifest, policy).value_or(compatible);
     }
 }  // namespace Horo::Runtime
