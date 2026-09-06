@@ -106,10 +106,16 @@ namespace Horo::WorldStreaming {
             std::unordered_set<StreamingCellId, StreamingCellIdHash> cells{first, second};
             REQUIRE(cells.size() == 2);
             REQUIRE(cells.contains(first));
-            REQUIRE(WorldPartitionIdHash{}(World()) == WorldPartitionIdHash{}(World()));
-            REQUIRE(StreamingLayerIdHash{}(layer) == StreamingLayerIdHash{}(layer));
+        }
+
+        TEST_CASE("Hash adapters match canonical FNV-1a vectors", "[unit][world_streaming][identity]") {
+            const auto layer = StreamingLayerId::Create(3).Value();
+            const StreamingCellId cell{1, 2, 3, 4, layer};
+            REQUIRE(WorldPartitionIdHash{}(World()) == static_cast<std::size_t>(0x52a39b8a741b3ef5ULL));
+            REQUIRE(StreamingCellIdHash{}(cell) == static_cast<std::size_t>(0x863b8d1d71539660ULL));
+            REQUIRE(StreamingLayerIdHash{}(layer) == static_cast<std::size_t>(0x0835ee07b4ee5316ULL));
             REQUIRE(StreamingSourceIdHash{}(IdentityFrom<StreamingSourceId>(7)) ==
-                    StreamingSourceIdHash{}(IdentityFrom<StreamingSourceId>(7)));
+                    static_cast<std::size_t>(0x4bd7a317074c5b62ULL));
         }
 
         TEST_CASE("Streaming fence binds world incarnation cell and attempt", "[unit][world_streaming][identity]") {

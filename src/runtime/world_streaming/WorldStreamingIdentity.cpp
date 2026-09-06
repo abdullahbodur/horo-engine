@@ -6,7 +6,7 @@
 
 namespace Horo::WorldStreaming {
     namespace {
-        constexpr std::uint64_t FnvOffset = 1469598103934665603ULL;
+        constexpr std::uint64_t FnvOffset = 14695981039346656037ULL;
         constexpr std::uint64_t FnvPrime = 1099511628211ULL;
 
         [[nodiscard]] std::size_t HashBytes(const std::span<const std::uint8_t> bytes) noexcept {
