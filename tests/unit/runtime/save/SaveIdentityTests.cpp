@@ -6,6 +6,7 @@
 #include <string>
 #include <type_traits>
 #include <unordered_set>
+#include <vector>
 
 namespace Horo::Runtime {
     namespace {
@@ -57,6 +58,8 @@ namespace Horo::Runtime {
             REQUIRE_FALSE(values.insert(first).second);
             REQUIRE(values.insert(second).second);
             REQUIRE(values.size() == 2);
+            REQUIRE(SaveIdentityDetail::HashUuid(first.Bytes()) == 0x52a39b8a741b3ef5ULL);
+            REQUIRE(PersistentSaveIdentityHash<SaveGameSlotIdentityTag>{}(first) == static_cast<std::size_t>(0x52a39b8a741b3ef5ULL));
         }
 
         TEST_CASE("Identity collection validation rejects missing and duplicate records", "[unit][save][identity]") {
@@ -68,7 +71,26 @@ namespace Horo::Runtime {
             REQUIRE(ValidateUniqueSaveIdentities<SaveRecordIdentityTag>(unique).HasValue());
             REQUIRE(ValidateUniqueSaveIdentities<SaveRecordIdentityTag>(duplicate).HasError());
             REQUIRE(ValidateUniqueSaveIdentities<SaveRecordIdentityTag>(withMissing).HasError());
-            REQUIRE(ValidateUniqueSaveIdentities<SaveRecordIdentityTag>({}).HasError());
+            REQUIRE(ValidateUniqueSaveIdentities<SaveRecordIdentityTag>({}).HasValue());
+        }
+
+        TEST_CASE("Identity collection validation scales to large unique inputs", "[unit][save][identity]") {
+            std::vector<SaveRecordId> identities;
+            identities.reserve(4096);
+            for (std::uint32_t index = 1; index <= 4096; ++index) {
+                SaveIdentityDetail::Bytes bytes{};
+                bytes[12] = static_cast<std::uint8_t>(index >> 24U);
+                bytes[13] = static_cast<std::uint8_t>(index >> 16U);
+                bytes[14] = static_cast<std::uint8_t>(index >> 8U);
+                bytes[15] = static_cast<std::uint8_t>(index);
+                auto identity = SaveRecordId::FromBytes(bytes);
+                REQUIRE(identity.HasValue());
+                identities.push_back(identity.Value());
+            }
+
+            REQUIRE(ValidateUniqueSaveIdentities<SaveRecordIdentityTag>(identities).HasValue());
+            identities.back() = identities.front();
+            REQUIRE(ValidateUniqueSaveIdentities<SaveRecordIdentityTag>(identities).HasError());
         }
 
         TEST_CASE("Participant identities reject ambiguous missing and oversized input", "[unit][save][identity]") {

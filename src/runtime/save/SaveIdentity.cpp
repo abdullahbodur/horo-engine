@@ -1,26 +1,34 @@
 #include "Horo/Runtime/Save/SaveIdentity.h"
 
 #include <algorithm>
+#include <charconv>
+#include <optional>
 
 namespace Horo::Runtime {
     namespace {
-        [[nodiscard]] int HexValue(const char value) noexcept {
-            if (value >= '0' && value <= '9')
-                return value - '0';
-            if (value >= 'a' && value <= 'f')
-                return value - 'a' + 10;
-            return -1;
-        }
-
         [[nodiscard]] bool IsCanonicalParticipantCharacter(const unsigned char character) noexcept {
             return (character >= 'a' && character <= 'z') || (character >= '0' && character <= '9') || character == '_';
         }
 
-        template <typename Range> [[nodiscard]] std::size_t StableHash(const Range &bytes) noexcept {
-            std::size_t hash = sizeof(std::size_t) == 8 ? 1469598103934665603ULL : 2166136261U;
+        /** @brief Parses exactly two lowercase hexadecimal characters into one byte. */
+        [[nodiscard]] std::optional<std::uint8_t> ParseCanonicalByte(const std::string_view text) noexcept {
+            if (text.size() != 2 || !std::ranges::all_of(text, [](const char character) {
+                return (character >= '0' && character <= '9') || (character >= 'a' && character <= 'f');
+            }))
+                return std::nullopt;
+
+            unsigned int parsedByte{};
+            const auto [end, error] = std::from_chars(text.data(), text.data() + text.size(), parsedByte, 16);
+            if (error != std::errc{} || end != text.data() + text.size())
+                return std::nullopt;
+            return static_cast<std::uint8_t>(parsedByte);
+        }
+
+        template <typename Range> [[nodiscard]] std::uint64_t StableHash64(const Range &bytes) noexcept {
+            std::uint64_t hash = 14695981039346656037ULL;
             for (const auto byte : bytes) {
                 hash ^= static_cast<unsigned char>(byte);
-                hash *= sizeof(std::size_t) == 8 ? 1099511628211ULL : 16777619U;
+                hash *= 1099511628211ULL;
             }
             return hash;
         }
@@ -39,11 +47,13 @@ namespace Horo::Runtime {
                     ++index;
                     continue;
                 }
-                const int high = HexValue(text[index++]);
-                const int low = index < text.size() ? HexValue(text[index++]) : -1;
-                if (high < 0 || low < 0 || byteIndex >= bytes.size())
+                if (index + 2 > text.size() || byteIndex >= bytes.size())
                     return Result<Bytes>::Failure(MakeError(SaveErrors::IdentityMalformed));
-                bytes[byteIndex++] = static_cast<std::uint8_t>((high << 4) | low);
+                const auto parsedByte = ParseCanonicalByte(text.substr(index, 2));
+                if (!parsedByte.has_value())
+                    return Result<Bytes>::Failure(MakeError(SaveErrors::IdentityMalformed));
+                bytes[byteIndex++] = *parsedByte;
+                index += 2;
             }
             if (byteIndex != bytes.size())
                 return Result<Bytes>::Failure(MakeError(SaveErrors::IdentityMalformed));
@@ -74,8 +84,8 @@ namespace Horo::Runtime {
         }
 
         /** @copydoc HashUuid */
-        std::size_t HashUuid(const Bytes &bytes) noexcept {
-            return StableHash(bytes);
+        std::uint64_t HashUuid(const Bytes &bytes) noexcept {
+            return StableHash64(bytes);
         }
     }  // namespace SaveIdentityDetail
 
@@ -114,6 +124,6 @@ namespace Horo::Runtime {
 
     /** @copydoc SaveParticipantIdHash::operator() */
     std::size_t SaveParticipantIdHash::operator()(const SaveParticipantId &value) const noexcept {
-        return StableHash(value.Value());
+        return static_cast<std::size_t>(StableHash64(value.Value()));
     }
 }  // namespace Horo::Runtime

@@ -15,6 +15,7 @@
 #include <span>
 #include <string>
 #include <string_view>
+#include <unordered_set>
 #include <utility>
 
 namespace Horo::Runtime {
@@ -28,8 +29,8 @@ namespace Horo::Runtime {
         [[nodiscard]] Result<Bytes> ValidateUuid(Bytes bytes);
         /** @brief Formats canonical lowercase UUID text. */
         [[nodiscard]] std::string FormatUuid(const Bytes &bytes);
-        /** @brief Computes the stable FNV-1a hash of canonical identity bytes. */
-        [[nodiscard]] std::size_t HashUuid(const Bytes &bytes) noexcept;
+        /** @brief Computes the stable 64-bit FNV-1a hash of canonical identity bytes. */
+        [[nodiscard]] std::uint64_t HashUuid(const Bytes &bytes) noexcept;
     }  // namespace SaveIdentityDetail
 
     /**
@@ -84,7 +85,7 @@ namespace Horo::Runtime {
          * @return Stable FNV-1a hash independent of process and standard-library implementation.
          */
         [[nodiscard]] std::size_t operator()(const PersistentSaveIdentity<Tag> &value) const noexcept {
-            return SaveIdentityDetail::HashUuid(value.Bytes());
+            return static_cast<std::size_t>(SaveIdentityDetail::HashUuid(value.Bytes()));
         }
     };
 
@@ -224,19 +225,17 @@ namespace Horo::Runtime {
     }
 
     /** @brief Rejects invalid or duplicate identities before persistence work. @param values Values to validate.
-     * @return Success for a non-empty unique sequence, otherwise a typed identity error.
+     * @return Success for a unique sequence, including an empty sequence; otherwise a typed identity error.
      */
     template <typename Tag>
     [[nodiscard]] Result<void> ValidateUniqueSaveIdentities(const std::span<const PersistentSaveIdentity<Tag>> values) {
-        if (values.empty())
-            return Result<void>::Failure(MakeError(SaveErrors::IdentityInvalid));
-        for (std::size_t index = 0; index < values.size(); ++index) {
-            if (!values[index].IsValid())
+        std::unordered_set<PersistentSaveIdentity<Tag>, PersistentSaveIdentityHash<Tag>> uniqueValues;
+        uniqueValues.reserve(values.size());
+        for (const auto &value : values) {
+            if (!value.IsValid())
                 return Result<void>::Failure(MakeError(SaveErrors::IdentityInvalid));
-            for (std::size_t previous = 0; previous < index; ++previous) {
-                if (values[previous] == values[index])
-                    return Result<void>::Failure(MakeError(SaveErrors::IdentityDuplicate));
-            }
+            if (!uniqueValues.insert(value).second)
+                return Result<void>::Failure(MakeError(SaveErrors::IdentityDuplicate));
         }
         return Result<void>::Success();
     }
