@@ -7,9 +7,9 @@
 #include <algorithm>
 #include <array>
 #include <atomic>
-#include <chrono>
 #include <cmath>
 #include <functional>
+#include <limits>
 #include <new>
 #include <thread>
 #include <utility>
@@ -199,11 +199,14 @@ namespace Horo::Physics {
             return Result<void>::Success();
         }
 
+        /** @brief Reports whether two errors preserve the same stable domain/code identity. */
+        [[nodiscard]] bool SameErrorCode(const Error &left, const Error &right) noexcept {
+            return left.domain.Value() == right.domain.Value() && left.code.Value() == right.code.Value();
+        }
+
         /** @brief Dispatches one validated solver-neutral batch and drains it before the tick may continue. */
         [[nodiscard]] Result<void> RunSolverJobs(JobSystem &jobs, const PhysicsSolverJobBatch &batch) {
             TaskGroup group(jobs, TaskGroupFailurePolicy::FailFast);
-            std::vector<JobId> childIds;
-            childIds.reserve(batch.jobCount);
             for (std::uint32_t index = 0; index < batch.jobCount; ++index) {
                 const PhysicsSolverJob job = batch.jobs[index];
                 const auto spawned = group.Spawn({}, [job](const CancellationToken &cancellation) {
@@ -211,27 +214,39 @@ namespace Horo::Physics {
                 });
                 if (spawned.HasError())
                     return Result<void>::Failure(spawned.ErrorValue());
-                childIds.push_back(spawned.Value());
             }
 
-            const auto now = std::chrono::steady_clock::now();
-            const auto remaining = std::chrono::nanoseconds(batch.joinTimeout.ToNanoseconds());
-            const auto available = std::chrono::steady_clock::time_point::max() - now;
-            const auto deadline = remaining >= available ? std::chrono::steady_clock::time_point::max() : now + remaining;
-            for (;;) {
-                const bool complete = std::ranges::all_of(childIds, [&jobs](const JobId id) {
-                    const JobState state = jobs.Query(id).state;
-                    return state == JobState::Succeeded || state == JobState::Failed || state == JobState::Cancelled;
-                });
-                if (complete)
-                    return group.Join();
-                if (std::chrono::steady_clock::now() >= deadline) {
-                    group.RequestCancel();
-                    static_cast<void>(group.Join());
-                    return Result<void>::Failure(MakeError(PhysicsErrors::SolverDeadlineExceeded));
-                }
-                std::this_thread::yield();
-            }
+            const Result<void> joined = group.Join({.waitPolicy = WaitPolicy::OwnerThreadBlockAllowed, .timeout = batch.joinTimeout});
+            if (joined.HasValue())
+                return joined;
+            group.RequestCancel();
+            const Result<void> drained = group.Join({.waitPolicy = WaitPolicy::OwnerThreadBlockAllowed,
+                                                     .timeout = Duration::FromNanoseconds(std::numeric_limits<std::int64_t>::max())});
+            if (drained.HasError() && SameErrorCode(joined.ErrorValue(), drained.ErrorValue()))
+                return joined;
+            return Result<void>::Failure(MakeError(PhysicsErrors::SolverDeadlineExceeded));
+        }
+
+        /** @brief Checks mutable owner affinity and lifecycle admission for one fixed tick. */
+        [[nodiscard]] Result<void> CheckReadyForTick(const auto &impl) {
+            if (impl.runtime->ownerThread != std::this_thread::get_id())
+                return Result<void>::Failure(MakeError(PhysicsErrors::ThreadAffinityViolation));
+            if (impl.state == PhysicsWorldState::ActiveNull)
+                return Result<void>::Failure(MakeError(PhysicsErrors::CapabilityUnavailable));
+            if (impl.state != PhysicsWorldState::ActiveSolver || impl.stepping)
+                return Result<void>::Failure(MakeError(PhysicsErrors::InvalidState));
+            return Result<void>::Success();
+        }
+
+        /** @brief Checks sequence and exact fixed delta before a tick begins. */
+        [[nodiscard]] Result<void> ValidateTickInput(const auto &impl, const PhysicsFixedTickInput &input) {
+            const auto configuredNanoseconds =
+                static_cast<std::int64_t>(std::llround(impl.settings.Values().world.fixedDeltaSeconds * 1'000'000'000.0));
+            if (input.simulationTick == 0 || input.simulationTick != impl.published.completedTick + 1 ||
+                input.fixedDelta.ToNanoseconds() != configuredNanoseconds)
+                return Result<void>::Failure(MakeError(PhysicsErrors::DescriptorInvalid,
+                                                       "Physics requires the next one-based tick and the world's exact fixed delta."));
+            return Result<void>::Success();
         }
     }  // namespace
 
@@ -409,18 +424,10 @@ namespace Horo::Physics {
     /** @copydoc PhysicsWorld::AdvanceFixedTick */
     Result<void> PhysicsWorld::AdvanceFixedTick(const PhysicsFixedTickInput &input) {
         using enum PhysicsTickPhase;
-        if (impl_->runtime->ownerThread != std::this_thread::get_id())
-            return Result<void>::Failure(MakeError(PhysicsErrors::ThreadAffinityViolation));
-        if (impl_->state == PhysicsWorldState::ActiveNull)
-            return Result<void>::Failure(MakeError(PhysicsErrors::CapabilityUnavailable));
-        if (impl_->state != PhysicsWorldState::ActiveSolver || impl_->stepping)
-            return Result<void>::Failure(MakeError(PhysicsErrors::InvalidState));
-        if (const auto configuredNanoseconds =
-                static_cast<std::int64_t>(std::llround(impl_->settings.Values().world.fixedDeltaSeconds * 1'000'000'000.0));
-            input.simulationTick == 0 || input.simulationTick != impl_->published.completedTick + 1 ||
-            input.fixedDelta.ToNanoseconds() != configuredNanoseconds)
-            return Result<void>::Failure(
-                MakeError(PhysicsErrors::DescriptorInvalid, "Physics requires the next one-based tick and the world's exact fixed delta."));
+        if (const Result<void> ready = CheckReadyForTick(*impl_); ready.HasError())
+            return ready;
+        if (const Result<void> validInput = ValidateTickInput(*impl_, input); validInput.HasError())
+            return validInput;
         if (const Result<void> jobs = ValidateSolverJobs(impl_->runtime->solverJobs, input.solverJobs); jobs.HasError())
             return jobs;
 

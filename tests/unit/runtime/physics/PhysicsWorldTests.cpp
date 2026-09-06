@@ -360,6 +360,47 @@ namespace Horo::Physics {
         jobs.Shutdown(ShutdownPolicy::Cancel);
     }
 
+    TEST_CASE("Physics rejects malformed or unavailable solver job batches before starting a tick", "[physics][tick][jobs]") {
+        constexpr Duration fixedDelta = Duration::FromNanoseconds(16'666'667);
+        {
+            std::unique_ptr<PhysicsRuntime> runtime;
+            auto world = ActiveCanonicalWorld(Test::SmallWorldSettings(), runtime);
+            SolverJobTrace trace;
+            const PhysicsSolverJob solverJob{.context = &trace, .execute = RunSolverJob};
+            const auto unavailable = world->AdvanceFixedTick(
+                {.simulationTick = 1,
+                 .fixedDelta = fixedDelta,
+                 .solverJobs = {.jobs = &solverJob, .jobCount = 1, .joinTimeout = Duration::FromMilliseconds(100)}});
+            REQUIRE(unavailable.HasError());
+            REQUIRE(unavailable.ErrorValue().code.Value() == PhysicsErrors::CapabilityUnavailable.code.Value());
+            REQUIRE(world->State() == PhysicsWorldState::ActiveSolver);
+        }
+
+        JobSystem jobs({.workerCount = 1, .maxQueuedJobs = 1});
+        auto runtime = PhysicsRuntime::Create(PhysicsRuntimeMode::Canonical, &jobs).Value();
+        auto world = runtime->PrepareWorld(Test::SmallWorldSettings()).Value();
+        REQUIRE(world->Activate(PhysicsWorldId::Create(204).Value()).HasValue());
+        const PhysicsSolverJob missingCallback{};
+        const auto oversized = world->AdvanceFixedTick({.simulationTick = 1,
+                                                        .fixedDelta = fixedDelta,
+                                                        .solverJobs = {.jobs = &missingCallback,
+                                                                       .jobCount = MaximumPhysicsSolverJobsPerTick + 1,
+                                                                       .joinTimeout = Duration::FromMilliseconds(100)}});
+        REQUIRE(oversized.HasError());
+        REQUIRE(oversized.ErrorValue().code.Value() == PhysicsErrors::DescriptorInvalid.code.Value());
+        const auto nullCallback = world->AdvanceFixedTick(
+            {.simulationTick = 1,
+             .fixedDelta = fixedDelta,
+             .solverJobs = {.jobs = &missingCallback, .jobCount = 1, .joinTimeout = Duration::FromMilliseconds(100)}});
+        REQUIRE(nullCallback.HasError());
+        REQUIRE(nullCallback.ErrorValue().code.Value() == PhysicsErrors::DescriptorInvalid.code.Value());
+        REQUIRE(world->State() == PhysicsWorldState::ActiveSolver);
+        REQUIRE(world->PublishedTick().publicationRevision == 0);
+        world.reset();
+        runtime.reset();
+        jobs.Shutdown(ShutdownPolicy::Cancel);
+    }
+
     TEST_CASE("Physics rejects foreign-thread world mutation with a typed affinity error", "[physics][tick][threading]") {
         std::unique_ptr<PhysicsRuntime> runtime;
         auto world = ActiveCanonicalWorld(Test::SmallWorldSettings(), runtime);

@@ -199,6 +199,22 @@ namespace {
         jobs.Shutdown(Horo::ShutdownPolicy::Drain);
     }
 
+    TEST_CASE("Owner Thread Blocking Wait Does Not Execute Queued Work Inline", "[unit][foundation][jobs][wait]") {
+        Horo::JobSystem jobs{Horo::JobSystemConfig{.workerCount = 0, .maxQueuedJobs = 1}};
+        std::atomic executed{false};
+        auto submitted = jobs.Submit({}, [&executed](const Horo::CancellationToken &) {
+            executed.store(true);
+        });
+        REQUIRE((submitted.HasValue()));
+
+        const auto timedOut = submitted.Value().Wait(
+            {.waitPolicy = Horo::WaitPolicy::OwnerThreadBlockAllowed, .timeout = Horo::Duration::FromMilliseconds(1)});
+        REQUIRE((timedOut.HasError()));
+        REQUIRE((timedOut.ErrorValue().code.Value() == "job.wait_timed_out"));
+        REQUIRE_FALSE((executed.load()));
+        jobs.Shutdown(Horo::ShutdownPolicy::Cancel);
+    }
+
     TEST_CASE("Bounded Wait Validates Affinity Before Terminal Observation", "[unit][foundation][jobs][wait]") {
         Horo::JobSystem jobs{Horo::JobSystemConfig{.workerCount = 1, .maxQueuedJobs = 2}};
         auto completed = jobs.Submit({}, [](const Horo::CancellationToken &) {
