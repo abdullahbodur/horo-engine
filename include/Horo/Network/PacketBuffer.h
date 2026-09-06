@@ -21,7 +21,11 @@ namespace Horo::Network {
         std::size_t inlineBytes{256};        /**< Bytes classified as the allocation-free small-message path; at most 256. */
     };
 
-    /** @brief Move-only packet bytes whose lease keeps prepared pool state alive. */
+    /**
+     * @brief Move-only packet bytes whose lease keeps prepared pool state alive.
+     * @note Distinct leases may be released on different threads. Concurrent access to the same lease object still requires
+     * external synchronization.
+     */
     class PacketBuffer final {
     public:
         PacketBuffer() = default;
@@ -48,7 +52,10 @@ namespace Horo::Network {
         std::size_t generation_{};
     };
 
-    /** @brief Exclusively admitted fixed pool; leases safely retain state after the pool owner moves or dies. */
+    /**
+     * @brief Fixed pool whose leases safely retain state after the pool owner moves or dies.
+     * @note Acquire, Outstanding, and release of distinct leases synchronize shared pool bookkeeping.
+     */
     class PacketBufferPool final {
     public:
         /** @brief Prepares all slot storage. @return Pool or typed invalid/capacity/allocation failure. */

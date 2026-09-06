@@ -77,14 +77,45 @@ namespace Horo::Network {
         PacketQueue &operator=(const PacketQueue &) = delete;
 
     private:
+        static constexpr std::size_t InvalidIndex = static_cast<std::size_t>(-1);
+
+        enum class AccountingState : std::uint8_t {
+            Empty,
+            Occupied,
+            Tombstone
+        };
+
+        struct ConnectionAccounting final {
+            PacketConnectionId connection;
+            std::size_t packets{};
+            std::size_t bytes{};
+            std::size_t head{InvalidIndex};
+            std::size_t tail{InvalidIndex};
+            AccountingState state{AccountingState::Empty};
+        };
+
         explicit PacketQueue(PacketQueueDescriptor descriptor, std::unique_ptr<std::optional<QueuedPacket>[]> records) noexcept;
         [[nodiscard]] bool Fits(const QueuedPacket &packet) const noexcept;
         [[nodiscard]] bool FitsAfterRemoving(const QueuedPacket &packet, std::size_t removed) const noexcept;
         [[nodiscard]] std::optional<std::size_t> OldestFor(PacketConnectionId connection) const noexcept;
+        [[nodiscard]] std::size_t FindAccounting(PacketConnectionId connection) const noexcept;
+        [[nodiscard]] std::size_t FindOrCreateAccounting(PacketConnectionId connection) noexcept;
+        [[nodiscard]] Result<PacketQueueAdmission> Admit(QueuedPacket packet, PacketQueueAdmission outcome) noexcept;
+        [[nodiscard]] Result<PacketQueueAdmission> HandleOverflow(QueuedPacket packet) noexcept;
+        [[nodiscard]] std::optional<QueuedPacket> Take(std::size_t index) noexcept;
         void Erase(std::size_t index) noexcept;
 
         PacketQueueDescriptor descriptor_;
         std::unique_ptr<std::optional<QueuedPacket>[]> records_;
+        std::unique_ptr<std::size_t[]> next_;
+        std::unique_ptr<std::size_t[]> previous_;
+        std::unique_ptr<std::size_t[]> nextForConnection_;
+        std::unique_ptr<std::size_t[]> previousForConnection_;
+        std::unique_ptr<std::size_t[]> free_;
+        std::unique_ptr<ConnectionAccounting[]> accounting_;
+        std::size_t head_{InvalidIndex};
+        std::size_t tail_{InvalidIndex};
+        std::size_t freeCount_{};
         std::size_t size_{};
         std::size_t bytes_{};
     };

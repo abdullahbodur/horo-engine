@@ -4,6 +4,7 @@
 
 #include <algorithm>
 #include <array>
+#include <atomic>
 #include <new>
 #include <vector>
 
@@ -19,12 +20,36 @@ namespace Horo::Network {
 
         PacketBufferPoolDescriptor descriptor;
         std::vector<Slot> slots;
+        std::vector<std::size_t> freeSlots;
+        std::atomic_flag gate = ATOMIC_FLAG_INIT;
+        std::size_t freeCount{};
         std::size_t outstanding{};
     };
 
     namespace {
         template <typename T> Result<T> Fail(const ErrorCodeDescriptor &code) {
             return Result<T>::Failure(MakeError(code));
+        }
+
+        class StateLock final {
+        public:
+            explicit StateLock(PacketBufferPoolState &state) noexcept : state_(state) {
+                while (state_.gate.test_and_set(std::memory_order_acquire)) {
+                    state_.gate.wait(true, std::memory_order_relaxed);
+                }
+            }
+
+            ~StateLock() {
+                state_.gate.clear(std::memory_order_release);
+                state_.gate.notify_one();
+            }
+
+        private:
+            PacketBufferPoolState &state_;
+        };
+
+        bool IsValidLocked(const PacketBufferPoolState &state, const std::size_t slot, const std::size_t generation) noexcept {
+            return slot < state.slots.size() && state.slots[slot].leased && state.slots[slot].generation == generation;
         }
 
         std::byte *Storage(PacketBufferPoolState::Slot &slot, const PacketBufferPoolDescriptor &descriptor) noexcept {
@@ -60,26 +85,39 @@ namespace Horo::Network {
     }
 
     bool PacketBuffer::IsValid() const noexcept {
-        return state_ && slot_ < state_->slots.size() && state_->slots[slot_].leased && state_->slots[slot_].generation == generation_;
+        if (!state_)
+            return false;
+        const StateLock lock{*state_};
+        return IsValidLocked(*state_, slot_, generation_);
     }
 
     std::span<const std::byte> PacketBuffer::Bytes() const noexcept {
-        if (!IsValid())
+        if (!state_)
+            return {};
+        const StateLock lock{*state_};
+        if (!IsValidLocked(*state_, slot_, generation_))
             return {};
         const auto &slot = state_->slots[slot_];
         return {Storage(slot, state_->descriptor), slot.size};
     }
 
     bool PacketBuffer::UsesInlineStorage() const noexcept {
-        return IsValid() && state_->slots[slot_].size <= state_->descriptor.inlineBytes;
+        if (!state_)
+            return false;
+        const StateLock lock{*state_};
+        return IsValidLocked(*state_, slot_, generation_) && state_->slots[slot_].size <= state_->descriptor.inlineBytes;
     }
 
     void PacketBuffer::Reset() noexcept {
-        if (IsValid()) {
-            auto &slot = state_->slots[slot_];
-            slot.leased = false;
-            slot.size = 0;
-            --state_->outstanding;
+        if (state_) {
+            const StateLock lock{*state_};
+            if (IsValidLocked(*state_, slot_, generation_)) {
+                auto &slot = state_->slots[slot_];
+                slot.leased = false;
+                slot.size = 0;
+                --state_->outstanding;
+                state_->freeSlots[state_->freeCount++] = slot_;
+            }
         }
         state_.reset();
         slot_ = 0;
@@ -93,6 +131,10 @@ namespace Horo::Network {
             auto state = std::make_shared<PacketBufferPoolState>();
             state->descriptor = descriptor;
             state->slots.resize(descriptor.maximumBuffers);
+            state->freeSlots.resize(descriptor.maximumBuffers);
+            state->freeCount = descriptor.maximumBuffers;
+            for (std::size_t index = 0; index < descriptor.maximumBuffers; ++index)
+                state->freeSlots[index] = descriptor.maximumBuffers - index - 1;
             if (descriptor.maximumBytesPerBuffer > descriptor.inlineBytes) {
                 for (auto &slot : state->slots)
                     slot.overflowStorage = std::make_unique_for_overwrite<std::byte[]>(descriptor.maximumBytesPerBuffer);
@@ -106,24 +148,26 @@ namespace Horo::Network {
     Result<PacketBuffer> PacketBufferPool::Acquire(const std::span<const std::byte> bytes) {
         if (!state_ || bytes.size() > state_->descriptor.maximumBytesPerBuffer)
             return Fail<PacketBuffer>(NetworkErrors::PacketBufferCapacityExceeded);
-        const auto found = std::ranges::find_if(state_->slots, [](const auto &slot) {
-            return !slot.leased;
-        });
-        if (found == state_->slots.end())
+        const StateLock lock{*state_};
+        if (state_->freeCount == 0)
             return Fail<PacketBuffer>(NetworkErrors::PacketBufferPoolExhausted);
-        found->size = bytes.size();
+        const auto slotIndex = state_->freeSlots[--state_->freeCount];
+        auto &slot = state_->slots[slotIndex];
+        slot.size = bytes.size();
         if (!bytes.empty())
-            std::ranges::copy(bytes, Storage(*found, state_->descriptor));
-        ++found->generation;
-        if (found->generation == 0)
-            ++found->generation;
-        found->leased = true;
+            std::ranges::copy(bytes, Storage(slot, state_->descriptor));
+        ++slot.generation;
+        if (slot.generation == 0)
+            ++slot.generation;
+        slot.leased = true;
         ++state_->outstanding;
-        return Result<PacketBuffer>::Success(
-            PacketBuffer{state_, static_cast<std::size_t>(found - state_->slots.begin()), found->generation});
+        return Result<PacketBuffer>::Success(PacketBuffer{state_, slotIndex, slot.generation});
     }
 
     std::size_t PacketBufferPool::Outstanding() const noexcept {
-        return state_ ? state_->outstanding : 0;
+        if (!state_)
+            return 0;
+        const StateLock lock{*state_};
+        return state_->outstanding;
     }
 }  // namespace Horo::Network

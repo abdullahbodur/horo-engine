@@ -6,6 +6,7 @@
 #include <catch2/catch_test_macros.hpp>
 #include <cstddef>
 #include <limits>
+#include <thread>
 #include <vector>
 
 namespace Horo::Network {
@@ -54,6 +55,22 @@ namespace Horo::Network {
         }
         REQUIRE(retained.Bytes().size() == small.size());
         retained.Reset();
+    }
+
+    TEST_CASE("Packet buffer pool synchronizes distinct lease release and reuses its prepared free list", "[unit][network][packet]") {
+        auto pool = PacketBufferPool::Create({2, 4, 4}).Value();
+        auto first = std::move(pool.Acquire(std::array<std::byte, 1>{})).Value();
+        auto second = std::move(pool.Acquire(std::array<std::byte, 1>{})).Value();
+        std::thread firstRelease{[lease = std::move(first)]() mutable {
+            lease.Reset();
+        }};
+        std::thread secondRelease{[lease = std::move(second)]() mutable {
+            lease.Reset();
+        }};
+        firstRelease.join();
+        secondRelease.join();
+        REQUIRE(pool.Outstanding() == 0);
+        REQUIRE(pool.Acquire(std::array<std::byte, 4>{}).HasValue());
     }
 
     TEST_CASE("Packet queue rejects capacity and returns ownership exactly once", "[unit][network][packet]") {
@@ -106,5 +123,21 @@ namespace Horo::Network {
         REQUIRE(pool.Outstanding() == 0);
         RequireError(queue.Enqueue(MakePacket(pool, 1, 1), TransportAdmissionState::ShuttingDown), NetworkErrors::TransportShuttingDown);
         REQUIRE(pool.Outstanding() == 0);
+    }
+
+    TEST_CASE("Packet queue enforces per-connection packet and byte limits independently", "[unit][network][packet]") {
+        auto pool = PacketBufferPool::Create({5, 8, 4}).Value();
+        auto countQueue = PacketQueue::Create({4, 16, 1, 8, PacketQueueOverflowPolicy::RejectIncoming}).Value();
+        REQUIRE(countQueue.Enqueue(MakePacket(pool, 1, 4)).HasValue());
+        REQUIRE(countQueue.Enqueue(MakePacket(pool, 2, 4)).HasValue());
+        RequireError(countQueue.Enqueue(MakePacket(pool, 1, 1)), NetworkErrors::PacketQueueFull);
+        REQUIRE(countQueue.Size() == 2);
+        countQueue.Drain();
+
+        auto byteQueue = PacketQueue::Create({4, 16, 3, 4, PacketQueueOverflowPolicy::RejectIncoming}).Value();
+        REQUIRE(byteQueue.Enqueue(MakePacket(pool, 1, 3)).HasValue());
+        REQUIRE(byteQueue.Enqueue(MakePacket(pool, 2, 3)).HasValue());
+        RequireError(byteQueue.Enqueue(MakePacket(pool, 1, 2)), NetworkErrors::PacketQueueFull);
+        REQUIRE(byteQueue.Bytes() == 6);
     }
 }  // namespace Horo::Network
