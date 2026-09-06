@@ -107,4 +107,45 @@ namespace Horo::Navigation {
     std::span<const NavigationCoverageDependency> NavigationCoverageEvidence::Missing() const noexcept {
         return std::span{missing_}.first(missingCount_);
     }
+
+    /** @copydoc NavigationNoPath::Create */
+    Result<NavigationNoPath> NavigationNoPath::Create(NavigationOutcomeProvenance provenance, NavigationCoverageEvidence coverage) {
+        if (!ValidateNavigationOutcomeProvenance(provenance) || !coverage.IsComplete())
+            return Result<NavigationNoPath>::Failure(MakeError(NavigationErrors::OutcomeDescriptorInvalid));
+        return Result<NavigationNoPath>::Success(NavigationNoPath{std::move(provenance), std::move(coverage)});
+    }
+
+    NavigationNoPath::NavigationNoPath(NavigationOutcomeProvenance provenance, NavigationCoverageEvidence coverage)
+        : provenance_(std::move(provenance)), coverage_(std::move(coverage)) {}
+
+    /** @copydoc NavigationNoPath::Provenance */
+    const NavigationOutcomeProvenance &NavigationNoPath::Provenance() const noexcept {
+        return provenance_;
+    }
+
+    /** @copydoc NavigationNoPath::Coverage */
+    const NavigationCoverageEvidence &NavigationNoPath::Coverage() const noexcept {
+        return coverage_;
+    }
+
+    /** @copydoc NavigationStale::Create */
+    Result<NavigationStale> NavigationStale::Create(const NavigationGeneration expectedTopology,
+                                                    const NavigationGeneration observedTopology) {
+        if (!expectedTopology.IsValid() || !observedTopology.IsValid() || expectedTopology == observedTopology)
+            return Result<NavigationStale>::Failure(MakeError(NavigationErrors::OutcomeDescriptorInvalid));
+        return Result<NavigationStale>::Success(NavigationStale{expectedTopology, observedTopology});
+    }
+
+    NavigationStale::NavigationStale(const NavigationGeneration expectedTopology, const NavigationGeneration observedTopology) noexcept
+        : expectedTopology_(expectedTopology), observedTopology_(observedTopology) {}
+
+    /** @copydoc NavigationStale::ExpectedTopology */
+    NavigationGeneration NavigationStale::ExpectedTopology() const noexcept {
+        return expectedTopology_;
+    }
+
+    /** @copydoc NavigationStale::ObservedTopology */
+    NavigationGeneration NavigationStale::ObservedTopology() const noexcept {
+        return observedTopology_;
+    }
 }  // namespace Horo::Navigation
