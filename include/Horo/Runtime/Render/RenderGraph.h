@@ -305,6 +305,9 @@ namespace Horo::Render {
 
         [[nodiscard]] Result<void> Reserve();
         [[nodiscard]] Result<void> ValidateOpenOnOwnerThread() const;
+        [[nodiscard]] Result<void> ValidateUsageReferences(const RenderGraphResourceUsage &usage) const;
+        [[nodiscard]] Result<void> ValidateUsageSemantics(const RenderGraphResourceUsage &usage) const;
+        [[nodiscard]] Result<void> ValidateDependencyReferences(const RenderGraphDependency &dependency) const;
         [[nodiscard]] const RenderGraphPass *FindPass(RenderGraphPassRef reference) const noexcept;
         [[nodiscard]] const RenderGraphResource *FindResource(RenderGraphResourceId id) const noexcept;
 

@@ -294,30 +294,13 @@ namespace Horo::Render {
         if (usages_.size() == limits_.maxUsages) {
             return Result<void>::Failure(MakeError(RenderGraphErrors::CapacityExceeded, "Graph-resource usage capacity is full."));
         }
-        if (!usage.pass.IsValid()) {
-            return Result<void>::Failure(MakeError(RenderGraphErrors::InvalidPass));
+        const Result<void> references = ValidateUsageReferences(usage);
+        if (references.HasError()) {
+            return references;
         }
-        if (!usage.resource.IsValid()) {
-            return Result<void>::Failure(MakeError(RenderGraphErrors::InvalidResource));
-        }
-        if (usage.pass.owner != owner_ || usage.resource.owner != owner_) {
-            return Result<void>::Failure(MakeError(RenderGraphErrors::WrongOwner));
-        }
-
-        const RenderGraphPass *pass = FindPass(usage.pass);
-        const RenderGraphResource *resource = FindResource(usage.resource);
-        if (pass == nullptr) {
-            return Result<void>::Failure(MakeError(RenderGraphErrors::InvalidPass));
-        }
-        if (resource == nullptr) {
-            return Result<void>::Failure(MakeError(RenderGraphErrors::InvalidResource));
-        }
-        if (!IsKnown(usage.access) || !IsKnown(usage.kind)) {
-            return Result<void>::Failure(MakeError(RenderGraphErrors::UnsupportedUsage));
-        }
-        if (!IsAccessCompatible(usage.access, usage.kind) || !IsPassCompatible(pass->kind, usage.kind) ||
-            !IsResourceCompatible(resource->kind, usage.kind)) {
-            return Result<void>::Failure(MakeError(RenderGraphErrors::InvalidUsage));
+        const Result<void> semantics = ValidateUsageSemantics(usage);
+        if (semantics.HasError()) {
+            return semantics;
         }
 
         usages_.push_back(usage);
@@ -333,17 +316,12 @@ namespace Horo::Render {
         if (dependencies_.size() == limits_.maxDependencies) {
             return Result<void>::Failure(MakeError(RenderGraphErrors::CapacityExceeded, "Render dependency capacity is full."));
         }
-        if (!dependency.before.IsValid() || !dependency.after.IsValid() || dependency.before == dependency.after) {
-            return Result<void>::Failure(MakeError(RenderGraphErrors::InvalidDependency));
-        }
-        if (dependency.before.owner != owner_ || dependency.after.owner != owner_) {
-            return Result<void>::Failure(MakeError(RenderGraphErrors::WrongOwner));
+        const Result<void> references = ValidateDependencyReferences(dependency);
+        if (references.HasError()) {
+            return references;
         }
         if (!IsKnown(dependency.kind)) {
             return Result<void>::Failure(MakeError(RenderGraphErrors::UnsupportedDependencyKind));
-        }
-        if (FindPass(dependency.before) == nullptr || FindPass(dependency.after) == nullptr) {
-            return Result<void>::Failure(MakeError(RenderGraphErrors::InvalidDependency));
         }
 
         dependencies_.push_back(dependency);
@@ -417,6 +395,55 @@ namespace Horo::Render {
         }
         if (state_ != RenderGraphBuilderState::Open) {
             return Result<void>::Failure(MakeError(RenderGraphErrors::BuilderClosed));
+        }
+        return Result<void>::Success();
+    }
+
+    /** @copydoc RenderGraphBuilder::ValidateUsageReferences */
+    Result<void> RenderGraphBuilder::ValidateUsageReferences(const RenderGraphResourceUsage &usage) const {
+        if (!usage.pass.IsValid()) {
+            return Result<void>::Failure(MakeError(RenderGraphErrors::InvalidPass));
+        }
+        if (!usage.resource.IsValid()) {
+            return Result<void>::Failure(MakeError(RenderGraphErrors::InvalidResource));
+        }
+        if (usage.pass.owner != owner_ || usage.resource.owner != owner_) {
+            return Result<void>::Failure(MakeError(RenderGraphErrors::WrongOwner));
+        }
+        if (FindPass(usage.pass) == nullptr) {
+            return Result<void>::Failure(MakeError(RenderGraphErrors::InvalidPass));
+        }
+        if (FindResource(usage.resource) == nullptr) {
+            return Result<void>::Failure(MakeError(RenderGraphErrors::InvalidResource));
+        }
+        return Result<void>::Success();
+    }
+
+    /** @copydoc RenderGraphBuilder::ValidateUsageSemantics */
+    Result<void> RenderGraphBuilder::ValidateUsageSemantics(const RenderGraphResourceUsage &usage) const {
+        if (!IsKnown(usage.access) || !IsKnown(usage.kind)) {
+            return Result<void>::Failure(MakeError(RenderGraphErrors::UnsupportedUsage));
+        }
+
+        const RenderGraphPass &pass = *FindPass(usage.pass);
+        const RenderGraphResource &resource = *FindResource(usage.resource);
+        if (!IsAccessCompatible(usage.access, usage.kind) || !IsPassCompatible(pass.kind, usage.kind) ||
+            !IsResourceCompatible(resource.kind, usage.kind)) {
+            return Result<void>::Failure(MakeError(RenderGraphErrors::InvalidUsage));
+        }
+        return Result<void>::Success();
+    }
+
+    /** @copydoc RenderGraphBuilder::ValidateDependencyReferences */
+    Result<void> RenderGraphBuilder::ValidateDependencyReferences(const RenderGraphDependency &dependency) const {
+        if (!dependency.before.IsValid() || !dependency.after.IsValid() || dependency.before == dependency.after) {
+            return Result<void>::Failure(MakeError(RenderGraphErrors::InvalidDependency));
+        }
+        if (dependency.before.owner != owner_ || dependency.after.owner != owner_) {
+            return Result<void>::Failure(MakeError(RenderGraphErrors::WrongOwner));
+        }
+        if (FindPass(dependency.before) == nullptr || FindPass(dependency.after) == nullptr) {
+            return Result<void>::Failure(MakeError(RenderGraphErrors::InvalidDependency));
         }
         return Result<void>::Success();
     }
