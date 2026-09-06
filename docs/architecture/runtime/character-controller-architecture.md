@@ -129,18 +129,13 @@ cannot restore a standalone Character blob or a network-specific field subset.
 
 ## Character Controller Component
 
-```cpp
-struct CharacterControllerDescriptor {
-    float radius;
-    float height;
-    float stepOffset;
-    float slopeLimitDegrees;
-    float skinWidth;
-    float minMoveDistance;
-    Vec3 gravity;
-    PhysicsMaterialId defaultMaterial;
-};
-```
+`Horo::Character::CharacterControllerDescriptor` is the exact inert live creation
+contract. It binds typed capsule geometry, root/up/gravity, canonical collision
+profile/query-channel filtering, fallback material and a fixed contact budget to one
+scene, Character-world and Physics-world generation. Pure validation proves
+representation and owner-generation consistency without allocating a controller or
+proving registry liveness; the CHR-001.3 world manager owns slot admission and stale
+generation checks.
 
 The component attaches to a scene object. While active, `CharacterWorld` owns the
 authoritative collision-root position, capsule up basis and heading. Scene Transform
@@ -222,15 +217,9 @@ capsule, accumulate root motion or become a resume-time catch-up displacement.
 
 ### Input
 
-```cpp
-struct MovementRequest {
-    SimulationTick tick;
-    Vec3 desiredVelocity;       // world-space, meters/second
-    Quat desiredOrientation;
-    bool jumpRequested;
-    bool crouchRequested;
-};
-```
+`Horo::Character::CharacterMovementRequest` owns an exact tick and producer
+sequence, generation-checked controller identity, explicit optional desired velocity
+and heading, jump intent and typed stance intent. It contains no caller delta time.
 
 The controller consumes `FixedStepContext::fixedDelta`; callers cannot provide a
 different delta. Desired translation/facing use explicit presence and root-motion
@@ -238,29 +227,12 @@ composition modes, not zero-vector/epsilon inference.
 
 ### Output
 
-```cpp
-struct SurfaceContact {
-    Vec3 point;                  // contact point in world space
-    Vec3 normal;                 // surface normal at contact
-    SurfaceMaterialId material;  // resolved surface material (default fallback applied)
-    PhysicsBodyId body;          // optional; invalid if hit static world
-    float penetrationDepth;      // signed depth; negative for separation
-};
-
-struct MovementResult {
-    Vec3 finalPosition;
-    Quat finalOrientation;
-    bool isGrounded;
-    float groundSlopeDegrees;
-    SurfaceMaterialId groundSurface;  // never invalid; falls back to defaultMaterial
-    Vec3 groundNormal;
-    bool hitCeiling;
-    BoundedContactView contacts;
-};
-```
-
-The view borrows one immutable tick-result generation owned by `CharacterWorld`.
-Steady fixed ticks do not allocate a result vector.
+`Horo::Character::CharacterMovementResult` owns fixed-capacity ordered contacts,
+typed collision flags, achieved motion and optional grounded-surface evidence for
+one committed tick. Its active contact prefix is bounded by the descriptor and the
+absolute inline ceiling; truncation is explicit and no result path allocates a
+contact vector. Later world publication may expose immutable borrowed generations,
+but it cannot change this payload's validation semantics.
 
 ### Collision Pass
 

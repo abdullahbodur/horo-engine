@@ -340,6 +340,8 @@ target_compile_features(HoroAudioCommands PUBLIC cxx_std_20)
 target_link_libraries(HoroAudioCommands PUBLIC HoroEngine::AudioMemory)
 
 add_library(HoroPhysics STATIC
+        physics/CharacterControllerContracts.cpp
+        physics/CharacterErrors.cpp
         physics/PhysicsBodyDescriptor.cpp
         physics/PhysicsCapabilities.cpp
         physics/PhysicsConstraintDescriptor.cpp
