@@ -124,6 +124,33 @@ namespace Horo {
                                                   .remediationHint = "Spawn child work before cancelling or joining the task group.",
                                                   .retryable = false,
                                                   .userActionable = false};
+
+        const ErrorCodeDescriptor WaitForbidden{.domain = JobDomain,
+                                                .code = ErrorCode{"job.wait_forbidden"},
+                                                .defaultSeverity = ErrorSeverity::Error,
+                                                .summary = "The calling thread is not permitted to wait for this job.",
+                                                .remediationHint =
+                                                    "Use an allowed executor or select an explicit bounded owner-thread policy.",
+                                                .retryable = false,
+                                                .userActionable = false};
+
+        const ErrorCodeDescriptor WaitTimedOut{.domain = JobDomain,
+                                               .code = ErrorCode{"job.wait_timed_out"},
+                                               .defaultSeverity = ErrorSeverity::Error,
+                                               .summary = "The bounded job wait reached its deadline.",
+                                               .remediationHint =
+                                                   "Cancel the owning operation or retry only while its captured state remains alive.",
+                                               .retryable = true,
+                                               .userActionable = false};
+
+        const ErrorCodeDescriptor WaitCapacityDeadlock{.domain = JobDomain,
+                                                       .code = ErrorCode{"job.wait_capacity_deadlock"},
+                                                       .defaultSeverity = ErrorSeverity::Error,
+                                                       .summary = "The requested wait would create a scheduler capacity deadlock.",
+                                                       .remediationHint =
+                                                           "Restructure the dependency so a job never waits on its active execution chain.",
+                                                       .retryable = false,
+                                                       .userActionable = false};
     }  // namespace JobErrors
 
     namespace HashingErrors {

@@ -2,12 +2,14 @@
 
 #include "Horo/Foundation/CancellationToken.h"
 #include "Horo/Foundation/Result.h"
+#include "Horo/Foundation/Time.h"
 
 #include <cstddef>
 #include <cstdint>
 #include <functional>
 #include <memory>
 #include <optional>
+#include <vector>
 
 namespace Horo {
     using JobId = std::uint64_t;
@@ -48,6 +50,19 @@ namespace Horo {
         Cancel,
     };
 
+    /** @brief Selects the caller-affinity rule for one bounded wait. */
+    enum class WaitPolicy : std::uint8_t {
+        WorkerOnly,
+        MainThreadPumpAllowed,
+        ForbiddenOnOwnerThread,
+    };
+
+    /** @brief Explicit finite policy for a bounded job wait. */
+    struct JoinOptions {
+        WaitPolicy waitPolicy{WaitPolicy::WorkerOnly}; /**< Caller-affinity rule checked before observing completion. */
+        Duration timeout{};                            /**< Maximum duration of this wait. */
+    };
+
     struct JobRecord;
 
     /** @brief Move-only reference to a durable accepted job record. */
@@ -61,11 +76,20 @@ namespace Horo {
 
         /** @brief Waits until the job reaches its single terminal state. */
         [[nodiscard]] Result<void> Wait() const;
+        /**
+         * @brief Waits under a finite affinity policy, optionally helping only this exact queued record.
+         * @param options Caller-affinity rule and maximum wait duration. `MainThreadPumpAllowed` and `WorkerOnly` may claim
+         * this record for inline execution; unrelated queued jobs are never pumped.
+         * @return Terminal job result, or a typed forbidden, deadlock-risk or timeout error. Policy validation occurs even
+         * if the job is already terminal. A timeout does not change the job lifecycle, so the handle remains safely retryable.
+         */
+        [[nodiscard]] Result<void> Wait(const JoinOptions &options) const;
         /** @brief Returns the stable identifier assigned at successful submission. */
         [[nodiscard]] JobId Id() const noexcept;
 
     private:
         friend class JobSystem;
+        friend class TaskGroup;
 
         explicit JobHandle(std::shared_ptr<JobRecord> record) : m_record(std::move(record)) {}
 
@@ -144,10 +168,25 @@ namespace Horo {
          * @return Success or the first child error in deterministic spawn order. Repeated calls return the same result.
          */
         [[nodiscard]] Result<void> Join() const;
+        /**
+         * @brief Closes admission and joins every accepted child under one finite deadline.
+         * @param options Caller-affinity rule and maximum duration shared by the complete join.
+         * @return Success, the first child error in spawn order, or a typed wait-control error. A wait-control error
+         * leaves the closed group retryable so its owner can cancel and drain it safely.
+         */
+        [[nodiscard]] Result<void> Join(const JoinOptions &options) const;
 
     private:
         struct State;
+
+        struct ChildJoinOutcome {
+            std::optional<Error> firstError;
+            std::optional<Error> interruption;
+        };
+
         static void CancelChildren(const std::shared_ptr<State> &state);
+        static ChildJoinOutcome WaitForChildren(const std::vector<std::shared_ptr<JobRecord>> &children, const JoinOptions *options);
+        [[nodiscard]] Result<void> JoinImpl(const JoinOptions *options) const;
         std::shared_ptr<State> m_state;
     };
 }  // namespace Horo
