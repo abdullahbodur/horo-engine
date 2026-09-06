@@ -165,7 +165,10 @@ namespace Horo {
         }
 
         [[nodiscard]] Result<void> TerminalResult(const JobRecord &record) {
-            return record.state == JobState::Succeeded ? Result<void>::Success() : Result<void>::Failure(*record.error);
+            return record.state == JobState::Succeeded
+                       ? Result<void>::Success()
+                       : Result<void>::Failure(record.error.value_or(
+                             MakeJobError(JobErrors::Failed, "Terminal job state did not retain its required error payload.")));
         }
 
         [[nodiscard]] std::chrono::steady_clock::time_point WaitDeadline(const Duration timeout) noexcept {
@@ -184,7 +187,7 @@ namespace Horo {
                 ExecuteJobRecord(record);
 
             std::unique_lock lock(record->Mutex());
-            if (!record->completed.wait_until(lock, deadline, [&record] {
+            if (!record->completed.wait_until(lock, deadline, [record] {
                 return IsTerminal(record->state);
             }))
                 return Result<void>::Failure(MakeJobError(JobErrors::WaitTimedOut, "The job did not complete before its wait deadline."));
