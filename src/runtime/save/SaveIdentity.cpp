@@ -52,10 +52,11 @@ namespace Horo::Runtime {
                 return Result<Bytes>::Failure(MakeError(SaveErrors::IdentityMalformed));
 
             std::array<char, 32> compactText{};
-            const auto compactEnd = std::ranges::copy_if(text, compactText.begin(), [](const char character) {
+            if (const auto compactEnd = std::ranges::copy_if(text, compactText.begin(),
+                                                             [](const char character) {
                 return character != '-';
             }).out;
-            if (compactEnd != compactText.end())
+                compactEnd != compactText.end())
                 return Result<Bytes>::Failure(MakeError(SaveErrors::IdentityMalformed));
 
             Bytes bytes{};
@@ -106,8 +107,8 @@ namespace Horo::Runtime {
         std::size_t segmentBegin{};
         while (segmentBegin <= value.size()) {
             const std::size_t segmentEnd = value.find('.', segmentBegin);
-            const std::string_view segment = value.substr(segmentBegin, segmentEnd - segmentBegin);
-            if (!IsCanonicalParticipantSegment(segment))
+            if (const std::string_view segment = value.substr(segmentBegin, segmentEnd - segmentBegin);
+                !IsCanonicalParticipantSegment(segment))
                 return Result<SaveParticipantId>::Failure(MakeError(SaveErrors::ParticipantIdInvalid));
             if (segmentEnd == std::string_view::npos)
                 break;
