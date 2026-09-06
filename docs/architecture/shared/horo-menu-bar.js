@@ -15,11 +15,11 @@
   const assetUrl = (path) => new URL(path, repositoryRoot).href;
 
   function modal(title, path, label) {
-    return `<div class="menu-leaf" role="button" tabindex="0" data-modal-title="${title}" data-modal-path="${path}">${label} opens modal</div>`;
+    return `<div class="menu-leaf" role="button" tabindex="0" aria-label="Open ${label}" data-modal-title="${title}" data-modal-path="${path}">${label}</div>`;
   }
 
   function screen(path, label) {
-    return `<a class="menu-leaf" href="../${path}">${label} opens screen</a>`;
+    return `<a class="menu-leaf" href="../${path}" aria-label="Open ${label}">${label}</a>`;
   }
 
   function submenu(label, content) {
@@ -75,7 +75,7 @@
     [data-horo-menu-bar] .submenu {
       position: relative;
       display: block !important;
-      min-width: 236px;
+      min-width: 224px;
       padding: 0 !important;
       margin: 0;
       background: transparent !important;
@@ -86,45 +86,49 @@
       align-items: center;
       justify-content: space-between;
       gap: 18px;
-      padding: 6px 14px;
+      min-height: 30px;
+      padding: 0 10px;
       color: var(--horo-txt, var(--txt, #e8e4d9));
       white-space: nowrap;
-      font: 12px var(--horo-mono, var(--mono, monospace));
+      font: 12px var(--horo-ui, Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif);
       cursor: default;
     }
     [data-horo-menu-bar] .submenu:hover > .submenu-trigger,
-    [data-horo-menu-bar] .submenu.active > .submenu-trigger { background: var(--horo-hover, var(--hover, #252d39)); }
-    [data-horo-menu-bar] .submenu-arrow { color: var(--horo-dim, var(--dim, #6f6a61)); }
+    [data-horo-menu-bar] .submenu.active > .submenu-trigger { background: #202a34; border-radius: 3px; }
+    [data-horo-menu-bar] .submenu-arrow { color: #7d8791; font-size: 15px; }
     [data-horo-menu-bar] .dropdown .submenu > .submenu-menu {
       display: none !important;
       position: absolute;
       top: 0;
-      left: calc(100% - 2px);
+      left: calc(100% + 4px);
       z-index: 120;
-      min-width: 244px;
-      padding: 5px 0 !important;
+      min-width: 236px;
+      padding: 4px !important;
       border: 1px solid var(--horo-bd2, var(--bd2, #3a4656));
       border-radius: var(--horo-radius, var(--r, 4px));
-      background: var(--horo-bg2, var(--bg2, #181c21)) !important;
-      box-shadow: 0 14px 32px rgba(0,0,0,.48);
+      background: #11171e !important;
+      box-shadow: 0 16px 38px rgba(0,0,0,.55), 0 2px 8px rgba(0,0,0,.32);
     }
     [data-horo-menu-bar] .dropdown .submenu > .submenu-menu:hover {
-      background: var(--horo-bg2, var(--bg2, #181c21)) !important;
+      background: #11171e !important;
     }
     [data-horo-menu-bar] .dropdown .submenu.active > .submenu-menu { display: block !important; }
     [data-horo-menu-bar] .submenu-menu > .menu-leaf {
-      display: block !important;
-      padding: 6px 14px;
+      display: flex !important;
+      align-items: center;
+      min-height: 30px;
+      padding: 0 10px;
       background: transparent !important;
       color: var(--horo-txt, var(--txt, #e8e4d9));
       text-decoration: none;
       white-space: nowrap;
-      font: 12px var(--horo-mono, var(--mono, monospace));
+      font: 12px var(--horo-ui, Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif);
     }
     [data-horo-menu-bar] .submenu-menu > .menu-leaf:hover,
     [data-horo-menu-bar] .submenu-menu > .menu-leaf:focus {
-      background: var(--horo-hover, var(--hover, #252d39)) !important;
-      color: var(--horo-txt, var(--txt, #e8e4d9));
+      background: #202a34 !important;
+      color: #eef1f3;
+      border-radius: 3px;
       outline: none;
     }
   `;

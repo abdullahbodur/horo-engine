@@ -199,6 +199,7 @@
   }
 
   function addLocaleSelector() {
+    if (document.body?.dataset.localeControl === 'hidden') return;
     const statusRight = document.querySelector('.status-right');
     if (!statusRight || document.getElementById('horo-web-locale')) return;
     const select = document.createElement('select');
