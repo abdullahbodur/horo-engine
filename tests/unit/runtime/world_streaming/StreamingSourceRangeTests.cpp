@@ -3,6 +3,7 @@
 #include "WorldStreamingTestUtils.h"
 
 #include <catch2/catch_test_macros.hpp>
+#include <compare>
 #include <limits>
 
 namespace Horo::WorldStreaming {
@@ -83,7 +84,7 @@ namespace Horo::WorldStreaming {
             auto sameLogicalPath = path;
             sameLogicalPath.points.back() = Point(99, 88, 77);
             REQUIRE(path == sameLogicalPath);
-            REQUIRE((path <=> sameLogicalPath) == 0);
+            REQUIRE((path <=> sameLogicalPath) == std::strong_ordering::equal);
 
             sameLogicalPath.points[1] = Point(1'501, 500, 500);
             REQUIRE(path != sameLogicalPath);
