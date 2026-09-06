@@ -144,6 +144,8 @@ target_link_libraries(HoroRuntime PUBLIC HoroEngine::Foundation PRIVATE nlohmann
 add_library(HoroNetworkApi STATIC
         runtime/networking/api/MessageCodecRegistry.cpp
         runtime/networking/api/NetworkErrors.cpp
+        runtime/networking/api/PacketBuffer.cpp
+        runtime/networking/api/PacketQueue.cpp
         runtime/networking/api/ProtocolIdentityRegistry.cpp
         runtime/networking/api/ReplicationDescriptor.cpp
         runtime/networking/api/ReplicationDescriptorRegistry.cpp

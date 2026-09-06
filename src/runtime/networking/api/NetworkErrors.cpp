@@ -5,6 +5,49 @@ namespace Horo::Network::NetworkErrors {
         const ErrorDomainId NetworkDomain{"horo.network"};
     }
 
+    const ErrorCodeDescriptor PacketBufferInvalid{NetworkDomain,
+                                                  ErrorCode{"network.packet.buffer_invalid"},
+                                                  ErrorSeverity::Error,
+                                                  "Packet buffer pool bounds are invalid.",
+                                                  "Use positive finite slot and byte bounds.",
+                                                  false,
+                                                  true};
+    const ErrorCodeDescriptor PacketBufferCapacityExceeded{NetworkDomain,
+                                                           ErrorCode{"network.packet.buffer_capacity_exceeded"},
+                                                           ErrorSeverity::Error,
+                                                           "Packet buffer capacity was exceeded.",
+                                                           "Reduce the payload or prepare a larger bounded pool.",
+                                                           false,
+                                                           true};
+    const ErrorCodeDescriptor PacketBufferPoolExhausted{NetworkDomain,
+                                                        ErrorCode{"network.packet.buffer_pool_exhausted"},
+                                                        ErrorSeverity::Error,
+                                                        "No prepared packet buffer slot is available.",
+                                                        "Release a lease or apply explicit queue backpressure.",
+                                                        true,
+                                                        false};
+    const ErrorCodeDescriptor PacketQueueInvalid{NetworkDomain,
+                                                 ErrorCode{"network.packet.queue_invalid"},
+                                                 ErrorSeverity::Error,
+                                                 "Packet queue input or bounds are invalid.",
+                                                 "Use valid identities and positive finite bounds.",
+                                                 false,
+                                                 true};
+    const ErrorCodeDescriptor PacketQueueCapacityExceeded{NetworkDomain,
+                                                          ErrorCode{"network.packet.queue_capacity_exceeded"},
+                                                          ErrorSeverity::Error,
+                                                          "A packet can never fit the queue's declared byte bounds.",
+                                                          "Reduce the packet or explicitly revise queue bounds.",
+                                                          false,
+                                                          true};
+    const ErrorCodeDescriptor PacketQueueFull{NetworkDomain,
+                                              ErrorCode{"network.packet.queue_full"},
+                                              ErrorSeverity::Error,
+                                              "The bounded packet queue rejected admission.",
+                                              "Apply the queue's explicit overload policy or retry after bounded drain.",
+                                              true,
+                                              false};
+
     const ErrorCodeDescriptor IdentityInvalid{
         .domain = NetworkDomain,
         .code = ErrorCode{"network.identity.invalid"},
