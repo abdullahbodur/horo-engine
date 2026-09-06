@@ -67,6 +67,25 @@ namespace Horo::Navigation {
                    requested.maximumResultPoints <= available.maximumResultPoints &&
                    requested.maximumSearchDistanceMeters <= available.maximumSearchDistanceMeters;
         }
+
+        /** @brief Validates only descriptor-shaped admission inputs before revision or support checks. */
+        Result<void> ValidateAdmissionDescriptors(const NavigationProviderCapabilities &capabilities, const std::uint64_t expectedRevision,
+                                                  const NavigationQueryRequirement &requirement) {
+            if (!ValidateNavigationProviderCapabilities(capabilities) || expectedRevision == 0 ||
+                !IsKnown(requirement.query, NavigationQueryKind::Count) || !IsKnown(requirement.quality, NavigationQualityLevel::Count) ||
+                !ValidateLimits(requirement.limits))
+                return Result<void>::Failure(MakeError(NavigationErrors::CapabilityDescriptorInvalid));
+            return Result<void>::Success();
+        }
+
+        /** @brief Maps exact support evidence to pre-dispatch admission without queue mutation. */
+        Result<void> AdmitSupport(const NavigationSupport support) {
+            if (support == NavigationSupport::Unsupported)
+                return Result<void>::Failure(MakeError(NavigationErrors::OperationUnsupported));
+            if (support != NavigationSupport::Available)
+                return Result<void>::Failure(MakeError(NavigationErrors::CapabilityUnavailable));
+            return Result<void>::Success();
+        }
     }  // namespace
 
     /** @copydoc ValidateNavigationProviderCapabilities */
@@ -110,20 +129,17 @@ namespace Horo::Navigation {
     /** @copydoc AdmitNavigationQuery */
     Result<void> AdmitNavigationQuery(const NavigationProviderCapabilities &capabilities, const std::uint64_t expectedRevision,
                                       const NavigationQueryRequirement &requirement) {
-        if (!ValidateNavigationProviderCapabilities(capabilities) || expectedRevision == 0 ||
-            !IsKnown(requirement.query, NavigationQueryKind::Count) || !IsKnown(requirement.quality, NavigationQualityLevel::Count) ||
-            !ValidateLimits(requirement.limits))
-            return Result<void>::Failure(MakeError(NavigationErrors::CapabilityDescriptorInvalid));
+        const auto descriptors = ValidateAdmissionDescriptors(capabilities, expectedRevision, requirement);
+        if (descriptors.HasError())
+            return descriptors;
         if (capabilities.revision != expectedRevision)
             return Result<void>::Failure(MakeError(NavigationErrors::CapabilityStale));
 
         const auto queryIndex = static_cast<std::size_t>(requirement.query);
         const auto qualityIndex = static_cast<std::size_t>(requirement.quality);
-        const auto support = capabilities.querySupport[queryIndex][qualityIndex];
-        if (support == NavigationSupport::Unsupported)
-            return Result<void>::Failure(MakeError(NavigationErrors::OperationUnsupported));
-        if (support != NavigationSupport::Available)
-            return Result<void>::Failure(MakeError(NavigationErrors::CapabilityUnavailable));
+        const auto support = AdmitSupport(capabilities.querySupport[queryIndex][qualityIndex]);
+        if (support.HasError())
+            return support;
         if (!Fits(requirement.limits, capabilities.queryLimits[queryIndex][qualityIndex]))
             return Result<void>::Failure(MakeError(NavigationErrors::QueryLimitExceeded));
         return Result<void>::Success();

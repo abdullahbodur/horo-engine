@@ -77,6 +77,15 @@ namespace Horo::Navigation::NavigationErrors {
         .retryable = false,
         .userActionable = true,
     };
+    const ErrorCodeDescriptor AdmissionRejected{
+        .domain = NavigationDomain,
+        .code = ErrorCode{"navigation.query.admission_rejected"},
+        .defaultSeverity = ErrorSeverity::Warning,
+        .summary = "Navigation admission rejected the request before creating a handle or job.",
+        .remediationHint = "Retry within policy after queue or result-record capacity becomes available.",
+        .retryable = true,
+        .userActionable = false,
+    };
     const ErrorCodeDescriptor QueryCancelled{
         .domain = NavigationDomain,
         .code = ErrorCode{"navigation.query.cancelled"},
@@ -111,6 +120,33 @@ namespace Horo::Navigation::NavigationErrors {
         .summary = "The selected navigation provider failed while executing admitted work.",
         .remediationHint = "Inspect the normalized provider category and Horo diagnostics before retrying or replacing the provider.",
         .retryable = false,
+        .userActionable = true,
+    };
+    const ErrorCodeDescriptor OutcomeDescriptorInvalid{
+        .domain = NavigationDomain,
+        .code = ErrorCode{"navigation.outcome.descriptor_invalid"},
+        .defaultSeverity = ErrorSeverity::Error,
+        .summary = "Navigation terminal outcome evidence is invalid.",
+        .remediationHint = "Publish outcomes only through typed factories with valid bounded provenance and coverage evidence.",
+        .retryable = false,
+        .userActionable = false,
+    };
+    const ErrorCodeDescriptor InvalidWorld{
+        .domain = NavigationDomain,
+        .code = ErrorCode{"navigation.query.invalid_world"},
+        .defaultSeverity = ErrorSeverity::Info,
+        .summary = "The accepted navigation request belongs to an invalid or replaced world.",
+        .remediationHint = "Resolve the active navigation-world incarnation and submit a new request if still required.",
+        .retryable = true,
+        .userActionable = false,
+    };
+    const ErrorCodeDescriptor CapacityExceeded{
+        .domain = NavigationDomain,
+        .code = ErrorCode{"navigation.query.capacity_exceeded"},
+        .defaultSeverity = ErrorSeverity::Warning,
+        .summary = "Accepted navigation work exceeded a declared execution or publication capacity.",
+        .remediationHint = "Reduce query work or retry under a profile with sufficient bounded scratch, result, or retry capacity.",
+        .retryable = true,
         .userActionable = true,
     };
 }  // namespace Horo::Navigation::NavigationErrors

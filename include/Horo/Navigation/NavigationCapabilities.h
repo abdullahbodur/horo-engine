@@ -9,12 +9,8 @@
 
 #include <array>
 #include <compare>
-#include <concepts>
 #include <cstddef>
 #include <cstdint>
-#include <functional>
-#include <type_traits>
-#include <utility>
 
 namespace Horo::Navigation {
     /** @brief Composition-level provider availability, independent of an active navigation world. */
@@ -137,23 +133,4 @@ namespace Horo::Navigation {
     [[nodiscard]] Result<void> AdmitNavigationQuery(const NavigationProviderCapabilities &capabilities, std::uint64_t expectedRevision,
                                                     const NavigationQueryRequirement &requirement);
 
-    /**
-     * @brief Runs a caller-owned dispatch only after the exact query requirement passes capability admission.
-     * @tparam Dispatch Callable returning Result<void>; it owns any subsequent bounded queue mutation.
-     * @param capabilities Immutable capability snapshot captured for this admission attempt.
-     * @param expectedRevision Exact non-zero revision retained by the caller.
-     * @param requirement Exact query, quality, and finite requested ceilings.
-     * @param dispatch Callable invoked exactly once after successful admission and never on admission failure.
-     * @return Admission failure without dispatch, otherwise the dispatch result unchanged.
-     */
-    template <typename Dispatch>
-        requires std::same_as<std::remove_cvref_t<std::invoke_result_t<Dispatch>>, Result<void>>
-    [[nodiscard]] Result<void> DispatchNavigationQueryIfSupported(const NavigationProviderCapabilities &capabilities,
-                                                                  const std::uint64_t expectedRevision,
-                                                                  const NavigationQueryRequirement &requirement, Dispatch &&dispatch) {
-        const auto admission = AdmitNavigationQuery(capabilities, expectedRevision, requirement);
-        if (admission.HasError())
-            return Result<void>::Failure(admission.ErrorValue());
-        return std::invoke(std::forward<Dispatch>(dispatch));
-    }
 }  // namespace Horo::Navigation
