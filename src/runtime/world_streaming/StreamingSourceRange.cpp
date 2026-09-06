@@ -11,6 +11,7 @@
 namespace Horo::WorldStreaming {
     namespace {
         using Coordinates = std::array<std::int64_t, 3>;
+        constexpr double FrustumBoundaryEpsilon = 1.0e-5;
 
         struct ExactBounds final {
             Coordinates minimum{};
@@ -179,7 +180,7 @@ namespace Horo::WorldStreaming {
                                                                        : std::max(cell.minimum[axis], extentBounds.minimum[axis]);
                     maximumProjection += static_cast<double>(normal[axis]) * static_cast<double>(selected - anchor[axis]);
                 }
-                if (maximumProjection < 0.0)
+                if (maximumProjection < -FrustumBoundaryEpsilon)
                     return false;
             }
             return true;

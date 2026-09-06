@@ -80,6 +80,14 @@ namespace Horo::WorldStreaming {
             REQUIRE(Evaluate(StreamingSourceShape{path}).Value());
             REQUIRE_FALSE(Evaluate(StreamingSourceShape{path}, {0, 2, 0, 0, Layer()}).Value());
 
+            auto sameLogicalPath = path;
+            sameLogicalPath.points.back() = Point(99, 88, 77);
+            REQUIRE(path == sameLogicalPath);
+            REQUIRE((path <=> sameLogicalPath) == 0);
+
+            sameLogicalPath.points[1] = Point(1'501, 500, 500);
+            REQUIRE(path != sameLogicalPath);
+
             path.pointCount = path.points.size() + 1;
             RequireError(ValidateStreamingSourceShape(StreamingSourceShape{path}), WorldStreamingErrors::SourceShapeInvalid);
         }

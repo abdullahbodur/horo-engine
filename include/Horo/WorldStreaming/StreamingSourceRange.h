@@ -10,6 +10,7 @@
 #include "Horo/WorldStreaming/StreamingSourceDescriptor.h"
 #include "Horo/WorldStreaming/WorldCellQuantization.h"
 
+#include <algorithm>
 #include <array>
 #include <compare>
 #include <cstddef>
@@ -70,7 +71,27 @@ namespace Horo::WorldStreaming {
         std::size_t pointCount{};             /**< Active prefix length in [2, MaximumPathPointCount]. */
         std::int64_t halfExtentMillimeters{}; /**< Positive swept axis-aligned half-extent. */
 
-        [[nodiscard]] constexpr auto operator<=>(const StreamingSourcePathVolume &) const noexcept = default;
+        /**
+         * @brief Compares only the active point prefixes and remaining logical fields.
+         * @param other Path volume to compare.
+         * @return Strong ordering independent of inactive array storage.
+         */
+        [[nodiscard]] constexpr std::strong_ordering operator<=>(const StreamingSourcePathVolume &other) const noexcept {
+            const std::size_t commonPointCount = std::min({pointCount, other.pointCount, points.size()});
+            for (std::size_t index = 0; index < commonPointCount; ++index) {
+                if (const auto order = points[index] <=> other.points[index]; order != 0)
+                    return order;
+            }
+            if (const auto order = pointCount <=> other.pointCount; order != 0)
+                return order;
+            return halfExtentMillimeters <=> other.halfExtentMillimeters;
+        }
+
+        /** @brief Tests logical equality without observing inactive array storage. @param other Path volume to compare. @return Equality.
+         */
+        [[nodiscard]] constexpr bool operator==(const StreamingSourcePathVolume &other) const noexcept {
+            return (*this <=> other) == 0;
+        }
     };
 
     /** @brief One value-owned source influence shape. */
