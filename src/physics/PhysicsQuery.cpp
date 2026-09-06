@@ -93,37 +93,103 @@ namespace Horo::Physics {
             return std::tuple{hit.normal.has_value(), hit.normal.has_value() ? hit.normal->x : 0.0F,
                               hit.normal.has_value() ? hit.normal->y : 0.0F, hit.normal.has_value() ? hit.normal->z : 0.0F};
         }
+
+        /** @brief Validates world/scene/channel admission identity. */
+        [[nodiscard]] Result<void> ValidateQueryIdentity(const PhysicsQueryDescriptor &descriptor, const PhysicsWorldId expectedWorld,
+                                                         const std::uint64_t expectedSceneGeneration) {
+            if (!expectedWorld.IsValid() || !descriptor.world.IsValid())
+                return Result<void>::Failure(MakeError(PhysicsErrors::WorldInvalid));
+            if (descriptor.world != expectedWorld)
+                return Result<void>::Failure(
+                    MakeError(PhysicsErrors::HandleWorldMismatch, "Query targets another physics world generation."));
+            if (expectedSceneGeneration == 0 || descriptor.sceneGeneration != expectedSceneGeneration)
+                return Result<void>::Failure(MakeError(PhysicsErrors::QuerySnapshotStale));
+            if (!descriptor.filter.channel.IsValid())
+                return Result<void>::Failure(MakeError(PhysicsErrors::DescriptorInvalid, "Queries require a non-zero query channel ID."));
+            return Result<void>::Success();
+        }
+
+        /** @brief Validates closed query policies and result bounds. */
+        [[nodiscard]] Result<void> ValidateQueryPolicies(const PhysicsQueryDescriptor &descriptor) {
+            if (!IsSupported(descriptor.filter.triggers) || !IsSupported(descriptor.collection) || !IsSupported(descriptor.ordering))
+                return Result<void>::Failure(
+                    MakeError(PhysicsErrors::OperationUnsupported, "Query policy contains an unknown typed value."));
+            if (descriptor.maximumHitCount == 0 || descriptor.maximumHitCount > MaximumPhysicsQueryHits)
+                return Result<void>::Failure(
+                    MakeError(PhysicsErrors::CapacityExceeded, "Query result bound is outside the supported profile."));
+            if (descriptor.collection == PhysicsQueryCollection::Closest && descriptor.maximumHitCount != 1)
+                return Result<void>::Failure(
+                    MakeError(PhysicsErrors::DescriptorInvalid, "Closest queries require an exact one-hit result bound."));
+            return Result<void>::Success();
+        }
+
+        /** @brief Validates allocation-free optional selectors. */
+        [[nodiscard]] Result<void> ValidateQuerySelectors(const PhysicsQueryFilter &filter, const PhysicsWorldId world) {
+            if (filter.requiredLayer.has_value() && !filter.requiredLayer->IsValid())
+                return Result<void>::Failure(MakeError(PhysicsErrors::DescriptorInvalid, "Required collision layer ID is invalid."));
+            if (filter.requiredProfile.has_value() && !filter.requiredProfile->IsValid())
+                return Result<void>::Failure(MakeError(PhysicsErrors::DescriptorInvalid, "Required collision profile ID is invalid."));
+            if (filter.excludedBody.has_value())
+                return ValidatePhysicsHandleOwner(*filter.excludedBody, world);
+            return Result<void>::Success();
+        }
+
+        /** @brief Validates hit identities selected by the admitted filter. */
+        [[nodiscard]] Result<void> ValidateHitIdentity(const PhysicsQueryHit &hit, const PhysicsQueryDescriptor &descriptor) {
+            if (const auto body = ValidatePhysicsHandleOwner(hit.body, descriptor.world); body.HasError())
+                return body;
+            if (const auto shape = ValidatePhysicsHandleOwner(hit.shape, descriptor.world); shape.HasError())
+                return shape;
+            if (!hit.layer.IsValid() || !hit.profile.IsValid() || hit.channel != descriptor.filter.channel)
+                return Result<void>::Failure(
+                    MakeError(PhysicsErrors::DescriptorInvalid, "Hit filter identity evidence is incomplete or mismatched."));
+            if (descriptor.filter.requiredLayer.has_value() && hit.layer != *descriptor.filter.requiredLayer)
+                return Result<void>::Failure(
+                    MakeError(PhysicsErrors::DescriptorInvalid, "Hit does not match the required collision layer."));
+            if (descriptor.filter.requiredProfile.has_value() && hit.profile != *descriptor.filter.requiredProfile)
+                return Result<void>::Failure(
+                    MakeError(PhysicsErrors::DescriptorInvalid, "Hit does not match the required collision profile."));
+            return Result<void>::Success();
+        }
+
+        /** @brief Validates finite contact evidence and the admitted travel bound. */
+        [[nodiscard]] Result<void> ValidateHitGeometry(const PhysicsQueryHit &hit, const PhysicsQueryDescriptor &descriptor) {
+            if (!IsSupported(hit.response) || !Math::IsFinite(hit.position))
+                return Result<void>::Failure(
+                    MakeError(PhysicsErrors::DescriptorInvalid, "Hit response and position must be supported and finite."));
+            if (!std::isfinite(hit.distanceMeters) || hit.distanceMeters < 0)
+                return Result<void>::Failure(MakeError(PhysicsErrors::DescriptorInvalid, "Hit distance must be non-negative and finite."));
+            if (const auto maximumDistance = MaximumTravelDistance(descriptor.geometry);
+                maximumDistance.has_value() && hit.distanceMeters > *maximumDistance)
+                return Result<void>::Failure(
+                    MakeError(PhysicsErrors::DescriptorInvalid, "Hit distance exceeds the admitted query travel bound."));
+            if (hit.normal.has_value() && !IsUnitDirection(*hit.normal))
+                return Result<void>::Failure(
+                    MakeError(PhysicsErrors::DescriptorInvalid, "A reported hit normal must be finite and unit length."));
+            return Result<void>::Success();
+        }
+
+        /** @brief Validates optional stable subshape/material evidence. */
+        [[nodiscard]] Result<void> ValidateHitDetails(const PhysicsQueryHit &hit) {
+            if (hit.subshape.has_value() && !hit.subshape->IsValid())
+                return Result<void>::Failure(MakeError(PhysicsErrors::DescriptorInvalid, "A reported subshape identity must be non-zero."));
+            if (hit.material.has_value() &&
+                (!hit.material->asset.IsValid() || hit.material->assetGeneration == 0 || !hit.material->slot.IsValid()))
+                return Result<void>::Failure(
+                    MakeError(PhysicsErrors::DescriptorInvalid, "Material evidence requires exact asset, generation and slot identity."));
+            return Result<void>::Success();
+        }
     }  // namespace
 
     /** @copydoc ValidatePhysicsQueryDescriptor */
     Result<void> ValidatePhysicsQueryDescriptor(const PhysicsQueryDescriptor &descriptor, const PhysicsWorldId expectedWorld,
                                                 const std::uint64_t expectedSceneGeneration) {
-        if (!expectedWorld.IsValid())
-            return Result<void>::Failure(MakeError(PhysicsErrors::WorldInvalid));
-        if (!descriptor.world.IsValid())
-            return Result<void>::Failure(MakeError(PhysicsErrors::WorldInvalid));
-        if (descriptor.world != expectedWorld)
-            return Result<void>::Failure(MakeError(PhysicsErrors::HandleWorldMismatch, "Query targets another physics world generation."));
-        if (expectedSceneGeneration == 0 || descriptor.sceneGeneration != expectedSceneGeneration)
-            return Result<void>::Failure(MakeError(PhysicsErrors::QuerySnapshotStale));
-        if (!descriptor.filter.channel.IsValid())
-            return Result<void>::Failure(MakeError(PhysicsErrors::DescriptorInvalid, "Queries require a non-zero query channel ID."));
-        if (!IsSupported(descriptor.filter.triggers) || !IsSupported(descriptor.collection) || !IsSupported(descriptor.ordering))
-            return Result<void>::Failure(MakeError(PhysicsErrors::OperationUnsupported, "Query policy contains an unknown typed value."));
-        if (descriptor.maximumHitCount == 0 || descriptor.maximumHitCount > MaximumPhysicsQueryHits)
-            return Result<void>::Failure(
-                MakeError(PhysicsErrors::CapacityExceeded, "Query result bound is outside the supported profile."));
-        if (descriptor.collection == PhysicsQueryCollection::Closest && descriptor.maximumHitCount != 1)
-            return Result<void>::Failure(
-                MakeError(PhysicsErrors::DescriptorInvalid, "Closest queries require an exact one-hit result bound."));
-        if (descriptor.filter.requiredLayer.has_value() && !descriptor.filter.requiredLayer->IsValid())
-            return Result<void>::Failure(MakeError(PhysicsErrors::DescriptorInvalid, "Required collision layer ID is invalid."));
-        if (descriptor.filter.requiredProfile.has_value() && !descriptor.filter.requiredProfile->IsValid())
-            return Result<void>::Failure(MakeError(PhysicsErrors::DescriptorInvalid, "Required collision profile ID is invalid."));
-        if (descriptor.filter.excludedBody.has_value()) {
-            if (const auto owner = ValidatePhysicsHandleOwner(*descriptor.filter.excludedBody, expectedWorld); owner.HasError())
-                return owner;
-        }
+        if (const auto identity = ValidateQueryIdentity(descriptor, expectedWorld, expectedSceneGeneration); identity.HasError())
+            return identity;
+        if (const auto policies = ValidateQueryPolicies(descriptor); policies.HasError())
+            return policies;
+        if (const auto selectors = ValidateQuerySelectors(descriptor.filter, expectedWorld); selectors.HasError())
+            return selectors;
         return std::visit([expectedWorld](const auto &geometry) {
             return ValidateGeometry(geometry, expectedWorld);
         }, descriptor.geometry);
@@ -131,34 +197,13 @@ namespace Horo::Physics {
 
     /** @copydoc ValidatePhysicsQueryHit */
     Result<void> ValidatePhysicsQueryHit(const PhysicsQueryHit &hit, const PhysicsQueryDescriptor &descriptor) {
-        if (const auto body = ValidatePhysicsHandleOwner(hit.body, descriptor.world); body.HasError())
-            return body;
-        if (const auto shape = ValidatePhysicsHandleOwner(hit.shape, descriptor.world); shape.HasError())
-            return shape;
-        if (!hit.layer.IsValid() || !hit.profile.IsValid() || hit.channel != descriptor.filter.channel ||
-            (descriptor.filter.requiredLayer.has_value() && hit.layer != *descriptor.filter.requiredLayer) ||
-            (descriptor.filter.requiredProfile.has_value() && hit.profile != *descriptor.filter.requiredProfile))
-            return Result<void>::Failure(
-                MakeError(PhysicsErrors::DescriptorInvalid, "Hit filter identity evidence is incomplete or mismatched."));
+        if (const auto identity = ValidateHitIdentity(hit, descriptor); identity.HasError())
+            return identity;
         if (hit.filterSchemaGeneration == 0)
             return Result<void>::Failure(MakeError(PhysicsErrors::QuerySnapshotStale));
-        if (!IsSupported(hit.response) || !Math::IsFinite(hit.position) || !std::isfinite(hit.distanceMeters) || hit.distanceMeters < 0)
-            return Result<void>::Failure(
-                MakeError(PhysicsErrors::DescriptorInvalid, "Hit response, position and distance must be supported and finite."));
-        if (const auto maximumDistance = MaximumTravelDistance(descriptor.geometry);
-            maximumDistance.has_value() && hit.distanceMeters > *maximumDistance)
-            return Result<void>::Failure(
-                MakeError(PhysicsErrors::DescriptorInvalid, "Hit distance exceeds the admitted query travel bound."));
-        if (hit.normal.has_value() && !IsUnitDirection(*hit.normal))
-            return Result<void>::Failure(
-                MakeError(PhysicsErrors::DescriptorInvalid, "A reported hit normal must be finite and unit length."));
-        if (hit.subshape.has_value() && !hit.subshape->IsValid())
-            return Result<void>::Failure(MakeError(PhysicsErrors::DescriptorInvalid, "A reported subshape identity must be non-zero."));
-        if (hit.material.has_value() &&
-            (!hit.material->asset.IsValid() || hit.material->assetGeneration == 0 || !hit.material->slot.IsValid()))
-            return Result<void>::Failure(
-                MakeError(PhysicsErrors::DescriptorInvalid, "Material evidence requires exact asset, generation and slot identity."));
-        return Result<void>::Success();
+        if (const auto geometry = ValidateHitGeometry(hit, descriptor); geometry.HasError())
+            return geometry;
+        return ValidateHitDetails(hit);
     }
 
     /** @copydoc ValidatePhysicsQueryResult */

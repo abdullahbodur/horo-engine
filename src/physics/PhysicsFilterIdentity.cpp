@@ -17,39 +17,53 @@ namespace Horo::Physics::Detail {
                 return static_cast<std::uint8_t>(value - 'a' + 10);
             return std::nullopt;
         }
+
+        /** @brief Checks exact UUID length and separator placement. */
+        [[nodiscard]] bool HasCanonicalUuidShape(const std::string_view value) noexcept {
+            constexpr std::array HyphenOffsets{8U, 13U, 18U, 23U};
+            if (value.size() != 36)
+                return false;
+            for (const std::size_t offset : HyphenOffsets) {
+                if (value[offset] != '-')
+                    return false;
+            }
+            return true;
+        }
+
+        /** @brief Decodes validated-shape UUID characters without reading across a separator. */
+        [[nodiscard]] Result<std::array<std::uint8_t, 16>> DecodeUuidBytes(const std::string_view value) {
+            std::array<std::uint8_t, 16> bytes{};
+            std::size_t output{};
+            std::optional<std::uint8_t> high;
+            for (const char character : value) {
+                if (character == '-')
+                    continue;
+                const auto digit = ParseHexDigit(character);
+                if (!digit.has_value())
+                    return Result<std::array<std::uint8_t, 16>>::Failure(
+                        MakeError(PhysicsErrors::DescriptorInvalid, "Physics project IDs require lowercase hexadecimal UUID digits."));
+                if (!high.has_value()) {
+                    high = digit;
+                    continue;
+                }
+                bytes[output++] = static_cast<std::uint8_t>((*high << 4U) | *digit);
+                high.reset();
+            }
+            if (output != bytes.size() || high.has_value())
+                return Result<std::array<std::uint8_t, 16>>::Failure(
+                    MakeError(PhysicsErrors::DescriptorInvalid, "Physics project IDs contain an unexpected UUID separator."));
+            return Result<std::array<std::uint8_t, 16>>::Success(bytes);
+        }
     }  // namespace
 
     Result<std::array<std::uint8_t, 16>> ParsePhysicsProjectId(const std::string_view value) {
-        constexpr std::array HyphenOffsets{8U, 13U, 18U, 23U};
-        if (value.size() != 36)
+        if (!HasCanonicalUuidShape(value))
             return Result<std::array<std::uint8_t, 16>>::Failure(
                 MakeError(PhysicsErrors::DescriptorInvalid, "Physics project IDs require the canonical 36-character UUID form."));
-        for (const std::size_t offset : HyphenOffsets) {
-            if (value[offset] != '-')
-                return Result<std::array<std::uint8_t, 16>>::Failure(
-                    MakeError(PhysicsErrors::DescriptorInvalid, "Physics project IDs require UUID hyphens at canonical offsets."));
-        }
-
-        std::array<std::uint8_t, 16> bytes{};
-        std::size_t output{};
-        std::optional<std::uint8_t> high;
-        for (const char character : value) {
-            if (character == '-')
-                continue;
-            const auto digit = ParseHexDigit(character);
-            if (!digit.has_value())
-                return Result<std::array<std::uint8_t, 16>>::Failure(
-                    MakeError(PhysicsErrors::DescriptorInvalid, "Physics project IDs require lowercase hexadecimal UUID digits."));
-            if (!high.has_value()) {
-                high = digit;
-                continue;
-            }
-            bytes[output++] = static_cast<std::uint8_t>((*high << 4U) | *digit);
-            high.reset();
-        }
-        if (output != bytes.size() || high.has_value())
-            return Result<std::array<std::uint8_t, 16>>::Failure(
-                MakeError(PhysicsErrors::DescriptorInvalid, "Physics project IDs contain an unexpected UUID separator."));
+        auto decoded = DecodeUuidBytes(value);
+        if (decoded.HasError())
+            return decoded;
+        const auto bytes = std::move(decoded).Value();
         if (std::ranges::all_of(bytes, [](const std::uint8_t byte) {
             return byte == 0;
         }))
