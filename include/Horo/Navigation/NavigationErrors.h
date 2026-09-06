@@ -40,4 +40,14 @@ namespace Horo::Navigation::NavigationErrors {
     extern const ErrorCodeDescriptor InvalidWorld;
     /** @brief An accepted operation exhausted a declared execution, scratch, result, or retry bound. */
     extern const ErrorCodeDescriptor CapacityExceeded;
+    /** @brief An area identity, source, or finite non-negative traversal cost is malformed. */
+    extern const ErrorCodeDescriptor AreaDescriptorInvalid;
+    /** @brief A filter identity, source, referenced identity, or finite non-negative cost is malformed. */
+    extern const ErrorCodeDescriptor FilterDescriptorInvalid;
+    /** @brief Area, filter, or filter-override identities collide within one deterministic registry. */
+    extern const ErrorCodeDescriptor DescriptorConflict;
+    /** @brief An exact area identity is absent and cannot be replaced by a default area. */
+    extern const ErrorCodeDescriptor AreaUnknown;
+    /** @brief An exact filter identity is absent and cannot be replaced by a default filter. */
+    extern const ErrorCodeDescriptor FilterUnknown;
 }  // namespace Horo::Navigation::NavigationErrors

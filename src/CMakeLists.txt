@@ -345,6 +345,7 @@ else()
 endif()
 
 add_library(HoroNavigationApi STATIC
+        runtime/navigation/api/NavigationAreas.cpp
         runtime/navigation/api/NavigationCapabilities.cpp
         runtime/navigation/api/NavigationErrors.cpp
         runtime/navigation/api/NavigationIdentity.cpp

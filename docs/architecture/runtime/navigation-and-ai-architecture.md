@@ -476,6 +476,20 @@ struct NavMeshData {
 NavMesh tile requests are driven by active-agent demand, but cell residency remains
 World Streaming policy as defined above; nearby agents do not authorize a second loader.
 
+### Area And Query-Filter Registry
+
+Authored navigation areas and reusable query filters use stable non-zero identities;
+array order, display names and localized labels are never identity. Project and
+package contributions enter one typed registry and are resolved in canonical identity
+order. A duplicate area, filter or per-filter area override is a conflict rather than
+an input-order precedence rule.
+
+Every base and overridden traversal cost is finite and non-negative before registry
+activation. An empty include mask means all areas, while matching exclusion flags
+always win. Exact unknown area and filter identities return typed errors and never
+silently select a default descriptor. Provider-native area flags remain private to
+the selected backend and are translated from these Horo-owned policies.
+
 ## Pathfinding
 
 ### A* With NavMesh
