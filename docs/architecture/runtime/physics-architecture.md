@@ -145,6 +145,15 @@ using ConstraintHandle = Handle<PhysicsConstraintTag>;
 Stale handles return typed errors or empty query results according to the API
 contract. They never alias newly created physics objects.
 
+Each world owns separate bounded body, shape and constraint registries. Candidate
+preparation allocates their slot tables before publication; activation binds the
+host-issued `PhysicsWorldId` without allocation. A successful removal increments
+the slot generation before reuse. A slot already at the generation ceiling is
+retired permanently, and the registry never wraps it to an earlier identity.
+Full registries distinguish temporarily occupied capacity from terminal generation
+exhaustion with stable typed diagnostics. Native solver IDs, pointers and leases
+remain values of the target-private mapping and never become public handle fields.
+
 ## Shape Authoring, Cook And Runtime Boundary
 
 [ADR-085](../../adr/085-physics-shape-authoring-cook-and-runtime-boundary.md)
