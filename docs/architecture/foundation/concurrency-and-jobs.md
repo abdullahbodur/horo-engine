@@ -72,7 +72,8 @@ public:
 enum class WaitPolicy {
     WorkerOnly,           // allowed from worker threads only
     MainThreadPumpAllowed,// main thread may pump bounded continuations only
-    ForbiddenOnOwnerThread// the thread that submitted must never wait here
+    ForbiddenOnOwnerThread,// the thread that submitted must never wait here
+    OwnerThreadBlockAllowed// a dedicated submitting owner may block without pumping
 };
 
 struct JoinOptions {
@@ -85,7 +86,11 @@ struct JoinOptions {
 terminal state, so completion timing cannot bypass a caller restriction.
 `WorkerOnly` requires a callback executing on the same scheduler;
 `ForbiddenOnOwnerThread` rejects the thread that submitted the record; and
-`MainThreadPumpAllowed` permits an owner wait. Both allowed execution policies
+`OwnerThreadBlockAllowed` requires that exact submitting thread and blocks on the
+record's completion notification without claiming queued work. It exists for
+dedicated subsystem owners such as the fixed-tick Physics owner, which must join
+worker-only native work without executing it inline. `MainThreadPumpAllowed`
+permits an owner wait. The two helping execution policies
 may claim and execute only the exact awaited queued record; unrelated queue work
 is never pumped. A thread-local execution chain rejects direct self-waits and
 nested A-to-B-to-A cycles with `job.wait_capacity_deadlock`. Forbidden callers
@@ -423,6 +428,9 @@ full queue.
 - The main/editor thread does not synchronously wait for ordinary worker jobs.
   It may only pump bounded continuations through an explicit owner-thread wait
   scope configured with `WaitPolicy::MainThreadPumpAllowed`.
+- A dedicated subsystem owner may block without pumping only through a finite
+  `OwnerThreadBlockAllowed` wait whose child work cannot require that owner to
+  complete; Physics uses this only for worker-safe per-tick batches.
 - The render-capable thread does not wait on a job that requires a render-thread
   continuation.
 - Unbounded `Join()` is forbidden from main, editor, render-capable, and

@@ -55,6 +55,7 @@ namespace Horo {
         WorkerOnly,
         MainThreadPumpAllowed,
         ForbiddenOnOwnerThread,
+        OwnerThreadBlockAllowed,
     };
 
     /** @brief Explicit finite policy for a bounded job wait. */
@@ -79,7 +80,7 @@ namespace Horo {
         /**
          * @brief Waits under a finite affinity policy, optionally helping only this exact queued record.
          * @param options Caller-affinity rule and maximum wait duration. `MainThreadPumpAllowed` and `WorkerOnly` may claim
-         * this record for inline execution; unrelated queued jobs are never pumped.
+         * this record for inline execution; `OwnerThreadBlockAllowed` waits without pumping. Unrelated queued jobs are never pumped.
          * @return Terminal job result, or a typed forbidden, deadlock-risk or timeout error. Policy validation occurs even
          * if the job is already terminal. A timeout does not change the job lifecycle, so the handle remains safely retryable.
          */

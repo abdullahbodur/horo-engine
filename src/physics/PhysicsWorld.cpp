@@ -1,6 +1,7 @@
 #include "Horo/Physics/PhysicsWorld.h"
 
 #include "CanonicalPhysicsRuntime.h"
+#include "Horo/Foundation/JobSystem.h"
 #include "Horo/Physics/PhysicsErrors.h"
 
 #include <algorithm>
@@ -8,6 +9,7 @@
 #include <atomic>
 #include <cmath>
 #include <functional>
+#include <limits>
 #include <new>
 #include <thread>
 #include <utility>
@@ -16,7 +18,8 @@
 namespace Horo::Physics {
     /** @brief Shared only by the process wrapper and its worlds; identity pointers are owner-thread, stable-address registrations. */
     struct PhysicsRuntime::Impl final {
-        explicit Impl(const PhysicsRuntimeMode selectedMode) : mode(selectedMode) {}
+        explicit Impl(const PhysicsRuntimeMode selectedMode, JobSystem *solverJobSystem)
+            : mode(selectedMode), solverJobs(solverJobSystem) {}
 
         Impl(const Impl &) = delete;
         Impl &operator=(const Impl &) = delete;
@@ -37,6 +40,7 @@ namespace Horo::Physics {
         PhysicsRuntimeState state{PhysicsRuntimeState::Ready};
         std::thread::id ownerThread{std::this_thread::get_id()};
         Detail::CanonicalRuntimeHandle native;
+        JobSystem *solverJobs{};
         std::vector<const PhysicsWorldId *> identities;
     };
 
@@ -176,15 +180,83 @@ namespace Horo::Physics {
                 ++applied;
             }
         }
+
+        /** @brief Validates one solver-neutral batch before any tick phase is observed. */
+        [[nodiscard]] Result<void> ValidateSolverJobs(const JobSystem *jobs, const PhysicsSolverJobBatch &batch) {
+            if (batch.jobCount == 0)
+                return Result<void>::Success();
+            if (jobs == nullptr)
+                return Result<void>::Failure(
+                    MakeError(PhysicsErrors::CapabilityUnavailable, "This Physics runtime has no injected solver job system."));
+            if (batch.jobs == nullptr || batch.jobCount > MaximumPhysicsSolverJobsPerTick || batch.joinTimeout <= Duration{})
+                return Result<void>::Failure(
+                    MakeError(PhysicsErrors::DescriptorInvalid, "Solver jobs require valid bounded storage and a positive join timeout."));
+            for (std::uint32_t index = 0; index < batch.jobCount; ++index) {
+                if (batch.jobs[index].execute == nullptr)
+                    return Result<void>::Failure(
+                        MakeError(PhysicsErrors::DescriptorInvalid, "Every solver job requires an executable callback."));
+            }
+            return Result<void>::Success();
+        }
+
+        /** @brief Reports whether two errors preserve the same stable domain/code identity. */
+        [[nodiscard]] bool SameErrorCode(const Error &left, const Error &right) noexcept {
+            return left.domain.Value() == right.domain.Value() && left.code.Value() == right.code.Value();
+        }
+
+        /** @brief Dispatches one validated solver-neutral batch and drains it before the tick may continue. */
+        [[nodiscard]] Result<void> RunSolverJobs(JobSystem &jobs, const PhysicsSolverJobBatch &batch) {
+            TaskGroup group(jobs, TaskGroupFailurePolicy::FailFast);
+            for (std::uint32_t index = 0; index < batch.jobCount; ++index) {
+                const PhysicsSolverJob job = batch.jobs[index];
+                const auto spawned = group.Spawn({}, [job](const CancellationToken &cancellation) {
+                    return job.execute(job.context, cancellation);
+                });
+                if (spawned.HasError())
+                    return Result<void>::Failure(spawned.ErrorValue());
+            }
+
+            const Result<void> joined = group.Join({.waitPolicy = WaitPolicy::OwnerThreadBlockAllowed, .timeout = batch.joinTimeout});
+            if (joined.HasValue())
+                return joined;
+            group.RequestCancel();
+            const Result<void> drained = group.Join({.waitPolicy = WaitPolicy::OwnerThreadBlockAllowed,
+                                                     .timeout = Duration::FromNanoseconds(std::numeric_limits<std::int64_t>::max())});
+            if (drained.HasError() && SameErrorCode(joined.ErrorValue(), drained.ErrorValue()))
+                return joined;
+            return Result<void>::Failure(MakeError(PhysicsErrors::SolverDeadlineExceeded));
+        }
+
+        /** @brief Checks mutable owner affinity and lifecycle admission for one fixed tick. */
+        [[nodiscard]] Result<void> CheckReadyForTick(const auto &impl) {
+            if (impl.runtime->ownerThread != std::this_thread::get_id())
+                return Result<void>::Failure(MakeError(PhysicsErrors::ThreadAffinityViolation));
+            if (impl.state == PhysicsWorldState::ActiveNull)
+                return Result<void>::Failure(MakeError(PhysicsErrors::CapabilityUnavailable));
+            if (impl.state != PhysicsWorldState::ActiveSolver || impl.stepping)
+                return Result<void>::Failure(MakeError(PhysicsErrors::InvalidState));
+            return Result<void>::Success();
+        }
+
+        /** @brief Checks sequence and exact fixed delta before a tick begins. */
+        [[nodiscard]] Result<void> ValidateTickInput(const auto &impl, const PhysicsFixedTickInput &input) {
+            const auto configuredNanoseconds =
+                static_cast<std::int64_t>(std::llround(impl.settings.Values().world.fixedDeltaSeconds * 1'000'000'000.0));
+            if (input.simulationTick == 0 || input.simulationTick != impl.published.completedTick + 1 ||
+                input.fixedDelta.ToNanoseconds() != configuredNanoseconds)
+                return Result<void>::Failure(MakeError(PhysicsErrors::DescriptorInvalid,
+                                                       "Physics requires the next one-based tick and the world's exact fixed delta."));
+            return Result<void>::Success();
+        }
     }  // namespace
 
     /** @copydoc PhysicsRuntime::Create */
-    Result<std::unique_ptr<PhysicsRuntime>> PhysicsRuntime::Create(const PhysicsRuntimeMode mode) {
+    Result<std::unique_ptr<PhysicsRuntime>> PhysicsRuntime::Create(const PhysicsRuntimeMode mode, JobSystem *solverJobs) {
         if (mode > PhysicsRuntimeMode::Null)
             return Result<std::unique_ptr<PhysicsRuntime>>::Failure(
                 MakeError(PhysicsErrors::OperationUnsupported, "Unknown Physics runtime composition."));
         try {
-            auto impl = std::make_shared<Impl>(mode);
+            auto impl = std::make_shared<Impl>(mode, solverJobs);
             if (mode == PhysicsRuntimeMode::Canonical) {
                 const auto native = Detail::CreateCanonicalRuntime();
                 if (native.HasError()) {
@@ -207,9 +279,10 @@ namespace Horo::Physics {
 
     /** @copydoc PhysicsRuntime::PrepareWorld */
     Result<std::unique_ptr<PhysicsWorld>> PhysicsRuntime::PrepareWorld(const PhysicsWorldSettings &settings) {
+        if (impl_->ownerThread != std::this_thread::get_id())
+            return Result<std::unique_ptr<PhysicsWorld>>::Failure(MakeError(PhysicsErrors::ThreadAffinityViolation));
         if (const std::array admissionConditions{
                 impl_->state == PhysicsRuntimeState::Ready,
-                impl_->ownerThread == std::this_thread::get_id(),
             };
             !std::ranges::all_of(admissionConditions, std::identity{}))
             return Result<std::unique_ptr<PhysicsWorld>>::Failure(MakeError(PhysicsErrors::InvalidState));
@@ -280,11 +353,9 @@ namespace Horo::Physics {
         const auto firstPrepared = static_cast<std::uint8_t>(PhysicsWorldState::PreparedSolver);
         const auto prepared =
             static_cast<std::uint8_t>(state - firstPrepared) <= static_cast<std::uint8_t>(PhysicsWorldState::PreparedNull) - firstPrepared;
-        if (const std::array admissionConditions{
-                prepared,
-                impl_->runtime->state == PhysicsRuntimeState::Ready,
-                impl_->runtime->ownerThread == std::this_thread::get_id(),
-            };
+        if (impl_->runtime->ownerThread != std::this_thread::get_id())
+            return Result<void>::Failure(MakeError(PhysicsErrors::ThreadAffinityViolation));
+        if (const std::array admissionConditions{prepared, impl_->runtime->state == PhysicsRuntimeState::Ready};
             !std::ranges::all_of(admissionConditions, std::identity{}))
             return Result<void>::Failure(MakeError(PhysicsErrors::InvalidState));
         if (!identity.IsValid())
@@ -321,9 +392,11 @@ namespace Horo::Physics {
 
     /** @copydoc PhysicsWorld::QueueStructuralCommand */
     Result<PhysicsCommandAdmission> PhysicsWorld::QueueStructuralCommand(const PhysicsStructuralCommand &command) {
+        if (impl_->runtime->ownerThread != std::this_thread::get_id())
+            return Result<PhysicsCommandAdmission>::Failure(MakeError(PhysicsErrors::ThreadAffinityViolation));
         if (impl_->state == PhysicsWorldState::ActiveNull)
             return Result<PhysicsCommandAdmission>::Failure(MakeError(PhysicsErrors::CapabilityUnavailable));
-        if (impl_->state != PhysicsWorldState::ActiveSolver || impl_->runtime->ownerThread != std::this_thread::get_id())
+        if (impl_->state != PhysicsWorldState::ActiveSolver)
             return Result<PhysicsCommandAdmission>::Failure(MakeError(PhysicsErrors::InvalidState));
         if (!IsValidCommand(command) || command.sequence <= impl_->lastAdmittedCommandSequence)
             return Result<PhysicsCommandAdmission>::Failure(
@@ -351,16 +424,12 @@ namespace Horo::Physics {
     /** @copydoc PhysicsWorld::AdvanceFixedTick */
     Result<void> PhysicsWorld::AdvanceFixedTick(const PhysicsFixedTickInput &input) {
         using enum PhysicsTickPhase;
-        if (impl_->state == PhysicsWorldState::ActiveNull)
-            return Result<void>::Failure(MakeError(PhysicsErrors::CapabilityUnavailable));
-        if (impl_->state != PhysicsWorldState::ActiveSolver || impl_->runtime->ownerThread != std::this_thread::get_id() || impl_->stepping)
-            return Result<void>::Failure(MakeError(PhysicsErrors::InvalidState));
-        if (const auto configuredNanoseconds =
-                static_cast<std::int64_t>(std::llround(impl_->settings.Values().world.fixedDeltaSeconds * 1'000'000'000.0));
-            input.simulationTick == 0 || input.simulationTick != impl_->published.completedTick + 1 ||
-            input.fixedDelta.ToNanoseconds() != configuredNanoseconds)
-            return Result<void>::Failure(
-                MakeError(PhysicsErrors::DescriptorInvalid, "Physics requires the next one-based tick and the world's exact fixed delta."));
+        if (const Result<void> ready = CheckReadyForTick(*impl_); ready.HasError())
+            return ready;
+        if (const Result<void> validInput = ValidateTickInput(*impl_, input); validInput.HasError())
+            return validInput;
+        if (const Result<void> jobs = ValidateSolverJobs(impl_->runtime->solverJobs, input.solverJobs); jobs.HasError())
+            return jobs;
 
         impl_->stepping = true;
         const BooleanResetGuard stepGuard{impl_->stepping};
@@ -374,6 +443,14 @@ namespace Horo::Physics {
         ObservePhase(input, BroadPhase);
         ObservePhase(input, ContactGeneration);
         ObservePhase(input, ConstraintSolve);
+
+        if (input.solverJobs.jobCount != 0) {
+            const Result<void> jobs = RunSolverJobs(*impl_->runtime->solverJobs, input.solverJobs);
+            if (jobs.HasError()) {
+                impl_->state = PhysicsWorldState::Failed;
+                return jobs;
+            }
+        }
 
         if (const auto stepped =
                 Detail::StepCanonicalWorld(impl_->native, static_cast<float>(impl_->settings.Values().world.fixedDeltaSeconds));

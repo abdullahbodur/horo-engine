@@ -181,6 +181,11 @@ namespace Horo {
             switch (policy) {
                 case MainThreadPumpAllowed:
                     return Result<void>::Success();
+                case OwnerThreadBlockAllowed:
+                    if (record.submittingThread == std::this_thread::get_id())
+                        return Result<void>::Success();
+                    return Result<void>::Failure(
+                        MakeJobError(JobErrors::WaitForbidden, "OwnerThreadBlockAllowed requires the submitting owner thread."));
                 case WorkerOnly:
                     if (activeSchedulerIdentity.has_value() && *activeSchedulerIdentity == record.schedulerIdentity)
                         return Result<void>::Success();
@@ -214,7 +219,7 @@ namespace Horo {
             if (const Result<void> validated = ValidateBoundedWait(*record, policy); validated.HasError())
                 return validated;
 
-            if (policy != WaitPolicy::ForbiddenOnOwnerThread && TryClaimJobRecord(record))
+            if ((policy == WaitPolicy::MainThreadPumpAllowed || policy == WaitPolicy::WorkerOnly) && TryClaimJobRecord(record))
                 ExecuteJobRecord(record);
 
             if (std::unique_lock lock(record->Mutex()); !record->completed.wait_until(lock, deadline, [record] {
