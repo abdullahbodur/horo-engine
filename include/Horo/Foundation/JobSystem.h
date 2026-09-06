@@ -178,6 +178,7 @@ namespace Horo {
     private:
         struct State;
         static void CancelChildren(const std::shared_ptr<State> &state);
+        [[nodiscard]] Result<void> JoinImpl(const JoinOptions *options) const;
         std::shared_ptr<State> m_state;
     };
 }  // namespace Horo

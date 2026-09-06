@@ -65,22 +65,27 @@ namespace Horo {
     };
 
     namespace {
+        struct JobExecutionFrame final {
+            const JobRecord *record{};
+            const JobExecutionFrame *previous{};
+        };
+
         thread_local const void *activeSchedulerIdentity{};
-        thread_local const JobRecord *activeJobRecord{};
+        thread_local const JobExecutionFrame *activeExecutionFrame{};
 
         /** @brief Installs exact scheduler/job execution identity for nested wait validation and restores it afterward. */
         class JobExecutionScope final {
         public:
             JobExecutionScope(const JobRecord &record, const bool schedulerWorker) noexcept
-                : previousScheduler_(activeSchedulerIdentity), previousJob_(activeJobRecord) {
+                : previousScheduler_(activeSchedulerIdentity), frame_{&record, activeExecutionFrame} {
                 if (schedulerWorker)
                     activeSchedulerIdentity = record.schedulerIdentity;
-                activeJobRecord = &record;
+                activeExecutionFrame = &frame_;
             }
 
             ~JobExecutionScope() {
                 activeSchedulerIdentity = previousScheduler_;
-                activeJobRecord = previousJob_;
+                activeExecutionFrame = frame_.previous;
             }
 
             JobExecutionScope(const JobExecutionScope &) = delete;
@@ -88,8 +93,16 @@ namespace Horo {
 
         private:
             const void *previousScheduler_{};
-            const JobRecord *previousJob_{};
+            JobExecutionFrame frame_;
         };
+
+        [[nodiscard]] bool IsOnExecutionStack(const JobRecord &record) noexcept {
+            for (const JobExecutionFrame *frame = activeExecutionFrame; frame != nullptr; frame = frame->previous) {
+                if (frame->record == &record)
+                    return true;
+            }
+            return false;
+        }
 
         void SetTerminalState(const std::shared_ptr<JobRecord> &record, const JobState state, std::optional<Error> error = std::nullopt) {
             std::lock_guard lock(record->Mutex());
@@ -142,9 +155,9 @@ namespace Horo {
         }
 
         [[nodiscard]] Result<void> ValidateBoundedWait(const JobRecord &record, const WaitPolicy policy) {
-            if (activeJobRecord == &record)
+            if (IsOnExecutionStack(record))
                 return Result<void>::Failure(
-                    MakeJobError(JobErrors::WaitCapacityDeadlock, "A job cannot synchronously wait for its own completion."));
+                    MakeJobError(JobErrors::WaitCapacityDeadlock, "A synchronous wait would close a re-entrant job execution cycle."));
             if (policy == WaitPolicy::WorkerOnly && activeSchedulerIdentity != record.schedulerIdentity)
                 return Result<void>::Failure(
                     MakeJobError(JobErrors::WaitForbidden, "WorkerOnly requires a worker executing on the owning job system."));
@@ -163,13 +176,13 @@ namespace Horo {
 
         [[nodiscard]] Result<void> WaitUntil(const std::shared_ptr<JobRecord> &record, const std::chrono::steady_clock::time_point deadline,
                                              const WaitPolicy policy) {
+            if (const Result<void> validated = ValidateBoundedWait(*record, policy); validated.HasError())
+                return validated;
             {
                 std::lock_guard lock(record->Mutex());
                 if (IsTerminal(record->state))
                     return record->state == JobState::Succeeded ? Result<void>::Success() : Result<void>::Failure(*record->error);
             }
-            if (const Result<void> validated = ValidateBoundedWait(*record, policy); validated.HasError())
-                return validated;
             if (policy != WaitPolicy::ForbiddenOnOwnerThread && TryClaimJobRecord(record))
                 ExecuteJobRecord(record, activeSchedulerIdentity == record->schedulerIdentity);
 
@@ -416,35 +429,15 @@ namespace Horo {
     }
 
     Result<void> TaskGroup::Join() const {
-        std::lock_guard joinLock(m_state->joinMutex);
-        if (m_state->cancellation.Token().IsCancellationRequested())
-            CancelChildren(m_state);
-
-        std::vector<std::shared_ptr<JobHandle>> children;
-        {
-            std::lock_guard lock(m_state->mutex);
-            if (m_state->joined)
-                return m_state->joinError.has_value() ? Result<void>::Failure(*m_state->joinError) : Result<void>::Success();
-            m_state->accepting = false;
-            children = m_state->children;
-        }
-
-        std::optional<Error> firstError;
-        for (const auto &child : children) {
-            const Result<void> waited = child->Wait();
-            if (waited.HasError() && !firstError.has_value())
-                firstError = waited.ErrorValue();
-        }
-        {
-            std::lock_guard lock(m_state->mutex);
-            m_state->joined = true;
-            m_state->joinError = firstError;
-        }
-        return firstError.has_value() ? Result<void>::Failure(*firstError) : Result<void>::Success();
+        return JoinImpl(nullptr);
     }
 
     /** @copydoc TaskGroup::Join(const JoinOptions &) */
     Result<void> TaskGroup::Join(const JoinOptions &options) const {
+        return JoinImpl(&options);
+    }
+
+    Result<void> TaskGroup::JoinImpl(const JoinOptions *options) const {
         std::lock_guard joinLock(m_state->joinMutex);
         if (m_state->cancellation.Token().IsCancellationRequested())
             CancelChildren(m_state);
@@ -458,11 +451,11 @@ namespace Horo {
             children = m_state->children;
         }
 
-        const auto deadline = WaitDeadline(options.timeout);
+        const auto deadline = options == nullptr ? std::chrono::steady_clock::time_point{} : WaitDeadline(options->timeout);
         std::optional<Error> firstError;
         for (const auto &child : children) {
-            const Result<void> waited = WaitUntil(child->m_record, deadline, options.waitPolicy);
-            if (waited.HasError() && IsWaitControlError(waited.ErrorValue()))
+            const Result<void> waited = options == nullptr ? child->Wait() : WaitUntil(child->m_record, deadline, options->waitPolicy);
+            if (options != nullptr && waited.HasError() && IsWaitControlError(waited.ErrorValue()))
                 return waited;
             if (waited.HasError() && !firstError.has_value())
                 firstError = waited.ErrorValue();

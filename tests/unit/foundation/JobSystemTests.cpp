@@ -260,6 +260,10 @@ namespace {
         REQUIRE((jobs.Query(submitted.Value().Id()).state == Horo::JobState::Queued));
 
         REQUIRE((jobs.RequestCancel(submitted.Value().Id()).HasValue()));
+        const auto terminalWorkerOnly =
+            submitted.Value().Wait({.waitPolicy = Horo::WaitPolicy::WorkerOnly, .timeout = Horo::Duration::FromMilliseconds(10)});
+        REQUIRE((terminalWorkerOnly.HasError()));
+        REQUIRE((terminalWorkerOnly.ErrorValue().code.Value() == "job.wait_forbidden"));
         jobs.Shutdown(Horo::ShutdownPolicy::Cancel);
     }
 
@@ -279,6 +283,37 @@ namespace {
 
         REQUIRE((submitted.Value().Wait().HasValue()));
         REQUIRE((selfWaitRejected.load()));
+        jobs.Shutdown(Horo::ShutdownPolicy::Drain);
+    }
+
+    TEST_CASE("Worker Helping Rejects A Reentrant Wait Cycle", "[unit][foundation][jobs][wait]") {
+        Horo::JobSystem jobs{Horo::JobSystemConfig{.workerCount = 1, .maxQueuedJobs = 2}};
+        std::atomic<const Horo::JobHandle *> parentHandle{};
+        std::atomic<const Horo::JobHandle *> childHandle{};
+        std::atomic cycleRejected{false};
+        std::atomic childWaitSucceeded{false};
+
+        auto parent = jobs.Submit({}, [&](const Horo::CancellationToken &) {
+            while (childHandle.load() == nullptr)
+                std::this_thread::yield();
+            childWaitSucceeded.store(
+                childHandle.load()
+                    ->Wait({.waitPolicy = Horo::WaitPolicy::WorkerOnly, .timeout = Horo::Duration::FromMilliseconds(100)})
+                    .HasValue());
+        });
+        REQUIRE((parent.HasValue()));
+        parentHandle.store(&parent.Value());
+        auto child = jobs.Submit({}, [&](const Horo::CancellationToken &) {
+            const auto cycle =
+                parentHandle.load()->Wait({.waitPolicy = Horo::WaitPolicy::WorkerOnly, .timeout = Horo::Duration::FromMilliseconds(100)});
+            cycleRejected.store(cycle.HasError() && cycle.ErrorValue().code.Value() == "job.wait_capacity_deadlock");
+        });
+        REQUIRE((child.HasValue()));
+        childHandle.store(&child.Value());
+
+        REQUIRE((parent.Value().Wait().HasValue()));
+        REQUIRE((childWaitSucceeded.load()));
+        REQUIRE((cycleRejected.load()));
         jobs.Shutdown(Horo::ShutdownPolicy::Drain);
     }
 
@@ -370,6 +405,55 @@ namespace {
         REQUIRE((group.Join().HasValue()));
         REQUIRE((group.Join().HasValue()));
         REQUIRE((childExecuted.load()));
+        jobs.Shutdown(Horo::ShutdownPolicy::Drain);
+    }
+
+    TEST_CASE("Bounded Task Group Join Preserves First Failure In Spawn Order", "[unit][foundation][jobs][wait]") {
+        Horo::JobSystem jobs{Horo::JobSystemConfig{.workerCount = 0, .maxQueuedJobs = 2}};
+        Horo::TaskGroup group(jobs, Horo::TaskGroupFailurePolicy::CollectAll);
+        REQUIRE((group
+                     .Spawn({}, [](const Horo::CancellationToken &) {
+            Horo::Error error = Horo::MakeError(TestFailure);
+            error.code = Horo::ErrorCode("test.job_system.bounded_first");
+            return Horo::Result<void>::Failure(std::move(error));
+        }).HasValue()));
+        REQUIRE((group
+                     .Spawn({}, [](const Horo::CancellationToken &) {
+            Horo::Error error = Horo::MakeError(TestFailure);
+            error.code = Horo::ErrorCode("test.job_system.bounded_second");
+            return Horo::Result<void>::Failure(std::move(error));
+        }).HasValue()));
+
+        const auto joined =
+            group.Join({.waitPolicy = Horo::WaitPolicy::MainThreadPumpAllowed, .timeout = Horo::Duration::FromMilliseconds(100)});
+        REQUIRE((joined.HasError()));
+        REQUIRE((joined.ErrorValue().code.Value() == "test.job_system.bounded_first"));
+        REQUIRE((group.Join().ErrorValue().code.Value() == "test.job_system.bounded_first"));
+        jobs.Shutdown(Horo::ShutdownPolicy::Drain);
+    }
+
+    TEST_CASE("Task Group Destructor Cancels And Drains After Bounded Timeout", "[unit][foundation][jobs][wait][lifetime]") {
+        Horo::JobSystem jobs{Horo::JobSystemConfig{.workerCount = 1, .maxQueuedJobs = 1}};
+        std::atomic started{false};
+        std::atomic stopped{false};
+        {
+            Horo::TaskGroup group(jobs);
+            REQUIRE((group
+                         .Spawn({}, [&](const Horo::CancellationToken &cancellation) {
+                started.store(true);
+                while (!cancellation.IsCancellationRequested())
+                    std::this_thread::yield();
+                stopped.store(true);
+                return Horo::Result<void>::Success();
+            }).HasValue()));
+            while (!started.load())
+                std::this_thread::yield();
+            const auto timedOut =
+                group.Join({.waitPolicy = Horo::WaitPolicy::MainThreadPumpAllowed, .timeout = Horo::Duration::FromMilliseconds(1)});
+            REQUIRE((timedOut.HasError()));
+            REQUIRE((timedOut.ErrorValue().code.Value() == "job.wait_timed_out"));
+        }
+        REQUIRE((stopped.load()));
         jobs.Shutdown(Horo::ShutdownPolicy::Drain);
     }
 }  // namespace
