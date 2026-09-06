@@ -22,6 +22,26 @@ namespace Horo::Render {
             }
             return Result<RenderGraphOwnerId>::Failure(MakeError(RenderGraphErrors::OwnerExhausted));
         }
+
+        /** @brief Reports whether the pass kind belongs to the public contract. */
+        [[nodiscard]] bool IsKnown(const RenderPassKind kind) noexcept {
+            return static_cast<std::uint8_t>(kind) <= static_cast<std::uint8_t>(RenderPassKind::Copy);
+        }
+
+        /** @brief Reports whether the queue role belongs to the public contract. */
+        [[nodiscard]] bool IsKnown(const RenderQueueRole queue) noexcept {
+            return static_cast<std::uint8_t>(queue) <= static_cast<std::uint8_t>(RenderQueueRole::Transfer);
+        }
+
+        /** @brief Reports whether a declared queue can carry the pass kind. */
+        [[nodiscard]] bool IsQueueCompatible(const RenderPassKind kind, const RenderQueueRole queue) noexcept {
+            constexpr bool compatible[3][3] = {
+                {true, false, false},
+                {true, true, false},
+                {true, true, true},
+            };
+            return compatible[static_cast<std::uint8_t>(kind)][static_cast<std::uint8_t>(queue)];
+        }
     }  // namespace
 
     /** @copydoc RenderGraph::RenderGraph */
@@ -107,6 +127,30 @@ namespace Horo::Render {
         return state_;
     }
 
+    /** @copydoc RenderGraphBuilder::AddPass */
+    Result<RenderGraphPassRef> RenderGraphBuilder::AddPass(const RenderPassKind kind, const RenderQueueRole queue) {
+        const Result<void> open = ValidateOpenOnOwnerThread();
+        if (open.HasError()) {
+            return Result<RenderGraphPassRef>::Failure(open.ErrorValue());
+        }
+        if (!IsKnown(kind)) {
+            return Result<RenderGraphPassRef>::Failure(MakeError(RenderGraphErrors::UnsupportedPassKind));
+        }
+        if (!IsKnown(queue)) {
+            return Result<RenderGraphPassRef>::Failure(MakeError(RenderGraphErrors::UnsupportedQueueRole));
+        }
+        if (!IsQueueCompatible(kind, queue)) {
+            return Result<RenderGraphPassRef>::Failure(MakeError(RenderGraphErrors::IncompatibleQueue));
+        }
+        if (passes_.size() == limits_.maxPasses) {
+            return Result<RenderGraphPassRef>::Failure(MakeError(RenderGraphErrors::CapacityExceeded, "Render-pass capacity is full."));
+        }
+
+        const RenderGraphPassRef reference{owner_, RenderPassId{static_cast<std::uint32_t>(passes_.size() + 1)}};
+        passes_.push_back(RenderGraphPass{reference, kind, queue});
+        return Result<RenderGraphPassRef>::Success(reference);
+    }
+
     /** @copydoc RenderGraphBuilder::Shutdown */
     void RenderGraphBuilder::Shutdown() noexcept {
         ReleaseStorage();
@@ -127,6 +171,17 @@ namespace Horo::Render {
             Shutdown();
             return Result<void>::Failure(MakeError(RenderGraphErrors::AllocationFailed));
         }
+    }
+
+    /** @copydoc RenderGraphBuilder::ValidateOpenOnOwnerThread */
+    Result<void> RenderGraphBuilder::ValidateOpenOnOwnerThread() const {
+        if (std::this_thread::get_id() != ownerThread_) {
+            return Result<void>::Failure(MakeError(RenderGraphErrors::WrongThread));
+        }
+        if (state_ != RenderGraphBuilderState::Open) {
+            return Result<void>::Failure(MakeError(RenderGraphErrors::BuilderClosed));
+        }
+        return Result<void>::Success();
     }
 
     /** @copydoc RenderGraphBuilder::ReleaseStorage */

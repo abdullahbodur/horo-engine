@@ -248,6 +248,14 @@ namespace Horo::Render {
         [[nodiscard]] RenderGraphBuilderState State() const noexcept;
 
         /**
+         * @brief Adds one pass and assigns the next canonical render-pass identity.
+         * @param kind Backend-neutral pass category.
+         * @param queue Explicit queue role; incompatible or unknown roles fail without fallback.
+         * @return Builder-scoped reference or a typed affinity, lifecycle, capacity, or support failure.
+         */
+        [[nodiscard]] Result<RenderGraphPassRef> AddPass(RenderPassKind kind, RenderQueueRole queue);
+
+        /**
          * @brief Releases retained authoring storage without backend or GPU work.
          *
          * Repeated calls are safe. The caller must quiesce owner-thread authoring
@@ -259,6 +267,7 @@ namespace Horo::Render {
         RenderGraphBuilder(RenderGraphOwnerId owner, RenderGraphLimits limits) noexcept;
 
         [[nodiscard]] Result<void> Reserve();
+        [[nodiscard]] Result<void> ValidateOpenOnOwnerThread() const;
         void ReleaseStorage() noexcept;
 
         RenderGraphOwnerId owner_;

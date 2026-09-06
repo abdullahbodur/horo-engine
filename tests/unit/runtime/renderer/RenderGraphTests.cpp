@@ -2,6 +2,8 @@
 #include "Horo/Runtime/Render/RenderGraphErrors.h"
 
 #include <catch2/catch_test_macros.hpp>
+#include <string>
+#include <thread>
 #include <type_traits>
 #include <utility>
 
@@ -79,4 +81,32 @@ TEST_CASE("Render graph builder owns finite storage and explicit lifecycle", "[r
     const auto rejected = RenderGraphBuilder::Create(invalid);
     REQUIRE(rejected.HasError());
     REQUIRE(rejected.ErrorValue().code.Value() == "render.graph.limits_invalid");
+}
+
+TEST_CASE("Render graph pass authoring rejects unsupported and incompatible queues", "[runtime][renderer][render-graph]") {
+    RenderGraphLimits limits = {};
+    limits.maxPasses = 1;
+    auto created = RenderGraphBuilder::Create(limits);
+    REQUIRE(created.HasValue());
+    RenderGraphBuilder builder = std::move(created).Value();
+
+    REQUIRE(builder.AddPass(RenderPassKind::Graphics, RenderQueueRole::Compute).ErrorValue().code.Value() ==
+            "render.graph.queue_incompatible");
+    REQUIRE(builder.AddPass(static_cast<RenderPassKind>(255), RenderQueueRole::Graphics).ErrorValue().code.Value() ==
+            "render.graph.pass_kind_unsupported");
+    REQUIRE(builder.AddPass(RenderPassKind::Graphics, static_cast<RenderQueueRole>(255)).ErrorValue().code.Value() ==
+            "render.graph.queue_role_unsupported");
+
+    auto pass = builder.AddPass(RenderPassKind::Graphics, RenderQueueRole::Graphics);
+    REQUIRE(pass.HasValue());
+    REQUIRE(pass.Value().id == RenderPassId{1});
+    REQUIRE(builder.AddPass(RenderPassKind::Graphics, RenderQueueRole::Graphics).ErrorValue().code.Value() ==
+            "render.graph.capacity_exceeded");
+
+    std::string threadError;
+    std::thread worker{[&builder, &threadError] {
+        threadError = builder.AddPass(RenderPassKind::Copy, RenderQueueRole::Transfer).ErrorValue().code.Value();
+    }};
+    worker.join();
+    REQUIRE(threadError == "render.graph.wrong_thread");
 }

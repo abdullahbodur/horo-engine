@@ -1347,7 +1347,9 @@ Finalized records reside in one move-only owning `RenderGraph` exposed through
 immutable deterministic-order views. `RenderGraphBuilder` owns pre-reserved finite
 CPU storage under a process-local non-reusable identity. Creation fixes
 owner-thread affinity; explicit idempotent shutdown releases storage without
-backend or GPU work. Mutation, validation, finalization, resource import/export
+backend or GPU work. Pass authoring assigns canonical identities and rejects
+unknown or incompatible queue roles without fallback. Resource/use/dependency
+mutation, finalization, resource import/export
 classes, dependency DAG validation, lifetime compilation, barrier synthesis, and
 backend translation remain separate render-graph delivery stages.
 
