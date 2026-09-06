@@ -1339,10 +1339,14 @@ struct RenderPassDescriptor {
 };
 ```
 
-The current foundation slice carries minimal compiled pass metadata. Resource
-read/write declarations belong to the future render-graph authoring descriptor
-and will be added only with typed `ResourceUse`, dependency validation, and
-lifetime compilation.
+The render API defines backend-neutral authoring records for graph-local pass and
+resource references, semantic resource uses, explicit dependencies, queue roles,
+and finite graph limits. Pass references reuse canonical `RenderPassId` and
+`RenderPassKind` values rather than creating a competing pass identity model.
+Finalized records reside in one move-only owning `RenderGraph` exposed through
+immutable deterministic-order views. Builder ownership, validation, finalization, resource import/export classes,
+dependency DAG validation, lifetime compilation, barrier synthesis, and backend
+translation remain separate render-graph delivery stages.
 
 The graph:
 

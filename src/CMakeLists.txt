@@ -363,15 +363,18 @@ target_compile_features(HoroInput PUBLIC cxx_std_20)
 target_include_directories(HoroInput PUBLIC ${PROJECT_SOURCE_DIR}/include)
 target_link_libraries(HoroInput PUBLIC HoroEngine::Foundation PRIVATE nlohmann_json::nlohmann_json)
 
-add_library(HoroRenderApi INTERFACE)
+add_library(HoroRenderApi STATIC
+        runtime/renderer/api/RenderGraph.cpp
+        runtime/renderer/api/RenderGraphErrors.cpp
+)
 add_library(HoroEngine::RenderApi ALIAS HoroRenderApi)
 
-target_compile_features(HoroRenderApi INTERFACE cxx_std_20)
+target_compile_features(HoroRenderApi PUBLIC cxx_std_20)
 target_include_directories(HoroRenderApi
-        INTERFACE
+        PUBLIC
         ${PROJECT_SOURCE_DIR}/include
 )
-target_link_libraries(HoroRenderApi INTERFACE HoroEngine::Foundation)
+target_link_libraries(HoroRenderApi PUBLIC HoroEngine::Foundation)
 
 add_library(HoroRenderBackendRegistry STATIC
         runtime/renderer/backend_registry/RenderBackendRegistry.cpp
