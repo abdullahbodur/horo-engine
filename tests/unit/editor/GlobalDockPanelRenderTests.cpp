@@ -90,17 +90,74 @@ namespace {
         using namespace Horo::Editor;
 
         const std::array buildRecords{
-            BuildOutputRecord{.status = BuildOutputStatus::Succeeded, .phase = "Compile", .message = "Shader complete"},
-            BuildOutputRecord{.status = BuildOutputStatus::Failed,
-                              .phase = "Validate",
-                              .message = "Syntax error",
+            BuildOutputRecord{.result = BuildOutputResult::Succeeded,
+                              .stage = "Compile",
+                              .code = DiagnosticCode{"shader.compile.succeeded"},
+                              .message = "Shader complete"},
+            BuildOutputRecord{.severity = DiagnosticSeverity::Error,
+                              .stage = "Validate",
+                              .code = DiagnosticCode{"shader.validation.syntax"},
+                              .message = "Invalid syntax",
                               .source = DiagnosticSourceLocation{.absolutePath = "/project/assets/material.glsl", .line = 8}},
-            BuildOutputRecord{.status = BuildOutputStatus::Cached, .phase = "Cook", .message = "Mesh cached"},
+            BuildOutputRecord{.result = BuildOutputResult::Cached,
+                              .stage = "Reuse",
+                              .code = DiagnosticCode{"mesh.cache.hit"},
+                              .message = "Reused mesh"},
+            BuildOutputRecord{.severity = DiagnosticSeverity::Warning,
+                              .stage = "Compile",
+                              .code = DiagnosticCode{"shader.compile.deprecated"},
+                              .message = "Deprecated syntax"},
+            BuildOutputRecord{.severity = DiagnosticSeverity::Fatal,
+                              .stage = "Validate",
+                              .code = DiagnosticCode{"shader.validation.abort"},
+                              .message = "Compiler process cannot continue"},
+            BuildOutputRecord{.result = BuildOutputResult::Failed,
+                              .stage = "Link",
+                              .code = DiagnosticCode{"gameplay.link.terminal"},
+                              .message = "Linker stopped"},
+            BuildOutputRecord{.result = BuildOutputResult::Cancelled,
+                              .stage = "Generate",
+                              .code = DiagnosticCode{"gameplay.generate.cancel"},
+                              .message = "Generation stopped"},
+            BuildOutputRecord{.result = BuildOutputResult::TimedOut,
+                              .stage = "Package",
+                              .code = DiagnosticCode{"gameplay.package.timeout"},
+                              .message = "Packaging stopped"},
+            BuildOutputRecord{.severity = DiagnosticSeverity::Note,
+                              .stage = "Resolve",
+                              .code = DiagnosticCode{"gameplay.resolve.detail"},
+                              .message = "Dependency resolved"},
         };
         REQUIRE((GlobalDockBuildOutputPane::ProjectRecords(buildRecords, GlobalDockBuildOutputPane::StatusFilter::Failed, "MATERIAL") ==
                  std::vector<std::size_t>{1}));
         REQUIRE((GlobalDockBuildOutputPane::ProjectRecords(buildRecords, GlobalDockBuildOutputPane::StatusFilter::Cached, {}) ==
                  std::vector<std::size_t>{2}));
+        REQUIRE((GlobalDockBuildOutputPane::ProjectRecords(buildRecords, GlobalDockBuildOutputPane::StatusFilter::Failed, "deprecated")
+                     .empty()));
+        REQUIRE((GlobalDockBuildOutputPane::ProjectRecords(buildRecords, GlobalDockBuildOutputPane::StatusFilter::All,
+                                                           "shader.compile.deprecated") == std::vector<std::size_t>{3}));
+        REQUIRE((GlobalDockBuildOutputPane::ProjectRecords(buildRecords, GlobalDockBuildOutputPane::StatusFilter::Failed, "FATAL") ==
+                 std::vector<std::size_t>{4}));
+        REQUIRE((GlobalDockBuildOutputPane::ProjectRecords(buildRecords, GlobalDockBuildOutputPane::StatusFilter::Ok, {}) ==
+                 std::vector<std::size_t>{0, 8}));
+        REQUIRE((GlobalDockBuildOutputPane::ProjectRecords(buildRecords, GlobalDockBuildOutputPane::StatusFilter::Failed, {}) ==
+                 std::vector<std::size_t>{1, 4, 5, 6, 7}));
+        REQUIRE((GlobalDockBuildOutputPane::ProjectRecords(buildRecords, GlobalDockBuildOutputPane::StatusFilter::All, "OK") ==
+                 std::vector<std::size_t>{0}));
+        REQUIRE((GlobalDockBuildOutputPane::ProjectRecords(buildRecords, GlobalDockBuildOutputPane::StatusFilter::All, "ERROR") ==
+                 std::vector<std::size_t>{1}));
+        REQUIRE((GlobalDockBuildOutputPane::ProjectRecords(buildRecords, GlobalDockBuildOutputPane::StatusFilter::All, "CACHED") ==
+                 std::vector<std::size_t>{2}));
+        REQUIRE((GlobalDockBuildOutputPane::ProjectRecords(buildRecords, GlobalDockBuildOutputPane::StatusFilter::All, "WARNING") ==
+                 std::vector<std::size_t>{3}));
+        REQUIRE((GlobalDockBuildOutputPane::ProjectRecords(buildRecords, GlobalDockBuildOutputPane::StatusFilter::All, "FAILED") ==
+                 std::vector<std::size_t>{5}));
+        REQUIRE((GlobalDockBuildOutputPane::ProjectRecords(buildRecords, GlobalDockBuildOutputPane::StatusFilter::All, "CANCELLED") ==
+                 std::vector<std::size_t>{6}));
+        REQUIRE((GlobalDockBuildOutputPane::ProjectRecords(buildRecords, GlobalDockBuildOutputPane::StatusFilter::All, "TIMED OUT") ==
+                 std::vector<std::size_t>{7}));
+        REQUIRE((GlobalDockBuildOutputPane::ProjectRecords(buildRecords, GlobalDockBuildOutputPane::StatusFilter::All, "INFO") ==
+                 std::vector<std::size_t>{8}));
 
         const std::array operations{
             OperationRecord{.id = 1, .kind = OperationKind::Import, .state = OperationState::Running, .title = "Import assets"},
@@ -393,12 +450,49 @@ TEST_CASE("Content browser renders responsive layouts and every dock tab", "[uni
     ImGui::Render();
     liveConsole.OnDetach();
 
-    BuildOutputStore buildOutputStore{8};
-    buildOutputStore.Append({.timestampUtc = std::chrono::system_clock::now(),
-                             .status = BuildOutputStatus::Failed,
-                             .phase = "compile",
-                             .message = "Unable to compile shader",
-                             .source = DiagnosticSourceLocation{.absolutePath = "/tmp/HoroProject/assets/shader.glsl", .line = 12}});
+    BuildOutputStore buildOutputStore{16};
+    const std::array renderedBuildRecords{
+        BuildOutputRecord{.timestampUtc = std::chrono::system_clock::now(),
+                          .result = BuildOutputResult::Succeeded,
+                          .stage = "compile",
+                          .message = "Build succeeded"},
+        BuildOutputRecord{.timestampUtc = std::chrono::system_clock::now(),
+                          .result = BuildOutputResult::Failed,
+                          .stage = "link",
+                          .message = "Build failed"},
+        BuildOutputRecord{.timestampUtc = std::chrono::system_clock::now(),
+                          .result = BuildOutputResult::Cached,
+                          .stage = "cook",
+                          .message = "Cache hit"},
+        BuildOutputRecord{.timestampUtc = std::chrono::system_clock::now(),
+                          .result = BuildOutputResult::Cancelled,
+                          .stage = "package",
+                          .message = "Build cancelled"},
+        BuildOutputRecord{.timestampUtc = std::chrono::system_clock::now(),
+                          .result = BuildOutputResult::TimedOut,
+                          .stage = "package",
+                          .message = "Build timed out"},
+        BuildOutputRecord{.timestampUtc = std::chrono::system_clock::now(),
+                          .severity = DiagnosticSeverity::Error,
+                          .stage = "validate",
+                          .message = "Validation error"},
+        BuildOutputRecord{.timestampUtc = std::chrono::system_clock::now(),
+                          .severity = DiagnosticSeverity::Warning,
+                          .stage = "compile",
+                          .message = "Compiler warning"},
+        BuildOutputRecord{.timestampUtc = std::chrono::system_clock::now(),
+                          .severity = DiagnosticSeverity::Note,
+                          .stage = "resolve",
+                          .message = "Resolution note"},
+        BuildOutputRecord{.timestampUtc = std::chrono::system_clock::now(),
+                          .severity = DiagnosticSeverity::Fatal,
+                          .stage = "compile",
+                          .code = DiagnosticCode{"shader.compile.abort"},
+                          .message = "Unable to compile shader",
+                          .source = DiagnosticSourceLocation{.absolutePath = "/tmp/HoroProject/assets/shader.glsl", .line = 12}},
+    };
+    for (const BuildOutputRecord &record : renderedBuildRecords)
+        buildOutputStore.Append(record);
     OperationStore operationStore{8, 8};
     const auto operationId = operationStore.Begin({.kind = OperationKind::Cook,
                                                    .title = "Cook assets",

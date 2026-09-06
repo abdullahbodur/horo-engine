@@ -1010,10 +1010,13 @@
       "text": "Önbellekte"
     },
     "workspace.global_dock.build_output.row_status.info": {"text": "Bilgi"},
+    "workspace.global_dock.build_output.row_status.warning": {"text": "Uyarı"},
+    "workspace.global_dock.build_output.row_status.fatal": {"text": "Kritik"},
     "workspace.global_dock.build_output.row_status.succeeded": {"text": "Tamam"},
     "workspace.global_dock.build_output.row_status.failed": {"text": "Başarısız"},
     "workspace.global_dock.build_output.row_status.cached": {"text": "Önbellekte"},
     "workspace.global_dock.build_output.row_status.cancelled": {"text": "İptal edildi"},
+    "workspace.global_dock.build_output.row_status.timed_out": {"text": "Zaman aşımına uğradı"},
     "workspace.global_dock.build_output.column.time": {
       "text": "Zaman"
     },

@@ -31,8 +31,8 @@ namespace Horo::Assets {
         class CookOperationScope {
         public:
             CookOperationScope(OperationStore *store, BuildOutputStore *output, const CancellationToken &cancellation,
-                               const std::optional<OperationId> id)
-                : store_(store), output_(output), cancellation_(&cancellation), id_(id) {}
+                               const BuildOutputSessionId sessionId, const std::optional<OperationId> id)
+                : store_(store), output_(output), cancellation_(&cancellation), sessionId_(sessionId), id_(id) {}
 
             ~CookOperationScope() {
                 if (completed_)
@@ -43,11 +43,12 @@ namespace Horo::Assets {
                         store_->Update(*id_, OperationUpdate{.state = cancelled ? OperationState::Cancelled : OperationState::Failed,
                                                              .phase = "cook",
                                                              .message = cancelled ? "Cook cancelled" : "Cook failed"}));
-                if (output_ != nullptr)
-                    output_->Append(BuildOutputRecord{.timestampUtc = std::chrono::system_clock::now(),
-                                                      .status = cancelled ? BuildOutputStatus::Cancelled : BuildOutputStatus::Failed,
-                                                      .phase = "cook",
-                                                      .message = cancelled ? "Cook cancelled" : "Cook failed"});
+                Publish(BuildOutputRecord{.timestampUtc = std::chrono::system_clock::now(),
+                                          .severity = cancelled ? DiagnosticSeverity::Warning : DiagnosticSeverity::Error,
+                                          .result = cancelled ? BuildOutputResult::Cancelled : BuildOutputResult::Failed,
+                                          .stage = "cook",
+                                          .code = DiagnosticCode{cancelled ? "asset.cook.cancelled" : "asset.cook.failed"},
+                                          .message = cancelled ? "Cook cancelled" : "Cook failed"});
             }
 
             CookOperationScope(const CookOperationScope &) = delete;
@@ -68,18 +69,27 @@ namespace Horo::Assets {
                                                                            .phase = "complete",
                                                                            .message = std::move(message),
                                                                            .progress = 1.0F}));
-                if (output_ != nullptr)
-                    output_->Append(BuildOutputRecord{.timestampUtc = std::chrono::system_clock::now(),
-                                                      .status = BuildOutputStatus::Succeeded,
-                                                      .phase = "complete",
-                                                      .message = outputMessage});
+                Publish(BuildOutputRecord{.timestampUtc = std::chrono::system_clock::now(),
+                                          .result = BuildOutputResult::Succeeded,
+                                          .stage = "complete",
+                                          .code = DiagnosticCode{"asset.cook.succeeded"},
+                                          .message = outputMessage});
                 completed_ = true;
+            }
+
+            void Publish(BuildOutputRecord record) const {
+                if (output_ == nullptr)
+                    return;
+                record.sessionId = sessionId_;
+                record.operationId = id_;
+                output_->Append(std::move(record));
             }
 
         private:
             OperationStore *store_{};
             BuildOutputStore *output_{};
             const CancellationToken *cancellation_{};
+            BuildOutputSessionId sessionId_;
             std::optional<OperationId> id_;
             bool completed_{false};
         };
@@ -200,10 +210,10 @@ namespace Horo::Assets {
             if (request.buildOutputStore != nullptr) {
                 for (const auto &slot : slots) {
                     if (!slot.cacheHit) {
-                        request.buildOutputStore->Append(BuildOutputRecord{
+                        operation.Publish(BuildOutputRecord{
                             .timestampUtc = std::chrono::system_clock::now(),
-                            .status = BuildOutputStatus::Succeeded,
-                            .phase = "cook",
+                            .stage = "cook",
+                            .code = DiagnosticCode{"asset.cook.asset_cooked"},
                             .message = slot.record.sourcePath.String(),
                             .source =
                                 DiagnosticSourceLocation{
@@ -299,10 +309,11 @@ namespace Horo::Assets {
                     slot.cookedArtifact = std::move(*cached);
                     ++cacheHits;
                     if (request.buildOutputStore != nullptr) {
-                        request.buildOutputStore->Append(BuildOutputRecord{
+                        operation.Publish(BuildOutputRecord{
                             .timestampUtc = std::chrono::system_clock::now(),
-                            .status = BuildOutputStatus::Cached,
-                            .phase = "cook",
+                            .result = BuildOutputResult::Cached,
+                            .stage = "cache_check",
+                            .code = DiagnosticCode{"asset.cook.cache_hit"},
                             .message = slot.record.sourcePath.String(),
                             .source =
                                 DiagnosticSourceLocation{
@@ -312,6 +323,16 @@ namespace Horo::Assets {
                 }
             }
             return Result<std::size_t>::Success(cacheHits);
+        }
+
+        /** @brief Allocates the optional build-output identity before admitting an operation row. */
+        [[nodiscard]] Result<std::optional<BuildOutputSessionId>> BeginOutputSession(BuildOutputStore *output) {
+            if (output == nullptr)
+                return Result<std::optional<BuildOutputSessionId>>::Success(std::nullopt);
+            std::optional<BuildOutputSessionId> sessionId = output->BeginSession();
+            if (!sessionId.has_value())
+                return Result<std::optional<BuildOutputSessionId>>::Failure(MakeError(CookErrors::OutputIdentityExhausted));
+            return Result<std::optional<BuildOutputSessionId>>::Success(std::move(sessionId));
         }
     }  // namespace
 
@@ -327,6 +348,9 @@ namespace Horo::Assets {
 
         auto records = request.registry.Records();
 
+        Result<std::optional<BuildOutputSessionId>> outputSession = BeginOutputSession(request.buildOutputStore);
+        if (outputSession.HasError())
+            return Result<AssetCookReport>::Failure(outputSession.ErrorValue());
         std::optional<OperationId> operationId;
         if (request.operationStore != nullptr) {
             operationId = request.operationStore->Begin(OperationDescriptor{.kind = OperationKind::Cook,
@@ -337,14 +361,15 @@ namespace Horo::Assets {
                                                                             .cancellable = static_cast<bool>(request.requestCancel),
                                                                             .requestCancel = request.requestCancel});
         }
-        CookOperationScope operation{request.operationStore, request.buildOutputStore, cancellation, operationId};
+        CookOperationScope operation{request.operationStore, request.buildOutputStore, cancellation,
+                                     outputSession.Value().value_or(BuildOutputSessionId{}), operationId};
 
         if (request.buildOutputStore != nullptr) {
             const auto now = std::chrono::system_clock::now();
-            request.buildOutputStore->Append(BuildOutputRecord{
+            operation.Publish(BuildOutputRecord{
                 .timestampUtc = now,
-                .status = BuildOutputStatus::Info,
-                .phase = "prepare",
+                .stage = "prepare",
+                .code = DiagnosticCode{"asset.cook.started"},
                 .message = std::format("Cooking {} assets", records.size()),
             });
         }

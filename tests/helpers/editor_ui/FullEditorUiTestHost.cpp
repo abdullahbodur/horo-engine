@@ -295,7 +295,7 @@ namespace Horo::Tests {
         std::string result;
         if (snapshot) {
             for (const BuildOutputRecord &record : snapshot->records)
-                result += record.phase + ": " + record.message + "\n";
+                result += record.stage + ": " + record.message + "\n";
         }
         return result;
     }

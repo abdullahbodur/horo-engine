@@ -284,6 +284,23 @@ struct Diagnostic {
 Diagnostics are ordered deterministically so CLI output, tests, and support
 bundles remain stable.
 
+### Build Output Projection
+
+Build and cook producers publish immutable records into one composition-root-owned,
+fixed-capacity `BuildOutputStore`. Each admitted producer operation receives a
+store-issued, non-zero, monotonically allocated session identity and may also carry
+its application `OperationId`. Records keep diagnostic severity separate from an
+optional terminal result, and include a stable diagnostic code, stage, UTC timestamp,
+store sequence, message, and optional source location. One producer operation emits
+at most one terminal result; progress, compiler diagnostics, and cache observations
+remain result-less unless they represent an independently correlated terminal scope.
+
+The store assigns sequence and revision under its lock, accounts for overwritten
+records, and returns owned snapshots only when the revision changes. Producers may
+append from any thread and never depend on editor or GUI lifetime. The composition
+root stops producers before destroying the store; panels detach their borrowed query
+capability and never retain store-owned references or become output authorities.
+
 ## Severity
 
 | Severity | Meaning |
