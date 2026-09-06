@@ -218,25 +218,28 @@ namespace Horo::Physics {
 
     /** @copydoc PhysicsQueryHitLess */
     bool PhysicsQueryHitLess(const PhysicsQueryHit &left, const PhysicsQueryHit &right) noexcept {
-        const auto leftKey = std::tuple{left.distanceMeters,   ResponseRank(left.response),
-                                        left.body.slot.index,  left.body.slot.generation,
-                                        left.shape.slot.index, left.shape.slot.generation,
-                                        SubshapeValue(left),   left.position.x,
-                                        left.position.y,       left.position.z,
-                                        NormalKey(left)};
-        const auto rightKey = std::tuple{right.distanceMeters,   ResponseRank(right.response),
-                                         right.body.slot.index,  right.body.slot.generation,
-                                         right.shape.slot.index, right.shape.slot.generation,
-                                         SubshapeValue(right),   right.position.x,
-                                         right.position.y,       right.position.z,
-                                         NormalKey(right)};
-        if (leftKey != rightKey)
-            return leftKey < rightKey;
+        const auto leftResponse = ResponseRank(left.response);
+        const auto rightResponse = ResponseRank(right.response);
+        const auto leftSubshape = SubshapeValue(left);
+        const auto rightSubshape = SubshapeValue(right);
+        const auto leftNormal = NormalKey(left);
+        const auto rightNormal = NormalKey(right);
+        const auto leftKey =
+            std::tie(left.distanceMeters, leftResponse, left.body.slot.index, left.body.slot.generation, left.shape.slot.index,
+                     left.shape.slot.generation, leftSubshape, left.position.x, left.position.y, left.position.z, leftNormal);
+        const auto rightKey =
+            std::tie(right.distanceMeters, rightResponse, right.body.slot.index, right.body.slot.generation, right.shape.slot.index,
+                     right.shape.slot.generation, rightSubshape, right.position.x, right.position.y, right.position.z, rightNormal);
+        if (const auto ordering = leftKey <=> rightKey; ordering != 0)
+            return ordering < 0;
         if (left.material.has_value() != right.material.has_value())
             return !left.material.has_value();
         if (!left.material.has_value())
             return false;
-        return std::tuple{left.material->asset.Bytes(), left.material->assetGeneration, left.material->slot.Value()} <
-               std::tuple{right.material->asset.Bytes(), right.material->assetGeneration, right.material->slot.Value()};
+        const auto leftSlot = left.material->slot.Value();
+        const auto rightSlot = right.material->slot.Value();
+        return std::tie(left.material->asset.Bytes(), left.material->assetGeneration, leftSlot) <=>
+                   std::tie(right.material->asset.Bytes(), right.material->assetGeneration, rightSlot) <
+               0;
     }
 }  // namespace Horo::Physics
