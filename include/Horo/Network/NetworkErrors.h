@@ -8,6 +8,18 @@
 #include "Horo/Foundation/ErrorCode.h"
 
 namespace Horo::Network::NetworkErrors {
+    /** @brief Packet pool descriptor is malformed. */
+    extern const ErrorCodeDescriptor PacketBufferInvalid;
+    /** @brief Packet bytes or prepared storage exceed finite capacity. */
+    extern const ErrorCodeDescriptor PacketBufferCapacityExceeded;
+    /** @brief Every prepared packet slot is leased. */
+    extern const ErrorCodeDescriptor PacketBufferPoolExhausted;
+    /** @brief Queue descriptor or packet metadata is malformed. */
+    extern const ErrorCodeDescriptor PacketQueueInvalid;
+    /** @brief A packet cannot fit the queue's declared byte bounds. */
+    extern const ErrorCodeDescriptor PacketQueueCapacityExceeded;
+    /** @brief Explicit reject/replace policy could not admit a packet. */
+    extern const ErrorCodeDescriptor PacketQueueFull;
     /** @brief A stable network identity uses its reserved zero representation. */
     extern const ErrorCodeDescriptor IdentityInvalid;
     /** @brief Replication descriptor metadata is malformed or exceeds its declared bounds. */

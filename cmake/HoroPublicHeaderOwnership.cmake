@@ -80,6 +80,8 @@ horo_configure_target_header_boundary(HoroNetworkApi PUBLIC_HEADERS
     Horo/Network/MessageCodecRegistry.h
     Horo/Network/MessageEnvelope.h
     Horo/Network/NetworkErrors.h
+    Horo/Network/PacketBuffer.h
+    Horo/Network/PacketQueue.h
     Horo/Network/ProtocolIdentity.h
     Horo/Network/ProtocolIdentityRegistry.h
     Horo/Network/ReplicationDescriptor.h
