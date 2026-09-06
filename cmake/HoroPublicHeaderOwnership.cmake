@@ -81,6 +81,7 @@ horo_configure_target_header_boundary(HoroNetworkApi PUBLIC_HEADERS
     Horo/Network/ReplicationDescriptor.h
     Horo/Network/ReplicationDescriptorRegistry.h
     Horo/Network/ReplicationIdentity.h
+    Horo/Network/TransportCapabilities.h
 )
 
 horo_configure_target_header_boundary(HoroGameplayApi PUBLIC_HEADERS

@@ -61,4 +61,67 @@ namespace Horo::Network::NetworkErrors {
         .retryable = false,
         .userActionable = true,
     };
+    const ErrorCodeDescriptor TransportCapabilityDescriptorInvalid{
+        .domain = NetworkDomain,
+        .code = ErrorCode{"network.transport.capability_descriptor_invalid"},
+        .defaultSeverity = ErrorSeverity::Error,
+        .summary = "Transport capability evidence or delivery requirements are malformed.",
+        .remediationHint = "Use version-one evidence, an exact non-zero revision, known policies, and finite positive limits.",
+        .retryable = false,
+        .userActionable = true,
+    };
+    const ErrorCodeDescriptor TransportCapabilityStale{
+        .domain = NetworkDomain,
+        .code = ErrorCode{"network.transport.capability_stale"},
+        .defaultSeverity = ErrorSeverity::Error,
+        .summary = "Transport capability evidence changed during admission.",
+        .remediationHint = "Capture the current candidate evidence and repeat complete delivery negotiation.",
+        .retryable = true,
+        .userActionable = false,
+    };
+    const ErrorCodeDescriptor TransportDeliveryUnsupported{
+        .domain = NetworkDomain,
+        .code = ErrorCode{"network.transport.delivery_unsupported"},
+        .defaultSeverity = ErrorSeverity::Error,
+        .summary = "The selected transport candidate cannot provide the exact required delivery semantics.",
+        .remediationHint = "Choose an explicit candidate supporting the required policy; do not weaken reliability or ordering.",
+        .retryable = false,
+        .userActionable = true,
+    };
+    const ErrorCodeDescriptor TransportCapabilityUnavailable{
+        .domain = NetworkDomain,
+        .code = ErrorCode{"network.transport.capability_unavailable"},
+        .defaultSeverity = ErrorSeverity::Error,
+        .summary = "A required transport capability is not currently available.",
+        .remediationHint = "Restore the explicit candidate or retry after it publishes a new capability revision.",
+        .retryable = true,
+        .userActionable = false,
+    };
+    const ErrorCodeDescriptor TransportLimitExceeded{
+        .domain = NetworkDomain,
+        .code = ErrorCode{"network.transport.limit_exceeded"},
+        .defaultSeverity = ErrorSeverity::Error,
+        .summary = "A transport delivery requirement exceeds the candidate's finite limits.",
+        .remediationHint = "Reduce the requested channel, message, or deadline bound or choose an explicit capable candidate.",
+        .retryable = false,
+        .userActionable = true,
+    };
+    const ErrorCodeDescriptor TransportOperationCancelled{
+        .domain = NetworkDomain,
+        .code = ErrorCode{"network.transport.operation_cancelled"},
+        .defaultSeverity = ErrorSeverity::Info,
+        .summary = "Transport admission was cancelled before queue mutation.",
+        .remediationHint = "Submit again only if the owning caller still requires the operation.",
+        .retryable = true,
+        .userActionable = false,
+    };
+    const ErrorCodeDescriptor TransportShuttingDown{
+        .domain = NetworkDomain,
+        .code = ErrorCode{"network.transport.shutting_down"},
+        .defaultSeverity = ErrorSeverity::Info,
+        .summary = "Transport admission was rejected because shutdown has begun.",
+        .remediationHint = "Do not enqueue new transport work after the owning runtime begins shutdown.",
+        .retryable = false,
+        .userActionable = false,
+    };
 }  // namespace Horo::Network::NetworkErrors

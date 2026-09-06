@@ -145,6 +145,7 @@ add_library(HoroNetworkApi STATIC
         runtime/networking/api/NetworkErrors.cpp
         runtime/networking/api/ReplicationDescriptor.cpp
         runtime/networking/api/ReplicationDescriptorRegistry.cpp
+        runtime/networking/api/TransportCapabilities.cpp
 )
 add_library(HoroEngine::NetworkApi ALIAS HoroNetworkApi)
 target_compile_features(HoroNetworkApi PUBLIC cxx_std_20)
