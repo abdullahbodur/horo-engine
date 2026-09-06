@@ -317,9 +317,11 @@ add_library(HoroPhysics STATIC
         physics/PhysicsConstraintDescriptor.cpp
         physics/PhysicsCookedShapeDescriptor.cpp
         physics/PhysicsErrors.cpp
+        physics/PhysicsFilterIdentity.cpp
         physics/PhysicsHandleRegistry.h
         physics/PhysicsIdentity.cpp
         physics/PhysicsPose.cpp
+        physics/PhysicsQuery.cpp
         physics/PhysicsShapeDescriptor.cpp
         physics/PhysicsStepPolicy.cpp
         physics/PhysicsWorld.cpp

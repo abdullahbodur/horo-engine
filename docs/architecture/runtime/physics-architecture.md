@@ -368,6 +368,34 @@ Queries declare:
 - maximum result count
 - ordering guarantee
 
+The typed baseline represents ray, resident-shape sweep, resident-shape overlap
+and point geometry as a closed variant. Every descriptor owns its geometry and
+bounded selectors; it contains no native filter, callback or borrowed result
+storage. A descriptor names one exact `PhysicsWorldId` and non-zero scene
+generation. Resident shape/body selectors remain non-owning generation-checked
+handles and are revalidated by the receiving world.
+
+`Closest` admits exactly one result. `All` admits at most the descriptor's bounded
+maximum. `ThroughFirstBlock` first orders all admitted evidence, then retains
+overlaps through the closest blocking hit. The CanonicalV1 public hit ceiling is
+`1024`; exceeding it fails admission instead of allocating or truncating silently.
+When caller-provided storage cannot retain every contractually selected hit, the
+result reports `truncated` explicitly.
+
+Public ordering is closest distance first. Exact-distance ties order `Block`
+before `Overlap`, then body slot/generation, shape slot/generation, stable
+subshape identity, hit position/optional normal and exact material
+asset/generation/slot evidence. Native
+broadphase order, native IDs, pointers and face indexes never participate. Hits
+with identical public evidence are equivalent; implementations may coalesce them
+but cannot expose traversal order as a further tie-break.
+
+Hits copy stable body, shape, layer, profile, query-channel, schema, optional
+subshape and optional material evidence into caller-owned bounded storage. They
+do not extend world, schema, shape or material leases. A missing geometric hit is
+a successful zero-hit result; stale world/scene/filter generations and malformed
+evidence are typed errors.
+
 Immediate queries execute on the physics owner thread outside a step. Parallel
 or asynchronous queries use a read-only broadphase snapshot with documented
 staleness.
