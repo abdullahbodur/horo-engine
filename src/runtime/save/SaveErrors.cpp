@@ -23,4 +23,32 @@ namespace Horo::Runtime::SaveErrors {
     const ErrorCodeDescriptor VersionUnsupportedNewer{kDomain, ErrorCode{"save.version.unsupported_newer"}, kError,
                                                       "The save version is newer than this reader supports.",
                                                       "Use a compatible reader or an explicit supported migration."};
+    const ErrorCodeDescriptor ParticipantDescriptorInvalid{kDomain, ErrorCode{"save.participant.descriptor_invalid"}, kError,
+                                                           "A save participant descriptor is invalid.",
+                                                           "Correct its identity, version, roles, dependencies, ownership, and bounds."};
+    const ErrorCodeDescriptor ParticipantAdapterMissing{kDomain, ErrorCode{"save.participant.adapter_missing"}, kError,
+                                                        "A save participant adapter lease is missing.",
+                                                        "Bind an owned adapter during explicit host composition."};
+    const ErrorCodeDescriptor ParticipantDuplicate{kDomain, ErrorCode{"save.participant.duplicate"}, kError,
+                                                   "A save participant identity is already registered.",
+                                                   "Register each semantic participant identity exactly once."};
+    const ErrorCodeDescriptor ParticipantRecordOwnershipDuplicate{kDomain, ErrorCode{"save.participant.record_ownership_duplicate"}, kError,
+                                                                  "A canonical save record has more than one semantic owner.",
+                                                                  "Assign each record identity to exactly one participant."};
+    const ErrorCodeDescriptor ParticipantRegistryClosed{kDomain, ErrorCode{"save.participant.registry_closed"}, kError,
+                                                        "The save participant registry is closed.",
+                                                        "Register or rebind participants before the owning lifecycle closes."};
+    const ErrorCodeDescriptor ParticipantRegistryCapacityExceeded{kDomain, ErrorCode{"save.participant.registry_capacity_exceeded"}, kError,
+                                                                  "The save participant registry reached its bounded capacity.",
+                                                                  "Reduce participant count or revise the explicit product limit."};
+    const ErrorCodeDescriptor ParticipantDependencyMissing{kDomain, ErrorCode{"save.participant.dependency_missing"}, kError,
+                                                           "A required save participant dependency is absent.",
+                                                           "Register every declared dependency before publishing a snapshot."};
+    const ErrorCodeDescriptor ParticipantDependencyCycle{kDomain, ErrorCode{"save.participant.dependency_cycle"}, kError,
+                                                         "Save participant dependencies contain a cycle.",
+                                                         "Remove the cycle so semantic ownership has an acyclic dependency graph."};
+    const ErrorCodeDescriptor ParticipantRegistryGenerationExhausted{kDomain, ErrorCode{"save.participant.registry_generation_exhausted"},
+                                                                     ErrorSeverity::Critical,
+                                                                     "The save participant registry generation is exhausted.",
+                                                                     "Stop the owning runtime instead of reusing a registry generation."};
 }  // namespace Horo::Runtime::SaveErrors
