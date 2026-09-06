@@ -5,6 +5,7 @@
 
 #include <algorithm>
 #include <array>
+#include <cmath>
 #include <functional>
 #include <new>
 #include <thread>
@@ -41,7 +42,7 @@ namespace Horo::Physics {
     /** @brief Owns one candidate's settings/native state and unregisters its identity before releasing the runtime lease. */
     struct PhysicsWorld::Impl final {
         Impl(std::shared_ptr<PhysicsRuntime::Impl> runtimeOwner, const PhysicsWorldSettings &worldSettings)
-            : runtime(std::move(runtimeOwner)), settings(worldSettings) {
+            : runtime(std::move(runtimeOwner)), settings(worldSettings), commands(worldSettings.Values().budgets.maximumCommands) {
             runtime->identities.push_back(&identity);
         }
 
@@ -62,12 +63,57 @@ namespace Horo::Physics {
             runtime->ReleaseNativeWhenIdle();
         }
 
+        [[nodiscard]] const PhysicsStructuralCommand &CommandAt(const std::uint32_t offset) const noexcept {
+            return commands[(commandHead + offset) % commands.size()];
+        }
+
+        void DiscardCommands(const std::uint32_t discarded) noexcept {
+            commandHead = (commandHead + discarded) % commands.size();
+            commandCount -= discarded;
+            statistics.pendingCommands = commandCount;
+        }
+
         std::shared_ptr<PhysicsRuntime::Impl> runtime;
         PhysicsWorldSettings settings;
         PhysicsWorldState state{PhysicsWorldState::Preparing};
         PhysicsWorldId identity;
         Detail::CanonicalWorldHandle native;
+        std::vector<PhysicsStructuralCommand> commands;
+        std::uint32_t commandHead{};
+        std::uint32_t commandCount{};
+        std::uint64_t lastAdmittedCommandSequence{};
+        bool stepping{};
+        PhysicsPublishedTick published;
+        PhysicsTickStatistics statistics;
     };
+
+    namespace {
+        [[nodiscard]] bool IsValidCommand(const PhysicsStructuralCommand &command) noexcept {
+            return command.sequence != 0 && command.sceneGeneration != 0 && command.subject != 0 &&
+                   command.kind <= PhysicsStructuralCommandKind::Destroy;
+        }
+
+        void ObservePhase(const PhysicsFixedTickInput &input, const PhysicsTickPhase phase) noexcept {
+            if (input.observer.phase)
+                input.observer.phase(input.observer.context, phase, input.simulationTick);
+        }
+
+        void ObserveCommands(const auto &impl, const PhysicsFixedTickInput &input, const std::uint32_t eligible,
+                             const PhysicsStructuralCommandKind selectedKind, const PhysicsCommandSafePoint safePoint,
+                             std::uint32_t &applied) noexcept {
+            for (std::uint32_t offset = 0; offset < eligible; ++offset) {
+                const PhysicsStructuralCommand &command = impl.CommandAt(offset);
+                const bool selected = selectedKind == PhysicsStructuralCommandKind::Destroy
+                                          ? command.kind == PhysicsStructuralCommandKind::Destroy
+                                          : command.kind != PhysicsStructuralCommandKind::Destroy;
+                if (!selected)
+                    continue;
+                if (input.observer.command)
+                    input.observer.command(input.observer.context, command, safePoint, input.simulationTick);
+                ++applied;
+            }
+        }
+    }  // namespace
 
     /** @copydoc PhysicsRuntime::Create */
     Result<std::unique_ptr<PhysicsRuntime>> PhysicsRuntime::Create(const PhysicsRuntimeMode mode) {
@@ -208,5 +254,107 @@ namespace Horo::Physics {
     /** @copydoc PhysicsWorld::Settings */
     const PhysicsWorldSettings &PhysicsWorld::Settings() const noexcept {
         return impl_->settings;
+    }
+
+    /** @copydoc PhysicsWorld::QueueStructuralCommand */
+    Result<PhysicsCommandAdmission> PhysicsWorld::QueueStructuralCommand(const PhysicsStructuralCommand &command) {
+        if (impl_->state == PhysicsWorldState::ActiveNull)
+            return Result<PhysicsCommandAdmission>::Failure(MakeError(PhysicsErrors::CapabilityUnavailable));
+        if (impl_->state != PhysicsWorldState::ActiveSolver || impl_->runtime->ownerThread != std::this_thread::get_id())
+            return Result<PhysicsCommandAdmission>::Failure(MakeError(PhysicsErrors::InvalidState));
+        if (!IsValidCommand(command) || command.sequence <= impl_->lastAdmittedCommandSequence)
+            return Result<PhysicsCommandAdmission>::Failure(
+                MakeError(PhysicsErrors::DescriptorInvalid,
+                          "Physics structural commands require non-zero identities, a known kind and increasing sequence order."));
+
+        const std::uint32_t capacity = static_cast<std::uint32_t>(impl_->commands.size());
+        const bool destruction = command.kind == PhysicsStructuralCommandKind::Destroy;
+        const std::uint32_t ordinaryLimit = capacity - 1;
+        if (impl_->commandCount >= (destruction ? capacity : ordinaryLimit)) {
+            ++impl_->statistics.rejectedCommands;
+            if (destruction)
+                ++impl_->statistics.destructionRetryCount;
+            return Result<PhysicsCommandAdmission>::Success(
+                {destruction ? PhysicsCommandAdmissionStatus::DestructionRetryRequired : PhysicsCommandAdmissionStatus::RejectedFull,
+                 impl_->commandCount});
+        }
+
+        const std::uint32_t tail = (impl_->commandHead + impl_->commandCount) % capacity;
+        impl_->commands[tail] = command;
+        ++impl_->commandCount;
+        impl_->lastAdmittedCommandSequence = command.sequence;
+        ++impl_->statistics.admittedCommands;
+        impl_->statistics.pendingCommands = impl_->commandCount;
+        impl_->statistics.maximumCommandDepth = std::max(impl_->statistics.maximumCommandDepth, impl_->commandCount);
+        return Result<PhysicsCommandAdmission>::Success({PhysicsCommandAdmissionStatus::Deferred, impl_->commandCount});
+    }
+
+    /** @copydoc PhysicsWorld::AdvanceFixedTick */
+    Result<void> PhysicsWorld::AdvanceFixedTick(const PhysicsFixedTickInput &input) {
+        if (impl_->state == PhysicsWorldState::ActiveNull)
+            return Result<void>::Failure(MakeError(PhysicsErrors::CapabilityUnavailable));
+        if (impl_->state != PhysicsWorldState::ActiveSolver || impl_->runtime->ownerThread != std::this_thread::get_id() || impl_->stepping)
+            return Result<void>::Failure(MakeError(PhysicsErrors::InvalidState));
+        const auto configuredNanoseconds =
+            static_cast<std::int64_t>(std::llround(impl_->settings.Values().world.fixedDeltaSeconds * 1'000'000'000.0));
+        if (input.simulationTick == 0 || input.simulationTick != impl_->published.completedTick + 1 ||
+            input.fixedDelta.ToNanoseconds() != configuredNanoseconds)
+            return Result<void>::Failure(
+                MakeError(PhysicsErrors::DescriptorInvalid, "Physics requires the next one-based tick and the world's exact fixed delta."));
+
+        struct StepGuard final {
+            bool &stepping;
+
+            explicit StepGuard(bool &value) noexcept : stepping(value) {
+                stepping = true;
+            }
+
+            ~StepGuard() {
+                stepping = false;
+            }
+        } guard{impl_->stepping};
+
+        const std::uint32_t eligible = std::min(impl_->commandCount, impl_->settings.Values().budgets.maximumCommandsPerTick);
+        std::uint32_t applied{};
+        ObservePhase(input, PhysicsTickPhase::ApplyDeferredPreStep);
+        ObserveCommands(*impl_, input, eligible, PhysicsStructuralCommandKind::Create, PhysicsCommandSafePoint::PreStep, applied);
+        ObservePhase(input, PhysicsTickPhase::CopyKinematicTargets);
+        ObservePhase(input, PhysicsTickPhase::ApplyDynamicInputs);
+        ObservePhase(input, PhysicsTickPhase::BroadPhase);
+        ObservePhase(input, PhysicsTickPhase::ContactGeneration);
+        ObservePhase(input, PhysicsTickPhase::ConstraintSolve);
+
+        const Result<void> stepped =
+            Detail::StepCanonicalWorld(impl_->native, static_cast<float>(impl_->settings.Values().world.fixedDeltaSeconds));
+        if (stepped.HasError())
+            return stepped;
+
+        ObservePhase(input, PhysicsTickPhase::IntegrateBodies);
+        ObservePhase(input, PhysicsTickPhase::WriteRuntimeTransforms);
+        ObservePhase(input, PhysicsTickPhase::ProduceEvents);
+        ObservePhase(input, PhysicsTickPhase::ApplyDeferredPostStep);
+        ObserveCommands(*impl_, input, eligible, PhysicsStructuralCommandKind::Destroy, PhysicsCommandSafePoint::PostStep, applied);
+
+        impl_->DiscardCommands(eligible);
+        const std::uint64_t revision = impl_->published.publicationRevision + 1;
+        impl_->published = {.completedTick = input.simulationTick,
+                            .publicationRevision = revision,
+                            .transformTick = input.simulationTick,
+                            .queryTick = input.simulationTick,
+                            .eventTick = input.simulationTick,
+                            .appliedCommands = applied};
+        impl_->statistics.completedTicks = input.simulationTick;
+        ObservePhase(input, PhysicsTickPhase::PublishCompletedTick);
+        return Result<void>::Success();
+    }
+
+    /** @copydoc PhysicsWorld::PublishedTick */
+    PhysicsPublishedTick PhysicsWorld::PublishedTick() const noexcept {
+        return impl_->published;
+    }
+
+    /** @copydoc PhysicsWorld::TickStatistics */
+    PhysicsTickStatistics PhysicsWorld::TickStatistics() const noexcept {
+        return impl_->statistics;
     }
 }  // namespace Horo::Physics

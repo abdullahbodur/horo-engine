@@ -44,6 +44,8 @@ namespace Horo::Physics::Detail {
                                                                     CanonicalFailurePoint failurePoint = CanonicalFailurePoint::None);
     /** @brief Releases one native world in reverse dependency order. */
     void DestroyCanonicalWorld(CanonicalWorldHandle world) noexcept;
+    /** @brief Runs and joins one serial native fixed step before returning to publication code. */
+    [[nodiscard]] Result<void> StepCanonicalWorld(CanonicalWorldHandle world, float fixedDeltaSeconds);
     /** @brief Copies current native resource ownership counts without traversing solver data. */
     [[nodiscard]] CanonicalResourceCounts InspectCanonicalResources(CanonicalRuntimeHandle runtime) noexcept;
 }  // namespace Horo::Physics::Detail

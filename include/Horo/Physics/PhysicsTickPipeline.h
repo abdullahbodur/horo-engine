@@ -1,0 +1,111 @@
+#pragma once
+
+/** @file PhysicsTickPipeline.h
+ * @brief Fixed-tick phase, deferred structural command and atomic publication contracts.
+ */
+
+#include "Horo/Foundation/Time.h"
+
+#include <cstdint>
+
+namespace Horo::Physics {
+    /** @brief Ordered stages of one canonical Physics fixed tick. */
+    enum class PhysicsTickPhase : std::uint8_t {
+        ApplyDeferredPreStep,
+        CopyKinematicTargets,
+        ApplyDynamicInputs,
+        BroadPhase,
+        ContactGeneration,
+        ConstraintSolve,
+        IntegrateBodies,
+        WriteRuntimeTransforms,
+        ProduceEvents,
+        ApplyDeferredPostStep,
+        PublishCompletedTick
+    };
+
+    /** @brief Structural intent category; payload interpretation remains owned by the later body/constraint adapters. */
+    enum class PhysicsStructuralCommandKind : std::uint8_t {
+        Create,
+        Change,
+        Destroy
+    };
+
+    /** @brief Safe point selected from command semantics, never from producer timing. */
+    enum class PhysicsCommandSafePoint : std::uint8_t {
+        PreStep,
+        PostStep
+    };
+
+    /**
+     * @brief Bounded structural-command envelope retained by value until one fixed-tick safe point.
+     *
+     * Sequence is producer-assigned deterministic order evidence and must increase for every admitted
+     * command in a world generation. Scene generation and subject are
+     * opaque Horo identities interpreted by the owning scene-to-Physics adapter; neither is a native
+     * solver ID. Create/change apply before the solver step and destruction applies after all solver
+     * work completes but before publication.
+     */
+    struct PhysicsStructuralCommand final {
+        std::uint64_t sequence{};        /**< Non-zero strictly increasing admission order. */
+        std::uint64_t sceneGeneration{}; /**< Non-zero stable scene generation carried through deferral. */
+        std::uint64_t subject{};         /**< Non-zero stable object/operation identity, never a native solver ID. */
+        PhysicsStructuralCommandKind kind{PhysicsStructuralCommandKind::Create}; /**< Semantic safe-point classification. */
+    };
+
+    /** @brief Non-throwing command admission result; rejected work remains owned by the caller. */
+    enum class PhysicsCommandAdmissionStatus : std::uint8_t {
+        Deferred,
+        RejectedFull,
+        DestructionRetryRequired
+    };
+
+    /** @brief Admission result with queue depth after the attempt. */
+    struct PhysicsCommandAdmission final {
+        PhysicsCommandAdmissionStatus status{PhysicsCommandAdmissionStatus::RejectedFull}; /**< Ownership outcome. */
+        std::uint32_t pendingCommands{};                                                   /**< Depth after this attempt. */
+    };
+
+    /**
+     * @brief Optional allocation-free observation hook for tests and bounded diagnostics.
+     *
+     * Callbacks run synchronously on the Physics owner thread. They may enqueue more commands; those
+     * commands are retained for the next tick and cannot enter the command batch currently executing.
+     * QueueStructuralCommand is the only world mutation permitted from a callback; every other solver
+     * or scene mutation is forbidden. Callbacks must not throw, retain borrowed command references or
+     * call AdvanceFixedTick reentrantly.
+     */
+    struct PhysicsTickObserver final {
+        void *context{}; /**< Caller-owned context valid through AdvanceFixedTick. */
+        void (*phase)(void *context, PhysicsTickPhase phase, std::uint64_t tick) noexcept {}; /**< Optional phase observation. */
+        void (*command)(void *context, const PhysicsStructuralCommand &command, PhysicsCommandSafePoint safePoint,
+                        std::uint64_t tick) noexcept {}; /**< Optional safe-point command observation. */
+    };
+
+    /** @brief Exact host-owned fixed-tick attempt; Physics never samples or accumulates wall time. */
+    struct PhysicsFixedTickInput final {
+        std::uint64_t simulationTick{}; /**< One-based next tick supplied by Runtime. */
+        Duration fixedDelta{};          /**< Exact configured host quantum, never a measured frame delta. */
+        PhysicsTickObserver observer;   /**< Optional synchronous observation only. */
+    };
+
+    /** @brief Atomically replaced publication marker for transforms, queries and events from one completed tick. */
+    struct PhysicsPublishedTick final {
+        std::uint64_t completedTick{};       /**< Last successfully completed simulation tick. */
+        std::uint64_t publicationRevision{}; /**< Monotonic all-domain publication revision. */
+        std::uint64_t transformTick{};       /**< Tick owning the visible transform snapshot. */
+        std::uint64_t queryTick{};           /**< Tick owning the visible query snapshot. */
+        std::uint64_t eventTick{};           /**< Tick owning the visible event batch. */
+        std::uint32_t appliedCommands{};     /**< Eligible commands processed at this tick's safe points. */
+    };
+
+    /** @brief Allocation-free cumulative fixed-tick and command-buffer metrics. */
+    struct PhysicsTickStatistics final {
+        std::uint64_t completedTicks{};        /**< Successfully published ticks. */
+        std::uint64_t admittedCommands{};      /**< Commands copied into bounded storage. */
+        std::uint64_t rejectedCommands{};      /**< Full-buffer admissions retaining caller ownership. */
+        std::uint64_t destructionRetryCount{}; /**< Destructions returned for mandatory retry. */
+        std::uint32_t pendingCommands{};       /**< Current deferred depth. */
+        std::uint32_t maximumCommandDepth{};   /**< High-water mark since world preparation. */
+    };
+}  // namespace Horo::Physics

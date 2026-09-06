@@ -1,8 +1,11 @@
 #include "Horo/Physics/PhysicsWorld.h"
+#include "Horo/Runtime/RuntimeHost.h"
 #include "PhysicsTestUtils.h"
 
+#include <array>
 #include <catch2/catch_test_macros.hpp>
 #include <thread>
+#include <vector>
 
 namespace Horo::Physics {
     TEST_CASE("Null Physics is explicit omitted capability and never invents simulation", "[physics][lifecycle]") {
@@ -27,6 +30,12 @@ namespace Horo::Physics {
         const auto identity = PhysicsWorldId::Create(100).Value();
         REQUIRE(world->Activate(identity).HasValue());
         REQUIRE(world->State() == PhysicsWorldState::ActiveNull);
+        REQUIRE(world->QueueStructuralCommand({1, 1, 1, PhysicsStructuralCommandKind::Destroy}).ErrorValue().code.Value() ==
+                PhysicsErrors::CapabilityUnavailable.code.Value());
+        REQUIRE(
+            world->AdvanceFixedTick({.simulationTick = 1, .fixedDelta = Duration::FromNanoseconds(16'666'667)}).ErrorValue().code.Value() ==
+            PhysicsErrors::CapabilityUnavailable.code.Value());
+        REQUIRE(world->PublishedTick().publicationRevision == 0);
         REQUIRE(world->Identity() == identity);
         REQUIRE(world->Activate(identity).ErrorValue().code.Value() == PhysicsErrors::InvalidState.code.Value());
         world->Shutdown();
@@ -118,4 +127,231 @@ namespace Horo::Physics {
         REQUIRE(created.ErrorValue().code.Value() == PhysicsErrors::CapabilityUnavailable.code.Value());
 #endif
     }
+
+#if HORO_TEST_PHYSICS_NATIVE
+    namespace {
+        struct TickTrace final {
+            PhysicsWorld *world{};
+            std::vector<PhysicsTickPhase> phases;
+            std::vector<std::uint64_t> commandSequences;
+            PhysicsCommandAdmissionStatus reentrantAdmission{PhysicsCommandAdmissionStatus::RejectedFull};
+            bool reentrantStepRejected{};
+            bool queuedDuringTick{};
+            bool attemptedReentrantStep{};
+        };
+
+        void RecordPhase(void *context, const PhysicsTickPhase phase, const std::uint64_t tick) noexcept {
+            auto &trace = *static_cast<TickTrace *>(context);
+            trace.phases.push_back(phase);
+            if (phase != PhysicsTickPhase::CopyKinematicTargets || trace.queuedDuringTick)
+                return;
+            trace.queuedDuringTick = true;
+            const auto admitted = trace.world->QueueStructuralCommand(
+                {.sequence = 3, .sceneGeneration = 7, .subject = 13, .kind = PhysicsStructuralCommandKind::Change});
+            if (admitted.HasValue())
+                trace.reentrantAdmission = admitted.Value().status;
+            trace.attemptedReentrantStep = true;
+            const auto stepped =
+                trace.world->AdvanceFixedTick({.simulationTick = tick, .fixedDelta = Duration::FromNanoseconds(16'666'667)});
+            trace.reentrantStepRejected =
+                stepped.HasError() && stepped.ErrorValue().code.Value() == PhysicsErrors::InvalidState.code.Value();
+        }
+
+        void RecordCommand(void *context, const PhysicsStructuralCommand &command, const PhysicsCommandSafePoint,
+                           const std::uint64_t) noexcept {
+            static_cast<TickTrace *>(context)->commandSequences.push_back(command.sequence);
+        }
+
+        [[nodiscard]] std::unique_ptr<PhysicsWorld> ActiveCanonicalWorld(const PhysicsWorldSettings &settings,
+                                                                         std::unique_ptr<PhysicsRuntime> &runtime) {
+            runtime = PhysicsRuntime::Create(PhysicsRuntimeMode::Canonical).Value();
+            auto world = runtime->PrepareWorld(settings).Value();
+            REQUIRE(world->Activate(PhysicsWorldId::Create(200).Value()).HasValue());
+            return world;
+        }
+
+        void RequirePublishedTick(const PhysicsPublishedTick &published, const std::uint64_t expectedTick,
+                                  const std::uint64_t expectedRevision, const std::uint32_t expectedCommands) {
+            REQUIRE(published.completedTick == expectedTick);
+            REQUIRE(published.publicationRevision == expectedRevision);
+            REQUIRE(published.transformTick == published.completedTick);
+            REQUIRE(published.queryTick == published.completedTick);
+            REQUIRE(published.eventTick == published.completedTick);
+            REQUIRE(published.appliedCommands == expectedCommands);
+        }
+
+        class PhysicsTickParticipant final : public Runtime::RuntimeLifecycleParticipant {
+        public:
+            explicit PhysicsTickParticipant(std::vector<std::uint64_t> &trace) : trace_(&trace) {}
+
+            Result<void> Startup(const CancellationToken &) override {
+                auto createdRuntime = PhysicsRuntime::Create(PhysicsRuntimeMode::Canonical);
+                if (createdRuntime.HasError())
+                    return Result<void>::Failure(createdRuntime.ErrorValue());
+                runtime_ = std::move(createdRuntime).Value();
+                auto prepared = runtime_->PrepareWorld(Test::SmallWorldSettings());
+                if (prepared.HasError())
+                    return Result<void>::Failure(prepared.ErrorValue());
+                world_ = std::move(prepared).Value();
+                return world_->Activate(PhysicsWorldId::Create(201).Value());
+            }
+
+            Result<void> OnPhase(Runtime::RuntimePhase, const Runtime::FrameContext &) override {
+                return Result<void>::Success();
+            }
+
+            Result<void> OnFixedUpdate(const Runtime::FixedStepContext &context) override {
+                const std::uint64_t firstSequence = context.simulationTick * 2 - 1;
+                const auto created =
+                    world_->QueueStructuralCommand({firstSequence, 9, firstSequence, PhysicsStructuralCommandKind::Create});
+                if (created.HasError())
+                    return Result<void>::Failure(created.ErrorValue());
+                const auto destroyed =
+                    world_->QueueStructuralCommand({firstSequence + 1, 9, firstSequence + 1, PhysicsStructuralCommandKind::Destroy});
+                if (destroyed.HasError())
+                    return Result<void>::Failure(destroyed.ErrorValue());
+                const PhysicsTickObserver observer{.context = trace_, .command = RecordCommandSequence};
+                const auto stepped = world_->AdvanceFixedTick(
+                    {.simulationTick = context.simulationTick, .fixedDelta = context.fixedDelta, .observer = observer});
+                if (stepped.HasValue())
+                    lastPublishedTick = world_->PublishedTick().completedTick;
+                return stepped;
+            }
+
+            void Shutdown() noexcept override {
+                world_.reset();
+                runtime_.reset();
+            }
+
+            static void RecordCommandSequence(void *context, const PhysicsStructuralCommand &command, PhysicsCommandSafePoint,
+                                              std::uint64_t) noexcept {
+                static_cast<std::vector<std::uint64_t> *>(context)->push_back(command.sequence);
+            }
+
+            std::uint64_t lastPublishedTick{};
+
+        private:
+            std::vector<std::uint64_t> *trace_{};
+            std::unique_ptr<PhysicsRuntime> runtime_;
+            std::unique_ptr<PhysicsWorld> world_;
+        };
+
+        [[nodiscard]] std::vector<std::uint64_t> RunPhysicsCadence(const std::uint32_t frameCount) {
+            DeterministicClock clock;
+            std::vector<std::uint64_t> trace;
+            trace.reserve(120);
+            auto host = Runtime::RuntimeHost::Create(clock).Value();
+            REQUIRE(host->AddParticipant(std::make_unique<PhysicsTickParticipant>(trace)).HasValue());
+            REQUIRE(host->Startup().HasValue());
+            REQUIRE(host->RunFrame().HasValue());
+            constexpr std::int64_t totalNanoseconds = 60LL * 16'666'667;
+            const std::int64_t baseDelta = totalNanoseconds / frameCount;
+            for (std::uint32_t frame = 0; frame < frameCount; ++frame) {
+                const std::int64_t remainder = frame + 1 == frameCount ? totalNanoseconds % frameCount : 0;
+                clock.Advance(Duration::FromNanoseconds(baseDelta + remainder));
+                REQUIRE(host->RunFrame().HasValue());
+            }
+            REQUIRE(host->Statistics().completedSimulationTick == 60);
+            return trace;
+        }
+    }  // namespace
+
+    TEST_CASE("Physics fixed tick defers reentrant commands and publishes one complete revision", "[physics][tick]") {
+        std::unique_ptr<PhysicsRuntime> runtime;
+        auto world = ActiveCanonicalWorld(Test::SmallWorldSettings(), runtime);
+        REQUIRE(
+            world
+                ->QueueStructuralCommand({.sequence = 1, .sceneGeneration = 7, .subject = 11, .kind = PhysicsStructuralCommandKind::Create})
+                .Value()
+                .status == PhysicsCommandAdmissionStatus::Deferred);
+        REQUIRE(world
+                    ->QueueStructuralCommand(
+                        {.sequence = 2, .sceneGeneration = 7, .subject = 12, .kind = PhysicsStructuralCommandKind::Destroy})
+                    .Value()
+                    .status == PhysicsCommandAdmissionStatus::Deferred);
+
+        TickTrace trace{.world = world.get()};
+        trace.phases.reserve(11);
+        trace.commandSequences.reserve(2);
+        const PhysicsTickObserver observer{.context = &trace, .phase = RecordPhase, .command = RecordCommand};
+        constexpr Duration fixedDelta = Duration::FromNanoseconds(16'666'667);
+        REQUIRE(world->AdvanceFixedTick({.simulationTick = 1, .fixedDelta = fixedDelta, .observer = observer}).HasValue());
+        constexpr std::array expectedPhases{
+            PhysicsTickPhase::ApplyDeferredPreStep, PhysicsTickPhase::CopyKinematicTargets,
+            PhysicsTickPhase::ApplyDynamicInputs,   PhysicsTickPhase::BroadPhase,
+            PhysicsTickPhase::ContactGeneration,    PhysicsTickPhase::ConstraintSolve,
+            PhysicsTickPhase::IntegrateBodies,      PhysicsTickPhase::WriteRuntimeTransforms,
+            PhysicsTickPhase::ProduceEvents,        PhysicsTickPhase::ApplyDeferredPostStep,
+            PhysicsTickPhase::PublishCompletedTick,
+        };
+        REQUIRE(trace.phases.size() == expectedPhases.size());
+        for (std::size_t index = 0; index < expectedPhases.size(); ++index)
+            REQUIRE(trace.phases[index] == expectedPhases[index]);
+        REQUIRE(trace.commandSequences == std::vector<std::uint64_t>{1, 2});
+        REQUIRE(trace.reentrantAdmission == PhysicsCommandAdmissionStatus::Deferred);
+        REQUIRE(trace.attemptedReentrantStep);
+        REQUIRE(trace.reentrantStepRejected);
+
+        RequirePublishedTick(world->PublishedTick(), 1, 1, 2);
+        REQUIRE(world->TickStatistics().pendingCommands == 1);
+
+        trace.phases.clear();
+        trace.commandSequences.clear();
+        REQUIRE(world->AdvanceFixedTick({.simulationTick = 2, .fixedDelta = fixedDelta, .observer = observer}).HasValue());
+        REQUIRE(trace.commandSequences == std::vector<std::uint64_t>{3});
+        REQUIRE(world->PublishedTick().appliedCommands == 1);
+        REQUIRE(world->TickStatistics().pendingCommands == 0);
+        REQUIRE(world->AdvanceFixedTick({.simulationTick = 2, .fixedDelta = fixedDelta}).HasError());
+        REQUIRE(world->PublishedTick().completedTick == 2);
+    }
+
+    TEST_CASE("Physics command capacity reserves destruction and returns explicit retry ownership", "[physics][commands]") {
+        PhysicsWorldSettingsDescriptor descriptor;
+        descriptor.world.capacity = {16, 32, 16, 4096};
+        descriptor.budgets.maximumContactPairs = 32;
+        descriptor.budgets.maximumContactConstraints = 16;
+        descriptor.budgets.maximumInFlightPairs = 8;
+        descriptor.budgets.maximumCommands = 3;
+        descriptor.budgets.maximumCommandsPerTick = 3;
+        descriptor.budgets.scratchBytes = 1024 * 1024;
+        std::unique_ptr<PhysicsRuntime> runtime;
+        auto world = ActiveCanonicalWorld(PhysicsWorldSettings::Capture(descriptor).Value(), runtime);
+
+        REQUIRE(world->QueueStructuralCommand({}).ErrorValue().code.Value() == PhysicsErrors::DescriptorInvalid.code.Value());
+        REQUIRE(world->QueueStructuralCommand({1, 8, 21, PhysicsStructuralCommandKind::Create}).Value().status ==
+                PhysicsCommandAdmissionStatus::Deferred);
+        REQUIRE(world->QueueStructuralCommand({1, 8, 25, PhysicsStructuralCommandKind::Change}).ErrorValue().code.Value() ==
+                PhysicsErrors::DescriptorInvalid.code.Value());
+        REQUIRE(world->QueueStructuralCommand({2, 8, 22, PhysicsStructuralCommandKind::Change}).Value().status ==
+                PhysicsCommandAdmissionStatus::Deferred);
+        REQUIRE(world->QueueStructuralCommand({3, 8, 23, PhysicsStructuralCommandKind::Create}).Value().status ==
+                PhysicsCommandAdmissionStatus::RejectedFull);
+        REQUIRE(world->QueueStructuralCommand({3, 8, 23, PhysicsStructuralCommandKind::Destroy}).Value().status ==
+                PhysicsCommandAdmissionStatus::Deferred);
+        REQUIRE(world->QueueStructuralCommand({4, 8, 24, PhysicsStructuralCommandKind::Destroy}).Value().status ==
+                PhysicsCommandAdmissionStatus::DestructionRetryRequired);
+        const PhysicsTickStatistics statistics = world->TickStatistics();
+        REQUIRE(statistics.pendingCommands == 3);
+        REQUIRE(statistics.maximumCommandDepth == 3);
+        REQUIRE(statistics.rejectedCommands == 2);
+        REQUIRE(statistics.destructionRetryCount == 1);
+
+        constexpr Duration fixedDelta = Duration::FromNanoseconds(16'666'667);
+        REQUIRE(world->AdvanceFixedTick({.simulationTick = 1, .fixedDelta = fixedDelta}).HasValue());
+        REQUIRE(world->QueueStructuralCommand({4, 8, 24, PhysicsStructuralCommandKind::Destroy}).Value().status ==
+                PhysicsCommandAdmissionStatus::Deferred);
+        REQUIRE(world->AdvanceFixedTick({.simulationTick = 2, .fixedDelta = fixedDelta}).HasValue());
+        REQUIRE(world->PublishedTick().appliedCommands == 1);
+        REQUIRE(world->TickStatistics().pendingCommands == 0);
+    }
+
+    TEST_CASE("Runtime cadence cannot change Physics tick phase or command order", "[physics][tick][runtime]") {
+        const std::vector<std::uint64_t> thirtyHz = RunPhysicsCadence(30);
+        const std::vector<std::uint64_t> sixtyHz = RunPhysicsCadence(60);
+        const std::vector<std::uint64_t> highHz = RunPhysicsCadence(144);
+        REQUIRE(thirtyHz.size() == 120);
+        REQUIRE(sixtyHz == thirtyHz);
+        REQUIRE(highHz == thirtyHz);
+    }
+#endif
 }  // namespace Horo::Physics

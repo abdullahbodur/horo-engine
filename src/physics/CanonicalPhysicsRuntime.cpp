@@ -229,6 +229,19 @@ namespace Horo::Physics::Detail {
         const std::unique_ptr<CanonicalWorld> ownedWorld{static_cast<CanonicalWorld *>(world.value)};
     }
 
+    /** @copydoc StepCanonicalWorld */
+    Result<void> StepCanonicalWorld(const CanonicalWorldHandle world, const float fixedDeltaSeconds) {
+        if (world.value == nullptr)
+            return Result<void>::Failure(MakeError(PhysicsErrors::InvalidState));
+        auto &canonical = *static_cast<CanonicalWorld *>(world.value);
+        const JPH::EPhysicsUpdateError error =
+            canonical.system->Update(fixedDeltaSeconds, 1, canonical.scratch.get(), canonical.jobs.get());
+        if (error != JPH::EPhysicsUpdateError::None)
+            return Result<void>::Failure(
+                MakeError(PhysicsErrors::CapacityExceeded, "Canonical fixed tick exhausted required contact or pair storage."));
+        return Result<void>::Success();
+    }
+
     /** @copydoc InspectCanonicalResources */
     CanonicalResourceCounts InspectCanonicalResources(const CanonicalRuntimeHandle runtime) noexcept {
         return runtime.value == nullptr ? CanonicalResourceCounts{} : static_cast<const CanonicalRuntime *>(runtime.value)->resources;
