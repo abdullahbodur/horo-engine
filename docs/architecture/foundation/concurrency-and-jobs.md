@@ -47,14 +47,16 @@ that affinity and synchronization are explicit.
 
 ## Job System Interface
 
-Implementation status on 1 August 2026: the FND-001A baseline implements the
+Implementation status on 6 September 2026: the FND-001A baseline implements the
 bounded worker queue, result-returning submissions, parent cancellation and the
 non-movable operation-owned `TaskGroup` below. A bounded `OperationStore`
 baseline also provides typed state, phase, monotonic per-phase progress,
-terminal retention, and cooperative cancellation. Priority, affinity,
-configuration snapshot capture, main-thread pumping, job aggregation, wait
-reasons, and revision notifications remain later Foundation work; examples of
-those capabilities below describe the target rather than implemented behavior.
+terminal retention, and cooperative cancellation. `JobHandle::Wait(options)`
+implements the finite wait subset below with explicit caller-affinity validation
+and exact-record helping. Priority, configuration snapshot capture, general
+main-thread pumping, job aggregation, wait reasons, and revision notifications
+remain later Foundation work; examples of those capabilities below otherwise
+describe the target rather than implemented behavior.
 
 ```cpp
 class JobSystem {
@@ -76,9 +78,22 @@ enum class WaitPolicy {
 struct JoinOptions {
     WaitPolicy waitPolicy;
     Duration timeout;
-    bool publishWaitReason = true;
 };
 ```
+
+`JobHandle::Wait(options)` validates its affinity policy before observing the
+terminal state, so completion timing cannot bypass a caller restriction.
+`WorkerOnly` requires a callback executing on the same scheduler;
+`ForbiddenOnOwnerThread` rejects the thread that submitted the record; and
+`MainThreadPumpAllowed` permits an owner wait. Both allowed execution policies
+may claim and execute only the exact awaited queued record; unrelated queue work
+is never pumped. A thread-local execution chain rejects direct self-waits and
+nested A-to-B-to-A cycles with `job.wait_capacity_deadlock`. Forbidden callers
+and expired deadlines fail with distinct stable errors. A timeout does not alter
+the job lifecycle, and the handle remains safely retryable.
+
+The legacy unbounded overload remains a migration compatibility path. New
+owner-bound integrations must use the bounded contract.
 
 `JobHandle` is move-only and refers to a durable in-process job record. Dropping
 the handle does not implicitly cancel a job unless the descriptor explicitly
@@ -134,6 +149,7 @@ public:
     Result<JobId> Spawn(JobDescriptor descriptor, JobFunction work);
     void RequestCancel();
     Result<void> Join();
+    Result<void> Join(const JoinOptions &options);
 };
 ```
 
@@ -143,6 +159,13 @@ idempotent and reports child failure in deterministic spawn order. `FailFast`
 requests sibling cancellation on the first observed failure; `CollectAll` joins
 all accepted children without early sibling cancellation. Destruction closes
 admission, requests cancellation and joins every accepted child.
+
+`Join(options)` applies one monotonic deadline across all children. A forbidden,
+capacity-deadlock, or timeout result leaves the group closed but not finalized,
+so the owner can cancel and retry the join. A completed bounded join records the
+first child error in spawn order exactly like the unbounded overload. Destruction
+always falls back to cancellation plus an unbounded drain, including after a
+bounded timeout.
 
 A parent operation cannot report completion while required child work remains
 unaccounted for. Child failures follow the task group's declared policy:
