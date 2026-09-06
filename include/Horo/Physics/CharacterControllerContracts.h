@@ -33,14 +33,10 @@ namespace Horo::Character {
         [[nodiscard]] static Result<CharacterWorldId> Create(std::uint64_t value);
 
         /** @brief Returns the host-issued value. @return Zero only for the invalid default identity. */
-        [[nodiscard]] constexpr std::uint64_t Value() const noexcept {
-            return value_;
-        }
+        [[nodiscard]] std::uint64_t Value() const noexcept;
 
         /** @brief Checks representation, not world liveness. @return Whether the value is non-zero. */
-        [[nodiscard]] constexpr bool IsValid() const noexcept {
-            return value_ != 0;
-        }
+        [[nodiscard]] bool IsValid() const noexcept;
 
         constexpr auto operator<=>(const CharacterWorldId &) const noexcept = default;
 
@@ -65,7 +61,7 @@ namespace Horo::Character {
         Horo::Handle<CharacterControllerTag> slot; /**< Registry slot and non-zero slot generation. */
 
         /** @brief Checks identity shape, not registry liveness. @return True when every generation is usable. */
-        [[nodiscard]] constexpr bool IsValid() const noexcept {
+        [[nodiscard]] bool IsValid() const noexcept {
             return sceneGeneration != 0 && world.IsValid() && slot.IsValid() && slot.generation != 0;
         }
 
