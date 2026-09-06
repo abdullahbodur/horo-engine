@@ -137,8 +137,7 @@ namespace Horo::Navigation {
             if (!ValidateNavigationOutcomeProvenance(provenance) || coverage.IsComplete() != CompleteT ||
                 (!CompleteT && coverage.Missing().empty()))
                 return Result<NavigationPathValue>::Failure(MakeError(NavigationErrors::OutcomeDescriptorInvalid));
-            return Result<NavigationPathValue>::Success(
-                NavigationPathValue{std::move(value), std::move(provenance), std::move(coverage)});
+            return Result<NavigationPathValue>::Success(NavigationPathValue{std::move(value), std::move(provenance), std::move(coverage)});
         }
 
         /** @brief Returns the complete value or valid bounded partial prefix/frontier. */
