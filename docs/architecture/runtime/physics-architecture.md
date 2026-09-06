@@ -168,6 +168,14 @@ stable child/material mappings. Dynamic bodies accept primitives, convex hulls a
 convex compounds; triangle meshes, height fields and static planes remain static.
 Scale is validated and baked before cook rather than applied to runtime shapes.
 
+Analytic authoring resolves one owned body-local pose and typed positive finite
+scale into scale-free geometry before admission. Boxes admit component-wise
+non-uniform scale. Spheres and capsules require uniform scale because an affine
+non-uniform result is no longer that analytic kind. Static planes preserve their
+exact equation by inverse-transpose normal transformation and signed-distance
+renormalization. Degenerate, overflowing or non-finite results reject without
+mutating the authored request; native backends never reinterpret these rules.
+
 Cook identity binds semantic source and dependency digests to Horo shape/cooker
 schemas, the canonical tolerance profile, target platform and the exact private
 solver build fingerprint. Runtime activation consumes only validated artifacts;
