@@ -120,9 +120,10 @@ namespace Horo::Navigation {
         /**
          * @brief Resolves one exact query filter without a default fallback.
          * @param id Stable filter identity.
-         * @return A copy of the registered descriptor or NavigationErrors::FilterUnknown.
+         * @return A registry-owned immutable descriptor pointer or NavigationErrors::FilterUnknown. The pointer remains
+         * valid until the registry is destroyed and must not outlive it.
          */
-        [[nodiscard]] Result<NavigationQueryFilterDescriptor> ResolveFilter(NavigationFilterId id) const;
+        [[nodiscard]] Result<const NavigationQueryFilterDescriptor *> ResolveFilter(NavigationFilterId id) const;
 
         /**
          * @brief Applies exclusion-wins flags and an exact optional cost override.
