@@ -2,6 +2,7 @@
 
 #include "Horo/Foundation/CancellationToken.h"
 #include "Horo/Foundation/Result.h"
+#include "Horo/Foundation/Time.h"
 
 #include <cstddef>
 #include <cstdint>
@@ -48,6 +49,19 @@ namespace Horo {
         Cancel,
     };
 
+    /** @brief Selects the caller-affinity rule for one bounded wait. */
+    enum class WaitPolicy : std::uint8_t {
+        WorkerOnly,
+        MainThreadPumpAllowed,
+        ForbiddenOnOwnerThread,
+    };
+
+    /** @brief Explicit finite policy for a bounded job wait. */
+    struct JoinOptions {
+        WaitPolicy waitPolicy{WaitPolicy::WorkerOnly}; /**< Caller-affinity rule checked before observing completion. */
+        Duration timeout{};                            /**< Maximum duration of this wait. */
+    };
+
     struct JobRecord;
 
     /** @brief Move-only reference to a durable accepted job record. */
@@ -61,6 +75,13 @@ namespace Horo {
 
         /** @brief Waits until the job reaches its single terminal state. */
         [[nodiscard]] Result<void> Wait() const;
+        /**
+         * @brief Passively waits for the job under a finite caller-affinity policy.
+         * @param options Caller-affinity rule and maximum wait duration.
+         * @return Terminal job result, or a typed forbidden or timeout error. Policy validation occurs even if the job
+         * is already terminal. A timeout does not change the job lifecycle, so the handle remains safely retryable.
+         */
+        [[nodiscard]] Result<void> Wait(const JoinOptions &options) const;
         /** @brief Returns the stable identifier assigned at successful submission. */
         [[nodiscard]] JobId Id() const noexcept;
 

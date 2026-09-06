@@ -47,14 +47,16 @@ that affinity and synchronization are explicit.
 
 ## Job System Interface
 
-Implementation status on 1 August 2026: the FND-001A baseline implements the
+Implementation status on 6 September 2026: the FND-001A baseline implements the
 bounded worker queue, result-returning submissions, parent cancellation and the
 non-movable operation-owned `TaskGroup` below. A bounded `OperationStore`
 baseline also provides typed state, phase, monotonic per-phase progress,
-terminal retention, and cooperative cancellation. Priority, affinity,
-configuration snapshot capture, main-thread pumping, job aggregation, wait
-reasons, and revision notifications remain later Foundation work; examples of
-those capabilities below describe the target rather than implemented behavior.
+terminal retention, and cooperative cancellation. `JobHandle::Wait(options)`
+implements the finite passive-wait subset below with explicit caller-affinity
+validation. Priority, configuration snapshot capture, main-thread pumping,
+job aggregation, wait reasons, revision notifications, and bounded task-group
+joins remain later Foundation work; examples of those capabilities below
+otherwise describe the target rather than implemented behavior.
 
 ```cpp
 class JobSystem {
@@ -76,9 +78,21 @@ enum class WaitPolicy {
 struct JoinOptions {
     WaitPolicy waitPolicy;
     Duration timeout;
-    bool publishWaitReason = true;
 };
 ```
+
+`JobHandle::Wait(options)` validates its affinity policy before observing the
+terminal state, so completion timing cannot bypass a caller restriction.
+`WorkerOnly` requires a callback executing on the same scheduler;
+`ForbiddenOnOwnerThread` rejects the thread that submitted the record; and
+`MainThreadPumpAllowed` permits a bounded passive owner wait. The latter does
+not yet pump queued work. Forbidden callers and expired deadlines fail with
+distinct stable errors. A timeout does not alter the job lifecycle, and the
+handle remains safely retryable.
+
+The legacy unbounded overload remains a migration compatibility path. New
+owner-bound integrations must use the bounded contract. Exact-record helping
+and bounded task-group joins are introduced by their own reviewed capabilities.
 
 `JobHandle` is move-only and refers to a durable in-process job record. Dropping
 the handle does not implicitly cancel a job unless the descriptor explicitly

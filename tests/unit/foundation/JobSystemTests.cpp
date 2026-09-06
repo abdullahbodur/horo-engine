@@ -93,6 +93,46 @@ namespace {
         jobs.Shutdown(Horo::ShutdownPolicy::Drain);
     }
 
+    TEST_CASE("Bounded Wait Times Out Without Changing Queued Job State", "[unit][foundation][jobs][wait]") {
+        Horo::JobSystem jobs{Horo::JobSystemConfig{.workerCount = 0, .maxQueuedJobs = 1}};
+        auto submitted = jobs.Submit({}, [](const Horo::CancellationToken &) {
+        });
+        REQUIRE((submitted.HasValue()));
+
+        const auto timedOut =
+            submitted.Value().Wait({.waitPolicy = Horo::WaitPolicy::MainThreadPumpAllowed, .timeout = Horo::Duration::FromMilliseconds(1)});
+        REQUIRE((timedOut.HasError()));
+        REQUIRE((timedOut.ErrorValue().code.Value() == "job.wait_timed_out"));
+        REQUIRE((jobs.Query(submitted.Value().Id()).state == Horo::JobState::Queued));
+
+        REQUIRE((jobs.RequestCancel(submitted.Value().Id()).HasValue()));
+        jobs.Shutdown(Horo::ShutdownPolicy::Cancel);
+    }
+
+    TEST_CASE("Bounded Wait Validates Affinity Before Terminal Observation", "[unit][foundation][jobs][wait]") {
+        Horo::JobSystem jobs{Horo::JobSystemConfig{.workerCount = 1, .maxQueuedJobs = 2}};
+        auto completed = jobs.Submit({}, [](const Horo::CancellationToken &) {
+        });
+        REQUIRE((completed.HasValue()));
+        REQUIRE((completed.Value().Wait().HasValue()));
+
+        const auto ownerForbidden = completed.Value().Wait(
+            {.waitPolicy = Horo::WaitPolicy::ForbiddenOnOwnerThread, .timeout = Horo::Duration::FromMilliseconds(10)});
+        REQUIRE((ownerForbidden.HasError()));
+        REQUIRE((ownerForbidden.ErrorValue().code.Value() == "job.wait_forbidden"));
+
+        std::atomic workerAccepted{false};
+        auto verifier = jobs.Submit({}, [&completed, &workerAccepted](const Horo::CancellationToken &) {
+            workerAccepted.store(completed.Value()
+                                     .Wait({.waitPolicy = Horo::WaitPolicy::WorkerOnly, .timeout = Horo::Duration::FromMilliseconds(10)})
+                                     .HasValue());
+        });
+        REQUIRE((verifier.HasValue()));
+        REQUIRE((verifier.Value().Wait().HasValue()));
+        REQUIRE((workerAccepted.load()));
+        jobs.Shutdown(Horo::ShutdownPolicy::Drain);
+    }
+
     TEST_CASE("Task Group Collect All Returns Failures In Spawn Order", "[unit][foundation]") {
         Horo::JobSystem jobs{Horo::JobSystemConfig{.workerCount = 2, .maxQueuedJobs = 8}};
         Horo::TaskGroup group(jobs, Horo::TaskGroupFailurePolicy::CollectAll);

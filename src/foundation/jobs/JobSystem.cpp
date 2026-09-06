@@ -4,6 +4,7 @@
 #include "Horo/Foundation/Telemetry/Operation.h"
 
 #include <algorithm>
+#include <chrono>
 #include <condition_variable>
 #include <deque>
 #include <exception>
@@ -27,8 +28,9 @@ namespace Horo {
     }  // namespace
 
     struct JobRecord {
-        JobRecord(const JobId jobId, const JobDescriptor &descriptor, JobFunction jobWork)
-            : id(jobId), cancellation(descriptor.parentCancellation), work(std::move(jobWork)) {}
+        JobRecord(const JobId jobId, const JobDescriptor &descriptor, JobFunction jobWork, const void *scheduler)
+            : id(jobId), cancellation(descriptor.parentCancellation), work(std::move(jobWork)), schedulerIdentity(scheduler),
+              submittingThread(std::this_thread::get_id()) {}
 
         [[nodiscard]] std::mutex &Mutex() const noexcept {
             return mutex_;
@@ -41,6 +43,8 @@ namespace Horo {
         CancellationSource cancellation;
         JobFunction work;
         Telemetry::OperationContext operationContext = Telemetry::CaptureOperationContext();
+        const void *schedulerIdentity{};
+        std::thread::id submittingThread;
         mutable std::mutex mutex_;  // NOSONAR(cpp:S8379) Controlled via Mutex() accessor.
     };
 
@@ -61,6 +65,8 @@ namespace Horo {
     };
 
     namespace {
+        thread_local const void *activeSchedulerIdentity{};
+
         void SetTerminalState(const std::shared_ptr<JobRecord> &record, const JobState state, std::optional<Error> error = std::nullopt) {
             std::lock_guard lock(record->Mutex());
             if (IsTerminal(record->state))
@@ -101,6 +107,33 @@ namespace Horo {
                 SetTerminalState(record, JobState::Failed, MakeJobError(JobErrors::Failed, "Job callback threw an unknown exception."));
             }
         }
+
+        [[nodiscard]] Result<void> ValidateBoundedWait(const JobRecord &record, const WaitPolicy policy) {
+            if (policy == WaitPolicy::WorkerOnly && activeSchedulerIdentity != record.schedulerIdentity)
+                return Result<void>::Failure(
+                    MakeJobError(JobErrors::WaitForbidden, "WorkerOnly requires a worker executing on the owning job system."));
+            if (policy == WaitPolicy::ForbiddenOnOwnerThread && record.submittingThread == std::this_thread::get_id())
+                return Result<void>::Failure(
+                    MakeJobError(JobErrors::WaitForbidden, "The submitting owner thread is forbidden from waiting for this job."));
+            return Result<void>::Success();
+        }
+
+        [[nodiscard]] Result<void> TerminalResult(const JobRecord &record) {
+            return record.state == JobState::Succeeded ? Result<void>::Success() : Result<void>::Failure(*record.error);
+        }
+
+        [[nodiscard]] Result<void> WaitBounded(const std::shared_ptr<JobRecord> &record, const JoinOptions &options) {
+            if (const Result<void> validated = ValidateBoundedWait(*record, options.waitPolicy); validated.HasError())
+                return validated;
+
+            const auto timeout = std::chrono::nanoseconds(std::max<std::int64_t>(0, options.timeout.ToNanoseconds()));
+            std::unique_lock lock(record->Mutex());
+            if (!record->completed.wait_for(lock, timeout, [&record] {
+                return IsTerminal(record->state);
+            }))
+                return Result<void>::Failure(MakeJobError(JobErrors::WaitTimedOut, "The job did not complete before its wait deadline."));
+            return TerminalResult(*record);
+        }
     }  // namespace
 
     void JobSystem::RunWorker(const std::shared_ptr<State> &state) {
@@ -134,7 +167,9 @@ namespace Horo {
     JobSystem::JobSystem(const JobSystemConfig config) : m_state(std::make_shared<State>(config)) {
         for (std::size_t index = 0; index < config.workerCount; ++index)
             m_state->workers.emplace_back([state = m_state] {
+                activeSchedulerIdentity = state.get();
                 RunWorker(state);
+                activeSchedulerIdentity = nullptr;
             });
     }
 
@@ -156,7 +191,7 @@ namespace Horo {
         if (m_state->queue.size() >= m_state->config.maxQueuedJobs)
             return Result<JobHandle>::Failure(MakeJobError(JobErrors::QueueFull, "Job queue is at capacity."));
 
-        auto record = std::make_shared<JobRecord>(m_state->nextId++, descriptor, std::move(work));
+        auto record = std::make_shared<JobRecord>(m_state->nextId++, descriptor, std::move(work), m_state.get());
         m_state->jobs.try_emplace(record->id, record);
         m_state->queue.push_back(record);
         m_state->workAvailable.notify_one();
@@ -240,9 +275,14 @@ namespace Horo {
         record->completed.wait(lock, [record] {
             return IsTerminal(record->state);
         });
-        if (record->state == JobState::Succeeded)
-            return Result<void>::Success();
-        return Result<void>::Failure(*record->error);
+        return TerminalResult(*record);
+    }
+
+    /** @copydoc JobHandle::Wait(const JoinOptions &) */
+    Result<void> JobHandle::Wait(const JoinOptions &options) const {
+        if (!m_record)
+            return Result<void>::Failure(MakeJobError(JobErrors::InvalidHandle, "Cannot wait on an invalid job handle."));
+        return WaitBounded(m_record, options);
     }
 
     JobId JobHandle::Id() const noexcept {
