@@ -99,8 +99,10 @@ namespace Horo::Prefab {
         explicit PrefabExpansionBudget(const PrefabLimitProfile &profile) noexcept;
         PrefabExpansionBudget(const PrefabExpansionBudget &) = delete;
         PrefabExpansionBudget &operator=(const PrefabExpansionBudget &) = delete;
-        PrefabExpansionBudget(PrefabExpansionBudget &&) = delete;
-        PrefabExpansionBudget &operator=(PrefabExpansionBudget &&) = delete;
+        /** @brief Transfers the only remaining-work authority and empties the source budget. */
+        PrefabExpansionBudget(PrefabExpansionBudget &&other) noexcept;
+        /** @brief Replaces this authority with the source authority and empties the source budget. */
+        PrefabExpansionBudget &operator=(PrefabExpansionBudget &&other) noexcept;
 
         /**
          * @brief Charges bounded expansion work before performing it.

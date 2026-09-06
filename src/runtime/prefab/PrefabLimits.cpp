@@ -89,6 +89,15 @@ namespace Horo::Prefab {
     PrefabExpansionBudget::PrefabExpansionBudget(const PrefabLimitProfile &profile) noexcept
         : remaining_(profile.MaximumExpansionWorkItems()) {}
 
+    /** @copydoc PrefabExpansionBudget::PrefabExpansionBudget(PrefabExpansionBudget&&) */
+    PrefabExpansionBudget::PrefabExpansionBudget(PrefabExpansionBudget &&other) noexcept : remaining_(std::exchange(other.remaining_, 0)) {}
+
+    /** @copydoc PrefabExpansionBudget::operator= */
+    PrefabExpansionBudget &PrefabExpansionBudget::operator=(PrefabExpansionBudget &&other) noexcept {
+        remaining_ = std::exchange(other.remaining_, 0);
+        return *this;
+    }
+
     /** @copydoc PrefabExpansionBudget::Consume */
     Result<void> PrefabExpansionBudget::Consume(const std::size_t workItems) {
         if (workItems > remaining_)

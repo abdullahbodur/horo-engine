@@ -3,6 +3,7 @@
 
 #include <array>
 #include <catch2/catch_test_macros.hpp>
+#include <utility>
 
 namespace Horo::Prefab {
     TEST_CASE("Prefab project policy defaults resolve at the canonical hard ceilings", "[unit][prefab][limits]") {
@@ -112,5 +113,22 @@ namespace Horo::Prefab {
         REQUIRE(exhausted.HasError());
         REQUIRE(exhausted.ErrorValue().code.Value() == PrefabErrors::WorkBudgetExceeded.code.Value());
         REQUIRE(budget.Remaining() == 0);
+    }
+
+    TEST_CASE("Prefab expansion budget move transfers its single work authority", "[unit][prefab][limits]") {
+        const auto profile = PrefabLimitProfile::Create({});
+        REQUIRE(profile.HasValue());
+        PrefabExpansionBudget source{profile.Value()};
+        const std::size_t capacity = source.Remaining();
+        REQUIRE(source.Consume(1).HasValue());
+
+        PrefabExpansionBudget constructed{std::move(source)};
+        REQUIRE(source.Remaining() == 0);
+        REQUIRE(constructed.Remaining() == capacity - 1);
+
+        PrefabExpansionBudget assigned{profile.Value()};
+        assigned = std::move(constructed);
+        REQUIRE(constructed.Remaining() == 0);
+        REQUIRE(assigned.Remaining() == capacity - 1);
     }
 }  // namespace Horo::Prefab
