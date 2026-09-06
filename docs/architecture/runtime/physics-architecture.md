@@ -575,6 +575,14 @@ This scratch policy is separate from non-finite body/world containment.
 Invalid user or scene data returns diagnostics. Internal solver invariant
 violations use assertions in development and preserve safety checks in release.
 
+Physics diagnostic evidence uses six closed categories: configuration, cook,
+runtime, query, event and lifecycle. Records copy one canonical Physics error code,
+severity, bounded message and at most eight typed context fields in stable key order.
+The operation `Error` remains control-flow authority; a diagnostic record is inert
+owned evidence with no logging, storage, event, lifetime or mutation authority.
+Metrics/profiler ingestion and native solver callback translation remain separate
+owning contracts.
+
 NaN or non-finite body state is detected at owned boundaries, associated with
 body/entity identity, and quarantined or treated as fatal according to the
 configured runtime policy.
