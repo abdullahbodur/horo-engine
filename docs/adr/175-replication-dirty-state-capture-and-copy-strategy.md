@@ -43,8 +43,9 @@ are a declared network representation and never replace canonical gameplay or sa
 authority.
 
 The candidate is private until all required fields and identities validate. Capture
-failure, capacity denial or stale identity publishes nothing and preserves the previous
-immutable snapshot and baselines.
+failure or capacity denial for the still-current identity publishes nothing and
+preserves its previous immutable snapshot and baselines. A stale identity instead
+invalidates its old logical generation as defined below.
 
 ### 2. Dirty notifications are lossy, idempotent scheduling hints
 
@@ -57,6 +58,11 @@ state with the compatible prior snapshot under the pinned descriptor. A missing 
 therefore cannot make a changed authoritative value permanently invisible: bounded
 periodic reconciliation or an owner revision mismatch schedules a fresh capture. A
 duplicate hint cannot create a second semantic revision or unbounded history.
+
+Reconciliation is incrementally budgeted per simulation tick with a stable rotating
+cursor and a finite object/work/byte allowance. Exhausting the allowance defers the
+remaining eligible objects without resetting their position. It never performs an
+unbounded full-object scan or creates a total-object O(N) spike in one tick.
 
 Polling ECS/component memory, generic event-bus mirroring, pointer/layout comparison,
 and a separate mutable replication cache owned by gameplay are prohibited. There is one
@@ -71,7 +77,11 @@ or committing, retain the view after adapter return, or race the next owner muta
 
 Scene replacement, authority change, session replacement, object reuse and descriptor
 replacement advance their generations. A candidate whose complete identity no longer
-matches at publication is stale and discarded without changing the active snapshot.
+matches at publication is stale and discarded. The generation transition immediately
+invalidates and drops every snapshot and baseline for the old logical object/world/
+session/descriptor identity; stale data is never preserved or served for a destroyed or
+reused identity. Only a failed candidate for the still-current identity preserves its
+prior valid snapshot.
 
 ### 4. Allocation and work are bounded before publication
 
@@ -109,14 +119,18 @@ duplicated hints, stale identities, capacity failure, cancellation and shutdown.
 baseline/delta encoding and tests that duplicate or missing delivery never changes the
 captured source authority.
 
-Those tests must prove:
+Those tickets must provide executable tests that prove all six gates:
 
-- a lost hint is recovered by revision reconciliation and a duplicated hint publishes
-  at most one semantic snapshot;
-- capture never observes a partially committed field or structural change;
-- stale world/session/authority/object/descriptor candidates preserve the prior pin;
-- cancellation and capacity failure publish no partial candidate; and
-- shutdown rejects new work and drains every candidate/view/snapshot pin in owner order.
+1. A lost hint is recovered by incrementally budgeted revision reconciliation without a
+   full-object single-tick scan.
+2. A duplicated hint publishes at most one semantic snapshot and creates no unbounded
+   history.
+3. Capture never observes a partially committed field or structural change.
+4. A stale world/session/authority/object/descriptor candidate cannot publish, and an
+   identity-generation transition immediately removes old snapshots and baselines.
+5. Cancellation and capacity failure publish no partial candidate while a failed
+   candidate for the current identity preserves its prior valid pin.
+6. Shutdown rejects new work and drains every candidate/view/snapshot pin in owner order.
 
 This ADR claims no executable coverage by itself. The linked implementation tickets
 cannot close without those gates.
