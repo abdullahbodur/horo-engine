@@ -71,6 +71,7 @@ device backend.
 | `HoroApplication` (`HoroEngine::Application`) | Always | Owns project version, compatibility, migration planning/execution, and host observability contracts in `Application/**`, except gameplay build. Generated compatibility data is private. | Foundation (public) |
 | `HoroProjectMigrations` (`HoroEngine::ProjectMigrations`) | Always | Owns generated concrete migration catalog composition. It intentionally exposes the Application migration contract rather than a separate header family. | Application (public) |
 | `HoroRuntime` (`HoroEngine::Runtime`) | Always | Owns frame scheduling, runtime lifecycle, and runtime host contracts in `Runtime/FrameScheduler.h`, `Runtime/RuntimeLifecycle.h`, and `Runtime/RuntimeHost.h`. | Foundation (public) |
+| `HoroRuntimeUi` (`HoroEngine::RuntimeUi`) | Always | Owns backend-neutral stable Runtime UI identities, transient generation-safe handles, revision comparison, and typed stale-value rejection under `Runtime/Ui/**`. Document/tree storage, rendering, platform, editor, and gameplay ownership remain outside this target. | Foundation (public) |
 | `HoroAssets` (`HoroEngine::Assets`) | Always | Owns all current `Assets/**` headers. The target currently combines registry, provider, import, preview, reimport, cook, cache, and output responsibilities. | Foundation (public) |
 | `HoroInput` (`HoroEngine::Input`) | Always | Owns the backend-neutral `Runtime/Input.h` contract and runtime implementation. | Foundation (public) |
 | `HoroAudioMemory` (`HoroEngine::AudioMemory`) | Always | Owns `Audio/AudioMemory.h`, bounded scratch storage and generation-safe fixed pools with explicit deferred reuse. Aligned allocation details remain target-private. | AudioApi (public) |
@@ -196,6 +197,7 @@ conflicts are recorded rather than treated as additional implementations.
 | `HoroEngine::Foundation` | Implemented | `HoroFoundation` |
 | `HoroEngine::Platform` | Implemented | `HoroPlatform` |
 | `HoroEngine::Runtime` | Implemented | `HoroRuntime` |
+| `HoroEngine::RuntimeUi` | Partial | `HoroRuntimeUi` owns the typed identity, handle, and revision foundation; document/canvas storage, service lifecycle, layout, interaction, and extraction remain planned. |
 | `HoroEngine::Assets` | Partial | Target exists, but registry, import, cook, cache, and preview are combined beyond the narrower ownership described by System Design. |
 | `HoroEngine::SceneModel` | Partial | Target exists but publicly depends on RenderApi, contrary to the documented Foundation-only level. |
 | `HoroEngine::RuntimeScene` | Implemented | `HoroRuntimeScene`; Build System still calls this `HoroEngine::SceneRuntime`. |

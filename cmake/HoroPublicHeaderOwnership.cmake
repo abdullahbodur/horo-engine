@@ -68,6 +68,10 @@ horo_configure_target_header_boundary(HoroRuntime PUBLIC_HEADERS
     Horo/Runtime/Save/SaveIdentity.h
     Horo/Runtime/Save/SaveParticipantRegistry.h
 )
+horo_configure_target_header_boundary(HoroRuntimeUi PUBLIC_HEADERS
+    Horo/Runtime/Ui/UiErrors.h
+    Horo/Runtime/Ui/UiIdentity.h
+)
 
 horo_configure_target_header_boundary(HoroGameplayApi PUBLIC_HEADERS
     Horo/Gameplay/Behavior.h
