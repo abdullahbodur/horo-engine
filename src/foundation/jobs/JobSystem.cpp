@@ -4,12 +4,14 @@
 #include "Horo/Foundation/Telemetry/Operation.h"
 
 #include <algorithm>
+#include <array>
 #include <chrono>
 #include <condition_variable>
 #include <deque>
 #include <exception>
 #include <mutex>
 #include <string>
+#include <string_view>
 #include <thread>
 #include <unordered_map>
 #include <utility>
@@ -166,20 +168,41 @@ namespace Horo {
             return record.state == JobState::Succeeded ? Result<void>::Success() : Result<void>::Failure(*record.error);
         }
 
-        [[nodiscard]] Result<void> WaitBounded(const std::shared_ptr<JobRecord> &record, const JoinOptions &options) {
-            if (const Result<void> validated = ValidateBoundedWait(*record, options.waitPolicy); validated.HasError())
+        [[nodiscard]] std::chrono::steady_clock::time_point WaitDeadline(const Duration timeout) noexcept {
+            const auto now = std::chrono::steady_clock::now();
+            const auto remaining = std::chrono::nanoseconds(std::max<std::int64_t>(0, timeout.ToNanoseconds()));
+            const auto available = std::chrono::steady_clock::time_point::max() - now;
+            return remaining >= available ? std::chrono::steady_clock::time_point::max() : now + remaining;
+        }
+
+        [[nodiscard]] Result<void> WaitUntil(const std::shared_ptr<JobRecord> &record, const std::chrono::steady_clock::time_point deadline,
+                                             const WaitPolicy policy) {
+            if (const Result<void> validated = ValidateBoundedWait(*record, policy); validated.HasError())
                 return validated;
 
-            if (options.waitPolicy != WaitPolicy::ForbiddenOnOwnerThread && TryClaimJobRecord(record))
+            if (policy != WaitPolicy::ForbiddenOnOwnerThread && TryClaimJobRecord(record))
                 ExecuteJobRecord(record);
 
-            const auto timeout = std::chrono::nanoseconds(std::max<std::int64_t>(0, options.timeout.ToNanoseconds()));
             std::unique_lock lock(record->Mutex());
-            if (!record->completed.wait_for(lock, timeout, [&record] {
+            if (!record->completed.wait_until(lock, deadline, [&record] {
                 return IsTerminal(record->state);
             }))
                 return Result<void>::Failure(MakeJobError(JobErrors::WaitTimedOut, "The job did not complete before its wait deadline."));
             return TerminalResult(*record);
+        }
+
+        [[nodiscard]] bool IsWaitControlError(const Error &error) {
+            static constexpr std::array<std::string_view, 3> controlCodes{
+                "job.wait_forbidden",
+                "job.wait_timed_out",
+                "job.wait_capacity_deadlock",
+            };
+            const std::string_view code = error.code.Value();
+            return std::ranges::find(controlCodes, code) != controlCodes.end();
+        }
+
+        [[nodiscard]] Result<void> ResultFromError(const std::optional<Error> &error) {
+            return error.has_value() ? Result<void>::Failure(*error) : Result<void>::Success();
         }
     }  // namespace
 
@@ -329,7 +352,7 @@ namespace Horo {
     Result<void> JobHandle::Wait(const JoinOptions &options) const {
         if (!m_record)
             return Result<void>::Failure(MakeJobError(JobErrors::InvalidHandle, "Cannot wait on an invalid job handle."));
-        return WaitBounded(m_record, options);
+        return WaitUntil(m_record, WaitDeadline(options.timeout), options.waitPolicy);
     }
 
     JobId JobHandle::Id() const noexcept {
@@ -409,6 +432,31 @@ namespace Horo {
     }
 
     Result<void> TaskGroup::Join() const {
+        return JoinImpl(nullptr);
+    }
+
+    /** @copydoc TaskGroup::Join(const JoinOptions &) */
+    Result<void> TaskGroup::Join(const JoinOptions &options) const {
+        return JoinImpl(&options);
+    }
+
+    TaskGroup::ChildJoinOutcome TaskGroup::WaitForChildren(const std::vector<std::shared_ptr<JobHandle>> &children,
+                                                           const JoinOptions *options) {
+        const auto deadline = options == nullptr ? std::chrono::steady_clock::time_point{} : WaitDeadline(options->timeout);
+        ChildJoinOutcome outcome;
+        for (const auto &child : children) {
+            const Result<void> waited = options == nullptr ? child->Wait() : WaitUntil(child->m_record, deadline, options->waitPolicy);
+            if (options != nullptr && waited.HasError() && IsWaitControlError(waited.ErrorValue())) {
+                outcome.interruption = waited.ErrorValue();
+                return outcome;
+            }
+            if (waited.HasError() && !outcome.firstError.has_value())
+                outcome.firstError = waited.ErrorValue();
+        }
+        return outcome;
+    }
+
+    Result<void> TaskGroup::JoinImpl(const JoinOptions *options) const {
         std::lock_guard joinLock(m_state->joinMutex);
         if (m_state->cancellation.Token().IsCancellationRequested())
             CancelChildren(m_state);
@@ -417,22 +465,19 @@ namespace Horo {
         {
             std::lock_guard lock(m_state->mutex);
             if (m_state->joined)
-                return m_state->joinError.has_value() ? Result<void>::Failure(*m_state->joinError) : Result<void>::Success();
+                return ResultFromError(m_state->joinError);
             m_state->accepting = false;
             children = m_state->children;
         }
 
-        std::optional<Error> firstError;
-        for (const auto &child : children) {
-            const Result<void> waited = child->Wait();
-            if (waited.HasError() && !firstError.has_value())
-                firstError = waited.ErrorValue();
-        }
+        const ChildJoinOutcome outcome = WaitForChildren(children, options);
+        if (outcome.interruption.has_value())
+            return Result<void>::Failure(*outcome.interruption);
         {
             std::lock_guard lock(m_state->mutex);
             m_state->joined = true;
-            m_state->joinError = firstError;
+            m_state->joinError = outcome.firstError;
         }
-        return firstError.has_value() ? Result<void>::Failure(*firstError) : Result<void>::Success();
+        return ResultFromError(outcome.firstError);
     }
 }  // namespace Horo

@@ -242,6 +242,108 @@ namespace {
         jobs.Shutdown(Horo::ShutdownPolicy::Drain);
     }
 
+    TEST_CASE("Timed Out Task Group Join Remains Retryable", "[unit][foundation][jobs][wait]") {
+        Horo::JobSystem jobs{Horo::JobSystemConfig{.workerCount = 1, .maxQueuedJobs = 3}};
+        std::mutex mutex;
+        std::condition_variable condition;
+        bool blockerStarted{};
+        bool releaseBlocker{};
+        auto blocker = jobs.Submit({}, [&](const Horo::CancellationToken &) {
+            std::unique_lock lock(mutex);
+            blockerStarted = true;
+            condition.notify_all();
+            condition.wait(lock, [&] {
+                return releaseBlocker;
+            });
+        });
+        REQUIRE((blocker.HasValue()));
+        {
+            std::unique_lock lock(mutex);
+            condition.wait(lock, [&] {
+                return blockerStarted;
+            });
+        }
+
+        Horo::TaskGroup group(jobs);
+        std::atomic childExecuted{false};
+        REQUIRE((group
+                     .Spawn({}, [&childExecuted](const Horo::CancellationToken &) {
+            childExecuted.store(true);
+            return Horo::Result<void>::Success();
+        }).HasValue()));
+
+        std::string waitError;
+        std::thread waiter([&] {
+            const auto joined =
+                group.Join({.waitPolicy = Horo::WaitPolicy::ForbiddenOnOwnerThread, .timeout = Horo::Duration::FromMilliseconds(10)});
+            if (joined.HasError())
+                waitError = joined.ErrorValue().code.Value();
+        });
+        waiter.join();
+        REQUIRE((waitError == "job.wait_timed_out"));
+        REQUIRE_FALSE((childExecuted.load()));
+
+        {
+            std::lock_guard lock(mutex);
+            releaseBlocker = true;
+        }
+        condition.notify_all();
+        REQUIRE((blocker.Value().Wait().HasValue()));
+        REQUIRE((group.Join().HasValue()));
+        REQUIRE((group.Join().HasValue()));
+        REQUIRE((childExecuted.load()));
+        jobs.Shutdown(Horo::ShutdownPolicy::Drain);
+    }
+
+    TEST_CASE("Bounded Task Group Join Preserves First Failure In Spawn Order", "[unit][foundation][jobs][wait]") {
+        Horo::JobSystem jobs{Horo::JobSystemConfig{.workerCount = 0, .maxQueuedJobs = 2}};
+        Horo::TaskGroup group(jobs, Horo::TaskGroupFailurePolicy::CollectAll);
+        REQUIRE((group
+                     .Spawn({}, [](const Horo::CancellationToken &) {
+            Horo::Error error = Horo::MakeError(TestFailure);
+            error.code = Horo::ErrorCode("test.job_system.bounded_first");
+            return Horo::Result<void>::Failure(std::move(error));
+        }).HasValue()));
+        REQUIRE((group
+                     .Spawn({}, [](const Horo::CancellationToken &) {
+            Horo::Error error = Horo::MakeError(TestFailure);
+            error.code = Horo::ErrorCode("test.job_system.bounded_second");
+            return Horo::Result<void>::Failure(std::move(error));
+        }).HasValue()));
+
+        const auto joined =
+            group.Join({.waitPolicy = Horo::WaitPolicy::MainThreadPumpAllowed, .timeout = Horo::Duration::FromMilliseconds(100)});
+        REQUIRE((joined.HasError()));
+        REQUIRE((joined.ErrorValue().code.Value() == "test.job_system.bounded_first"));
+        REQUIRE((group.Join().ErrorValue().code.Value() == "test.job_system.bounded_first"));
+        jobs.Shutdown(Horo::ShutdownPolicy::Drain);
+    }
+
+    TEST_CASE("Task Group Destructor Cancels And Drains After Bounded Timeout", "[unit][foundation][jobs][wait][lifetime]") {
+        Horo::JobSystem jobs{Horo::JobSystemConfig{.workerCount = 1, .maxQueuedJobs = 1}};
+        std::atomic started{false};
+        std::atomic stopped{false};
+        {
+            Horo::TaskGroup group(jobs);
+            REQUIRE((group
+                         .Spawn({}, [&](const Horo::CancellationToken &cancellation) {
+                started.store(true);
+                while (!cancellation.IsCancellationRequested())
+                    std::this_thread::yield();
+                stopped.store(true);
+                return Horo::Result<void>::Success();
+            }).HasValue()));
+            while (!started.load())
+                std::this_thread::yield();
+            const auto timedOut =
+                group.Join({.waitPolicy = Horo::WaitPolicy::MainThreadPumpAllowed, .timeout = Horo::Duration::FromMilliseconds(1)});
+            REQUIRE((timedOut.HasError()));
+            REQUIRE((timedOut.ErrorValue().code.Value() == "job.wait_timed_out"));
+        }
+        REQUIRE((stopped.load()));
+        jobs.Shutdown(Horo::ShutdownPolicy::Drain);
+    }
+
     TEST_CASE("Task Group Collect All Returns Failures In Spawn Order", "[unit][foundation]") {
         Horo::JobSystem jobs{Horo::JobSystemConfig{.workerCount = 2, .maxQueuedJobs = 8}};
         Horo::TaskGroup group(jobs, Horo::TaskGroupFailurePolicy::CollectAll);
