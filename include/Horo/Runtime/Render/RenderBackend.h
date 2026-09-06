@@ -6,6 +6,7 @@
  */
 
 #include "Horo/Foundation/Result.h"
+#include "Horo/Runtime/Render/RenderAdapter.h"
 #include "Horo/Runtime/Render/RenderScene.h"
 #include "Horo/Runtime/Render/Texture.h"
 
@@ -88,6 +89,8 @@ namespace Horo::Render {
 
     /** @brief Host-owned renderer initialization policy with no native API values. */
     struct RenderBackendConfig {
+        std::optional<RenderAdapterId> adapter;    /**< Exact host-selected adapter, or backend-defined deterministic default. */
+        std::uint64_t adapterDiscoveryRevision{0}; /**< Discovery revision paired with an explicit adapter. */
         bool requirePresentation{false};
         bool enableValidation{false};
         std::uint32_t maxFramesInFlight{2};
@@ -95,6 +98,9 @@ namespace Horo::Render {
 
         /** @brief Reports whether ranges and presentation policy are valid. */
         [[nodiscard]] bool IsValid() const noexcept {
+            if (adapter.has_value() != (adapterDiscoveryRevision != 0) || (adapter && !adapter->IsValid())) {
+                return false;
+            }
             if (maxFramesInFlight == 0 || maxFramesInFlight > 8) {
                 return false;
             }
