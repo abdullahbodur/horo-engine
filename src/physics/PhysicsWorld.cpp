@@ -5,6 +5,7 @@
 
 #include <algorithm>
 #include <array>
+#include <atomic>
 #include <cmath>
 #include <functional>
 #include <new>
@@ -68,6 +69,8 @@ namespace Horo::Physics {
         }
 
         void DiscardCommands(const std::uint32_t discarded) noexcept {
+            if (discarded == 0)
+                return;
             commandHead = (commandHead + discarded) % commands.size();
             commandCount -= discarded;
             statistics.pendingCommands = commandCount;
@@ -83,21 +86,64 @@ namespace Horo::Physics {
         std::uint32_t commandCount{};
         std::uint64_t lastAdmittedCommandSequence{};
         bool stepping{};
+        // The owner thread alone writes publication state; any live-world thread may take a coherent snapshot.
+        // The flag protects only the bounded copy below and owns no worker or shutdown lifetime.
+        mutable std::atomic_flag publicationLock = ATOMIC_FLAG_INIT;
         PhysicsPublishedTick published;
         PhysicsTickStatistics statistics;
     };
 
     namespace {
+        /** @brief Provides non-throwing mutual exclusion for the bounded publication snapshot copy. */
+        class PublicationGuard final {
+        public:
+            explicit PublicationGuard(std::atomic_flag &lock) noexcept : lock_(lock) {
+                while (lock_.test_and_set(std::memory_order_acquire))
+                    std::this_thread::yield();
+            }
+
+            ~PublicationGuard() {
+                lock_.clear(std::memory_order_release);
+            }
+
+        private:
+            std::atomic_flag &lock_;
+        };
+
+        /** @brief Records bounded-buffer rejection metrics and preserves explicit destruction retry ownership. */
+        [[nodiscard]] PhysicsCommandAdmission RejectFullCommand(auto &impl, const bool destruction) noexcept {
+            ++impl.statistics.rejectedCommands;
+            if (!destruction)
+                return {PhysicsCommandAdmissionStatus::RejectedFull, impl.commandCount};
+            ++impl.statistics.destructionRetryCount;
+            return {PhysicsCommandAdmissionStatus::DestructionRetryRequired, impl.commandCount};
+        }
+
+        /** @brief Replaces every externally visible publication domain under one synchronization boundary. */
+        void PublishCompletedTick(auto &impl, const std::uint64_t tick, const std::uint32_t appliedCommands) noexcept {
+            PublicationGuard publicationGuard{impl.publicationLock};
+            const std::uint64_t revision = impl.published.publicationRevision + 1;
+            impl.published = {.completedTick = tick,
+                              .publicationRevision = revision,
+                              .transformTick = tick,
+                              .queryTick = tick,
+                              .eventTick = tick,
+                              .appliedCommands = appliedCommands};
+        }
+
+        /** @brief Validates the opaque structural envelope before it enters retained world storage. */
         [[nodiscard]] bool IsValidCommand(const PhysicsStructuralCommand &command) noexcept {
             return command.sequence != 0 && command.sceneGeneration != 0 && command.subject != 0 &&
                    command.kind <= PhysicsStructuralCommandKind::Destroy;
         }
 
+        /** @brief Emits one optional synchronous phase observation on the owner thread. */
         void ObservePhase(const PhysicsFixedTickInput &input, const PhysicsTickPhase phase) noexcept {
             if (input.observer.phase)
                 input.observer.phase(input.observer.context, phase, input.simulationTick);
         }
 
+        /** @brief Emits eligible commands selected for one semantic safe point without mutating the queue. */
         void ObserveCommands(const auto &impl, const PhysicsFixedTickInput &input, const std::uint32_t eligible,
                              const PhysicsStructuralCommandKind selectedKind, const PhysicsCommandSafePoint safePoint,
                              std::uint32_t &applied) noexcept {
@@ -268,16 +314,13 @@ namespace Horo::Physics {
                           "Physics structural commands require non-zero identities, a known kind and increasing sequence order."));
 
         const std::uint32_t capacity = static_cast<std::uint32_t>(impl_->commands.size());
+        if (capacity == 0)
+            return Result<PhysicsCommandAdmission>::Failure(
+                MakeError(PhysicsErrors::InvalidState, "Validated Physics command storage is unexpectedly unavailable."));
         const bool destruction = command.kind == PhysicsStructuralCommandKind::Destroy;
         const std::uint32_t ordinaryLimit = capacity - 1;
-        if (impl_->commandCount >= (destruction ? capacity : ordinaryLimit)) {
-            ++impl_->statistics.rejectedCommands;
-            if (destruction)
-                ++impl_->statistics.destructionRetryCount;
-            return Result<PhysicsCommandAdmission>::Success(
-                {destruction ? PhysicsCommandAdmissionStatus::DestructionRetryRequired : PhysicsCommandAdmissionStatus::RejectedFull,
-                 impl_->commandCount});
-        }
+        if (impl_->commandCount >= (destruction ? capacity : ordinaryLimit))
+            return Result<PhysicsCommandAdmission>::Success(RejectFullCommand(*impl_, destruction));
 
         const std::uint32_t tail = (impl_->commandHead + impl_->commandCount) % capacity;
         impl_->commands[tail] = command;
@@ -336,13 +379,7 @@ namespace Horo::Physics {
         ObserveCommands(*impl_, input, eligible, PhysicsStructuralCommandKind::Destroy, PhysicsCommandSafePoint::PostStep, applied);
 
         impl_->DiscardCommands(eligible);
-        const std::uint64_t revision = impl_->published.publicationRevision + 1;
-        impl_->published = {.completedTick = input.simulationTick,
-                            .publicationRevision = revision,
-                            .transformTick = input.simulationTick,
-                            .queryTick = input.simulationTick,
-                            .eventTick = input.simulationTick,
-                            .appliedCommands = applied};
+        PublishCompletedTick(*impl_, input.simulationTick, applied);
         impl_->statistics.completedTicks = input.simulationTick;
         ObservePhase(input, PhysicsTickPhase::PublishCompletedTick);
         return Result<void>::Success();
@@ -350,6 +387,7 @@ namespace Horo::Physics {
 
     /** @copydoc PhysicsWorld::PublishedTick */
     PhysicsPublishedTick PhysicsWorld::PublishedTick() const noexcept {
+        PublicationGuard publicationGuard{impl_->publicationLock};
         return impl_->published;
     }
 

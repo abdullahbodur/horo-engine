@@ -133,7 +133,10 @@ namespace Horo::Physics {
          * @pre Active canonical world on its owner thread; reentrant stepping is rejected.
          */
         [[nodiscard]] Result<void> AdvanceFixedTick(const PhysicsFixedTickInput &input);
-        /** @brief Reads the last atomically completed tick marker. @return Zero revision before the first completed tick. */
+        /** @brief Reads one coherent copy of the last atomically completed tick marker from any thread.
+         * @return Zero revision before the first completed tick.
+         * @pre The caller keeps this PhysicsWorld alive for the complete call; the snapshot lock does not extend object lifetime.
+         */
         [[nodiscard]] PhysicsPublishedTick PublishedTick() const noexcept;
         /** @brief Reads allocation-free cumulative pipeline metrics. @return Owner-thread value snapshot. */
         [[nodiscard]] PhysicsTickStatistics TickStatistics() const noexcept;

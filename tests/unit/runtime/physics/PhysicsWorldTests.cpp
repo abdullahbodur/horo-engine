@@ -3,6 +3,7 @@
 #include "PhysicsTestUtils.h"
 
 #include <array>
+#include <atomic>
 #include <catch2/catch_test_macros.hpp>
 #include <thread>
 #include <vector>
@@ -343,6 +344,33 @@ namespace Horo::Physics {
         REQUIRE(world->AdvanceFixedTick({.simulationTick = 2, .fixedDelta = fixedDelta}).HasValue());
         REQUIRE(world->PublishedTick().appliedCommands == 1);
         REQUIRE(world->TickStatistics().pendingCommands == 0);
+    }
+
+    TEST_CASE("Physics publication snapshots remain coherent for concurrent readers", "[physics][tick][threading]") {
+        std::unique_ptr<PhysicsRuntime> runtime;
+        auto world = ActiveCanonicalWorld(Test::SmallWorldSettings(), runtime);
+        std::atomic_bool reading{true};
+        std::atomic_bool coherent{true};
+        std::thread reader([&] {
+            while (reading.load(std::memory_order_acquire)) {
+                const PhysicsPublishedTick published = world->PublishedTick();
+                if (published.publicationRevision == 0)
+                    continue;
+                const bool sameTick = published.completedTick == published.transformTick &&
+                                      published.completedTick == published.queryTick && published.completedTick == published.eventTick;
+                if (!sameTick || published.publicationRevision != published.completedTick)
+                    coherent.store(false, std::memory_order_release);
+            }
+        });
+
+        constexpr Duration fixedDelta = Duration::FromNanoseconds(16'666'667);
+        for (std::uint64_t tick = 1; tick <= 100; ++tick)
+            REQUIRE(world->AdvanceFixedTick({.simulationTick = tick, .fixedDelta = fixedDelta}).HasValue());
+        reading.store(false, std::memory_order_release);
+        reader.join();
+
+        REQUIRE(coherent.load(std::memory_order_acquire));
+        RequirePublishedTick(world->PublishedTick(), 100, 100, 0);
     }
 
     TEST_CASE("Runtime cadence cannot change Physics tick phase or command order", "[physics][tick][runtime]") {
