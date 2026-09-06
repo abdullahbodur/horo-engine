@@ -140,6 +140,7 @@ add_executable(HoroInputTests
 target_compile_features(HoroInputTests PRIVATE cxx_std_20)
 target_link_libraries(HoroInputTests PRIVATE HoroEngine::Input)
 add_executable(HoroNetworkApiTests
+        unit/runtime/networking/ProtocolIdentityTests.cpp
         unit/runtime/networking/ReplicationDescriptorTests.cpp
         unit/runtime/networking/ReplicationDescriptorRegistryTests.cpp
         unit/runtime/networking/TransportCapabilitiesTests.cpp
