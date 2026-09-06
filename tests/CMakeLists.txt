@@ -425,6 +425,23 @@ if (HORO_BUILD_EDITOR_GUI)
             HoroEngine::Gui
             HoroEngine::EditorServices
     )
+    add_executable(HoroEditorPresentationTests
+            unit/editor/SettingsModalPresentationTests.cpp
+            unit/editor/ProjectCreationViewPresentationTests.cpp
+            unit/editor/AssetImportModalPresentationTests.cpp
+            unit/editor/ScreenViewPresentationTests.cpp
+    )
+    target_compile_features(HoroEditorPresentationTests PRIVATE cxx_std_20)
+    target_include_directories(HoroEditorPresentationTests PRIVATE
+            ${PROJECT_SOURCE_DIR}/src
+            ${PROJECT_SOURCE_DIR}/tests
+    )
+    target_link_libraries(HoroEditorPresentationTests
+            PRIVATE
+            HoroEngine::Gui
+            HoroEngine::EditorServices
+            HoroThirdParty::ImGui
+    )
     add_executable(HoroAssetImportModalLifecycleTests
             unit/editor/AssetImportModalLifecycleTests.cpp
     )
@@ -1223,6 +1240,7 @@ set(HORO_CATCH_TEST_TARGETS
         HoroEditorModalHostTests
         HoroGuiScreenHostLifecycleTests
         HoroSettingsModalLifecycleTests
+        HoroEditorPresentationTests
         HoroAssetImportModalLifecycleTests
         HoroEditorLocalizationServiceTests
         HoroProjectCreationControllerTests
