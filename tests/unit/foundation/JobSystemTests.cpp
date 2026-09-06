@@ -17,6 +17,17 @@ namespace {
         .remediationHint = "Inspect the test.",
     };
 
+    [[nodiscard]] Horo::Result<void> WaitForPublishedWorkerJob(const std::atomic<const Horo::JobHandle *> &published) {
+        const Horo::JobHandle *handle = nullptr;
+        while ((handle = published.load(std::memory_order_acquire)) == nullptr)
+            std::this_thread::yield();
+        return handle->Wait({.waitPolicy = Horo::WaitPolicy::WorkerOnly, .timeout = Horo::Duration::FromMilliseconds(100)});
+    }
+
+    [[nodiscard]] bool IsCapacityDeadlock(const Horo::Result<void> &result) {
+        return result.HasError() && result.ErrorValue().code.Value() == "job.wait_capacity_deadlock";
+    }
+
     TEST_CASE("Submitted Job Reaches Succeeded Terminal State", "[unit][foundation]") {
         Horo::JobSystem jobs{Horo::JobSystemConfig{.workerCount = 1, .maxQueuedJobs = 4}};
         std::atomic executed{false};
@@ -201,12 +212,7 @@ namespace {
         std::atomic dependencyWaitSucceeded{false};
 
         auto parent = jobs.Submit({}, [&](const Horo::CancellationToken &) {
-            while (dependencyHandle.load() == nullptr)
-                std::this_thread::yield();
-            dependencyWaitSucceeded.store(
-                dependencyHandle.load()
-                    ->Wait({.waitPolicy = Horo::WaitPolicy::WorkerOnly, .timeout = Horo::Duration::FromMilliseconds(100)})
-                    .HasValue());
+            dependencyWaitSucceeded.store(WaitForPublishedWorkerJob(dependencyHandle).HasValue());
         });
         REQUIRE((parent.HasValue()));
         auto dependency = jobs.Submit({}, [&dependencyExecuted](const Horo::CancellationToken &) {
@@ -226,11 +232,7 @@ namespace {
         std::atomic<const Horo::JobHandle *> selfHandle{};
         std::atomic selfWaitRejected{false};
         auto submitted = jobs.Submit({}, [&](const Horo::CancellationToken &) {
-            while (selfHandle.load() == nullptr)
-                std::this_thread::yield();
-            const auto result =
-                selfHandle.load()->Wait({.waitPolicy = Horo::WaitPolicy::WorkerOnly, .timeout = Horo::Duration::FromMilliseconds(100)});
-            selfWaitRejected.store(result.HasError() && result.ErrorValue().code.Value() == "job.wait_capacity_deadlock");
+            selfWaitRejected.store(IsCapacityDeadlock(WaitForPublishedWorkerJob(selfHandle)));
         });
         REQUIRE((submitted.HasValue()));
         selfHandle.store(&submitted.Value());
@@ -248,19 +250,12 @@ namespace {
         std::atomic childWaitSucceeded{false};
 
         auto parent = jobs.Submit({}, [&](const Horo::CancellationToken &) {
-            while (childHandle.load() == nullptr)
-                std::this_thread::yield();
-            childWaitSucceeded.store(
-                childHandle.load()
-                    ->Wait({.waitPolicy = Horo::WaitPolicy::WorkerOnly, .timeout = Horo::Duration::FromMilliseconds(100)})
-                    .HasValue());
+            childWaitSucceeded.store(WaitForPublishedWorkerJob(childHandle).HasValue());
         });
         REQUIRE((parent.HasValue()));
         parentHandle.store(&parent.Value());
         auto child = jobs.Submit({}, [&](const Horo::CancellationToken &) {
-            const auto cycle =
-                parentHandle.load()->Wait({.waitPolicy = Horo::WaitPolicy::WorkerOnly, .timeout = Horo::Duration::FromMilliseconds(100)});
-            cycleRejected.store(cycle.HasError() && cycle.ErrorValue().code.Value() == "job.wait_capacity_deadlock");
+            cycleRejected.store(IsCapacityDeadlock(WaitForPublishedWorkerJob(parentHandle)));
         });
         REQUIRE((child.HasValue()));
         childHandle.store(&child.Value());
