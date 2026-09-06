@@ -22,14 +22,7 @@ namespace {
     SaveGameManifest Manifest() {
         return {.saveSchemaVersion = V<SaveSchemaVersion>(1),
                 .canonicalState = {ComputeSha256({})},
-                .participants = {{.participant = SaveParticipantId::Parse("horo.scene.core.v1").Value(),
-                                  .schemaVersion = V<ParticipantSchemaVersion>(1),
-                                  .required = true,
-                                  .chunks = {Id<SaveRecordId>(20), Id<SaveRecordId>(21)}},
-                                 {.participant = SaveParticipantId::Parse("project.gameplay.v1").Value(),
-                                  .schemaVersion = V<ParticipantSchemaVersion>(1),
-                                  .required = false,
-                                  .chunks = {Id<SaveRecordId>(22)}}}};
+                .participants = StandardParticipants(1, 1)};
     }
 
     SaveChunkDirectory Directory(const std::span<const std::byte> payload) {

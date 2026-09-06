@@ -38,14 +38,7 @@ namespace {
     SaveGameManifest Manifest() {
         return {.saveSchemaVersion = V<SaveSchemaVersion>(3),
                 .canonicalState = {ComputeSha256({})},
-                .participants = {{.participant = SaveParticipantId::Parse("horo.scene.core.v1").Value(),
-                                  .schemaVersion = V<ParticipantSchemaVersion>(2),
-                                  .required = true,
-                                  .chunks = {Id<SaveRecordId>(20), Id<SaveRecordId>(21)}},
-                                 {.participant = SaveParticipantId::Parse("project.gameplay.v1").Value(),
-                                  .schemaVersion = V<ParticipantSchemaVersion>(5),
-                                  .required = false,
-                                  .chunks = {Id<SaveRecordId>(22)}}}};
+                .participants = StandardParticipants(2, 5)};
     }
 
     template <typename Tag>
