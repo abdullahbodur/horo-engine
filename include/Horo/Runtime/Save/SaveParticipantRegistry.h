@@ -144,22 +144,27 @@ namespace Horo::Runtime {
         /** @brief Validates and copies one descriptor and adapter lease. @param descriptor Inert metadata.
          * @param adapter Owned adapter lease bound by host composition.
          * @return Registration evidence or a typed validation, duplicate, capacity, or lifecycle error.
+         * @pre Called by the owning composition thread while the registry is quiescent.
          */
         [[nodiscard]] Result<SaveParticipantRegistration> Register(CanonicalStateParticipantDescriptor descriptor,
                                                                    std::shared_ptr<const ICanonicalStateAdapter> adapter);
 
         /** @brief Removes one live registration before shutdown. @param participant Identity to remove.
          * @return Whether a registration was removed, or a lifecycle/generation error.
+         * @pre Called by the owning composition thread while the registry is quiescent.
          * @post Already issued snapshots and their adapter leases remain unchanged.
          */
         [[nodiscard]] Result<bool> Unregister(const SaveParticipantId &participant);
 
         /** @brief Validates the complete graph and publishes an owning immutable view.
          * @return Stable-ID-sorted snapshot or a typed missing-dependency/cycle/lifecycle error.
+         * @pre Called by the owning composition thread; concurrent registry mutation is forbidden.
          */
         [[nodiscard]] Result<SaveParticipantRegistrySnapshot> Snapshot() const;
 
-        /** @brief Closes admission and releases live registrations; issued snapshots remain safe. */
+        /** @brief Closes admission and releases live registrations; issued snapshots remain safe.
+         * @pre Called by the owning composition thread after closing new operation admission.
+         */
         void Close() noexcept;
         /** @brief Reports whether admission and new snapshot publication are closed. @return Current lifecycle state. */
         [[nodiscard]] bool IsClosed() const noexcept;

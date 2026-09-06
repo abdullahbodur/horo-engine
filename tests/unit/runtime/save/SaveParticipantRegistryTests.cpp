@@ -88,6 +88,10 @@ namespace Horo::Runtime {
             REQUIRE(snapshot.Value().Generation() == first.Value().registryGeneration);
             REQUIRE(snapshot.Value().Bindings().size() == 1);
             REQUIRE(snapshot.Value().Find(Participant("horo.test.scene")) != nullptr);
+            REQUIRE(snapshot.Value().Find(Participant("horo.test.absent")) == nullptr);
+            REQUIRE(SaveParticipantRegistrySnapshot{}.Bindings().empty());
+            REQUIRE_FALSE(SaveParticipantRegistrySnapshot{}.IsValid());
+            REQUIRE_FALSE(registry.Unregister(Participant("horo.test.absent")).Value());
         }
 
         TEST_CASE("Participant registry enforces its explicit capacity", "[unit][save][registry]") {
