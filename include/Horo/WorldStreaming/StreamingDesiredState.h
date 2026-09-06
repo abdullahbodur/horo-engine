@@ -5,6 +5,7 @@
  * @brief Typed source residency and retention intent for world streaming.
  */
 
+#include "Horo/Foundation/Result.h"
 #include "Horo/WorldStreaming/StreamingSourceDescriptor.h"
 
 #include <cstdint>
