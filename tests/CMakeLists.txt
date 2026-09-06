@@ -210,6 +210,7 @@ horo_register_catch_test(HoroPhysicsTests LABELS "unit;physics;headless")
 add_executable(HoroNavigationApiTests
         support/navigation/DeterministicNavigationProvider.cpp
         unit/runtime/navigation/NavigationAreaRegistryTests.cpp
+        unit/runtime/navigation/NavigationAgentProfileTests.cpp
         unit/runtime/navigation/NavigationCapabilitiesTests.cpp
         unit/runtime/navigation/NavigationIdentityTests.cpp
         unit/runtime/navigation/NavigationOutcomesTests.cpp

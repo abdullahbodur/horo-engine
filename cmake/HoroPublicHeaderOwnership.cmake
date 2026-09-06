@@ -162,6 +162,7 @@ horo_configure_target_header_boundary(HoroPhysics PUBLIC_HEADERS
 )
 horo_configure_target_header_boundary(HoroNavigationApi PUBLIC_HEADERS
     Horo/Navigation/NavigationAreas.h
+    Horo/Navigation/NavigationAgentProfiles.h
     Horo/Navigation/NavigationBackend.h
     Horo/Navigation/NavigationCapabilities.h
     Horo/Navigation/NavigationErrors.h

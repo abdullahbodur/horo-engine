@@ -195,4 +195,22 @@ namespace Horo::Navigation::NavigationErrors {
         .retryable = false,
         .userActionable = true,
     };
+    const ErrorCodeDescriptor AgentProfileInvalid{
+        .domain = NavigationDomain,
+        .code = ErrorCode{"navigation.agent_profile.invalid"},
+        .defaultSeverity = ErrorSeverity::Error,
+        .summary = "The grounded navigation agent profile is invalid.",
+        .remediationHint = "Use a stable non-zero identity, a display name, and finite grounded dimensions and bake resolution values.",
+        .retryable = false,
+        .userActionable = true,
+    };
+    const ErrorCodeDescriptor AgentProfileReferenced{
+        .domain = NavigationDomain,
+        .code = ErrorCode{"navigation.agent_profile.referenced"},
+        .defaultSeverity = ErrorSeverity::Error,
+        .summary = "The navigation agent profile still has authored references.",
+        .remediationHint = "Choose an explicit surviving replacement profile before deleting the referenced profile.",
+        .retryable = false,
+        .userActionable = true,
+    };
 }  // namespace Horo::Navigation::NavigationErrors
