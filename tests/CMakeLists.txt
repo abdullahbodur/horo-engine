@@ -887,6 +887,11 @@ target_link_libraries(HoroRuntimeLifecycleTests
         HoroEngine::RenderFrontend
         HoroEngine::RenderNull
 )
+add_executable(HoroRuntimeSaveIdentityTests
+        unit/runtime/save/SaveIdentityTests.cpp
+)
+target_compile_features(HoroRuntimeSaveIdentityTests PRIVATE cxx_std_20)
+target_link_libraries(HoroRuntimeSaveIdentityTests PRIVATE HoroEngine::Runtime)
 add_executable(HoroRuntimeSceneTests
         unit/runtime/scene/RuntimeSceneTests.cpp
 )
@@ -1207,6 +1212,7 @@ set(HORO_CATCH_TEST_TARGETS
         HoroRenderFrontendTests
         HoroEditorViewportResourceTests
         HoroRuntimeLifecycleTests
+        HoroRuntimeSaveIdentityTests
         HoroRuntimeSceneTests
         HoroAssetRegistryTests
         HoroAssetProviderTests
