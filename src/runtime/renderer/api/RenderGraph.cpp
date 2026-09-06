@@ -64,17 +64,19 @@ namespace Horo::Render {
 
         /** @brief Reports whether access direction matches the semantic use. */
         [[nodiscard]] bool IsAccessCompatible(const RenderGraphAccess access, const RenderGraphUsageKind kind) noexcept {
+            using enum RenderGraphAccess;
+            using enum RenderGraphUsageKind;
             switch (kind) {
-                case RenderGraphUsageKind::Sampled:
-                case RenderGraphUsageKind::CopySource:
-                    return access == RenderGraphAccess::Read;
-                case RenderGraphUsageKind::ColorAttachment:
-                    return access == RenderGraphAccess::Write || access == RenderGraphAccess::ReadWrite;
-                case RenderGraphUsageKind::DepthStencilAttachment:
-                case RenderGraphUsageKind::Storage:
+                case Sampled:
+                case CopySource:
+                    return access == Read;
+                case ColorAttachment:
+                    return access == Write || access == ReadWrite;
+                case DepthStencilAttachment:
+                case Storage:
                     return true;
-                case RenderGraphUsageKind::CopyDestination:
-                    return access == RenderGraphAccess::Write;
+                case CopyDestination:
+                    return access == Write;
                 default:
                     return false;
             }
@@ -82,13 +84,15 @@ namespace Horo::Render {
 
         /** @brief Reports whether a pass category can declare the semantic use. */
         [[nodiscard]] bool IsPassCompatible(const RenderPassKind pass, const RenderGraphUsageKind usage) noexcept {
+            using enum RenderGraphUsageKind;
+            using enum RenderPassKind;
             switch (pass) {
-                case RenderPassKind::Graphics:
-                    return usage != RenderGraphUsageKind::CopySource && usage != RenderGraphUsageKind::CopyDestination;
-                case RenderPassKind::Compute:
-                    return usage == RenderGraphUsageKind::Sampled || usage == RenderGraphUsageKind::Storage;
-                case RenderPassKind::Copy:
-                    return usage == RenderGraphUsageKind::CopySource || usage == RenderGraphUsageKind::CopyDestination;
+                case Graphics:
+                    return usage != CopySource && usage != CopyDestination;
+                case Compute:
+                    return usage == Sampled || usage == Storage;
+                case Copy:
+                    return usage == CopySource || usage == CopyDestination;
                 default:
                     return false;
             }
@@ -374,9 +378,9 @@ namespace Horo::Render {
         }
 
         const RenderGraphPass &pass = *FindPass(usage.pass);
-        const RenderGraphResource &resource = *FindResource(usage.resource);
-        if (!IsAccessCompatible(usage.access, usage.kind) || !IsPassCompatible(pass.kind, usage.kind) ||
-            !IsResourceCompatible(resource.kind, usage.kind)) {
+        if (const RenderGraphResource &resource = *FindResource(usage.resource); !IsAccessCompatible(usage.access, usage.kind) ||
+                                                                                 !IsPassCompatible(pass.kind, usage.kind) ||
+                                                                                 !IsResourceCompatible(resource.kind, usage.kind)) {
             return Result<void>::Failure(MakeError(RenderGraphErrors::InvalidUsage));
         }
         return Result<void>::Success();
