@@ -11,7 +11,6 @@
 #include <exception>
 #include <mutex>
 #include <string>
-#include <string_view>
 #include <thread>
 #include <unordered_map>
 #include <utility>
@@ -203,13 +202,14 @@ namespace Horo {
         }
 
         [[nodiscard]] bool IsWaitControlError(const Error &error) {
-            static constexpr std::array<std::string_view, 3> controlCodes{
-                "job.wait_forbidden",
-                "job.wait_timed_out",
-                "job.wait_capacity_deadlock",
+            static const std::array<const ErrorCodeDescriptor *, 3> controlErrors{
+                &JobErrors::WaitForbidden,
+                &JobErrors::WaitTimedOut,
+                &JobErrors::WaitCapacityDeadlock,
             };
-            const std::string_view code = error.code.Value();
-            return std::ranges::find(controlCodes, code) != controlCodes.end();
+            return std::ranges::any_of(controlErrors, [&error](const ErrorCodeDescriptor *descriptor) {
+                return error.domain.Value() == descriptor->domain.Value() && error.code.Value() == descriptor->code.Value();
+            });
         }
 
         [[nodiscard]] Result<void> ResultFromError(const std::optional<Error> &error) {
@@ -383,7 +383,7 @@ namespace Horo {
         bool accepting = true;
         bool joined = false;
         std::optional<Error> joinError;
-        std::vector<std::shared_ptr<JobHandle>> children;
+        std::vector<JobHandle> children;
     };
 
     void TaskGroup::CancelChildren(const std::shared_ptr<State> &state) {
@@ -394,7 +394,7 @@ namespace Horo {
             state->cancellation.RequestCancellation();
             childIds.reserve(state->children.size());
             for (const auto &child : state->children)
-                childIds.push_back(child->Id());
+                childIds.push_back(child.Id());
         }
         for (const JobId childId : childIds)
             static_cast<void>(state->jobs.RequestCancel(childId));
@@ -433,8 +433,8 @@ namespace Horo {
         if (submitted.HasError())
             return Result<JobId>::Failure(submitted.ErrorValue());
 
-        auto child = std::make_shared<JobHandle>(std::move(submitted).Value());
-        const JobId childId = child->Id();
+        JobHandle child = std::move(submitted).Value();
+        const JobId childId = child.Id();
         m_state->children.push_back(std::move(child));
         return Result<JobId>::Success(childId);
     }
@@ -452,12 +452,12 @@ namespace Horo {
         return JoinImpl(&options);
     }
 
-    TaskGroup::ChildJoinOutcome TaskGroup::WaitForChildren(const std::vector<std::shared_ptr<JobHandle>> &children,
+    TaskGroup::ChildJoinOutcome TaskGroup::WaitForChildren(const std::vector<std::shared_ptr<JobRecord>> &children,
                                                            const JoinOptions *options) {
         const auto deadline = options == nullptr ? std::chrono::steady_clock::time_point{} : WaitDeadline(options->timeout);
         ChildJoinOutcome outcome;
         for (const auto &child : children) {
-            const Result<void> waited = options == nullptr ? child->Wait() : WaitUntil(child->m_record, deadline, options->waitPolicy);
+            const Result<void> waited = options == nullptr ? JobHandle{child}.Wait() : WaitUntil(child, deadline, options->waitPolicy);
             if (options != nullptr && waited.HasError() && IsWaitControlError(waited.ErrorValue())) {
                 outcome.interruption = waited.ErrorValue();
                 return outcome;
@@ -473,13 +473,15 @@ namespace Horo {
         if (m_state->cancellation.Token().IsCancellationRequested())
             CancelChildren(m_state);
 
-        std::vector<std::shared_ptr<JobHandle>> children;
+        std::vector<std::shared_ptr<JobRecord>> children;
         {
             std::lock_guard lock(m_state->mutex);
             if (m_state->joined)
                 return ResultFromError(m_state->joinError);
             m_state->accepting = false;
-            children = m_state->children;
+            children.reserve(m_state->children.size());
+            for (const auto &child : m_state->children)
+                children.push_back(child.m_record);
         }
 
         const ChildJoinOutcome outcome = WaitForChildren(children, options);

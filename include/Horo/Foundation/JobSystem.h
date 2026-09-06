@@ -185,7 +185,7 @@ namespace Horo {
         };
 
         static void CancelChildren(const std::shared_ptr<State> &state);
-        static ChildJoinOutcome WaitForChildren(const std::vector<std::shared_ptr<JobHandle>> &children, const JoinOptions *options);
+        static ChildJoinOutcome WaitForChildren(const std::vector<std::shared_ptr<JobRecord>> &children, const JoinOptions *options);
         [[nodiscard]] Result<void> JoinImpl(const JoinOptions *options) const;
         std::shared_ptr<State> m_state;
     };

@@ -343,6 +343,53 @@ namespace {
         jobs.Shutdown(Horo::ShutdownPolicy::Drain);
     }
 
+    TEST_CASE("Forbidden Task Group Join Remains Closed And Retryable", "[unit][foundation][jobs][wait]") {
+        Horo::JobSystem jobs{Horo::JobSystemConfig{.workerCount = 0, .maxQueuedJobs = 1}};
+        Horo::TaskGroup group(jobs);
+        std::atomic childExecuted{false};
+        REQUIRE((group
+                     .Spawn({}, [&childExecuted](const Horo::CancellationToken &) {
+            childExecuted.store(true);
+            return Horo::Result<void>::Success();
+        }).HasValue()));
+
+        const auto forbidden = group.Join({.waitPolicy = Horo::WaitPolicy::WorkerOnly, .timeout = Horo::Duration::FromMilliseconds(10)});
+        REQUIRE((forbidden.HasError()));
+        REQUIRE((forbidden.ErrorValue().code.Value() == "job.wait_forbidden"));
+        REQUIRE((group
+                     .Spawn({},
+                            [](const Horo::CancellationToken &) {
+            return Horo::Result<void>::Success();
+        })
+                     .ErrorValue()
+                     .code.Value() == "job.task_group_closed"));
+
+        REQUIRE((group.Join({.waitPolicy = Horo::WaitPolicy::MainThreadPumpAllowed, .timeout = Horo::Duration::FromMilliseconds(100)})
+                     .HasValue()));
+        REQUIRE((childExecuted.load()));
+        jobs.Shutdown(Horo::ShutdownPolicy::Drain);
+    }
+
+    TEST_CASE("Cyclic Task Group Join Returns Capacity Deadlock And Remains Retryable", "[unit][foundation][jobs][wait]") {
+        Horo::JobSystem jobs{Horo::JobSystemConfig{.workerCount = 1, .maxQueuedJobs = 1}};
+        Horo::TaskGroup group(jobs);
+        std::atomic joinAttempted{false};
+        std::atomic cycleRejected{false};
+        REQUIRE((group
+                     .Spawn({}, [&group, &joinAttempted, &cycleRejected](const Horo::CancellationToken &) {
+            const auto cycle = group.Join({.waitPolicy = Horo::WaitPolicy::WorkerOnly, .timeout = Horo::Duration::FromMilliseconds(100)});
+            cycleRejected.store(cycle.HasError() && cycle.ErrorValue().code.Value() == "job.wait_capacity_deadlock");
+            joinAttempted.store(true);
+            return Horo::Result<void>::Success();
+        }).HasValue()));
+
+        while (!joinAttempted.load(std::memory_order_acquire))
+            std::this_thread::yield();
+        REQUIRE((cycleRejected.load()));
+        REQUIRE((group.Join().HasValue()));
+        jobs.Shutdown(Horo::ShutdownPolicy::Drain);
+    }
+
     TEST_CASE("Bounded Task Group Join Preserves First Failure In Spawn Order", "[unit][foundation][jobs][wait]") {
         Horo::JobSystem jobs{Horo::JobSystemConfig{.workerCount = 0, .maxQueuedJobs = 2}};
         Horo::TaskGroup group(jobs, Horo::TaskGroupFailurePolicy::CollectAll);
