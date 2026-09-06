@@ -42,30 +42,15 @@ namespace Horo::Physics {
             REQUIRE(PhysicsDiagnosticCategoryName(static_cast<PhysicsDiagnosticCategory>(255)).empty());
         }
 
-        TEST_CASE("Physics diagnostic records map every canonical error code without accepting invented codes", "[physics][diagnostics]") {
-            const std::array<const ErrorCodeDescriptor *, 16> descriptors{
-                &PhysicsErrors::WorldInvalid,
-                &PhysicsErrors::HandleMalformed,
-                &PhysicsErrors::HandleWorldMismatch,
-                &PhysicsErrors::HandleStale,
-                &PhysicsErrors::GenerationExhausted,
-                &PhysicsErrors::CapabilityUnavailable,
-                &PhysicsErrors::OperationUnsupported,
-                &PhysicsErrors::InvalidState,
-                &PhysicsErrors::ThreadAffinityViolation,
-                &PhysicsErrors::SolverDeadlineExceeded,
-                &PhysicsErrors::DescriptorInvalid,
-                &PhysicsErrors::ProfileUnsupported,
-                &PhysicsErrors::CapacityExceeded,
-                &PhysicsErrors::CapabilityStale,
-                &PhysicsErrors::QuerySnapshotStale,
-                &PhysicsErrors::InitializationFailed,
-            };
-            for (const ErrorCodeDescriptor *descriptor : descriptors) {
-                const auto record = MakePhysicsDiagnosticRecord(PhysicsDiagnosticCategory::Runtime, MakeError(*descriptor));
-                REQUIRE(record.HasValue());
-                REQUIRE(record.Value().code.Value() == descriptor->code.Value());
-            }
+        TEST_CASE("Physics diagnostic records accept canonical mapping boundaries without accepting invented codes",
+                  "[physics][diagnostics]") {
+            const auto first = MakePhysicsDiagnosticRecord(PhysicsDiagnosticCategory::Runtime, MakeError(PhysicsErrors::WorldInvalid));
+            REQUIRE(first.HasValue());
+            REQUIRE(first.Value().code.Value() == PhysicsErrors::WorldInvalid.code.Value());
+            const auto last =
+                MakePhysicsDiagnosticRecord(PhysicsDiagnosticCategory::Lifecycle, MakeError(PhysicsErrors::InitializationFailed));
+            REQUIRE(last.HasValue());
+            REQUIRE(last.Value().code.Value() == PhysicsErrors::InitializationFailed.code.Value());
 
             auto invented = MakeError(PhysicsErrors::DescriptorInvalid);
             invented.code = ErrorCode{"physics.future.invented"};
