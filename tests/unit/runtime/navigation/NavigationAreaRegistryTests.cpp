@@ -5,9 +5,15 @@
 #include <array>
 #include <catch2/catch_test_macros.hpp>
 #include <limits>
+#include <type_traits>
 #include <utility>
 
 namespace Horo::Navigation {
+    static_assert(!std::is_copy_constructible_v<NavigationAreaRegistry>);
+    static_assert(!std::is_copy_assignable_v<NavigationAreaRegistry>);
+    static_assert(std::is_nothrow_move_constructible_v<NavigationAreaRegistry>);
+    static_assert(!std::is_move_assignable_v<NavigationAreaRegistry>);
+
     namespace {
         using TestSupport::RequireError;
 

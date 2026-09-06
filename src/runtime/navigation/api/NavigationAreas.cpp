@@ -98,7 +98,7 @@ namespace Horo::Navigation {
     }
 
     /** @copydoc NavigationAreaRegistry::ResolveFilter */
-    Result<const NavigationQueryFilterDescriptor *> NavigationAreaRegistry::ResolveFilter(const NavigationFilterId id) const {
+    Result<const NavigationQueryFilterDescriptor *> NavigationAreaRegistry::ResolveFilter(NavigationFilterId id) const {
         const auto found = Find(std::span{filters_}, id, &NavigationQueryFilterDescriptor::id);
         if (found == nullptr)
             return Result<const NavigationQueryFilterDescriptor *>::Failure(MakeError(NavigationErrors::FilterUnknown));

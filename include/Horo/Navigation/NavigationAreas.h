@@ -95,6 +95,19 @@ namespace Horo::Navigation {
      */
     class NavigationAreaRegistry final {
     public:
+        /** @brief Registry storage has unique ownership and cannot be copied. */
+        NavigationAreaRegistry(const NavigationAreaRegistry &) = delete;
+        /** @brief Registry storage has unique ownership and cannot be copy-assigned. */
+        NavigationAreaRegistry &operator=(const NavigationAreaRegistry &) = delete;
+
+        /**
+         * @brief Transfers owned descriptor storage to a new registry.
+         * @param other Registry whose storage and borrowed-pointer lifetime responsibility transfer to this instance.
+         */
+        NavigationAreaRegistry(NavigationAreaRegistry &&) noexcept = default;
+        /** @brief Existing registry storage cannot be replaced while borrowed descriptors may exist. */
+        NavigationAreaRegistry &operator=(NavigationAreaRegistry &&) = delete;
+
         /**
          * @brief Validates, owns, and deterministically orders complete descriptor contributions.
          * @param areas Project and package area contributions in arbitrary order.
