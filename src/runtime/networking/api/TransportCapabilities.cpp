@@ -118,7 +118,7 @@ namespace Horo::Network {
         }))
             return false;
         const bool deliveryAvailable = HasAvailableDelivery(capabilities);
-        if (deliveryAvailable != (capabilities.maximumChannels > 0 && capabilities.maximumMessageBytes > 0))
+        if (deliveryAvailable != (capabilities.maximumChannels > 0) || deliveryAvailable != (capabilities.maximumMessageBytes > 0))
             return false;
         if (!deliveryAvailable && capabilities.deadlines == TransportSupport::Available)
             return false;

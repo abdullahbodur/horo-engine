@@ -39,6 +39,61 @@ namespace Horo::Network {
             REQUIRE(result.HasError());
             REQUIRE(result.ErrorValue().code.Value() == error.code.Value());
         }
+
+        struct DeadlineCase final {
+            TransportSupport support;
+            DeadlineRequirement requirement;
+            const ErrorCodeDescriptor *error;
+            bool enabled;
+        };
+
+        const std::array DeadlineCases{
+            DeadlineCase{TransportSupport::Unknown, DeadlineRequirement::None, nullptr, false},
+            DeadlineCase{TransportSupport::Unknown, DeadlineRequirement::Optional, nullptr, false},
+            DeadlineCase{TransportSupport::Unknown, DeadlineRequirement::Required, &NetworkErrors::TransportCapabilityUnavailable, false},
+            DeadlineCase{TransportSupport::Unknown, DeadlineRequirement::Count, &NetworkErrors::TransportCapabilityDescriptorInvalid,
+                         false},
+            DeadlineCase{TransportSupport::Unsupported, DeadlineRequirement::None, nullptr, false},
+            DeadlineCase{TransportSupport::Unsupported, DeadlineRequirement::Optional, nullptr, false},
+            DeadlineCase{TransportSupport::Unsupported, DeadlineRequirement::Required, &NetworkErrors::TransportDeliveryUnsupported, false},
+            DeadlineCase{TransportSupport::Unsupported, DeadlineRequirement::Count, &NetworkErrors::TransportCapabilityDescriptorInvalid,
+                         false},
+            DeadlineCase{TransportSupport::Unavailable, DeadlineRequirement::None, nullptr, false},
+            DeadlineCase{TransportSupport::Unavailable, DeadlineRequirement::Optional, nullptr, false},
+            DeadlineCase{TransportSupport::Unavailable, DeadlineRequirement::Required, &NetworkErrors::TransportCapabilityUnavailable,
+                         false},
+            DeadlineCase{TransportSupport::Unavailable, DeadlineRequirement::Count, &NetworkErrors::TransportCapabilityDescriptorInvalid,
+                         false},
+            DeadlineCase{TransportSupport::Available, DeadlineRequirement::None, nullptr, false},
+            DeadlineCase{TransportSupport::Available, DeadlineRequirement::Optional, nullptr, true},
+            DeadlineCase{TransportSupport::Available, DeadlineRequirement::Required, nullptr, true},
+            DeadlineCase{TransportSupport::Available, DeadlineRequirement::Count, &NetworkErrors::TransportCapabilityDescriptorInvalid,
+                         false},
+            DeadlineCase{TransportSupport::Count, DeadlineRequirement::None, &NetworkErrors::TransportCapabilityDescriptorInvalid, false},
+            DeadlineCase{TransportSupport::Count, DeadlineRequirement::Optional, &NetworkErrors::TransportCapabilityDescriptorInvalid,
+                         false},
+            DeadlineCase{TransportSupport::Count, DeadlineRequirement::Required, &NetworkErrors::TransportCapabilityDescriptorInvalid,
+                         false},
+            DeadlineCase{TransportSupport::Count, DeadlineRequirement::Count, &NetworkErrors::TransportCapabilityDescriptorInvalid, false},
+        };
+
+        void VerifyDeadlineCase(const DeadlineCase &testCase) {
+            CAPTURE(testCase.support, testCase.requirement);
+            auto capabilities = AvailableCapabilities();
+            capabilities.deadlines = testCase.support;
+            capabilities.maximumDeadlineMilliseconds = testCase.support == TransportSupport::Available ? 5000 : 0;
+            auto requirements = Requirements();
+            requirements.deadline = testCase.requirement;
+            requirements.requiredMaximumDeadlineMilliseconds = testCase.requirement == DeadlineRequirement::None ? 0 : 1000;
+
+            const auto result = ResolveTransportCapabilities(capabilities, capabilities.revision, requirements);
+            if (testCase.error != nullptr)
+                RequireError(result, *testCase.error);
+            else {
+                REQUIRE(result.HasValue());
+                REQUIRE(result.Value().deadlinesEnabled == testCase.enabled);
+            }
+        }
     }  // namespace
 
     static_assert(static_cast<std::size_t>(DeliveryPolicy::Count) == 4);
@@ -75,6 +130,20 @@ namespace Horo::Network {
 
         malformed = AvailableCapabilities();
         malformed.maximumChannels = 0;
+        REQUIRE_FALSE(ValidateTransportCapabilities(malformed));
+
+        malformed = AvailableCapabilities();
+        malformed.maximumMessageBytes = 0;
+        REQUIRE_FALSE(ValidateTransportCapabilities(malformed));
+
+        malformed = AvailableCapabilities();
+        malformed.delivery.fill(TransportSupport::Unsupported);
+        malformed.maximumChannels = 0;
+        REQUIRE_FALSE(ValidateTransportCapabilities(malformed));
+
+        malformed = AvailableCapabilities();
+        malformed.delivery.fill(TransportSupport::Unsupported);
+        malformed.maximumMessageBytes = 0;
         REQUIRE_FALSE(ValidateTransportCapabilities(malformed));
 
         malformed = AvailableCapabilities();
@@ -139,6 +208,11 @@ namespace Horo::Network {
         requirements.deadline = DeadlineRequirement::Required;
         RequireError(ResolveTransportCapabilities(capabilities, capabilities.revision, requirements),
                      NetworkErrors::TransportLimitExceeded);
+    }
+
+    TEST_CASE("Every deadline support and requirement combination has an explicit outcome", "[unit][network][transport][capabilities]") {
+        for (const DeadlineCase &testCase : DeadlineCases)
+            VerifyDeadlineCase(testCase);
     }
 
     TEST_CASE("Transport negotiation rejects malformed stale and over-limit requirements", "[unit][network][transport][capabilities]") {
@@ -214,17 +288,29 @@ namespace Horo::Network {
                      NetworkErrors::TransportLimitExceeded);
     }
 
-    TEST_CASE("Transport admission treats cancellation and shutdown as terminal caller-owned values",
-              "[unit][network][transport][capabilities]") {
+    TEST_CASE("Every transport admission state has an explicit caller-owned outcome", "[unit][network][transport][capabilities]") {
+        struct AdmissionCase final {
+            TransportAdmissionState state;
+            const ErrorCodeDescriptor *error;
+        };
+
+        const std::array cases{
+            AdmissionCase{TransportAdmissionState::Accepting, nullptr},
+            AdmissionCase{TransportAdmissionState::Cancelled, &NetworkErrors::TransportOperationCancelled},
+            AdmissionCase{TransportAdmissionState::ShuttingDown, &NetworkErrors::TransportShuttingDown},
+            AdmissionCase{TransportAdmissionState::Count, &NetworkErrors::TransportCapabilityDescriptorInvalid},
+        };
         const auto capabilities = AvailableCapabilities();
         const auto selection = ResolveTransportCapabilities(capabilities, capabilities.revision, Requirements()).Value();
         const TransportSendRequirement send{.delivery = DeliveryPolicy::ReliableOrdered};
 
-        RequireError(AdmitTransportSend(selection, selection.capabilityRevision, send, TransportAdmissionState::Cancelled),
-                     NetworkErrors::TransportOperationCancelled);
-        RequireError(AdmitTransportSend(selection, selection.capabilityRevision, send, TransportAdmissionState::ShuttingDown),
-                     NetworkErrors::TransportShuttingDown);
-        RequireError(AdmitTransportSend(selection, selection.capabilityRevision, send, TransportAdmissionState::Count),
-                     NetworkErrors::TransportCapabilityDescriptorInvalid);
+        for (const AdmissionCase &testCase : cases) {
+            CAPTURE(testCase.state);
+            const auto result = AdmitTransportSend(selection, selection.capabilityRevision, send, testCase.state);
+            if (testCase.error != nullptr)
+                RequireError(result, *testCase.error);
+            else
+                REQUIRE(result.HasValue());
+        }
     }
 }  // namespace Horo::Network
