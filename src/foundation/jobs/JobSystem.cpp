@@ -4,10 +4,12 @@
 #include "Horo/Foundation/Telemetry/Operation.h"
 
 #include <algorithm>
+#include <atomic>
 #include <chrono>
 #include <condition_variable>
 #include <deque>
 #include <exception>
+#include <functional>
 #include <mutex>
 #include <string>
 #include <thread>
@@ -25,12 +27,22 @@ namespace Horo {
             using enum JobState;
             return state == Succeeded || state == Failed || state == Cancelled;
         }
+
+        struct SchedulerIdentity {
+            std::uint64_t value{};
+
+            [[nodiscard]] friend bool operator==(const SchedulerIdentity &, const SchedulerIdentity &) = default;
+        };
+
+        [[nodiscard]] SchedulerIdentity NextSchedulerIdentity() noexcept {
+            static std::atomic<std::uint64_t> next{1};
+            return SchedulerIdentity{next.fetch_add(1, std::memory_order_relaxed)};
+        }
     }  // namespace
 
     struct JobRecord {
-        JobRecord(const JobId jobId, const JobDescriptor &descriptor, JobFunction jobWork, const void *scheduler)
-            : id(jobId), cancellation(descriptor.parentCancellation), work(std::move(jobWork)), schedulerIdentity(scheduler),
-              submittingThread(std::this_thread::get_id()) {}
+        JobRecord(const JobId jobId, const JobDescriptor &descriptor, JobFunction jobWork, const SchedulerIdentity scheduler)
+            : id(jobId), cancellation(descriptor.parentCancellation), work(std::move(jobWork)), schedulerIdentity(scheduler) {}
 
         [[nodiscard]] std::mutex &Mutex() const noexcept {
             return mutex_;
@@ -43,15 +55,16 @@ namespace Horo {
         CancellationSource cancellation;
         JobFunction work;
         Telemetry::OperationContext operationContext = Telemetry::CaptureOperationContext();
-        const void *schedulerIdentity{};
-        std::thread::id submittingThread;
+        SchedulerIdentity schedulerIdentity;
+        std::thread::id submittingThread = std::this_thread::get_id();
         mutable std::mutex mutex_;  // NOSONAR(cpp:S8379) Controlled via Mutex() accessor.
     };
 
     struct JobSystem::State {
-        explicit State(const JobSystemConfig value) : config(value) {}
+        explicit State(const JobSystemConfig value) : config(value), schedulerIdentity(NextSchedulerIdentity()) {}
 
         JobSystemConfig config;
+        SchedulerIdentity schedulerIdentity;
         std::mutex mutex;
         std::condition_variable workAvailable;
         bool accepting = true;
@@ -65,19 +78,20 @@ namespace Horo {
     };
 
     namespace {
+        thread_local std::optional<SchedulerIdentity> activeSchedulerIdentity;
+
         struct JobExecutionFrame final {
-            const JobRecord *record{};
-            const JobExecutionFrame *previous{};
+            const JobRecord &record;
+            std::optional<std::reference_wrapper<const JobExecutionFrame>> previous;
         };
 
-        thread_local const void *activeSchedulerIdentity{};
-        thread_local const JobExecutionFrame *activeExecutionFrame{};
+        thread_local std::optional<std::reference_wrapper<const JobExecutionFrame>> activeExecutionFrame;
 
         /** @brief Tracks nested exact-record execution so synchronous wait cycles can be rejected. */
         class JobExecutionScope final {
         public:
-            explicit JobExecutionScope(const JobRecord &record) noexcept : frame_{&record, activeExecutionFrame} {
-                activeExecutionFrame = &frame_;
+            explicit JobExecutionScope(const JobRecord &record) noexcept : frame_{record, activeExecutionFrame} {
+                activeExecutionFrame = std::cref(frame_);
             }
 
             ~JobExecutionScope() {
@@ -92,8 +106,8 @@ namespace Horo {
         };
 
         [[nodiscard]] bool IsOnExecutionStack(const JobRecord &record) noexcept {
-            for (const JobExecutionFrame *frame = activeExecutionFrame; frame != nullptr; frame = frame->previous) {
-                if (frame->record == &record)
+            for (auto frame = activeExecutionFrame; frame.has_value(); frame = frame->get().previous) {
+                if (&frame->get().record == &record)
                     return true;
             }
             return false;
@@ -150,18 +164,19 @@ namespace Horo {
         }
 
         [[nodiscard]] Result<void> ValidateBoundedWait(const JobRecord &record, const WaitPolicy policy) {
+            using enum WaitPolicy;
             if (IsOnExecutionStack(record))
                 return Result<void>::Failure(
                     MakeJobError(JobErrors::WaitCapacityDeadlock, "A synchronous wait would close a re-entrant job execution cycle."));
             switch (policy) {
-                case WaitPolicy::MainThreadPumpAllowed:
+                case MainThreadPumpAllowed:
                     return Result<void>::Success();
-                case WaitPolicy::WorkerOnly:
-                    if (activeSchedulerIdentity == record.schedulerIdentity)
+                case WorkerOnly:
+                    if (activeSchedulerIdentity.has_value() && *activeSchedulerIdentity == record.schedulerIdentity)
                         return Result<void>::Success();
                     return Result<void>::Failure(
                         MakeJobError(JobErrors::WaitForbidden, "WorkerOnly requires a worker executing on the owning job system."));
-                case WaitPolicy::ForbiddenOnOwnerThread:
+                case ForbiddenOnOwnerThread:
                     if (record.submittingThread != std::this_thread::get_id())
                         return Result<void>::Success();
                     return Result<void>::Failure(
@@ -185,8 +200,7 @@ namespace Horo {
                 ExecuteJobRecord(record);
 
             const auto timeout = std::chrono::nanoseconds(std::max<std::int64_t>(0, options.timeout.ToNanoseconds()));
-            std::unique_lock lock(record->Mutex());
-            if (!record->completed.wait_for(lock, timeout, [record] {
+            if (std::unique_lock lock(record->Mutex()); !record->completed.wait_for(lock, timeout, [record] {
                 return IsTerminal(record->state);
             }))
                 return Result<void>::Failure(MakeJobError(JobErrors::WaitTimedOut, "The job did not complete before its wait deadline."));
@@ -221,9 +235,9 @@ namespace Horo {
     JobSystem::JobSystem(const JobSystemConfig config) : m_state(std::make_shared<State>(config)) {
         for (std::size_t index = 0; index < config.workerCount; ++index)
             m_state->workers.emplace_back([state = m_state] {
-                activeSchedulerIdentity = state.get();
+                activeSchedulerIdentity = state->schedulerIdentity;
                 RunWorker(state);
-                activeSchedulerIdentity = nullptr;
+                activeSchedulerIdentity.reset();
             });
     }
 
@@ -250,7 +264,7 @@ namespace Horo {
         if (m_state->queue.size() >= m_state->config.maxQueuedJobs)
             return Result<JobHandle>::Failure(MakeJobError(JobErrors::QueueFull, "Job queue is at capacity."));
 
-        auto record = std::make_shared<JobRecord>(m_state->nextId++, descriptor, std::move(work), m_state.get());
+        auto record = std::make_shared<JobRecord>(m_state->nextId++, descriptor, std::move(work), m_state->schedulerIdentity);
         m_state->jobs.try_emplace(record->id, record);
         m_state->queue.push_back(record);
         m_state->workAvailable.notify_one();
