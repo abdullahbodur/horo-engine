@@ -38,6 +38,7 @@ Character checkpoint.
 - **Deterministic Cancellation and Shutdown**: Every connection reaches a definitive terminal state. Disconnections, timeouts, cancellations, and engine shutdown follow bounded, leak-free teardown protocols.
 - **Opt-In Prediction**: NonPredicted is the baseline and constructs no history/replay machinery. LocalPrediction and RollbackResimulation require validated ADR-100 descriptors, bounded histories and owner-provided fixed-tick hooks.
 - **Network-Owned Scheduling**: One NetworkRuntime scheduler applies immutable renderer-independent project profiles, per-connection bandwidth/work/queue ledgers, bounded interest and weighted-deficit fairness.
+- **Single Capture Strategy**: ADR-175 captures declared canonical state once at the post-commit owner safe point into bounded immutable NetworkRuntime storage. Dirty marks are lossy scheduling hints; polling component memory and gameplay-owned replication shadows are prohibited.
 - **Typed Runtime Mode Plan**: ADR-102 separates package-supported modes from the one standalone, client, listen-server or dedicated-server plan selected before world publication. Gameplay receives world/session-generation-scoped roles and capabilities; process globals, locality and headless state never grant authority.
 - **Shared Typed Configuration**: ADR-103 applies ADR-009 once across editor, CLI, MCP, CI and packaged hosts. Project defaults, preview preferences, release role, host requests and credential bindings retain distinct owners; product capability/security floors constrain runtime selection.
 
@@ -303,7 +304,9 @@ To prevent race conditions and frame stalls, network operations are strictly par
     - dispatch Active-session messages to ReplicationManager / gameplay
   Frame Phase: Simulation & Gameplay Update
   Frame Phase: NetworkFlush
-    - ReplicationManager collects dirty properties
+    - ReplicationManager admits dirty/revision hints and bounded reconciliation
+    - capture each selected owner once from the complete committed simulation state
+    - publish one immutable candidate only after full identity/field validation
     - serialize outbound snapshots and RPCs
     - transport.Send(...) for Active sessions
   Frame Phase: RenderExtraction
@@ -327,7 +330,7 @@ To prevent race conditions and frame stalls, network operations are strictly par
    - Drains transport events and advances session state on the simulation thread.
 2. `FrameScheduler::Phase::NetworkFlush`:
    - Runs after scene simulation and before render command extraction.
-   - Submits outbound packets from post-simulation dirty state.
+   - Captures declared canonical state from the complete post-simulation commit and submits derived outbound packets.
    - Has no dependency on render extraction. Flush is ordered before extract so replication latency is not coupled to rendering work.
 
 Allowed adjacent orders are `NetworkPoll -> Simulation -> NetworkFlush -> RenderExtraction -> Render`. `NetworkFlush` after `RenderExtraction` is forbidden as the default because it adds render-extract latency to the network path without a transport requirement.
@@ -542,7 +545,7 @@ The networking subsystem requires targeted automated verification:
    - `SessionAdmissionTests`: protocol/schema compatibility, transcript binding, exposure/bind policy, principal creation, expiry and revocation.
    - `NetworkHandleTests`: stale handle -> `InvalidHandle`; send-after-close -> `ConnectionClosed`; duplicate `Close` is idempotent.
    - `SendPayloadLifetimeTests`: caller buffer may be overwritten after `Send()` returns.
-   - `ReplicationManagerTests`: Dirty property extraction, delta compression, interest management queries.
+   - `ReplicationManagerTests`: ADR-175 safe-point capture and immutable publication; lost/duplicate dirty hints, stale identity, cancellation, shutdown, delta compression and interest queries.
 2. **Deterministic Transport Tests (`NetworkTransportNullTests`)**:
    - No `Platform` link; no OS sockets; no I/O thread.
    - Simulated latency, jitter, packet loss, duplicate packets, and out-of-order delivery.
