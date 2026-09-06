@@ -65,8 +65,7 @@ namespace Horo::Prefab {
             std::unordered_set<std::uint64_t> componentInstances;
             componentInstances.reserve(components.size());
             for (const RawComponentPayload &component : components) {
-                const auto validation = ValidateRawComponentPayload(component);
-                if (validation.HasError())
+                if (const auto validation = ValidateRawComponentPayload(component); validation.HasError())
                     return validation;
                 if (!componentInstances.emplace(component.instance.Value()).second)
                     return Result<void>::Failure(MakeError(PrefabErrors::DocumentInvalid));
@@ -82,8 +81,7 @@ namespace Horo::Prefab {
             std::unordered_set<std::uint64_t> behaviorInstances;
             behaviorInstances.reserve(behaviors.size());
             for (const Gameplay::BehaviorComponent &behavior : behaviors) {
-                const auto validation = Gameplay::ValidateBehaviorComponent(behavior);
-                if (validation.HasError())
+                if (const auto validation = Gameplay::ValidateBehaviorComponent(behavior); validation.HasError())
                     return validation;
                 if (!behaviorInstances.emplace(behavior.instanceId.value).second)
                     return Result<void>::Failure(MakeError(PrefabErrors::DocumentInvalid));
@@ -108,8 +106,7 @@ namespace Horo::Prefab {
             if (!AddPayloadBytes(payloadBytes, object.name.size()))
                 return Result<void>::Failure(MakeError(PrefabErrors::PayloadTooLarge));
 
-            const auto componentValidation = ValidateComponents(object.components, payloadBytes);
-            if (componentValidation.HasError())
+            if (const auto componentValidation = ValidateComponents(object.components, payloadBytes); componentValidation.HasError())
                 return componentValidation;
             return ValidateBehaviors(object.behaviors, payloadBytes);
         }
@@ -139,13 +136,11 @@ namespace Horo::Prefab {
             for (std::size_t index = 0; index < objects.size(); ++index) {
                 const PrefabObjectNode &object = objects[index];
                 if (index != 0) {
-                    const auto registration = RegisterChild(object, depths);
-                    if (registration.HasError())
+                    if (const auto registration = RegisterChild(object, depths); registration.HasError())
                         return Result<ObjectDepths>::Failure(registration.ErrorValue());
                 }
 
-                const auto objectValidation = ValidateObject(object, payloadBytes);
-                if (objectValidation.HasError())
+                if (const auto objectValidation = ValidateObject(object, payloadBytes); objectValidation.HasError())
                     return Result<ObjectDepths>::Failure(objectValidation.ErrorValue());
             }
             return Result<ObjectDepths>::Success(std::move(depths));
@@ -230,16 +225,14 @@ namespace Horo::Prefab {
         std::size_t payloadBytes = referenceValidation.Value();
 
         ObjectDepths objectDepths;
-        const bool isVariant = candidate.composition && candidate.composition->variantParent;
-        if (!isVariant) {
+        if (const bool isVariant = candidate.composition && candidate.composition->variantParent; !isVariant) {
             auto hierarchyValidation = ValidateHierarchy(candidate.objects, payloadBytes);
             if (hierarchyValidation.HasError())
                 return Result<PrefabDocument>::Failure(hierarchyValidation.ErrorValue());
             objectDepths = std::move(hierarchyValidation).Value();
         }
 
-        const auto compositionValidation = ValidateComposition(candidate, objectDepths);
-        if (compositionValidation.HasError())
+        if (const auto compositionValidation = ValidateComposition(candidate, objectDepths); compositionValidation.HasError())
             return Result<PrefabDocument>::Failure(compositionValidation.ErrorValue());
 
         return Result<PrefabDocument>::Success(PrefabDocument{std::move(candidate)});
