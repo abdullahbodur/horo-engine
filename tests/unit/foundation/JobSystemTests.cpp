@@ -181,7 +181,12 @@ namespace {
         REQUIRE_FALSE((unrelatedExecuted.load()));
         REQUIRE((jobs.Query(unrelated.Value().Id()).state == Horo::JobState::Queued));
 
+        auto replacement = jobs.Submit({}, [](const Horo::CancellationToken &) {
+        });
+        REQUIRE((replacement.HasValue()));
+
         REQUIRE((jobs.RequestCancel(unrelated.Value().Id()).HasValue()));
+        REQUIRE((jobs.RequestCancel(replacement.Value().Id()).HasValue()));
         jobs.Shutdown(Horo::ShutdownPolicy::Cancel);
     }
 
