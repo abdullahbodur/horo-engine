@@ -219,7 +219,14 @@ namespace Horo::Render {
         MovedFrom,
     };
 
-    /** @brief Owner-thread-bound finite storage for backend-neutral graph authoring. */
+    /**
+     * @brief Owner-thread-only bounded authoring surface for one backend-neutral render graph.
+     *
+     * The builder owns every admitted record and allocates its declared capacities during
+     * creation. Authoring and finalization must occur on the creating thread. Cancellation
+     * and shutdown never submit backend work; shutdown is idempotent and may run during
+     * partial initialization or destruction.
+     */
     class RenderGraphBuilder final {
     public:
         RenderGraphBuilder(const RenderGraphBuilder &) = delete;
@@ -233,7 +240,7 @@ namespace Horo::Render {
          * @param limits Requested capacities constrained by the engine hard bounds.
          * @return Open builder or a typed invalid-limit, identity, or allocation failure.
          */
-        [[nodiscard]] static Result<RenderGraphBuilder> Create(RenderGraphLimits limits = {});
+        [[nodiscard]] static Result<RenderGraphBuilder> Create(const RenderGraphLimits &limits = {});
 
         /**
          * @brief Returns the process-local identity that scopes issued references.
@@ -256,6 +263,39 @@ namespace Horo::Render {
         [[nodiscard]] Result<RenderGraphPassRef> AddPass(RenderPassKind kind, RenderQueueRole queue);
 
         /**
+         * @brief Adds one graph-local logical resource.
+         * @param kind Backend-neutral resource category.
+         * @return Owner-scoped identity or a typed affinity, lifecycle, capacity, or support failure.
+         */
+        [[nodiscard]] Result<RenderGraphResourceId> AddResource(RenderGraphResourceKind kind);
+
+        /**
+         * @brief Records one pass-resource use after validating ownership and semantic compatibility.
+         * @param usage Complete use declaration referencing records from this builder.
+         * @return Success or a typed affinity, ownership, reference, capacity, or support failure.
+         */
+        [[nodiscard]] Result<void> AddUsage(const RenderGraphResourceUsage &usage);
+
+        /**
+         * @brief Records one directed dependency between two distinct passes from this builder.
+         * @param dependency Complete dependency declaration.
+         * @return Success or a typed affinity, ownership, reference, capacity, or support failure.
+         */
+        [[nodiscard]] Result<void> AddDependency(const RenderGraphDependency &dependency);
+
+        /**
+         * @brief Finalizes the builder and transfers all owned records into an immutable graph.
+         * @return Owning graph or a typed affinity, lifecycle, or empty-graph failure.
+         */
+        [[nodiscard]] Result<RenderGraph> Finalize();
+
+        /**
+         * @brief Cancels open authoring and releases all authored records on the owner thread.
+         * @return Success, including repeated cancellation, or a typed affinity/lifecycle failure.
+         */
+        [[nodiscard]] Result<void> Cancel();
+
+        /**
          * @brief Releases retained authoring storage without backend or GPU work.
          *
          * Repeated calls are safe. The caller must quiesce owner-thread authoring
@@ -264,11 +304,16 @@ namespace Horo::Render {
         void Shutdown() noexcept;
 
     private:
-        RenderGraphBuilder(RenderGraphOwnerId owner, RenderGraphLimits limits) noexcept;
+        RenderGraphBuilder(RenderGraphOwnerId owner, const RenderGraphLimits &limits) noexcept;
 
         [[nodiscard]] Result<void> Reserve();
         [[nodiscard]] Result<void> ValidateOpenOnOwnerThread() const;
+        [[nodiscard]] Result<void> ValidateUsageReferences(const RenderGraphResourceUsage &usage) const;
+        [[nodiscard]] Result<void> ValidateUsageSemantics(const RenderGraphResourceUsage &usage) const;
+        [[nodiscard]] Result<void> ValidateDependencyReferences(const RenderGraphDependency &dependency) const;
         void ReleaseStorage() noexcept;
+        [[nodiscard]] const RenderGraphPass *FindPass(RenderGraphPassRef reference) const noexcept;
+        [[nodiscard]] const RenderGraphResource *FindResource(RenderGraphResourceId id) const noexcept;
 
         RenderGraphOwnerId owner_;
         RenderGraphLimits limits_;

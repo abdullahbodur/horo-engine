@@ -2,6 +2,7 @@
 
 #include "Horo/Runtime/Render/RenderGraphErrors.h"
 
+#include <array>
 #include <atomic>
 #include <limits>
 #include <new>
@@ -9,14 +10,12 @@
 
 namespace Horo::Render {
     namespace {
-        /** @brief Next non-reusable process-local render-graph owner identity. */
-        std::atomic<std::uint64_t> NextGraphOwner{1};
-
         /** @brief Atomically acquires a non-zero owner identity without wrapping. */
         [[nodiscard]] Result<RenderGraphOwnerId> AcquireOwner() {
-            std::uint64_t candidate = NextGraphOwner.load(std::memory_order_relaxed);
+            static std::atomic<std::uint64_t> nextGraphOwner{1};
+            std::uint64_t candidate = nextGraphOwner.load();
             while (candidate != std::numeric_limits<std::uint64_t>::max()) {
-                if (NextGraphOwner.compare_exchange_weak(candidate, candidate + 1, std::memory_order_relaxed)) {
+                if (nextGraphOwner.compare_exchange_weak(candidate, candidate + 1)) {
                     return Result<RenderGraphOwnerId>::Success(RenderGraphOwnerId{candidate});
                 }
             }
@@ -33,14 +32,74 @@ namespace Horo::Render {
             return static_cast<std::uint8_t>(queue) <= static_cast<std::uint8_t>(RenderQueueRole::Transfer);
         }
 
+        /** @brief Reports whether the resource kind belongs to the public contract. */
+        [[nodiscard]] bool IsKnown(const RenderGraphResourceKind kind) noexcept {
+            return static_cast<std::uint8_t>(kind) <= static_cast<std::uint8_t>(RenderGraphResourceKind::Texture);
+        }
+
+        /** @brief Reports whether the access value belongs to the public contract. */
+        [[nodiscard]] bool IsKnown(const RenderGraphAccess access) noexcept {
+            return static_cast<std::uint8_t>(access) <= static_cast<std::uint8_t>(RenderGraphAccess::ReadWrite);
+        }
+
+        /** @brief Reports whether the usage kind belongs to the public contract. */
+        [[nodiscard]] bool IsKnown(const RenderGraphUsageKind kind) noexcept {
+            return static_cast<std::uint8_t>(kind) <= static_cast<std::uint8_t>(RenderGraphUsageKind::CopyDestination);
+        }
+
+        /** @brief Reports whether the dependency kind belongs to the public contract. */
+        [[nodiscard]] bool IsKnown(const RenderGraphDependencyKind kind) noexcept {
+            return static_cast<std::uint8_t>(kind) <= static_cast<std::uint8_t>(RenderGraphDependencyKind::ExternalSynchronization);
+        }
+
         /** @brief Reports whether a declared queue can carry the pass kind. */
         [[nodiscard]] bool IsQueueCompatible(const RenderPassKind kind, const RenderQueueRole queue) noexcept {
-            constexpr bool compatible[3][3] = {
-                {true, false, false},
-                {true, true, false},
-                {true, true, true},
+            constexpr std::array compatible{
+                std::array{true, false, false},
+                std::array{true, true, false},
+                std::array{true, true, true},
             };
             return compatible[static_cast<std::uint8_t>(kind)][static_cast<std::uint8_t>(queue)];
+        }
+
+        /** @brief Reports whether access direction matches the semantic use. */
+        [[nodiscard]] bool IsAccessCompatible(const RenderGraphAccess access, const RenderGraphUsageKind kind) noexcept {
+            switch (kind) {
+                case RenderGraphUsageKind::Sampled:
+                case RenderGraphUsageKind::CopySource:
+                    return access == RenderGraphAccess::Read;
+                case RenderGraphUsageKind::ColorAttachment:
+                    return access == RenderGraphAccess::Write || access == RenderGraphAccess::ReadWrite;
+                case RenderGraphUsageKind::DepthStencilAttachment:
+                case RenderGraphUsageKind::Storage:
+                    return true;
+                case RenderGraphUsageKind::CopyDestination:
+                    return access == RenderGraphAccess::Write;
+                default:
+                    return false;
+            }
+        }
+
+        /** @brief Reports whether a pass category can declare the semantic use. */
+        [[nodiscard]] bool IsPassCompatible(const RenderPassKind pass, const RenderGraphUsageKind usage) noexcept {
+            switch (pass) {
+                case RenderPassKind::Graphics:
+                    return usage != RenderGraphUsageKind::CopySource && usage != RenderGraphUsageKind::CopyDestination;
+                case RenderPassKind::Compute:
+                    return usage == RenderGraphUsageKind::Sampled || usage == RenderGraphUsageKind::Storage;
+                case RenderPassKind::Copy:
+                    return usage == RenderGraphUsageKind::CopySource || usage == RenderGraphUsageKind::CopyDestination;
+                default:
+                    return false;
+            }
+        }
+
+        /** @brief Reports whether a resource category can satisfy the semantic use. */
+        [[nodiscard]] bool IsResourceCompatible(const RenderGraphResourceKind resource, const RenderGraphUsageKind usage) noexcept {
+            if (usage == RenderGraphUsageKind::ColorAttachment || usage == RenderGraphUsageKind::DepthStencilAttachment) {
+                return resource == RenderGraphResourceKind::Texture;
+            }
+            return true;
         }
     }  // namespace
 
@@ -101,7 +160,7 @@ namespace Horo::Render {
     }
 
     /** @copydoc RenderGraphBuilder::RenderGraphBuilder */
-    RenderGraphBuilder::RenderGraphBuilder(const RenderGraphOwnerId owner, const RenderGraphLimits limits) noexcept
+    RenderGraphBuilder::RenderGraphBuilder(const RenderGraphOwnerId owner, const RenderGraphLimits &limits) noexcept
         : owner_(owner), limits_(limits), ownerThread_(std::this_thread::get_id()), state_(RenderGraphBuilderState::Open) {}
 
     /** @copydoc RenderGraphBuilder::RenderGraphBuilder */
@@ -119,7 +178,7 @@ namespace Horo::Render {
     }
 
     /** @copydoc RenderGraphBuilder::Create */
-    Result<RenderGraphBuilder> RenderGraphBuilder::Create(const RenderGraphLimits limits) {
+    Result<RenderGraphBuilder> RenderGraphBuilder::Create(const RenderGraphLimits &limits) {
         if (!limits.IsValid()) {
             return Result<RenderGraphBuilder>::Failure(MakeError(RenderGraphErrors::InvalidLimits));
         }
@@ -129,8 +188,7 @@ namespace Horo::Render {
         }
 
         RenderGraphBuilder builder{owner.Value(), limits};
-        const Result<void> reserved = builder.Reserve();
-        if (reserved.HasError()) {
+        if (const Result<void> reserved = builder.Reserve(); reserved.HasError()) {
             return Result<RenderGraphBuilder>::Failure(reserved.ErrorValue());
         }
         return Result<RenderGraphBuilder>::Success(std::move(builder));
@@ -148,8 +206,7 @@ namespace Horo::Render {
 
     /** @copydoc RenderGraphBuilder::AddPass */
     Result<RenderGraphPassRef> RenderGraphBuilder::AddPass(const RenderPassKind kind, const RenderQueueRole queue) {
-        const Result<void> open = ValidateOpenOnOwnerThread();
-        if (open.HasError()) {
+        if (const Result<void> open = ValidateOpenOnOwnerThread(); open.HasError()) {
             return Result<RenderGraphPassRef>::Failure(open.ErrorValue());
         }
         if (!IsKnown(kind)) {
@@ -166,8 +223,102 @@ namespace Horo::Render {
         }
 
         const RenderGraphPassRef reference{owner_, RenderPassId{static_cast<std::uint32_t>(passes_.size() + 1)}};
-        passes_.push_back(RenderGraphPass{reference, kind, queue});
+        passes_.emplace_back(reference, kind, queue);
         return Result<RenderGraphPassRef>::Success(reference);
+    }
+
+    /** @copydoc RenderGraphBuilder::AddResource */
+    Result<RenderGraphResourceId> RenderGraphBuilder::AddResource(const RenderGraphResourceKind kind) {
+        const Result<void> open = ValidateOpenOnOwnerThread();
+        if (open.HasError()) {
+            return Result<RenderGraphResourceId>::Failure(open.ErrorValue());
+        }
+        if (!IsKnown(kind)) {
+            return Result<RenderGraphResourceId>::Failure(MakeError(RenderGraphErrors::UnsupportedResourceKind));
+        }
+        if (resources_.size() == limits_.maxResources) {
+            return Result<RenderGraphResourceId>::Failure(
+                MakeError(RenderGraphErrors::CapacityExceeded, "Graph-resource capacity is full."));
+        }
+
+        const RenderGraphResourceId id{owner_, static_cast<std::uint32_t>(resources_.size() + 1)};
+        resources_.push_back(RenderGraphResource{id, kind});
+        return Result<RenderGraphResourceId>::Success(id);
+    }
+
+    /** @copydoc RenderGraphBuilder::AddUsage */
+    Result<void> RenderGraphBuilder::AddUsage(const RenderGraphResourceUsage &usage) {
+        const Result<void> open = ValidateOpenOnOwnerThread();
+        if (open.HasError()) {
+            return open;
+        }
+        if (usages_.size() == limits_.maxUsages) {
+            return Result<void>::Failure(MakeError(RenderGraphErrors::CapacityExceeded, "Graph-resource usage capacity is full."));
+        }
+        const Result<void> references = ValidateUsageReferences(usage);
+        if (references.HasError()) {
+            return references;
+        }
+        const Result<void> semantics = ValidateUsageSemantics(usage);
+        if (semantics.HasError()) {
+            return semantics;
+        }
+
+        usages_.push_back(usage);
+        return Result<void>::Success();
+    }
+
+    /** @copydoc RenderGraphBuilder::AddDependency */
+    Result<void> RenderGraphBuilder::AddDependency(const RenderGraphDependency &dependency) {
+        const Result<void> open = ValidateOpenOnOwnerThread();
+        if (open.HasError()) {
+            return open;
+        }
+        if (dependencies_.size() == limits_.maxDependencies) {
+            return Result<void>::Failure(MakeError(RenderGraphErrors::CapacityExceeded, "Render dependency capacity is full."));
+        }
+        const Result<void> references = ValidateDependencyReferences(dependency);
+        if (references.HasError()) {
+            return references;
+        }
+        if (!IsKnown(dependency.kind)) {
+            return Result<void>::Failure(MakeError(RenderGraphErrors::UnsupportedDependencyKind));
+        }
+
+        dependencies_.push_back(dependency);
+        return Result<void>::Success();
+    }
+
+    /** @copydoc RenderGraphBuilder::Finalize */
+    Result<RenderGraph> RenderGraphBuilder::Finalize() {
+        const Result<void> open = ValidateOpenOnOwnerThread();
+        if (open.HasError()) {
+            return Result<RenderGraph>::Failure(open.ErrorValue());
+        }
+        if (passes_.empty()) {
+            return Result<RenderGraph>::Failure(MakeError(RenderGraphErrors::EmptyGraph));
+        }
+
+        state_ = RenderGraphBuilderState::Finalized;
+        return Result<RenderGraph>::Success(
+            RenderGraph{owner_, limits_, std::move(passes_), std::move(resources_), std::move(usages_), std::move(dependencies_)});
+    }
+
+    /** @copydoc RenderGraphBuilder::Cancel */
+    Result<void> RenderGraphBuilder::Cancel() {
+        if (std::this_thread::get_id() != ownerThread_) {
+            return Result<void>::Failure(MakeError(RenderGraphErrors::WrongThread));
+        }
+        if (state_ == RenderGraphBuilderState::Cancelled) {
+            return Result<void>::Success();
+        }
+        if (state_ != RenderGraphBuilderState::Open) {
+            return Result<void>::Failure(MakeError(RenderGraphErrors::BuilderClosed));
+        }
+
+        ReleaseStorage();
+        state_ = RenderGraphBuilderState::Cancelled;
+        return Result<void>::Success();
     }
 
     /** @copydoc RenderGraphBuilder::Shutdown */
@@ -203,11 +354,76 @@ namespace Horo::Render {
         return Result<void>::Success();
     }
 
+    /** @copydoc RenderGraphBuilder::ValidateUsageReferences */
+    Result<void> RenderGraphBuilder::ValidateUsageReferences(const RenderGraphResourceUsage &usage) const {
+        if (!usage.pass.IsValid()) {
+            return Result<void>::Failure(MakeError(RenderGraphErrors::InvalidPass));
+        }
+        if (!usage.resource.IsValid()) {
+            return Result<void>::Failure(MakeError(RenderGraphErrors::InvalidResource));
+        }
+        if (usage.pass.owner != owner_ || usage.resource.owner != owner_) {
+            return Result<void>::Failure(MakeError(RenderGraphErrors::WrongOwner));
+        }
+        if (FindPass(usage.pass) == nullptr) {
+            return Result<void>::Failure(MakeError(RenderGraphErrors::InvalidPass));
+        }
+        if (FindResource(usage.resource) == nullptr) {
+            return Result<void>::Failure(MakeError(RenderGraphErrors::InvalidResource));
+        }
+        return Result<void>::Success();
+    }
+
+    /** @copydoc RenderGraphBuilder::ValidateUsageSemantics */
+    Result<void> RenderGraphBuilder::ValidateUsageSemantics(const RenderGraphResourceUsage &usage) const {
+        if (!IsKnown(usage.access) || !IsKnown(usage.kind)) {
+            return Result<void>::Failure(MakeError(RenderGraphErrors::UnsupportedUsage));
+        }
+
+        const RenderGraphPass &pass = *FindPass(usage.pass);
+        const RenderGraphResource &resource = *FindResource(usage.resource);
+        if (!IsAccessCompatible(usage.access, usage.kind) || !IsPassCompatible(pass.kind, usage.kind) ||
+            !IsResourceCompatible(resource.kind, usage.kind)) {
+            return Result<void>::Failure(MakeError(RenderGraphErrors::InvalidUsage));
+        }
+        return Result<void>::Success();
+    }
+
+    /** @copydoc RenderGraphBuilder::ValidateDependencyReferences */
+    Result<void> RenderGraphBuilder::ValidateDependencyReferences(const RenderGraphDependency &dependency) const {
+        if (!dependency.before.IsValid() || !dependency.after.IsValid() || dependency.before == dependency.after) {
+            return Result<void>::Failure(MakeError(RenderGraphErrors::InvalidDependency));
+        }
+        if (dependency.before.owner != owner_ || dependency.after.owner != owner_) {
+            return Result<void>::Failure(MakeError(RenderGraphErrors::WrongOwner));
+        }
+        if (FindPass(dependency.before) == nullptr || FindPass(dependency.after) == nullptr) {
+            return Result<void>::Failure(MakeError(RenderGraphErrors::InvalidDependency));
+        }
+        return Result<void>::Success();
+    }
+
     /** @copydoc RenderGraphBuilder::ReleaseStorage */
     void RenderGraphBuilder::ReleaseStorage() noexcept {
         std::vector<RenderGraphPass>{}.swap(passes_);
         std::vector<RenderGraphResource>{}.swap(resources_);
         std::vector<RenderGraphResourceUsage>{}.swap(usages_);
         std::vector<RenderGraphDependency>{}.swap(dependencies_);
+    }
+
+    /** @copydoc RenderGraphBuilder::FindPass */
+    const RenderGraphPass *RenderGraphBuilder::FindPass(const RenderGraphPassRef reference) const noexcept {
+        if (reference.owner != owner_ || reference.id.value == 0 || reference.id.value > passes_.size()) {
+            return nullptr;
+        }
+        return &passes_[reference.id.value - 1];
+    }
+
+    /** @copydoc RenderGraphBuilder::FindResource */
+    const RenderGraphResource *RenderGraphBuilder::FindResource(const RenderGraphResourceId id) const noexcept {
+        if (id.owner != owner_ || id.value == 0 || id.value > resources_.size()) {
+            return nullptr;
+        }
+        return &resources_[id.value - 1];
     }
 }  // namespace Horo::Render

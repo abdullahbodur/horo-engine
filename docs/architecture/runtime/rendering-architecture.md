@@ -1348,10 +1348,13 @@ immutable deterministic-order views. `RenderGraphBuilder` owns pre-reserved fini
 CPU storage under a process-local non-reusable identity. Creation fixes
 owner-thread affinity; explicit idempotent shutdown releases storage without
 backend or GPU work. Pass authoring assigns canonical identities and rejects
-unknown or incompatible queue roles without fallback. Resource/use/dependency
-mutation, finalization, resource import/export
-classes, dependency DAG validation, lifetime compilation, barrier synthesis, and
-backend translation remain separate render-graph delivery stages.
+unknown or incompatible queue roles without fallback. Resource, use, and
+dependency authoring validate builder ownership, record existence, and semantic
+compatibility before preserving deterministic authoring order. Owner-thread
+cancellation releases retained CPU storage, while successful finalization moves
+all records into the immutable graph. Resource import/export classes, dependency
+DAG validation, lifetime compilation, barrier synthesis, and backend translation
+remain separate render-graph delivery stages.
 
 The graph:
 
