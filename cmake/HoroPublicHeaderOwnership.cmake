@@ -78,6 +78,8 @@ horo_configure_target_header_boundary(HoroRuntimeUi PUBLIC_HEADERS
 )
 horo_configure_target_header_boundary(HoroNetworkApi PUBLIC_HEADERS
     Horo/Network/NetworkErrors.h
+    Horo/Network/ProtocolIdentity.h
+    Horo/Network/ProtocolIdentityRegistry.h
     Horo/Network/ReplicationDescriptor.h
     Horo/Network/ReplicationDescriptorRegistry.h
     Horo/Network/ReplicationIdentity.h
