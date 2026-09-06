@@ -51,7 +51,7 @@ namespace Horo::Runtime {
             ParticipantIndices indices;
             indices.reserve(bindings.size());
             for (std::size_t index = 0; index < bindings.size(); ++index)
-                indices.emplace(bindings[index].Descriptor().participant, index);
+                indices.try_emplace(bindings[index].Descriptor().participant, index);
             return indices;
         }
 
@@ -66,24 +66,29 @@ namespace Horo::Runtime {
             return true;
         }
 
+        /** @brief Visits one participant and returns false when its dependency path cycles. */
+        [[nodiscard]] bool VisitParticipant(const std::size_t index, const std::vector<SaveParticipantBinding> &bindings,
+                                            const ParticipantIndices &indices, std::vector<VisitState> &states) {
+            using enum VisitState;
+            if (states[index] == Visiting)
+                return false;
+            if (states[index] == Visited)
+                return true;
+            states[index] = Visiting;
+            for (const SaveParticipantId &dependency : bindings[index].Descriptor().dependencies) {
+                if (!VisitParticipant(indices.at(dependency), bindings, indices, states))
+                    return false;
+            }
+            states[index] = Visited;
+            return true;
+        }
+
         /** @brief Reports whether the complete participant graph contains a dependency cycle. */
         [[nodiscard]] bool HasDependencyCycle(const std::vector<SaveParticipantBinding> &bindings, const ParticipantIndices &indices) {
-            std::vector<VisitState> states(bindings.size(), VisitState::Unvisited);
-            const auto visit = [&](const auto &self, const std::size_t index) -> bool {
-                if (states[index] == VisitState::Visiting)
-                    return false;
-                if (states[index] == VisitState::Visited)
-                    return true;
-                states[index] = VisitState::Visiting;
-                for (const SaveParticipantId &dependency : bindings[index].Descriptor().dependencies) {
-                    if (!self(self, indices.at(dependency)))
-                        return false;
-                }
-                states[index] = VisitState::Visited;
-                return true;
-            };
+            using enum VisitState;
+            std::vector states(bindings.size(), Unvisited);
             for (std::size_t index = 0; index < bindings.size(); ++index) {
-                if (!visit(visit, index))
+                if (!VisitParticipant(index, bindings, indices, states))
                     return true;
             }
             return false;
