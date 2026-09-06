@@ -368,6 +368,14 @@ Multiple grounded NavMesh surfaces can exist for profiles such as humans, large
 creatures and ground vehicles. Flying, swimming and space traversal require a
 future volumetric provider/artifact; they are not ordinary grounded profiles.
 
+The immutable navigation-area registry owns its identity-sorted query-filter
+descriptors. Exact filter lookup returns a non-owning immutable pointer into that
+storage; the pointer is valid only for the lifetime of its registry. Callers of the
+initial by-value lookup contract migrate from `result.Value().field` to
+`result.Value()->field` and must not retain the pointer beyond registry teardown.
+The registry is non-copyable and non-assignable. Move construction transfers
+storage and all borrowed-pointer lifetime responsibility to the destination.
+
 ### NavMesh Asset And Cook Contract
 
 [ADR-105](../../adr/105-navigation-asset-and-scene-ownership-boundary.md)

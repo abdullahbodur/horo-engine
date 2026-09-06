@@ -1,6 +1,7 @@
 #include "Horo/Navigation/Backends/NullProvider.h"
 #include "Horo/Navigation/NavigationErrors.h"
 #include "navigation/DeterministicNavigationProvider.h"
+#include "navigation/NavigationTestAssertions.h"
 
 #include <array>
 #include <atomic>
@@ -11,6 +12,8 @@
 
 namespace Horo::Navigation {
     namespace {
+        using TestSupport::RequireError;
+
         NavigationPathRequest Request(const Math::Vec3 start = {}, const Math::Vec3 destination = {}) {
             return {
                 .world = NavigationWorldId::Create(1).Value(),
@@ -26,11 +29,6 @@ namespace Horo::Navigation {
             };
         }
 
-        void RequireError(const Result<NavigationPath> &result, const ErrorCodeDescriptor &expected) {
-            REQUIRE(result.HasError());
-            REQUIRE(result.ErrorValue().domain.Value() == expected.domain.Value());
-            REQUIRE(result.ErrorValue().code.Value() == expected.code.Value());
-        }
     }  // namespace
 
     TEST_CASE("Null navigation provider reports explicit absence without plausible paths", "[unit][navigation][headless]") {

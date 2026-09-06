@@ -95,6 +95,19 @@ namespace Horo::Navigation {
      */
     class NavigationAreaRegistry final {
     public:
+        /** @brief Registry storage has unique ownership and cannot be copied. */
+        NavigationAreaRegistry(const NavigationAreaRegistry &) = delete;
+        /** @brief Registry storage has unique ownership and cannot be copy-assigned. */
+        NavigationAreaRegistry &operator=(const NavigationAreaRegistry &) = delete;
+
+        /**
+         * @brief Transfers owned descriptor storage to a new registry.
+         * @param other Registry whose storage and borrowed-pointer lifetime responsibility transfer to this instance.
+         */
+        NavigationAreaRegistry(NavigationAreaRegistry &&) noexcept = default;
+        /** @brief Existing registry storage cannot be replaced while borrowed descriptors may exist. */
+        NavigationAreaRegistry &operator=(NavigationAreaRegistry &&) = delete;
+
         /**
          * @brief Validates, owns, and deterministically orders complete descriptor contributions.
          * @param areas Project and package area contributions in arbitrary order.
@@ -120,9 +133,10 @@ namespace Horo::Navigation {
         /**
          * @brief Resolves one exact query filter without a default fallback.
          * @param id Stable filter identity.
-         * @return A copy of the registered descriptor or NavigationErrors::FilterUnknown.
+         * @return A registry-owned immutable descriptor pointer or NavigationErrors::FilterUnknown. The pointer remains
+         * valid until the registry is destroyed and must not outlive it.
          */
-        [[nodiscard]] Result<NavigationQueryFilterDescriptor> ResolveFilter(NavigationFilterId id) const;
+        [[nodiscard]] Result<const NavigationQueryFilterDescriptor *> ResolveFilter(NavigationFilterId id) const;
 
         /**
          * @brief Applies exclusion-wins flags and an exact optional cost override.

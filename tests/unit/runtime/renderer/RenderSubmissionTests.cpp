@@ -23,6 +23,12 @@ TEST_CASE("Render queue roles and identities stay backend-neutral", "[runtime][r
     REQUIRE(RenderQueueAssignment{RenderQueueRole::Compute, RenderQueueId{1}}.IsValid());
     REQUIRE_FALSE(RenderQueueAssignment{static_cast<RenderQueueRole>(255), RenderQueueId{1}}.IsValid());
     REQUIRE_FALSE(RenderQueueAssignment{RenderQueueRole::Transfer, RenderQueueId{}}.IsValid());
+
+    constexpr RenderQueueAssignment graphics{RenderQueueRole::Graphics, RenderQueueId{1}};
+    constexpr RenderQueueAssignment sameGraphics{RenderQueueRole::Graphics, RenderQueueId{1}};
+    constexpr RenderQueueAssignment compute{RenderQueueRole::Compute, RenderQueueId{1}};
+    STATIC_REQUIRE(graphics == sameGraphics);
+    STATIC_REQUIRE(graphics < compute);
 }
 
 TEST_CASE("Submission orders and timeline points reserve invalid and wrap values", "[runtime][renderer][submission]") {

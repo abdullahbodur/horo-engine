@@ -1,13 +1,22 @@
 #include "Horo/Navigation/NavigationAreas.h"
 #include "Horo/Navigation/NavigationErrors.h"
+#include "navigation/NavigationTestAssertions.h"
 
 #include <array>
 #include <catch2/catch_test_macros.hpp>
 #include <limits>
+#include <type_traits>
 #include <utility>
 
 namespace Horo::Navigation {
+    static_assert(!std::is_copy_constructible_v<NavigationAreaRegistry>);
+    static_assert(!std::is_copy_assignable_v<NavigationAreaRegistry>);
+    static_assert(std::is_nothrow_move_constructible_v<NavigationAreaRegistry>);
+    static_assert(!std::is_move_assignable_v<NavigationAreaRegistry>);
+
     namespace {
+        using TestSupport::RequireError;
+
         NavigationAreaId AreaId(const std::uint64_t value) {
             return NavigationAreaId::Create(value).Value();
         }
@@ -33,12 +42,6 @@ namespace Horo::Navigation {
                     .includedFlags = {.bits = included},
                     .excludedFlags = {.bits = excluded},
                     .costOverrides = std::move(overrides)};
-        }
-
-        template <typename T> void RequireError(const Result<T> &result, const ErrorCodeDescriptor &expected) {
-            REQUIRE(result.HasError());
-            REQUIRE(result.ErrorValue().domain.Value() == expected.domain.Value());
-            REQUIRE(result.ErrorValue().code.Value() == expected.code.Value());
         }
 
         NavigationAreaRegistry Registry() {
@@ -72,6 +75,11 @@ namespace Horo::Navigation {
         REQUIRE(second.Areas()[1].id == first.Areas()[1].id);
         REQUIRE(second.Filters()[0].id == first.Filters()[0].id);
         REQUIRE(second.Filters()[1].id == first.Filters()[1].id);
+
+        const auto resolved = first.ResolveFilter(FilterId(2));
+        REQUIRE(resolved.HasValue());
+        REQUIRE(resolved.Value() == &first.Filters()[0]);
+        REQUIRE(resolved.Value()->costOverrides[0].area == AreaId(3));
     }
 
     TEST_CASE("Navigation traversal uses exclusion wins wildcard inclusion and exact cost overrides", "[unit][navigation][area]") {
