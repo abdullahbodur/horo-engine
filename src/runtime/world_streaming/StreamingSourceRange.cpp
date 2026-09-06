@@ -48,11 +48,11 @@ namespace Horo::WorldStreaming {
             const std::uint64_t lhsMagnitude = Magnitude(lhs);
             const std::uint64_t rhsMagnitude = Magnitude(rhs);
             constexpr std::uint64_t MinimumMagnitude = std::uint64_t{1} << 63U;
-            const std::uint64_t limit = negative ? MinimumMagnitude : static_cast<std::uint64_t>(std::numeric_limits<std::int64_t>::max());
-            if (lhsMagnitude > limit / rhsMagnitude)
+            if (const std::uint64_t limit =
+                    negative ? MinimumMagnitude : static_cast<std::uint64_t>(std::numeric_limits<std::int64_t>::max());
+                lhsMagnitude > limit / rhsMagnitude)
                 return false;
-            const std::uint64_t productMagnitude = lhsMagnitude * rhsMagnitude;
-            if (negative && productMagnitude == MinimumMagnitude)
+            if (const std::uint64_t productMagnitude = lhsMagnitude * rhsMagnitude; negative && productMagnitude == MinimumMagnitude)
                 product = std::numeric_limits<std::int64_t>::min();
             else
                 product = negative ? -static_cast<std::int64_t>(productMagnitude) : static_cast<std::int64_t>(productMagnitude);
@@ -60,10 +60,18 @@ namespace Horo::WorldStreaming {
         }
 
         [[nodiscard]] std::int64_t AddSaturated(const std::int64_t value, const std::int64_t delta) noexcept {
-            std::int64_t sum{};
-            if (AddChecked(value, delta, sum))
+            if (std::int64_t sum{}; AddChecked(value, delta, sum))
                 return sum;
             return delta < 0 ? std::numeric_limits<std::int64_t>::min() : std::numeric_limits<std::int64_t>::max();
+        }
+
+        [[nodiscard]] std::uint64_t AxisDistanceFromBounds(const std::int64_t coordinate, const std::int64_t minimum,
+                                                           const std::int64_t maximum) noexcept {
+            if (coordinate < minimum)
+                return Distance(coordinate, minimum);
+            if (coordinate > maximum)
+                return Distance(coordinate, maximum);
+            return 0U;
         }
 
         [[nodiscard]] bool ExpandChecked(const Coordinates &center, const std::int64_t extent, ExactBounds &bounds) noexcept {
@@ -145,9 +153,7 @@ namespace Horo::WorldStreaming {
             const auto radius = static_cast<std::uint64_t>(sphere.radiusMillimeters);
             std::uint64_t squaredDistance{};
             for (std::size_t axis = 0; axis < center.size(); ++axis) {
-                const std::uint64_t distance = center[axis] < cell.minimum[axis]   ? Distance(center[axis], cell.minimum[axis])
-                                               : center[axis] > cell.maximum[axis] ? Distance(center[axis], cell.maximum[axis])
-                                                                                   : 0U;
+                const std::uint64_t distance = AxisDistanceFromBounds(center[axis], cell.minimum[axis], cell.maximum[axis]);
                 if (distance > radius)
                     return false;
                 squaredDistance += distance * distance;
@@ -184,15 +190,15 @@ namespace Horo::WorldStreaming {
             double lower = 0.0;
             double upper = 1.0;
             for (std::size_t axis = 0; axis < start.size(); ++axis) {
-                const double direction = static_cast<double>(end[axis] - start[axis]);
+                const auto direction = static_cast<double>(end[axis] - start[axis]);
                 const std::int64_t segmentMinimum = std::min(start[axis], end[axis]);
                 const std::int64_t segmentMaximum = std::max(start[axis], end[axis]);
                 const std::int64_t expandedMinimum = AddSaturated(cell.minimum[axis], -halfExtent);
                 const std::int64_t expandedMaximum = AddSaturated(cell.maximum[axis], halfExtent);
                 if (expandedMaximum < segmentMinimum || segmentMaximum < expandedMinimum)
                     return false;
-                const double minimum = static_cast<double>(std::max(expandedMinimum, segmentMinimum) - start[axis]);
-                const double maximum = static_cast<double>(std::min(expandedMaximum, segmentMaximum) - start[axis]);
+                const auto minimum = static_cast<double>(std::max(expandedMinimum, segmentMinimum) - start[axis]);
+                const auto maximum = static_cast<double>(std::min(expandedMaximum, segmentMaximum) - start[axis]);
                 if (direction == 0.0) {
                     if (0.0 < minimum || 0.0 > maximum)
                         return false;
@@ -220,8 +226,7 @@ namespace Horo::WorldStreaming {
         }
 
         [[nodiscard]] bool IsSupported(const StreamingSourceShape &shape, const StreamingSourceShapeSupport support) noexcept {
-            return std::visit([support](const auto &value) {
-                using Shape = std::remove_cvref_t<decltype(value)>;
+            return std::visit([support]<typename Shape>(const Shape &) {
                 if constexpr (std::is_same_v<Shape, StreamingSourceSphere>)
                     return support.sphere;
                 if constexpr (std::is_same_v<Shape, StreamingSourceBox>)
@@ -248,9 +253,9 @@ namespace Horo::WorldStreaming {
         }
 
         [[nodiscard]] bool IsValidPlane(const StreamingSourceFrustumPlane &plane, const std::int64_t maximumExtent) noexcept {
-            const float lengthSquared = plane.inwardNormal.x * plane.inwardNormal.x + plane.inwardNormal.y * plane.inwardNormal.y +
-                                        plane.inwardNormal.z * plane.inwardNormal.z;
-            if (!std::isfinite(lengthSquared) || lengthSquared < 0.998F || lengthSquared > 1.002F)
+            if (const float lengthSquared = plane.inwardNormal.x * plane.inwardNormal.x + plane.inwardNormal.y * plane.inwardNormal.y +
+                                            plane.inwardNormal.z * plane.inwardNormal.z;
+                !std::isfinite(lengthSquared) || lengthSquared < 0.998F || lengthSquared > 1.002F)
                 return false;
             return std::isfinite(plane.distanceMillimeters) && plane.distanceMillimeters >= 0.0F &&
                    plane.distanceMillimeters <= static_cast<float>(maximumExtent);
@@ -271,8 +276,7 @@ namespace Horo::WorldStreaming {
         }
 
         [[nodiscard]] bool IsPathPointBounded(const Coordinates &point, const Coordinates &anchor, const std::int64_t halfExtent) noexcept {
-            ExactBounds expanded;
-            if (!ExpandChecked(point, halfExtent, expanded))
+            if (ExactBounds expanded; !ExpandChecked(point, halfExtent, expanded))
                 return false;
             for (std::size_t axis = 0; axis < point.size(); ++axis) {
                 const std::uint64_t distance = Distance(point[axis], anchor[axis]);
