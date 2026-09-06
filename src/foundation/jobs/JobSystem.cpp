@@ -65,7 +65,39 @@ namespace Horo {
     };
 
     namespace {
+        struct JobExecutionFrame final {
+            const JobRecord *record{};
+            const JobExecutionFrame *previous{};
+        };
+
         thread_local const void *activeSchedulerIdentity{};
+        thread_local const JobExecutionFrame *activeExecutionFrame{};
+
+        /** @brief Tracks nested exact-record execution so synchronous wait cycles can be rejected. */
+        class JobExecutionScope final {
+        public:
+            explicit JobExecutionScope(const JobRecord &record) noexcept : frame_{&record, activeExecutionFrame} {
+                activeExecutionFrame = &frame_;
+            }
+
+            ~JobExecutionScope() {
+                activeExecutionFrame = frame_.previous;
+            }
+
+            JobExecutionScope(const JobExecutionScope &) = delete;
+            JobExecutionScope &operator=(const JobExecutionScope &) = delete;
+
+        private:
+            JobExecutionFrame frame_;
+        };
+
+        [[nodiscard]] bool IsOnExecutionStack(const JobRecord &record) noexcept {
+            for (const JobExecutionFrame *frame = activeExecutionFrame; frame != nullptr; frame = frame->previous) {
+                if (frame->record == &record)
+                    return true;
+            }
+            return false;
+        }
 
         void SetTerminalState(const std::shared_ptr<JobRecord> &record, const JobState state, std::optional<Error> error = std::nullopt) {
             std::lock_guard lock(record->Mutex());
@@ -79,6 +111,7 @@ namespace Horo {
 
         void ExecuteJobRecord(const std::shared_ptr<JobRecord> &record) {
             const Telemetry::ScopedOperationContext operationContext{record->operationContext};
+            const JobExecutionScope executionScope{*record};
             try {
                 JobFunction work;
                 {
@@ -108,7 +141,18 @@ namespace Horo {
             }
         }
 
+        [[nodiscard]] bool TryClaimJobRecord(const std::shared_ptr<JobRecord> &record) {
+            std::lock_guard lock(record->Mutex());
+            if (record->state != JobState::Queued)
+                return false;
+            record->state = JobState::Running;
+            return true;
+        }
+
         [[nodiscard]] Result<void> ValidateBoundedWait(const JobRecord &record, const WaitPolicy policy) {
+            if (IsOnExecutionStack(record))
+                return Result<void>::Failure(
+                    MakeJobError(JobErrors::WaitCapacityDeadlock, "A synchronous wait would close a re-entrant job execution cycle."));
             if (policy == WaitPolicy::WorkerOnly && activeSchedulerIdentity != record.schedulerIdentity)
                 return Result<void>::Failure(
                     MakeJobError(JobErrors::WaitForbidden, "WorkerOnly requires a worker executing on the owning job system."));
@@ -125,6 +169,9 @@ namespace Horo {
         [[nodiscard]] Result<void> WaitBounded(const std::shared_ptr<JobRecord> &record, const JoinOptions &options) {
             if (const Result<void> validated = ValidateBoundedWait(*record, options.waitPolicy); validated.HasError())
                 return validated;
+
+            if (options.waitPolicy != WaitPolicy::ForbiddenOnOwnerThread && TryClaimJobRecord(record))
+                ExecuteJobRecord(record);
 
             const auto timeout = std::chrono::nanoseconds(std::max<std::int64_t>(0, options.timeout.ToNanoseconds()));
             std::unique_lock lock(record->Mutex());

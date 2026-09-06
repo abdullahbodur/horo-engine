@@ -93,20 +93,28 @@ namespace {
         jobs.Shutdown(Horo::ShutdownPolicy::Drain);
     }
 
-    TEST_CASE("Bounded Wait Times Out Without Changing Queued Job State", "[unit][foundation][jobs][wait]") {
-        Horo::JobSystem jobs{Horo::JobSystemConfig{.workerCount = 0, .maxQueuedJobs = 1}};
-        auto submitted = jobs.Submit({}, [](const Horo::CancellationToken &) {
+    TEST_CASE("Bounded Wait Times Out Without Changing Running Job State", "[unit][foundation][jobs][wait]") {
+        Horo::JobSystem jobs{Horo::JobSystemConfig{.workerCount = 1, .maxQueuedJobs = 1}};
+        std::atomic started{false};
+        std::atomic release{false};
+        auto submitted = jobs.Submit({}, [&started, &release](const Horo::CancellationToken &) {
+            started.store(true);
+            while (!release.load())
+                std::this_thread::yield();
         });
         REQUIRE((submitted.HasValue()));
+        while (!started.load())
+            std::this_thread::yield();
 
         const auto timedOut =
             submitted.Value().Wait({.waitPolicy = Horo::WaitPolicy::MainThreadPumpAllowed, .timeout = Horo::Duration::FromMilliseconds(1)});
         REQUIRE((timedOut.HasError()));
         REQUIRE((timedOut.ErrorValue().code.Value() == "job.wait_timed_out"));
-        REQUIRE((jobs.Query(submitted.Value().Id()).state == Horo::JobState::Queued));
+        REQUIRE((jobs.Query(submitted.Value().Id()).state == Horo::JobState::Running));
 
-        REQUIRE((jobs.RequestCancel(submitted.Value().Id()).HasValue()));
-        jobs.Shutdown(Horo::ShutdownPolicy::Cancel);
+        release.store(true);
+        REQUIRE((submitted.Value().Wait().HasValue()));
+        jobs.Shutdown(Horo::ShutdownPolicy::Drain);
     }
 
     TEST_CASE("Bounded Wait Validates Affinity Before Terminal Observation", "[unit][foundation][jobs][wait]") {
@@ -130,6 +138,107 @@ namespace {
         REQUIRE((verifier.HasValue()));
         REQUIRE((verifier.Value().Wait().HasValue()));
         REQUIRE((workerAccepted.load()));
+        jobs.Shutdown(Horo::ShutdownPolicy::Drain);
+    }
+
+    TEST_CASE("Bounded Owner Wait Helps Only Its Exact Queued Record", "[unit][foundation][jobs][wait]") {
+        Horo::JobSystem jobs{Horo::JobSystemConfig{.workerCount = 0, .maxQueuedJobs = 2}};
+        std::atomic unrelatedExecuted{false};
+        std::atomic awaitedExecuted{false};
+        const auto unrelated = jobs.Submit({}, [&unrelatedExecuted](const Horo::CancellationToken &) {
+            unrelatedExecuted.store(true);
+        });
+        auto awaited = jobs.Submit({}, [&awaitedExecuted](const Horo::CancellationToken &) {
+            awaitedExecuted.store(true);
+        });
+        REQUIRE((unrelated.HasValue()));
+        REQUIRE((awaited.HasValue()));
+
+        const auto result =
+            awaited.Value().Wait({.waitPolicy = Horo::WaitPolicy::MainThreadPumpAllowed, .timeout = Horo::Duration::FromMilliseconds(100)});
+        REQUIRE((result.HasValue()));
+        REQUIRE((awaitedExecuted.load()));
+        REQUIRE_FALSE((unrelatedExecuted.load()));
+        REQUIRE((jobs.Query(unrelated.Value().Id()).state == Horo::JobState::Queued));
+
+        REQUIRE((jobs.RequestCancel(unrelated.Value().Id()).HasValue()));
+        jobs.Shutdown(Horo::ShutdownPolicy::Cancel);
+    }
+
+    TEST_CASE("Worker Wait Helps Its Exact Queued Dependency", "[unit][foundation][jobs][wait]") {
+        Horo::JobSystem jobs{Horo::JobSystemConfig{.workerCount = 1, .maxQueuedJobs = 2}};
+        std::atomic<const Horo::JobHandle *> dependencyHandle{};
+        std::atomic dependencyExecuted{false};
+        std::atomic dependencyWaitSucceeded{false};
+
+        auto parent = jobs.Submit({}, [&](const Horo::CancellationToken &) {
+            while (dependencyHandle.load() == nullptr)
+                std::this_thread::yield();
+            dependencyWaitSucceeded.store(
+                dependencyHandle.load()
+                    ->Wait({.waitPolicy = Horo::WaitPolicy::WorkerOnly, .timeout = Horo::Duration::FromMilliseconds(100)})
+                    .HasValue());
+        });
+        REQUIRE((parent.HasValue()));
+        auto dependency = jobs.Submit({}, [&dependencyExecuted](const Horo::CancellationToken &) {
+            dependencyExecuted.store(true);
+        });
+        REQUIRE((dependency.HasValue()));
+        dependencyHandle.store(&dependency.Value());
+
+        REQUIRE((parent.Value().Wait().HasValue()));
+        REQUIRE((dependencyWaitSucceeded.load()));
+        REQUIRE((dependencyExecuted.load()));
+        jobs.Shutdown(Horo::ShutdownPolicy::Drain);
+    }
+
+    TEST_CASE("Worker Self Wait Returns Capacity Deadlock Without Blocking", "[unit][foundation][jobs][wait]") {
+        Horo::JobSystem jobs{Horo::JobSystemConfig{.workerCount = 1, .maxQueuedJobs = 2}};
+        std::atomic<const Horo::JobHandle *> selfHandle{};
+        std::atomic selfWaitRejected{false};
+        auto submitted = jobs.Submit({}, [&](const Horo::CancellationToken &) {
+            while (selfHandle.load() == nullptr)
+                std::this_thread::yield();
+            const auto result =
+                selfHandle.load()->Wait({.waitPolicy = Horo::WaitPolicy::WorkerOnly, .timeout = Horo::Duration::FromMilliseconds(100)});
+            selfWaitRejected.store(result.HasError() && result.ErrorValue().code.Value() == "job.wait_capacity_deadlock");
+        });
+        REQUIRE((submitted.HasValue()));
+        selfHandle.store(&submitted.Value());
+
+        REQUIRE((submitted.Value().Wait().HasValue()));
+        REQUIRE((selfWaitRejected.load()));
+        jobs.Shutdown(Horo::ShutdownPolicy::Drain);
+    }
+
+    TEST_CASE("Worker Helping Rejects A Reentrant Wait Cycle", "[unit][foundation][jobs][wait]") {
+        Horo::JobSystem jobs{Horo::JobSystemConfig{.workerCount = 1, .maxQueuedJobs = 2}};
+        std::atomic<const Horo::JobHandle *> parentHandle{};
+        std::atomic<const Horo::JobHandle *> childHandle{};
+        std::atomic cycleRejected{false};
+        std::atomic childWaitSucceeded{false};
+
+        auto parent = jobs.Submit({}, [&](const Horo::CancellationToken &) {
+            while (childHandle.load() == nullptr)
+                std::this_thread::yield();
+            childWaitSucceeded.store(
+                childHandle.load()
+                    ->Wait({.waitPolicy = Horo::WaitPolicy::WorkerOnly, .timeout = Horo::Duration::FromMilliseconds(100)})
+                    .HasValue());
+        });
+        REQUIRE((parent.HasValue()));
+        parentHandle.store(&parent.Value());
+        auto child = jobs.Submit({}, [&](const Horo::CancellationToken &) {
+            const auto cycle =
+                parentHandle.load()->Wait({.waitPolicy = Horo::WaitPolicy::WorkerOnly, .timeout = Horo::Duration::FromMilliseconds(100)});
+            cycleRejected.store(cycle.HasError() && cycle.ErrorValue().code.Value() == "job.wait_capacity_deadlock");
+        });
+        REQUIRE((child.HasValue()));
+        childHandle.store(&child.Value());
+
+        REQUIRE((parent.Value().Wait().HasValue()));
+        REQUIRE((childWaitSucceeded.load()));
+        REQUIRE((cycleRejected.load()));
         jobs.Shutdown(Horo::ShutdownPolicy::Drain);
     }
 

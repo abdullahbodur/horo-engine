@@ -22,6 +22,7 @@ namespace Horo::JobErrors {
     extern const ErrorCodeDescriptor TaskGroupClosed;
     extern const ErrorCodeDescriptor WaitForbidden;
     extern const ErrorCodeDescriptor WaitTimedOut;
+    extern const ErrorCodeDescriptor WaitCapacityDeadlock;
 }  // namespace Horo::JobErrors
 
 namespace Horo::HashingErrors {

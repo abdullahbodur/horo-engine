@@ -76,10 +76,11 @@ namespace Horo {
         /** @brief Waits until the job reaches its single terminal state. */
         [[nodiscard]] Result<void> Wait() const;
         /**
-         * @brief Passively waits for the job under a finite caller-affinity policy.
-         * @param options Caller-affinity rule and maximum wait duration.
-         * @return Terminal job result, or a typed forbidden or timeout error. Policy validation occurs even if the job
-         * is already terminal. A timeout does not change the job lifecycle, so the handle remains safely retryable.
+         * @brief Waits under a finite affinity policy, optionally helping only this exact queued record.
+         * @param options Caller-affinity rule and maximum wait duration. `MainThreadPumpAllowed` and `WorkerOnly` may claim
+         * this record for inline execution; unrelated queued jobs are never pumped.
+         * @return Terminal job result, or a typed forbidden, deadlock-risk or timeout error. Policy validation occurs even
+         * if the job is already terminal. A timeout does not change the job lifecycle, so the handle remains safely retryable.
          */
         [[nodiscard]] Result<void> Wait(const JoinOptions &options) const;
         /** @brief Returns the stable identifier assigned at successful submission. */

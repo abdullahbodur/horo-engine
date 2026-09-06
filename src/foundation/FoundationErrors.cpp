@@ -142,6 +142,15 @@ namespace Horo {
                                                    "Cancel the owning operation or retry only while its captured state remains alive.",
                                                .retryable = true,
                                                .userActionable = false};
+
+        const ErrorCodeDescriptor WaitCapacityDeadlock{.domain = JobDomain,
+                                                       .code = ErrorCode{"job.wait_capacity_deadlock"},
+                                                       .defaultSeverity = ErrorSeverity::Error,
+                                                       .summary = "The requested wait would create a scheduler capacity deadlock.",
+                                                       .remediationHint =
+                                                           "Restructure the dependency so a job never waits on its active execution chain.",
+                                                       .retryable = false,
+                                                       .userActionable = false};
     }  // namespace JobErrors
 
     namespace HashingErrors {
