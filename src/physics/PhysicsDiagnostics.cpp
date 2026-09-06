@@ -12,7 +12,7 @@ namespace Horo::Physics {
             if (error.domain.Value() != "horo.physics")
                 return std::nullopt;
 
-            const ErrorCodeDescriptor *const descriptors[]{
+            static const ErrorCodeDescriptor *const descriptors[]{
                 &PhysicsErrors::WorldInvalid,
                 &PhysicsErrors::HandleMalformed,
                 &PhysicsErrors::HandleWorldMismatch,
