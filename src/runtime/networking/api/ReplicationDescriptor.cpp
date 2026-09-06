@@ -67,16 +67,16 @@ namespace Horo::Network {
         /** @brief Validates one field's canonical default and compatible-minor requirement. */
         [[nodiscard]] Result<void> ValidateFieldDefault(const ReplicationFieldDescriptor &field, const ReplicationSchemaDescriptor &schema,
                                                         const ReplicationDescriptorLimits &limits) {
+            using enum ReplicationFieldRequirement;
             if (field.canonicalDefault.has_value()) {
-                if (field.requirement != ReplicationFieldRequirement::Optional ||
-                    field.canonicalDefault->canonicalBytes.size() > limits.maximumDefaultBytesPerField ||
+                if (field.requirement != Optional || field.canonicalDefault->canonicalBytes.size() > limits.maximumDefaultBytesPerField ||
                     field.canonicalDefault->canonicalBytes.size() > field.limits.maximumEncodedBytes)
                     return Result<void>::Failure(MakeError(NetworkErrors::ReplicationDescriptorInvalid));
-            } else if (field.requirement == ReplicationFieldRequirement::Optional) {
+            } else if (field.requirement == Optional) {
                 return Result<void>::Failure(MakeError(NetworkErrors::ReplicationDescriptorInvalid));
             }
 
-            if (field.requirement == ReplicationFieldRequirement::Required && field.introducedVersion > schema.compatibility.minimum)
+            if (field.requirement == Required && field.introducedVersion > schema.compatibility.minimum)
                 return Result<void>::Failure(MakeError(NetworkErrors::ReplicationDescriptorIncompatible));
             return Result<void>::Success();
         }

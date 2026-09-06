@@ -121,19 +121,15 @@ namespace Horo::Network {
 
         /** @brief Ensures prior fields retain semantics or undergo an allowed retirement. */
         [[nodiscard]] bool RetainsPriorFields(const ReplicationSchemaDescriptor &previous, const ReplicationSchemaDescriptor &candidate) {
-            for (const ReplicationFieldDescriptor &priorField : previous.fields) {
-                const ReplicationFieldDescriptor *candidateField = FindField(candidate, priorField.id);
-                if (candidateField != nullptr) {
-                    if (*candidateField != priorField)
-                        return false;
-                    continue;
-                }
+            return std::ranges::all_of(previous.fields, [&previous, &candidate](const ReplicationFieldDescriptor &priorField) {
+                if (const ReplicationFieldDescriptor *candidateField = FindField(candidate, priorField.id); candidateField != nullptr)
+                    return *candidateField == priorField;
                 if (!std::ranges::binary_search(candidate.tombstonedFields, priorField.id))
                     return false;
                 if (candidate.compatibility.Contains(previous.version) && priorField.requirement == ReplicationFieldRequirement::Required)
                     return false;
-            }
-            return true;
+                return true;
+            });
         }
 
         /** @brief Ensures compatible-minor additions are new, optional, and canonical-defaulted. */
