@@ -4,7 +4,7 @@
  * @brief Owned analytic shape descriptors in normalized Horo SI local space.
  */
 
-#include "Horo/Math/SceneMath.h"
+#include "Horo/Physics/PhysicsPose.h"
 
 #include <variant>
 
@@ -45,6 +45,36 @@ namespace Horo::Physics {
      */
     using PhysicsShapeDescriptor = std::variant<PhysicsBoxShape, PhysicsSphereShape, PhysicsCapsuleShape, PhysicsStaticPlaneShape>;
 
+    /** @brief Typed authored scale resolved into analytic geometry before runtime shape admission. */
+    struct PhysicsShapeScale final {
+        Math::Vec3 factors{1, 1, 1};
+        bool operator==(const PhysicsShapeScale &) const noexcept = default;
+    };
+
+    /**
+     * @brief Owned authoring request for one analytic primitive and its body-local placement.
+     *
+     * Scale is transient semantic input. Resolution folds an admitted scale into geometry and
+     * never retains a runtime/native scale multiplier. This value owns no world, body, shape,
+     * asset, native solver object or borrowed memory.
+     */
+    struct PhysicsPrimitiveShapeRequest final {
+        PhysicsShapeDescriptor geometry;
+        PhysicsPose localPose;
+        PhysicsShapeScale scale;
+    };
+
+    /**
+     * @brief Owned validated analytic primitive with scale-free body-local placement.
+     *
+     * This is structural preparation output, not a resident shape, lease or proof of motion-mode,
+     * material, filter, capability, profile-size or world-capacity admission.
+     */
+    struct ResolvedPhysicsPrimitiveShape final {
+        PhysicsShapeDescriptor geometry;
+        PhysicsPose localPose;
+    };
+
     /**
      * @brief Validates analytic dimensions and plane representation without normalization or native work.
      * @param descriptor Immutable normalized-meter geometry.
@@ -54,4 +84,17 @@ namespace Horo::Physics {
      * native feature availability and world capacity must still be admitted before shape creation.
      */
     [[nodiscard]] Result<void> ValidatePhysicsShapeDescriptor(const PhysicsShapeDescriptor &descriptor);
+
+    /**
+     * @brief Validates and folds authored analytic scale into an owned scale-free primitive.
+     * @param request Immutable primitive geometry, body-local pose and typed authored scale.
+     * @return The resolved primitive; PhysicsErrors::DescriptorInvalid for non-finite, non-positive,
+     * degenerate or overflowing numeric input; or PhysicsErrors::OperationUnsupported when a
+     * non-uniform affine scale cannot preserve the requested sphere or capsule geometry.
+     * @pre Preparation/control use; failure diagnostics may allocate.
+     * @post The request is unchanged on success and failure. Boxes admit positive non-uniform scale.
+     * Spheres and capsules require uniform scale. Planes admit positive non-uniform scale through
+     * inverse-transpose equation transformation. The result stores no scale multiplier.
+     */
+    [[nodiscard]] Result<ResolvedPhysicsPrimitiveShape> ResolvePhysicsPrimitiveShape(const PhysicsPrimitiveShapeRequest &request);
 }  // namespace Horo::Physics
