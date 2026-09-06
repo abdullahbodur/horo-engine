@@ -14,6 +14,10 @@ namespace Horo::Prefab::PrefabErrors {
     extern const ErrorCodeDescriptor AddressInvalid;
     /** @brief A prefab reference does not use a valid Asset Registry identity. */
     extern const ErrorCodeDescriptor ReferenceInvalid;
+    /** @brief A prefab project limit policy is empty, contradictory or exceeds an engine hard ceiling. */
+    extern const ErrorCodeDescriptor LimitProfileInvalid;
+    /** @brief A prefab expansion operation exhausted its captured derived work budget. */
+    extern const ErrorCodeDescriptor WorkBudgetExceeded;
     /** @brief A prefab authoring document has invalid top-level metadata or mode. */
     extern const ErrorCodeDescriptor DocumentInvalid;
     /** @brief A prefab hierarchy is disconnected, cyclic, unordered, or ambiguously rooted. */

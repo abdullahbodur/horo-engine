@@ -239,6 +239,7 @@ horo_register_catch_test(HoroWorldStreamingTests LABELS "unit;world_streaming;he
 add_executable(HoroPrefabTests
         unit/runtime/prefab/PrefabDocumentTests.cpp
         unit/runtime/prefab/PrefabIdentityTests.cpp
+        unit/runtime/prefab/PrefabLimitsTests.cpp
 )
 target_compile_features(HoroPrefabTests PRIVATE cxx_std_20)
 target_link_libraries(HoroPrefabTests PRIVATE HoroEngine::PrefabAuthoring)

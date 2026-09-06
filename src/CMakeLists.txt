@@ -402,6 +402,7 @@ target_link_libraries(HoroWorldStreaming PUBLIC HoroEngine::Foundation)
 add_library(HoroPrefab STATIC
         runtime/prefab/PrefabErrors.cpp
         runtime/prefab/PrefabIdentity.cpp
+        runtime/prefab/PrefabLimits.cpp
 )
 add_library(HoroEngine::Prefab ALIAS HoroPrefab)
 target_compile_features(HoroPrefab PUBLIC cxx_std_20)

@@ -9,6 +9,7 @@
 #include "Horo/Foundation/StrongId.h"
 #include "Horo/Gameplay/Component.h"
 #include "Horo/Prefab/PrefabErrors.h"
+#include "Horo/Prefab/PrefabLimits.h"
 
 #include <array>
 #include <compare>
@@ -19,7 +20,7 @@
 
 namespace Horo::Prefab {
     /** @brief Maximum nested placement segments in one persisted object address. */
-    inline constexpr std::size_t MaximumPrefabObjectScopeDepth = 16;
+    inline constexpr std::size_t MaximumPrefabObjectScopeDepth = PrefabHardLimits::NestedPrefabDepth;
 
     struct PrefabInstanceIdTag;
     struct PrefabComponentInstanceIdTag;

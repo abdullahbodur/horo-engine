@@ -1,4 +1,5 @@
 #include "Horo/Prefab/PrefabDocument.h"
+#include "Horo/Prefab/PrefabErrors.h"
 
 #include <array>
 #include <catch2/catch_test_macros.hpp>
@@ -62,6 +63,14 @@ namespace Horo::Prefab {
             return {.projectVersion = ProjectVersion(), .assetId = Asset(1), .objects = {Root()}};
         }
 
+        PrefabLimitProfile Limits() {
+            return PrefabLimitProfile::Create({}).Value();
+        }
+
+        Result<PrefabDocument> CreateDocument(PrefabDocumentData data) {
+            return PrefabDocument::Create(std::move(data), Limits());
+        }
+
         TEST_CASE("Prefab document publishes one immutable ordered portable candidate", "[unit][prefab][document]") {
             auto data = Concrete();
             data.referencedAssets = {Asset(2)};
@@ -75,7 +84,7 @@ namespace Horo::Prefab {
                                       .authoredAgainst = Revision()}},
             };
 
-            const auto document = PrefabDocument::Create(data);
+            const auto document = CreateDocument(data);
             REQUIRE(document.HasValue());
             REQUIRE(document.Value().Data() == data);
             REQUIRE(document.Value().Data().objects.front().components.front().component.payload.empty());
@@ -84,69 +93,87 @@ namespace Horo::Prefab {
         TEST_CASE("Prefab hierarchy requires one root and parent-before-child stable slots", "[unit][prefab][document]") {
             auto rootMissing = Concrete();
             rootMissing.objects.front().localId = {1};
-            REQUIRE(PrefabDocument::Create(rootMissing).HasError());
+            REQUIRE(CreateDocument(rootMissing).HasError());
 
             auto duplicate = Concrete();
             duplicate.objects.push_back({.localId = {1}, .parentLocalId = LocalObjectId{}});
             duplicate.objects.push_back({.localId = {1}, .parentLocalId = LocalObjectId{}});
-            REQUIRE(PrefabDocument::Create(duplicate).HasError());
+            REQUIRE(CreateDocument(duplicate).HasError());
 
             auto unordered = Concrete();
             unordered.objects.push_back({.localId = {2}, .parentLocalId = LocalObjectId{3}});
             unordered.objects.push_back({.localId = {3}, .parentLocalId = LocalObjectId{}});
-            REQUIRE(PrefabDocument::Create(unordered).HasError());
+            REQUIRE(CreateDocument(unordered).HasError());
 
             auto secondRoot = Concrete();
             secondRoot.objects.push_back(Root());
-            REQUIRE(PrefabDocument::Create(secondRoot).HasError());
+            REQUIRE(CreateDocument(secondRoot).HasError());
         }
 
         TEST_CASE("Prefab hierarchy accepts exact object and depth bounds then rejects overflow", "[unit][prefab][document]") {
             auto objectBound = Concrete();
-            for (std::uint32_t id = 1; id < MaximumPrefabObjectCount; ++id)
+            for (std::uint32_t id = 1; id < PrefabHardLimits::SourceObjectCount; ++id)
                 objectBound.objects.push_back({.localId = {id}, .parentLocalId = LocalObjectId{}});
-            REQUIRE(PrefabDocument::Create(objectBound).HasValue());
+            REQUIRE(CreateDocument(objectBound).HasValue());
             objectBound.objects.push_back(
-                {.localId = {static_cast<std::uint32_t>(MaximumPrefabObjectCount)}, .parentLocalId = LocalObjectId{}});
-            REQUIRE(PrefabDocument::Create(objectBound).HasError());
+                {.localId = {static_cast<std::uint32_t>(PrefabHardLimits::SourceObjectCount)}, .parentLocalId = LocalObjectId{}});
+            REQUIRE(CreateDocument(objectBound).HasError());
 
             auto depthBound = Concrete();
-            for (std::uint32_t id = 1; id < MaximumPrefabHierarchyDepth; ++id)
+            for (std::uint32_t id = 1; id < PrefabHardLimits::SourceHierarchyDepth; ++id)
                 depthBound.objects.push_back({.localId = {id}, .parentLocalId = LocalObjectId{id - 1}});
-            REQUIRE(PrefabDocument::Create(depthBound).HasValue());
-            depthBound.objects.push_back({.localId = {static_cast<std::uint32_t>(MaximumPrefabHierarchyDepth)},
-                                          .parentLocalId = LocalObjectId{static_cast<std::uint32_t>(MaximumPrefabHierarchyDepth - 1)}});
-            REQUIRE(PrefabDocument::Create(depthBound).HasError());
+            REQUIRE(CreateDocument(depthBound).HasValue());
+            depthBound.objects.push_back(
+                {.localId = {static_cast<std::uint32_t>(PrefabHardLimits::SourceHierarchyDepth)},
+                 .parentLocalId = LocalObjectId{static_cast<std::uint32_t>(PrefabHardLimits::SourceHierarchyDepth - 1)}});
+            REQUIRE(CreateDocument(depthBound).HasError());
         }
 
         TEST_CASE("Prefab object combines component and behavior occurrences under one bound", "[unit][prefab][document]") {
             auto data = Concrete();
-            for (std::uint64_t id = 1; id <= MaximumPrefabComponentsPerObject; ++id)
+            for (std::uint64_t id = 1; id <= PrefabHardLimits::ComponentsPerObject; ++id)
                 data.objects.front().components.push_back(Component(id));
-            REQUIRE(PrefabDocument::Create(data).HasValue());
+            REQUIRE(CreateDocument(data).HasValue());
             data.objects.front().behaviors.push_back(Behavior(1));
-            REQUIRE(PrefabDocument::Create(data).HasError());
+            REQUIRE(CreateDocument(data).HasError());
 
             auto duplicateComponent = Concrete();
             duplicateComponent.objects.front().components = {Component(1), Component(1)};
-            REQUIRE(PrefabDocument::Create(duplicateComponent).HasError());
+            REQUIRE(CreateDocument(duplicateComponent).HasError());
 
             auto duplicateBehavior = Concrete();
             duplicateBehavior.objects.front().behaviors = {Behavior(1), Behavior(1)};
-            REQUIRE(PrefabDocument::Create(duplicateBehavior).HasError());
+            REQUIRE(CreateDocument(duplicateBehavior).HasError());
         }
 
         TEST_CASE("Prefab dynamic payload accepts exactly four MiB and rejects one byte more", "[unit][prefab][document]") {
             auto data = Concrete();
             data.objects.front().name.clear();
             const std::size_t typeBytes = ComponentType().Value().size();
-            const std::size_t baseChunk = (MaximumPrefabPayloadBytes - 4 * typeBytes) / 4;
-            const std::size_t remainder = (MaximumPrefabPayloadBytes - 4 * typeBytes) % 4;
+            const std::size_t baseChunk = (PrefabHardLimits::SourcePayloadBytes - 4 * typeBytes) / 4;
+            const std::size_t remainder = (PrefabHardLimits::SourcePayloadBytes - 4 * typeBytes) % 4;
             for (std::uint64_t id = 1; id <= 4; ++id)
                 data.objects.front().components.push_back(Component(id, baseChunk + (id == 4 ? remainder : 0)));
-            REQUIRE(PrefabDocument::Create(data).HasValue());
+            REQUIRE(CreateDocument(data).HasValue());
             data.objects.front().components.back().component.payload.push_back(std::byte{});
-            REQUIRE(PrefabDocument::Create(data).HasError());
+            REQUIRE(CreateDocument(data).HasError());
+        }
+
+        TEST_CASE("Prefab document captures a lower validated project policy transactionally", "[unit][prefab][document]") {
+            const auto current = CreateDocument(Concrete());
+            REQUIRE(current.HasValue());
+
+            PrefabProjectPolicy policy;
+            policy.maximumObjectCount = 1;
+            const auto limits = PrefabLimitProfile::Create(policy);
+            REQUIRE(limits.HasValue());
+            auto replacement = Concrete();
+            replacement.objects.push_back({.localId = {1}, .parentLocalId = LocalObjectId{}});
+
+            const auto rejected = PrefabDocument::Create(std::move(replacement), limits.Value());
+            REQUIRE(rejected.HasError());
+            REQUIRE(rejected.ErrorValue().code.Value() == PrefabErrors::ObjectCountExceeded.code.Value());
+            REQUIRE(current.Value().Data().objects.size() == 1);
         }
 
         TEST_CASE("Prefab composition enforces placement identity source revision and declared dependencies", "[unit][prefab][document]") {
@@ -157,39 +184,39 @@ namespace Horo::Prefab {
                                       .sourcePrefab = PrefabAssetReference::Create(Asset(2)).Value(),
                                       .authoredAgainst = Revision()}},
             };
-            REQUIRE(PrefabDocument::Create(data).HasValue());
+            REQUIRE(CreateDocument(data).HasValue());
 
             auto colliding = data;
             colliding.composition->nestedPlacements.front().placementLocalId = {};
-            REQUIRE(PrefabDocument::Create(colliding).HasError());
+            REQUIRE(CreateDocument(colliding).HasError());
             auto undeclared = data;
             undeclared.referencedAssets.clear();
-            REQUIRE(PrefabDocument::Create(undeclared).HasError());
+            REQUIRE(CreateDocument(undeclared).HasError());
             auto selfReference = data;
             selfReference.composition->nestedPlacements.front().sourcePrefab = PrefabAssetReference::Create(Asset(1)).Value();
             selfReference.referencedAssets = {Asset(1)};
-            REQUIRE(PrefabDocument::Create(selfReference).HasError());
+            REQUIRE(CreateDocument(selfReference).HasError());
         }
 
         TEST_CASE("Prefab direct placement and asset reference counts are independently bounded", "[unit][prefab][document]") {
             auto placements = Concrete();
             placements.referencedAssets = {Asset(2)};
             placements.composition = PrefabComposition{};
-            for (std::uint32_t id = 1; id <= MaximumDirectNestedPrefabPlacements; ++id)
+            for (std::uint32_t id = 1; id <= PrefabHardLimits::DirectNestedPlacements; ++id)
                 placements.composition->nestedPlacements.push_back({.placementLocalId = {id},
                                                                     .sourcePrefab = PrefabAssetReference::Create(Asset(2)).Value(),
                                                                     .authoredAgainst = Revision()});
-            REQUIRE(PrefabDocument::Create(placements).HasValue());
+            REQUIRE(CreateDocument(placements).HasValue());
             placements.composition->nestedPlacements.push_back(
                 {.placementLocalId = {999}, .sourcePrefab = PrefabAssetReference::Create(Asset(2)).Value(), .authoredAgainst = Revision()});
-            REQUIRE(PrefabDocument::Create(placements).HasError());
+            REQUIRE(CreateDocument(placements).HasError());
 
             auto references = Concrete();
-            for (std::uint16_t id = 2; id < MaximumPrefabReferencedAssets + 2; ++id)
+            for (std::uint16_t id = 2; id < PrefabHardLimits::ReferencedAssets + 2; ++id)
                 references.referencedAssets.push_back(Asset(id));
-            REQUIRE(PrefabDocument::Create(references).HasValue());
+            REQUIRE(CreateDocument(references).HasValue());
             references.referencedAssets.push_back(Asset(500));
-            REQUIRE(PrefabDocument::Create(references).HasError());
+            REQUIRE(CreateDocument(references).HasError());
         }
 
         TEST_CASE("Prefab variants own one exclusive exact parent source", "[unit][prefab][document]") {
@@ -200,17 +227,17 @@ namespace Horo::Prefab {
                                                  .variantAuthoredAgainst = Revision()},
                 .referencedAssets = {Asset(2)},
             };
-            REQUIRE(PrefabDocument::Create(variant).HasValue());
+            REQUIRE(CreateDocument(variant).HasValue());
 
             auto withHierarchy = variant;
             withHierarchy.objects = {Root()};
-            REQUIRE(PrefabDocument::Create(withHierarchy).HasError());
+            REQUIRE(CreateDocument(withHierarchy).HasError());
             auto missingRevision = variant;
             missingRevision.composition->variantAuthoredAgainst.reset();
-            REQUIRE(PrefabDocument::Create(missingRevision).HasError());
+            REQUIRE(CreateDocument(missingRevision).HasError());
             auto emptyComposition = Concrete();
             emptyComposition.composition = PrefabComposition{};
-            REQUIRE(PrefabDocument::Create(emptyComposition).HasError());
+            REQUIRE(CreateDocument(emptyComposition).HasError());
         }
 
         TEST_CASE("Prefab document validation rejects noncanonical metadata and leaves source candidates untouched",
@@ -218,28 +245,28 @@ namespace Horo::Prefab {
             auto invalidVersion = Concrete();
             invalidVersion.projectVersion.prerelease = std::string(80, 'x');
             const auto original = invalidVersion;
-            REQUIRE(PrefabDocument::Create(invalidVersion).HasError());
+            REQUIRE(CreateDocument(invalidVersion).HasError());
             REQUIRE(invalidVersion == original);
 
             auto invalidAsset = Concrete();
             invalidAsset.assetId = {};
-            REQUIRE(PrefabDocument::Create(invalidAsset).HasError());
+            REQUIRE(CreateDocument(invalidAsset).HasError());
 
             auto invalidTransform = Concrete();
             invalidTransform.objects.front().localTransform.translation.x = std::numeric_limits<float>::quiet_NaN();
-            REQUIRE(PrefabDocument::Create(invalidTransform).HasError());
+            REQUIRE(CreateDocument(invalidTransform).HasError());
 
             auto oversizedName = Concrete();
             oversizedName.objects.front().name.assign(MaximumPrefabObjectNameBytes + 1, 'x');
-            REQUIRE(PrefabDocument::Create(oversizedName).HasError());
+            REQUIRE(CreateDocument(oversizedName).HasError());
 
             auto invalidUtf8 = Concrete();
             invalidUtf8.objects.front().name = std::string{"\xC3\x28", 2};
-            REQUIRE(PrefabDocument::Create(invalidUtf8).HasError());
+            REQUIRE(CreateDocument(invalidUtf8).HasError());
 
             auto validUtf8 = Concrete();
             validUtf8.objects.front().name = std::string{"\xF0\x9F\x8C\x8D", 4};
-            REQUIRE(PrefabDocument::Create(validUtf8).HasValue());
+            REQUIRE(CreateDocument(validUtf8).HasValue());
         }
     }  // namespace
 }  // namespace Horo::Prefab

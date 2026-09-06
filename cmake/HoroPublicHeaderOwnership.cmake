@@ -195,6 +195,7 @@ horo_configure_target_header_boundary(HoroWorldStreaming PUBLIC_HEADERS
 horo_configure_target_header_boundary(HoroPrefab PUBLIC_HEADERS
     Horo/Prefab/PrefabErrors.h
     Horo/Prefab/PrefabIdentity.h
+    Horo/Prefab/PrefabLimits.h
 )
 
 horo_configure_target_header_boundary(HoroPrefabAuthoring PUBLIC_HEADERS
