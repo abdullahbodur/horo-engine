@@ -169,4 +169,94 @@ namespace Horo::Network::NetworkErrors {
         .retryable = false,
         .userActionable = true,
     };
+    const ErrorCodeDescriptor MessageEnvelopeInvalid{
+        .domain = NetworkDomain,
+        .code = ErrorCode{"network.message.envelope_invalid"},
+        .defaultSeverity = ErrorSeverity::Error,
+        .summary = "Message envelope framing or codec metadata is malformed.",
+        .remediationHint = "Use the canonical fixed header, ordered bounded fields, and exact declared lengths.",
+        .retryable = false,
+        .userActionable = true,
+    };
+    const ErrorCodeDescriptor MessageEnvelopeCapacityExceeded{
+        .domain = NetworkDomain,
+        .code = ErrorCode{"network.message.envelope_capacity_exceeded"},
+        .defaultSeverity = ErrorSeverity::Error,
+        .summary = "Message envelope exceeds an admitted finite bound.",
+        .remediationHint = "Reduce frame, payload, extension count, or extension bytes within the active limits.",
+        .retryable = false,
+        .userActionable = true,
+    };
+    const ErrorCodeDescriptor MessageCodecConflict{
+        .domain = NetworkDomain,
+        .code = ErrorCode{"network.message.codec_conflict"},
+        .defaultSeverity = ErrorSeverity::Error,
+        .summary = "Message codec metadata contains a duplicate stable identity.",
+        .remediationHint = "Publish one codec and one extension descriptor for each protocol-scoped identity.",
+        .retryable = false,
+        .userActionable = true,
+    };
+    const ErrorCodeDescriptor MessageCodecUnknown{
+        .domain = NetworkDomain,
+        .code = ErrorCode{"network.message.codec_unknown"},
+        .defaultSeverity = ErrorSeverity::Error,
+        .summary = "No exact payload codec metadata is registered for the message.",
+        .remediationHint = "Use an explicitly registered protocol and message identity; no fallback codec is selected.",
+        .retryable = false,
+        .userActionable = false,
+    };
+    const ErrorCodeDescriptor MessageSchemaIncompatible{
+        .domain = NetworkDomain,
+        .code = ErrorCode{"network.message.schema_incompatible"},
+        .defaultSeverity = ErrorSeverity::Error,
+        .summary = "The payload schema identity or version is incompatible.",
+        .remediationHint = "Use the codec's exact schema identity and an explicitly supported same-major version.",
+        .retryable = false,
+        .userActionable = true,
+    };
+    const ErrorCodeDescriptor MessageEnvelopeUnknownRequiredField{
+        .domain = NetworkDomain,
+        .code = ErrorCode{"network.message.unknown_required_field"},
+        .defaultSeverity = ErrorSeverity::Error,
+        .summary = "A required message-envelope extension is unknown.",
+        .remediationHint = "Negotiate support before sending required extensions; only optional unknown fields may be skipped.",
+        .retryable = false,
+        .userActionable = true,
+    };
+    const ErrorCodeDescriptor MessageCounterExhausted{
+        .domain = NetworkDomain,
+        .code = ErrorCode{"network.message.counter_exhausted"},
+        .defaultSeverity = ErrorSeverity::Error,
+        .summary = "A message wire counter cannot advance without wrapping.",
+        .remediationHint = "Close or replace the owning protocol/session generation before reusing a 32-bit counter value.",
+        .retryable = false,
+        .userActionable = false,
+    };
+    const ErrorCodeDescriptor MessageEnvelopeCancelled{
+        .domain = NetworkDomain,
+        .code = ErrorCode{"network.message.cancelled"},
+        .defaultSeverity = ErrorSeverity::Warning,
+        .summary = "Message codec admission was cancelled.",
+        .remediationHint = "Do not retry unless the caller supplies a new active operation generation.",
+        .retryable = false,
+        .userActionable = false,
+    };
+    const ErrorCodeDescriptor MessageEnvelopeTimedOut{
+        .domain = NetworkDomain,
+        .code = ErrorCode{"network.message.timed_out"},
+        .defaultSeverity = ErrorSeverity::Warning,
+        .summary = "Message codec admission deadline expired.",
+        .remediationHint = "Discard the late frame and continue only under a new caller-owned operation generation.",
+        .retryable = false,
+        .userActionable = false,
+    };
+    const ErrorCodeDescriptor MessageEnvelopeShuttingDown{
+        .domain = NetworkDomain,
+        .code = ErrorCode{"network.message.shutting_down"},
+        .defaultSeverity = ErrorSeverity::Info,
+        .summary = "Message codec admission is closed for shutdown.",
+        .remediationHint = "Stop producing new frames and complete bounded owner-controlled teardown.",
+        .retryable = false,
+        .userActionable = false,
+    };
 }  // namespace Horo::Network::NetworkErrors
