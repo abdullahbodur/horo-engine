@@ -3,6 +3,7 @@
 #include "Horo/Runtime/Render/RenderAdapterErrors.h"
 
 #include <algorithm>
+#include <string_view>
 
 namespace Horo::Render {
     namespace {
@@ -49,7 +50,7 @@ namespace Horo::Render {
 
     /** @copydoc RenderAdapterId::IsValid */
     bool RenderAdapterId::IsValid() const noexcept {
-        return !value_.empty() && value_.size() <= MaxIdentityLength && std::all_of(value_.begin(), value_.end(), [](const char value) {
+        return !value_.empty() && value_.size() <= MaxIdentityLength && std::ranges::all_of(value_, [](const char value) {
             return IsIdentityCharacter(static_cast<unsigned char>(value));
         });
     }
@@ -97,9 +98,10 @@ namespace Horo::Render {
         }
 
         if (request.requiredAdapter) {
-            const auto found = std::lower_bound(snapshot.adapters.begin(), snapshot.adapters.end(), request.requiredAdapter->Value(),
-                                                [](const RenderAdapterProperties &adapter, const std::string &value) {
-                return adapter.id.Value() < value;
+            const auto found =
+                std::ranges::lower_bound(snapshot.adapters, std::string_view{request.requiredAdapter->Value()}, std::ranges::less{},
+                                         [](const RenderAdapterProperties &adapter) -> std::string_view {
+                return adapter.id.Value();
             });
             if (found == snapshot.adapters.end() || found->id != *request.requiredAdapter) {
                 return Result<RenderAdapterSelection>::Failure(MakeError(RenderAdapterErrors::RequiredAdapterNotFound));
@@ -113,7 +115,7 @@ namespace Horo::Render {
             return Result<RenderAdapterSelection>::Success(RenderAdapterSelection{*found, snapshot.revision});
         }
 
-        const auto found = std::find_if(snapshot.adapters.begin(), snapshot.adapters.end(), [&](const RenderAdapterProperties &adapter) {
+        const auto found = std::ranges::find_if(snapshot.adapters, [&](const RenderAdapterProperties &adapter) {
             return Matches(adapter, request);
         });
         if (found == snapshot.adapters.end()) {

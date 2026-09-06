@@ -10,7 +10,6 @@
 #include <compare>
 #include <cstdint>
 #include <optional>
-#include <span>
 #include <string>
 #include <utility>
 #include <vector>
