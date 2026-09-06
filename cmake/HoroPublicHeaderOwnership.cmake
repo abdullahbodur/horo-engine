@@ -78,6 +78,8 @@ horo_configure_target_header_boundary(HoroRuntimeUi PUBLIC_HEADERS
 )
 horo_configure_target_header_boundary(HoroNetworkApi PUBLIC_HEADERS
     Horo/Network/NetworkErrors.h
+    Horo/Network/ProtocolIdentity.h
+    Horo/Network/ProtocolIdentityRegistry.h
     Horo/Network/ReplicationDescriptor.h
     Horo/Network/ReplicationDescriptorRegistry.h
     Horo/Network/ReplicationIdentity.h
@@ -192,6 +194,7 @@ horo_configure_target_header_boundary(HoroNavigationNull PUBLIC_HEADERS
     Horo/Navigation/Backends/NullProvider.h
 )
 horo_configure_target_header_boundary(HoroWorldStreaming PUBLIC_HEADERS
+    Horo/WorldStreaming/StreamingSourceDescriptor.h
     Horo/WorldStreaming/WorldCellQuantization.h
     Horo/WorldStreaming/WorldStreamingErrors.h
     Horo/WorldStreaming/WorldStreamingIdentity.h

@@ -128,6 +128,15 @@ namespace Horo::WorldStreaming {
         return StreamingGeneration::Create(current.Value() + 1);
     }
 
+    /** @copydoc NextStreamingSourceRevision */
+    Result<StreamingSourceRevision> NextStreamingSourceRevision(const StreamingSourceRevision current) {
+        if (!current.IsValid())
+            return Result<StreamingSourceRevision>::Failure(MakeError(WorldStreamingErrors::IdentityInvalid));
+        if (current.Value() == std::numeric_limits<std::uint64_t>::max())
+            return Result<StreamingSourceRevision>::Failure(MakeError(WorldStreamingErrors::GenerationExhausted));
+        return StreamingSourceRevision::Create(current.Value() + 1);
+    }
+
     /** @copydoc SerializeWorldPartitionId */
     SerializedWorldPartitionId SerializeWorldPartitionId(const WorldPartitionId &value) noexcept {
         return value.Bytes();

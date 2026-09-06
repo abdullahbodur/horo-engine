@@ -12,7 +12,7 @@ namespace Horo::WorldStreaming::WorldStreamingErrors {
     extern const ErrorCodeDescriptor IdentityInvalid;
     /** @brief A canonical serialized identity is malformed or contains a reserved value. */
     extern const ErrorCodeDescriptor SerializedIdentityInvalid;
-    /** @brief A partition epoch or cell-attempt generation cannot advance without wrapping. */
+    /** @brief A partition epoch, cell-attempt generation, or source revision cannot advance without wrapping. */
     extern const ErrorCodeDescriptor GenerationExhausted;
     /** @brief A world-cell grid has zero/overflowing cell size, inverted bounds, or no LODs. */
     extern const ErrorCodeDescriptor QuantizationPolicyInvalid;
@@ -22,4 +22,16 @@ namespace Horo::WorldStreaming::WorldStreamingErrors {
     extern const ErrorCodeDescriptor LodUnsupported;
     /** @brief The deterministic cell coordinate falls outside the inclusive manifest grid bounds. */
     extern const ErrorCodeDescriptor CellOutOfBounds;
+    /** @brief A streaming source descriptor or admission context is structurally invalid. */
+    extern const ErrorCodeDescriptor SourceDescriptorInvalid;
+    /** @brief A streaming source intent is not supported by this contract version. */
+    extern const ErrorCodeDescriptor SourceIntentUnsupported;
+    /** @brief A streaming source owner token no longer names the active owner lifetime. */
+    extern const ErrorCodeDescriptor SourceOwnerStale;
+    /** @brief A source update does not advance the currently admitted revision. */
+    extern const ErrorCodeDescriptor SourceRevisionStale;
+    /** @brief A new source cannot be admitted within the configured bounded capacity. */
+    extern const ErrorCodeDescriptor SourceCapacityExceeded;
+    /** @brief Source admission is closed because its owner is cancelling or shut down. */
+    extern const ErrorCodeDescriptor SourceLifecycleUnavailable;
 }  // namespace Horo::WorldStreaming::WorldStreamingErrors

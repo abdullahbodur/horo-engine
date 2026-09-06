@@ -34,4 +34,14 @@ namespace Horo::Network::NetworkErrors {
     extern const ErrorCodeDescriptor TransportOperationCancelled;
     /** @brief Caller-owned shutdown state rejected transport admission before queue mutation. */
     extern const ErrorCodeDescriptor TransportShuttingDown;
+    /** @brief Protocol identity contributions or version ranges are malformed. */
+    extern const ErrorCodeDescriptor ProtocolIdentityDescriptorInvalid;
+    /** @brief A protocol-scoped stable identity is registered more than once. */
+    extern const ErrorCodeDescriptor ProtocolIdentityConflict;
+    /** @brief An exact protocol-scoped identity is absent from the immutable registry. */
+    extern const ErrorCodeDescriptor ProtocolIdentityUnknown;
+    /** @brief Protocol version ranges have no explicit compatible overlap. */
+    extern const ErrorCodeDescriptor ProtocolVersionIncompatible;
+    /** @brief Protocol identity registry construction exceeded an explicit finite bound. */
+    extern const ErrorCodeDescriptor ProtocolIdentityCapacityExceeded;
 }  // namespace Horo::Network::NetworkErrors

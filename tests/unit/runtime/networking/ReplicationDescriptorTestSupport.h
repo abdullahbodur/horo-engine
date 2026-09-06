@@ -2,6 +2,7 @@
 
 #include "Horo/Network/NetworkErrors.h"
 #include "Horo/Network/ReplicationDescriptor.h"
+#include "NetworkTestUtils.h"
 
 #include <catch2/catch_test_macros.hpp>
 #include <cstddef>
@@ -53,8 +54,4 @@ namespace Horo::Network::TestSupport {
                 .fields = std::move(fields)};
     }
 
-    template <typename T> void RequireError(const Result<T> &result, const ErrorCodeDescriptor &descriptor) {
-        REQUIRE(result.HasError());
-        REQUIRE(result.ErrorValue().code.Value() == descriptor.code.Value());
-    }
 }  // namespace Horo::Network::TestSupport

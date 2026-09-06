@@ -124,4 +124,49 @@ namespace Horo::Network::NetworkErrors {
         .retryable = false,
         .userActionable = false,
     };
+    const ErrorCodeDescriptor ProtocolIdentityDescriptorInvalid{
+        .domain = NetworkDomain,
+        .code = ErrorCode{"network.protocol.identity_descriptor_invalid"},
+        .defaultSeverity = ErrorSeverity::Error,
+        .summary = "Protocol identity metadata is malformed.",
+        .remediationHint = "Use non-zero fixed-width identities, matching namespaces, and valid bounded versions.",
+        .retryable = false,
+        .userActionable = true,
+    };
+    const ErrorCodeDescriptor ProtocolIdentityConflict{
+        .domain = NetworkDomain,
+        .code = ErrorCode{"network.protocol.identity_conflict"},
+        .defaultSeverity = ErrorSeverity::Error,
+        .summary = "Protocol identity registrations conflict.",
+        .remediationHint = "Allocate each protocol-scoped wire identity once and preserve it across renames.",
+        .retryable = false,
+        .userActionable = true,
+    };
+    const ErrorCodeDescriptor ProtocolIdentityUnknown{
+        .domain = NetworkDomain,
+        .code = ErrorCode{"network.protocol.identity_unknown"},
+        .defaultSeverity = ErrorSeverity::Error,
+        .summary = "The requested protocol identity is not registered.",
+        .remediationHint = "Use an exact identity from the pinned registry; no name or default fallback is applied.",
+        .retryable = false,
+        .userActionable = false,
+    };
+    const ErrorCodeDescriptor ProtocolVersionIncompatible{
+        .domain = NetworkDomain,
+        .code = ErrorCode{"network.protocol.version_incompatible"},
+        .defaultSeverity = ErrorSeverity::Error,
+        .summary = "Protocol versions have no compatible overlap.",
+        .remediationHint = "Advertise an explicit same-major interval permitted by both protocol peers.",
+        .retryable = false,
+        .userActionable = true,
+    };
+    const ErrorCodeDescriptor ProtocolIdentityCapacityExceeded{
+        .domain = NetworkDomain,
+        .code = ErrorCode{"network.protocol.identity_capacity_exceeded"},
+        .defaultSeverity = ErrorSeverity::Error,
+        .summary = "Protocol identity registry construction exceeded its finite capacity.",
+        .remediationHint = "Reduce protocol, message, feature, or close-reason contributions within configured limits.",
+        .retryable = false,
+        .userActionable = true,
+    };
 }  // namespace Horo::Network::NetworkErrors

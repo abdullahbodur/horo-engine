@@ -1,5 +1,6 @@
 #include "Horo/Network/NetworkErrors.h"
 #include "Horo/Network/TransportCapabilities.h"
+#include "NetworkTestUtils.h"
 
 #include <algorithm>
 #include <array>
@@ -7,6 +8,8 @@
 #include <cstddef>
 
 namespace Horo::Network {
+    using TestSupport::RequireError;
+
     namespace {
         constexpr std::size_t Index(const DeliveryPolicy policy) {
             return static_cast<std::size_t>(policy);
@@ -33,11 +36,6 @@ namespace Horo::Network {
             requirements.deadline = DeadlineRequirement::Required;
             requirements.requiredMaximumDeadlineMilliseconds = 1000;
             return requirements;
-        }
-
-        template <typename T> void RequireError(const Result<T> &result, const ErrorCodeDescriptor &error) {
-            REQUIRE(result.HasError());
-            REQUIRE(result.ErrorValue().code.Value() == error.code.Value());
         }
 
         struct DeadlineCase final {

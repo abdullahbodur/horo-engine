@@ -1,4 +1,5 @@
 #include "Horo/WorldStreaming/WorldStreamingIdentity.h"
+#include "WorldStreamingTestUtils.h"
 
 #include <array>
 #include <catch2/catch_test_macros.hpp>
@@ -11,11 +12,7 @@
 
 namespace Horo::WorldStreaming {
     namespace {
-        template <typename Identity> Identity IdentityFrom(const std::uint64_t value) {
-            const auto result = Identity::Create(value);
-            REQUIRE(result.HasValue());
-            return result.Value();
-        }
+        using TestSupport::IdentityFrom;
 
         WorldPartitionId World() {
             const auto result =
@@ -28,6 +25,7 @@ namespace Horo::WorldStreaming {
             REQUIRE_FALSE(WorldPartitionId{}.IsValid());
             REQUIRE_FALSE(StreamingLayerId{}.IsValid());
             REQUIRE_FALSE(StreamingSourceId{}.IsValid());
+            REQUIRE_FALSE(StreamingSourceRevision{}.IsValid());
             REQUIRE_FALSE(PartitionEpoch{}.IsValid());
             REQUIRE_FALSE(StreamingGeneration{}.IsValid());
             REQUIRE_FALSE(StreamingCellId{}.IsValid());
@@ -43,20 +41,27 @@ namespace Horo::WorldStreaming {
             static_assert(!std::is_convertible_v<std::uint16_t, StreamingLayerId>);
             static_assert(!std::is_convertible_v<std::uint64_t, StreamingSourceId>);
             static_assert(!std::is_same_v<PartitionEpoch, StreamingGeneration>);
+            static_assert(!std::is_same_v<StreamingSourceId, StreamingSourceRevision>);
         }
 
         TEST_CASE("Partition generations advance monotonically and never wrap", "[unit][world_streaming][identity]") {
             const auto epoch = IdentityFrom<PartitionEpoch>(41);
             const auto generation = IdentityFrom<StreamingGeneration>(99);
+            const auto sourceRevision = IdentityFrom<StreamingSourceRevision>(7);
             REQUIRE(NextPartitionEpoch(epoch).Value().Value() == 42);
             REQUIRE(NextStreamingGeneration(generation).Value().Value() == 100);
+            REQUIRE(NextStreamingSourceRevision(sourceRevision).Value().Value() == 8);
             REQUIRE(NextPartitionEpoch({}).HasError());
             REQUIRE(NextStreamingGeneration({}).HasError());
+            REQUIRE(NextStreamingSourceRevision({}).HasError());
 
             const auto lastEpoch = IdentityFrom<PartitionEpoch>(std::numeric_limits<std::uint64_t>::max());
             const auto lastGeneration = IdentityFrom<StreamingGeneration>(std::numeric_limits<std::uint64_t>::max());
+            const auto lastSourceRevision = IdentityFrom<StreamingSourceRevision>(std::numeric_limits<std::uint64_t>::max());
             REQUIRE(NextPartitionEpoch(lastEpoch).ErrorValue().code.Value() == WorldStreamingErrors::GenerationExhausted.code.Value());
             REQUIRE(NextStreamingGeneration(lastGeneration).ErrorValue().code.Value() ==
+                    WorldStreamingErrors::GenerationExhausted.code.Value());
+            REQUIRE(NextStreamingSourceRevision(lastSourceRevision).ErrorValue().code.Value() ==
                     WorldStreamingErrors::GenerationExhausted.code.Value());
         }
 
@@ -131,10 +136,19 @@ namespace Horo::WorldStreaming {
 
         TEST_CASE("World streaming errors expose unique stable descriptors", "[unit][world_streaming][errors]") {
             const std::array descriptors{
-                &WorldStreamingErrors::IdentityInvalid,      &WorldStreamingErrors::SerializedIdentityInvalid,
-                &WorldStreamingErrors::GenerationExhausted,  &WorldStreamingErrors::QuantizationPolicyInvalid,
-                &WorldStreamingErrors::CoordinateOutOfRange, &WorldStreamingErrors::LodUnsupported,
+                &WorldStreamingErrors::IdentityInvalid,
+                &WorldStreamingErrors::SerializedIdentityInvalid,
+                &WorldStreamingErrors::GenerationExhausted,
+                &WorldStreamingErrors::QuantizationPolicyInvalid,
+                &WorldStreamingErrors::CoordinateOutOfRange,
+                &WorldStreamingErrors::LodUnsupported,
                 &WorldStreamingErrors::CellOutOfBounds,
+                &WorldStreamingErrors::SourceDescriptorInvalid,
+                &WorldStreamingErrors::SourceIntentUnsupported,
+                &WorldStreamingErrors::SourceOwnerStale,
+                &WorldStreamingErrors::SourceRevisionStale,
+                &WorldStreamingErrors::SourceCapacityExceeded,
+                &WorldStreamingErrors::SourceLifecycleUnavailable,
             };
             std::set<std::string_view> codes;
             for (const ErrorCodeDescriptor *descriptor : descriptors) {

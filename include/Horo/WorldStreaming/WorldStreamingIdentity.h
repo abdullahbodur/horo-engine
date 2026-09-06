@@ -18,6 +18,8 @@ namespace Horo::WorldStreaming {
     namespace Detail {
         /** @brief Tag that keeps stable source identities distinct from other non-zero counters. */
         struct StreamingSourceIdTag;
+        /** @brief Tag that keeps source descriptor revisions distinct from identities and residency generations. */
+        struct StreamingSourceRevisionTag;
         /** @brief Tag that keeps partition epochs distinct from other non-zero counters. */
         struct PartitionEpochTag;
         /** @brief Tag that keeps streaming generations distinct from other non-zero counters. */
@@ -97,6 +99,10 @@ namespace Horo::WorldStreaming {
     /** @brief Stable host-authored streaming relevance source identity; zero is reserved as invalid. */
     using StreamingSourceId = Foundation::Detail::NonZeroId64<Detail::StreamingSourceIdTag, WorldStreamingErrors::IdentityInvalid>;
 
+    /** @brief Monotonic revision of one stable streaming source; zero is invalid and revisions never wrap. */
+    using StreamingSourceRevision =
+        Foundation::Detail::NonZeroId64<Detail::StreamingSourceRevisionTag, WorldStreamingErrors::IdentityInvalid>;
+
     /** @brief Mounted partition incarnation; zero is invalid and issued values never wrap or repeat. */
     using PartitionEpoch = Foundation::Detail::NonZeroId64<Detail::PartitionEpochTag, WorldStreamingErrors::IdentityInvalid>;
 
@@ -161,6 +167,9 @@ namespace Horo::WorldStreaming {
     /** @brief Returns the next non-wrapping cell-attempt generation. @param current Current valid generation. @return Next generation or
      * GenerationExhausted. */
     [[nodiscard]] Result<StreamingGeneration> NextStreamingGeneration(StreamingGeneration current);
+    /** @brief Returns the next non-wrapping source revision. @param current Current valid source revision. @return Next revision or
+     * GenerationExhausted. */
+    [[nodiscard]] Result<StreamingSourceRevision> NextStreamingSourceRevision(StreamingSourceRevision current);
 
     /** @brief Encodes exact worldGuid bytes. @param value World identity. @return Canonical 16-byte representation. */
     [[nodiscard]] SerializedWorldPartitionId SerializeWorldPartitionId(const WorldPartitionId &value) noexcept;
