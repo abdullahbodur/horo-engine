@@ -90,6 +90,16 @@ partition; WorldPartitionId scopes it in every runtime request. Layer validity i
 manifest membership, not a blanket nonzero rule. Runtime volume IDs map explicitly
 to cooked uint32 volume IDs where present; they do not widen the wire format.
 
+`WorldPartitionDescriptor` is the immutable owned runtime projection of the
+versioned world index bounds, grid, layers, cells, and chunk `AssetId` references.
+Construction validates mandatory caller ceilings and canonical ordering before
+copying caller data; its read-only spans remain valid only while that descriptor
+value has not been moved from or destroyed. This public contract adds the narrow
+`HoroWorldStreaming -> HoroAssets` dependency because package references use the
+existing path-independent asset identity rather than a competing identifier.
+Serialized layout, cooked checksums, streaming volumes, and residency lifecycle
+state remain owned by their later contracts and are not inferred here.
+
 PartitionEpoch identifies a mounted partition incarnation. It changes on world
 replacement/reload, including replacement by the same worldGuid. StreamingGeneration
 changes on each new cell attempt and when an attempt is invalidated; it does not

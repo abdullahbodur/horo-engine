@@ -410,12 +410,13 @@ add_library(HoroWorldStreaming STATIC
         runtime/world_streaming/StreamingSourceDescriptor.cpp
         runtime/world_streaming/StreamingSourceRange.cpp
         runtime/world_streaming/WorldCellQuantization.cpp
+        runtime/world_streaming/WorldPartitionDescriptor.cpp
         runtime/world_streaming/WorldStreamingErrors.cpp
         runtime/world_streaming/WorldStreamingIdentity.cpp
 )
 add_library(HoroEngine::WorldStreaming ALIAS HoroWorldStreaming)
 target_compile_features(HoroWorldStreaming PUBLIC cxx_std_20)
-target_link_libraries(HoroWorldStreaming PUBLIC HoroEngine::Foundation)
+target_link_libraries(HoroWorldStreaming PUBLIC HoroEngine::Foundation HoroEngine::Assets)
 
 add_library(HoroPrefab STATIC
         runtime/prefab/PrefabErrors.cpp

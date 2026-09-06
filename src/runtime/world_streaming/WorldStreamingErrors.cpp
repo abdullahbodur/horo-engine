@@ -46,6 +46,26 @@ namespace Horo::WorldStreaming::WorldStreamingErrors {
         Describe("world_streaming.quantization.cell_out_of_bounds", ErrorSeverity::Error,
                  "The quantized world cell is outside the manifest's inclusive grid bounds.",
                  "Reject the spatial request or use a validated partition whose bounds contain the coordinate.", false);
+    const ErrorCodeDescriptor PartitionDescriptorInvalid =
+        Describe("world_streaming.partition.descriptor_invalid", ErrorSeverity::Error,
+                 "A world-partition descriptor is incomplete or contains malformed fields.",
+                 "Provide a valid partition identity, layers, cells, package references and versioned field values.", true);
+    const ErrorCodeDescriptor PartitionVersionUnsupported =
+        Describe("world_streaming.partition.version_unsupported", ErrorSeverity::Error,
+                 "The world-partition descriptor schema version is unsupported.",
+                 "Migrate the world index to the exact schema version supported by this runtime.", true);
+    const ErrorCodeDescriptor PartitionBoundsInvalid =
+        Describe("world_streaming.partition.bounds_invalid", ErrorSeverity::Error,
+                 "World content bounds are unordered or outside the representable grid envelope.",
+                 "Use ordered exact bounds fully contained by the validated level-zero partition grid.", true);
+    const ErrorCodeDescriptor PartitionCapacityExceeded =
+        Describe("world_streaming.partition.capacity_exceeded", ErrorSeverity::Error,
+                 "The world-partition descriptor exceeds a mandatory host storage limit.",
+                 "Reduce manifest layer, cell, or layer-name data, or choose an explicitly larger supported limit.", true);
+    const ErrorCodeDescriptor PartitionIdentityConflict =
+        Describe("world_streaming.partition.identity_conflict", ErrorSeverity::Error,
+                 "The world-partition descriptor repeats a layer or exact cell identity.",
+                 "Remove duplicate identities and regenerate the canonical world index.", true);
     const ErrorCodeDescriptor SourceDescriptorInvalid =
         Describe("world_streaming.source.descriptor_invalid", ErrorSeverity::Error,
                  "A streaming source descriptor or admission context is structurally invalid.",
