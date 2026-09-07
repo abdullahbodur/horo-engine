@@ -52,4 +52,18 @@ namespace Horo::WorldStreaming::WorldStreamingErrors {
     extern const ErrorCodeDescriptor SourceDesiredStateInvalid;
     /** @brief A source desired-state residency or retention value is not supported by this contract version. */
     extern const ErrorCodeDescriptor SourceDesiredStateUnsupported;
+    /** @brief A world-authoring contract, page descriptor, request, or authority snapshot is malformed. */
+    extern const ErrorCodeDescriptor AuthoringContractInvalid;
+    /** @brief The requested world-authoring contract schema version is unsupported. */
+    extern const ErrorCodeDescriptor AuthoringVersionUnsupported;
+    /** @brief The requested authoring granularity or collaboration authority is unsupported. */
+    extern const ErrorCodeDescriptor AuthoringPolicyUnsupported;
+    /** @brief The authoring request does not match the current page identity or partition. */
+    extern const ErrorCodeDescriptor AuthoringIdentityConflict;
+    /** @brief The authoring request carries a stale or non-successor page revision. */
+    extern const ErrorCodeDescriptor AuthoringRevisionStale;
+    /** @brief The bounded authoring-page capacity cannot admit another open page. */
+    extern const ErrorCodeDescriptor AuthoringCapacityExceeded;
+    /** @brief Authoring admission is closed because the owner is cancelling or shut down. */
+    extern const ErrorCodeDescriptor AuthoringLifecycleUnavailable;
 }  // namespace Horo::WorldStreaming::WorldStreamingErrors

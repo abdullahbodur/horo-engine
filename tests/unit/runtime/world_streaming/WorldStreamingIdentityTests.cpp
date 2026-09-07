@@ -26,6 +26,7 @@ namespace Horo::WorldStreaming {
             REQUIRE_FALSE(StreamingLayerId{}.IsValid());
             REQUIRE_FALSE(StreamingSourceId{}.IsValid());
             REQUIRE_FALSE(StreamingSourceRevision{}.IsValid());
+            REQUIRE_FALSE(WorldAuthoringRevision{}.IsValid());
             REQUIRE_FALSE(PartitionEpoch{}.IsValid());
             REQUIRE_FALSE(StreamingGeneration{}.IsValid());
             REQUIRE_FALSE(StreamingCellId{}.IsValid());
@@ -42,26 +43,33 @@ namespace Horo::WorldStreaming {
             static_assert(!std::is_convertible_v<std::uint64_t, StreamingSourceId>);
             static_assert(!std::is_same_v<PartitionEpoch, StreamingGeneration>);
             static_assert(!std::is_same_v<StreamingSourceId, StreamingSourceRevision>);
+            static_assert(!std::is_same_v<StreamingSourceRevision, WorldAuthoringRevision>);
         }
 
         TEST_CASE("Partition generations advance monotonically and never wrap", "[unit][world_streaming][identity]") {
             const auto epoch = IdentityFrom<PartitionEpoch>(41);
             const auto generation = IdentityFrom<StreamingGeneration>(99);
             const auto sourceRevision = IdentityFrom<StreamingSourceRevision>(7);
+            const auto authoringRevision = IdentityFrom<WorldAuthoringRevision>(11);
             REQUIRE(NextPartitionEpoch(epoch).Value().Value() == 42);
             REQUIRE(NextStreamingGeneration(generation).Value().Value() == 100);
             REQUIRE(NextStreamingSourceRevision(sourceRevision).Value().Value() == 8);
+            REQUIRE(NextWorldAuthoringRevision(authoringRevision).Value().Value() == 12);
             REQUIRE(NextPartitionEpoch({}).HasError());
             REQUIRE(NextStreamingGeneration({}).HasError());
             REQUIRE(NextStreamingSourceRevision({}).HasError());
+            REQUIRE(NextWorldAuthoringRevision({}).HasError());
 
             const auto lastEpoch = IdentityFrom<PartitionEpoch>(std::numeric_limits<std::uint64_t>::max());
             const auto lastGeneration = IdentityFrom<StreamingGeneration>(std::numeric_limits<std::uint64_t>::max());
             const auto lastSourceRevision = IdentityFrom<StreamingSourceRevision>(std::numeric_limits<std::uint64_t>::max());
+            const auto lastAuthoringRevision = IdentityFrom<WorldAuthoringRevision>(std::numeric_limits<std::uint64_t>::max());
             REQUIRE(NextPartitionEpoch(lastEpoch).ErrorValue().code.Value() == WorldStreamingErrors::GenerationExhausted.code.Value());
             REQUIRE(NextStreamingGeneration(lastGeneration).ErrorValue().code.Value() ==
                     WorldStreamingErrors::GenerationExhausted.code.Value());
             REQUIRE(NextStreamingSourceRevision(lastSourceRevision).ErrorValue().code.Value() ==
+                    WorldStreamingErrors::GenerationExhausted.code.Value());
+            REQUIRE(NextWorldAuthoringRevision(lastAuthoringRevision).ErrorValue().code.Value() ==
                     WorldStreamingErrors::GenerationExhausted.code.Value());
         }
 
@@ -156,6 +164,13 @@ namespace Horo::WorldStreaming {
                 &WorldStreamingErrors::SourceLifecycleUnavailable,
                 &WorldStreamingErrors::SourceDesiredStateInvalid,
                 &WorldStreamingErrors::SourceDesiredStateUnsupported,
+                &WorldStreamingErrors::AuthoringContractInvalid,
+                &WorldStreamingErrors::AuthoringVersionUnsupported,
+                &WorldStreamingErrors::AuthoringPolicyUnsupported,
+                &WorldStreamingErrors::AuthoringIdentityConflict,
+                &WorldStreamingErrors::AuthoringRevisionStale,
+                &WorldStreamingErrors::AuthoringCapacityExceeded,
+                &WorldStreamingErrors::AuthoringLifecycleUnavailable,
             };
             std::set<std::string_view> codes;
             for (const ErrorCodeDescriptor *descriptor : descriptors) {

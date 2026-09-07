@@ -106,4 +106,32 @@ namespace Horo::WorldStreaming::WorldStreamingErrors {
         Describe("world_streaming.source.desired_state_unsupported", ErrorSeverity::Error,
                  "A streaming source desired-state value is not supported by this contract version.",
                  "Use Unloaded, Loaded or Activated residency with Releasable or Pinned retention.", true);
+    const ErrorCodeDescriptor AuthoringContractInvalid =
+        Describe("world_streaming.authoring.contract_invalid", ErrorSeverity::Error,
+                 "A world-authoring contract, page request, or authority snapshot is malformed.",
+                 "Provide valid partition, page asset and revision identities with consistent bounded owner state.", true);
+    const ErrorCodeDescriptor AuthoringVersionUnsupported =
+        Describe("world_streaming.authoring.version_unsupported", ErrorSeverity::Error,
+                 "The world-authoring contract schema version is unsupported.",
+                 "Migrate the authoring contract to the exact version supported by this editor.", true);
+    const ErrorCodeDescriptor AuthoringPolicyUnsupported =
+        Describe("world_streaming.authoring.policy_unsupported", ErrorSeverity::Error,
+                 "The requested authoring granularity or collaboration authority is unsupported.",
+                 "Use spatial authoring pages with revision-checked publication.", true);
+    const ErrorCodeDescriptor AuthoringIdentityConflict =
+        Describe("world_streaming.authoring.identity_conflict", ErrorSeverity::Error,
+                 "The authoring request does not match the active page identity or partition.",
+                 "Resolve the exact partition and stable page asset before submitting the request again.", false);
+    const ErrorCodeDescriptor AuthoringRevisionStale =
+        Describe("world_streaming.authoring.revision_stale", ErrorSeverity::Warning,
+                 "The authoring request does not replace the expected immutable page revision.",
+                 "Reload the current page head and publish its exact non-wrapping successor revision.", false);
+    const ErrorCodeDescriptor AuthoringCapacityExceeded =
+        Describe("world_streaming.authoring.capacity_exceeded", ErrorSeverity::Error,
+                 "The authoring owner cannot admit another page within its configured capacity.",
+                 "Close an existing authoring page or select a larger supported owner capacity.", false);
+    const ErrorCodeDescriptor AuthoringLifecycleUnavailable =
+        Describe("world_streaming.authoring.lifecycle_unavailable", ErrorSeverity::Warning,
+                 "The authoring owner is cancelling or closed to page admission.",
+                 "Finish retirement or submit the page to a new active authoring owner.", false);
 }  // namespace Horo::WorldStreaming::WorldStreamingErrors
