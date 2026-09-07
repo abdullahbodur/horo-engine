@@ -6,6 +6,7 @@
  */
 
 #include "Horo/Foundation/Result.h"
+#include "Horo/Network/NetworkHandles.h"
 
 #include <array>
 #include <compare>
@@ -37,21 +38,6 @@ namespace Horo::Network {
         Optional,
         Required,
         Count
-    };
-
-    /** @brief Pure caller-owned operation state checked before transport queue admission. */
-    enum class TransportAdmissionState : std::uint8_t {
-        Accepting,
-        Cancelled,
-        ShuttingDown,
-        Count
-    };
-
-    /** @brief Zero-based backend-neutral message channel identity. */
-    struct ChannelId final {
-        std::uint32_t value{}; /**< Zero-based channel within the negotiated channel count. */
-
-        constexpr auto operator<=>(const ChannelId &) const noexcept = default;
     };
 
     /**

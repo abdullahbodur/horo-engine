@@ -247,7 +247,7 @@ namespace Horo::Network {
 
         TransportSendRequirement send{
             .delivery = DeliveryPolicy::ReliableOrdered,
-            .channel = {.value = selection.channelCount - 1},
+            .channel = ChannelId::Create(selection.channelCount - 1, selection.channelCount).Value(),
             .payloadBytes = 0,
             .deadlineMilliseconds = selection.maximumDeadlineMilliseconds,
         };
@@ -271,11 +271,11 @@ namespace Horo::Network {
                      NetworkErrors::TransportDeliveryUnsupported);
 
         send.delivery = DeliveryPolicy::ReliableOrdered;
-        send.channel.value = selection.channelCount;
+        send.channel = ChannelId::Create(selection.channelCount, selection.channelCount + 1).Value();
         RequireError(AdmitTransportSend(selection, selection.capabilityRevision, send, TransportAdmissionState::Accepting),
                      NetworkErrors::TransportLimitExceeded);
 
-        send.channel.value = 0;
+        send.channel = ChannelId{};
         send.payloadBytes = selection.maximumMessageBytes + 1;
         RequireError(AdmitTransportSend(selection, selection.capabilityRevision, send, TransportAdmissionState::Accepting),
                      NetworkErrors::TransportLimitExceeded);

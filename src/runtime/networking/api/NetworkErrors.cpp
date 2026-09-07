@@ -5,6 +5,44 @@ namespace Horo::Network::NetworkErrors {
         const ErrorDomainId NetworkDomain{"horo.network"};
     }
 
+    const ErrorCodeDescriptor
+        NetworkAddressInvalid{NetworkDomain,
+                              ErrorCode{"network.address.invalid"},
+                              ErrorSeverity::Error,
+                              "The network endpoint is malformed or ambiguous.",
+                              "Use canonical IPv4, bracketed IPv6, or a bounded ASCII DNS hostname with a numeric port.",
+                              false,
+                              true};
+    const ErrorCodeDescriptor
+        NetworkAddressUnsupported{NetworkDomain,
+                                  ErrorCode{"network.address.unsupported"},
+                                  ErrorSeverity::Error,
+                                  "The network endpoint representation is unsupported.",
+                                  "Remove schemes and zones; provide an ASCII DNS name already resolved by host policy.",
+                                  false,
+                                  true};
+    const ErrorCodeDescriptor NetworkAddressCapacityExceeded{NetworkDomain,
+                                                             ErrorCode{"network.address.capacity_exceeded"},
+                                                             ErrorSeverity::Error,
+                                                             "The network endpoint exceeds its finite text capacity.",
+                                                             "Use a DNS name of at most 253 bytes and a canonical numeric port.",
+                                                             false,
+                                                             true};
+    const ErrorCodeDescriptor TransportHandleInvalid{NetworkDomain,
+                                                     ErrorCode{"network.transport.handle_invalid"},
+                                                     ErrorSeverity::Error,
+                                                     "The transport handle is invalid or stale.",
+                                                     "Use the exact current slot generation issued by the owning transport.",
+                                                     false,
+                                                     false};
+    const ErrorCodeDescriptor TransportGenerationExhausted{NetworkDomain,
+                                                           ErrorCode{"network.transport.generation_exhausted"},
+                                                           ErrorSeverity::Error,
+                                                           "The transport handle generation cannot advance without wrapping.",
+                                                           "Retire the exhausted slot permanently and allocate a different bounded slot.",
+                                                           false,
+                                                           false};
+
     const ErrorCodeDescriptor PacketBufferInvalid{NetworkDomain,
                                                   ErrorCode{"network.packet.buffer_invalid"},
                                                   ErrorSeverity::Error,
