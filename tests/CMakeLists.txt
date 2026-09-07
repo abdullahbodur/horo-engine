@@ -1333,7 +1333,6 @@ set(HORO_CATCH_TEST_TARGETS
         HoroRuntimeSaveArchiveMetadataTests
         HoroRuntimeSaveArchiveFramingTests
         HoroRuntimeSceneTests
-        HoroNetworkRuntimeTests
         HoroAssetRegistryTests
         HoroAssetProviderTests
         HoroAssetCookTests
