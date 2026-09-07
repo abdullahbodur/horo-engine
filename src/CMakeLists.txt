@@ -401,6 +401,14 @@ add_library(HoroEngine::AI ALIAS HoroAI)
 target_compile_features(HoroAI PUBLIC cxx_std_20)
 target_link_libraries(HoroAI PUBLIC HoroEngine::Foundation)
 
+add_library(HoroVfxApi STATIC
+        runtime/vfx/api/VfxErrors.cpp
+        runtime/vfx/api/VfxIdentity.cpp
+)
+add_library(HoroEngine::VfxApi ALIAS HoroVfxApi)
+target_compile_features(HoroVfxApi PUBLIC cxx_std_20)
+target_link_libraries(HoroVfxApi PUBLIC HoroEngine::Foundation)
+
 add_library(HoroNavigationApi STATIC
         runtime/navigation/api/NavigationAreas.cpp
         runtime/navigation/api/NavigationAgentProfiles.cpp

@@ -237,6 +237,13 @@ target_compile_features(HoroAITests PRIVATE cxx_std_20)
 target_link_libraries(HoroAITests PRIVATE HoroEngine::AI)
 horo_register_catch_test(HoroAITests LABELS "unit;ai;headless")
 
+add_executable(HoroVfxApiTests
+        unit/runtime/vfx/VfxIdentityTests.cpp
+)
+target_compile_features(HoroVfxApiTests PRIVATE cxx_std_20)
+target_link_libraries(HoroVfxApiTests PRIVATE HoroEngine::VfxApi)
+horo_register_catch_test(HoroVfxApiTests LABELS "unit;vfx;headless")
+
 add_executable(HoroNavigationApiTests
         support/navigation/DeterministicNavigationProvider.cpp
         unit/runtime/navigation/NavigationAreaRegistryTests.cpp
