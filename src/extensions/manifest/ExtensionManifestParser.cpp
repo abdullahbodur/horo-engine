@@ -482,69 +482,68 @@ namespace Horo::Extensions {
                 return true;
             }
 
-            [[nodiscard]] bool ParseModuleExports(const Json &module, const std::string_view path,
-                                                  std::vector<ExtensionServiceExportManifest> &exports) {
-                const auto found = module.find("exports");
+            template <typename Entry, typename ParseEntry>
+            [[nodiscard]] bool ParseModuleServiceEntries(const Json &module, const std::string_view path, const std::string_view fieldName,
+                                                         const std::string_view entryName, std::vector<Entry> &entries,
+                                                         ParseEntry parseEntry) {
+                const auto found = module.find(fieldName);
                 if (found == module.end())
                     return true;
-                const std::string exportsPath = ChildPath(path, "exports");
+                const std::string entriesPath = ChildPath(path, fieldName);
                 if (!found->is_array())
-                    return Reject(exportsPath, "extension.manifest.invalid_type", "Module exports must be an array.");
+                    return Reject(entriesPath, "extension.manifest.invalid_type",
+                                  "Module " + std::string{entryName} + "s must be an array.");
                 if (found->size() > limits_.maximumContributions)
-                    return Reject(exportsPath, "extension.manifest.collection_limit", "Module export count exceeds its limit.");
+                    return Reject(entriesPath, "extension.manifest.collection_limit",
+                                  "Module " + std::string{entryName} + " count exceeds its limit.");
+
                 std::set<std::string, std::less<>> identities;
                 for (std::size_t index = 0; index < found->size(); ++index) {
                     const Json &encoded = (*found)[index];
-                    const std::string elementPath = ElementPath(exportsPath, index);
-                    ExtensionServiceExportManifest value;
+                    const std::string elementPath = ElementPath(entriesPath, index);
+                    Entry value;
                     if (!encoded.is_object())
-                        return Reject(elementPath, "extension.manifest.invalid_type", "Module export must be an object.");
-                    if (!AllowFields(encoded, elementPath, {"id", "contract", "version"}) ||
-                        !ReadId(encoded, "id", elementPath, value.id) || !ReadId(encoded, "contract", elementPath, value.contract) ||
-                        !ReadString(encoded, "version", elementPath, value.version, MaximumSemanticVersionBytes, true))
+                        return Reject(elementPath, "extension.manifest.invalid_type",
+                                      "Module " + std::string{entryName} + " must be an object.");
+                    if (!parseEntry(encoded, elementPath, value))
                         return false;
-                    if (!IsCanonicalSemanticVersion(value.version))
-                        return Reject(ChildPath(elementPath, "version"), "extension.manifest.invalid_version",
-                                      "Service export version must be canonical semantic version text.");
                     if (!identities.insert(value.id).second)
                         return Reject(ChildPath(elementPath, "id"), "extension.manifest.duplicate_identifier",
-                                      "Service export ID must be unique within a module.");
-                    exports.push_back(std::move(value));
+                                      "Service " + std::string{entryName} + " ID must be unique within a module.");
+                    entries.push_back(std::move(value));
                 }
                 return true;
             }
 
+            [[nodiscard]] bool ParseModuleExports(const Json &module, const std::string_view path,
+                                                  std::vector<ExtensionServiceExportManifest> &exports) {
+                return ParseModuleServiceEntries(module, path, "exports", "export", exports,
+                                                 [this](const Json &encoded, const std::string_view elementPath,
+                                                        ExtensionServiceExportManifest &value) {
+                    if (!AllowFields(encoded, elementPath, {"id", "contract", "version"}) ||
+                        !ReadId(encoded, "id", elementPath, value.id) || !ReadId(encoded, "contract", elementPath, value.contract) ||
+                        !ReadString(encoded, "version", elementPath, value.version, MaximumSemanticVersionBytes, true))
+                        return false;
+                    return IsCanonicalSemanticVersion(value.version) ||
+                           Reject(ChildPath(elementPath, "version"), "extension.manifest.invalid_version",
+                                  "Service export version must be canonical semantic version text.");
+                });
+            }
+
             [[nodiscard]] bool ParseModuleImports(const Json &module, const std::string_view path,
                                                   std::vector<ExtensionServiceImportManifest> &imports) {
-                const auto found = module.find("imports");
-                if (found == module.end())
-                    return true;
-                const std::string importsPath = ChildPath(path, "imports");
-                if (!found->is_array())
-                    return Reject(importsPath, "extension.manifest.invalid_type", "Module imports must be an array.");
-                if (found->size() > limits_.maximumContributions)
-                    return Reject(importsPath, "extension.manifest.collection_limit", "Module import count exceeds its limit.");
-                std::set<std::string, std::less<>> identities;
-                for (std::size_t index = 0; index < found->size(); ++index) {
-                    const Json &encoded = (*found)[index];
-                    const std::string elementPath = ElementPath(importsPath, index);
-                    ExtensionServiceImportManifest value;
-                    if (!encoded.is_object())
-                        return Reject(elementPath, "extension.manifest.invalid_type", "Module import must be an object.");
+                return ParseModuleServiceEntries(module, path, "imports", "import", imports,
+                                                 [this](const Json &encoded, const std::string_view elementPath,
+                                                        ExtensionServiceImportManifest &value) {
                     if (!AllowFields(encoded, elementPath, {"id", "service", "contract", "minimumVersion"}) ||
                         !ReadId(encoded, "id", elementPath, value.id) || !ReadId(encoded, "service", elementPath, value.service) ||
                         !ReadId(encoded, "contract", elementPath, value.contract) ||
                         !ReadString(encoded, "minimumVersion", elementPath, value.minimumVersion, MaximumSemanticVersionBytes, true))
                         return false;
-                    if (!IsCanonicalSemanticVersion(value.minimumVersion))
-                        return Reject(ChildPath(elementPath, "minimumVersion"), "extension.manifest.invalid_version",
-                                      "Service import minimum version must be canonical semantic version text.");
-                    if (!identities.insert(value.id).second)
-                        return Reject(ChildPath(elementPath, "id"), "extension.manifest.duplicate_identifier",
-                                      "Service import ID must be unique within a module.");
-                    imports.push_back(std::move(value));
-                }
-                return true;
+                    return IsCanonicalSemanticVersion(value.minimumVersion) ||
+                           Reject(ChildPath(elementPath, "minimumVersion"), "extension.manifest.invalid_version",
+                                  "Service import minimum version must be canonical semantic version text.");
+                });
             }
 
             [[nodiscard]] bool ParseContributions(const Json &document, ExtensionManifest &manifest) {

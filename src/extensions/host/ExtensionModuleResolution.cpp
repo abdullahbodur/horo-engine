@@ -5,6 +5,7 @@
 #include <algorithm>
 #include <charconv>
 #include <map>
+#include <optional>
 #include <ranges>
 #include <set>
 #include <sstream>
@@ -20,14 +21,16 @@ namespace Horo::Extensions {
             bool prerelease{};
         };
 
-        [[nodiscard]] SemanticVersionCore ParseVersionCore(std::string_view version) {
+        [[nodiscard]] std::optional<SemanticVersionCore> ParseVersionCore(std::string_view version) {
             SemanticVersionCore result;
             result.prerelease = version.find('-') != std::string_view::npos;
             std::uint64_t *parts[] = {&result.major, &result.minor, &result.patch};
             for (std::uint64_t *part : parts) {
                 const std::size_t end = version.find_first_of(".-");
                 const std::string_view digits = version.substr(0, end);
-                static_cast<void>(std::from_chars(digits.data(), digits.data() + digits.size(), *part));
+                const auto [parsedEnd, error] = std::from_chars(digits.data(), digits.data() + digits.size(), *part);
+                if (error != std::errc{} || parsedEnd != digits.data() + digits.size())
+                    return std::nullopt;
                 if (end == std::string_view::npos)
                     break;
                 version.remove_prefix(end + 1);
@@ -36,13 +39,13 @@ namespace Horo::Extensions {
         }
 
         [[nodiscard]] bool IsCompatibleVersion(const std::string_view provided, const std::string_view required) {
-            const SemanticVersionCore actual = ParseVersionCore(provided);
-            const SemanticVersionCore minimum = ParseVersionCore(required);
-            if (actual.major != minimum.major)
+            const auto actual = ParseVersionCore(provided);
+            const auto minimum = ParseVersionCore(required);
+            if (!actual.has_value() || !minimum.has_value() || actual->major != minimum->major)
                 return false;
-            const auto actualCore = std::tie(actual.minor, actual.patch);
-            const auto minimumCore = std::tie(minimum.minor, minimum.patch);
-            return actualCore > minimumCore || (actualCore == minimumCore && (!actual.prerelease || minimum.prerelease));
+            const auto actualCore = std::tie(actual->minor, actual->patch);
+            const auto minimumCore = std::tie(minimum->minor, minimum->patch);
+            return actualCore > minimumCore || (actualCore == minimumCore && (!actual->prerelease || minimum->prerelease));
         }
 
         [[nodiscard]] bool IsPresentationOnly(const ExtensionModuleManifest &module) {

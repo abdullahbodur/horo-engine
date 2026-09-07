@@ -88,6 +88,11 @@ namespace Horo::Extensions::Tests {
             RequireResolutionError(result, "Incompatible service export");
             CHECK_THAT(result.ErrorValue().message, Catch::Matchers::ContainsSubstring(provider.id));
             CHECK_THAT(result.ErrorValue().message, Catch::Matchers::ContainsSubstring(consumer.id));
+
+            provider.exports.front().version = "999999999999999999999999999999.0.0";
+            consumer.imports.front().minimumVersion = "1.0.0";
+            manifest.modules = {provider, consumer};
+            RequireResolutionError(ResolveExtensionModules(manifest, ExtensionHostProfile::Interactive), "Incompatible service export");
         }
 
         SECTION("cycles identify every unresolved participant") {

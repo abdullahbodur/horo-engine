@@ -201,7 +201,6 @@ namespace Horo::Extensions {
 
             auto lifetime = std::make_shared<ExtensionModuleLifetime>();
             lifetime->library = library;
-            lifetime->library = library;
             lifetime->unload =
                 reinterpret_cast<HoroExtensionUnloadFunc>(library->GetSymbol("horo_extension_unload"));  // NOSONAR(cpp:S3630)
             AssetImporterRegistrationSession registration{
