@@ -9,6 +9,7 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <optional>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -36,6 +37,42 @@ namespace Horo::Extensions {
         RuntimeParticipant,
     };
 
+    /** @brief Host operating systems addressable by a native extension entry. */
+    enum class ExtensionHostPlatform : std::uint8_t {
+        Windows,
+        MacOS,
+        Linux,
+        Count,
+    };
+
+    /** @brief CPU architectures addressable by a native extension entry. */
+    enum class ExtensionHostArchitecture : std::uint8_t {
+        X86_64,
+        Arm64,
+        Count,
+    };
+
+    /** @brief Binary compatibility profiles addressable by a native extension entry. */
+    enum class ExtensionBuildProfile : std::uint8_t {
+        Debug,
+        Release,
+        Count,
+    };
+
+    /** @brief One exact native artifact selector owned by an extension module. */
+    struct ExtensionNativeEntryManifest {
+        ExtensionHostPlatform platform{ExtensionHostPlatform::Count};             /**< Required host operating system. */
+        ExtensionHostArchitecture architecture{ExtensionHostArchitecture::Count}; /**< Required host CPU architecture. */
+        ExtensionBuildProfile buildProfile{ExtensionBuildProfile::Count};         /**< Required host binary profile. */
+        std::string entry;                                                        /**< Safe package-relative native entry name. */
+    };
+
+    /** @brief Generic host ABI requirement declared by one native extension module. */
+    struct ExtensionAbiRequirement {
+        std::uint32_t major{1};       /**< Required ABI major version. */
+        std::uint32_t minimumMinor{}; /**< Minimum append-only ABI minor version. */
+    };
+
     /** @brief One module-owned, backend-neutral service contract export. */
     struct ExtensionServiceExportManifest {
         std::string id;       /**< Stable service export identity. */
@@ -61,6 +98,9 @@ namespace Horo::Extensions {
         std::vector<std::string> dependencies;               /**< Required local module identities. */
         std::vector<ExtensionServiceExportManifest> exports; /**< Services owned by this module. */
         std::vector<ExtensionServiceImportManifest> imports; /**< Services consumed by this module. */
+        std::optional<ExtensionAbiRequirement> abi;          /**< Required generic host ABI range; absent for legacy compatibility input. */
+        std::vector<ExtensionNativeEntryManifest> entries;   /**< Exact native artifact variants; mutually exclusive with legacy entry. */
+        std::vector<std::string> requiredCapabilities;       /**< Stable host capability identities required before library load. */
     };
 
     /** @brief One manifest-declared contribution bound to a module in the same package. */

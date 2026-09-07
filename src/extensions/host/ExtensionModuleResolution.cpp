@@ -49,6 +49,55 @@ namespace Horo::Extensions {
             return actualCore > minimumCore || (actualCore == minimumCore && (!actual->prerelease || minimum->prerelease));
         }
 
+        [[nodiscard]] bool IsVersionAtMost(const std::string_view actualVersion, const std::string_view maximumVersion) {
+            const auto actual = ParseVersionCore(actualVersion);
+            const auto maximum = ParseVersionCore(maximumVersion);
+            if (!actual.has_value() || !maximum.has_value())
+                return false;
+            return std::tie(actual->major, actual->minor, actual->patch) <= std::tie(maximum->major, maximum->minor, maximum->patch);
+        }
+
+        [[nodiscard]] std::string_view PlatformName(const ExtensionHostPlatform platform) noexcept {
+            using enum ExtensionHostPlatform;
+            if (platform == Windows)
+                return "windows";
+            if (platform == MacOS)
+                return "macos";
+            if (platform == Linux)
+                return "linux";
+            return "unknown";
+        }
+
+        [[nodiscard]] std::string_view ArchitectureName(const ExtensionHostArchitecture architecture) noexcept {
+            using enum ExtensionHostArchitecture;
+            if (architecture == X86_64)
+                return "x86_64";
+            if (architecture == Arm64)
+                return "arm64";
+            return "unknown";
+        }
+
+        [[nodiscard]] std::string_view BuildProfileName(const ExtensionBuildProfile profile) noexcept {
+            using enum ExtensionBuildProfile;
+            if (profile == Debug)
+                return "debug";
+            if (profile == Release)
+                return "release";
+            return "unknown";
+        }
+
+        [[nodiscard]] bool LegacyPlatformMatches(const std::string_view declared, const ExtensionHostEnvironment &host) {
+            const std::string_view platform = PlatformName(host.platform);
+            if (declared == platform)
+                return true;
+            return declared == std::string{platform} + '-' + std::string{ArchitectureName(host.architecture)};
+        }
+
+        [[nodiscard]] ExtensionModuleCompatibility Rejection(const ExtensionModuleManifest &moduleManifest,
+                                                             const ExtensionCompatibilityStatus status, std::string requirement) {
+            return {.status = status, .moduleId = moduleManifest.id, .requirement = std::move(requirement)};
+        }
+
         [[nodiscard]] bool IsPresentationOnly(const ExtensionModuleManifest &moduleManifest) {
             return moduleManifest.roles.size() == 1 && moduleManifest.roles.front() == ExtensionModuleRole::EditorPresentation;
         }
@@ -76,6 +125,32 @@ namespace Horo::Extensions {
             return std::ranges::find(moduleManifest.roles, role) != moduleManifest.roles.end();
         }
 
+        [[nodiscard]] Result<void> ValidateEntrySelectors(const ExtensionManifest &manifest,
+                                                          const ExtensionModuleManifest &moduleManifest) {
+            if ((!manifest.sdkAbi.empty() && moduleManifest.abi.has_value()) ||
+                (!manifest.platforms.empty() && !moduleManifest.entries.empty()))
+                return Result<void>::Failure(
+                    MakeError(ExtensionErrors::ModuleResolutionFailed,
+                              "Legacy and typed compatibility authority cannot compete. Involved modules: " + moduleManifest.id + '.'));
+            if (!moduleManifest.entry.empty() && !moduleManifest.entries.empty())
+                return Result<void>::Failure(
+                    MakeError(ExtensionErrors::ModuleResolutionFailed,
+                              "Legacy and typed module entries cannot compete. Involved modules: " + moduleManifest.id + '.'));
+            std::set<std::tuple<ExtensionHostPlatform, ExtensionHostArchitecture, ExtensionBuildProfile>> entrySelectors;
+            for (const ExtensionNativeEntryManifest &entry : moduleManifest.entries) {
+                if (entry.platform >= ExtensionHostPlatform::Count || entry.architecture >= ExtensionHostArchitecture::Count ||
+                    entry.buildProfile >= ExtensionBuildProfile::Count || entry.entry.empty())
+                    return Result<void>::Failure(
+                        MakeError(ExtensionErrors::ModuleResolutionFailed,
+                                  "A native entry selector is malformed. Involved modules: " + moduleManifest.id + '.'));
+                if (!entrySelectors.emplace(entry.platform, entry.architecture, entry.buildProfile).second)
+                    return Result<void>::Failure(
+                        MakeError(ExtensionErrors::ModuleResolutionFailed,
+                                  "A native entry selector is duplicated. Involved modules: " + moduleManifest.id + '.'));
+            }
+            return Result<void>::Success();
+        }
+
         [[nodiscard]] Result<ModuleIndex> ValidateAndIndexModules(const ExtensionManifest &manifest) {
             const ExtensionManifestLimits limits;
             if (manifest.modules.empty() || manifest.modules.size() > limits.maximumModules)
@@ -101,6 +176,8 @@ namespace Horo::Extensions {
                     return Result<ModuleIndex>::Failure(
                         MakeError(ExtensionErrors::ModuleResolutionFailed,
                                   "A service export requires backend-capability authority. Involved modules: " + moduleManifest.id + '.'));
+                if (auto entryResult = ValidateEntrySelectors(manifest, moduleManifest); entryResult.HasError())
+                    return Result<ModuleIndex>::Failure(entryResult.ErrorValue());
                 if (!modules.try_emplace(moduleManifest.id, &moduleManifest).second)
                     return Result<ModuleIndex>::Failure(
                         MakeError(ExtensionErrors::ModuleResolutionFailed,
@@ -241,10 +318,82 @@ namespace Horo::Extensions {
             }
             return Result<void>::Success();
         }
+
+        [[nodiscard]] std::optional<ExtensionModuleCompatibility> EvaluateEngineCompatibility(const ExtensionManifest &manifest,
+                                                                                              const ExtensionModuleManifest &moduleManifest,
+                                                                                              const ExtensionHostEnvironment &host) {
+            if ((!manifest.engineMin.empty() && !IsCompatibleVersion(host.engineVersion, manifest.engineMin)) ||
+                (!manifest.engineMax.empty() && !IsVersionAtMost(host.engineVersion, manifest.engineMax)))
+                return Rejection(moduleManifest, ExtensionCompatibilityStatus::EngineVersionUnsupported, std::string{host.engineVersion});
+            return std::nullopt;
+        }
+
+        [[nodiscard]] std::optional<ExtensionModuleCompatibility> EvaluateAbiCompatibility(const ExtensionManifest &manifest,
+                                                                                           const ExtensionModuleManifest &moduleManifest,
+                                                                                           const ExtensionHostEnvironment &host) {
+            const ExtensionAbiRequirement abi = moduleManifest.abi.value_or(ExtensionAbiRequirement{});
+            if ((!manifest.sdkAbi.empty() && manifest.sdkAbi != "horo.extension-1") || abi.major != host.abiMajor ||
+                abi.minimumMinor > host.abiMinor)
+                return Rejection(moduleManifest, ExtensionCompatibilityStatus::AbiUnsupported,
+                                 std::to_string(abi.major) + '.' + std::to_string(abi.minimumMinor));
+            return std::nullopt;
+        }
+
+        [[nodiscard]] std::optional<ExtensionModuleCompatibility> EvaluateCapabilities(const ExtensionModuleManifest &moduleManifest,
+                                                                                       const ExtensionHostEnvironment &host) {
+            const auto missing = std::ranges::find_if(moduleManifest.requiredCapabilities, [&host](const std::string &capability) {
+                return std::ranges::find(host.capabilities, capability) == host.capabilities.end();
+            });
+            if (missing != moduleManifest.requiredCapabilities.end())
+                return Rejection(moduleManifest, ExtensionCompatibilityStatus::CapabilityUnavailable, *missing);
+            return std::nullopt;
+        }
+
+        [[nodiscard]] ExtensionModuleCompatibility SelectNativeEntry(const ExtensionManifest &manifest,
+                                                                     const ExtensionModuleManifest &moduleManifest,
+                                                                     const ExtensionHostEnvironment &host) {
+            using enum ExtensionCompatibilityStatus;
+            if (moduleManifest.entries.empty()) {
+                if (!manifest.platforms.empty() && std::ranges::none_of(manifest.platforms, [&host](const std::string_view platform) {
+                    return LegacyPlatformMatches(platform, host);
+                }))
+                    return Rejection(moduleManifest, HostPlatformUnsupported, std::string{PlatformName(host.platform)});
+                return {.moduleId = moduleManifest.id, .selectedEntry = moduleManifest.entry};
+            }
+
+            const auto platform = std::ranges::find(moduleManifest.entries, host.platform, &ExtensionNativeEntryManifest::platform);
+            if (platform == moduleManifest.entries.end())
+                return Rejection(moduleManifest, HostPlatformUnsupported, std::string{PlatformName(host.platform)});
+            const auto architecture = std::ranges::find_if(moduleManifest.entries, [&host](const ExtensionNativeEntryManifest &entry) {
+                return entry.platform == host.platform && entry.architecture == host.architecture;
+            });
+            if (architecture == moduleManifest.entries.end())
+                return Rejection(moduleManifest, HostArchitectureUnsupported, std::string{ArchitectureName(host.architecture)});
+            const auto selected = std::ranges::find_if(moduleManifest.entries, [&host](const ExtensionNativeEntryManifest &entry) {
+                return entry.platform == host.platform && entry.architecture == host.architecture &&
+                       entry.buildProfile == host.buildProfile;
+            });
+            if (selected == moduleManifest.entries.end())
+                return Rejection(moduleManifest, BuildProfileUnsupported, std::string{BuildProfileName(host.buildProfile)});
+            return {.moduleId = moduleManifest.id, .selectedEntry = selected->entry};
+        }
     }  // namespace
 
+    /** @copydoc EvaluateExtensionModuleCompatibility */
+    ExtensionModuleCompatibility EvaluateExtensionModuleCompatibility(const ExtensionManifest &manifest,
+                                                                      const ExtensionModuleManifest &moduleManifest,
+                                                                      const ExtensionHostEnvironment &host) {
+        if (auto engine = EvaluateEngineCompatibility(manifest, moduleManifest, host))
+            return std::move(*engine);
+        if (auto abi = EvaluateAbiCompatibility(manifest, moduleManifest, host))
+            return std::move(*abi);
+        if (auto capability = EvaluateCapabilities(moduleManifest, host))
+            return std::move(*capability);
+        return SelectNativeEntry(manifest, moduleManifest, host);
+    }
+
     /** @copydoc ResolveExtensionModules */
-    Result<ExtensionModulePlan> ResolveExtensionModules(const ExtensionManifest &manifest, const ExtensionHostProfile profile) {
+    Result<ExtensionModulePlan> ResolveExtensionModules(const ExtensionManifest &manifest, const ExtensionHostEnvironment &host) {
         auto modulesResult = ValidateAndIndexModules(manifest);
         if (modulesResult.HasError())
             return Result<ExtensionModulePlan>::Failure(modulesResult.ErrorValue());
@@ -267,7 +416,7 @@ namespace Horo::Extensions {
             return Result<ExtensionModulePlan>::Failure(orderResult.ErrorValue());
         std::vector<std::string> order = std::move(orderResult).Value();
 
-        if (profile == ExtensionHostProfile::Headless) {
+        if (host.profile == ExtensionHostProfile::Headless) {
             if (auto headlessResult = ValidateHeadlessDependencies(dependencies, modules); headlessResult.HasError())
                 return Result<ExtensionModulePlan>::Failure(headlessResult.ErrorValue());
             std::erase_if(order, [&modules](const std::string &moduleId) {
@@ -276,6 +425,15 @@ namespace Horo::Extensions {
         }
 
         ExtensionModulePlan plan{.moduleIds = std::move(order)};
+        plan.selectedEntries.reserve(plan.moduleIds.size());
+        for (const std::string &moduleId : plan.moduleIds) {
+            const ExtensionModuleCompatibility compatibility = EvaluateExtensionModuleCompatibility(manifest, *modules.at(moduleId), host);
+            if (!compatibility.IsCompatible())
+                return Result<ExtensionModulePlan>::Failure(
+                    MakeError(ExtensionErrors::ModuleResolutionFailed,
+                              "Module '" + moduleId + "' rejected compatibility requirement '" + compatibility.requirement + "'."));
+            plan.selectedEntries.push_back(compatibility.selectedEntry);
+        }
         const std::set<std::string, std::less<>> selected(plan.moduleIds.begin(), plan.moduleIds.end());
         for (const ExtensionContributionManifest &contribution : manifest.contributions) {
             if (selected.contains(contribution.owningModule))
