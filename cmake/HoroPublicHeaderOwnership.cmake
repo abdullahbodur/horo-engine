@@ -199,6 +199,10 @@ horo_configure_target_header_boundary(HoroAI PUBLIC_HEADERS
     Horo/AI/AIIdentity.h
     Horo/AI/BlackboardSchema.h
 )
+horo_configure_target_header_boundary(HoroVfxApi PUBLIC_HEADERS
+    Horo/Vfx/VfxErrors.h
+    Horo/Vfx/VfxIdentity.h
+)
 horo_configure_target_header_boundary(HoroNavigationApi PUBLIC_HEADERS
     Horo/Navigation/NavigationAreas.h
     Horo/Navigation/NavigationAgentProfiles.h
