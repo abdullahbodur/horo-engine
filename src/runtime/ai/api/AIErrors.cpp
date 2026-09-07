@@ -50,4 +50,58 @@ namespace Horo::AI::AIErrors {
         .retryable = false,
         .userActionable = false,
     };
+    const ErrorCodeDescriptor BlackboardSchemaInvalid{
+        .domain = AiDomain,
+        .code = ErrorCode{"ai.blackboard.schema_invalid"},
+        .defaultSeverity = ErrorSeverity::Error,
+        .summary = "The gameplay-AI blackboard schema has an invalid identity, version, policy, or key descriptor.",
+        .remediationHint = "Correct the schema metadata and submit a bounded typed key set.",
+        .retryable = false,
+        .userActionable = true,
+    };
+    const ErrorCodeDescriptor BlackboardLimitExceeded{
+        .domain = AiDomain,
+        .code = ErrorCode{"ai.blackboard.limit_exceeded"},
+        .defaultSeverity = ErrorSeverity::Error,
+        .summary = "The gameplay-AI blackboard schema or value exceeds a fixed contract capacity.",
+        .remediationHint = "Reduce the key, collection, or opaque payload count before admission.",
+        .retryable = false,
+        .userActionable = true,
+    };
+    const ErrorCodeDescriptor BlackboardValueTypeMismatch{
+        .domain = AiDomain,
+        .code = ErrorCode{"ai.blackboard.value_type_mismatch"},
+        .defaultSeverity = ErrorSeverity::Error,
+        .summary = "The gameplay-AI blackboard value does not match its schema key type.",
+        .remediationHint = "Encode the value using the key's exact scalar kind and cardinality.",
+        .retryable = false,
+        .userActionable = true,
+    };
+    const ErrorCodeDescriptor BlackboardValueInvalid{
+        .domain = AiDomain,
+        .code = ErrorCode{"ai.blackboard.value_invalid"},
+        .defaultSeverity = ErrorSeverity::Error,
+        .summary = "The gameplay-AI blackboard value is non-finite, malformed, or contains an invalid stored reference.",
+        .remediationHint = "Provide finite scalar data and well-formed canonical reference bytes.",
+        .retryable = false,
+        .userActionable = true,
+    };
+    const ErrorCodeDescriptor BlackboardUnknownValueRejected{
+        .domain = AiDomain,
+        .code = ErrorCode{"ai.blackboard.unknown_value_rejected"},
+        .defaultSeverity = ErrorSeverity::Error,
+        .summary = "The gameplay-AI blackboard schema rejects an unavailable key or value type.",
+        .remediationHint = "Load the owning type adapter or use an explicit preserve-opaque schema version policy.",
+        .retryable = false,
+        .userActionable = true,
+    };
+    const ErrorCodeDescriptor BlackboardStorageUnavailable{
+        .domain = AiDomain,
+        .code = ErrorCode{"ai.blackboard.storage_unavailable"},
+        .defaultSeverity = ErrorSeverity::Critical,
+        .summary = "Immutable gameplay-AI blackboard schema storage could not be allocated.",
+        .remediationHint = "Release memory pressure and retry schema admission before scene activation.",
+        .retryable = true,
+        .userActionable = false,
+    };
 }  // namespace Horo::AI::AIErrors
