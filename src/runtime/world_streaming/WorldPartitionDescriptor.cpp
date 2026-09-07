@@ -16,10 +16,11 @@ namespace Horo::WorldStreaming {
             static_cast<std::uint32_t>(WorldLayerFlags::ServerOnly) | static_cast<std::uint32_t>(WorldLayerFlags::ClientOnly);
 
         [[nodiscard]] bool IsKnown(const WorldLayerOwnership value) noexcept {
+            using enum WorldLayerOwnership;
             switch (value) {
-                case WorldLayerOwnership::WorldStreaming:
-                case WorldLayerOwnership::GameplayScript:
-                case WorldLayerOwnership::NetworkReplication:
+                case WorldStreaming:
+                case GameplayScript:
+                case NetworkReplication:
                     return true;
             }
             return false;
@@ -79,13 +80,12 @@ namespace Horo::WorldStreaming {
             const auto minimum = bounds.minimum.Millimeters();
             const auto maximum = bounds.maximum.Millimeters();
             const auto origin = grid.Origin().Millimeters();
-            const auto gridBounds = grid.Bounds();
-            if (!AxisContains(origin[0], gridBounds.minimumX, gridBounds.maximumX, grid.BaseCellSizeMillimeters(), minimum[0],
-                              maximum[0]) ||
-                !AxisContains(origin[1], gridBounds.minimumY, gridBounds.maximumY, grid.BaseCellSizeMillimeters(), minimum[1],
-                              maximum[1]) ||
-                !AxisContains(origin[2], gridBounds.minimumZ, gridBounds.maximumZ, grid.BaseCellSizeMillimeters(), minimum[2],
-                              maximum[2])) {
+            if (const auto gridBounds = grid.Bounds(); !AxisContains(origin[0], gridBounds.minimumX, gridBounds.maximumX,
+                                                                     grid.BaseCellSizeMillimeters(), minimum[0], maximum[0]) ||
+                                                       !AxisContains(origin[1], gridBounds.minimumY, gridBounds.maximumY,
+                                                                     grid.BaseCellSizeMillimeters(), minimum[1], maximum[1]) ||
+                                                       !AxisContains(origin[2], gridBounds.minimumZ, gridBounds.maximumZ,
+                                                                     grid.BaseCellSizeMillimeters(), minimum[2], maximum[2])) {
                 return Invalid<void>(WorldStreamingErrors::PartitionBoundsInvalid);
             }
             return Result<void>::Success();
@@ -95,8 +95,8 @@ namespace Horo::WorldStreaming {
                                                                                      const WorldPartitionDescriptorLimits limits) {
             std::uint32_t totalNameBytes{};
             for (const auto &layer : layers) {
-                const auto flags = static_cast<std::uint32_t>(layer.flags);
-                if (!layer.id.IsValid() || !IsKnown(layer.ownership) || (flags & ~KnownLayerFlags) != 0 || layer.name.empty() ||
+                if (const auto flags = static_cast<std::uint32_t>(layer.flags);
+                    !layer.id.IsValid() || !IsKnown(layer.ownership) || (flags & ~KnownLayerFlags) != 0 || layer.name.empty() ||
                     layer.name.find('\0') != std::string::npos || !std::isfinite(layer.priorityMultiplier) ||
                     layer.priorityMultiplier <= 0.0F) {
                     return Invalid<std::vector<WorldLayerDescriptor>>(WorldStreamingErrors::PartitionDescriptorInvalid);
@@ -141,14 +141,14 @@ namespace Horo::WorldStreaming {
 
     /** @copydoc WorldPartitionDescriptor::WorldPartitionDescriptor */
     WorldPartitionDescriptor::WorldPartitionDescriptor(WorldPartitionSchemaVersion version, WorldPartitionId partition,
-                                                       WorldPartitionBounds bounds, WorldCellQuantizationPolicy grid,
+                                                       const WorldPartitionBounds &bounds, const WorldCellQuantizationPolicy &grid,
                                                        std::vector<WorldLayerDescriptor> layers,
                                                        std::vector<WorldPartitionCellDescriptor> cells) noexcept
         : version_(version), partition_(partition), bounds_(bounds), grid_(grid), layers_(std::move(layers)), cells_(std::move(cells)) {}
 
     /** @copydoc WorldPartitionDescriptor::Create */
     Result<WorldPartitionDescriptor> WorldPartitionDescriptor::Create(const WorldPartitionSchemaVersion version,
-                                                                      const WorldPartitionId partition, const WorldPartitionBounds bounds,
+                                                                      const WorldPartitionId partition, const WorldPartitionBounds &bounds,
                                                                       const WorldCellQuantizationPolicy &grid,
                                                                       const std::span<const WorldLayerDescriptor> layers,
                                                                       const std::span<const WorldPartitionCellDescriptor> cells,

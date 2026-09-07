@@ -107,7 +107,8 @@ namespace Horo::WorldStreaming {
          * @return Owned immutable descriptor, or a stable typed descriptor error with no partial result.
          */
         [[nodiscard]] static Result<WorldPartitionDescriptor> Create(WorldPartitionSchemaVersion version, WorldPartitionId partition,
-                                                                     WorldPartitionBounds bounds, const WorldCellQuantizationPolicy &grid,
+                                                                     const WorldPartitionBounds &bounds,
+                                                                     const WorldCellQuantizationPolicy &grid,
                                                                      std::span<const WorldLayerDescriptor> layers,
                                                                      std::span<const WorldPartitionCellDescriptor> cells,
                                                                      WorldPartitionDescriptorLimits limits);
@@ -150,8 +151,8 @@ namespace Horo::WorldStreaming {
 
     private:
         /** @brief Stores already validated and canonically ordered owned state. */
-        WorldPartitionDescriptor(WorldPartitionSchemaVersion version, WorldPartitionId partition, WorldPartitionBounds bounds,
-                                 WorldCellQuantizationPolicy grid, std::vector<WorldLayerDescriptor> layers,
+        WorldPartitionDescriptor(WorldPartitionSchemaVersion version, WorldPartitionId partition, const WorldPartitionBounds &bounds,
+                                 const WorldCellQuantizationPolicy &grid, std::vector<WorldLayerDescriptor> layers,
                                  std::vector<WorldPartitionCellDescriptor> cells) noexcept;
 
         WorldPartitionSchemaVersion version_{};
