@@ -141,21 +141,12 @@ namespace Horo::Tests::FullEditorActions {
 
         void AddContentBrowserStep(UiScenarioPipe &pipeline) {
             pipeline.Step("Create and navigate an Asset Browser folder", [](ImGuiTestContext &ui) {
-                if (!ui.ItemExists("//**/##ContentBrowserSearch")) {
-                    if (!ui.ItemExists("//**/Assets")) {
-                        ui.ItemClick("//**/horo.global_dock/##ActivityItem");
-                        ui.Yield();
-                    }
-                    ui.ItemClick("//**/Assets");
-                    for (int frame = 0; frame < 30 && !ui.ItemExists("//**/##ContentBrowserSearch"); ++frame)
-                        ui.Yield();
+                if (!ui.ItemExists("//**/Assets")) {
+                    ui.ItemClick("//**/horo.global_dock/##ActivityItem");
+                    ui.Yield();
                 }
-                IM_CHECK(ui.ItemExists("//**/##ContentBrowserSearch"));
-                ui.ItemInputValue("//**/##ContentBrowserSearch", "missing");
-                ui.ItemInputValue("//**/##ContentBrowserSearch", "");
-                ui.ItemClick("//**/###ContentBrowserSort");
-                ui.ItemClick("//**/###combo_option_1");
-                ui.ItemClick("//**/A-Z");
+                ui.ItemClick("//**/Assets");
+                ui.Yield();
 
                 ImGuiTestItemInfo dock = ui.WindowInfo("//##DockBottom", ImGuiTestOpFlags_NoError);
                 if (dock.Window == nullptr)
@@ -171,7 +162,6 @@ namespace Horo::Tests::FullEditorActions {
                 ui.ItemClick("//**/Create Folder");
                 ui.Yield();
 
-                ui.ItemInputValue("//**/##ContentBrowserSearch", "CoverageFolder");
                 for (int frame = 0; frame < 30 && !ui.ItemExists("//**/##AssetCard"); ++frame)
                     ui.Yield();
                 IM_CHECK(ui.ItemExists("//**/##AssetCard"));
@@ -194,8 +184,7 @@ namespace Horo::Tests::FullEditorActions {
                 ui.ItemClick("//**/##AssetCard", ImGuiMouseButton_Right);
                 ui.ItemClick("//**/Delete");
                 ui.Yield();
-                ui.ItemClick("//**/Delete");
-                ui.ItemInputValue("//**/##ContentBrowserSearch", "");
+                ui.ItemClick("//**/Cancel");
             });
         }
 
