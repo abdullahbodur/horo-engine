@@ -1221,6 +1221,24 @@ generation exhaustion rejects access; exhausted slots retire instead of wrapping
 Stable authored identities and runtime handles therefore remain separate sources of
 truth.
 
+`BlackboardSchema` is the immutable schema-1 admission boundary. It owns at most
+128 descriptors sorted by `BlackboardKeyId`; each key declares a scalar kind or a
+flat inline collection capped at 16 elements, optionality, read/write access and an
+optional type-checked default. Schema capture copies borrowed inputs transactionally,
+so the returned value never aliases authoring storage. Runtime instances may size
+their value array once from this schema, but storage and synchronization remain owned
+by the later blackboard runtime work.
+
+Entity and asset values cross HoroAI's Foundation-only public boundary as explicitly
+named blackboard stored projections: the exact scene-incarnation/slot/generation tuple
+or canonical 128-bit asset bytes. They are not alternate canonical identities.
+RuntimeScene and Assets adapters convert these projections and revalidate residency,
+generation, asset type and availability before use. Exact world positions reuse
+Foundation-owned `WorldCoordinate64` directly. Unavailable key/type payloads are
+either rejected or retained byte-for-byte in a fixed 128-byte opaque envelope according
+to the schema's explicit version policy; recursive or dynamically owned collections
+are not part of this contract.
+
 All gameplay AI runtime state is owned strictly by the active `SceneRuntime` generation:
 
 ```cpp

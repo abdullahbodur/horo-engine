@@ -132,8 +132,13 @@ namespace Horo::AI {
         }
 
         TEST_CASE("AI identity errors expose stable unique descriptors", "[unit][ai][errors]") {
-            const std::array descriptors{&AIErrors::IdentityInvalid, &AIErrors::DescriptorConflict, &AIErrors::DescriptorLimitExceeded,
-                                         &AIErrors::HandleInvalid, &AIErrors::GenerationExhausted};
+            const std::array descriptors{
+                &AIErrors::IdentityInvalid,         &AIErrors::DescriptorConflict,
+                &AIErrors::DescriptorLimitExceeded, &AIErrors::HandleInvalid,
+                &AIErrors::GenerationExhausted,     &AIErrors::BlackboardSchemaInvalid,
+                &AIErrors::BlackboardLimitExceeded, &AIErrors::BlackboardValueTypeMismatch,
+                &AIErrors::BlackboardValueInvalid,  &AIErrors::BlackboardUnknownValueRejected,
+            };
             std::set<std::string_view> uniqueCodes;
             for (const ErrorCodeDescriptor *descriptor : descriptors) {
                 CHECK(descriptor->domain.Value() == "horo.ai");

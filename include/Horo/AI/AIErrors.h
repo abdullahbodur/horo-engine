@@ -2,7 +2,7 @@
 
 /**
  * @file AIErrors.h
- * @brief Stable gameplay-AI identity errors independent of runtime storage.
+ * @brief Stable gameplay-AI contract errors independent of runtime storage.
  */
 
 #include "Horo/Foundation/ErrorCode.h"
@@ -18,4 +18,14 @@ namespace Horo::AI::AIErrors {
     extern const ErrorCodeDescriptor HandleInvalid;
     /** @brief A runtime slot generation cannot advance without wrapping. */
     extern const ErrorCodeDescriptor GenerationExhausted;
+    /** @brief A blackboard schema or key descriptor has an invalid representation. */
+    extern const ErrorCodeDescriptor BlackboardSchemaInvalid;
+    /** @brief A blackboard schema or collection exceeds its fixed contract capacity. */
+    extern const ErrorCodeDescriptor BlackboardLimitExceeded;
+    /** @brief A blackboard value does not match its admitted key type. */
+    extern const ErrorCodeDescriptor BlackboardValueTypeMismatch;
+    /** @brief A blackboard value is non-finite, malformed, or an invalid stored reference. */
+    extern const ErrorCodeDescriptor BlackboardValueInvalid;
+    /** @brief An unavailable key or value type was supplied under a rejecting schema policy. */
+    extern const ErrorCodeDescriptor BlackboardUnknownValueRejected;
 }  // namespace Horo::AI::AIErrors

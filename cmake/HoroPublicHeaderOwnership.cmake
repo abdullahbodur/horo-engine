@@ -196,6 +196,7 @@ horo_configure_target_header_boundary(HoroPhysics PUBLIC_HEADERS
 horo_configure_target_header_boundary(HoroAI PUBLIC_HEADERS
     Horo/AI/AIErrors.h
     Horo/AI/AIIdentity.h
+    Horo/AI/BlackboardSchema.h
 )
 horo_configure_target_header_boundary(HoroNavigationApi PUBLIC_HEADERS
     Horo/Navigation/NavigationAreas.h
