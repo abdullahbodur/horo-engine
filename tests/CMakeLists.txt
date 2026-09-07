@@ -434,6 +434,7 @@ if (HORO_BUILD_EDITOR_GUI)
             unit/editor/ProjectCreationViewPresentationTests.cpp
             unit/editor/AssetImportModalPresentationTests.cpp
             unit/editor/ScreenViewPresentationTests.cpp
+            unit/editor/EditorThemeBehaviorTests.cpp
     )
     target_compile_features(HoroEditorPresentationTests PRIVATE cxx_std_20)
     target_include_directories(HoroEditorPresentationTests PRIVATE
