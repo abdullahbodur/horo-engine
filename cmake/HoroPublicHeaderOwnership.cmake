@@ -165,6 +165,8 @@ horo_configure_target_header_boundary(HoroInput PUBLIC_HEADERS
     Horo/Runtime/Input.h
 )
 horo_configure_target_header_boundary(HoroPhysics PUBLIC_HEADERS
+    Horo/Physics/CharacterControllerContracts.h
+    Horo/Physics/CharacterErrors.h
     Horo/Physics/PhysicsBodyDescriptor.h
     Horo/Physics/PhysicsCapabilities.h
     Horo/Physics/PhysicsConstraintDescriptor.h
