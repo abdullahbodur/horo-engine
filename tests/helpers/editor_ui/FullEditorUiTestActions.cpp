@@ -145,15 +145,21 @@ namespace Horo::Tests::FullEditorActions {
                     ui.ItemClick("//**/horo.global_dock/##ActivityItem");
                     ui.Yield();
                 }
-                ui.ItemClick("//**/Assets");
+                const char *dockPath = "//##DockBottom";
+                ImGuiTestItemInfo dock = ui.WindowInfo(dockPath, ImGuiTestOpFlags_NoError);
+                if (dock.Window == nullptr) {
+                    dockPath = "//##DockBottomLeft";
+                    dock = ui.WindowInfo(dockPath, ImGuiTestOpFlags_NoError);
+                }
+                if (dock.Window == nullptr) {
+                    dockPath = "//##DockBottomRight";
+                    dock = ui.WindowInfo(dockPath, ImGuiTestOpFlags_NoError);
+                }
+                IM_CHECK(dock.Window != nullptr);
+                const std::string dockScope{dockPath};
+                ui.ItemClick((dockScope + "/**/Assets").c_str());
                 ui.Yield();
 
-                ImGuiTestItemInfo dock = ui.WindowInfo("//##DockBottom", ImGuiTestOpFlags_NoError);
-                if (dock.Window == nullptr)
-                    dock = ui.WindowInfo("//##DockBottomLeft", ImGuiTestOpFlags_NoError);
-                if (dock.Window == nullptr)
-                    dock = ui.WindowInfo("//##DockBottomRight", ImGuiTestOpFlags_NoError);
-                IM_CHECK(dock.Window != nullptr);
                 ui.MouseMoveToPos({dock.RectClipped.GetCenter().x, dock.RectClipped.Max.y - 8.0F});
                 ui.MouseClick(ImGuiMouseButton_Right);
                 ui.ItemClick("//**/Create Folder");
