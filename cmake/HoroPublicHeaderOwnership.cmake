@@ -84,6 +84,7 @@ horo_configure_target_header_boundary(HoroNetworkApi PUBLIC_HEADERS
     Horo/Network/NetworkAddress.h
     Horo/Network/NetworkErrors.h
     Horo/Network/NetworkHandles.h
+    Horo/Network/NetworkObjectIdentity.h
     Horo/Network/PacketBuffer.h
     Horo/Network/PacketQueue.h
     Horo/Network/ProtocolIdentity.h
@@ -92,6 +93,9 @@ horo_configure_target_header_boundary(HoroNetworkApi PUBLIC_HEADERS
     Horo/Network/ReplicationDescriptorRegistry.h
     Horo/Network/ReplicationIdentity.h
     Horo/Network/TransportCapabilities.h
+)
+horo_configure_target_header_boundary(HoroNetworkRuntime PUBLIC_HEADERS
+    Horo/Network/NetworkObjectMapping.h
 )
 
 horo_configure_target_header_boundary(HoroGameplayApi PUBLIC_HEADERS

@@ -42,6 +42,69 @@ namespace Horo::Network::NetworkErrors {
                                                            "Retire the exhausted slot permanently and allocate a different bounded slot.",
                                                            false,
                                                            false};
+    const ErrorCodeDescriptor NetworkObjectIdentityInvalid{
+        .domain = NetworkDomain,
+        .code = ErrorCode{"network.object.identity_invalid"},
+        .defaultSeverity = ErrorSeverity::Error,
+        .summary = "The replicated authority or object identity is invalid.",
+        .remediationHint = "Use a non-zero authority epoch and a non-zero owner-issued object slot and generation.",
+        .retryable = false,
+        .userActionable = true,
+    };
+    const ErrorCodeDescriptor NetworkObjectGenerationExhausted{
+        .domain = NetworkDomain,
+        .code = ErrorCode{"network.object.generation_exhausted"},
+        .defaultSeverity = ErrorSeverity::Error,
+        .summary = "The replicated-object generation cannot advance without wrapping.",
+        .remediationHint = "Retire the exhausted slot permanently and allocate a different bounded slot.",
+        .retryable = false,
+        .userActionable = false,
+    };
+    const ErrorCodeDescriptor NetworkObjectMappingInvalid{
+        .domain = NetworkDomain,
+        .code = ErrorCode{"network.object.mapping_invalid"},
+        .defaultSeverity = ErrorSeverity::Error,
+        .summary = "The replicated-object mapping input is malformed or belongs to another scene.",
+        .remediationHint = "Use valid schema provenance and a generation-checked entity from the mapping's exact scene.",
+        .retryable = false,
+        .userActionable = true,
+    };
+    const ErrorCodeDescriptor NetworkObjectMappingConflict{
+        .domain = NetworkDomain,
+        .code = ErrorCode{"network.object.mapping_conflict"},
+        .defaultSeverity = ErrorSeverity::Error,
+        .summary = "A replicated-object slot or local entity already has a live mapping.",
+        .remediationHint = "Retire the exact prior occurrence before reusing its slot, and map each entity only once.",
+        .retryable = false,
+        .userActionable = true,
+    };
+    const ErrorCodeDescriptor NetworkObjectMappingUnknown{
+        .domain = NetworkDomain,
+        .code = ErrorCode{"network.object.mapping_unknown"},
+        .defaultSeverity = ErrorSeverity::Error,
+        .summary = "The replicated-object identity or local entity is absent, retired, or stale.",
+        .remediationHint = "Use the exact active authority epoch, scene, entity generation, and object generation.",
+        .retryable = false,
+        .userActionable = false,
+    };
+    const ErrorCodeDescriptor NetworkObjectMappingCapacityExceeded{
+        .domain = NetworkDomain,
+        .code = ErrorCode{"network.object.mapping_capacity_exceeded"},
+        .defaultSeverity = ErrorSeverity::Error,
+        .summary = "The session-owned replicated-object mapping exhausted its prepared slot capacity.",
+        .remediationHint = "Apply bounded admission policy or create the session with an explicitly larger finite capacity.",
+        .retryable = true,
+        .userActionable = false,
+    };
+    const ErrorCodeDescriptor NetworkObjectMappingTerminal{
+        .domain = NetworkDomain,
+        .code = ErrorCode{"network.object.mapping_terminal"},
+        .defaultSeverity = ErrorSeverity::Error,
+        .summary = "The replicated-object mapping is shutting down or invalidated.",
+        .remediationHint = "Reject late work and create a new mapping for the replacement session and scene generation.",
+        .retryable = false,
+        .userActionable = false,
+    };
 
     const ErrorCodeDescriptor PacketBufferInvalid{NetworkDomain,
                                                   ErrorCode{"network.packet.buffer_invalid"},
