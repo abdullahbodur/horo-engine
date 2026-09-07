@@ -11,13 +11,30 @@ namespace Horo::Runtime {
         /** @brief Reports whether a slot kind is one of the declared stable values. */
         [[nodiscard]] constexpr bool IsKnown(const SaveSlotKind kind) noexcept {
             using enum SaveSlotKind;
-            return kind == Manual || kind == Quick || kind == Auto || kind == Checkpoint || kind == Recovery || kind == System;
+            switch (kind) {
+                case Manual:
+                case Quick:
+                case Auto:
+                case Checkpoint:
+                case Recovery:
+                case System:
+                    return true;
+            }
+            return false;
         }
 
         /** @brief Reports whether a cloud summary is one of the declared stable values. */
         [[nodiscard]] constexpr bool IsKnown(const SaveSlotCloudState state) noexcept {
             using enum SaveSlotCloudState;
-            return state == LocalOnly || state == UploadPending || state == Synchronized || state == DownloadPending || state == Conflict;
+            switch (state) {
+                case LocalOnly:
+                case UploadPending:
+                case Synchronized:
+                case DownloadPending:
+                case Conflict:
+                    return true;
+            }
+            return false;
         }
 
         /** @brief Validates UTF-8 without allocation after the caller has enforced its byte bound. */
@@ -62,7 +79,9 @@ namespace Horo::Runtime {
             return Result<void>::Failure(MakeError(SaveErrors::SlotMetadataLimitExceeded));
         if (!HasValidPublicationIdentities(metadata) || !HasValidPublicationValues(metadata))
             return Result<void>::Failure(MakeError(SaveErrors::SlotMetadataInvalid));
-        if (metadata.projectBuildId.empty() || metadata.projectBuildId.size() > limits.maximumBuildIdBytes)
+        if (metadata.projectBuildId.empty())
+            return Result<void>::Failure(MakeError(SaveErrors::SlotMetadataInvalid));
+        if (metadata.projectBuildId.size() > limits.maximumBuildIdBytes)
             return Result<void>::Failure(MakeError(SaveErrors::SlotMetadataLimitExceeded));
         if (!IsValidUtf8(metadata.projectBuildId))
             return Result<void>::Failure(MakeError(SaveErrors::SlotMetadataInvalid));

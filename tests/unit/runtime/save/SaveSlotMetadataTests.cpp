@@ -70,6 +70,10 @@ namespace Horo::Runtime {
             metadata.savedAtUnixMilliseconds = 0;
             REQUIRE(ValidateSaveSlotPublicationMetadata(metadata).HasError());
             metadata = Publication();
+            metadata.projectBuildId.clear();
+            REQUIRE(ValidateSaveSlotPublicationMetadata(metadata).ErrorValue().code.Value() ==
+                    SaveErrors::SlotMetadataInvalid.code.Value());
+            metadata = Publication();
             metadata.projectBuildId = std::string{"\xC3\x28", 2};
             REQUIRE(ValidateSaveSlotPublicationMetadata(metadata).HasError());
 
