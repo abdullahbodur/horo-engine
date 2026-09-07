@@ -252,8 +252,8 @@ namespace Horo::Tests::FullEditorActions {
     void ExerciseWorkspacePanels(UiScenarioPipe &pipeline, FullEditorUiTestHost &editor) {
         AddInputMappingStep(pipeline);
         AddGlobalDockSteps(pipeline);
-        AddMenuRoutingStep(pipeline, editor);
         AddContentBrowserStep(pipeline);
+        AddMenuRoutingStep(pipeline, editor);
         AddSettingsStep(pipeline, editor);
     }
 
