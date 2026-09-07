@@ -31,9 +31,13 @@ namespace Horo::Extensions {
         /**
          * @brief Creates an extension manager bound to an optional unsealed importer catalog.
          * @param importerCatalog Host-owned candidate catalog receiving transactional asset.importer registrations.
+         * @param hostProfile Explicit presentation shape available to extension modules.
+         * @param hostCapabilities Stable capability identities granted by the host composition root. Invalid, duplicate, or excess
+         *                         identities are omitted so module requirements fail closed.
          */
         explicit ExtensionManager(Assets::AssetImporterCatalog *importerCatalog = nullptr,
-                                  ExtensionHostProfile hostProfile = ExtensionHostProfile::Interactive);
+                                  ExtensionHostProfile hostProfile = ExtensionHostProfile::Interactive,
+                                  std::vector<std::string> hostCapabilities = {});
         ~ExtensionManager();
         ExtensionManager(const ExtensionManager &) = delete;
         ExtensionManager &operator=(const ExtensionManager &) = delete;
@@ -67,6 +71,7 @@ namespace Horo::Extensions {
     private:
         Assets::AssetImporterCatalog *m_importerCatalog{};
         ExtensionHostProfile m_hostProfile{ExtensionHostProfile::Interactive};
+        std::vector<std::string> m_hostCapabilities;
         TransparentStringMap<std::unique_ptr<LoadedExtension>> m_loadedExtensions;
     };
 

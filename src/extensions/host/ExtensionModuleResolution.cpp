@@ -125,8 +125,8 @@ namespace Horo::Extensions {
             return std::ranges::find(moduleManifest.roles, role) != moduleManifest.roles.end();
         }
 
-        [[nodiscard]] Result<void> ValidateEntrySelectors(const ExtensionManifest &manifest,
-                                                          const ExtensionModuleManifest &moduleManifest) {
+        [[nodiscard]] Result<void> ValidateCompatibilityAuthority(const ExtensionManifest &manifest,
+                                                                  const ExtensionModuleManifest &moduleManifest) {
             if ((!manifest.sdkAbi.empty() && moduleManifest.abi.has_value()) ||
                 (!manifest.platforms.empty() && !moduleManifest.entries.empty()))
                 return Result<void>::Failure(
@@ -136,6 +136,10 @@ namespace Horo::Extensions {
                 return Result<void>::Failure(
                     MakeError(ExtensionErrors::ModuleResolutionFailed,
                               "Legacy and typed module entries cannot compete. Involved modules: " + moduleManifest.id + '.'));
+            return Result<void>::Success();
+        }
+
+        [[nodiscard]] Result<void> ValidateNativeEntrySelectors(const ExtensionModuleManifest &moduleManifest) {
             std::set<std::tuple<ExtensionHostPlatform, ExtensionHostArchitecture, ExtensionBuildProfile>> entrySelectors;
             for (const ExtensionNativeEntryManifest &entry : moduleManifest.entries) {
                 if (entry.platform >= ExtensionHostPlatform::Count || entry.architecture >= ExtensionHostArchitecture::Count ||
@@ -176,7 +180,9 @@ namespace Horo::Extensions {
                     return Result<ModuleIndex>::Failure(
                         MakeError(ExtensionErrors::ModuleResolutionFailed,
                                   "A service export requires backend-capability authority. Involved modules: " + moduleManifest.id + '.'));
-                if (auto entryResult = ValidateEntrySelectors(manifest, moduleManifest); entryResult.HasError())
+                if (auto authorityResult = ValidateCompatibilityAuthority(manifest, moduleManifest); authorityResult.HasError())
+                    return Result<ModuleIndex>::Failure(authorityResult.ErrorValue());
+                if (auto entryResult = ValidateNativeEntrySelectors(moduleManifest); entryResult.HasError())
                     return Result<ModuleIndex>::Failure(entryResult.ErrorValue());
                 if (!modules.try_emplace(moduleManifest.id, &moduleManifest).second)
                     return Result<ModuleIndex>::Failure(
