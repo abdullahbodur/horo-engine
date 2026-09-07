@@ -114,6 +114,7 @@ jobs:
         id: coverage
         run: |
           xvfb-run -a ctest --test-dir build/sonar --output-on-failure -LE 'gui|editor'
+          build/sonar/tests/HoroEditorPresentationTests
           build/sonar/tests/HoroEditorUiAutomationTests '~[native]'
           /tmp/horo-gcovr/bin/coverage run --source=scripts -m pytest tests/python --quiet
           /tmp/horo-gcovr/bin/coverage xml -o build/sonar/python-coverage.xml
