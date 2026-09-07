@@ -32,16 +32,23 @@ namespace Horo {
 
     /** @copydoc DiagnosticSeverityForError */
     std::optional<DiagnosticSeverity> DiagnosticSeverityForError(const ErrorSeverity severity) noexcept {
+        DiagnosticSeverity diagnosticSeverity{};
         switch (severity) {
             case ErrorSeverity::Info:
-                return DiagnosticSeverity::Note;
+                diagnosticSeverity = DiagnosticSeverity::Note;
+                break;
             case ErrorSeverity::Warning:
-                return DiagnosticSeverity::Warning;
+                diagnosticSeverity = DiagnosticSeverity::Warning;
+                break;
             case ErrorSeverity::Error:
-                return DiagnosticSeverity::Error;
+                diagnosticSeverity = DiagnosticSeverity::Error;
+                break;
             case ErrorSeverity::Critical:
-                return DiagnosticSeverity::Fatal;
+                diagnosticSeverity = DiagnosticSeverity::Fatal;
+                break;
+            default:
+                return std::nullopt;
         }
-        return std::nullopt;
+        return diagnosticSeverity;
     }
 }  // namespace Horo

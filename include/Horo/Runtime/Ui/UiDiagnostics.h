@@ -78,10 +78,9 @@ namespace Horo::Runtime::Ui {
         std::uint8_t correlationCount{};
     };
 
-    /**
-     * @brief Returns the stable dotted presentation name derived from a known category.
-     * @param category Closed category value to render.
-     * @return Stable process-lifetime name, or an empty view for an unknown enum representation.
+    /** @brief Resolves one closed Runtime UI category to presentation metadata.
+     * @param category Runtime UI diagnostic area supplied by a validated producer.
+     * @return Process-lifetime dotted name; empty when the numeric representation is outside the closed vocabulary.
      */
     [[nodiscard]] std::string_view UiDiagnosticCategoryName(UiDiagnosticCategory category) noexcept;
 
