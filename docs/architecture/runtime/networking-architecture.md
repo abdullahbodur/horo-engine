@@ -201,7 +201,10 @@ Handles are 64-bit generation-checked identifiers preventing ABA handle reuse is
 | `Close` on an already `Closed` or `Failed` handle with matching generation | Success (idempotent) |
 | `Close` on `InvalidHandle` | `NetworkErrorCode::InvalidHandle` |
 
-A handle remains generation-valid until the transport reclaims the slot. After reclaim, the same bit pattern is `InvalidHandle`.
+A handle remains generation-valid until the transport reclaims the slot. Reuse advances the non-zero 32-bit generation without
+wrapping; an exhausted slot is retired. Every operation compares slot and generation against the owner registry, so an old handle
+cannot name a replacement. `PeerHandle` is transport correlation only and never authenticates a remote principal. Diagnostics may
+project the opaque numeric slot and observed generation, but those values are neither wire identity nor a native handle.
 
 ## NetworkAddress
 
@@ -213,7 +216,11 @@ A handle remains generation-valid until the transport reclaims the slot. After r
 
 Literal addresses skip `Resolving`. Hostname endpoints require asynchronous DNS as part of the transport connection lifecycle. Resolution failure transitions the transport connection to `Failed` with `NetworkErrorCode::NameResolutionFailed`.
 
-Public `NetworkAddress` stores host text or numeric form plus port. It never exposes `sockaddr`, `addrinfo`, or other OS types.
+Public `NetworkAddress` stores IPv4/IPv6 bytes in network byte order or an owned lowercase bounded ASCII DNS hostname plus a
+non-zero numeric port. IPv6 is bracketed at the parse boundary. Empty labels, trailing-dot aliases, non-canonical dotted decimal,
+URI schemes, IPv6 zones, Unicode/IDNA input, service names and oversized values fail closed before backend work. Numeric and DNS
+representations compare by canonical owned data; diagnostic text is bounded and never authoritative. It never exposes `sockaddr`,
+`addrinfo`, or other OS types.
 
 ## Transport and Session Lifecycles
 

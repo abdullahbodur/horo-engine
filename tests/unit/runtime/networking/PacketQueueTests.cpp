@@ -11,14 +11,17 @@
 
 namespace Horo::Network {
     using TestSupport::RequireError;
-    using TestSupport::WireIdentity;
 
     namespace {
-        QueuedPacket MakePacket(PacketBufferPool &pool, const std::uint16_t connection, const std::size_t bytes) {
+        QueuedPacket MakePacket(PacketBufferPool &pool, const ConnectionHandle connection, const std::size_t bytes) {
             const std::vector payload(bytes, std::byte{0x5a});
             auto buffer = pool.Acquire(payload);
             REQUIRE(buffer.HasValue());
-            return {WireIdentity<PacketConnectionId>(connection), ChannelId{}, DeliveryPolicy::ReliableOrdered, std::move(buffer).Value()};
+            return {connection, ChannelId{}, DeliveryPolicy::ReliableOrdered, std::move(buffer).Value()};
+        }
+
+        QueuedPacket MakePacket(PacketBufferPool &pool, const std::uint16_t connection, const std::size_t bytes) {
+            return MakePacket(pool, ConnectionHandle::Create(connection, 1).Value(), bytes);
         }
 
         PacketQueueDescriptor QueueLimits(const PacketQueueOverflowPolicy policy) {
@@ -139,5 +142,17 @@ namespace Horo::Network {
         REQUIRE(byteQueue.Enqueue(MakePacket(pool, 2, 3)).HasValue());
         RequireError(byteQueue.Enqueue(MakePacket(pool, 1, 2)), NetworkErrors::PacketQueueFull);
         REQUIRE(byteQueue.Bytes() == 6);
+    }
+
+    TEST_CASE("Packet queue accounting distinguishes recycled connection generations", "[unit][network][packet]") {
+        auto pool = PacketBufferPool::Create({2, 4, 4}).Value();
+        auto queue = PacketQueue::Create({2, 8, 1, 4, PacketQueueOverflowPolicy::RejectIncoming}).Value();
+        const auto first = ConnectionHandle::Create(5, 1).Value();
+        const auto recycled = first.NextGeneration().Value();
+        REQUIRE(queue.Enqueue(MakePacket(pool, first, 4)).HasValue());
+        REQUIRE(queue.Enqueue(MakePacket(pool, recycled, 4)).HasValue());
+        REQUIRE(queue.Size() == 2);
+        queue.Drain();
+        REQUIRE(pool.Outstanding() == 0);
     }
 }  // namespace Horo::Network

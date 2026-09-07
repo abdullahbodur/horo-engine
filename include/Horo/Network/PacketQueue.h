@@ -5,8 +5,8 @@
  * @brief Synchronization-neutral preallocated packet queue and explicit overload policy.
  */
 
+#include "Horo/Network/NetworkHandles.h"
 #include "Horo/Network/PacketBuffer.h"
-#include "Horo/Network/ProtocolIdentity.h"
 #include "Horo/Network/TransportCapabilities.h"
 
 #include <cstddef>
@@ -14,9 +14,6 @@
 #include <optional>
 
 namespace Horo::Network {
-    /** @brief Stable non-zero connection identity for queue accounting; not a native handle. */
-    using PacketConnectionId = ProtocolIdentity<struct PacketConnectionIdentityTag>;
-
     /** @brief Explicit action selected before a queue becomes full. */
     enum class PacketQueueOverflowPolicy : std::uint8_t {
         RejectIncoming,             /**< Preserve queued work and reject the incoming packet. */
@@ -45,7 +42,7 @@ namespace Horo::Network {
 
     /** @brief One owned packet record transferred into or out of the queue. */
     struct QueuedPacket final {
-        PacketConnectionId connection;
+        ConnectionHandle connection;
         ChannelId channel;
         DeliveryPolicy delivery{DeliveryPolicy::ReliableOrdered};
         PacketBuffer payload;
@@ -86,7 +83,7 @@ namespace Horo::Network {
         };
 
         struct ConnectionAccounting final {
-            PacketConnectionId connection;
+            ConnectionHandle connection;
             std::size_t packets{};
             std::size_t bytes{};
             std::size_t head{InvalidIndex};
@@ -97,9 +94,9 @@ namespace Horo::Network {
         explicit PacketQueue(const PacketQueueDescriptor &descriptor, std::unique_ptr<std::optional<QueuedPacket>[]> records) noexcept;
         [[nodiscard]] bool Fits(const QueuedPacket &packet) const noexcept;
         [[nodiscard]] bool FitsAfterRemoving(const QueuedPacket &packet, std::size_t removed) const noexcept;
-        [[nodiscard]] std::optional<std::size_t> OldestFor(PacketConnectionId connection) const noexcept;
-        [[nodiscard]] std::size_t FindAccounting(PacketConnectionId connection) const noexcept;
-        [[nodiscard]] std::size_t FindOrCreateAccounting(PacketConnectionId connection) const noexcept;
+        [[nodiscard]] std::optional<std::size_t> OldestFor(ConnectionHandle connection) const noexcept;
+        [[nodiscard]] std::size_t FindAccounting(ConnectionHandle connection) const noexcept;
+        [[nodiscard]] std::size_t FindOrCreateAccounting(ConnectionHandle connection) const noexcept;
         [[nodiscard]] Result<PacketQueueAdmission> Admit(QueuedPacket packet, PacketQueueAdmission outcome) noexcept;
         [[nodiscard]] Result<PacketQueueAdmission> HandleOverflow(QueuedPacket packet) noexcept;
         [[nodiscard]] std::optional<QueuedPacket> Take(std::size_t index) noexcept;

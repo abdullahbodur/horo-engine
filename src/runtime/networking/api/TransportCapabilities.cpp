@@ -100,7 +100,7 @@ namespace Horo::Network {
 
         [[nodiscard]] Result<void> AdmitSendBounds(const TransportSelectionEvidence &selection,
                                                    const TransportSendRequirement &requirement) {
-            if (requirement.channel.value >= selection.channelCount || requirement.payloadBytes > selection.maximumMessageBytes)
+            if (!requirement.channel.IsWithin(selection.channelCount) || requirement.payloadBytes > selection.maximumMessageBytes)
                 return Result<void>::Failure(MakeError(NetworkErrors::TransportLimitExceeded));
             if (requirement.deadlineMilliseconds > 0 && !selection.deadlinesEnabled)
                 return Result<void>::Failure(MakeError(NetworkErrors::TransportDeliveryUnsupported));
