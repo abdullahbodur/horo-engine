@@ -74,4 +74,16 @@ namespace Horo::Runtime::SaveErrors {
     extern const ErrorCodeDescriptor SlotDisplayMetadataInvalid;
     /** @brief A replacement changed logical slot identity or reused the committed generation. */
     extern const ErrorCodeDescriptor SlotGenerationConflict;
+    /** @brief The selected save composition explicitly does not support persistence. */
+    extern const ErrorCodeDescriptor CompositionUnsupported;
+    /** @brief Deterministic composition limits or a submitted request are malformed. */
+    extern const ErrorCodeDescriptor CompositionInvalid;
+    /** @brief The deterministic composition cannot retain another operation, object, or payload. */
+    extern const ErrorCodeDescriptor CompositionCapacityExceeded;
+    /** @brief Cancellation won before the deterministic operation's in-memory commit point. */
+    extern const ErrorCodeDescriptor CompositionCancelled;
+    /** @brief A deterministic test fault failed the operation before publication. */
+    extern const ErrorCodeDescriptor CompositionInjectedFailure;
+    /** @brief A deterministic load or remove addressed no committed object. */
+    extern const ErrorCodeDescriptor CompositionObjectMissing;
 }  // namespace Horo::Runtime::SaveErrors
