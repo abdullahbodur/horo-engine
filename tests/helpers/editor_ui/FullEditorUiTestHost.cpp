@@ -3,6 +3,7 @@
 #include "Horo/Application/GameplayBuildService.h"
 #include "Horo/Application/ProjectCompatibility.h"
 #include "Horo/Assets/AssetRegistry.h"
+#include "Horo/Editor/AssetImportModal.h"
 #include "Horo/Editor/DefaultScreenFactories.h"
 #include "Horo/Editor/DefaultWorkspacePanels.h"
 #include "Horo/Editor/EditorConfiguration.h"
@@ -322,6 +323,30 @@ namespace Horo::Tests {
 
     Editor::GuiScreenHost &FullEditorUiTestHost::Screens() noexcept {
         return *state_->screenHost;
+    }
+
+    bool FullEditorUiTestHost::BeginAssetImport(const std::filesystem::path &source) {
+        auto *const modal = dynamic_cast<Editor::AssetImportModal *>(state_->modals.TopModal());
+        if (modal == nullptr)
+            return false;
+        const CancellationToken cancellation;
+        return modal->BeginImport({source}, state_->screenHost->CurrentProjectRoot(), cancellation).HasValue();
+    }
+
+    bool FullEditorUiTestHost::ImportFirstPendingAsset() {
+        auto *const modal = dynamic_cast<Editor::AssetImportModal *>(state_->modals.TopModal());
+        if (modal == nullptr || modal->Snapshot().items.empty())
+            return false;
+        const CancellationToken cancellation;
+        return modal->ImportSingleItem(0, cancellation).HasValue();
+    }
+
+    bool FullEditorUiTestHost::ResolvePendingAssetConflict() {
+        auto *const modal = dynamic_cast<Editor::AssetImportModal *>(state_->modals.TopModal());
+        if (modal == nullptr || !modal->HasPendingConflicts())
+            return false;
+        modal->ResolveCurrentConflict(Editor::AssetImportModal::ConflictChoice::Rename, false);
+        return modal->IsImportComplete();
     }
 
     Input::InputRouter &FullEditorUiTestHost::Input() noexcept {

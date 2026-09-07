@@ -153,25 +153,39 @@ namespace Horo::Tests::FullEditorActions {
 
     void ExerciseAssetImport(UiScenarioPipe &pipeline, FullEditorUiTestHost &editor) {
         pipeline.Step("Import a mesh through the asset-import modal", [&editor](ImGuiTestContext &ui) {
-            const std::filesystem::path source = editor.Screens().CurrentProjectRoot() / "coverage_triangle.obj";
+            const std::filesystem::path source = editor.Screens().CurrentProjectRoot() / "assets" / "coverage_triangle.obj";
             std::ofstream fixture{source, std::ios::binary};
             fixture << "v 0 0 0\nv 1 0 0\nv 0 1 0\nf 1 2 3\n";
             fixture.close();
             IM_CHECK(std::filesystem::is_regular_file(source));
 
             ui.Yield();
-            editor.Screens().HandleDropFiles({source});
-            for (int frame = 0; frame < 5; ++frame)
-                ui.Yield();
+            editor.Screens().DispatchMenuInvocation(Editor::EditorMenuInvocation{Editor::EditorMenuAction::ImportAssets, std::nullopt});
+            ui.Yield();
+            IM_CHECK(editor.BeginAssetImport(source));
+            ui.Yield();
             for (int frame = 0; frame < 30 && !ui.ItemExists("//**/##ImportTab0"); ++frame)
                 ui.Yield();
             IM_CHECK(ui.ItemExists("//**/##ImportTab0"));
+            IM_CHECK(ui.ItemExists("//**/##QueueItem0"));
             for (int tab = 1; tab < 4; ++tab) {
                 ui.ItemClick(("//**/##ImportTab" + std::to_string(tab)).c_str());
                 ui.Yield();
             }
-            ui.ItemClick("//**/Cancel");
+            IM_CHECK(editor.ImportFirstPendingAsset());
             ui.Yield();
+            IM_CHECK(ui.ItemExists("//**/Done"));
+            ui.ItemClick("//**/Done");
+            ui.Yield();
+
+            editor.Screens().DispatchMenuInvocation(Editor::EditorMenuInvocation{Editor::EditorMenuAction::ImportAssets, std::nullopt});
+            ui.Yield();
+            IM_CHECK(editor.BeginAssetImport(source));
+            IM_CHECK(editor.ImportFirstPendingAsset());
+            IM_CHECK(editor.ResolvePendingAssetConflict());
+            ui.Yield();
+            IM_CHECK(ui.ItemExists("//**/Done"));
+            ui.ItemClick("//**/Done");
         });
     }
 }  // namespace Horo::Tests::FullEditorActions
