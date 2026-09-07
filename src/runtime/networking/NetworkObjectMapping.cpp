@@ -41,29 +41,21 @@ namespace Horo::Network {
     }
 
     std::vector<NetworkObjectMapping::SlotRecord>::iterator NetworkObjectMapping::LowerBound(const std::uint64_t slot) noexcept {
-        return std::lower_bound(slots_.begin(), slots_.end(), slot, [](const SlotRecord &record, const std::uint64_t value) {
-            return record.slot < value;
-        });
+        return std::ranges::lower_bound(slots_, slot, {}, &SlotRecord::slot);
     }
 
     std::vector<NetworkObjectMapping::SlotRecord>::const_iterator NetworkObjectMapping::LowerBound(
         const std::uint64_t slot) const noexcept {
-        return std::lower_bound(slots_.begin(), slots_.end(), slot, [](const SlotRecord &record, const std::uint64_t value) {
-            return record.slot < value;
-        });
+        return std::ranges::lower_bound(slots_, slot, {}, &SlotRecord::slot);
     }
 
     std::vector<NetworkObjectMapping::EntityRecord>::iterator NetworkObjectMapping::LowerBound(const Runtime::EntityRef entity) noexcept {
-        return std::lower_bound(entityIndex_.begin(), entityIndex_.end(), entity, [](const EntityRecord &record, const auto &value) {
-            return record.entity < value;
-        });
+        return std::ranges::lower_bound(entityIndex_, entity, {}, &EntityRecord::entity);
     }
 
     std::vector<NetworkObjectMapping::EntityRecord>::const_iterator NetworkObjectMapping::LowerBound(
         const Runtime::EntityRef entity) const noexcept {
-        return std::lower_bound(entityIndex_.begin(), entityIndex_.end(), entity, [](const EntityRecord &record, const auto &value) {
-            return record.entity < value;
-        });
+        return std::ranges::lower_bound(entityIndex_, entity, {}, &EntityRecord::entity);
     }
 
     Result<void> NetworkObjectMapping::RequireActive() const {
@@ -78,8 +70,7 @@ namespace Horo::Network {
         if (!entry.object.IsValid() || entry.object.Epoch() != epoch_ || !entry.entity.IsValid() || entry.entity.runtime != scene_ ||
             !entry.provenance.IsValid())
             return Result<void>::Failure(MakeError(NetworkErrors::NetworkObjectMappingInvalid));
-        const auto entity = LowerBound(entry.entity);
-        if (entity != entityIndex_.end() && entity->entity == entry.entity)
+        if (const auto entity = LowerBound(entry.entity); entity != entityIndex_.end() && entity->entity == entry.entity)
             return Result<void>::Failure(MakeError(NetworkErrors::NetworkObjectMappingConflict));
         return Result<void>::Success();
     }
@@ -89,7 +80,7 @@ namespace Horo::Network {
         if (found == slots_.end() || found->slot != entry.object.Slot()) {
             if (slots_.size() == maximumSlots_)
                 return Result<void>::Failure(MakeError(NetworkErrors::NetworkObjectMappingCapacityExceeded));
-            slots_.insert(found, SlotRecord{entry.object.Slot(), entry.object.Generation(), entry});
+            slots_.emplace(found, entry.object.Slot(), entry.object.Generation(), entry);
             return Result<void>::Success();
         }
         if (found->live.has_value())
@@ -110,7 +101,7 @@ namespace Horo::Network {
         if (const auto reconciled = ReconcileSlot(entry); reconciled.HasError())
             return reconciled;
         const auto entity = LowerBound(entry.entity);
-        entityIndex_.insert(entity, EntityRecord{entry.entity, entry.object});
+        entityIndex_.emplace(entity, entry.entity, entry.object);
         ++liveCount_;
         return Result<void>::Success();
     }
