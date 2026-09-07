@@ -97,8 +97,8 @@ namespace Horo::Network {
 
     private:
         /** @brief Constructs one already validated canonical endpoint representation. */
-        NetworkAddress(NetworkAddressKind kind, std::uint16_t port, std::array<std::uint8_t, Ipv6ByteCount> addressBytes,
-                       std::array<char, MaximumHostnameLength> hostname, std::uint16_t hostnameLength) noexcept;
+        NetworkAddress(NetworkAddressKind kind, std::uint16_t port, const std::array<std::uint8_t, Ipv6ByteCount> &addressBytes,
+                       const std::array<char, MaximumHostnameLength> &hostname, std::uint16_t hostnameLength) noexcept;
 
         NetworkAddressKind kind_{NetworkAddressKind::Count};
         std::uint16_t port_{};
