@@ -147,7 +147,8 @@ namespace Horo::Tests::FullEditorActions {
                         ui.Yield();
                     }
                     ui.ItemClick("//**/Assets");
-                    ui.Yield();
+                    for (int frame = 0; frame < 30 && !ui.ItemExists("//**/##ContentBrowserSearch"); ++frame)
+                        ui.Yield();
                 }
                 IM_CHECK(ui.ItemExists("//**/##ContentBrowserSearch"));
                 ui.ItemInputValue("//**/##ContentBrowserSearch", "missing");
