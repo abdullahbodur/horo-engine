@@ -193,7 +193,7 @@ namespace Horo::AI {
 
         /**
          * @brief Borrows stable key-sorted descriptors owned by this value.
-         * @return View valid only while this BlackboardSchema value remains alive and unmoved.
+         * @return View valid while the owning BlackboardSchema remains alive; empty for a moved-from value.
          */
         [[nodiscard]] std::span<const BlackboardKeyDescriptor> Keys() const noexcept;
 

@@ -58,6 +58,7 @@ namespace Horo::AI {
             BlackboardSchema moved = std::move(captured).Value();
             CHECK(moved.Keys().data() == stableStorage);
             CHECK(moved.Keys()[1].key.Value() == 9);
+            CHECK(captured.Value().Keys().empty());
 
             static_assert(!std::is_default_constructible_v<BlackboardSchema>);
             static_assert(std::is_nothrow_move_constructible_v<BlackboardSchema>);

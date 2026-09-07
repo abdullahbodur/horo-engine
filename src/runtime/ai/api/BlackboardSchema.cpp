@@ -235,6 +235,8 @@ namespace Horo::AI {
 
     /** @copydoc BlackboardSchema::Keys */
     std::span<const BlackboardKeyDescriptor> BlackboardSchema::Keys() const noexcept {
+        if (keys_ == nullptr)
+            return {};
         return {keys_->data(), keyCount_};
     }
 
