@@ -63,13 +63,6 @@ namespace Horo::Extensions {
             return std::move(output).str();
         }
 
-        [[nodiscard]] Result<ExtensionModulePlan> Failure(const std::string_view reason,
-                                                          const std::set<std::string, std::less<>> &moduleIds) {
-            return Result<ExtensionModulePlan>::Failure(
-                MakeError(ExtensionErrors::ModuleResolutionFailed,
-                          std::string{reason} + " Involved modules: " + JoinModuleIds(moduleIds) + '.'));
-        }
-
         struct ExportOwner {
             const ExtensionServiceExportManifest *service{};
             const ExtensionModuleManifest *ownerModule{};
