@@ -17,6 +17,9 @@ namespace Horo::Runtime {
         constexpr std::size_t kOwnerSecondaryOffset = kOwnerPrimaryOffset + SaveIdentityDetail::Bytes{}.size();
         constexpr std::byte kUserProfileKind{1};
         constexpr std::byte kServerWorldKind{2};
+        static_assert(CanonicalSaveNamespaceKeyBytes == kOwnerSecondaryOffset + SaveIdentityDetail::Bytes{}.size());
+
+        template <typename> inline constexpr bool kUnsupportedNamespaceOwner = false;
 
         void CopyIdentity(const SaveIdentityDetail::Bytes &identity, std::array<std::byte, CanonicalSaveNamespaceKeyBytes> &destination,
                           const std::size_t offset) {
@@ -89,9 +92,11 @@ namespace Horo::Runtime {
                 bytes[kOwnerKindOffset] = kUserProfileKind;
                 CopyIdentity(owner.user.Bytes(), bytes, kOwnerPrimaryOffset);
                 CopyIdentity(owner.profile.Bytes(), bytes, kOwnerSecondaryOffset);
-            } else {
+            } else if constexpr (std::same_as<Owner, ServerWorldOwner>) {
                 bytes[kOwnerKindOffset] = kServerWorldKind;
                 CopyIdentity(owner.owner.Bytes(), bytes, kOwnerPrimaryOffset);
+            } else {
+                static_assert(kUnsupportedNamespaceOwner<Owner>, "SaveNamespaceOwner visitor is not exhaustive");
             }
         }, namespaceId.owner);
         return Result<CanonicalSaveNamespaceKey>::Success(CanonicalSaveNamespaceKey{bytes});
