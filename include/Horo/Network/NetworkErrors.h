@@ -8,6 +8,16 @@
 #include "Horo/Foundation/ErrorCode.h"
 
 namespace Horo::Network::NetworkErrors {
+    /** @brief Endpoint text is malformed or has an ambiguous non-canonical representation. */
+    extern const ErrorCodeDescriptor NetworkAddressInvalid;
+    /** @brief Endpoint text uses a deliberately unsupported scheme, zone, or IDNA representation. */
+    extern const ErrorCodeDescriptor NetworkAddressUnsupported;
+    /** @brief Endpoint text exceeds the finite public address bound. */
+    extern const ErrorCodeDescriptor NetworkAddressCapacityExceeded;
+    /** @brief A transport handle is malformed, stale, or does not match the current owner generation. */
+    extern const ErrorCodeDescriptor TransportHandleInvalid;
+    /** @brief A reclaimed handle slot cannot advance its generation without wrapping. */
+    extern const ErrorCodeDescriptor TransportGenerationExhausted;
     /** @brief Packet pool descriptor is malformed. */
     extern const ErrorCodeDescriptor PacketBufferInvalid;
     /** @brief Packet bytes or prepared storage exceed finite capacity. */

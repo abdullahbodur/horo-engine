@@ -141,6 +141,8 @@ target_compile_features(HoroInputTests PRIVATE cxx_std_20)
 target_link_libraries(HoroInputTests PRIVATE HoroEngine::Input)
 add_executable(HoroNetworkApiTests
         unit/runtime/networking/MessageEnvelopeTests.cpp
+        unit/runtime/networking/NetworkAddressTests.cpp
+        unit/runtime/networking/NetworkHandleTests.cpp
         unit/runtime/networking/PacketQueueTests.cpp
         unit/runtime/networking/ProtocolIdentityTests.cpp
         unit/runtime/networking/ReplicationDescriptorTests.cpp
@@ -197,6 +199,7 @@ target_link_libraries(HoroAudioCommandTests PRIVATE HoroEngine::AudioCommands)
 horo_register_catch_test(HoroAudioCommandTests LABELS "unit;audio;headless")
 
 add_executable(HoroPhysicsTests
+        unit/runtime/physics/CharacterControllerContractsTests.cpp
         unit/runtime/physics/CanonicalSolverTests.cpp
         unit/runtime/physics/PhysicsBodyDescriptorTests.cpp
         unit/runtime/physics/PhysicsConstraintDescriptorTests.cpp

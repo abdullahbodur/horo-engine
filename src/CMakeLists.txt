@@ -144,6 +144,7 @@ target_link_libraries(HoroRuntime PUBLIC HoroEngine::Foundation PRIVATE nlohmann
 
 add_library(HoroNetworkApi STATIC
         runtime/networking/api/MessageCodecRegistry.cpp
+        runtime/networking/api/NetworkAddress.cpp
         runtime/networking/api/NetworkErrors.cpp
         runtime/networking/api/PacketBuffer.cpp
         runtime/networking/api/PacketQueue.cpp
@@ -341,6 +342,8 @@ target_compile_features(HoroAudioCommands PUBLIC cxx_std_20)
 target_link_libraries(HoroAudioCommands PUBLIC HoroEngine::AudioMemory)
 
 add_library(HoroPhysics STATIC
+        physics/CharacterControllerContracts.cpp
+        physics/CharacterErrors.cpp
         physics/PhysicsBodyDescriptor.cpp
         physics/PhysicsCapabilities.cpp
         physics/PhysicsConstraintDescriptor.cpp
