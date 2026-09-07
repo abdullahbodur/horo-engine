@@ -47,6 +47,21 @@ namespace Horo::Render {
             return resourceClass != RenderGraphResourceClass::Transient;
         }
 
+        /** @brief Reports whether a binding exactly matches its declared kind and lifetime class. */
+        [[nodiscard]] bool IsBindingValid(const RenderGraphResourceKind kind, const RenderGraphResourceClass resourceClass,
+                                          const RenderGraphResourceBinding &binding) noexcept {
+            if (!IsImported(resourceClass)) {
+                return std::holds_alternative<std::monostate>(binding);
+            }
+            if (kind == RenderGraphResourceKind::Buffer && std::holds_alternative<RenderBufferHandle>(binding)) {
+                return std::get<RenderBufferHandle>(binding).IsValid();
+            }
+            if (kind == RenderGraphResourceKind::Texture && std::holds_alternative<RenderTextureHandle>(binding)) {
+                return std::get<RenderTextureHandle>(binding).IsValid();
+            }
+            return false;
+        }
+
         /** @brief Reports whether the access value belongs to the public contract. */
         [[nodiscard]] bool IsKnown(const RenderGraphAccess access) noexcept {
             return static_cast<std::uint8_t>(access) <= static_cast<std::uint8_t>(RenderGraphAccess::ReadWrite);
@@ -292,22 +307,6 @@ namespace Horo::Render {
     Result<RenderGraphResourceId> RenderGraphBuilder::AddImportedResource(const RenderGraphResourceKind kind,
                                                                           const RenderGraphResourceClass resourceClass,
                                                                           RenderGraphResourceBinding binding) {
-        if (const Result<void> open = ValidateOpenOnOwnerThread(); open.HasError()) {
-            return Result<RenderGraphResourceId>::Failure(open.ErrorValue());
-        }
-        if (!IsKnown(resourceClass)) {
-            return Result<RenderGraphResourceId>::Failure(MakeError(RenderGraphErrors::UnsupportedResourceClass));
-        }
-        if (!IsImported(resourceClass)) {
-            return Result<RenderGraphResourceId>::Failure(MakeError(RenderGraphErrors::InvalidImport));
-        }
-        const bool validBuffer = kind == RenderGraphResourceKind::Buffer && std::holds_alternative<RenderBufferHandle>(binding) &&
-                                 std::get<RenderBufferHandle>(binding).IsValid();
-        const bool validTexture = kind == RenderGraphResourceKind::Texture && std::holds_alternative<RenderTextureHandle>(binding) &&
-                                  std::get<RenderTextureHandle>(binding).IsValid();
-        if (!validBuffer && !validTexture) {
-            return Result<RenderGraphResourceId>::Failure(MakeError(RenderGraphErrors::InvalidImport));
-        }
         return AddResourceDeclaration(kind, resourceClass, std::move(binding));
     }
 
@@ -323,6 +322,9 @@ namespace Horo::Render {
         }
         if (!IsKnown(resourceClass)) {
             return Result<RenderGraphResourceId>::Failure(MakeError(RenderGraphErrors::UnsupportedResourceClass));
+        }
+        if (!IsBindingValid(kind, resourceClass, binding)) {
+            return Result<RenderGraphResourceId>::Failure(MakeError(RenderGraphErrors::InvalidImport));
         }
         if (resources_.size() == limits_.maxResources) {
             return Result<RenderGraphResourceId>::Failure(
