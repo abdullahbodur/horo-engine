@@ -1,3 +1,4 @@
+#include "AiTestSupport.h"
 #include "Horo/AI/AIIdentity.h"
 
 #include <algorithm>
@@ -12,22 +13,13 @@
 
 namespace Horo::AI {
     namespace {
-        template <typename Identity> [[nodiscard]] Identity MakeIdentity(const std::uint64_t value) {
-            const auto identity = Identity::Create(value);
-            REQUIRE(identity.HasValue());
-            return identity.Value();
-        }
+        using TestSupport::ExpectError;
+        using TestSupport::MakeIdentity;
 
         [[nodiscard]] AiRuntimeIncarnation MakeIncarnation(const std::uint64_t value) {
             const auto incarnation = AiRuntimeIncarnation::Create(value);
             REQUIRE(incarnation.HasValue());
             return incarnation.Value();
-        }
-
-        void ExpectError(const Result<void> &result, const ErrorCodeDescriptor &descriptor) {
-            REQUIRE(result.HasError());
-            CHECK(result.ErrorValue().domain.Value() == descriptor.domain.Value());
-            CHECK(result.ErrorValue().code.Value() == descriptor.code.Value());
         }
 
         template <typename T>
@@ -133,11 +125,17 @@ namespace Horo::AI {
 
         TEST_CASE("AI identity errors expose stable unique descriptors", "[unit][ai][errors]") {
             const std::array descriptors{
-                &AIErrors::IdentityInvalid,         &AIErrors::DescriptorConflict,
-                &AIErrors::DescriptorLimitExceeded, &AIErrors::HandleInvalid,
-                &AIErrors::GenerationExhausted,     &AIErrors::BlackboardSchemaInvalid,
-                &AIErrors::BlackboardLimitExceeded, &AIErrors::BlackboardValueTypeMismatch,
-                &AIErrors::BlackboardValueInvalid,  &AIErrors::BlackboardUnknownValueRejected,
+                &AIErrors::IdentityInvalid,
+                &AIErrors::DescriptorConflict,
+                &AIErrors::DescriptorLimitExceeded,
+                &AIErrors::HandleInvalid,
+                &AIErrors::GenerationExhausted,
+                &AIErrors::BlackboardSchemaInvalid,
+                &AIErrors::BlackboardLimitExceeded,
+                &AIErrors::BlackboardValueTypeMismatch,
+                &AIErrors::BlackboardValueInvalid,
+                &AIErrors::BlackboardUnknownValueRejected,
+                &AIErrors::BlackboardStorageUnavailable,
             };
             std::set<std::string_view> uniqueCodes;
             for (const ErrorCodeDescriptor *descriptor : descriptors) {

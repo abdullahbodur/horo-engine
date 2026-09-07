@@ -4,6 +4,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <new>
 #include <type_traits>
 #include <utility>
 
@@ -136,6 +137,19 @@ namespace Horo::AI {
         });
     }
 
+    /** @copydoc BlackboardCollectionValue::operator== */
+    bool BlackboardCollectionValue::operator==(const BlackboardCollectionValue &other) const noexcept {
+        return elementKind == other.elementKind && count == other.count && count <= MaximumBlackboardCollectionElements &&
+               std::equal(elements.begin(), elements.begin() + static_cast<std::ptrdiff_t>(count), other.elements.begin());
+    }
+
+    /** @copydoc BlackboardOpaqueValue::operator== */
+    bool BlackboardOpaqueValue::operator==(const BlackboardOpaqueValue &other) const noexcept {
+        return schemaVersion == other.schemaVersion && serializedType == other.serializedType && size == other.size &&
+               size <= MaximumBlackboardOpaqueBytes &&
+               std::equal(bytes.begin(), bytes.begin() + static_cast<std::ptrdiff_t>(size), other.bytes.begin());
+    }
+
     /** @copydoc SerializeBlackboardEntityReference */
     Result<SerializedBlackboardEntityReference> SerializeBlackboardEntityReference(const BlackboardStoredEntityReference &reference) {
         if (!reference.IsValid())
@@ -195,18 +209,21 @@ namespace Horo::AI {
         if (descriptor.keys.size() > MaximumBlackboardKeys)
             return Result<BlackboardSchema>::Failure(MakeError(AIErrors::BlackboardLimitExceeded));
 
-        std::array<BlackboardKeyDescriptor, MaximumBlackboardKeys> keys{};
-        std::copy(descriptor.keys.begin(), descriptor.keys.end(), keys.begin());
+        auto keys = std::unique_ptr<std::array<BlackboardKeyDescriptor, MaximumBlackboardKeys>>{
+            new (std::nothrow) std::array<BlackboardKeyDescriptor, MaximumBlackboardKeys>{}};
+        if (keys == nullptr)
+            return Result<BlackboardSchema>::Failure(MakeError(AIErrors::BlackboardStorageUnavailable));
+        std::copy(descriptor.keys.begin(), descriptor.keys.end(), keys->begin());
         for (std::size_t index = 0; index < descriptor.keys.size(); ++index) {
-            if (const auto key = ValidateKey(keys[index]); key.HasError())
+            if (const auto key = ValidateKey((*keys)[index]); key.HasError())
                 return Result<BlackboardSchema>::Failure(key.ErrorValue());
         }
-        std::sort(keys.begin(), keys.begin() + static_cast<std::ptrdiff_t>(descriptor.keys.size()),
+        std::sort(keys->begin(), keys->begin() + static_cast<std::ptrdiff_t>(descriptor.keys.size()),
                   [](const BlackboardKeyDescriptor &left, const BlackboardKeyDescriptor &right) {
             return left.key.Value() < right.key.Value();
         });
-        const auto end = keys.begin() + static_cast<std::ptrdiff_t>(descriptor.keys.size());
-        if (std::adjacent_find(keys.begin(), end, [](const BlackboardKeyDescriptor &left, const BlackboardKeyDescriptor &right) {
+        const auto end = keys->begin() + static_cast<std::ptrdiff_t>(descriptor.keys.size());
+        if (std::adjacent_find(keys->begin(), end, [](const BlackboardKeyDescriptor &left, const BlackboardKeyDescriptor &right) {
             return left.key == right.key;
         }) != end)
             return Result<BlackboardSchema>::Failure(MakeError(AIErrors::DescriptorConflict));
@@ -216,12 +233,13 @@ namespace Horo::AI {
 
     /** @copydoc BlackboardSchema::Keys */
     std::span<const BlackboardKeyDescriptor> BlackboardSchema::Keys() const noexcept {
-        return {keys_.data(), keyCount_};
+        return {keys_->data(), keyCount_};
     }
 
     /** @brief Initializes an already validated immutable schema value. */
     BlackboardSchema::BlackboardSchema(const BlackboardSchemaId identity, const std::uint32_t version,
                                        const BlackboardUnknownValuePolicy policy,
-                                       std::array<BlackboardKeyDescriptor, MaximumBlackboardKeys> keys, const std::size_t keyCount) noexcept
+                                       std::unique_ptr<std::array<BlackboardKeyDescriptor, MaximumBlackboardKeys>> keys,
+                                       const std::size_t keyCount) noexcept
         : identity_(identity), version_(version), unknownValuePolicy_(policy), keys_(std::move(keys)), keyCount_(keyCount) {}
 }  // namespace Horo::AI

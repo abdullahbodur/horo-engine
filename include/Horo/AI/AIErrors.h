@@ -28,4 +28,6 @@ namespace Horo::AI::AIErrors {
     extern const ErrorCodeDescriptor BlackboardValueInvalid;
     /** @brief An unavailable key or value type was supplied under a rejecting schema policy. */
     extern const ErrorCodeDescriptor BlackboardUnknownValueRejected;
+    /** @brief Immutable blackboard schema storage could not be allocated during capture. */
+    extern const ErrorCodeDescriptor BlackboardStorageUnavailable;
 }  // namespace Horo::AI::AIErrors

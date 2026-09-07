@@ -1,3 +1,4 @@
+#include "AiTestSupport.h"
 #include "Horo/AI/AIErrors.h"
 #include "Horo/AI/BlackboardSchema.h"
 
@@ -13,16 +14,8 @@
 
 namespace Horo::AI {
     namespace {
-        template <typename Identity> [[nodiscard]] Identity MakeIdentity(const std::uint64_t value) {
-            const auto identity = Identity::Create(value);
-            REQUIRE(identity.HasValue());
-            return identity.Value();
-        }
-
-        template <typename T> void ExpectError(const Result<T> &result, const ErrorCodeDescriptor &descriptor) {
-            REQUIRE(result.HasError());
-            CHECK(result.ErrorValue().code.Value() == descriptor.code.Value());
-        }
+        using TestSupport::ExpectError;
+        using TestSupport::MakeIdentity;
 
         [[nodiscard]] BlackboardValue Scalar(const BlackboardScalarValue &value) {
             return BlackboardValue{value};
@@ -61,10 +54,17 @@ namespace Horo::AI {
             CHECK(captured.Value().Keys()[1].key.Value() == 9);
             CHECK(std::get<std::int64_t>(std::get<BlackboardScalarValue>(*captured.Value().Keys()[1].defaultValue)) == 42);
 
+            const auto *stableStorage = captured.Value().Keys().data();
+            BlackboardSchema moved = std::move(captured).Value();
+            CHECK(moved.Keys().data() == stableStorage);
+            CHECK(moved.Keys()[1].key.Value() == 9);
+
             static_assert(!std::is_default_constructible_v<BlackboardSchema>);
             static_assert(std::is_nothrow_move_constructible_v<BlackboardSchema>);
+            static_assert(!std::is_copy_constructible_v<BlackboardSchema>);
             static_assert(!std::is_copy_assignable_v<BlackboardSchema>);
             static_assert(!std::is_move_assignable_v<BlackboardSchema>);
+            static_assert(sizeof(BlackboardSchema) <= 64);
         }
 
         TEST_CASE("Blackboard schema rejects invalid bounds enums and duplicate identities transactionally", "[unit][ai][blackboard]") {
@@ -178,6 +178,18 @@ namespace Horo::AI {
             ExpectError(ValidateBlackboardValue(BlackboardValue{values}, &key, BlackboardUnknownValuePolicy::Reject),
                         AIErrors::BlackboardValueTypeMismatch);
 
+            BlackboardCollectionValue equalLeft;
+            equalLeft.elementKind = BlackboardValueKind::Boolean;
+            equalLeft.elements[0] = true;
+            equalLeft.elements[1] = false;
+            equalLeft.count = 1;
+            auto equalRight = equalLeft;
+            equalRight.elements[1] = true;
+            CHECK(equalLeft == equalRight);
+            equalLeft.count = MaximumBlackboardCollectionElements + 1;
+            equalRight.count = equalLeft.count;
+            CHECK_FALSE(equalLeft == equalRight);
+
             key.maximumCollectionElements = 0;
             ExpectError(BlackboardSchema::Capture(
                             {MakeIdentity<BlackboardSchemaId>(1), 1, BlackboardUnknownValuePolicy::Reject, std::span{&key, 1}}),
@@ -202,6 +214,10 @@ namespace Horo::AI {
             CHECK(ValidateBlackboardValue(value, nullptr, BlackboardUnknownValuePolicy::PreserveOpaque).HasValue());
             CHECK(std::get<BlackboardOpaqueValue>(value) == source);
 
+            auto equalTail = source;
+            equalTail.bytes[2] = std::byte{0xef};
+            CHECK(source == equalTail);
+
             source.schemaVersion = 0;
             ExpectError(ValidateBlackboardValue(BlackboardValue{source}, nullptr, BlackboardUnknownValuePolicy::PreserveOpaque),
                         AIErrors::BlackboardValueInvalid);
@@ -213,6 +229,8 @@ namespace Horo::AI {
             source.size = MaximumBlackboardOpaqueBytes + 1;
             ExpectError(ValidateBlackboardValue(BlackboardValue{source}, nullptr, BlackboardUnknownValuePolicy::PreserveOpaque),
                         AIErrors::BlackboardValueInvalid);
+            equalTail = source;
+            CHECK_FALSE(source == equalTail);
             ExpectError(ValidateBlackboardValue(Scalar(BlackboardScalarValue{true}), nullptr, BlackboardUnknownValuePolicy::PreserveOpaque),
                         AIErrors::BlackboardValueTypeMismatch);
         }

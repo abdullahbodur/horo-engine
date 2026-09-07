@@ -14,6 +14,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <limits>
+#include <memory>
 #include <optional>
 #include <span>
 #include <variant>
@@ -123,7 +124,8 @@ namespace Horo::AI {
         std::array<BlackboardScalarValue, MaximumBlackboardCollectionElements> elements{}; /**< Inline owned storage. */
         std::size_t count{};                                                               /**< Active prefix length. */
 
-        [[nodiscard]] bool operator==(const BlackboardCollectionValue &) const noexcept = default;
+        /** @brief Compares kind and active element prefix only. @return Whether the logical collection values match. */
+        [[nodiscard]] bool operator==(const BlackboardCollectionValue &other) const noexcept;
     };
 
     /** @brief Bounded canonical bytes retained only when an unavailable type is explicitly preservable. */
@@ -133,7 +135,8 @@ namespace Horo::AI {
         std::array<std::byte, MaximumBlackboardOpaqueBytes> bytes{}; /**< Byte-for-byte owned canonical payload. */
         std::size_t size{};                                          /**< Active payload byte count. */
 
-        [[nodiscard]] bool operator==(const BlackboardOpaqueValue &) const noexcept = default;
+        /** @brief Compares metadata and active payload prefix only. @return Whether the logical opaque values match. */
+        [[nodiscard]] bool operator==(const BlackboardOpaqueValue &other) const noexcept;
     };
 
     /** @brief Owned blackboard value or preserved unavailable canonical payload. */
@@ -194,19 +197,19 @@ namespace Horo::AI {
          */
         [[nodiscard]] std::span<const BlackboardKeyDescriptor> Keys() const noexcept;
 
-        BlackboardSchema(const BlackboardSchema &) = default;
+        BlackboardSchema(const BlackboardSchema &) = delete;
         BlackboardSchema(BlackboardSchema &&) noexcept = default;
         BlackboardSchema &operator=(const BlackboardSchema &) = delete;
         BlackboardSchema &operator=(BlackboardSchema &&) = delete;
 
     private:
         BlackboardSchema(BlackboardSchemaId identity, std::uint32_t version, BlackboardUnknownValuePolicy policy,
-                         std::array<BlackboardKeyDescriptor, MaximumBlackboardKeys> keys, std::size_t keyCount) noexcept;
+                         std::unique_ptr<std::array<BlackboardKeyDescriptor, MaximumBlackboardKeys>> keys, std::size_t keyCount) noexcept;
 
         BlackboardSchemaId identity_;
         std::uint32_t version_{};
         BlackboardUnknownValuePolicy unknownValuePolicy_{BlackboardUnknownValuePolicy::Reject};
-        std::array<BlackboardKeyDescriptor, MaximumBlackboardKeys> keys_{};
+        std::unique_ptr<std::array<BlackboardKeyDescriptor, MaximumBlackboardKeys>> keys_;
         std::size_t keyCount_{};
     };
 

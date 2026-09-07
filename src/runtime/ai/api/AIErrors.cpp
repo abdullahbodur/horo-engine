@@ -95,4 +95,13 @@ namespace Horo::AI::AIErrors {
         .retryable = false,
         .userActionable = true,
     };
+    const ErrorCodeDescriptor BlackboardStorageUnavailable{
+        .domain = AiDomain,
+        .code = ErrorCode{"ai.blackboard.storage_unavailable"},
+        .defaultSeverity = ErrorSeverity::Critical,
+        .summary = "Immutable gameplay-AI blackboard schema storage could not be allocated.",
+        .remediationHint = "Release memory pressure and retry schema admission before scene activation.",
+        .retryable = true,
+        .userActionable = false,
+    };
 }  // namespace Horo::AI::AIErrors

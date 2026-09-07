@@ -1225,7 +1225,8 @@ truth.
 128 descriptors sorted by `BlackboardKeyId`; each key declares a scalar kind or a
 flat inline collection capped at 16 elements, optionality, read/write access and an
 optional type-checked default. Schema capture copies borrowed inputs transactionally,
-so the returned value never aliases authoring storage. Runtime instances may size
+using one bounded load-time allocation so the returned move-only value stays small
+and never aliases authoring storage. Runtime instances may size
 their value array once from this schema, but storage and synchronization remain owned
 by the later blackboard runtime work.
 
