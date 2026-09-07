@@ -77,6 +77,14 @@ namespace Horo::WorldStreaming {
             static_assert(!std::is_copy_constructible_v<WorldPartitionDescriptor>);
             static_assert(std::is_move_constructible_v<WorldPartitionDescriptor>);
             static_assert(!std::is_move_assignable_v<WorldPartitionDescriptor>);
+
+            std::vector<WorldPartitionDescriptor> storage;
+            storage.push_back(std::move(descriptor));
+            auto second = Create(Layers(), Cells());
+            REQUIRE(second.HasValue());
+            storage.push_back(std::move(second).Value());
+            REQUIRE(storage.size() == 2);
+            REQUIRE(storage[0].Layers()[0].id.Value() == 2);
         }
 
         TEST_CASE("Partition cells use the stable layer LOD Z Y X ordering", "[unit][world_streaming][partition]") {
@@ -126,6 +134,18 @@ namespace Horo::WorldStreaming {
             const auto overflowGrid = Grid(Math::WorldCoordinate64::FromMillimeters(std::numeric_limits<std::int64_t>::max(), 0, 0),
                                            std::numeric_limits<std::int64_t>::max(), {1, 1, 0, 0, 0, 0}, 1);
             REQUIRE(WorldPartitionDescriptor::Create({}, Partition(), {}, overflowGrid, layers, cells, Limits).HasError());
+
+            const auto zeroCellGrid = Grid({}, 100, {0, 0, 0, 0, 0, 0}, 1);
+            const std::vector<WorldPartitionCellDescriptor> zeroCell{{{0, 0, 0, 0, StreamingLayerId::Create(2).Value()}, {Asset(1)}}};
+            REQUIRE(WorldPartitionDescriptor::Create({}, Partition(),
+                                                     {Math::WorldCoordinate64::FromMillimeters(0, 0, 0),
+                                                      Math::WorldCoordinate64::FromMillimeters(99, 99, 99)},
+                                                     zeroCellGrid, layers, zeroCell, Limits)
+                        .HasValue());
+
+            const auto negativeOverflowGrid = Grid(Math::WorldCoordinate64::FromMillimeters(std::numeric_limits<std::int64_t>::min(), 0, 0),
+                                                   std::numeric_limits<std::int64_t>::max(), {-1, -1, 0, 0, 0, 0}, 1);
+            REQUIRE(WorldPartitionDescriptor::Create({}, Partition(), {}, negativeOverflowGrid, layers, cells, Limits).HasError());
         }
 
         TEST_CASE("Layer validation rejects unknown malformed duplicate and over-capacity definitions",

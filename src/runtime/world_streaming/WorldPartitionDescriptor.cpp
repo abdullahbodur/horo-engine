@@ -26,6 +26,9 @@ namespace Horo::WorldStreaming {
         }
 
         [[nodiscard]] bool TryMultiply(const std::int64_t value, const std::int64_t positiveFactor, std::int64_t &result) noexcept {
+            if (positiveFactor <= 0) {
+                return false;
+            }
             if (value > 0 && value > std::numeric_limits<std::int64_t>::max() / positiveFactor) {
                 return false;
             }
@@ -68,8 +71,71 @@ namespace Horo::WorldStreaming {
             return left.id == right.id;
         }
 
-        [[nodiscard]] Result<WorldPartitionDescriptor> Invalid(const ErrorCodeDescriptor &descriptor) {
-            return Result<WorldPartitionDescriptor>::Failure(MakeError(descriptor));
+        template <typename T> [[nodiscard]] Result<T> Invalid(const ErrorCodeDescriptor &descriptor) {
+            return Result<T>::Failure(MakeError(descriptor));
+        }
+
+        [[nodiscard]] Result<void> ValidateEnvelope(const WorldPartitionBounds &bounds, const WorldCellQuantizationPolicy &grid) {
+            const auto minimum = bounds.minimum.Millimeters();
+            const auto maximum = bounds.maximum.Millimeters();
+            const auto origin = grid.Origin().Millimeters();
+            const auto gridBounds = grid.Bounds();
+            if (!AxisContains(origin[0], gridBounds.minimumX, gridBounds.maximumX, grid.BaseCellSizeMillimeters(), minimum[0],
+                              maximum[0]) ||
+                !AxisContains(origin[1], gridBounds.minimumY, gridBounds.maximumY, grid.BaseCellSizeMillimeters(), minimum[1],
+                              maximum[1]) ||
+                !AxisContains(origin[2], gridBounds.minimumZ, gridBounds.maximumZ, grid.BaseCellSizeMillimeters(), minimum[2],
+                              maximum[2])) {
+                return Invalid<void>(WorldStreamingErrors::PartitionBoundsInvalid);
+            }
+            return Result<void>::Success();
+        }
+
+        [[nodiscard]] Result<std::vector<WorldLayerDescriptor>> ValidateAndOwnLayers(const std::span<const WorldLayerDescriptor> layers,
+                                                                                     const WorldPartitionDescriptorLimits limits) {
+            std::uint32_t totalNameBytes{};
+            for (const auto &layer : layers) {
+                const auto flags = static_cast<std::uint32_t>(layer.flags);
+                if (!layer.id.IsValid() || !IsKnown(layer.ownership) || (flags & ~KnownLayerFlags) != 0 || layer.name.empty() ||
+                    layer.name.find('\0') != std::string::npos || !std::isfinite(layer.priorityMultiplier) ||
+                    layer.priorityMultiplier <= 0.0F) {
+                    return Invalid<std::vector<WorldLayerDescriptor>>(WorldStreamingErrors::PartitionDescriptorInvalid);
+                }
+                if (layer.name.size() > limits.maximumLayerNameBytes - totalNameBytes) {
+                    return Invalid<std::vector<WorldLayerDescriptor>>(WorldStreamingErrors::PartitionCapacityExceeded);
+                }
+                totalNameBytes += static_cast<std::uint32_t>(layer.name.size());
+            }
+
+            std::vector<WorldLayerDescriptor> owned{layers.begin(), layers.end()};
+            std::ranges::sort(owned, {}, &WorldLayerDescriptor::id);
+            if (std::ranges::adjacent_find(owned, {}, &WorldLayerDescriptor::id) != owned.end()) {
+                return Invalid<std::vector<WorldLayerDescriptor>>(WorldStreamingErrors::PartitionIdentityConflict);
+            }
+            return Result<std::vector<WorldLayerDescriptor>>::Success(std::move(owned));
+        }
+
+        [[nodiscard]] Result<std::vector<WorldPartitionCellDescriptor>> ValidateAndOwnCells(
+            const std::span<const WorldPartitionCellDescriptor> cells, const std::span<const WorldLayerDescriptor> layers,
+            const WorldCellQuantizationPolicy &grid) {
+            const auto bounds = grid.Bounds();
+            for (const auto &cell : cells) {
+                const auto id = cell.id;
+                const bool withinCoordinates = id.x >= bounds.minimumX && id.x <= bounds.maximumX && id.y >= bounds.minimumY &&
+                                               id.y <= bounds.maximumY && id.z >= bounds.minimumZ && id.z <= bounds.maximumZ;
+                const bool layerExists = std::ranges::binary_search(layers, id.layer, {}, &WorldLayerDescriptor::id);
+                if (!id.IsValid() || id.lod >= grid.LodLevels() || !withinCoordinates || !layerExists ||
+                    !cell.package.chunkAsset.IsValid()) {
+                    return Invalid<std::vector<WorldPartitionCellDescriptor>>(WorldStreamingErrors::PartitionDescriptorInvalid);
+                }
+            }
+
+            std::vector<WorldPartitionCellDescriptor> owned{cells.begin(), cells.end()};
+            std::ranges::sort(owned, CellLess);
+            if (std::ranges::adjacent_find(owned, SameCell) != owned.end()) {
+                return Invalid<std::vector<WorldPartitionCellDescriptor>>(WorldStreamingErrors::PartitionIdentityConflict);
+            }
+            return Result<std::vector<WorldPartitionCellDescriptor>>::Success(std::move(owned));
         }
     }  // namespace
 
@@ -88,63 +154,28 @@ namespace Horo::WorldStreaming {
                                                                       const std::span<const WorldPartitionCellDescriptor> cells,
                                                                       const WorldPartitionDescriptorLimits limits) {
         if (version.major != WorldPartitionSchemaVersion::CurrentMajor || version.minor != WorldPartitionSchemaVersion::CurrentMinor) {
-            return Invalid(WorldStreamingErrors::PartitionVersionUnsupported);
+            return Invalid<WorldPartitionDescriptor>(WorldStreamingErrors::PartitionVersionUnsupported);
         }
         if (!partition.IsValid() || limits.maximumLayers == 0 || limits.maximumCells == 0 || limits.maximumLayerNameBytes == 0 ||
             layers.empty() || cells.empty()) {
-            return Invalid(WorldStreamingErrors::PartitionDescriptorInvalid);
+            return Invalid<WorldPartitionDescriptor>(WorldStreamingErrors::PartitionDescriptorInvalid);
         }
         if (layers.size() > limits.maximumLayers || cells.size() > limits.maximumCells || layers.size() > StreamingLayerId::InvalidValue) {
-            return Invalid(WorldStreamingErrors::PartitionCapacityExceeded);
+            return Invalid<WorldPartitionDescriptor>(WorldStreamingErrors::PartitionCapacityExceeded);
         }
-
-        const auto minimum = bounds.minimum.Millimeters();
-        const auto maximum = bounds.maximum.Millimeters();
-        const auto origin = grid.Origin().Millimeters();
-        const auto gridBounds = grid.Bounds();
-        if (!AxisContains(origin[0], gridBounds.minimumX, gridBounds.maximumX, grid.BaseCellSizeMillimeters(), minimum[0], maximum[0]) ||
-            !AxisContains(origin[1], gridBounds.minimumY, gridBounds.maximumY, grid.BaseCellSizeMillimeters(), minimum[1], maximum[1]) ||
-            !AxisContains(origin[2], gridBounds.minimumZ, gridBounds.maximumZ, grid.BaseCellSizeMillimeters(), minimum[2], maximum[2])) {
-            return Invalid(WorldStreamingErrors::PartitionBoundsInvalid);
+        if (const auto envelope = ValidateEnvelope(bounds, grid); envelope.HasError()) {
+            return Result<WorldPartitionDescriptor>::Failure(envelope.ErrorValue());
         }
-
-        std::uint32_t totalNameBytes{};
-        for (const auto &layer : layers) {
-            const auto flags = static_cast<std::uint32_t>(layer.flags);
-            if (!layer.id.IsValid() || !IsKnown(layer.ownership) || (flags & ~KnownLayerFlags) != 0 || layer.name.empty() ||
-                layer.name.find('\0') != std::string::npos || !std::isfinite(layer.priorityMultiplier) ||
-                layer.priorityMultiplier <= 0.0F) {
-                return Invalid(WorldStreamingErrors::PartitionDescriptorInvalid);
-            }
-            if (layer.name.size() > limits.maximumLayerNameBytes - totalNameBytes) {
-                return Invalid(WorldStreamingErrors::PartitionCapacityExceeded);
-            }
-            totalNameBytes += static_cast<std::uint32_t>(layer.name.size());
+        auto ownedLayersResult = ValidateAndOwnLayers(layers, limits);
+        if (ownedLayersResult.HasError()) {
+            return Result<WorldPartitionDescriptor>::Failure(ownedLayersResult.ErrorValue());
         }
-
-        std::vector<WorldLayerDescriptor> ownedLayers{layers.begin(), layers.end()};
-        std::ranges::sort(ownedLayers, {}, &WorldLayerDescriptor::id);
-        if (std::ranges::adjacent_find(ownedLayers, {}, &WorldLayerDescriptor::id) != ownedLayers.end()) {
-            return Invalid(WorldStreamingErrors::PartitionIdentityConflict);
+        auto ownedLayers = std::move(ownedLayersResult).Value();
+        auto ownedCellsResult = ValidateAndOwnCells(cells, ownedLayers, grid);
+        if (ownedCellsResult.HasError()) {
+            return Result<WorldPartitionDescriptor>::Failure(ownedCellsResult.ErrorValue());
         }
-
-        for (const auto &cell : cells) {
-            const auto id = cell.id;
-            const bool withinCoordinates = id.x >= gridBounds.minimumX && id.x <= gridBounds.maximumX && id.y >= gridBounds.minimumY &&
-                                           id.y <= gridBounds.maximumY && id.z >= gridBounds.minimumZ && id.z <= gridBounds.maximumZ;
-            const bool layerExists = std::ranges::binary_search(ownedLayers, id.layer, {}, &WorldLayerDescriptor::id);
-            if (!id.IsValid() || id.lod >= grid.LodLevels() || !withinCoordinates || !layerExists || !cell.package.chunkAsset.IsValid()) {
-                return Invalid(WorldStreamingErrors::PartitionDescriptorInvalid);
-            }
-        }
-
-        std::vector<WorldPartitionCellDescriptor> ownedCells{cells.begin(), cells.end()};
-        std::ranges::sort(ownedCells, CellLess);
-        if (std::ranges::adjacent_find(ownedCells, SameCell) != ownedCells.end()) {
-            return Invalid(WorldStreamingErrors::PartitionIdentityConflict);
-        }
-
         return Result<WorldPartitionDescriptor>::Success(
-            WorldPartitionDescriptor{version, partition, bounds, grid, std::move(ownedLayers), std::move(ownedCells)});
+            WorldPartitionDescriptor{version, partition, bounds, grid, std::move(ownedLayers), std::move(ownedCellsResult).Value()});
     }
 }  // namespace Horo::WorldStreaming
