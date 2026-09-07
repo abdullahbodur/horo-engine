@@ -12,25 +12,8 @@
 #include <imgui.h>
 #include <string>
 #include <string_view>
-#include <unordered_map>
 
 namespace Horo::Editor::Tests {
-    class KeyLocalization final : public ILocalizationService {
-    public:
-        [[nodiscard]] const std::string &Get(std::string_view, std::string_view localKey) const override {
-            const auto [entry, inserted] = values_.try_emplace(std::string(localKey), localKey);
-            static_cast<void>(inserted);
-            return entry->second;
-        }
-
-        void Set(std::string_view key, std::string value) {
-            values_.insert_or_assign(std::string(key), std::move(value));
-        }
-
-    private:
-        mutable std::unordered_map<std::string, std::string> values_;
-    };
-
     class HeadlessEditorGuiFixture {
     public:
         explicit HeadlessEditorGuiFixture(const ImVec2 displaySize = {1280.0F, 800.0F}) {
@@ -39,12 +22,9 @@ namespace Horo::Editor::Tests {
             ImGuiIO &io = ImGui::GetIO();
             io.DisplaySize = displaySize;
             io.DeltaTime = 1.0F / 60.0F;
-            io.Fonts->AddFontDefault();
+            ImFont *const defaultFont = (io.FontDefault = io.Fonts->AddFontDefault());
             static_cast<void>(io.Fonts->Build());
-            fonts_ = {.sans = io.Fonts->Fonts.front(),
-                      .sansCompact = io.Fonts->Fonts.front(),
-                      .sansEmphasis = io.Fonts->Fonts.front(),
-                      .icon = io.Fonts->Fonts.front()};
+            fonts_ = {.sans = defaultFont, .sansCompact = defaultFont, .sansEmphasis = defaultFont, .icon = defaultFont};
         }
 
         ~HeadlessEditorGuiFixture() {

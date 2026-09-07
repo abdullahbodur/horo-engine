@@ -13,8 +13,9 @@
 struct ImGuiTestContext;
 
 namespace Horo::Editor {
+    struct EditorMenuInvocation;
     class GuiScreenHost;
-}
+}  // namespace Horo::Editor
 
 namespace Horo::Tests {
     /** @brief Owns the real HoroEditor screen, modal, project, input, and workspace composition for one scenario. */
@@ -58,6 +59,18 @@ namespace Horo::Tests {
 
         /** @brief Returns the real screen host for cross-surface assertions. */
         [[nodiscard]] Editor::GuiScreenHost &Screens() noexcept;
+
+        /** @brief Dispatches one menu invocation from the next editor-owned UI frame. */
+        void DispatchMenuInvocationOnNextFrame(Editor::EditorMenuInvocation invocation);
+
+        /** @brief Seeds the active real asset-import modal with one source file. */
+        [[nodiscard]] bool BeginAssetImport(const std::filesystem::path &source);
+
+        /** @brief Imports the first pending item through the active real asset-import modal. */
+        [[nodiscard]] bool ImportFirstPendingAsset();
+
+        /** @brief Resolves the active asset-import conflict by keeping a renamed copy. */
+        [[nodiscard]] bool ResolvePendingAssetConflict();
 
         /** @brief Returns the central input router driven by the Test Engine IO bridge. */
         [[nodiscard]] Input::InputRouter &Input() noexcept;

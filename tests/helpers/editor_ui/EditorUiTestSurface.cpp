@@ -12,7 +12,7 @@ namespace Horo::Tests {
                 extent_ = extent;
             }
 
-            void RequestGrid(const Editor::EditorViewportGridOptions) noexcept override {}
+            void RequestGrid(const Editor::EditorViewportGridOptions &) noexcept override {}
 
             void RequestLightVisualizer(const Editor::EditorViewportLightVisualizerOptions &) noexcept override {}
 

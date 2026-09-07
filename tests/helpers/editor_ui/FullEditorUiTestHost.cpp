@@ -3,6 +3,7 @@
 #include "Horo/Application/GameplayBuildService.h"
 #include "Horo/Application/ProjectCompatibility.h"
 #include "Horo/Assets/AssetRegistry.h"
+#include "Horo/Editor/AssetImportModal.h"
 #include "Horo/Editor/DefaultScreenFactories.h"
 #include "Horo/Editor/DefaultWorkspacePanels.h"
 #include "Horo/Editor/EditorConfiguration.h"
@@ -96,6 +97,19 @@ namespace Horo::Tests {
             }
         }
 
+        void WriteEmptySceneFixture(const std::filesystem::path &path) {
+            std::ofstream scene(path, std::ios::binary);
+            scene << R"({"schemaVersion":1,"objects":[]})";
+            scene.close();
+            if (!scene)
+                throw std::runtime_error("Unable to write recent-project E2E scene.");
+        }
+
+        void CreateFixtureRoots(const std::filesystem::path &home, const std::filesystem::path &projectsRoot) {
+            std::filesystem::create_directories(home);
+            std::filesystem::create_directories(projectsRoot);
+        }
+
         [[nodiscard]] std::filesystem::path SeedRecentProjectFixture(const std::filesystem::path &projectsRoot, const std::string &name,
                                                                      const IEditorUiTestSurface &surface) {
             const Application::EngineReleaseVersion release = Application::CurrentEngineReleaseVersion();
@@ -106,18 +120,22 @@ namespace Horo::Tests {
 
             const std::filesystem::path projectRoot = projectsRoot / name;
             std::filesystem::create_directories(projectRoot / ".horo");
+            std::filesystem::create_directories(projectRoot / "assets/scenes");
             const nlohmann::json document{{"horoVersion", Application::FormatHoroVersion(release.value)},
                                           {"persistentContract", Application::FormatPersistentContractHash(decision->persistentContract)},
                                           {"projectId", "recent-project-e2e"},
                                           {"name", name},
                                           {"projectVersion", "0.1.0"},
                                           {"createdAt", "2026-07-22T00:00:00Z"},
-                                          {"settings", {{"renderBackend", surface.RendererName() == "metal" ? "metal" : "opengl"}}}};
+                                          {"settings",
+                                           {{"renderBackend", surface.RendererName() == "metal" ? "metal" : "opengl"},
+                                            {"defaultScene", "assets/scenes/main.horo"}}}};
             std::ofstream metadata(projectRoot / ".horo/project.json", std::ios::binary);
             metadata << document.dump(2) << '\n';
             metadata.close();
             if (!metadata)
                 throw std::runtime_error("Unable to write recent-project E2E metadata.");
+            WriteEmptySceneFixture(projectRoot / "assets/scenes/main.horo");
 
             if (!Editor::SaveRecentProjectsToDisk(
                     {Editor::RecentProjectEntry{name, projectRoot.string(), "Just now", "empty", std::nullopt}})) {
@@ -140,10 +158,9 @@ namespace Horo::Tests {
               preflight(transactions), recentInspection(jobs, preflight), rendererAvailability(MakeRendererAvailability(testSurface)),
               open(jobs, files, preflight, mutations, transactions, rendererAvailability), surface(testSurface),
               viewportRenderer(testSurface.ViewportRenderer()),
-              fonts{ImGui::GetIO().Fonts->Fonts.front(), ImGui::GetIO().Fonts->Fonts.front(), ImGui::GetIO().Fonts->Fonts.front()},
+              fonts{ImGui::GetIO().FontDefault, ImGui::GetIO().FontDefault, ImGui::GetIO().FontDefault, ImGui::GetIO().FontDefault},
               theme{fonts}, settingsSnapshot(settings.Snapshot()), gui{engineEvents, editorEvents, localization, theme, settingsSnapshot} {
-            std::filesystem::create_directories(home);
-            std::filesystem::create_directories(projectsRoot);
+            CreateFixtureRoots(home, projectsRoot);
             LoadLocalization(localization, locale);
             if (recentProjectName.has_value())
                 static_cast<void>(SeedRecentProjectFixture(projectsRoot, *recentProjectName, testSurface));
@@ -232,6 +249,7 @@ namespace Horo::Tests {
         Editor::EditorGuiContext gui;
         std::unique_ptr<Editor::GuiScreenHost> screenHost;
         std::vector<Editor::GuiRouteKind> drawnRoutes;
+        std::optional<Editor::EditorMenuInvocation> pendingMenuInvocation;
     };
 
     FullEditorUiTestHost::FullEditorUiTestHost(IEditorUiTestSurface &surface, std::string locale,
@@ -242,6 +260,10 @@ namespace Horo::Tests {
 
     void FullEditorUiTestHost::DrawFrame(ImGuiTestContext *) {
         state_->engineEvents.DispatchQueued();
+        if (state_->pendingMenuInvocation.has_value()) {
+            state_->screenHost->DispatchMenuInvocation(*state_->pendingMenuInvocation);
+            state_->pendingMenuInvocation.reset();
+        }
         state_->settingsSnapshot = state_->settings.Snapshot();
         state_->modals.OnUpdate(1.0F / 60.0F);
         state_->screenHost->OnUpdate(1.0F / 60.0F);
@@ -318,6 +340,34 @@ namespace Horo::Tests {
 
     Editor::GuiScreenHost &FullEditorUiTestHost::Screens() noexcept {
         return *state_->screenHost;
+    }
+
+    void FullEditorUiTestHost::DispatchMenuInvocationOnNextFrame(Editor::EditorMenuInvocation invocation) {
+        state_->pendingMenuInvocation = std::move(invocation);
+    }
+
+    bool FullEditorUiTestHost::BeginAssetImport(const std::filesystem::path &source) {
+        auto *const modal = dynamic_cast<Editor::AssetImportModal *>(state_->modals.TopModal());
+        if (modal == nullptr)
+            return false;
+        const CancellationToken cancellation;
+        return modal->BeginImport({source}, state_->screenHost->CurrentProjectRoot(), cancellation).HasValue();
+    }
+
+    bool FullEditorUiTestHost::ImportFirstPendingAsset() {
+        auto *const modal = dynamic_cast<Editor::AssetImportModal *>(state_->modals.TopModal());
+        if (modal == nullptr || modal->Snapshot().items.empty())
+            return false;
+        const CancellationToken cancellation;
+        return modal->ImportSingleItem(0, cancellation).HasValue();
+    }
+
+    bool FullEditorUiTestHost::ResolvePendingAssetConflict() {
+        auto *const modal = dynamic_cast<Editor::AssetImportModal *>(state_->modals.TopModal());
+        if (modal == nullptr || !modal->HasPendingConflicts())
+            return false;
+        modal->ResolveCurrentConflict(Editor::AssetImportModal::ConflictChoice::Rename, false);
+        return modal->IsImportComplete();
     }
 
     Input::InputRouter &FullEditorUiTestHost::Input() noexcept {

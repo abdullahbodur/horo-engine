@@ -60,7 +60,7 @@ namespace {
         public:
             void RequestExtent(Horo::Editor::EditorViewportExtent) noexcept override {}
 
-            void RequestGrid(Horo::Editor::EditorViewportGridOptions) noexcept override {}
+            void RequestGrid(const Horo::Editor::EditorViewportGridOptions &) noexcept override {}
 
             void RequestLightVisualizer(const Horo::Editor::EditorViewportLightVisualizerOptions &) noexcept override {}
 

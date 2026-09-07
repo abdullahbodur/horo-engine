@@ -7,7 +7,6 @@
 #include <algorithm>
 #include <array>
 #include <catch2/catch_test_macros.hpp>
-#include <catch2/generators/catch_generators.hpp>
 #include <cctype>
 #include <cstdlib>
 #include <filesystem>
@@ -15,6 +14,7 @@
 #include <imgui.h>
 #include <imgui_test_engine/imgui_te_context.h>
 #include <string>
+#include <string_view>
 #include <thread>
 
 namespace {
@@ -25,16 +25,16 @@ namespace {
         Native
     };
 
-    std::string GameplayBehaviorTypeId(const std::filesystem::path &projectRoot) {
+    std::string GameplayBehaviorTypeId(const std::filesystem::path &projectRoot, const GameplayRuntimeKind runtime) {
         std::string projectNamespace = projectRoot.filename().string();
         std::ranges::transform(projectNamespace, projectNamespace.begin(), [](const unsigned char value) {
             return std::isalnum(value) ? static_cast<char>(std::tolower(value)) : '_';
         });
-        return "game." + projectNamespace + ".newbehavior";
+        return "game." + projectNamespace + (runtime == GameplayRuntimeKind::Lua ? ".lua.newbehavior" : ".cpp.newbehavior");
     }
 
     void InstallMovementFixture(const std::filesystem::path &projectRoot, const GameplayRuntimeKind runtime) {
-        const std::string typeId = GameplayBehaviorTypeId(projectRoot);
+        const std::string typeId = GameplayBehaviorTypeId(projectRoot, runtime);
         const std::filesystem::path fixtureRoot = std::filesystem::path{HORO_PROJECT_SOURCE_DIR} / "tests/fixtures/gameplay_e2e";
         const std::filesystem::path fixture =
             fixtureRoot / (runtime == GameplayRuntimeKind::Lua ? "SemanticInputMovement.horo_script" : "SemanticInputMovement.cpp");
@@ -43,7 +43,7 @@ namespace {
                                                       : projectRoot / "source/gameplay/NewBehavior.cpp";
         std::ifstream input{fixture, std::ios::binary};
         std::string contents{std::istreambuf_iterator{input}, std::istreambuf_iterator<char>{}};
-        constexpr std::string token = "{{BEHAVIOR_TYPE_ID}}";
+        constexpr std::string_view token = "{{BEHAVIOR_TYPE_ID}}";
         for (std::size_t position = contents.find(token); position != std::string::npos; position = contents.find(token, position)) {
             contents.replace(position, token.size(), typeId);
             position += typeId.size();
@@ -65,7 +65,7 @@ namespace {
         Tests::FullEditorUiTestHost editor{harness.Surface(), "en-US"};
         const std::string projectName = runtime == GameplayRuntimeKind::Lua ? "LuaGameplayJourney" : "NativeGameplayJourney";
         const std::filesystem::path projectRoot = editor.ProjectsRoot() / projectName;
-        const std::string behaviorTypeId = GameplayBehaviorTypeId(projectRoot);
+        const std::string behaviorTypeId = GameplayBehaviorTypeId(projectRoot, runtime);
         return harness.RunScenario("gameplay",
                                    runtime == GameplayRuntimeKind::Lua ? "lua_behavior_play_journey" : "native_behavior_play_journey",
                                    [&editor](ImGuiTestContext *context) {
@@ -79,14 +79,14 @@ namespace {
                 ui.MenuClick("###hierarchy_create_root/"
                              "###hierarchy_create_workspace.create.group.cameras/"
                              "###hierarchy_create_primitive.object.camera");
-                ui.ItemClick("//**/Box###hierarchy_object_row");
+                ui.ItemClick("//**/##hierarchy_object_row");
                 ui.Yield();
                 if (!ui.ItemExists("//**/###InspectorAddComponent")) {
                     ui.ItemClick("//**/horo.inspector/##ActivityItem");
                     ui.Yield();
                 }
                 if (!ui.ItemExists("//**/###InspectorAddComponent")) {
-                    ui.ItemClick("//**/Box###hierarchy_object_row");
+                    ui.ItemClick("//**/##hierarchy_object_row");
                     ui.Yield();
                 }
                 IM_CHECK(ui.ItemExists("//**/###InspectorAddComponent"));
@@ -107,6 +107,9 @@ namespace {
                 ui.MouseClick(ImGuiMouseButton_Right);
                 ui.ItemClick(runtime == GameplayRuntimeKind::Lua ? "//**/###content_browser_create_lua_behavior"
                                                                  : "//**/###content_browser_create_native_behavior");
+                ui.Yield();
+                ui.ItemInputValue("//**/##GameplayBehaviorFilename", "NewBehavior");
+                ui.ItemClick("//**/Create");
             });
             pipeline.Step("Install the versioned semantic-input fixture", [projectRoot, runtime, &editor](ImGuiTestContext &ui) {
                 const std::filesystem::path generated = runtime == GameplayRuntimeKind::Lua
@@ -241,7 +244,7 @@ namespace {
         Tests::EditorUiTestHarness harness;
         Tests::FullEditorUiTestHost editor{harness.Surface(), locale};
         CAPTURE(std::string{editor.RendererName()});
-        const Tests::FullEditorProjectSetup project{.name = "ProjectJourney", .templateId = "empty"};
+        const Tests::FullEditorProjectSetup project{.name = "ProjectJourney", .templateId = "3d-starter"};
         const std::filesystem::path projectRoot = editor.ProjectsRoot() / project.name;
 
         const Tests::EditorUiScenarioResult result =
@@ -250,15 +253,19 @@ namespace {
         }, [&editor, project](Tests::UiScenarioPipe &pipeline) {
             Tests::FullEditorSetups::CreateProjectAndOpenWorkspace(pipeline, editor, project);
             Tests::FullEditorActions::CreateRootBox(pipeline);
+            Tests::FullEditorActions::ExerciseHierarchyEdits(pipeline);
+            Tests::FullEditorActions::ExerciseInspectorComponents(pipeline);
             Tests::FullEditorActions::SelectOrthographicProjection(pipeline, editor);
-        }, Tests::EditorUiScenarioBudget::Extended(1800), &editor.Input());
+            Tests::FullEditorActions::ExerciseWorkspacePanels(pipeline, editor);
+            Tests::FullEditorActions::ExerciseAssetImport(pipeline, editor);
+        }, Tests::EditorUiScenarioBudget::Extended(2400), &editor.Input());
 
         INFO(result.testEngineLog);
         REQUIRE_FALSE(result.frameBudgetExceeded);
         REQUIRE_FALSE(result.cancelled);
         REQUIRE(result.exception == nullptr);
         REQUIRE(result.Succeeded());
-        REQUIRE(result.steps.size() == 8);
+        REQUIRE(result.steps.size() == 18);
         REQUIRE(std::all_of(result.steps.begin(), result.steps.begin() + 4, [](const Tests::UiScenarioStepResult &step) {
             return step.kind == Tests::UiScenarioStepKind::Setup && step.status == Tests::UiScenarioStepStatus::Passed;
         }));
@@ -271,9 +278,17 @@ namespace {
             REQUIRE(editor.RendererReady());
     }
 
-    TEST_CASE("Lua and native behaviors share the complete editor Play journey", "[ui][imgui][editor][e2e][gameplay]") {
-        const GameplayRuntimeKind runtime = GENERATE(GameplayRuntimeKind::Lua, GameplayRuntimeKind::Native);
-        const Tests::EditorUiScenarioResult result = RunBehaviorPlayJourney(runtime);
+    TEST_CASE("Lua behavior completes the editor Play journey", "[ui][imgui][editor][e2e][gameplay][lua]") {
+        const Tests::EditorUiScenarioResult result = RunBehaviorPlayJourney(GameplayRuntimeKind::Lua);
+        INFO(result.testEngineLog);
+        REQUIRE_FALSE(result.frameBudgetExceeded);
+        REQUIRE_FALSE(result.cancelled);
+        REQUIRE(result.exception == nullptr);
+        REQUIRE(result.Succeeded());
+    }
+
+    TEST_CASE("Native behavior completes the editor Play journey", "[ui][imgui][editor][e2e][gameplay][native]") {
+        const Tests::EditorUiScenarioResult result = RunBehaviorPlayJourney(GameplayRuntimeKind::Native);
         INFO(result.testEngineLog);
         REQUIRE_FALSE(result.frameBudgetExceeded);
         REQUIRE_FALSE(result.cancelled);
