@@ -3,6 +3,7 @@
 #include "Horo/Network/NetworkObjectMapping.h"
 #include "NetworkTestUtils.h"
 
+#include <array>
 #include <catch2/catch_test_macros.hpp>
 #include <cstdint>
 #include <limits>
@@ -88,6 +89,23 @@ namespace Horo::Network {
         malformed = Entry(Object(2), Entity(2));
         malformed.provenance.authoredObject = Runtime::SceneObjectId{};
         RequireError(mapping.Register(malformed), NetworkErrors::NetworkObjectMappingInvalid);
+    }
+
+    TEST_CASE("Bidirectional indexes stay canonical when slot and entity registration orders differ",
+              "[unit][network][replication][mapping]") {
+        auto mapping = NetworkObjectMapping::Create(Epoch(), Runtime::SceneRuntimeId{9}, 3).Value();
+        const std::array entries{Entry(Object(9), Entity(2)), Entry(Object(3), Entity(7)), Entry(Object(5), Entity(1))};
+        for (const auto &entry : entries)
+            REQUIRE(mapping.Register(entry).HasValue());
+
+        for (const auto &entry : entries) {
+            REQUIRE(mapping.Resolve(entry.object).Value() == entry.entity);
+            REQUIRE(mapping.Find(entry.entity).Value() == entry.object);
+        }
+        const auto snapshot = mapping.Snapshot().Value();
+        REQUIRE(snapshot.Entries()[0].object == Object(3));
+        REQUIRE(snapshot.Entries()[1].object == Object(5));
+        REQUIRE(snapshot.Entries()[2].object == Object(9));
     }
 
     TEST_CASE("Retirement admits only the exact next generation and stale identities never alias reuse",

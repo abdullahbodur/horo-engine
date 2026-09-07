@@ -18,8 +18,10 @@ namespace Horo::Network {
         : epoch_(epoch), scene_(scene), state_(state), entries_(std::move(entries)) {}
 
     NetworkObjectMapping::NetworkObjectMapping(const ReplicationAuthorityEpoch epoch, const Runtime::SceneRuntimeId scene,
-                                               const std::size_t maximumSlots, std::vector<SlotRecord> slots) noexcept
-        : epoch_(epoch), scene_(scene), maximumSlots_(maximumSlots), slots_(std::move(slots)), state_(NetworkObjectMappingState::Active) {}
+                                               const std::size_t maximumSlots, std::vector<SlotRecord> slots,
+                                               std::vector<EntityRecord> entityIndex) noexcept
+        : epoch_(epoch), scene_(scene), maximumSlots_(maximumSlots), slots_(std::move(slots)), entityIndex_(std::move(entityIndex)),
+          state_(NetworkObjectMappingState::Active) {}
 
     /** @copydoc NetworkObjectMapping::Create */
     Result<NetworkObjectMapping> NetworkObjectMapping::Create(const ReplicationAuthorityEpoch epoch, const Runtime::SceneRuntimeId scene,
@@ -29,7 +31,10 @@ namespace Horo::Network {
         try {
             std::vector<SlotRecord> slots;
             slots.reserve(maximumSlots);
-            return Result<NetworkObjectMapping>::Success(NetworkObjectMapping{epoch, scene, maximumSlots, std::move(slots)});
+            std::vector<EntityRecord> entityIndex;
+            entityIndex.reserve(maximumSlots);
+            return Result<NetworkObjectMapping>::Success(
+                NetworkObjectMapping{epoch, scene, maximumSlots, std::move(slots), std::move(entityIndex)});
         } catch (const std::bad_alloc &) {
             return Fail<NetworkObjectMapping>(NetworkErrors::NetworkObjectMappingCapacityExceeded);
         }
@@ -48,9 +53,16 @@ namespace Horo::Network {
         });
     }
 
-    bool NetworkObjectMapping::HasLiveEntity(const Runtime::EntityRef entity) const noexcept {
-        return std::ranges::any_of(slots_, [entity](const SlotRecord &record) {
-            return record.live.has_value() && record.live->entity == entity;
+    std::vector<NetworkObjectMapping::EntityRecord>::iterator NetworkObjectMapping::LowerBound(const Runtime::EntityRef entity) noexcept {
+        return std::lower_bound(entityIndex_.begin(), entityIndex_.end(), entity, [](const EntityRecord &record, const auto &value) {
+            return record.entity < value;
+        });
+    }
+
+    std::vector<NetworkObjectMapping::EntityRecord>::const_iterator NetworkObjectMapping::LowerBound(
+        const Runtime::EntityRef entity) const noexcept {
+        return std::lower_bound(entityIndex_.begin(), entityIndex_.end(), entity, [](const EntityRecord &record, const auto &value) {
+            return record.entity < value;
         });
     }
 
@@ -60,31 +72,45 @@ namespace Horo::Network {
         return Result<void>::Success();
     }
 
-    /** @copydoc NetworkObjectMapping::Register */
-    Result<void> NetworkObjectMapping::Register(const NetworkObjectMappingEntry &entry) {
+    Result<void> NetworkObjectMapping::ValidateRegistration(const NetworkObjectMappingEntry &entry) const {
         if (const auto active = RequireActive(); active.HasError())
             return Result<void>::Failure(active.ErrorValue());
         if (!entry.object.IsValid() || entry.object.Epoch() != epoch_ || !entry.entity.IsValid() || entry.entity.runtime != scene_ ||
             !entry.provenance.IsValid())
             return Result<void>::Failure(MakeError(NetworkErrors::NetworkObjectMappingInvalid));
-        if (HasLiveEntity(entry.entity))
+        const auto entity = LowerBound(entry.entity);
+        if (entity != entityIndex_.end() && entity->entity == entry.entity)
             return Result<void>::Failure(MakeError(NetworkErrors::NetworkObjectMappingConflict));
+        return Result<void>::Success();
+    }
 
+    Result<void> NetworkObjectMapping::ReconcileSlot(const NetworkObjectMappingEntry &entry) {
         const auto found = LowerBound(entry.object.Slot());
-        if (found != slots_.end() && found->slot == entry.object.Slot()) {
-            if (found->live.has_value())
-                return Result<void>::Failure(MakeError(NetworkErrors::NetworkObjectMappingConflict));
-            if (found->generation == std::numeric_limits<std::uint32_t>::max())
-                return Result<void>::Failure(MakeError(NetworkErrors::NetworkObjectGenerationExhausted));
-            if (entry.object.Generation() != found->generation + 1)
-                return Result<void>::Failure(MakeError(NetworkErrors::NetworkObjectMappingUnknown));
-            found->generation = entry.object.Generation();
-            found->live = entry;
-        } else {
+        if (found == slots_.end() || found->slot != entry.object.Slot()) {
             if (slots_.size() == maximumSlots_)
                 return Result<void>::Failure(MakeError(NetworkErrors::NetworkObjectMappingCapacityExceeded));
             slots_.insert(found, SlotRecord{entry.object.Slot(), entry.object.Generation(), entry});
+            return Result<void>::Success();
         }
+        if (found->live.has_value())
+            return Result<void>::Failure(MakeError(NetworkErrors::NetworkObjectMappingConflict));
+        if (found->generation == std::numeric_limits<std::uint32_t>::max())
+            return Result<void>::Failure(MakeError(NetworkErrors::NetworkObjectGenerationExhausted));
+        if (entry.object.Generation() != found->generation + 1)
+            return Result<void>::Failure(MakeError(NetworkErrors::NetworkObjectMappingUnknown));
+        found->generation = entry.object.Generation();
+        found->live = entry;
+        return Result<void>::Success();
+    }
+
+    /** @copydoc NetworkObjectMapping::Register */
+    Result<void> NetworkObjectMapping::Register(const NetworkObjectMappingEntry &entry) {
+        if (const auto valid = ValidateRegistration(entry); valid.HasError())
+            return valid;
+        if (const auto reconciled = ReconcileSlot(entry); reconciled.HasError())
+            return reconciled;
+        const auto entity = LowerBound(entry.entity);
+        entityIndex_.insert(entity, EntityRecord{entry.entity, entry.object});
         ++liveCount_;
         return Result<void>::Success();
     }
@@ -109,12 +135,10 @@ namespace Horo::Network {
             return Fail<NetworkObjectId>(NetworkErrors::NetworkObjectMappingTerminal);
         if (!entity.IsValid() || entity.runtime != scene_)
             return Fail<NetworkObjectId>(NetworkErrors::NetworkObjectMappingInvalid);
-        const auto found = std::ranges::find_if(slots_, [entity](const SlotRecord &record) {
-            return record.live.has_value() && record.live->entity == entity;
-        });
-        if (found == slots_.end())
+        const auto found = LowerBound(entity);
+        if (found == entityIndex_.end() || found->entity != entity)
             return Fail<NetworkObjectId>(NetworkErrors::NetworkObjectMappingUnknown);
-        return Result<NetworkObjectId>::Success(found->live->object);
+        return Result<NetworkObjectId>::Success(found->object);
     }
 
     /** @copydoc NetworkObjectMapping::Retire */
@@ -128,6 +152,8 @@ namespace Horo::Network {
         const auto found = LowerBound(object.Slot());
         if (found == slots_.end() || found->slot != object.Slot() || !found->live.has_value() || found->generation != object.Generation())
             return Result<void>::Failure(MakeError(NetworkErrors::NetworkObjectMappingUnknown));
+        const auto entity = LowerBound(found->live->entity);
+        entityIndex_.erase(entity);
         found->live.reset();
         --liveCount_;
         return Result<void>::Success();
@@ -141,6 +167,7 @@ namespace Horo::Network {
             return Result<void>::Failure(MakeError(NetworkErrors::NetworkObjectMappingInvalid));
         for (auto &record : slots_)
             record.live.reset();
+        entityIndex_.clear();
         liveCount_ = 0;
         state_ = NetworkObjectMappingState::SceneInvalidated;
         return Result<void>::Success();

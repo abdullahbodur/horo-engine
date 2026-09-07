@@ -97,7 +97,8 @@ namespace Horo::Network {
      *
      * The map performs no Scene mutation, ECS scanning, callback invocation, transport work, ambient registration, or internal
      * synchronization. Its session owner serializes every call at a declared safe point. Retired slots retain their last generation;
-     * reuse admits only the exact next generation and never wraps. Shutdown and scene invalidation are terminal.
+     * reuse admits only the exact next generation and never wraps. Creation reserves both sorted indexes, so registration and lookup
+     * do not allocate. Shutdown and scene invalidation are terminal.
      */
     class NetworkObjectMapping final {
     public:
@@ -167,18 +168,27 @@ namespace Horo::Network {
             std::optional<NetworkObjectMappingEntry> live;
         };
 
+        struct EntityRecord final {
+            Runtime::EntityRef entity;
+            NetworkObjectId object;
+        };
+
         NetworkObjectMapping(ReplicationAuthorityEpoch epoch, Runtime::SceneRuntimeId scene, std::size_t maximumSlots,
-                             std::vector<SlotRecord> slots) noexcept;
+                             std::vector<SlotRecord> slots, std::vector<EntityRecord> entityIndex) noexcept;
 
         [[nodiscard]] std::vector<SlotRecord>::iterator LowerBound(std::uint64_t slot) noexcept;
         [[nodiscard]] std::vector<SlotRecord>::const_iterator LowerBound(std::uint64_t slot) const noexcept;
-        [[nodiscard]] bool HasLiveEntity(Runtime::EntityRef entity) const noexcept;
+        [[nodiscard]] std::vector<EntityRecord>::iterator LowerBound(Runtime::EntityRef entity) noexcept;
+        [[nodiscard]] std::vector<EntityRecord>::const_iterator LowerBound(Runtime::EntityRef entity) const noexcept;
+        [[nodiscard]] Result<void> ValidateRegistration(const NetworkObjectMappingEntry &entry) const;
+        [[nodiscard]] Result<void> ReconcileSlot(const NetworkObjectMappingEntry &entry);
         [[nodiscard]] Result<void> RequireActive() const;
 
         ReplicationAuthorityEpoch epoch_;
         Runtime::SceneRuntimeId scene_;
         std::size_t maximumSlots_{};
         std::vector<SlotRecord> slots_;
+        std::vector<EntityRecord> entityIndex_;
         std::size_t liveCount_{};
         NetworkObjectMappingState state_{NetworkObjectMappingState::SceneInvalidated};
     };
