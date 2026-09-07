@@ -22,7 +22,7 @@ namespace Horo::WorldStreaming {
             return std::ranges::binary_search(cells, cell, StreamingCellCanonicalLess{}, &WorldPartitionCellDescriptor::id);
         }
 
-        [[nodiscard]] Result<void> ValidateLimits(const CookedWorldIndexManifestLimits limits) {
+        [[nodiscard]] Result<void> ValidateLimits(const CookedWorldIndexManifestLimits &limits) {
             if (limits.maximumCellEntries == 0 || limits.maximumDependenciesPerCell == 0 || limits.maximumTotalDependencies == 0 ||
                 limits.maximumCompressedBytes == 0 || limits.maximumUncompressedBytes == 0)
                 return Invalid<void>(WorldStreamingErrors::CookedManifestInvalid);
@@ -37,7 +37,7 @@ namespace Horo::WorldStreaming {
 
         [[nodiscard]] Result<ManifestTotals> ValidateShapeAndTotals(const std::span<const WorldPartitionCellDescriptor> descriptorCells,
                                                                     const std::span<const CookedWorldCellManifestCandidate> cells,
-                                                                    const CookedWorldIndexManifestLimits limits) {
+                                                                    const CookedWorldIndexManifestLimits &limits) {
             if (cells.empty())
                 return Invalid<ManifestTotals>(WorldStreamingErrors::CookedManifestInvalid);
             if (cells.size() != descriptorCells.size())
@@ -91,8 +91,8 @@ namespace Horo::WorldStreaming {
                 std::ranges::sort(dependencies, StreamingCellCanonicalLess{});
                 if (std::ranges::adjacent_find(dependencies) != dependencies.end())
                     return Invalid<OwnedCells>(WorldStreamingErrors::CookedManifestDependencyInvalid);
-                owned.cells.push_back({cell.cell, cell.uncompressedSize, cell.compressedSize, cell.payloadCrc32, cell.artifactHash, offset,
-                                       static_cast<std::uint32_t>(cell.hardDependencies.size())});
+                owned.cells.emplace_back(cell.cell, cell.uncompressedSize, cell.compressedSize, cell.payloadCrc32, cell.artifactHash,
+                                         offset, static_cast<std::uint32_t>(cell.hardDependencies.size()));
             }
 
             std::ranges::sort(owned.cells, StreamingCellCanonicalLess{}, &CookedWorldCellManifestEntry::cell);
@@ -107,7 +107,7 @@ namespace Horo::WorldStreaming {
 
         [[nodiscard]] Result<OwnedCells> ValidateAndOwnCells(const WorldPartitionDescriptor &descriptor,
                                                              const std::span<const CookedWorldCellManifestCandidate> cells,
-                                                             const CookedWorldIndexManifestLimits limits) {
+                                                             const CookedWorldIndexManifestLimits &limits) {
             const auto descriptorCells = descriptor.Cells();
             auto totals = ValidateShapeAndTotals(descriptorCells, cells, limits);
             if (totals.HasError())
@@ -130,7 +130,7 @@ namespace Horo::WorldStreaming {
     /** @copydoc CookedWorldIndexManifest::Create */
     Result<CookedWorldIndexManifest> CookedWorldIndexManifest::Create(WorldPartitionDescriptor &&descriptor,
                                                                       const std::span<const CookedWorldCellManifestCandidate> cells,
-                                                                      const CookedWorldIndexManifestLimits limits) {
+                                                                      const CookedWorldIndexManifestLimits &limits) {
         if (const auto validLimits = ValidateLimits(limits); validLimits.HasError())
             return Invalid<CookedWorldIndexManifest>(WorldStreamingErrors::CookedManifestInvalid);
         auto ownedResult = ValidateAndOwnCells(descriptor, cells, limits);
