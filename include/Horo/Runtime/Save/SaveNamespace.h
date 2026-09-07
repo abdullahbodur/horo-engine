@@ -46,7 +46,7 @@ namespace Horo::Runtime {
 
         /** @brief Validates every typed identity in the namespace. @return True for a complete namespace. */
         [[nodiscard]] bool IsValid() const noexcept;
-        [[nodiscard]] auto operator<=>(const SaveNamespaceId &) const noexcept = default;
+        [[nodiscard]] constexpr auto operator<=>(const SaveNamespaceId &) const noexcept = default;
     };
 
     /** @brief Explicit change category used by profile/session transaction owners. */
