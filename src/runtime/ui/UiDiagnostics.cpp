@@ -47,17 +47,18 @@ namespace Horo::Runtime::Ui {
 
         /** @brief Validates that one correlation key carries its exact declared value type and range. */
         bool IsValidCorrelationEntry(const UiDiagnosticCorrelationEntry &entry) noexcept {
+            using enum UiDiagnosticCorrelationKey;
             switch (entry.key) {
-                case UiDiagnosticCorrelationKey::Document:
+                case Document:
                     return HasValidIdentity<UiDocumentId>(entry.value);
-                case UiDiagnosticCorrelationKey::Element:
+                case Element:
                     return HasValidIdentity<UiElementId>(entry.value);
-                case UiDiagnosticCorrelationKey::Canvas:
+                case Canvas:
                     return HasValidIdentity<UiCanvasId>(entry.value);
-                case UiDiagnosticCorrelationKey::Player:
+                case Player:
                     return HasValidPlayer(entry.value);
-                case UiDiagnosticCorrelationKey::Viewport:
-                case UiDiagnosticCorrelationKey::Operation:
+                case Viewport:
+                case Operation:
                     return HasValidScalarIdentity(entry.value);
             }
             return false;
@@ -77,24 +78,25 @@ namespace Horo::Runtime::Ui {
 
     /** @copydoc UiDiagnosticCategoryName */
     std::string_view UiDiagnosticCategoryName(const UiDiagnosticCategory category) noexcept {
+        using enum UiDiagnosticCategory;
         switch (category) {
-            case UiDiagnosticCategory::Document:
+            case Document:
                 return "runtime_ui.document";
-            case UiDiagnosticCategory::Layout:
+            case Layout:
                 return "runtime_ui.layout";
-            case UiDiagnosticCategory::Text:
+            case Text:
                 return "runtime_ui.text";
-            case UiDiagnosticCategory::Input:
+            case Input:
                 return "runtime_ui.input";
-            case UiDiagnosticCategory::Focus:
+            case Focus:
                 return "runtime_ui.focus";
-            case UiDiagnosticCategory::Binding:
+            case Binding:
                 return "runtime_ui.binding";
-            case UiDiagnosticCategory::Render:
+            case Render:
                 return "runtime_ui.render";
-            case UiDiagnosticCategory::Accessibility:
+            case Accessibility:
                 return "runtime_ui.accessibility";
-            case UiDiagnosticCategory::Lifecycle:
+            case Lifecycle:
                 return "runtime_ui.lifecycle";
         }
         return {};
@@ -130,7 +132,7 @@ namespace Horo::Runtime::Ui {
         record.severity = *severity;
         record.message = error.message;
         record.correlationCount = static_cast<std::uint8_t>(correlation.size());
-        std::copy(correlation.begin(), correlation.end(), record.correlation.begin());
+        std::ranges::copy(correlation, record.correlation.begin());
         return Result<UiDiagnosticRecord>::Success(std::move(record));
     }
 }  // namespace Horo::Runtime::Ui
