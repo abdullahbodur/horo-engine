@@ -23,6 +23,14 @@ namespace {
         return {.maxPasses = 3, .maxResources = 2, .maxUsages = 3, .maxDependencies = 2};
     }
 
+    RenderBufferHandle BufferHandle(const std::uint32_t slot = 1) {
+        return {{41}, slot, 1};
+    }
+
+    RenderTextureHandle TextureHandle(const std::uint32_t slot = 1) {
+        return {{42}, slot, 1};
+    }
+
     RenderGraphBuilder RequireBuilder(const RenderGraphLimits &limits = SmallLimits()) {
         auto created = RenderGraphBuilder::Create(limits);
         REQUIRE(created.HasValue());
@@ -65,12 +73,27 @@ TEST_CASE("Render graph finite limits enforce exact hard boundaries", "[runtime]
 
 TEST_CASE("Render graph errors expose stable actionable identities", "[runtime][renderer][render-graph]") {
     const std::array descriptors{
-        &RenderGraphErrors::AllocationFailed,    &RenderGraphErrors::BuilderClosed,        &RenderGraphErrors::CapacityExceeded,
-        &RenderGraphErrors::EmptyGraph,          &RenderGraphErrors::IncompatibleQueue,    &RenderGraphErrors::InvalidDependency,
-        &RenderGraphErrors::InvalidLimits,       &RenderGraphErrors::InvalidPass,          &RenderGraphErrors::InvalidResource,
-        &RenderGraphErrors::InvalidUsage,        &RenderGraphErrors::OwnerExhausted,       &RenderGraphErrors::UnsupportedDependencyKind,
-        &RenderGraphErrors::UnsupportedPassKind, &RenderGraphErrors::UnsupportedQueueRole, &RenderGraphErrors::UnsupportedResourceKind,
-        &RenderGraphErrors::UnsupportedUsage,    &RenderGraphErrors::WrongOwner,           &RenderGraphErrors::WrongThread,
+        &RenderGraphErrors::AllocationFailed,
+        &RenderGraphErrors::BuilderClosed,
+        &RenderGraphErrors::CapacityExceeded,
+        &RenderGraphErrors::EmptyGraph,
+        &RenderGraphErrors::IncompatibleQueue,
+        &RenderGraphErrors::InvalidDependency,
+        &RenderGraphErrors::InvalidExport,
+        &RenderGraphErrors::InvalidImport,
+        &RenderGraphErrors::InvalidLimits,
+        &RenderGraphErrors::InvalidPass,
+        &RenderGraphErrors::InvalidResource,
+        &RenderGraphErrors::InvalidUsage,
+        &RenderGraphErrors::OwnerExhausted,
+        &RenderGraphErrors::UnsupportedDependencyKind,
+        &RenderGraphErrors::UnsupportedPassKind,
+        &RenderGraphErrors::UnsupportedQueueRole,
+        &RenderGraphErrors::UnsupportedResourceKind,
+        &RenderGraphErrors::UnsupportedResourceClass,
+        &RenderGraphErrors::UnsupportedUsage,
+        &RenderGraphErrors::WrongOwner,
+        &RenderGraphErrors::WrongThread,
     };
 
     for (const Horo::ErrorCodeDescriptor *descriptor : descriptors) {
@@ -144,8 +167,8 @@ TEST_CASE("Render graph builder finalizes typed records in authoring order", "[r
 
     auto graphics = builder.AddPass(RenderPassKind::Graphics, RenderQueueRole::Graphics);
     auto compute = builder.AddPass(RenderPassKind::Compute, RenderQueueRole::Compute);
-    auto texture = builder.AddResource(RenderGraphResourceKind::Texture);
-    auto buffer = builder.AddResource(RenderGraphResourceKind::Buffer);
+    auto texture = builder.ImportTexture(TextureHandle(), RenderGraphResourceClass::External);
+    auto buffer = builder.AddTransientResource(RenderGraphResourceKind::Buffer);
     REQUIRE(graphics.HasValue());
     REQUIRE(compute.HasValue());
     REQUIRE(texture.HasValue());
@@ -153,6 +176,7 @@ TEST_CASE("Render graph builder finalizes typed records in authoring order", "[r
     REQUIRE(
         builder.AddUsage({graphics.Value(), texture.Value(), RenderGraphAccess::Write, RenderGraphUsageKind::ColorAttachment}).HasValue());
     REQUIRE(builder.AddUsage({compute.Value(), buffer.Value(), RenderGraphAccess::ReadWrite, RenderGraphUsageKind::Storage}).HasValue());
+    REQUIRE(builder.ExportResource(texture.Value()).HasValue());
     REQUIRE(builder.AddDependency({graphics.Value(), compute.Value(), RenderGraphDependencyKind::ExecutionOrder}).HasValue());
 
     auto finalized = builder.Finalize();
@@ -165,10 +189,91 @@ TEST_CASE("Render graph builder finalizes typed records in authoring order", "[r
     REQUIRE(graph.Passes()[0].reference.id == RenderPassId{1});
     REQUIRE(graph.Passes()[1].queue == RenderQueueRole::Compute);
     REQUIRE(graph.Resources().size() == 2);
+    REQUIRE(graph.Resources()[0].resourceClass == RenderGraphResourceClass::External);
+    REQUIRE(std::get<RenderTextureHandle>(graph.Resources()[0].binding) == TextureHandle());
+    REQUIRE(graph.Resources()[1].resourceClass == RenderGraphResourceClass::Transient);
+    REQUIRE(std::holds_alternative<std::monostate>(graph.Resources()[1].binding));
+    REQUIRE(graph.Exports().size() == 1);
+    REQUIRE(graph.Exports()[0].resource == texture.Value());
     REQUIRE(graph.Usages().size() == 2);
     REQUIRE(graph.Dependencies().size() == 1);
     REQUIRE(graph.Dependencies()[0].before == graphics.Value());
-    RequireError(builder.AddResource(RenderGraphResourceKind::Buffer), "render.graph.builder_closed");
+    RequireError(builder.AddTransientResource(RenderGraphResourceKind::Buffer), "render.graph.builder_closed");
+}
+
+TEST_CASE("Render graph imports every resident lifetime class with exact typed bindings", "[runtime][renderer][render-graph]") {
+    RenderGraphLimits limits = SmallLimits();
+    limits.maxResources = 4;
+    RenderGraphBuilder builder = RequireBuilder(limits);
+    REQUIRE(builder.AddPass(RenderPassKind::Graphics, RenderQueueRole::Graphics).HasValue());
+
+    const auto external = builder.ImportBuffer(BufferHandle(1), RenderGraphResourceClass::External);
+    const auto persistent = builder.ImportTexture(TextureHandle(2), RenderGraphResourceClass::Persistent);
+    const auto transient = builder.AddTransientResource(RenderGraphResourceKind::Texture);
+    const auto history = builder.ImportTexture(TextureHandle(3), RenderGraphResourceClass::History);
+    REQUIRE(external.HasValue());
+    REQUIRE(persistent.HasValue());
+    REQUIRE(transient.HasValue());
+    REQUIRE(history.HasValue());
+
+    auto finalized = builder.Finalize();
+    REQUIRE(finalized.HasValue());
+    RenderGraph graph = std::move(finalized).Value();
+    REQUIRE(graph.Resources()[0].resourceClass == RenderGraphResourceClass::External);
+    REQUIRE(std::get<RenderBufferHandle>(graph.Resources()[0].binding) == BufferHandle(1));
+    REQUIRE(graph.Resources()[1].resourceClass == RenderGraphResourceClass::Persistent);
+    REQUIRE(std::get<RenderTextureHandle>(graph.Resources()[1].binding) == TextureHandle(2));
+    REQUIRE(graph.Resources()[2].resourceClass == RenderGraphResourceClass::Transient);
+    REQUIRE(std::holds_alternative<std::monostate>(graph.Resources()[2].binding));
+    REQUIRE(graph.Resources()[3].resourceClass == RenderGraphResourceClass::History);
+    REQUIRE(std::get<RenderTextureHandle>(graph.Resources()[3].binding) == TextureHandle(3));
+}
+
+TEST_CASE("Render graph rejects malformed imports and exports without fallback", "[runtime][renderer][render-graph]") {
+    RenderGraphBuilder builder = RequireBuilder();
+    RenderGraphBuilder foreign = RequireBuilder();
+    const auto resource = builder.AddTransientResource(RenderGraphResourceKind::Buffer);
+    const auto foreignResource = foreign.AddTransientResource(RenderGraphResourceKind::Buffer);
+    REQUIRE(resource.HasValue());
+    REQUIRE(foreignResource.HasValue());
+
+    RequireError(builder.ImportBuffer({}, RenderGraphResourceClass::External), "render.graph.import_invalid");
+    RequireError(builder.ImportTexture(TextureHandle(), RenderGraphResourceClass::Transient), "render.graph.import_invalid");
+    RequireError(builder.ImportBuffer(BufferHandle(), static_cast<RenderGraphResourceClass>(255)),
+                 "render.graph.resource_class_unsupported");
+    RequireError(builder.ExportResource({}), "render.graph.resource_invalid");
+    RequireError(builder.ExportResource(foreignResource.Value()), "render.graph.wrong_owner");
+    RequireError(builder.ExportResource({builder.Owner(), 99}), "render.graph.resource_invalid");
+    REQUIRE(builder.ExportResource(resource.Value()).HasValue());
+    RequireError(builder.ExportResource(resource.Value()), "render.graph.export_invalid");
+}
+
+TEST_CASE("Render graph use declarations cover read write attachment and copy semantics", "[runtime][renderer][render-graph]") {
+    RenderGraphLimits limits{.maxPasses = 3, .maxResources = 2, .maxUsages = 8, .maxDependencies = 1};
+    RenderGraphBuilder builder = RequireBuilder(limits);
+    const auto graphics = builder.AddPass(RenderPassKind::Graphics, RenderQueueRole::Graphics);
+    const auto compute = builder.AddPass(RenderPassKind::Compute, RenderQueueRole::Compute);
+    const auto copy = builder.AddPass(RenderPassKind::Copy, RenderQueueRole::Transfer);
+    const auto texture = builder.ImportTexture(TextureHandle(), RenderGraphResourceClass::Persistent);
+    const auto buffer = builder.AddTransientResource(RenderGraphResourceKind::Buffer);
+    REQUIRE(graphics.HasValue());
+    REQUIRE(compute.HasValue());
+    REQUIRE(copy.HasValue());
+    REQUIRE(texture.HasValue());
+    REQUIRE(buffer.HasValue());
+
+    const std::array declarations{
+        RenderGraphResourceUsage{graphics.Value(), texture.Value(), RenderGraphAccess::Read, RenderGraphUsageKind::Sampled},
+        RenderGraphResourceUsage{graphics.Value(), texture.Value(), RenderGraphAccess::Write, RenderGraphUsageKind::ColorAttachment},
+        RenderGraphResourceUsage{graphics.Value(), texture.Value(), RenderGraphAccess::ReadWrite,
+                                 RenderGraphUsageKind::DepthStencilAttachment},
+        RenderGraphResourceUsage{compute.Value(), buffer.Value(), RenderGraphAccess::ReadWrite, RenderGraphUsageKind::Storage},
+        RenderGraphResourceUsage{copy.Value(), buffer.Value(), RenderGraphAccess::Read, RenderGraphUsageKind::CopySource},
+        RenderGraphResourceUsage{copy.Value(), texture.Value(), RenderGraphAccess::Write, RenderGraphUsageKind::CopyDestination},
+    };
+    for (const RenderGraphResourceUsage &declaration : declarations) {
+        REQUIRE(builder.AddUsage(declaration).HasValue());
+    }
 }
 
 TEST_CASE("Render graph capacities bound every authored record", "[runtime][renderer][render-graph]") {
@@ -176,12 +281,12 @@ TEST_CASE("Render graph capacities bound every authored record", "[runtime][rend
         const RenderGraphLimits limits{.maxPasses = 1, .maxResources = 1, .maxUsages = 1, .maxDependencies = 1};
         RenderGraphBuilder builder = RequireBuilder(limits);
         auto pass = builder.AddPass(RenderPassKind::Graphics, RenderQueueRole::Graphics);
-        auto resource = builder.AddResource(RenderGraphResourceKind::Texture);
+        auto resource = builder.AddTransientResource(RenderGraphResourceKind::Texture);
         REQUIRE(pass.HasValue());
         REQUIRE(resource.HasValue());
         REQUIRE(
             builder.AddUsage({pass.Value(), resource.Value(), RenderGraphAccess::Write, RenderGraphUsageKind::ColorAttachment}).HasValue());
-        RequireError(builder.AddResource(RenderGraphResourceKind::Buffer), "render.graph.capacity_exceeded");
+        RequireError(builder.AddTransientResource(RenderGraphResourceKind::Buffer), "render.graph.capacity_exceeded");
         RequireError(builder.AddUsage(
                          {pass.Value(), resource.Value(), RenderGraphAccess::Read, RenderGraphUsageKind::DepthStencilAttachment}),
                      "render.graph.capacity_exceeded");
@@ -204,12 +309,12 @@ TEST_CASE("Render graph rejects invalid and foreign records without fallback", "
     RenderGraphBuilder first = RequireBuilder();
     RenderGraphBuilder second = RequireBuilder();
 
-    RequireError(first.AddResource(static_cast<RenderGraphResourceKind>(255)), "render.graph.resource_kind_unsupported");
+    RequireError(first.AddTransientResource(static_cast<RenderGraphResourceKind>(255)), "render.graph.resource_kind_unsupported");
     auto firstPass = first.AddPass(RenderPassKind::Graphics, RenderQueueRole::Graphics);
     auto firstCompute = first.AddPass(RenderPassKind::Compute, RenderQueueRole::Graphics);
-    auto firstTexture = first.AddResource(RenderGraphResourceKind::Texture);
+    auto firstTexture = first.AddTransientResource(RenderGraphResourceKind::Texture);
     auto foreignPass = second.AddPass(RenderPassKind::Graphics, RenderQueueRole::Graphics);
-    auto foreignTexture = second.AddResource(RenderGraphResourceKind::Texture);
+    auto foreignTexture = second.AddTransientResource(RenderGraphResourceKind::Texture);
     REQUIRE(firstPass.HasValue());
     REQUIRE(firstCompute.HasValue());
     REQUIRE(firstTexture.HasValue());
@@ -243,7 +348,7 @@ TEST_CASE("Render graph rejects invalid and foreign records without fallback", "
 TEST_CASE("Render graph supports depth read and explicit cancellation", "[runtime][renderer][render-graph]") {
     RenderGraphBuilder builder = RequireBuilder();
     auto pass = builder.AddPass(RenderPassKind::Graphics, RenderQueueRole::Graphics);
-    auto texture = builder.AddResource(RenderGraphResourceKind::Texture);
+    auto texture = builder.AddTransientResource(RenderGraphResourceKind::Texture);
     REQUIRE(pass.HasValue());
     REQUIRE(texture.HasValue());
     REQUIRE(builder.AddUsage({pass.Value(), texture.Value(), RenderGraphAccess::Read, RenderGraphUsageKind::DepthStencilAttachment})
@@ -260,19 +365,21 @@ TEST_CASE("Render graph supports depth read and explicit cancellation", "[runtim
 TEST_CASE("Render graph mutation and cancellation enforce owner-thread affinity", "[runtime][renderer][render-graph]") {
     RenderGraphBuilder builder = RequireBuilder();
     auto pass = builder.AddPass(RenderPassKind::Graphics, RenderQueueRole::Graphics);
-    auto resource = builder.AddResource(RenderGraphResourceKind::Texture);
+    auto resource = builder.AddTransientResource(RenderGraphResourceKind::Texture);
     REQUIRE(pass.HasValue());
     REQUIRE(resource.HasValue());
 
-    std::array<std::string, 5> errors;
+    std::array<std::string, 7> errors;
     std::thread worker{[&] {
-        errors[0] = builder.AddResource(RenderGraphResourceKind::Buffer).ErrorValue().code.Value();
-        errors[1] = builder.AddUsage({pass.Value(), resource.Value(), RenderGraphAccess::Read, RenderGraphUsageKind::Sampled})
+        errors[0] = builder.AddTransientResource(RenderGraphResourceKind::Buffer).ErrorValue().code.Value();
+        errors[1] = builder.ImportBuffer(BufferHandle(), RenderGraphResourceClass::External).ErrorValue().code.Value();
+        errors[2] = builder.ExportResource(resource.Value()).ErrorValue().code.Value();
+        errors[3] = builder.AddUsage({pass.Value(), resource.Value(), RenderGraphAccess::Read, RenderGraphUsageKind::Sampled})
                         .ErrorValue()
                         .code.Value();
-        errors[2] = builder.Finalize().ErrorValue().code.Value();
-        errors[3] = builder.Cancel().ErrorValue().code.Value();
-        errors[4] = builder.AddDependency({pass.Value(), {builder.Owner(), RenderPassId{2}}, RenderGraphDependencyKind::ExecutionOrder})
+        errors[4] = builder.Finalize().ErrorValue().code.Value();
+        errors[5] = builder.Cancel().ErrorValue().code.Value();
+        errors[6] = builder.AddDependency({pass.Value(), {builder.Owner(), RenderPassId{2}}, RenderGraphDependencyKind::ExecutionOrder})
                         .ErrorValue()
                         .code.Value();
     }};
