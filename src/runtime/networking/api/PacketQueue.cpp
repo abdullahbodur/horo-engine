@@ -78,14 +78,14 @@ namespace Horo::Network {
                AddFits(connectionBytes, packetBytes, descriptor_.maximumBytesPerConnection);
     }
 
-    std::optional<std::size_t> PacketQueue::OldestFor(const PacketConnectionId connection) const noexcept {
+    std::optional<std::size_t> PacketQueue::OldestFor(const ConnectionHandle connection) const noexcept {
         const auto accounting = FindAccounting(connection);
         return accounting == InvalidIndex ? std::nullopt : std::optional{accounting_[accounting].head};
     }
 
-    std::size_t PacketQueue::FindAccounting(const PacketConnectionId connection) const noexcept {
+    std::size_t PacketQueue::FindAccounting(const ConnectionHandle connection) const noexcept {
         using enum AccountingState;
-        const auto start = static_cast<std::size_t>(connection.Value()) % descriptor_.maximumPackets;
+        const auto start = static_cast<std::size_t>(connection.Slot()) % descriptor_.maximumPackets;
         for (std::size_t offset = 0; offset < descriptor_.maximumPackets; ++offset) {
             const auto index = (start + offset) % descriptor_.maximumPackets;
             if (accounting_[index].state == Empty)
@@ -96,9 +96,9 @@ namespace Horo::Network {
         return InvalidIndex;
     }
 
-    std::size_t PacketQueue::FindOrCreateAccounting(const PacketConnectionId connection) const noexcept {
+    std::size_t PacketQueue::FindOrCreateAccounting(const ConnectionHandle connection) const noexcept {
         using enum AccountingState;
-        const auto start = static_cast<std::size_t>(connection.Value()) % descriptor_.maximumPackets;
+        const auto start = static_cast<std::size_t>(connection.Slot()) % descriptor_.maximumPackets;
         auto reusable = InvalidIndex;
         for (std::size_t offset = 0; offset < descriptor_.maximumPackets; ++offset) {
             const auto index = (start + offset) % descriptor_.maximumPackets;
