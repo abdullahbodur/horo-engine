@@ -252,6 +252,8 @@ horo_configure_target_header_boundary(HoroRenderApi PUBLIC_HEADERS
     Horo/Runtime/Render/RenderResourceDescriptorErrors.h
     Horo/Runtime/Render/RenderResourceDescriptors.h
     Horo/Runtime/Render/RenderSubmission.h
+    Horo/Runtime/Render/ShaderManifest.h
+    Horo/Runtime/Render/ShaderManifestErrors.h
     Horo/Runtime/Render/Texture.h
     Horo/Runtime/Render/RenderResource.h
     Horo/Runtime/Render/RenderScene.h
