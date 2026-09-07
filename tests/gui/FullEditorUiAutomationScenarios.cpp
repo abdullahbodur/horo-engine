@@ -15,6 +15,7 @@
 #include <imgui.h>
 #include <imgui_test_engine/imgui_te_context.h>
 #include <string>
+#include <string_view>
 #include <thread>
 
 namespace {
@@ -43,7 +44,7 @@ namespace {
                                                       : projectRoot / "source/gameplay/NewBehavior.cpp";
         std::ifstream input{fixture, std::ios::binary};
         std::string contents{std::istreambuf_iterator{input}, std::istreambuf_iterator<char>{}};
-        constexpr std::string token = "{{BEHAVIOR_TYPE_ID}}";
+        constexpr std::string_view token = "{{BEHAVIOR_TYPE_ID}}";
         for (std::size_t position = contents.find(token); position != std::string::npos; position = contents.find(token, position)) {
             contents.replace(position, token.size(), typeId);
             position += typeId.size();
