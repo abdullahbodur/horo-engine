@@ -7,6 +7,7 @@
 
 #include "Horo/Foundation/Result.h"
 #include "Horo/Runtime/Render/RenderBackend.h"
+#include "Horo/Runtime/Render/RenderResource.h"
 #include "Horo/Runtime/Render/RenderSubmission.h"
 
 #include <compare>
@@ -14,6 +15,7 @@
 #include <cstdint>
 #include <span>
 #include <thread>
+#include <variant>
 #include <vector>
 
 namespace Horo::Render {
@@ -69,6 +71,23 @@ namespace Horo::Render {
         Buffer,
         Texture,
     };
+
+    /** @brief Lifetime and ownership class declared for one logical graph resource. */
+    enum class RenderGraphResourceClass : std::uint8_t {
+        External,
+        Persistent,
+        Transient,
+        History,
+    };
+
+    /**
+     * @brief Optional resident identity imported by one logical graph resource.
+     *
+     * A transient resource uses `std::monostate`. Every other resource class carries
+     * the generation-safe Horo buffer or texture identity that the graph borrows.
+     * The finalized graph does not own or extend the resident resource lifetime.
+     */
+    using RenderGraphResourceBinding = std::variant<std::monostate, RenderBufferHandle, RenderTextureHandle>;
 
     /** @brief Access direction declared by one pass-resource use. */
     enum class RenderGraphAccess : std::uint8_t {
@@ -127,6 +146,13 @@ namespace Horo::Render {
     struct RenderGraphResource {
         RenderGraphResourceId id;
         RenderGraphResourceKind kind{RenderGraphResourceKind::Buffer};
+        RenderGraphResourceClass resourceClass{RenderGraphResourceClass::Transient};
+        RenderGraphResourceBinding binding;
+    };
+
+    /** @brief One graph resource explicitly retained as an observable graph output. */
+    struct RenderGraphResourceExport {
+        RenderGraphResourceId resource;
     };
 
     /** @brief One explicit semantic use of a graph resource by a pass. */
@@ -178,6 +204,12 @@ namespace Horo::Render {
         [[nodiscard]] std::span<const RenderGraphResource> Resources() const noexcept;
 
         /**
+         * @brief Returns explicit resource exports in deterministic authoring order.
+         * @return View valid for the lifetime of this graph value.
+         */
+        [[nodiscard]] std::span<const RenderGraphResourceExport> Exports() const noexcept;
+
+        /**
          * @brief Returns immutable resource uses in deterministic authoring order.
          * @return View valid for the lifetime of this graph value.
          */
@@ -193,13 +225,14 @@ namespace Horo::Render {
         friend class RenderGraphBuilder;
 
         RenderGraph(RenderGraphOwnerId owner, const RenderGraphLimits &limits, std::vector<RenderGraphPass> passes,
-                    std::vector<RenderGraphResource> resources, std::vector<RenderGraphResourceUsage> usages,
-                    std::vector<RenderGraphDependency> dependencies) noexcept;
+                    std::vector<RenderGraphResource> resources, std::vector<RenderGraphResourceExport> exports,
+                    std::vector<RenderGraphResourceUsage> usages, std::vector<RenderGraphDependency> dependencies) noexcept;
 
         RenderGraphOwnerId owner_;
         RenderGraphLimits limits_;
         std::vector<RenderGraphPass> passes_;
         std::vector<RenderGraphResource> resources_;
+        std::vector<RenderGraphResourceExport> exports_;
         std::vector<RenderGraphResourceUsage> usages_;
         std::vector<RenderGraphDependency> dependencies_;
     };
@@ -257,11 +290,34 @@ namespace Horo::Render {
         [[nodiscard]] Result<RenderGraphPassRef> AddPass(RenderPassKind kind, RenderQueueRole queue);
 
         /**
-         * @brief Adds one graph-local logical resource.
+         * @brief Adds one graph-local transient resource with no resident binding.
          * @param kind Backend-neutral resource category.
          * @return Owner-scoped identity or a typed affinity, lifecycle, capacity, or support failure.
          */
-        [[nodiscard]] Result<RenderGraphResourceId> AddResource(RenderGraphResourceKind kind);
+        [[nodiscard]] Result<RenderGraphResourceId> AddTransientResource(RenderGraphResourceKind kind);
+
+        /**
+         * @brief Imports one generation-safe resident buffer into the graph.
+         * @param handle Borrowed Horo buffer identity; its generation must outlive graph use and submission.
+         * @param resourceClass External, persistent, or history lifetime classification.
+         * @return Graph-local identity or a typed affinity, lifecycle, capacity, binding, or support failure.
+         */
+        [[nodiscard]] Result<RenderGraphResourceId> ImportBuffer(RenderBufferHandle handle, RenderGraphResourceClass resourceClass);
+
+        /**
+         * @brief Imports one generation-safe resident texture into the graph.
+         * @param handle Borrowed Horo texture identity; its generation must outlive graph use and submission.
+         * @param resourceClass External, persistent, or history lifetime classification.
+         * @return Graph-local identity or a typed affinity, lifecycle, capacity, binding, or support failure.
+         */
+        [[nodiscard]] Result<RenderGraphResourceId> ImportTexture(RenderTextureHandle handle, RenderGraphResourceClass resourceClass);
+
+        /**
+         * @brief Marks one graph-local resource as an observable output.
+         * @param resource Resource issued by this builder.
+         * @return Success or a typed affinity, lifecycle, ownership, reference, or duplicate-export failure.
+         */
+        [[nodiscard]] Result<void> ExportResource(RenderGraphResourceId resource);
 
         /**
          * @brief Records one pass-resource use after validating ownership and semantic compatibility.
@@ -305,6 +361,12 @@ namespace Horo::Render {
         [[nodiscard]] Result<void> ValidateUsageReferences(const RenderGraphResourceUsage &usage) const;
         [[nodiscard]] Result<void> ValidateUsageSemantics(const RenderGraphResourceUsage &usage) const;
         [[nodiscard]] Result<void> ValidateDependencyReferences(const RenderGraphDependency &dependency) const;
+        [[nodiscard]] Result<RenderGraphResourceId> AddImportedResource(RenderGraphResourceKind kind,
+                                                                        RenderGraphResourceClass resourceClass,
+                                                                        RenderGraphResourceBinding binding);
+        [[nodiscard]] Result<RenderGraphResourceId> AddResourceDeclaration(RenderGraphResourceKind kind,
+                                                                           RenderGraphResourceClass resourceClass,
+                                                                           RenderGraphResourceBinding binding);
         void ReleaseStorage() noexcept;
         [[nodiscard]] const RenderGraphPass *FindPass(RenderGraphPassRef reference) const noexcept;
         [[nodiscard]] const RenderGraphResource *FindResource(RenderGraphResourceId id) const noexcept;
@@ -315,6 +377,8 @@ namespace Horo::Render {
         RenderGraphBuilderState state_{RenderGraphBuilderState::MovedFrom};
         std::vector<RenderGraphPass> passes_;
         std::vector<RenderGraphResource> resources_;
+        std::vector<RenderGraphResourceExport> exports_;
+        std::vector<std::uint8_t> exportedResources_;
         std::vector<RenderGraphResourceUsage> usages_;
         std::vector<RenderGraphDependency> dependencies_;
     };

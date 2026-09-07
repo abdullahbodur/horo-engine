@@ -1377,9 +1377,18 @@ unknown or incompatible queue roles without fallback. Resource, use, and
 dependency authoring validate builder ownership, record existence, and semantic
 compatibility before preserving deterministic authoring order. Owner-thread
 cancellation releases retained CPU storage, while successful finalization moves
-all records into the immutable graph. Resource import/export classes, dependency
-DAG validation, lifetime compilation, barrier synthesis, and backend translation
-remain separate render-graph delivery stages.
+all records into the immutable graph.
+
+Resource declarations classify each graph-local buffer or texture as external,
+persistent, transient, or history data. Transient declarations carry no resident
+identity. The other classes explicitly import a generation-safe Horo buffer or
+texture handle; the graph borrows that identity and does not own, prolong, resolve,
+or translate its resident generation. An explicit export record names an observable
+graph output. Imports, exports, and semantic read/write, attachment, storage, and copy
+uses are finite, owner-thread-authored metadata with no backend/native handles or
+ambient registry effects. Dependency DAG validation, read-before-write validation,
+cycle detection, pass culling, lifetime compilation, barrier synthesis, and backend
+translation remain separate render-graph delivery stages.
 
 The graph:
 

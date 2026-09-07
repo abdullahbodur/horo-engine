@@ -29,6 +29,13 @@ namespace Horo::Render::RenderGraphErrors {
         Detail::MakeErrorDescriptor(Domain, "render.graph.dependency_invalid", ErrorSeverity::Error,
                                     "The render graph dependency is malformed or references an unknown pass.",
                                     "Use two distinct pass references issued by this open builder.");
+    const ErrorCodeDescriptor InvalidExport = Detail::MakeErrorDescriptor(Domain, "render.graph.export_invalid", ErrorSeverity::Error,
+                                                                          "The render graph export is duplicated or malformed.",
+                                                                          "Export each valid graph-local resource at most once.");
+    const ErrorCodeDescriptor InvalidImport = Detail::
+        MakeErrorDescriptor(Domain, "render.graph.import_invalid", ErrorSeverity::Error,
+                            "The render graph import has an invalid resident binding or lifetime class.",
+                            "Import a valid generation-safe Horo buffer or texture handle as external, persistent, or history data.");
     const ErrorCodeDescriptor InvalidLimits =
         Detail::MakeErrorDescriptor(Domain, "render.graph.limits_invalid", ErrorSeverity::Error,
                                     "Render graph limits are zero or exceed engine hard bounds.",
@@ -64,6 +71,10 @@ namespace Horo::Render::RenderGraphErrors {
         Detail::MakeErrorDescriptor(Domain, "render.graph.resource_kind_unsupported", ErrorSeverity::Error,
                                     "The render graph resource kind is unsupported.",
                                     "Request a declared Buffer or Texture resource without fallback.");
+    const ErrorCodeDescriptor UnsupportedResourceClass =
+        Detail::MakeErrorDescriptor(Domain, "render.graph.resource_class_unsupported", ErrorSeverity::Error,
+                                    "The render graph resource lifetime class is unsupported.",
+                                    "Use External, Persistent, Transient, or History without fallback.");
     const ErrorCodeDescriptor UnsupportedUsage =
         Detail::MakeErrorDescriptor(Domain, "render.graph.usage_unsupported", ErrorSeverity::Error,
                                     "The render graph access or usage kind is unsupported.",

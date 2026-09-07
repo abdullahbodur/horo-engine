@@ -37,6 +37,16 @@ namespace Horo::Render {
             return static_cast<std::uint8_t>(kind) <= static_cast<std::uint8_t>(RenderGraphResourceKind::Texture);
         }
 
+        /** @brief Reports whether the resource class belongs to the public contract. */
+        [[nodiscard]] bool IsKnown(const RenderGraphResourceClass resourceClass) noexcept {
+            return static_cast<std::uint8_t>(resourceClass) <= static_cast<std::uint8_t>(RenderGraphResourceClass::History);
+        }
+
+        /** @brief Reports whether the class represents an imported resident generation. */
+        [[nodiscard]] bool IsImported(const RenderGraphResourceClass resourceClass) noexcept {
+            return resourceClass != RenderGraphResourceClass::Transient;
+        }
+
         /** @brief Reports whether the access value belongs to the public contract. */
         [[nodiscard]] bool IsKnown(const RenderGraphAccess access) noexcept {
             return static_cast<std::uint8_t>(access) <= static_cast<std::uint8_t>(RenderGraphAccess::ReadWrite);
@@ -109,16 +119,16 @@ namespace Horo::Render {
 
     /** @copydoc RenderGraph::RenderGraph */
     RenderGraph::RenderGraph(const RenderGraphOwnerId owner, const RenderGraphLimits &limits, std::vector<RenderGraphPass> passes,
-                             std::vector<RenderGraphResource> resources, std::vector<RenderGraphResourceUsage> usages,
-                             std::vector<RenderGraphDependency> dependencies) noexcept
-        : owner_(owner), limits_(limits), passes_(std::move(passes)), resources_(std::move(resources)), usages_(std::move(usages)),
-          dependencies_(std::move(dependencies)) {}
+                             std::vector<RenderGraphResource> resources, std::vector<RenderGraphResourceExport> exports,
+                             std::vector<RenderGraphResourceUsage> usages, std::vector<RenderGraphDependency> dependencies) noexcept
+        : owner_(owner), limits_(limits), passes_(std::move(passes)), resources_(std::move(resources)), exports_(std::move(exports)),
+          usages_(std::move(usages)), dependencies_(std::move(dependencies)) {}
 
     /** @copydoc RenderGraph::RenderGraph(RenderGraph &&) */
     RenderGraph::RenderGraph(RenderGraph &&other) noexcept
         : owner_(std::exchange(other.owner_, {})), limits_(std::exchange(other.limits_, {})), passes_(std::exchange(other.passes_, {})),
-          resources_(std::exchange(other.resources_, {})), usages_(std::exchange(other.usages_, {})),
-          dependencies_(std::exchange(other.dependencies_, {})) {}
+          resources_(std::exchange(other.resources_, {})), exports_(std::exchange(other.exports_, {})),
+          usages_(std::exchange(other.usages_, {})), dependencies_(std::exchange(other.dependencies_, {})) {}
 
     /** @copydoc RenderGraph::operator= */
     RenderGraph &RenderGraph::operator=(RenderGraph &&other) noexcept {
@@ -127,6 +137,7 @@ namespace Horo::Render {
             limits_ = std::exchange(other.limits_, {});
             passes_ = std::exchange(other.passes_, {});
             resources_ = std::exchange(other.resources_, {});
+            exports_ = std::exchange(other.exports_, {});
             usages_ = std::exchange(other.usages_, {});
             dependencies_ = std::exchange(other.dependencies_, {});
         }
@@ -153,6 +164,11 @@ namespace Horo::Render {
         return resources_;
     }
 
+    /** @copydoc RenderGraph::Exports */
+    std::span<const RenderGraphResourceExport> RenderGraph::Exports() const noexcept {
+        return exports_;
+    }
+
     /** @copydoc RenderGraph::Usages */
     std::span<const RenderGraphResourceUsage> RenderGraph::Usages() const noexcept {
         return usages_;
@@ -170,7 +186,8 @@ namespace Horo::Render {
     /** @copydoc RenderGraphBuilder::RenderGraphBuilder */
     RenderGraphBuilder::RenderGraphBuilder(RenderGraphBuilder &&other) noexcept
         : owner_(other.owner_), limits_(other.limits_), ownerThread_(other.ownerThread_), state_(other.state_),
-          passes_(std::move(other.passes_)), resources_(std::move(other.resources_)), usages_(std::move(other.usages_)),
+          passes_(std::move(other.passes_)), resources_(std::move(other.resources_)), exports_(std::move(other.exports_)),
+          exportedResources_(std::move(other.exportedResources_)), usages_(std::move(other.usages_)),
           dependencies_(std::move(other.dependencies_)) {
         other.owner_ = {};
         other.state_ = RenderGraphBuilderState::MovedFrom;
@@ -231,13 +248,81 @@ namespace Horo::Render {
         return Result<RenderGraphPassRef>::Success(reference);
     }
 
-    /** @copydoc RenderGraphBuilder::AddResource */
-    Result<RenderGraphResourceId> RenderGraphBuilder::AddResource(const RenderGraphResourceKind kind) {
+    /** @copydoc RenderGraphBuilder::AddTransientResource */
+    Result<RenderGraphResourceId> RenderGraphBuilder::AddTransientResource(const RenderGraphResourceKind kind) {
+        return AddResourceDeclaration(kind, RenderGraphResourceClass::Transient, std::monostate{});
+    }
+
+    /** @copydoc RenderGraphBuilder::ImportBuffer */
+    Result<RenderGraphResourceId> RenderGraphBuilder::ImportBuffer(const RenderBufferHandle handle,
+                                                                   const RenderGraphResourceClass resourceClass) {
+        return AddImportedResource(RenderGraphResourceKind::Buffer, resourceClass, handle);
+    }
+
+    /** @copydoc RenderGraphBuilder::ImportTexture */
+    Result<RenderGraphResourceId> RenderGraphBuilder::ImportTexture(const RenderTextureHandle handle,
+                                                                    const RenderGraphResourceClass resourceClass) {
+        return AddImportedResource(RenderGraphResourceKind::Texture, resourceClass, handle);
+    }
+
+    /** @copydoc RenderGraphBuilder::ExportResource */
+    Result<void> RenderGraphBuilder::ExportResource(const RenderGraphResourceId resource) {
+        if (const Result<void> open = ValidateOpenOnOwnerThread(); open.HasError()) {
+            return open;
+        }
+        if (!resource.IsValid()) {
+            return Result<void>::Failure(MakeError(RenderGraphErrors::InvalidResource));
+        }
+        if (resource.owner != owner_) {
+            return Result<void>::Failure(MakeError(RenderGraphErrors::WrongOwner));
+        }
+        if (FindResource(resource) == nullptr) {
+            return Result<void>::Failure(MakeError(RenderGraphErrors::InvalidResource));
+        }
+        const std::size_t resourceIndex = resource.value - 1;
+        if (exportedResources_[resourceIndex] != 0) {
+            return Result<void>::Failure(MakeError(RenderGraphErrors::InvalidExport));
+        }
+        exportedResources_[resourceIndex] = 1;
+        exports_.emplace_back(resource);
+        return Result<void>::Success();
+    }
+
+    /** @copydoc RenderGraphBuilder::AddImportedResource */
+    Result<RenderGraphResourceId> RenderGraphBuilder::AddImportedResource(const RenderGraphResourceKind kind,
+                                                                          const RenderGraphResourceClass resourceClass,
+                                                                          RenderGraphResourceBinding binding) {
+        if (const Result<void> open = ValidateOpenOnOwnerThread(); open.HasError()) {
+            return Result<RenderGraphResourceId>::Failure(open.ErrorValue());
+        }
+        if (!IsKnown(resourceClass)) {
+            return Result<RenderGraphResourceId>::Failure(MakeError(RenderGraphErrors::UnsupportedResourceClass));
+        }
+        if (!IsImported(resourceClass)) {
+            return Result<RenderGraphResourceId>::Failure(MakeError(RenderGraphErrors::InvalidImport));
+        }
+        const bool validBuffer = kind == RenderGraphResourceKind::Buffer && std::holds_alternative<RenderBufferHandle>(binding) &&
+                                 std::get<RenderBufferHandle>(binding).IsValid();
+        const bool validTexture = kind == RenderGraphResourceKind::Texture && std::holds_alternative<RenderTextureHandle>(binding) &&
+                                  std::get<RenderTextureHandle>(binding).IsValid();
+        if (!validBuffer && !validTexture) {
+            return Result<RenderGraphResourceId>::Failure(MakeError(RenderGraphErrors::InvalidImport));
+        }
+        return AddResourceDeclaration(kind, resourceClass, std::move(binding));
+    }
+
+    /** @copydoc RenderGraphBuilder::AddResourceDeclaration */
+    Result<RenderGraphResourceId> RenderGraphBuilder::AddResourceDeclaration(const RenderGraphResourceKind kind,
+                                                                             const RenderGraphResourceClass resourceClass,
+                                                                             RenderGraphResourceBinding binding) {
         if (const Result<void> open = ValidateOpenOnOwnerThread(); open.HasError()) {
             return Result<RenderGraphResourceId>::Failure(open.ErrorValue());
         }
         if (!IsKnown(kind)) {
             return Result<RenderGraphResourceId>::Failure(MakeError(RenderGraphErrors::UnsupportedResourceKind));
+        }
+        if (!IsKnown(resourceClass)) {
+            return Result<RenderGraphResourceId>::Failure(MakeError(RenderGraphErrors::UnsupportedResourceClass));
         }
         if (resources_.size() == limits_.maxResources) {
             return Result<RenderGraphResourceId>::Failure(
@@ -245,7 +330,8 @@ namespace Horo::Render {
         }
 
         const RenderGraphResourceId id{owner_, static_cast<std::uint32_t>(resources_.size() + 1)};
-        resources_.emplace_back(id, kind);
+        resources_.emplace_back(id, kind, resourceClass, std::move(binding));
+        exportedResources_.emplace_back(0);
         return Result<RenderGraphResourceId>::Success(id);
     }
 
@@ -297,8 +383,8 @@ namespace Horo::Render {
         }
 
         state_ = RenderGraphBuilderState::Finalized;
-        return Result<RenderGraph>::Success(
-            RenderGraph{owner_, limits_, std::move(passes_), std::move(resources_), std::move(usages_), std::move(dependencies_)});
+        return Result<RenderGraph>::Success(RenderGraph{owner_, limits_, std::move(passes_), std::move(resources_), std::move(exports_),
+                                                        std::move(usages_), std::move(dependencies_)});
     }
 
     /** @copydoc RenderGraphBuilder::Cancel */
@@ -331,6 +417,8 @@ namespace Horo::Render {
         try {
             passes_.reserve(limits_.maxPasses);
             resources_.reserve(limits_.maxResources);
+            exports_.reserve(limits_.maxResources);
+            exportedResources_.reserve(limits_.maxResources);
             usages_.reserve(limits_.maxUsages);
             dependencies_.reserve(limits_.maxDependencies);
             return Result<void>::Success();
@@ -404,6 +492,8 @@ namespace Horo::Render {
     void RenderGraphBuilder::ReleaseStorage() noexcept {
         std::vector<RenderGraphPass>{}.swap(passes_);
         std::vector<RenderGraphResource>{}.swap(resources_);
+        std::vector<RenderGraphResourceExport>{}.swap(exports_);
+        std::vector<std::uint8_t>{}.swap(exportedResources_);
         std::vector<RenderGraphResourceUsage>{}.swap(usages_);
         std::vector<RenderGraphDependency>{}.swap(dependencies_);
     }
