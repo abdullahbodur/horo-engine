@@ -32,6 +32,14 @@ namespace Horo::WorldStreaming::WorldStreamingErrors {
     extern const ErrorCodeDescriptor PartitionCapacityExceeded;
     /** @brief A partition descriptor repeats a layer or exact cell identity. */
     extern const ErrorCodeDescriptor PartitionIdentityConflict;
+    /** @brief A cooked world-index manifest is incomplete or contains malformed metadata. */
+    extern const ErrorCodeDescriptor CookedManifestInvalid;
+    /** @brief A cooked world-index manifest exceeds a mandatory count or byte ceiling. */
+    extern const ErrorCodeDescriptor CookedManifestCapacityExceeded;
+    /** @brief Cooked metadata does not map one-to-one to the authoritative descriptor cells. */
+    extern const ErrorCodeDescriptor CookedManifestIdentityConflict;
+    /** @brief A cooked cell dependency is invalid, duplicated, self-referential, or absent from the manifest. */
+    extern const ErrorCodeDescriptor CookedManifestDependencyInvalid;
     /** @brief A streaming source descriptor or admission context is structurally invalid. */
     extern const ErrorCodeDescriptor SourceDescriptorInvalid;
     /** @brief A streaming source intent is not supported by this contract version. */

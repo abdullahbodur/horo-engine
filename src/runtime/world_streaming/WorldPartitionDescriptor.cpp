@@ -6,7 +6,6 @@
 #include <array>
 #include <cmath>
 #include <limits>
-#include <tuple>
 #include <utility>
 
 namespace Horo::WorldStreaming {
@@ -61,11 +60,6 @@ namespace Horo::WorldStreaming {
                    TryMultiply(maximumBoundary, cellSize, maximumOffset) && TryAdd(origin, minimumOffset, gridMinimum) &&
                    TryAdd(origin, maximumOffset, gridMaximumExclusive) && contentMinimum >= gridMinimum &&
                    contentMaximum < gridMaximumExclusive;
-        }
-
-        [[nodiscard]] bool CellLess(const WorldPartitionCellDescriptor &left, const WorldPartitionCellDescriptor &right) noexcept {
-            return std::tuple{left.id.layer.Value(), left.id.lod, left.id.z, left.id.y, left.id.x} <
-                   std::tuple{right.id.layer.Value(), right.id.lod, right.id.z, right.id.y, right.id.x};
         }
 
         [[nodiscard]] bool SameCell(const WorldPartitionCellDescriptor &left, const WorldPartitionCellDescriptor &right) noexcept {
@@ -131,7 +125,7 @@ namespace Horo::WorldStreaming {
             }
 
             std::vector<WorldPartitionCellDescriptor> owned{cells.begin(), cells.end()};
-            std::ranges::sort(owned, CellLess);
+            std::ranges::sort(owned, StreamingCellCanonicalLess{}, &WorldPartitionCellDescriptor::id);
             if (std::ranges::adjacent_find(owned, SameCell) != owned.end()) {
                 return Invalid<std::vector<WorldPartitionCellDescriptor>>(WorldStreamingErrors::PartitionIdentityConflict);
             }

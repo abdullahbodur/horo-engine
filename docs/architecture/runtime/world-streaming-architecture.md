@@ -100,6 +100,25 @@ existing path-independent asset identity rather than a competing identifier.
 Serialized layout, cooked checksums, streaming volumes, and residency lifecycle
 state remain owned by their later contracts and are not inferred here.
 
+`CookedWorldIndexManifest` is the immutable WST-004.2 aggregate layered over that
+descriptor. It takes ownership of exactly one validated `WorldPartitionDescriptor`
+and adds exactly one cooked record per declared cell: encoded and decoded byte
+counts, aggregate payload CRC32, the canonical cell-artifact SHA-256, and a bounded
+canonically ordered set of required cell dependencies. The nested descriptor remains
+the sole authority for topology, layers, and package location through its chunk
+`AssetId`; cooked records do not repeat those fields or introduce filesystem paths.
+
+Construction validates and allocates all cooked metadata before moving the supplied
+descriptor. Success consumes the descriptor once; any typed failure leaves it valid
+and unmodified, and caller spans are never retained. Returned spans remain valid only
+until the manifest is moved from or destroyed. A replacement owner publishes a newly
+validated aggregate by value; this inert model performs no I/O, codec work, runtime
+registration, cancellation, or shutdown mutation. WST-004.5 may produce dependency
+bundles and soft-reference tables from these required edges, but it does not become a
+second manifest or topology authority. Existing descriptor-only callers migrate by
+constructing the cooked aggregate at the Asset Pipeline/runtime handoff once complete
+cell metadata is available; partial/default cooked metadata is not accepted.
+
 PartitionEpoch identifies a mounted partition incarnation. It changes on world
 replacement/reload, including replacement by the same worldGuid. StreamingGeneration
 changes on each new cell attempt and when an attempt is invalidated; it does not
