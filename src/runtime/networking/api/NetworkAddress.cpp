@@ -157,6 +157,29 @@ namespace Horo::Network {
             CapacityExceeded
         };
 
+        bool IsValidHostnameLabelShape(const std::string_view label) noexcept {
+            return !label.empty() && label.size() <= 63 && label.front() != '-' && label.back() != '-';
+        }
+
+        bool IsAsciiHostnameCharacter(const unsigned char character) noexcept {
+            return IsAsciiLetter(character) || IsAsciiDigit(character) || character == '-';
+        }
+
+        HostnameStatus CanonicalizeHostnameLabel(const std::string_view label, const std::span<char> output) noexcept {
+            using enum HostnameStatus;
+            if (!IsValidHostnameLabelShape(label))
+                return Invalid;
+            for (std::size_t index = 0; index < label.size(); ++index) {
+                const auto character = static_cast<unsigned char>(label[index]);
+                if (character > 0x7fU)
+                    return Unsupported;
+                if (!IsAsciiHostnameCharacter(character))
+                    return Invalid;
+                output[index] = AsciiLower(character);
+            }
+            return label.size() >= 4 && std::string_view{output.data(), 4} == "xn--" ? Unsupported : Valid;
+        }
+
         HostnameStatus CanonicalizeHostname(const std::string_view text,
                                             std::array<char, NetworkAddress::MaximumHostnameLength> &hostname) noexcept {
             using enum HostnameStatus;
@@ -164,27 +187,20 @@ namespace Horo::Network {
                 return CapacityExceeded;
             if (text.empty() || text.front() == '.' || text.back() == '.')
                 return Invalid;
-            std::size_t labelStart{};
-            for (std::size_t index = 0; index <= text.size(); ++index) {
-                if (index != text.size() && text[index] != '.') {
-                    const auto character = static_cast<unsigned char>(text[index]);
-                    if (character > 0x7fU)
-                        return Unsupported;
-                    if (!IsAsciiLetter(character) && !IsAsciiDigit(character) && character != '-')
-                        return Invalid;
-                    hostname[index] = AsciiLower(character);
-                    continue;
-                }
-                const auto labelLength = index - labelStart;
-                if (labelLength == 0 || labelLength > 63 || hostname[labelStart] == '-' || hostname[index - 1] == '-')
-                    return Invalid;
-                if (labelLength >= 4 && std::string_view{hostname.data() + labelStart, 4} == "xn--")
-                    return Unsupported;
-                if (index != text.size())
-                    hostname[index] = '.';
-                labelStart = index + 1;
+            std::size_t start{};
+            while (start < text.size()) {
+                const auto separator = text.find('.', start);
+                const auto end = separator == std::string_view::npos ? text.size() : separator;
+                const auto label = text.substr(start, end - start);
+                const auto output = std::span{hostname}.subspan(start, label.size());
+                if (const auto status = CanonicalizeHostnameLabel(label, output); status != Valid)
+                    return status;
+                if (separator == std::string_view::npos)
+                    return Valid;
+                hostname[separator] = '.';
+                start = separator + 1;
             }
-            return Valid;
+            return Invalid;
         }
 
         struct ParsedHost final {
