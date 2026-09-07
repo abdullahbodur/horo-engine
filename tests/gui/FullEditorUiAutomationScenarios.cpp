@@ -253,7 +253,9 @@ namespace {
         }, [&editor, project](Tests::UiScenarioPipe &pipeline) {
             Tests::FullEditorSetups::CreateProjectAndOpenWorkspace(pipeline, editor, project);
             Tests::FullEditorActions::CreateRootBox(pipeline);
+            Tests::FullEditorActions::ExerciseHierarchyEdits(pipeline);
             Tests::FullEditorActions::SelectOrthographicProjection(pipeline, editor);
+            Tests::FullEditorActions::ExerciseWorkspacePanels(pipeline, editor);
         }, Tests::EditorUiScenarioBudget::Extended(1800), &editor.Input());
 
         INFO(result.testEngineLog);
@@ -261,7 +263,7 @@ namespace {
         REQUIRE_FALSE(result.cancelled);
         REQUIRE(result.exception == nullptr);
         REQUIRE(result.Succeeded());
-        REQUIRE(result.steps.size() == 8);
+        REQUIRE(result.steps.size() == 15);
         REQUIRE(std::all_of(result.steps.begin(), result.steps.begin() + 4, [](const Tests::UiScenarioStepResult &step) {
             return step.kind == Tests::UiScenarioStepKind::Setup && step.status == Tests::UiScenarioStepStatus::Passed;
         }));
