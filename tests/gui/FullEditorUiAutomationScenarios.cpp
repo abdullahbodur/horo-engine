@@ -265,7 +265,7 @@ namespace {
         REQUIRE_FALSE(result.cancelled);
         REQUIRE(result.exception == nullptr);
         REQUIRE(result.Succeeded());
-        REQUIRE(result.steps.size() == 16);
+        REQUIRE(result.steps.size() == 18);
         REQUIRE(std::all_of(result.steps.begin(), result.steps.begin() + 4, [](const Tests::UiScenarioStepResult &step) {
             return step.kind == Tests::UiScenarioStepKind::Setup && step.status == Tests::UiScenarioStepStatus::Passed;
         }));

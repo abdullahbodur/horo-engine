@@ -105,6 +105,11 @@ namespace Horo::Tests {
                 throw std::runtime_error("Unable to write recent-project E2E scene.");
         }
 
+        void CreateFixtureRoots(const std::filesystem::path &home, const std::filesystem::path &projectsRoot) {
+            std::filesystem::create_directories(home);
+            std::filesystem::create_directories(projectsRoot);
+        }
+
         [[nodiscard]] std::filesystem::path SeedRecentProjectFixture(const std::filesystem::path &projectsRoot, const std::string &name,
                                                                      const IEditorUiTestSurface &surface) {
             const Application::EngineReleaseVersion release = Application::CurrentEngineReleaseVersion();
@@ -155,8 +160,7 @@ namespace Horo::Tests {
               viewportRenderer(testSurface.ViewportRenderer()),
               fonts{ImGui::GetIO().FontDefault, ImGui::GetIO().FontDefault, ImGui::GetIO().FontDefault, ImGui::GetIO().FontDefault},
               theme{fonts}, settingsSnapshot(settings.Snapshot()), gui{engineEvents, editorEvents, localization, theme, settingsSnapshot} {
-            std::filesystem::create_directories(home);
-            std::filesystem::create_directories(projectsRoot);
+            CreateFixtureRoots(home, projectsRoot);
             LoadLocalization(localization, locale);
             if (recentProjectName.has_value())
                 static_cast<void>(SeedRecentProjectFixture(projectsRoot, *recentProjectName, testSurface));
@@ -245,6 +249,7 @@ namespace Horo::Tests {
         Editor::EditorGuiContext gui;
         std::unique_ptr<Editor::GuiScreenHost> screenHost;
         std::vector<Editor::GuiRouteKind> drawnRoutes;
+        std::optional<Editor::EditorMenuInvocation> pendingMenuInvocation;
     };
 
     FullEditorUiTestHost::FullEditorUiTestHost(IEditorUiTestSurface &surface, std::string locale,
@@ -255,6 +260,10 @@ namespace Horo::Tests {
 
     void FullEditorUiTestHost::DrawFrame(ImGuiTestContext *) {
         state_->engineEvents.DispatchQueued();
+        if (state_->pendingMenuInvocation.has_value()) {
+            state_->screenHost->DispatchMenuInvocation(*state_->pendingMenuInvocation);
+            state_->pendingMenuInvocation.reset();
+        }
         state_->settingsSnapshot = state_->settings.Snapshot();
         state_->modals.OnUpdate(1.0F / 60.0F);
         state_->screenHost->OnUpdate(1.0F / 60.0F);
@@ -331,6 +340,10 @@ namespace Horo::Tests {
 
     Editor::GuiScreenHost &FullEditorUiTestHost::Screens() noexcept {
         return *state_->screenHost;
+    }
+
+    void FullEditorUiTestHost::DispatchMenuInvocationOnNextFrame(Editor::EditorMenuInvocation invocation) {
+        state_->pendingMenuInvocation = std::move(invocation);
     }
 
     bool FullEditorUiTestHost::BeginAssetImport(const std::filesystem::path &source) {

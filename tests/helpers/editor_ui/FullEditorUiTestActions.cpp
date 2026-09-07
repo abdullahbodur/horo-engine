@@ -119,6 +119,76 @@ namespace Horo::Tests::FullEditorActions {
             });
         }
 
+        void AddMenuRoutingStep(UiScenarioPipe &pipeline, FullEditorUiTestHost &editor) {
+            pipeline.Step("Exercise workspace menu routing and retain the dirty scene", [&editor](ImGuiTestContext &ui) {
+                const auto dispatch = [&editor, &ui](Editor::EditorMenuInvocation invocation) {
+                    editor.DispatchMenuInvocationOnNextFrame(std::move(invocation));
+                    ui.Yield();
+                };
+                dispatch({Editor::EditorMenuAction::SaveScene, std::nullopt});
+                dispatch({Editor::EditorMenuAction::Undo, std::nullopt});
+                dispatch({Editor::EditorMenuAction::Redo, std::nullopt});
+                dispatch({Editor::EditorMenuAction::CreatePrimitive, Runtime::PrimitiveId{"primitive.mesh.sphere"}});
+                dispatch({Editor::EditorMenuAction::None, std::nullopt});
+
+                dispatch({Editor::EditorMenuAction::OpenProject, std::nullopt});
+                IM_CHECK(ui.ItemExists("//**/Unsaved Changes"));
+                ui.ItemClick("//**/Stay Here");
+                ui.Yield();
+                IM_CHECK(editor.ActiveRoute() == Editor::GuiRouteKind::EditorWorkspace);
+            });
+        }
+
+        void AddContentBrowserStep(UiScenarioPipe &pipeline) {
+            pipeline.Step("Create and navigate an Asset Browser folder", [](ImGuiTestContext &ui) {
+                ui.ItemInputValue("//**/##ContentBrowserSearch", "missing");
+                ui.ItemInputValue("//**/##ContentBrowserSearch", "");
+                ui.ItemClick("//**/###ContentBrowserSort");
+                ui.ItemClick("//**/###combo_option_1");
+                ui.ItemClick("//**/A-Z");
+
+                ImGuiTestItemInfo dock = ui.WindowInfo("//##DockBottom", ImGuiTestOpFlags_NoError);
+                if (dock.Window == nullptr)
+                    dock = ui.WindowInfo("//##DockBottomLeft", ImGuiTestOpFlags_NoError);
+                if (dock.Window == nullptr)
+                    dock = ui.WindowInfo("//##DockBottomRight", ImGuiTestOpFlags_NoError);
+                IM_CHECK(dock.Window != nullptr);
+                ui.MouseMoveToPos({dock.RectClipped.Max.x - 24.0F, dock.RectClipped.Max.y - 24.0F});
+                ui.MouseClick(ImGuiMouseButton_Right);
+                ui.ItemClick("//**/Create Folder");
+                ui.Yield();
+                ui.ItemInputValue("//**/##ContentBrowserCreateFolderInput", "CoverageFolder");
+                ui.ItemClick("//**/Create Folder");
+                ui.Yield();
+
+                ui.ItemInputValue("//**/##ContentBrowserSearch", "CoverageFolder");
+                for (int frame = 0; frame < 30 && !ui.ItemExists("//**/##AssetCard"); ++frame)
+                    ui.Yield();
+                IM_CHECK(ui.ItemExists("//**/##AssetCard"));
+                ui.ItemClick("//**/##AssetCard", ImGuiMouseButton_Right);
+                ui.ItemClick("//**/Asset Info");
+                ui.Yield();
+                ui.KeyPress(ImGuiKey_Escape);
+                ui.Yield();
+
+                ui.ItemClick("//**/##AssetCard", ImGuiMouseButton_Right);
+                ui.ItemClick("//**/Rename");
+                ui.Yield();
+                ui.ItemInputValue("//**/##ContentBrowserRenameInput", "RenamedCoverageFolder");
+                ui.ItemClick("//**/Cancel");
+                ui.Yield();
+
+                for (int frame = 0; frame < 30 && !ui.ItemExists("//**/##AssetCard"); ++frame)
+                    ui.Yield();
+                IM_CHECK(ui.ItemExists("//**/##AssetCard"));
+                ui.ItemClick("//**/##AssetCard", ImGuiMouseButton_Right);
+                ui.ItemClick("//**/Delete");
+                ui.Yield();
+                ui.ItemClick("//**/Delete");
+                ui.ItemInputValue("//**/##ContentBrowserSearch", "");
+            });
+        }
+
         void AddSettingsStep(UiScenarioPipe &pipeline, FullEditorUiTestHost &editor) {
             pipeline.Step("Exercise editor settings sections", [&editor](ImGuiTestContext &ui) {
                 editor.Screens().DispatchMenuInvocation(
@@ -173,6 +243,8 @@ namespace Horo::Tests::FullEditorActions {
     void ExerciseWorkspacePanels(UiScenarioPipe &pipeline, FullEditorUiTestHost &editor) {
         AddInputMappingStep(pipeline);
         AddGlobalDockSteps(pipeline);
+        AddMenuRoutingStep(pipeline, editor);
+        AddContentBrowserStep(pipeline);
         AddSettingsStep(pipeline, editor);
     }
 
