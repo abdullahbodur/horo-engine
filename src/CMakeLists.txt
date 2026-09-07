@@ -131,6 +131,7 @@ add_library(HoroRuntime STATIC
         runtime/lifecycle/RuntimeErrors.cpp
         runtime/save/SaveErrors.cpp
         runtime/save/SaveIdentity.cpp
+        runtime/save/SaveRootResolver.cpp
         runtime/save/SaveParticipantRegistry.cpp
         runtime/save/SaveArchiveMetadata.cpp
         runtime/save/SaveCompatibility.cpp
