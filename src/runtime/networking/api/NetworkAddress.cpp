@@ -7,6 +7,7 @@
 #include <charconv>
 #include <limits>
 #include <string_view>
+#include <utility>
 
 namespace Horo::Network {
     namespace {
@@ -31,11 +32,12 @@ namespace Horo::Network {
         }
 
         const ErrorCodeDescriptor *ValidateAddressInput(const std::string_view text, const TransportAdmissionState state) noexcept {
-            if (state == TransportAdmissionState::Cancelled)
+            using enum TransportAdmissionState;
+            if (state == Cancelled)
                 return &NetworkErrors::TransportOperationCancelled;
-            if (state == TransportAdmissionState::ShuttingDown)
+            if (state == ShuttingDown)
                 return &NetworkErrors::TransportShuttingDown;
-            if (state != TransportAdmissionState::Accepting || text.empty())
+            if (state != Accepting || text.empty())
                 return &NetworkErrors::NetworkAddressInvalid;
             if (text.size() > NetworkAddressDiagnostic::MaximumLength)
                 return &NetworkErrors::NetworkAddressCapacityExceeded;
@@ -107,7 +109,9 @@ namespace Horo::Network {
                     return false;
                 const auto separator = text.find(':', start);
                 const auto end = separator == std::string_view::npos ? text.size() : separator;
-                if (!ParseHexGroup(text.substr(start, end - start), groups[count++]))
+                if (std::uint16_t group{}; ParseHexGroup(text.substr(start, end - start), group))
+                    groups[count++] = group;
+                else
                     return false;
                 if (separator == std::string_view::npos)
                     return true;
@@ -155,31 +159,89 @@ namespace Horo::Network {
 
         HostnameStatus CanonicalizeHostname(const std::string_view text,
                                             std::array<char, NetworkAddress::MaximumHostnameLength> &hostname) noexcept {
+            using enum HostnameStatus;
             if (text.size() > NetworkAddress::MaximumHostnameLength)
-                return HostnameStatus::CapacityExceeded;
+                return CapacityExceeded;
             if (text.empty() || text.front() == '.' || text.back() == '.')
-                return HostnameStatus::Invalid;
+                return Invalid;
             std::size_t labelStart{};
             for (std::size_t index = 0; index <= text.size(); ++index) {
                 if (index != text.size() && text[index] != '.') {
                     const auto character = static_cast<unsigned char>(text[index]);
                     if (character > 0x7fU)
-                        return HostnameStatus::Unsupported;
+                        return Unsupported;
                     if (!IsAsciiLetter(character) && !IsAsciiDigit(character) && character != '-')
-                        return HostnameStatus::Invalid;
+                        return Invalid;
                     hostname[index] = AsciiLower(character);
                     continue;
                 }
                 const auto labelLength = index - labelStart;
                 if (labelLength == 0 || labelLength > 63 || hostname[labelStart] == '-' || hostname[index - 1] == '-')
-                    return HostnameStatus::Invalid;
+                    return Invalid;
                 if (labelLength >= 4 && std::string_view{hostname.data() + labelStart, 4} == "xn--")
-                    return HostnameStatus::Unsupported;
+                    return Unsupported;
                 if (index != text.size())
                     hostname[index] = '.';
                 labelStart = index + 1;
             }
-            return HostnameStatus::Valid;
+            return Valid;
+        }
+
+        struct ParsedHost final {
+            NetworkAddressKind kind{NetworkAddressKind::Count};
+            std::array<std::uint8_t, NetworkAddress::Ipv6ByteCount> addressBytes{};
+            std::array<char, NetworkAddress::MaximumHostnameLength> hostname{};
+            std::uint16_t hostnameLength{};
+            std::string_view portText;
+        };
+
+        Result<ParsedHost> ParseBracketedIpv6(const std::string_view text) {
+            const auto closing = text.find(']');
+            if (closing == std::string_view::npos || closing + 1 >= text.size() || text[closing + 1] != ':' ||
+                text.find('[', 1) != std::string_view::npos || text.find(']', closing + 1) != std::string_view::npos)
+                return Fail<ParsedHost>(NetworkErrors::NetworkAddressInvalid);
+
+            ParsedHost parsed;
+            if (!ParseIpv6(text.substr(1, closing - 1), parsed.addressBytes))
+                return Fail<ParsedHost>(NetworkErrors::NetworkAddressInvalid);
+            parsed.kind = NetworkAddressKind::Ipv6;
+            parsed.portText = text.substr(closing + 2);
+            return Result<ParsedHost>::Success(std::move(parsed));
+        }
+
+        Result<ParsedHost> ParseNamedOrIpv4Host(const std::string_view text) {
+            using enum HostnameStatus;
+            const auto separator = text.find(':');
+            if (separator == std::string_view::npos || text.find(':', separator + 1) != std::string_view::npos)
+                return Fail<ParsedHost>(NetworkErrors::NetworkAddressInvalid);
+
+            const auto host = text.substr(0, separator);
+            if (host.empty())
+                return Fail<ParsedHost>(NetworkErrors::NetworkAddressInvalid);
+
+            ParsedHost parsed;
+            parsed.portText = text.substr(separator + 1);
+            if (IsDecimalOrDot(host)) {
+                if (!ParseIpv4(host, parsed.addressBytes))
+                    return Fail<ParsedHost>(NetworkErrors::NetworkAddressInvalid);
+                parsed.kind = NetworkAddressKind::Ipv4;
+                return Result<ParsedHost>::Success(std::move(parsed));
+            }
+
+            const auto hostnameStatus = CanonicalizeHostname(host, parsed.hostname);
+            if (hostnameStatus == Unsupported)
+                return Fail<ParsedHost>(NetworkErrors::NetworkAddressUnsupported);
+            if (hostnameStatus == CapacityExceeded)
+                return Fail<ParsedHost>(NetworkErrors::NetworkAddressCapacityExceeded);
+            if (hostnameStatus != Valid)
+                return Fail<ParsedHost>(NetworkErrors::NetworkAddressInvalid);
+            parsed.hostnameLength = static_cast<std::uint16_t>(host.size());
+            parsed.kind = NetworkAddressKind::DnsHostname;
+            return Result<ParsedHost>::Success(std::move(parsed));
+        }
+
+        Result<ParsedHost> ParseHost(const std::string_view text) {
+            return text.front() == '[' ? ParseBracketedIpv6(text) : ParseNamedOrIpv4Host(text);
         }
 
         class DiagnosticWriter final {
@@ -191,7 +253,7 @@ namespace Horo::Network {
             }
 
             void Text(const std::string_view text) noexcept {
-                std::copy(text.begin(), text.end(), output_.characters.begin() + output_.length);
+                std::ranges::copy(text, output_.characters.begin() + output_.length);
                 output_.length = static_cast<std::uint16_t>(output_.length + text.size());
             }
 
@@ -215,8 +277,8 @@ namespace Horo::Network {
 
     /** @copydoc NetworkAddress::NetworkAddress */
     NetworkAddress::NetworkAddress(const NetworkAddressKind kind, const std::uint16_t port,
-                                   std::array<std::uint8_t, Ipv6ByteCount> addressBytes, std::array<char, MaximumHostnameLength> hostname,
-                                   const std::uint16_t hostnameLength) noexcept
+                                   const std::array<std::uint8_t, Ipv6ByteCount> &addressBytes,
+                                   const std::array<char, MaximumHostnameLength> &hostname, const std::uint16_t hostnameLength) noexcept
         : kind_(kind), port_(port), addressBytes_(addressBytes), hostname_(hostname), hostnameLength_(hostnameLength) {}
 
     /** @copydoc NetworkAddress::Parse */
@@ -224,58 +286,23 @@ namespace Horo::Network {
         if (const auto *error = ValidateAddressInput(text, state); error != nullptr)
             return Fail<NetworkAddress>(*error);
 
-        NetworkAddressKind kind{NetworkAddressKind::Count};
-        std::array<std::uint8_t, Ipv6ByteCount> addressBytes{};
-        std::array<char, MaximumHostnameLength> hostname{};
-        std::uint16_t hostnameLength{};
-        std::string_view host;
-        std::string_view portText;
-        if (text.front() == '[') {
-            const auto closing = text.find(']');
-            if (closing == std::string_view::npos || closing + 1 >= text.size() || text[closing + 1] != ':' ||
-                text.find('[', 1) != std::string_view::npos || text.find(']', closing + 1) != std::string_view::npos)
-                return Fail<NetworkAddress>(NetworkErrors::NetworkAddressInvalid);
-            host = text.substr(1, closing - 1);
-            portText = text.substr(closing + 2);
-            if (!ParseIpv6(host, addressBytes))
-                return Fail<NetworkAddress>(NetworkErrors::NetworkAddressInvalid);
-            kind = NetworkAddressKind::Ipv6;
-        } else {
-            const auto separator = text.find(':');
-            if (separator == std::string_view::npos || text.find(':', separator + 1) != std::string_view::npos)
-                return Fail<NetworkAddress>(NetworkErrors::NetworkAddressInvalid);
-            host = text.substr(0, separator);
-            portText = text.substr(separator + 1);
-            if (host.empty())
-                return Fail<NetworkAddress>(NetworkErrors::NetworkAddressInvalid);
-            if (IsDecimalOrDot(host)) {
-                if (!ParseIpv4(host, addressBytes))
-                    return Fail<NetworkAddress>(NetworkErrors::NetworkAddressInvalid);
-                kind = NetworkAddressKind::Ipv4;
-            } else {
-                const auto hostnameStatus = CanonicalizeHostname(host, hostname);
-                if (hostnameStatus == HostnameStatus::Unsupported)
-                    return Fail<NetworkAddress>(NetworkErrors::NetworkAddressUnsupported);
-                if (hostnameStatus == HostnameStatus::CapacityExceeded)
-                    return Fail<NetworkAddress>(NetworkErrors::NetworkAddressCapacityExceeded);
-                if (hostnameStatus != HostnameStatus::Valid)
-                    return Fail<NetworkAddress>(NetworkErrors::NetworkAddressInvalid);
-                hostnameLength = static_cast<std::uint16_t>(host.size());
-                kind = NetworkAddressKind::DnsHostname;
-            }
-        }
-
-        auto port = ParsePort(portText);
+        auto parsedHost = ParseHost(text);
+        if (!parsedHost.HasValue())
+            return Result<NetworkAddress>::Failure(parsedHost.ErrorValue());
+        const auto &parsed = parsedHost.Value();
+        auto port = ParsePort(parsed.portText);
         if (!port.HasValue())
             return Fail<NetworkAddress>(NetworkErrors::NetworkAddressInvalid);
-        return Result<NetworkAddress>::Success(NetworkAddress{kind, port.Value(), addressBytes, hostname, hostnameLength});
+        return Result<NetworkAddress>::Success(
+            NetworkAddress{parsed.kind, port.Value(), parsed.addressBytes, parsed.hostname, parsed.hostnameLength});
     }
 
     /** @copydoc NetworkAddress::IsValid */
     bool NetworkAddress::IsValid() const noexcept {
-        if (port_ == 0 || kind_ >= NetworkAddressKind::Count)
+        using enum NetworkAddressKind;
+        if (port_ == 0 || kind_ >= Count)
             return false;
-        if (kind_ == NetworkAddressKind::DnsHostname)
+        if (kind_ == DnsHostname)
             return hostnameLength_ != 0 && hostnameLength_ <= hostname_.size();
         return hostnameLength_ == 0;
     }
