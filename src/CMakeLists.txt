@@ -147,6 +147,7 @@ add_library(HoroNetworkApi STATIC
         runtime/networking/api/MessageCodecRegistry.cpp
         runtime/networking/api/NetworkAddress.cpp
         runtime/networking/api/NetworkErrors.cpp
+        runtime/networking/api/NetworkObjectIdentity.cpp
         runtime/networking/api/PacketBuffer.cpp
         runtime/networking/api/PacketQueue.cpp
         runtime/networking/api/ProtocolIdentityRegistry.cpp
@@ -208,6 +209,13 @@ add_library(HoroEngine::RuntimeScene ALIAS HoroRuntimeScene)
 target_compile_features(HoroRuntimeScene PUBLIC cxx_std_20)
 target_include_directories(HoroRuntimeScene PUBLIC ${PROJECT_SOURCE_DIR}/include)
 target_link_libraries(HoroRuntimeScene PUBLIC HoroEngine::Foundation HoroEngine::Runtime HoroEngine::GameplayApi HoroEngine::RuntimeUi)
+
+add_library(HoroNetworkRuntime STATIC
+        runtime/networking/NetworkObjectMapping.cpp
+)
+add_library(HoroEngine::NetworkRuntime ALIAS HoroNetworkRuntime)
+target_compile_features(HoroNetworkRuntime PUBLIC cxx_std_20)
+target_link_libraries(HoroNetworkRuntime PUBLIC HoroEngine::NetworkApi HoroEngine::RuntimeScene)
 
 add_library(HoroGameplayRuntime STATIC
         gameplay/runtime/BehaviorRegistry.cpp

@@ -152,6 +152,12 @@ add_executable(HoroNetworkApiTests
 target_compile_features(HoroNetworkApiTests PRIVATE cxx_std_20)
 target_link_libraries(HoroNetworkApiTests PRIVATE HoroEngine::NetworkApi)
 horo_register_catch_test(HoroNetworkApiTests LABELS "unit;network;headless")
+add_executable(HoroNetworkRuntimeTests
+        unit/runtime/networking/NetworkObjectMappingTests.cpp
+)
+target_compile_features(HoroNetworkRuntimeTests PRIVATE cxx_std_20)
+target_link_libraries(HoroNetworkRuntimeTests PRIVATE HoroEngine::NetworkRuntime)
+horo_register_catch_test(HoroNetworkRuntimeTests LABELS "unit;network;headless")
 add_executable(HoroAudioApiTests
         unit/runtime/audio/AudioBackendCapabilitiesTests.cpp
         unit/runtime/audio/AudioCallbackEventsTests.cpp
@@ -1327,6 +1333,7 @@ set(HORO_CATCH_TEST_TARGETS
         HoroRuntimeSaveArchiveMetadataTests
         HoroRuntimeSaveArchiveFramingTests
         HoroRuntimeSceneTests
+        HoroNetworkRuntimeTests
         HoroAssetRegistryTests
         HoroAssetProviderTests
         HoroAssetCookTests

@@ -18,6 +18,20 @@ namespace Horo::Network::NetworkErrors {
     extern const ErrorCodeDescriptor TransportHandleInvalid;
     /** @brief A reclaimed handle slot cannot advance its generation without wrapping. */
     extern const ErrorCodeDescriptor TransportGenerationExhausted;
+    /** @brief A replicated authority epoch or object slot/generation is malformed. */
+    extern const ErrorCodeDescriptor NetworkObjectIdentityInvalid;
+    /** @brief A retired replicated-object slot cannot advance without generation wrap. */
+    extern const ErrorCodeDescriptor NetworkObjectGenerationExhausted;
+    /** @brief Network-object mapping construction, provenance, scene, or lifecycle input is malformed. */
+    extern const ErrorCodeDescriptor NetworkObjectMappingInvalid;
+    /** @brief A network-object slot or local entity is already mapped to a live occurrence. */
+    extern const ErrorCodeDescriptor NetworkObjectMappingConflict;
+    /** @brief A network-object identity or local entity is absent, retired, or stale. */
+    extern const ErrorCodeDescriptor NetworkObjectMappingUnknown;
+    /** @brief The session-owned mapping exhausted its prepared unique-slot capacity. */
+    extern const ErrorCodeDescriptor NetworkObjectMappingCapacityExceeded;
+    /** @brief The session-owned mapping is shutting down or invalidated with its scene. */
+    extern const ErrorCodeDescriptor NetworkObjectMappingTerminal;
     /** @brief Packet pool descriptor is malformed. */
     extern const ErrorCodeDescriptor PacketBufferInvalid;
     /** @brief Packet bytes or prepared storage exceed finite capacity. */

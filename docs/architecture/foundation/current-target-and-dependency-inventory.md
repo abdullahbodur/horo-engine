@@ -94,6 +94,7 @@ device backend.
 | Real target (alias) | Availability | Owner and public/private boundary | Direct first-party dependencies |
 |---|---|---|---|
 | `HoroRuntimeScene` (`HoroEngine::RuntimeScene`) | Always | Owns runtime scene definition, scene state, and scene component contracts under `Runtime/Scene/**`, excluding primitive mesh/catalog headers. | Foundation, Runtime, Assets, GameplayApi (public) |
+| `HoroNetworkRuntime` (`HoroEngine::NetworkRuntime`) | Always | Owns the bounded session/scene-scoped network-object mapping and immutable diagnostic snapshots under `Network/NetworkObjectMapping.h`; it performs no Scene mutation or transport work. | NetworkApi, RuntimeScene (public) |
 | `HoroSceneModel` (`HoroEngine::SceneModel`) | Always | Owns `Runtime/Scene/PrimitiveCatalog.h`, `PrimitiveMesh.h`, and `PrimitiveMeshDescriptor.h`. | Foundation, RenderApi (public) |
 | `HoroRenderApi` (`HoroEngine::RenderApi`) | Always | Interface target owning backend-neutral mesh, render-scene, and backend contracts under `Runtime/Render/**`, excluding registry/frontend/module headers. | Foundation (interface) |
 | `HoroRenderBackendRegistry` (`HoroEngine::RenderBackendRegistry`) | Always | Owns `Runtime/Render/RenderBackendRegistry.h` and backend registration/selection state. | RenderApi (public) |
@@ -210,8 +211,8 @@ conflicts are recorded rather than treated as additional implementations.
 | `HoroEngine::AudioCommands` | Implemented | Buffer-boundary typed commands and bounded MPSC/control/SPSC staging with critical reserves and barriers; clock-mapped scheduling and runtime execution remain separate. |
 | `HoroEngine::AudioPlatform` | Absent | No target or implementation path. |
 | `HoroEngine::AudioNull` | Absent | No target or implementation path. |
-| `HoroEngine::NetworkApi` | Partial | Foundation-only target owns canonical bounded IPv4/IPv6/DNS endpoints, generation-checked listener/connection/peer handles, channel identity, stable protocol/message/schema/feature/close-reason identities, bounded immutable protocol/codec/replication registries, canonical bounded message framing and replication fingerprints, exact transport delivery capability negotiation/admission, and prepared packet-buffer/queue storage primitives; concrete synchronized transports, sessions and runtime remain planned. |
-| `HoroEngine::NetworkRuntime` | Planned | Architecture exists; no production target. |
+| `HoroEngine::NetworkApi` | Partial | Foundation-only target owns canonical bounded IPv4/IPv6/DNS endpoints, generation-checked listener/connection/peer handles, channel identity, stable protocol/message/schema/feature/close-reason identities, authority-epoch-scoped network-object identity, bounded immutable protocol/codec/replication registries, canonical bounded message framing and replication fingerprints, exact transport delivery capability negotiation/admission, and prepared packet-buffer/queue storage primitives; concrete synchronized transports and sessions remain planned. |
+| `HoroEngine::NetworkRuntime` | Partial | Bounded session/scene-scoped network-object mapping exists with generation retirement, bidirectional lookup and immutable diagnostics; transport/session coordination, interest, baselines, capture/apply and scheduling remain planned. |
 | `HoroEngine::NetworkTransportNull` | Planned | Null transport peer behind `NetworkApi`; Foundation-only, no `Platform`; no production target yet. |
 | `HoroEngine::NetworkTransportGNS` | Planned | ADR-097 production direct-IP GNS transport peer behind `NetworkApi`; no production target yet. |
 | `HoroEngine::RenderApi` | Implemented | `HoroRenderApi` |
