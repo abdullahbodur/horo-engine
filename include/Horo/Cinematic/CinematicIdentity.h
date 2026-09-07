@@ -13,10 +13,33 @@
 #include <cstddef>
 #include <cstdint>
 #include <limits>
+#include <type_traits>
 
 namespace Horo::Cinematic {
     /** @brief Canonical network-byte-order encoding of a stable value and generation. */
     using SerializedCinematicIdentity = std::array<std::uint8_t, 12>;
+
+    namespace Detail {
+        /** @brief Writes one unsigned integer to a validated slice of the canonical identity representation. */
+        template <typename Integer>
+        constexpr void WriteNetworkOrder(SerializedCinematicIdentity &bytes, const std::size_t offset, Integer value) noexcept {
+            static_assert(std::is_unsigned_v<Integer>);
+            for (std::size_t byte = 0; byte < sizeof(Integer); ++byte) {
+                const std::size_t shift = (sizeof(Integer) - byte - 1U) * 8U;
+                bytes[offset + byte] = static_cast<std::uint8_t>(value >> shift);
+            }
+        }
+
+        /** @brief Reads one unsigned integer from a validated slice of the canonical identity representation. */
+        template <typename Integer>
+        [[nodiscard]] constexpr Integer ReadNetworkOrder(const SerializedCinematicIdentity &bytes, const std::size_t offset) noexcept {
+            static_assert(std::is_unsigned_v<Integer>);
+            Integer value{};
+            for (std::size_t byte = 0; byte < sizeof(Integer); ++byte)
+                value = static_cast<Integer>((value << 8U) | bytes[offset + byte]);
+            return value;
+        }
+    }  // namespace Detail
 
     /** @brief Strong generation-safe identity in one tag-defined cinematic domain. */
     template <typename Tag> struct CinematicIdentity final {
@@ -69,14 +92,8 @@ namespace Horo::Cinematic {
     template <typename Tag>
     [[nodiscard]] constexpr SerializedCinematicIdentity SerializeCinematicIdentity(const CinematicIdentity<Tag> identity) noexcept {
         SerializedCinematicIdentity bytes{};
-        for (std::size_t byte = 0; byte < sizeof(identity.stableValue); ++byte) {
-            const std::size_t shift = (sizeof(identity.stableValue) - byte - 1U) * 8U;
-            bytes[byte] = static_cast<std::uint8_t>(identity.stableValue >> shift);
-        }
-        for (std::size_t byte = 0; byte < sizeof(identity.generation); ++byte) {
-            const std::size_t shift = (sizeof(identity.generation) - byte - 1U) * 8U;
-            bytes[sizeof(identity.stableValue) + byte] = static_cast<std::uint8_t>(identity.generation >> shift);
-        }
+        Detail::WriteNetworkOrder(bytes, 0, identity.stableValue);
+        Detail::WriteNetworkOrder(bytes, sizeof(identity.stableValue), identity.generation);
         return bytes;
     }
 
@@ -87,15 +104,8 @@ namespace Horo::Cinematic {
      */
     template <typename Tag>
     [[nodiscard]] Result<CinematicIdentity<Tag>> DeserializeCinematicIdentity(const SerializedCinematicIdentity &bytes) {
-        std::uint64_t stableValue{};
-        for (std::size_t byte = 0; byte < sizeof(stableValue); ++byte)
-            stableValue = (stableValue << 8U) | bytes[byte];
-
-        std::uint32_t generation{};
-        for (std::size_t byte = sizeof(stableValue); byte < bytes.size(); ++byte)
-            generation = (generation << 8U) | bytes[byte];
-
-        auto identity = MakeCinematicIdentity<Tag>(stableValue, generation);
+        auto identity = MakeCinematicIdentity<Tag>(Detail::ReadNetworkOrder<std::uint64_t>(bytes, 0),
+                                                   Detail::ReadNetworkOrder<std::uint32_t>(bytes, sizeof(std::uint64_t)));
         if (identity.HasError())
             return Result<CinematicIdentity<Tag>>::Failure(MakeError(CinematicErrors::SerializedIdentityInvalid));
         return identity;
