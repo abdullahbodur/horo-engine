@@ -13,6 +13,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <limits>
+#include <tuple>
 
 namespace Horo::WorldStreaming {
     namespace Detail {
@@ -129,6 +130,20 @@ namespace Horo::WorldStreaming {
         }
 
         [[nodiscard]] constexpr auto operator<=>(const StreamingCellId &) const noexcept = default;
+    };
+
+    /** @brief Orders cell identities by the canonical world.index layer, LOD, Z, Y, then X key. */
+    struct StreamingCellCanonicalLess final {
+        /**
+         * @brief Compares two exact cell identities using the persistent manifest order.
+         * @param left First cell identity.
+         * @param right Second cell identity.
+         * @return True when @p left precedes @p right in canonical world.index order.
+         */
+        [[nodiscard]] constexpr bool operator()(const StreamingCellId &left, const StreamingCellId &right) const noexcept {
+            return std::tuple{left.layer.Value(), left.lod, left.z, left.y, left.x} <
+                   std::tuple{right.layer.Value(), right.lod, right.z, right.y, right.x};
+        }
     };
 
     /** @brief Complete fence for one cell attempt in one mounted partition incarnation. */

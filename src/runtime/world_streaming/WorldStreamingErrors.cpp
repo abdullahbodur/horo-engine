@@ -66,6 +66,22 @@ namespace Horo::WorldStreaming::WorldStreamingErrors {
         Describe("world_streaming.partition.identity_conflict", ErrorSeverity::Error,
                  "The world-partition descriptor repeats a layer or exact cell identity.",
                  "Remove duplicate identities and regenerate the canonical world index.", true);
+    const ErrorCodeDescriptor CookedManifestInvalid =
+        Describe("world_streaming.cooked_manifest.invalid", ErrorSeverity::Error,
+                 "A cooked world-index manifest is incomplete or contains malformed cell metadata.",
+                 "Provide one non-empty cooked record for every validated partition cell.", true);
+    const ErrorCodeDescriptor CookedManifestCapacityExceeded =
+        Describe("world_streaming.cooked_manifest.capacity_exceeded", ErrorSeverity::Error,
+                 "A cooked world-index manifest exceeds a mandatory count or byte ceiling.",
+                 "Reduce cell metadata or choose an explicitly larger supported manifest limit.", true);
+    const ErrorCodeDescriptor CookedManifestIdentityConflict =
+        Describe("world_streaming.cooked_manifest.identity_conflict", ErrorSeverity::Error,
+                 "Cooked cell metadata does not map one-to-one to the authoritative partition cells.",
+                 "Regenerate the cooked index with exactly one record for each descriptor cell.", true);
+    const ErrorCodeDescriptor CookedManifestDependencyInvalid =
+        Describe("world_streaming.cooked_manifest.dependency_invalid", ErrorSeverity::Error,
+                 "A cooked cell dependency is invalid, duplicated, self-referential, or absent from the manifest.",
+                 "Emit unique required cell identities that belong to the same cooked partition.", true);
     const ErrorCodeDescriptor SourceDescriptorInvalid =
         Describe("world_streaming.source.descriptor_invalid", ErrorSeverity::Error,
                  "A streaming source descriptor or admission context is structurally invalid.",
