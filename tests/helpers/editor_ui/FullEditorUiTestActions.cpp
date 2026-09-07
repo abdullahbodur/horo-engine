@@ -141,6 +141,15 @@ namespace Horo::Tests::FullEditorActions {
 
         void AddContentBrowserStep(UiScenarioPipe &pipeline) {
             pipeline.Step("Create and navigate an Asset Browser folder", [](ImGuiTestContext &ui) {
+                if (!ui.ItemExists("//**/##ContentBrowserSearch")) {
+                    if (!ui.ItemExists("//**/Assets")) {
+                        ui.ItemClick("//**/horo.global_dock/##ActivityItem");
+                        ui.Yield();
+                    }
+                    ui.ItemClick("//**/Assets");
+                    ui.Yield();
+                }
+                IM_CHECK(ui.ItemExists("//**/##ContentBrowserSearch"));
                 ui.ItemInputValue("//**/##ContentBrowserSearch", "missing");
                 ui.ItemInputValue("//**/##ContentBrowserSearch", "");
                 ui.ItemClick("//**/###ContentBrowserSort");
