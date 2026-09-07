@@ -72,6 +72,19 @@ attachments, fixed-capacity query/contact/impulse/event scratch and immutable de
 snapshots for one scene generation. The host publishes it with the exact Physics
 world in ADR-087's aggregate scene transaction.
 
+`CharacterWorldSettings` is the single immutable per-scene authority for retained
+controller, command, contact, event, query, impulse, diagnostic and debug capacity;
+fixed-tick work and scratch ceilings; and optional checkpoint/resimulation budgets.
+The host captures its versioned canonical content identity before Character-world
+activation. Defaults are deterministic and platform-neutral; renderer or device
+selection cannot enlarge them. A live world cannot mutate individual settings:
+adopting another snapshot requires complete transactional world replacement.
+Capacity or work exhaustion rejects/truncates only through the owning later runtime
+contract, preserves the last valid controller state, and reports against these named
+limits through structured counters and diagnostics. Per-controller capsule,
+locomotion, slope, step and gravity policy remains in
+`CharacterControllerDescriptor`.
+
 The Horo algorithm performs bounded overlap recovery, support classification,
 platform carry, capsule sweep/slide, guarded step-up/forward/down, vertical motion,
 ground snap and contact canonicalization. It borrows one read-only world/tick-
