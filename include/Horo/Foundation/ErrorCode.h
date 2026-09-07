@@ -9,6 +9,7 @@
 
 #include <cstdint>
 #include <optional>
+#include <span>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -79,6 +80,23 @@ namespace Horo {
      * @return Error carrying the descriptor identity and default severity.
      */
     [[nodiscard]] Error MakeError(const ErrorCodeDescriptor &descriptor, std::string message = {});
+
+    /**
+     * @brief Maps one error to diagnostic identity only when it matches an explicitly declared descriptor.
+     * @param error Candidate operation error.
+     * @param expectedDomain Exact owning domain required for both the error and matched descriptor.
+     * @param descriptors Canonical descriptor set admitted by the diagnostic contract.
+     * @return Owned diagnostic code for an exact declared match, or no value for foreign, unknown or malformed input.
+     */
+    [[nodiscard]] std::optional<DiagnosticCode> DiagnosticCodeForDeclaredError(const Error &error, std::string_view expectedDomain,
+                                                                               std::span<const ErrorCodeDescriptor *const> descriptors);
+
+    /**
+     * @brief Converts the complete Foundation error severity vocabulary to diagnostic severity.
+     * @param severity Error severity to convert.
+     * @return Exact diagnostic severity, or no value for an unknown enum representation.
+     */
+    [[nodiscard]] std::optional<DiagnosticSeverity> DiagnosticSeverityForError(ErrorSeverity severity) noexcept;
 
     /** @brief Event published over DataBus whenever a new typed error is reported. */
     struct ErrorPublishedEvent {

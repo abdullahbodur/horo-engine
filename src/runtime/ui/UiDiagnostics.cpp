@@ -2,18 +2,17 @@
 
 #include "Horo/Runtime/Ui/UiErrors.h"
 
+#include <algorithm>
 #include <array>
 #include <limits>
-#include <optional>
 #include <utility>
 
 namespace Horo::Runtime::Ui {
     namespace {
-        /** @brief Maps only canonical Runtime UI error descriptors to stable diagnostic identities. */
-        std::optional<DiagnosticCode> CanonicalDiagnosticCode(const Error &error) {
-            if (error.domain.Value() != "horo.runtime_ui")
-                return std::nullopt;
+        constexpr std::string_view UiErrorDomain = "horo.runtime_ui";
 
+        /** @brief Owns the one canonical descriptor table used by implementation and contract tests. */
+        const auto &DiagnosticDescriptors() noexcept {
             static const std::array descriptors{
                 &UiErrors::IdentityInvalid,       &UiErrors::OwnershipGenerationInvalid,
                 &UiErrors::HandleMalformed,       &UiErrors::HandleOwnerMismatch,
@@ -25,25 +24,7 @@ namespace Horo::Runtime::Ui {
                 &UiErrors::InstanceStateInvalid,  &UiErrors::DiagnosticInvalid,
                 &UiErrors::DiagnosticUnsupported,
             };
-            for (const ErrorCodeDescriptor *descriptor : descriptors) {
-                if (error.code.Value() == descriptor->code.Value())
-                    return DiagnosticCode{std::string{descriptor->code.Value()}};
-            }
-            return std::nullopt;
-        }
-
-        /** @brief Converts the closed Foundation severity representation without a fallback identity. */
-        std::optional<DiagnosticSeverity> DiagnosticSeverityFor(const ErrorSeverity severity) noexcept {
-            static constexpr std::array mapping{
-                DiagnosticSeverity::Note,
-                DiagnosticSeverity::Warning,
-                DiagnosticSeverity::Error,
-                DiagnosticSeverity::Fatal,
-            };
-            const auto index = static_cast<std::size_t>(severity);
-            if (index >= mapping.size())
-                return std::nullopt;
-            return mapping[index];
+            return descriptors;
         }
 
         /** @brief Checks that a correlation value contains one valid identity of the requested Runtime UI domain. */
@@ -119,6 +100,11 @@ namespace Horo::Runtime::Ui {
         return {};
     }
 
+    /** @copydoc UiDiagnosticErrorDescriptors */
+    std::span<const ErrorCodeDescriptor *const> UiDiagnosticErrorDescriptors() noexcept {
+        return DiagnosticDescriptors();
+    }
+
     /** @copydoc MakeUiDiagnosticRecord */
     Result<UiDiagnosticRecord> MakeUiDiagnosticRecord(const UiDiagnosticCategory category, const Error &error,
                                                       const std::span<const UiDiagnosticCorrelationEntry> correlation) {
@@ -126,8 +112,8 @@ namespace Horo::Runtime::Ui {
             return Result<UiDiagnosticRecord>::Failure(
                 MakeError(UiErrors::DiagnosticUnsupported, "Unknown Runtime UI diagnostic category."));
 
-        const auto code = CanonicalDiagnosticCode(error);
-        const auto severity = DiagnosticSeverityFor(error.severity);
+        const auto code = DiagnosticCodeForDeclaredError(error, UiErrorDomain, UiDiagnosticErrorDescriptors());
+        const auto severity = DiagnosticSeverityForError(error.severity);
         if (!code.has_value())
             return Result<UiDiagnosticRecord>::Failure(
                 MakeError(UiErrors::DiagnosticUnsupported, "Unknown or foreign Runtime UI diagnostic source error."));
@@ -144,8 +130,7 @@ namespace Horo::Runtime::Ui {
         record.severity = *severity;
         record.message = error.message;
         record.correlationCount = static_cast<std::uint8_t>(correlation.size());
-        for (std::size_t index = 0; index < correlation.size(); ++index)
-            record.correlation[index] = correlation[index];
+        std::copy(correlation.begin(), correlation.end(), record.correlation.begin());
         return Result<UiDiagnosticRecord>::Success(std::move(record));
     }
 }  // namespace Horo::Runtime::Ui

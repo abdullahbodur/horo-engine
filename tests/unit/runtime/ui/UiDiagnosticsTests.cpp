@@ -43,18 +43,8 @@ namespace Horo::Runtime::Ui {
         }
 
         TEST_CASE("Runtime UI diagnostic records map every canonical error and reject invented sources", "[runtime_ui][diagnostics]") {
-            const std::array descriptors{
-                &UiErrors::IdentityInvalid,       &UiErrors::OwnershipGenerationInvalid,
-                &UiErrors::HandleMalformed,       &UiErrors::HandleOwnerMismatch,
-                &UiErrors::HandleStale,           &UiErrors::RevisionInvalid,
-                &UiErrors::RevisionStale,         &UiErrors::GenerationExhausted,
-                &UiErrors::DocumentInvalid,       &UiErrors::DocumentDuplicateIdentity,
-                &UiErrors::DependencyInvalid,     &UiErrors::CapacityExceeded,
-                &UiErrors::PayloadInvalid,        &UiErrors::CanvasReferenceInvalid,
-                &UiErrors::InstanceStateInvalid,  &UiErrors::DiagnosticInvalid,
-                &UiErrors::DiagnosticUnsupported,
-            };
-            for (const ErrorCodeDescriptor *descriptor : descriptors) {
+            REQUIRE(UiDiagnosticErrorDescriptors().size() == 17);
+            for (const ErrorCodeDescriptor *descriptor : UiDiagnosticErrorDescriptors()) {
                 const auto record = MakeUiDiagnosticRecord(UiDiagnosticCategory::Document, MakeError(*descriptor));
                 REQUIRE(record.HasValue());
                 REQUIRE(record.Value().code.Value() == descriptor->code.Value());

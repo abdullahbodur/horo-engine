@@ -86,6 +86,12 @@ namespace Horo::Runtime::Ui {
     [[nodiscard]] std::string_view UiDiagnosticCategoryName(UiDiagnosticCategory category) noexcept;
 
     /**
+     * @brief Returns the single canonical descriptor table admitted as Runtime UI diagnostic sources.
+     * @return Borrowed immutable process-lifetime descriptor pointers in declaration order.
+     */
+    [[nodiscard]] std::span<const ErrorCodeDescriptor *const> UiDiagnosticErrorDescriptors() noexcept;
+
+    /**
      * @brief Creates bounded owned diagnostic evidence from one canonical Runtime UI error.
      * @param category Closed Runtime UI failure area; its stable name is derived, never parsed as input.
      * @param error Canonical `horo.runtime_ui` operation error whose code is mapped explicitly.
