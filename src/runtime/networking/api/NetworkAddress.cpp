@@ -80,8 +80,8 @@ namespace Horo::Network {
             std::size_t start{};
             for (std::size_t octet = 0; octet < NetworkAddress::Ipv4ByteCount; ++octet) {
                 const auto separator = text.find('.', start);
-                const auto end = separator == std::string_view::npos ? text.size() : separator;
-                if (!ParseIpv4Octet(text.substr(start, end - start), bytes[octet]))
+                if (const auto end = separator == std::string_view::npos ? text.size() : separator;
+                    !ParseIpv4Octet(text.substr(start, end - start), bytes[octet]))
                     return false;
                 if (octet + 1 < NetworkAddress::Ipv4ByteCount) {
                     if (separator == std::string_view::npos)
