@@ -69,6 +69,16 @@ namespace Horo::Network {
         RequireError(NetworkAddress::Parse(oversizedHostname + ":80"), NetworkErrors::NetworkAddressCapacityExceeded);
     }
 
+    TEST_CASE("Network address rejects malformed numeric group boundaries after parser decomposition", "[unit][network][address]") {
+        for (const std::string_view malformed : {"1.2.3:80", "1.2.3.4.5:80", "1..3.4:80", "001.2.3.4:80", "256.2.3.4:80",
+                                                 "[1:2:3:4:5:6:7]:80", "[1:2:3:4:5:6:7:8:9]:80", "[1::2::3]:80", "[1:2:3:4:5:6:7::8]:80"})
+            RequireError(NetworkAddress::Parse(malformed), NetworkErrors::NetworkAddressInvalid);
+
+        REQUIRE(NetworkAddress::Parse("255.0.1.254:80").HasValue());
+        REQUIRE(NetworkAddress::Parse("[1:2:3:4:5:6:7:8]:80").HasValue());
+        REQUIRE(NetworkAddress::Parse("[::]:80").HasValue());
+    }
+
     TEST_CASE("Network address cancellation and shutdown reject before parsing or backend work", "[unit][network][address]") {
         RequireError(NetworkAddress::Parse("127.0.0.1:7777", TransportAdmissionState::Cancelled),
                      NetworkErrors::TransportOperationCancelled);
