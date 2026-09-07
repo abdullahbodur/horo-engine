@@ -118,7 +118,7 @@ namespace Horo::Character {
         /** @brief Stores validated values and their canonical identity. */
         CharacterWorldSettings(const CharacterWorldSettingsDescriptor &values, const CharacterWorldSettingsIdentity &identity);
 
-        const CharacterWorldSettingsDescriptor values_;
-        const CharacterWorldSettingsIdentity identity_;
+        CharacterWorldSettingsDescriptor values_;
+        CharacterWorldSettingsIdentity identity_;
     };
 }  // namespace Horo::Character

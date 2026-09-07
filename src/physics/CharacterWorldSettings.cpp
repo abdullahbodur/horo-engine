@@ -6,6 +6,7 @@
 #include <bit>
 #include <cmath>
 #include <cstddef>
+#include <span>
 
 namespace Horo::Character {
     namespace {
@@ -21,47 +22,100 @@ namespace Horo::Character {
             return history.maximumCheckpoints == 0 && history.maximumBytes == 0 && history.maximumResimulationTicks == 0;
         }
 
+        /** @brief Reports whether every bounded integral setting is non-zero. */
+        [[nodiscard]] bool AreNonZero(const std::span<const std::uint64_t> values) noexcept {
+            for (const auto value : values) {
+                if (value == 0) {
+                    return false;
+                }
+            }
+            return true;
+        }
+
+        /** @brief Reports whether corresponding integral settings fit their canonical ceilings. */
+        [[nodiscard]] bool AreWithinLimits(const std::span<const std::uint64_t> values,
+                                           const std::span<const std::uint64_t> limits) noexcept {
+            for (std::size_t index = 0; index < values.size(); ++index) {
+                if (values[index] > limits[index]) {
+                    return false;
+                }
+            }
+            return true;
+        }
+
         [[nodiscard]] Result<void> ValidateCapacities(const CharacterWorldCapacities &values) {
-            if (values.maximumControllers == 0 || values.maximumQueuedCommands == 0 || values.maximumRetainedContacts == 0 ||
-                values.maximumQueuedEvents == 0 || values.maximumQueuedQueries == 0 || values.maximumStagedImpulses == 0 ||
-                values.maximumDiagnosticRecords == 0 || values.maximumDebugPrimitives == 0) {
+            const std::array<std::uint64_t, 8> fields{
+                values.maximumControllers,   values.maximumQueuedCommands, values.maximumRetainedContacts,  values.maximumQueuedEvents,
+                values.maximumQueuedQueries, values.maximumStagedImpulses, values.maximumDiagnosticRecords, values.maximumDebugPrimitives,
+            };
+            if (!AreNonZero(fields)) {
                 return Invalid("Character world retained capacities must all be non-zero.");
             }
-            if (values.maximumControllers > CharacterWorldSettingLimits::MaximumControllers ||
-                values.maximumQueuedCommands > CharacterWorldSettingLimits::MaximumQueuedCommands ||
-                values.maximumRetainedContacts > CharacterWorldSettingLimits::MaximumRetainedContacts ||
-                values.maximumQueuedEvents > CharacterWorldSettingLimits::MaximumQueuedEvents ||
-                values.maximumQueuedQueries > CharacterWorldSettingLimits::MaximumQueuedQueries ||
-                values.maximumStagedImpulses > CharacterWorldSettingLimits::MaximumStagedImpulses ||
-                values.maximumDiagnosticRecords > CharacterWorldSettingLimits::MaximumDiagnosticRecords ||
-                values.maximumDebugPrimitives > CharacterWorldSettingLimits::MaximumDebugPrimitives) {
+            constexpr std::array<std::uint64_t, 8> limits{
+                CharacterWorldSettingLimits::MaximumControllers,       CharacterWorldSettingLimits::MaximumQueuedCommands,
+                CharacterWorldSettingLimits::MaximumRetainedContacts,  CharacterWorldSettingLimits::MaximumQueuedEvents,
+                CharacterWorldSettingLimits::MaximumQueuedQueries,     CharacterWorldSettingLimits::MaximumStagedImpulses,
+                CharacterWorldSettingLimits::MaximumDiagnosticRecords, CharacterWorldSettingLimits::MaximumDebugPrimitives,
+            };
+            if (!AreWithinLimits(fields, limits)) {
                 return Exceeded("Character world retained capacity exceeds a schema-1 hard ceiling.");
             }
             return Result<void>::Success();
         }
 
-        [[nodiscard]] Result<void> ValidateWork(const CharacterWorldWorkBudgets &work, const CharacterWorldCapacities &capacities) {
-            if (work.maximumCommandsPerTick == 0 || work.maximumQueriesPerTick == 0 || work.maximumContactsPerMovement == 0 ||
-                work.maximumMovementIterations == 0 || work.maximumRecoveryIterations == 0 || work.scratchBytes == 0 ||
-                !std::isfinite(work.maximumDisplacementMetersPerTick) || work.maximumDisplacementMetersPerTick <= 0.0F) {
+        /** @brief Checks basic work-budget representation before ceilings or cross-field policy. */
+        [[nodiscard]] Result<void> ValidateWorkValues(const CharacterWorldWorkBudgets &work) {
+            const std::array<std::uint64_t, 6> values{
+                work.maximumCommandsPerTick,    work.maximumQueriesPerTick,     work.maximumContactsPerMovement,
+                work.maximumMovementIterations, work.maximumRecoveryIterations, work.scratchBytes,
+            };
+            if (!AreNonZero(values) || !std::isfinite(work.maximumDisplacementMetersPerTick) ||
+                work.maximumDisplacementMetersPerTick <= 0.0F) {
                 return Invalid("Character world work budgets must be finite and non-zero.");
             }
-            if (work.maximumCommandsPerTick > capacities.maximumQueuedCommands ||
-                work.maximumQueriesPerTick > capacities.maximumQueuedQueries ||
-                work.maximumContactsPerMovement > MaximumCharacterContacts ||
-                work.maximumMovementIterations > CharacterWorldSettingLimits::MaximumMovementIterations ||
-                work.maximumRecoveryIterations > CharacterWorldSettingLimits::MaximumRecoveryIterations ||
-                work.scratchBytes > CharacterWorldSettingLimits::MaximumScratchBytes ||
+            return Result<void>::Success();
+        }
+
+        /** @brief Checks work against retained storage and canonical schema ceilings. */
+        [[nodiscard]] Result<void> ValidateWorkLimits(const CharacterWorldWorkBudgets &work, const CharacterWorldCapacities &capacities) {
+            const std::array<std::uint64_t, 6> values{
+                work.maximumCommandsPerTick,    work.maximumQueriesPerTick,     work.maximumContactsPerMovement,
+                work.maximumMovementIterations, work.maximumRecoveryIterations, work.scratchBytes,
+            };
+            const std::array<std::uint64_t, 6> limits{
+                capacities.maximumQueuedCommands,
+                capacities.maximumQueuedQueries,
+                MaximumCharacterContacts,
+                CharacterWorldSettingLimits::MaximumMovementIterations,
+                CharacterWorldSettingLimits::MaximumRecoveryIterations,
+                CharacterWorldSettingLimits::MaximumScratchBytes,
+            };
+            if (!AreWithinLimits(values, limits) ||
                 work.maximumDisplacementMetersPerTick > CharacterWorldSettingLimits::MaximumDisplacementMetersPerTick) {
                 return Exceeded("Character fixed-tick work exceeds retained storage or a schema-1 hard ceiling.");
             }
+            return Result<void>::Success();
+        }
 
+        /** @brief Checks aggregate contact storage after all individual bounds are admitted. */
+        [[nodiscard]] Result<void> ValidateWorkConsistency(const CharacterWorldWorkBudgets &work,
+                                                           const CharacterWorldCapacities &capacities) {
             if (const auto retainedContactRequirement =
                     static_cast<std::uint64_t>(capacities.maximumControllers) * work.maximumContactsPerMovement;
                 retainedContactRequirement > capacities.maximumRetainedContacts) {
                 return Invalid("Retained contact capacity must cover every controller's admitted movement result.");
             }
             return Result<void>::Success();
+        }
+
+        [[nodiscard]] Result<void> ValidateWork(const CharacterWorldWorkBudgets &work, const CharacterWorldCapacities &capacities) {
+            if (const auto values = ValidateWorkValues(work); values.HasError()) {
+                return values;
+            }
+            if (const auto limits = ValidateWorkLimits(work, capacities); limits.HasError()) {
+                return limits;
+            }
+            return ValidateWorkConsistency(work, capacities);
         }
 
         [[nodiscard]] Result<void> ValidateHistory(const CharacterWorldHistoryBudgets &history) {
@@ -82,10 +136,43 @@ namespace Horo::Character {
             return Result<void>::Success();
         }
 
+        /**
+         * @brief Counts schema-1 members semantically so aggregate growth fails compilation until packing is revised.
+         *
+         * Structured bindings intentionally couple this guard to member count without depending on ABI size or padding.
+         */
+        consteval std::size_t SchemaFieldCount() {
+            CharacterWorldCapacities capacities;
+            auto &[controllers, commands, contacts, events, queries, impulses, diagnostics, debug] = capacities;
+            CharacterWorldWorkBudgets work;
+            auto &[tickCommands, tickQueries, movementContacts, movementIterations, recoveryIterations, scratch, displacement] = work;
+            CharacterWorldHistoryBudgets history;
+            auto &[checkpoints, historyBytes, resimulationTicks] = history;
+            static_cast<void>(controllers);
+            static_cast<void>(commands);
+            static_cast<void>(contacts);
+            static_cast<void>(events);
+            static_cast<void>(queries);
+            static_cast<void>(impulses);
+            static_cast<void>(diagnostics);
+            static_cast<void>(debug);
+            static_cast<void>(tickCommands);
+            static_cast<void>(tickQueries);
+            static_cast<void>(movementContacts);
+            static_cast<void>(movementIterations);
+            static_cast<void>(recoveryIterations);
+            static_cast<void>(scratch);
+            static_cast<void>(displacement);
+            static_cast<void>(checkpoints);
+            static_cast<void>(historyBytes);
+            static_cast<void>(resimulationTicks);
+            return 18;
+        }
+
         [[nodiscard]] CharacterWorldSettingsIdentity SettingsIdentity(const CharacterWorldSettingsDescriptor &values) noexcept {
             constexpr std::uint64_t SchemaVersion = 1;
             const auto displacement = std::bit_cast<std::uint32_t>(values.work.maximumDisplacementMetersPerTick);
-            const std::array<std::uint64_t, 19> words{
+            const std::array<std::uint64_t, 1 + SchemaFieldCount()> words{
                 SchemaVersion,
                 values.capacities.maximumControllers,
                 values.capacities.maximumQueuedCommands,

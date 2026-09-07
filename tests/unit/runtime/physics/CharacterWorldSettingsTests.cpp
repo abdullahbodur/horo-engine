@@ -6,6 +6,7 @@
 #include <cstdint>
 #include <limits>
 #include <type_traits>
+#include <utility>
 
 namespace Horo::Character {
     namespace {
@@ -28,8 +29,13 @@ namespace Horo::Character {
             REQUIRE(captured.Value().Values().capacities.maximumControllers == 4'096);
             static_assert(!std::is_default_constructible_v<CharacterWorldSettings>);
             static_assert(std::is_copy_constructible_v<CharacterWorldSettings>);
+            static_assert(std::is_nothrow_move_constructible_v<CharacterWorldSettings>);
             static_assert(!std::is_copy_assignable_v<CharacterWorldSettings>);
             static_assert(!std::is_move_assignable_v<CharacterWorldSettings>);
+
+            auto moved = std::move(captured.Value());
+            REQUIRE(moved.Values().capacities.maximumControllers == 4'096);
+            REQUIRE(moved.Identity() == equal.Value().Identity());
         }
 
         TEST_CASE("Character world settings identity has an independent schema-1 fixture", "[character][settings]") {
