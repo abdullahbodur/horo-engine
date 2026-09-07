@@ -1,6 +1,7 @@
 #include "Horo/WorldStreaming/CookedWorldIndexManifest.h"
 #include "Horo/WorldStreaming/WorldStreamingErrors.h"
 
+#include <algorithm>
 #include <array>
 #include <catch2/catch_test_macros.hpp>
 #include <cstdint>
@@ -46,7 +47,18 @@ namespace Horo::WorldStreaming {
             return hash;
         }
 
-        std::vector<CookedWorldCellManifestEntry> Entries() {
+        struct TestEntry final {
+            StreamingCellId cell{};
+            std::uint64_t uncompressedSize{};
+            std::uint64_t compressedSize{};
+            std::uint32_t payloadCrc32{};
+            Sha256Digest artifactHash{};
+            std::vector<StreamingCellId> hardDependencies;
+
+            [[nodiscard]] auto operator<=>(const TestEntry &) const noexcept = default;
+        };
+
+        std::vector<TestEntry> Entries() {
             return {
                 {Cell(1), 300, 200, 33, Hash(3), {Cell(0), Cell(-1)}},
                 {Cell(0), 200, 125, 22, Hash(2), {}},
@@ -56,10 +68,15 @@ namespace Horo::WorldStreaming {
 
         constexpr CookedWorldIndexManifestLimits Limits{8, 4, 8, 1024, 2048};
 
-        Result<CookedWorldIndexManifest> Create(WorldPartitionDescriptor &descriptor,
-                                                const std::span<const CookedWorldCellManifestEntry> entries,
+        Result<CookedWorldIndexManifest> Create(WorldPartitionDescriptor &descriptor, const std::span<const TestEntry> entries,
                                                 const CookedWorldIndexManifestLimits limits = Limits) {
-            return CookedWorldIndexManifest::Create(std::move(descriptor), entries, limits);
+            std::vector<CookedWorldCellManifestCandidate> candidates;
+            candidates.reserve(entries.size());
+            for (const auto &entry : entries) {
+                candidates.push_back({entry.cell, entry.uncompressedSize, entry.compressedSize, entry.payloadCrc32, entry.artifactHash,
+                                      entry.hardDependencies});
+            }
+            return CookedWorldIndexManifest::Create(std::move(descriptor), candidates, limits);
         }
 
         void RequireError(const Result<CookedWorldIndexManifest> &result, const ErrorCodeDescriptor &expected) {
@@ -85,7 +102,9 @@ namespace Horo::WorldStreaming {
         REQUIRE(manifest.Cells()[1].cell == Cell(0));
         REQUIRE(manifest.Cells()[2].cell == Cell(1));
         REQUIRE(manifest.Cells()[2].compressedSize == 200);
-        REQUIRE(manifest.Cells()[2].hardDependencies == std::vector{Cell(-1), Cell(0)});
+        REQUIRE(std::ranges::equal(manifest.HardDependencies(2), std::array{Cell(-1), Cell(0)}));
+        REQUIRE(manifest.HardDependencies(1).empty());
+        REQUIRE(manifest.HardDependencies(3).empty());
         REQUIRE(manifest.TotalCompressedBytes() == 400);
         REQUIRE(manifest.TotalUncompressedBytes() == 600);
 
@@ -95,6 +114,7 @@ namespace Horo::WorldStreaming {
         std::vector<CookedWorldIndexManifest> storage;
         storage.push_back(std::move(manifest));
         REQUIRE(storage.front().Cells()[2].artifactHash == Hash(3));
+        REQUIRE(std::ranges::equal(storage.front().HardDependencies(2), std::array{Cell(-1), Cell(0)}));
 
         auto zeroDigestDescriptor = Descriptor();
         auto zeroDigestEntries = Entries();
@@ -136,7 +156,7 @@ namespace Horo::WorldStreaming {
             auto result = Create(descriptor, entries);
             REQUIRE(result.HasValue());
             REQUIRE(entries == original);
-            REQUIRE(result.Value().Cells()[2].hardDependencies == std::vector{Cell(-1), Cell(0)});
+            REQUIRE(std::ranges::equal(result.Value().HardDependencies(2), std::array{Cell(-1), Cell(0)}));
         }
         SECTION("self dependency") {
             auto descriptor = Descriptor();
@@ -170,56 +190,45 @@ namespace Horo::WorldStreaming {
         }
     }
 
-    TEST_CASE("Cooked manifest applies checked count and byte ceilings", "[unit][world_streaming][cooked_manifest]") {
-        SECTION("invalid limits") {
-            auto descriptor = Descriptor();
-            const auto entries = Entries();
-            RequireError(Create(descriptor, entries, {}), WorldStreamingErrors::CookedManifestInvalid);
-            REQUIRE(descriptor.Cells().size() == 3);
-        }
-        SECTION("cell and dependency count limits") {
-            const auto entries = Entries();
-            {
-                auto descriptor = Descriptor();
-                RequireError(Create(descriptor, entries, {2, 4, 8, 1024, 2048}), WorldStreamingErrors::CookedManifestCapacityExceeded);
-            }
-            {
-                auto descriptor = Descriptor();
-                RequireError(Create(descriptor, entries, {8, 1, 8, 1024, 2048}), WorldStreamingErrors::CookedManifestCapacityExceeded);
-            }
-        }
-        SECTION("aggregate byte limit") {
-            const auto entries = Entries();
-            {
-                auto descriptor = Descriptor();
-                RequireError(Create(descriptor, entries, {8, 4, 8, 399, 2048}), WorldStreamingErrors::CookedManifestCapacityExceeded);
-            }
-            {
-                auto descriptor = Descriptor();
-                RequireError(Create(descriptor, entries, {8, 4, 8, 1024, 599}), WorldStreamingErrors::CookedManifestCapacityExceeded);
-            }
-        }
-        SECTION("checked arithmetic overflow") {
-            auto descriptor = Descriptor();
-            auto entries = Entries();
-            entries[0].compressedSize = std::numeric_limits<std::uint64_t>::max();
-            entries[1].compressedSize = 1;
-            RequireError(Create(descriptor, entries, {8, 4, 8, std::numeric_limits<std::uint64_t>::max(), 2048}),
-                         WorldStreamingErrors::CookedManifestCapacityExceeded);
-        }
-        SECTION("cell archives are never zero byte") {
-            {
-                auto descriptor = Descriptor();
-                auto entries = Entries();
-                entries.front().uncompressedSize = 0;
-                RequireError(Create(descriptor, entries), WorldStreamingErrors::CookedManifestInvalid);
-            }
-            {
-                auto descriptor = Descriptor();
-                auto entries = Entries();
-                entries.front().compressedSize = 0;
-                RequireError(Create(descriptor, entries), WorldStreamingErrors::CookedManifestInvalid);
-            }
-        }
+    TEST_CASE("Cooked manifest applies explicit count capacities", "[unit][world_streaming][cooked_manifest]") {
+        auto descriptor = Descriptor();
+        const auto entries = Entries();
+        RequireError(Create(descriptor, entries, {}), WorldStreamingErrors::CookedManifestInvalid);
+        REQUIRE(descriptor.Cells().size() == 3);
+
+        auto cellLimitedDescriptor = Descriptor();
+        RequireError(Create(cellLimitedDescriptor, entries, {2, 4, 8, 1024, 2048}), WorldStreamingErrors::CookedManifestCapacityExceeded);
+        auto dependencyLimitedDescriptor = Descriptor();
+        RequireError(Create(dependencyLimitedDescriptor, entries, {8, 1, 8, 1024, 2048}),
+                     WorldStreamingErrors::CookedManifestCapacityExceeded);
+    }
+
+    TEST_CASE("Cooked manifest applies aggregate encoded and decoded byte ceilings", "[unit][world_streaming][cooked_manifest]") {
+        const auto entries = Entries();
+        auto descriptor = Descriptor();
+        RequireError(Create(descriptor, entries, {8, 4, 8, 399, 2048}), WorldStreamingErrors::CookedManifestCapacityExceeded);
+        auto decodedDescriptor = Descriptor();
+        RequireError(Create(decodedDescriptor, entries, {8, 4, 8, 1024, 599}), WorldStreamingErrors::CookedManifestCapacityExceeded);
+    }
+
+    TEST_CASE("Cooked manifest rejects aggregate byte arithmetic overflow", "[unit][world_streaming][cooked_manifest]") {
+        auto descriptor = Descriptor();
+        auto entries = Entries();
+        entries[0].compressedSize = std::numeric_limits<std::uint64_t>::max();
+        entries[1].compressedSize = 1;
+        RequireError(Create(descriptor, entries, {8, 4, 8, std::numeric_limits<std::uint64_t>::max(), 2048}),
+                     WorldStreamingErrors::CookedManifestCapacityExceeded);
+    }
+
+    TEST_CASE("Cooked manifest rejects zero-byte cell archives", "[unit][world_streaming][cooked_manifest]") {
+        auto descriptor = Descriptor();
+        auto entries = Entries();
+        entries.front().uncompressedSize = 0;
+        RequireError(Create(descriptor, entries), WorldStreamingErrors::CookedManifestInvalid);
+
+        auto compressedDescriptor = Descriptor();
+        auto compressedEntries = Entries();
+        compressedEntries.front().compressedSize = 0;
+        RequireError(Create(compressedDescriptor, compressedEntries), WorldStreamingErrors::CookedManifestInvalid);
     }
 }  // namespace Horo::WorldStreaming

@@ -15,14 +15,25 @@
 namespace Horo::WorldStreaming {
     /** @brief Aggregate integrity and dependency metadata for one cooked cell archive. */
     struct CookedWorldCellManifestEntry final {
-        StreamingCellId cell{};                        /**< Exact cell key already declared by the partition descriptor. */
-        std::uint64_t uncompressedSize{};              /**< Non-zero aggregate decoded payload bytes. */
-        std::uint64_t compressedSize{};                /**< Non-zero complete encoded cell-body bytes. */
-        std::uint32_t payloadCrc32{};                  /**< Aggregate CRC32 of decoded provider payloads in TOC order. */
-        Sha256Digest artifactHash{};                   /**< SHA-256 of the canonical cell header and encoded body. */
-        std::vector<StreamingCellId> hardDependencies; /**< Required cells in canonical identity order. */
+        StreamingCellId cell{};           /**< Exact cell key already declared by the partition descriptor. */
+        std::uint64_t uncompressedSize{}; /**< Non-zero aggregate decoded payload bytes. */
+        std::uint64_t compressedSize{};   /**< Non-zero complete encoded cell-body bytes. */
+        std::uint32_t payloadCrc32{};     /**< Aggregate CRC32 of decoded provider payloads in TOC order. */
+        Sha256Digest artifactHash{};      /**< SHA-256 of the canonical cell header and encoded body. */
+        std::uint32_t dependencyOffset{}; /**< First dependency in the manifest-owned flat storage. */
+        std::uint32_t dependencyCount{};  /**< Number of canonical dependencies in the owned slice. */
 
         [[nodiscard]] auto operator<=>(const CookedWorldCellManifestEntry &) const noexcept = default;
+    };
+
+    /** @brief Borrowed cooked metadata used only while constructing one owned manifest. */
+    struct CookedWorldCellManifestCandidate final {
+        StreamingCellId cell{};                            /**< Exact cell key already declared by the partition descriptor. */
+        std::uint64_t uncompressedSize{};                  /**< Non-zero aggregate decoded payload bytes. */
+        std::uint64_t compressedSize{};                    /**< Non-zero complete encoded cell-body bytes. */
+        std::uint32_t payloadCrc32{};                      /**< Aggregate CRC32 of decoded provider payloads in TOC order. */
+        Sha256Digest artifactHash{};                       /**< SHA-256 of the canonical cell header and encoded body. */
+        std::span<const StreamingCellId> hardDependencies; /**< Borrowed dependencies copied into one flat owned allocation. */
     };
 
     /** @brief Caller-owned ceilings checked before a cooked manifest takes ownership. */
@@ -48,13 +59,13 @@ namespace Horo::WorldStreaming {
          * Success consumes @p descriptor exactly once. Failure leaves it valid and unmodified, including when the caller
          * passes `std::move(descriptor)`.
          * @param descriptor Validated partition topology whose cells and chunk AssetIds are authoritative.
-         * @param cells One cooked metadata record for every descriptor cell; caller storage is never retained or modified.
+         * @param cells One borrowed cooked metadata candidate for every descriptor cell; caller storage is never retained or modified.
          * @param limits Mandatory storage and byte ceilings applied before publication.
          * @return Complete owned manifest, or a stable typed error with no partial result.
          * @throws std::bad_alloc if owned metadata allocation fails; no manifest is published and @p descriptor remains unmodified.
          */
         [[nodiscard]] static Result<CookedWorldIndexManifest> Create(WorldPartitionDescriptor &&descriptor,
-                                                                     std::span<const CookedWorldCellManifestEntry> cells,
+                                                                     std::span<const CookedWorldCellManifestCandidate> cells,
                                                                      CookedWorldIndexManifestLimits limits);
 
         /** @brief Returns the sole owned topology and package-location authority. @return Immutable descriptor reference. */
@@ -70,6 +81,13 @@ namespace Horo::WorldStreaming {
             return cells_;
         }
 
+        /**
+         * @brief Returns one cell's canonical hard-dependency slice.
+         * @param cellIndex Index into Cells().
+         * @return Read-only view valid until this manifest is moved from or destroyed; empty for an out-of-range index.
+         */
+        [[nodiscard]] std::span<const StreamingCellId> HardDependencies(std::size_t cellIndex) const noexcept;
+
         /** @brief Returns the checked sum of encoded cell sizes. @return Aggregate encoded bytes. */
         [[nodiscard]] constexpr std::uint64_t TotalCompressedBytes() const noexcept {
             return totalCompressedBytes_;
@@ -83,10 +101,12 @@ namespace Horo::WorldStreaming {
     private:
         /** @brief Stores already validated and canonically ordered owned state. */
         CookedWorldIndexManifest(WorldPartitionDescriptor &&descriptor, std::vector<CookedWorldCellManifestEntry> cells,
-                                 std::uint64_t totalCompressedBytes, std::uint64_t totalUncompressedBytes) noexcept;
+                                 std::vector<StreamingCellId> hardDependencies, std::uint64_t totalCompressedBytes,
+                                 std::uint64_t totalUncompressedBytes) noexcept;
 
         WorldPartitionDescriptor descriptor_;
         std::vector<CookedWorldCellManifestEntry> cells_;
+        std::vector<StreamingCellId> hardDependencies_;
         std::uint64_t totalCompressedBytes_{};
         std::uint64_t totalUncompressedBytes_{};
     };
