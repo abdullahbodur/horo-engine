@@ -80,8 +80,16 @@ TEST_CASE("Shader manifest rejects malformed versions identities and noncanonica
     RequireError(ValidateShaderManifest(manifest), ShaderManifestErrors::InvalidManifest);
 
     manifest = ValidManifest();
-    manifest.entryPoints.push_back({ShaderStage::Vertex, "OtherVertex"});
+    manifest.entryPoints.push_back({ShaderStage::Vertex, "VertexMain"});
     RequireError(ValidateShaderManifest(manifest), ShaderManifestErrors::NonCanonicalIdentity);
+
+    manifest = ValidManifest();
+    manifest.entryPoints.front().name = "1VertexMain";
+    RequireError(ValidateShaderManifest(manifest), ShaderManifestErrors::InvalidManifest);
+
+    manifest = ValidManifest();
+    manifest.entryPoints.front().name = "Vertex.Main";
+    RequireError(ValidateShaderManifest(manifest), ShaderManifestErrors::InvalidManifest);
 
     manifest = ValidManifest();
     std::swap(manifest.bindings[0], manifest.bindings[1]);
@@ -90,6 +98,15 @@ TEST_CASE("Shader manifest rejects malformed versions identities and noncanonica
     ShaderManifestLimits limits;
     limits.maximumTargets = 0;
     RequireError(ValidateShaderManifest(ValidManifest(), limits), ShaderManifestErrors::InvalidLimits);
+}
+
+TEST_CASE("Shader manifest supports canonical multiple entry points per stage", "[runtime][renderer][shader-manifest]") {
+    ShaderManifest manifest = ValidManifest();
+    manifest.entryPoints.insert(manifest.entryPoints.begin() + 1, {ShaderStage::Vertex, "VertexShadow"});
+    CHECK(ValidateShaderManifest(manifest).HasValue());
+
+    std::swap(manifest.entryPoints[0], manifest.entryPoints[1]);
+    RequireError(ValidateShaderManifest(manifest), ShaderManifestErrors::NonCanonicalIdentity);
 }
 
 TEST_CASE("Shader binding and parameter validation rejects invalid access and references", "[runtime][renderer][shader-manifest]") {

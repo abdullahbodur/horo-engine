@@ -6,6 +6,7 @@
 #include <limits>
 #include <new>
 #include <ranges>
+#include <string_view>
 #include <type_traits>
 
 namespace Horo::Render {
@@ -27,15 +28,19 @@ namespace Horo::Render {
             return Result<void>::Failure(MakeError(descriptor));
         }
 
+        template <typename ValueT> [[nodiscard]] constexpr bool IsWithinBound(const ValueT value, const ValueT maximum) noexcept {
+            return value > 0 && value <= maximum;
+        }
+
         [[nodiscard]] bool IsValidLimits(const ShaderManifestLimits &limits) noexcept {
-            return limits.maximumEntryPoints > 0 && limits.maximumEntryPoints <= HardMaximumEntryPoints && limits.maximumBindings > 0 &&
-                   limits.maximumBindings <= HardMaximumBindings && limits.maximumParameters > 0 &&
-                   limits.maximumParameters <= HardMaximumParameters && limits.maximumInlineConstantRanges > 0 &&
-                   limits.maximumInlineConstantRanges <= HardMaximumInlineConstantRanges && limits.maximumSpecializationInputs > 0 &&
-                   limits.maximumSpecializationInputs <= HardMaximumSpecializationInputs && limits.maximumTargets > 0 &&
-                   limits.maximumTargets <= HardMaximumTargets && limits.maximumInlineConstantBytes > 0 &&
-                   limits.maximumInlineConstantBytes <= HardMaximumInlineConstantBytes && limits.maximumIdentityBytes > 0 &&
-                   limits.maximumIdentityBytes <= HardMaximumIdentityBytes;
+            return IsWithinBound(limits.maximumEntryPoints, HardMaximumEntryPoints) &&
+                   IsWithinBound(limits.maximumBindings, HardMaximumBindings) &&
+                   IsWithinBound(limits.maximumParameters, HardMaximumParameters) &&
+                   IsWithinBound(limits.maximumInlineConstantRanges, HardMaximumInlineConstantRanges) &&
+                   IsWithinBound(limits.maximumSpecializationInputs, HardMaximumSpecializationInputs) &&
+                   IsWithinBound(limits.maximumTargets, HardMaximumTargets) &&
+                   IsWithinBound(limits.maximumInlineConstantBytes, HardMaximumInlineConstantBytes) &&
+                   IsWithinBound(limits.maximumIdentityBytes, HardMaximumIdentityBytes);
         }
 
         [[nodiscard]] bool IsIdentityCharacter(const unsigned char value) noexcept {
@@ -47,6 +52,20 @@ namespace Horo::Render {
         [[nodiscard]] bool IsValidIdentity(const std::string &value, const std::size_t maximumBytes) noexcept {
             return !value.empty() && value.size() <= maximumBytes && std::ranges::all_of(value, [](const char character) {
                 return IsIdentityCharacter(static_cast<unsigned char>(character));
+            });
+        }
+
+        [[nodiscard]] bool IsValidEntryPointName(const std::string &value, const std::size_t maximumBytes) noexcept {
+            if (value.empty() || value.size() > maximumBytes)
+                return false;
+            const auto isAlphaOrUnderscore = [](const unsigned char character) {
+                return (character >= 'a' && character <= 'z') || (character >= 'A' && character <= 'Z') || character == '_';
+            };
+            const auto isIdentifierCharacter = [&](const unsigned char character) {
+                return isAlphaOrUnderscore(character) || (character >= '0' && character <= '9');
+            };
+            return isAlphaOrUnderscore(static_cast<unsigned char>(value.front())) && std::ranges::all_of(value, [&](const char character) {
+                return isIdentifierCharacter(static_cast<unsigned char>(character));
             });
         }
 
@@ -80,15 +99,17 @@ namespace Horo::Render {
 
             ShaderStageVisibility declaredStages{ShaderStageVisibility::None};
             std::uint8_t previousStage = 0;
+            std::string_view previousName;
             bool hasPrevious = false;
             for (const ShaderEntryPoint &entry : manifest.entryPoints) {
-                if (!IsKnown(entry.stage, ShaderStage::Compute) || !IsValidIdentity(entry.name, limits.maximumIdentityBytes))
+                if (!IsKnown(entry.stage, ShaderStage::Compute) || !IsValidEntryPointName(entry.name, limits.maximumIdentityBytes))
                     return Result<ShaderStageVisibility>::Failure(MakeError(ShaderManifestErrors::InvalidManifest));
                 const auto stage = static_cast<std::uint8_t>(entry.stage);
-                if (hasPrevious && previousStage >= stage)
+                if (hasPrevious && (previousStage > stage || (previousStage == stage && previousName >= entry.name)))
                     return Result<ShaderStageVisibility>::Failure(MakeError(ShaderManifestErrors::NonCanonicalIdentity));
                 declaredStages = declaredStages | VisibilityFor(entry.stage);
                 previousStage = stage;
+                previousName = entry.name;
                 hasPrevious = true;
             }
             return Result<ShaderStageVisibility>::Success(declaredStages);
