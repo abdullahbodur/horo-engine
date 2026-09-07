@@ -17,14 +17,15 @@ namespace Horo::Runtime {
         };
 
         [[nodiscard]] std::string_view PlatformName(const SaveRootPlatform platform) noexcept {
+            using enum SaveRootPlatform;
             switch (platform) {
-                case SaveRootPlatform::Windows:
+                case Windows:
                     return "Windows";
-                case SaveRootPlatform::MacOS:
+                case MacOS:
                     return "macOS";
-                case SaveRootPlatform::Linux:
+                case Linux:
                     return "Linux";
-                case SaveRootPlatform::Test:
+                case Test:
                     return "Test";
             }
             return "Unknown";
@@ -65,7 +66,7 @@ namespace Horo::Runtime {
             if (!home)
                 return MissingEnvironment(SaveRootPlatform::MacOS);
             return Result<PlatformRootPlan>::Success(
-                {.stateRoot = std::move(*home) / "Library" / "Application Support", .fixedComponents = {"Horo", "Products"}});
+                {.stateRoot = *home / "Library" / "Application Support", .fixedComponents = {"Horo", "Products"}});
         }
 
         [[nodiscard]] Result<PlatformRootPlan> LinuxPlan(const ProcessService &processes) {
@@ -74,24 +75,25 @@ namespace Horo::Runtime {
                 auto home = EnvironmentPath(processes, "HOME");
                 if (!home)
                     return MissingEnvironment(SaveRootPlatform::Linux);
-                state = std::move(*home) / ".local" / "state";
+                state = *home / ".local" / "state";
             }
             return Result<PlatformRootPlan>::Success({.stateRoot = std::move(*state), .fixedComponents = {"horo", "products"}});
         }
 
         [[nodiscard]] Result<PlatformRootPlan> PlatformPlan(const SaveRootResolutionRequest &request, const ProcessService &processes) {
+            using enum SaveRootPlatform;
             Result<PlatformRootPlan> plan = Result<PlatformRootPlan>::Failure(MakeError(SaveErrors::SaveRootPlatformUnsupported));
             switch (request.platform) {
-                case SaveRootPlatform::Windows:
+                case Windows:
                     plan = WindowsPlan(processes);
                     break;
-                case SaveRootPlatform::MacOS:
+                case MacOS:
                     plan = MacOSPlan(processes);
                     break;
-                case SaveRootPlatform::Linux:
+                case Linux:
                     plan = LinuxPlan(processes);
                     break;
-                case SaveRootPlatform::Test:
+                case Test:
                     if (!request.testStateRoot || request.testStateRoot->empty())
                         return Result<PlatformRootPlan>::Failure(
                             SafeFailure(SaveErrors::SaveRootConfigurationInvalid, request.platform, "sandbox lookup"));
@@ -117,8 +119,8 @@ namespace Horo::Runtime {
                 return Result<std::filesystem::path>::Failure(
                     SafeFailure(SaveErrors::SaveRootUnavailable, platform, "state-directory creation", error));
 
-            const auto status = std::filesystem::status(plan.stateRoot, error);
-            if (error || status.type() != std::filesystem::file_type::directory)
+            if (const auto status = std::filesystem::status(plan.stateRoot, error);
+                error || status.type() != std::filesystem::file_type::directory)
                 return Result<std::filesystem::path>::Failure(
                     SafeFailure(SaveErrors::SaveRootUnavailable, platform, "state-directory inspection", error));
 
@@ -211,6 +213,6 @@ namespace Horo::Runtime {
         if (current.HasError())
             return Result<ProductSaveRoot>::Failure(current.ErrorValue());
 
-        return Result<ProductSaveRoot>::Success(ProductSaveRoot{request.product, request.platform, std::move(current.Value())});
+        return Result<ProductSaveRoot>::Success(ProductSaveRoot{request.product, request.platform, std::move(current).Value()});
     }
 }  // namespace Horo::Runtime
