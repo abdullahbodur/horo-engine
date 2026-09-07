@@ -154,7 +154,7 @@ namespace Horo::Tests::FullEditorActions {
                 if (dock.Window == nullptr)
                     dock = ui.WindowInfo("//##DockBottomRight", ImGuiTestOpFlags_NoError);
                 IM_CHECK(dock.Window != nullptr);
-                ui.MouseMoveToPos({dock.RectClipped.Max.x - 24.0F, dock.RectClipped.Max.y - 24.0F});
+                ui.MouseMoveToPos({dock.RectClipped.GetCenter().x, dock.RectClipped.Max.y - 8.0F});
                 ui.MouseClick(ImGuiMouseButton_Right);
                 ui.ItemClick("//**/Create Folder");
                 ui.Yield();
