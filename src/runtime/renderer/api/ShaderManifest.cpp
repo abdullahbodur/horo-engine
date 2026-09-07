@@ -4,6 +4,7 @@
 
 #include <algorithm>
 #include <limits>
+#include <memory>
 #include <new>
 #include <ranges>
 #include <string_view>
@@ -20,9 +21,9 @@ namespace Horo::Render {
         constexpr std::size_t HardMaximumTargets = 16;
         constexpr std::uint32_t HardMaximumInlineConstantBytes = 65'536;
         constexpr std::size_t HardMaximumIdentityBytes = 256;
-        constexpr std::uint8_t AllStageBits = static_cast<std::uint8_t>(ShaderStageVisibility::Vertex) |
-                                              static_cast<std::uint8_t>(ShaderStageVisibility::Fragment) |
-                                              static_cast<std::uint8_t>(ShaderStageVisibility::Compute);
+        constexpr std::byte AllStageBits = std::byte{static_cast<std::uint8_t>(ShaderStageVisibility::Vertex)} |
+                                           std::byte{static_cast<std::uint8_t>(ShaderStageVisibility::Fragment)} |
+                                           std::byte{static_cast<std::uint8_t>(ShaderStageVisibility::Compute)};
 
         [[nodiscard]] Result<void> Failure(const ErrorCodeDescriptor &descriptor) {
             return Result<void>::Failure(MakeError(descriptor));
@@ -88,9 +89,9 @@ namespace Horo::Render {
 
         [[nodiscard]] constexpr bool IsValidVisibility(const ShaderStageVisibility visibility,
                                                        const ShaderStageVisibility declaredStages) noexcept {
-            const auto bits = static_cast<std::uint8_t>(visibility);
-            const auto declaredBits = static_cast<std::uint8_t>(declaredStages);
-            return bits != 0 && (bits & static_cast<std::uint8_t>(~AllStageBits)) == 0 && (bits & declaredBits) == bits;
+            const std::byte bits{static_cast<std::uint8_t>(visibility)};
+            const std::byte declaredBits{static_cast<std::uint8_t>(declaredStages)};
+            return bits != std::byte{0} && (bits & ~AllStageBits) == std::byte{0} && (bits & declaredBits) == bits;
         }
 
         [[nodiscard]] Result<ShaderStageVisibility> ValidateEntries(const ShaderManifest &manifest, const ShaderManifestLimits &limits) {
@@ -117,6 +118,7 @@ namespace Horo::Render {
 
         [[nodiscard]] Result<void> ValidateBindings(const ShaderManifest &manifest, const ShaderManifestLimits &limits,
                                                     const ShaderStageVisibility declaredStages) {
+            using enum ShaderResourceKind;
             if (manifest.bindings.size() > limits.maximumBindings)
                 return Failure(ShaderManifestErrors::InvalidManifest);
             for (std::size_t index = 0; index < manifest.bindings.size(); ++index) {
@@ -128,8 +130,7 @@ namespace Horo::Render {
                     return Failure(ShaderManifestErrors::InvalidManifest);
                 if (!IsValidVisibility(binding.stages, declaredStages))
                     return Failure(ShaderManifestErrors::InvalidReference);
-                if (const bool storage =
-                        binding.kind == ShaderResourceKind::StorageBuffer || binding.kind == ShaderResourceKind::StorageTexture;
+                if (const bool storage = binding.kind == StorageBuffer || binding.kind == StorageTexture;
                     !storage && binding.access != ShaderResourceAccess::ReadOnly)
                     return Failure(ShaderManifestErrors::InvalidManifest);
             }
@@ -138,7 +139,7 @@ namespace Horo::Render {
 
         [[nodiscard]] const ShaderResourceBinding *FindBinding(const ShaderManifest &manifest, const ShaderBindingId id) noexcept {
             const auto found = std::ranges::lower_bound(manifest.bindings, id, {}, &ShaderResourceBinding::id);
-            return found != manifest.bindings.end() && found->id == id ? &*found : nullptr;
+            return found != manifest.bindings.end() && found->id == id ? std::to_address(found) : nullptr;
         }
 
         [[nodiscard]] Result<void> ValidateParameters(const ShaderManifest &manifest, const ShaderManifestLimits &limits) {
@@ -196,17 +197,18 @@ namespace Horo::Render {
 
         [[nodiscard]] constexpr bool IsCanonicalTargetPair(const ShaderTargetBackend backend, const ShaderPayloadFormat payload) noexcept {
             using enum ShaderTargetBackend;
+            using enum ShaderPayloadFormat;
             switch (backend) {
                 case Null:
-                    return payload == ShaderPayloadFormat::ValidationFixture;
+                    return payload == ValidationFixture;
                 case OpenGL:
-                    return payload == ShaderPayloadFormat::Glsl410;
+                    return payload == Glsl410;
                 case Vulkan:
-                    return payload == ShaderPayloadFormat::SpirV16;
+                    return payload == SpirV16;
                 case Metal:
-                    return payload == ShaderPayloadFormat::MetalLibrary24;
+                    return payload == MetalLibrary24;
                 case D3D12:
-                    return payload == ShaderPayloadFormat::Dxil60;
+                    return payload == Dxil60;
             }
             return false;
         }
@@ -215,8 +217,8 @@ namespace Horo::Render {
                                                    const ShaderStageVisibility declaredStages, const std::uint32_t inlineConstantBytes) {
             if (manifest.targets.empty() || manifest.targets.size() > limits.maximumTargets)
                 return Failure(ShaderManifestErrors::InvalidManifest);
-            const bool needsCompute =
-                (static_cast<std::uint8_t>(declaredStages) & static_cast<std::uint8_t>(ShaderStageVisibility::Compute)) != 0;
+            const bool needsCompute = (std::byte{static_cast<std::uint8_t>(declaredStages)} &
+                                       std::byte{static_cast<std::uint8_t>(ShaderStageVisibility::Compute)}) != std::byte{0};
             const bool needsStorage = std::ranges::any_of(manifest.bindings, [](const ShaderResourceBinding &binding) {
                 return binding.kind == ShaderResourceKind::StorageBuffer || binding.kind == ShaderResourceKind::StorageTexture;
             });
