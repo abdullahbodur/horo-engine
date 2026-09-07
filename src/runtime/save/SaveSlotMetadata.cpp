@@ -102,11 +102,9 @@ namespace Horo::Runtime {
     Result<void> ValidateSaveSlotPublicationReplacement(const SaveSlotPublicationMetadata &previous,
                                                         const SaveSlotPublicationMetadata &replacement,
                                                         const SaveSlotMetadataLimits &limits) {
-        auto previousValidation = ValidateSaveSlotPublicationMetadata(previous, limits);
-        if (previousValidation.HasError())
+        if (auto previousValidation = ValidateSaveSlotPublicationMetadata(previous, limits); previousValidation.HasError())
             return previousValidation;
-        auto replacementValidation = ValidateSaveSlotPublicationMetadata(replacement, limits);
-        if (replacementValidation.HasError())
+        if (auto replacementValidation = ValidateSaveSlotPublicationMetadata(replacement, limits); replacementValidation.HasError())
             return replacementValidation;
         if (previous.slot != replacement.slot || previous.generation == replacement.generation)
             return Result<void>::Failure(MakeError(SaveErrors::SlotGenerationConflict));
