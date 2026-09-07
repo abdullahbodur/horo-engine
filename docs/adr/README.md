@@ -186,6 +186,8 @@ to the replacement.
 | [172](172-immersive-agent-ownership-authoring-mode-and-risk.md) | Immersive Agent Ownership, Authoring Mode and Risk | Proposed | 2026-09-02 |
 | [173](173-render-queue-submission-and-fence-contract.md) | Render Queue, Submission and Fence Contract | Proposed | 2026-09-06 |
 | [174](174-render-adapter-and-device-discovery-contract.md) | Render Adapter and Device Discovery Contract | Proposed | 2026-09-06 |
+| [175](175-replication-dirty-state-capture-and-copy-strategy.md) | Replication Dirty-State Capture and Copy Strategy | Accepted | 2026-09-07 |
+| [176](176-runtime-ui-element-and-control-taxonomy.md) | Runtime UI Element and Control Taxonomy | Accepted | 2026-09-07 |
 
 ## Conventions
 

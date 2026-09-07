@@ -157,27 +157,16 @@ gain hidden input or gameplay mutation authority.
 
 ## Core Runtime UI Primitives
 
-The engine core provides these UI primitives without packages:
+[ADR-176](../../adr/176-runtime-ui-element-and-control-taxonomy.md) is the single
+authority for core Runtime UI element kinds, orthogonal capabilities, typed
+control semantics, descriptor ownership, validation, compatibility, migration,
+and rejected alternatives. This document projects that decision into the retained
+tree, layout, input, accessibility, template, and rendering flows; it does not
+maintain a second taxonomy.
 
-| Primitive | Purpose |
-|---|---|
-| Canvas | Root coordinate space for screen-space or world-space UI. |
-| Screen | Full-screen route/page under a canvas, such as main menu or pause menu. |
-| Panel | Rectangular container with background, padding, and child layout. |
-| Frame | Panel variant with optional border, title/header, and content region. |
-| Text | Localized text display. |
-| Image | Texture/sprite display. |
-| Button | Focusable press action. |
-| Progress Bar | Bounded scalar value display, such as health or loading progress. |
-| Slider | Focusable scalar value editor. |
-| Checkbox / Toggle | Boolean control. |
-| Input Field | Text input control. |
-| Scroll View | Clipped scrollable content container. |
-| Layout Group | Horizontal, vertical, grid, or stack layout container. |
-
-Core primitives are intentionally small. Inventory systems, quest trackers,
-dialogue systems, minimaps, rich text, and animated widget packs build on top of
-these primitives through packages or gameplay modules.
+Game-specific UI is ordinary finite document/template composition. Packages may
+extend Runtime UI only through an explicit namespaced extension contract and never
+by reinterpreting a core kind or introducing a parallel registry.
 
 ## Canvas And Coordinate Spaces
 
