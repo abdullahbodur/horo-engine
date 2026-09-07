@@ -138,6 +138,7 @@ add_library(HoroRuntime STATIC
         runtime/save/SaveCompatibility.cpp
         runtime/save/SaveArchiveFraming.cpp
         runtime/save/SaveSlotMetadata.cpp
+        runtime/save/SaveTestCompositions.cpp
 )
 add_library(HoroEngine::Runtime ALIAS HoroRuntime)
 target_compile_features(HoroRuntime PUBLIC cxx_std_20)

@@ -109,4 +109,22 @@ namespace Horo::Runtime::SaveErrors {
     const ErrorCodeDescriptor SlotGenerationConflict{kDomain, ErrorCode{"save.slot.generation_conflict"}, kError,
                                                      "A save-slot replacement does not advance the same logical slot.",
                                                      "Keep the slot identity and allocate a new publication generation."};
+    const ErrorCodeDescriptor CompositionUnsupported{kDomain, ErrorCode{"save.composition.unsupported"}, kError,
+                                                     "The selected save composition does not support persistence.",
+                                                     "Select a save-capable product composition before admission."};
+    const ErrorCodeDescriptor CompositionInvalid{kDomain, ErrorCode{"save.composition.invalid"}, kError,
+                                                 "A deterministic save composition input is invalid.",
+                                                 "Supply finite positive limits and a valid typed operation request."};
+    const ErrorCodeDescriptor CompositionCapacityExceeded{kDomain, ErrorCode{"save.composition.capacity_exceeded"}, kError,
+                                                          "The deterministic save composition reached a declared bound.",
+                                                          "Retire test state or increase the explicit test-only capacity."};
+    const ErrorCodeDescriptor CompositionCancelled{kDomain, ErrorCode{"save.composition.cancelled"}, kError,
+                                                   "The deterministic save operation was cancelled before publication.",
+                                                   "Retry only when the owning operation remains valid."};
+    const ErrorCodeDescriptor CompositionInjectedFailure{kDomain, ErrorCode{"save.composition.injected_failure"}, kError,
+                                                         "The deterministic save operation reached its injected failure.",
+                                                         "Remove the deliberate test fault before retrying."};
+    const ErrorCodeDescriptor CompositionObjectMissing{kDomain, ErrorCode{"save.composition.object_missing"}, kError,
+                                                       "No deterministic save object exists at the requested address.",
+                                                       "Store the object before loading or removing it."};
 }  // namespace Horo::Runtime::SaveErrors
