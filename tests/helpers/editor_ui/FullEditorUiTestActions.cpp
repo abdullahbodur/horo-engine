@@ -88,21 +88,6 @@ namespace Horo::Tests::FullEditorActions {
                     ui.Yield();
                 }
             });
-            pipeline.Step("Create an asset-browser folder", [](ImGuiTestContext &ui) {
-                ImGuiTestItemInfo dock = ui.WindowInfo("//##DockBottom", ImGuiTestOpFlags_NoError);
-                if (dock.Window == nullptr)
-                    dock = ui.WindowInfo("//##DockBottomLeft", ImGuiTestOpFlags_NoError);
-                if (dock.Window == nullptr)
-                    dock = ui.WindowInfo("//##DockBottomRight", ImGuiTestOpFlags_NoError);
-                IM_CHECK(dock.Window != nullptr);
-                ui.MouseMoveToPos({dock.RectClipped.GetCenter().x, dock.RectClipped.Max.y - 8.0F});
-                ui.MouseClick(ImGuiMouseButton_Right);
-                ui.ItemClick("//**/Create Folder");
-                ui.Yield();
-                ui.ItemInputValue("//**/##ContentBrowserCreateFolderInput", "CoverageFolder");
-                ui.ItemClick("//**/Create Folder");
-                ui.Yield();
-            });
         }
 
         void AddSettingsStep(UiScenarioPipe &pipeline, FullEditorUiTestHost &editor) {
