@@ -2,6 +2,7 @@
 
 #include "Horo/Physics/CharacterErrors.h"
 
+#include <algorithm>
 #include <array>
 #include <bit>
 #include <cmath>
@@ -24,12 +25,9 @@ namespace Horo::Character {
 
         /** @brief Reports whether every bounded integral setting is non-zero. */
         [[nodiscard]] bool AreNonZero(const std::span<const std::uint64_t> values) noexcept {
-            for (const auto value : values) {
-                if (value == 0) {
-                    return false;
-                }
-            }
-            return true;
+            return std::ranges::all_of(values, [](const auto value) {
+                return value != 0;
+            });
         }
 
         /** @brief Reports whether corresponding integral settings fit their canonical ceilings. */
@@ -51,13 +49,17 @@ namespace Horo::Character {
             if (!AreNonZero(fields)) {
                 return Invalid("Character world retained capacities must all be non-zero.");
             }
-            constexpr std::array<std::uint64_t, 8> limits{
-                CharacterWorldSettingLimits::MaximumControllers,       CharacterWorldSettingLimits::MaximumQueuedCommands,
-                CharacterWorldSettingLimits::MaximumRetainedContacts,  CharacterWorldSettingLimits::MaximumQueuedEvents,
-                CharacterWorldSettingLimits::MaximumQueuedQueries,     CharacterWorldSettingLimits::MaximumStagedImpulses,
-                CharacterWorldSettingLimits::MaximumDiagnosticRecords, CharacterWorldSettingLimits::MaximumDebugPrimitives,
-            };
-            if (!AreWithinLimits(fields, limits)) {
+            if (constexpr std::array<std::uint64_t, 8> limits{
+                    CharacterWorldSettingLimits::MaximumControllers,
+                    CharacterWorldSettingLimits::MaximumQueuedCommands,
+                    CharacterWorldSettingLimits::MaximumRetainedContacts,
+                    CharacterWorldSettingLimits::MaximumQueuedEvents,
+                    CharacterWorldSettingLimits::MaximumQueuedQueries,
+                    CharacterWorldSettingLimits::MaximumStagedImpulses,
+                    CharacterWorldSettingLimits::MaximumDiagnosticRecords,
+                    CharacterWorldSettingLimits::MaximumDebugPrimitives,
+                };
+                !AreWithinLimits(fields, limits)) {
                 return Exceeded("Character world retained capacity exceeds a schema-1 hard ceiling.");
             }
             return Result<void>::Success();
@@ -65,11 +67,15 @@ namespace Horo::Character {
 
         /** @brief Checks basic work-budget representation before ceilings or cross-field policy. */
         [[nodiscard]] Result<void> ValidateWorkValues(const CharacterWorldWorkBudgets &work) {
-            const std::array<std::uint64_t, 6> values{
-                work.maximumCommandsPerTick,    work.maximumQueriesPerTick,     work.maximumContactsPerMovement,
-                work.maximumMovementIterations, work.maximumRecoveryIterations, work.scratchBytes,
-            };
-            if (!AreNonZero(values) || !std::isfinite(work.maximumDisplacementMetersPerTick) ||
+            if (const std::array<std::uint64_t, 6> values{
+                    work.maximumCommandsPerTick,
+                    work.maximumQueriesPerTick,
+                    work.maximumContactsPerMovement,
+                    work.maximumMovementIterations,
+                    work.maximumRecoveryIterations,
+                    work.scratchBytes,
+                };
+                !AreNonZero(values) || !std::isfinite(work.maximumDisplacementMetersPerTick) ||
                 work.maximumDisplacementMetersPerTick <= 0.0F) {
                 return Invalid("Character world work budgets must be finite and non-zero.");
             }
@@ -82,15 +88,15 @@ namespace Horo::Character {
                 work.maximumCommandsPerTick,    work.maximumQueriesPerTick,     work.maximumContactsPerMovement,
                 work.maximumMovementIterations, work.maximumRecoveryIterations, work.scratchBytes,
             };
-            const std::array<std::uint64_t, 6> limits{
-                capacities.maximumQueuedCommands,
-                capacities.maximumQueuedQueries,
-                MaximumCharacterContacts,
-                CharacterWorldSettingLimits::MaximumMovementIterations,
-                CharacterWorldSettingLimits::MaximumRecoveryIterations,
-                CharacterWorldSettingLimits::MaximumScratchBytes,
-            };
-            if (!AreWithinLimits(values, limits) ||
+            if (const std::array<std::uint64_t, 6> limits{
+                    capacities.maximumQueuedCommands,
+                    capacities.maximumQueuedQueries,
+                    MaximumCharacterContacts,
+                    CharacterWorldSettingLimits::MaximumMovementIterations,
+                    CharacterWorldSettingLimits::MaximumRecoveryIterations,
+                    CharacterWorldSettingLimits::MaximumScratchBytes,
+                };
+                !AreWithinLimits(values, limits) ||
                 work.maximumDisplacementMetersPerTick > CharacterWorldSettingLimits::MaximumDisplacementMetersPerTick) {
                 return Exceeded("Character fixed-tick work exceeds retained storage or a schema-1 hard ceiling.");
             }
@@ -143,11 +149,11 @@ namespace Horo::Character {
          */
         consteval std::size_t SchemaFieldCount() {
             CharacterWorldCapacities capacities;
-            auto &[controllers, commands, contacts, events, queries, impulses, diagnostics, debug] = capacities;
+            const auto &[controllers, commands, contacts, events, queries, impulses, diagnostics, debug] = capacities;
             CharacterWorldWorkBudgets work;
-            auto &[tickCommands, tickQueries, movementContacts, movementIterations, recoveryIterations, scratch, displacement] = work;
+            const auto &[tickCommands, tickQueries, movementContacts, movementIterations, recoveryIterations, scratch, displacement] = work;
             CharacterWorldHistoryBudgets history;
-            auto &[checkpoints, historyBytes, resimulationTicks] = history;
+            const auto &[checkpoints, historyBytes, resimulationTicks] = history;
             static_cast<void>(controllers);
             static_cast<void>(commands);
             static_cast<void>(contacts);
