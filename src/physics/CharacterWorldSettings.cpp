@@ -56,9 +56,9 @@ namespace Horo::Character {
                 return Exceeded("Character fixed-tick work exceeds retained storage or a schema-1 hard ceiling.");
             }
 
-            const auto retainedContactRequirement =
-                static_cast<std::uint64_t>(capacities.maximumControllers) * work.maximumContactsPerMovement;
-            if (retainedContactRequirement > capacities.maximumRetainedContacts) {
+            if (const auto retainedContactRequirement =
+                    static_cast<std::uint64_t>(capacities.maximumControllers) * work.maximumContactsPerMovement;
+                retainedContactRequirement > capacities.maximumRetainedContacts) {
                 return Invalid("Retained contact capacity must cover every controller's admitted movement result.");
             }
             return Result<void>::Success();
@@ -132,7 +132,8 @@ namespace Horo::Character {
     }
 
     /** @copydoc CharacterWorldSettings::CharacterWorldSettings */
-    CharacterWorldSettings::CharacterWorldSettings(CharacterWorldSettingsDescriptor values, CharacterWorldSettingsIdentity identity)
+    CharacterWorldSettings::CharacterWorldSettings(const CharacterWorldSettingsDescriptor &values,
+                                                   const CharacterWorldSettingsIdentity &identity)
         : values_(values), identity_(identity) {}
 
     /** @copydoc CharacterWorldSettings::Values */
