@@ -114,7 +114,7 @@ namespace Horo::Runtime {
         }
 
         /** @brief Rejects every operation without retaining its request. @return SaveErrors::CompositionUnsupported. */
-        [[nodiscard]] Result<SaveCompositionOperationId> Submit(const SaveCompositionRequest &request) const;
+        [[nodiscard]] Result<SaveCompositionOperationId> Submit(SaveCompositionRequest request) const;
 
         /** @brief Performs no work. @return False. */
         [[nodiscard]] constexpr bool AdvanceOne() const noexcept {

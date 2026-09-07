@@ -3,7 +3,9 @@
 #include "Horo/Runtime/Save/SaveErrors.h"
 
 #include <algorithm>
+#include <exception>
 #include <limits>
+#include <memory>
 #include <new>
 #include <utility>
 
@@ -34,7 +36,7 @@ namespace Horo::Runtime {
     }  // namespace
 
     /** @copydoc NullSaveComposition::Submit */
-    Result<SaveCompositionOperationId> NullSaveComposition::Submit(const SaveCompositionRequest &) const {
+    Result<SaveCompositionOperationId> NullSaveComposition::Submit(SaveCompositionRequest) const {
         return CompositionFailure(SaveErrors::CompositionUnsupported);
     }
 
@@ -64,14 +66,10 @@ namespace Horo::Runtime {
     namespace {
         using State = SaveCompositionDetail::DeterministicMockState;
 
-        [[nodiscard]] State::StoredObject *FindObject(State &state, const SaveCompositionAddress &address) {
+        template <typename StateType> [[nodiscard]] auto FindObject(StateType &state, const SaveCompositionAddress &address) {
             const auto iterator = std::ranges::find(state.objects, address, &State::StoredObject::address);
-            return iterator == state.objects.end() ? nullptr : &*iterator;
-        }
-
-        [[nodiscard]] const State::StoredObject *FindObject(const State &state, const SaveCompositionAddress &address) {
-            const auto iterator = std::ranges::find(state.objects, address, &State::StoredObject::address);
-            return iterator == state.objects.end() ? nullptr : &*iterator;
+            using Pointer = decltype(std::addressof(*iterator));
+            return iterator == state.objects.end() ? Pointer{} : std::addressof(*iterator);
         }
 
         [[nodiscard]] bool IsTerminal(const SaveCompositionOperationState state) noexcept {
@@ -84,7 +82,7 @@ namespace Horo::Runtime {
                 case SaveCompositionOperationState::Cancelled:
                     return true;
             }
-            return true;
+            std::terminate();
         }
 
         void Fail(State::Operation &operation, const ErrorCodeDescriptor &descriptor,
