@@ -143,12 +143,19 @@ namespace Horo::WorldStreaming {
                 &WorldStreamingErrors::CoordinateOutOfRange,
                 &WorldStreamingErrors::LodUnsupported,
                 &WorldStreamingErrors::CellOutOfBounds,
+                &WorldStreamingErrors::PartitionDescriptorInvalid,
+                &WorldStreamingErrors::PartitionVersionUnsupported,
+                &WorldStreamingErrors::PartitionBoundsInvalid,
+                &WorldStreamingErrors::PartitionCapacityExceeded,
+                &WorldStreamingErrors::PartitionIdentityConflict,
                 &WorldStreamingErrors::SourceDescriptorInvalid,
                 &WorldStreamingErrors::SourceIntentUnsupported,
                 &WorldStreamingErrors::SourceOwnerStale,
                 &WorldStreamingErrors::SourceRevisionStale,
                 &WorldStreamingErrors::SourceCapacityExceeded,
                 &WorldStreamingErrors::SourceLifecycleUnavailable,
+                &WorldStreamingErrors::SourceDesiredStateInvalid,
+                &WorldStreamingErrors::SourceDesiredStateUnsupported,
             };
             std::set<std::string_view> codes;
             for (const ErrorCodeDescriptor *descriptor : descriptors) {

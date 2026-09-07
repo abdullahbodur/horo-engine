@@ -67,6 +67,7 @@ horo_configure_target_header_boundary(HoroRuntime PUBLIC_HEADERS
     Horo/Runtime/RuntimeLifecycle.h
     Horo/Runtime/Save/SaveErrors.h
     Horo/Runtime/Save/SaveIdentity.h
+    Horo/Runtime/Save/SaveRootResolver.h
     Horo/Runtime/Save/SaveParticipantRegistry.h
     Horo/Runtime/Save/SaveArchiveMetadata.h
     Horo/Runtime/Save/SaveArchiveFraming.h
@@ -77,7 +78,11 @@ horo_configure_target_header_boundary(HoroRuntimeUi PUBLIC_HEADERS
     Horo/Runtime/Ui/UiDocument.h
 )
 horo_configure_target_header_boundary(HoroNetworkApi PUBLIC_HEADERS
+    Horo/Network/MessageCodecRegistry.h
+    Horo/Network/MessageEnvelope.h
     Horo/Network/NetworkErrors.h
+    Horo/Network/PacketBuffer.h
+    Horo/Network/PacketQueue.h
     Horo/Network/ProtocolIdentity.h
     Horo/Network/ProtocolIdentityRegistry.h
     Horo/Network/ReplicationDescriptor.h
@@ -164,6 +169,7 @@ horo_configure_target_header_boundary(HoroPhysics PUBLIC_HEADERS
     Horo/Physics/PhysicsCapabilities.h
     Horo/Physics/PhysicsConstraintDescriptor.h
     Horo/Physics/PhysicsCookedShapeDescriptor.h
+    Horo/Physics/PhysicsDiagnostics.h
     Horo/Physics/PhysicsErrors.h
     Horo/Physics/PhysicsFilterIdentity.h
     Horo/Physics/PhysicsIdentity.h
@@ -194,8 +200,11 @@ horo_configure_target_header_boundary(HoroNavigationNull PUBLIC_HEADERS
     Horo/Navigation/Backends/NullProvider.h
 )
 horo_configure_target_header_boundary(HoroWorldStreaming PUBLIC_HEADERS
+    Horo/WorldStreaming/StreamingDesiredState.h
     Horo/WorldStreaming/StreamingSourceDescriptor.h
+    Horo/WorldStreaming/StreamingSourceRange.h
     Horo/WorldStreaming/WorldCellQuantization.h
+    Horo/WorldStreaming/WorldPartitionDescriptor.h
     Horo/WorldStreaming/WorldStreamingErrors.h
     Horo/WorldStreaming/WorldStreamingIdentity.h
 )

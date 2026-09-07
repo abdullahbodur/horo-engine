@@ -140,6 +140,8 @@ add_executable(HoroInputTests
 target_compile_features(HoroInputTests PRIVATE cxx_std_20)
 target_link_libraries(HoroInputTests PRIVATE HoroEngine::Input)
 add_executable(HoroNetworkApiTests
+        unit/runtime/networking/MessageEnvelopeTests.cpp
+        unit/runtime/networking/PacketQueueTests.cpp
         unit/runtime/networking/ProtocolIdentityTests.cpp
         unit/runtime/networking/ReplicationDescriptorTests.cpp
         unit/runtime/networking/ReplicationDescriptorRegistryTests.cpp
@@ -199,6 +201,7 @@ add_executable(HoroPhysicsTests
         unit/runtime/physics/PhysicsBodyDescriptorTests.cpp
         unit/runtime/physics/PhysicsConstraintDescriptorTests.cpp
         unit/runtime/physics/PhysicsCookedShapeDescriptorTests.cpp
+        unit/runtime/physics/PhysicsDiagnosticsTests.cpp
         unit/runtime/physics/PhysicsHandleRegistryTests.cpp
         unit/runtime/physics/PhysicsIdentityTests.cpp
         unit/runtime/physics/PhysicsPoseTests.cpp
@@ -238,8 +241,11 @@ target_link_libraries(HoroNavigationApiTests PRIVATE HoroEngine::NavigationApi H
 horo_register_catch_test(HoroNavigationApiTests LABELS "unit;navigation;headless")
 
 add_executable(HoroWorldStreamingTests
+        unit/runtime/world_streaming/StreamingDesiredStateTests.cpp
         unit/runtime/world_streaming/StreamingSourceDescriptorTests.cpp
+        unit/runtime/world_streaming/StreamingSourceRangeTests.cpp
         unit/runtime/world_streaming/WorldCellQuantizationTests.cpp
+        unit/runtime/world_streaming/WorldPartitionDescriptorTests.cpp
         unit/runtime/world_streaming/WorldStreamingIdentityTests.cpp
 )
 target_compile_features(HoroWorldStreamingTests PRIVATE cxx_std_20)
@@ -951,6 +957,11 @@ add_executable(HoroRuntimeSaveIdentityTests
 )
 target_compile_features(HoroRuntimeSaveIdentityTests PRIVATE cxx_std_20)
 target_link_libraries(HoroRuntimeSaveIdentityTests PRIVATE HoroEngine::Runtime)
+add_executable(HoroRuntimeSaveRootResolverTests
+        unit/runtime/save/SaveRootResolverTests.cpp
+)
+target_compile_features(HoroRuntimeSaveRootResolverTests PRIVATE cxx_std_20)
+target_link_libraries(HoroRuntimeSaveRootResolverTests PRIVATE HoroEngine::Runtime)
 add_executable(HoroRuntimeSaveParticipantRegistryTests
         unit/runtime/save/SaveParticipantRegistryTests.cpp
 )
@@ -1299,6 +1310,7 @@ set(HORO_CATCH_TEST_TARGETS
         HoroEditorViewportResourceTests
         HoroRuntimeLifecycleTests
         HoroRuntimeSaveIdentityTests
+        HoroRuntimeSaveRootResolverTests
         HoroRuntimeSaveParticipantRegistryTests
         HoroRuntimeUiIdentityTests
         HoroRuntimeUiDocumentTests

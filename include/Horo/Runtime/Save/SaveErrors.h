@@ -52,4 +52,12 @@ namespace Horo::Runtime::SaveErrors {
     extern const ErrorCodeDescriptor ArchivePayloadTruncated;
     /** @brief A selected decoded chunk does not match its manifest checksum. */
     extern const ErrorCodeDescriptor ArchiveChunkHashMismatch;
+    /** @brief Product save-root inputs are missing, relative, or structurally invalid. */
+    extern const ErrorCodeDescriptor SaveRootConfigurationInvalid;
+    /** @brief The selected save-root platform convention is not supported. */
+    extern const ErrorCodeDescriptor SaveRootPlatformUnsupported;
+    /** @brief The product save root could not be created, inspected, or canonicalized. */
+    extern const ErrorCodeDescriptor SaveRootUnavailable;
+    /** @brief A save-root component redirected or resolved outside its approved parent. */
+    extern const ErrorCodeDescriptor SaveRootContainmentViolation;
 }  // namespace Horo::Runtime::SaveErrors

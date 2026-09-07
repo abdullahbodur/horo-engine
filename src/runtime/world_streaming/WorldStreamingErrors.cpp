@@ -46,6 +46,26 @@ namespace Horo::WorldStreaming::WorldStreamingErrors {
         Describe("world_streaming.quantization.cell_out_of_bounds", ErrorSeverity::Error,
                  "The quantized world cell is outside the manifest's inclusive grid bounds.",
                  "Reject the spatial request or use a validated partition whose bounds contain the coordinate.", false);
+    const ErrorCodeDescriptor PartitionDescriptorInvalid =
+        Describe("world_streaming.partition.descriptor_invalid", ErrorSeverity::Error,
+                 "A world-partition descriptor is incomplete or contains malformed fields.",
+                 "Provide a valid partition identity, layers, cells, package references and versioned field values.", true);
+    const ErrorCodeDescriptor PartitionVersionUnsupported =
+        Describe("world_streaming.partition.version_unsupported", ErrorSeverity::Error,
+                 "The world-partition descriptor schema version is unsupported.",
+                 "Migrate the world index to the exact schema version supported by this runtime.", true);
+    const ErrorCodeDescriptor PartitionBoundsInvalid =
+        Describe("world_streaming.partition.bounds_invalid", ErrorSeverity::Error,
+                 "World content bounds are unordered or outside the representable grid envelope.",
+                 "Use ordered exact bounds fully contained by the validated level-zero partition grid.", true);
+    const ErrorCodeDescriptor PartitionCapacityExceeded =
+        Describe("world_streaming.partition.capacity_exceeded", ErrorSeverity::Error,
+                 "The world-partition descriptor exceeds a mandatory host storage limit.",
+                 "Reduce manifest layer, cell, or layer-name data, or choose an explicitly larger supported limit.", true);
+    const ErrorCodeDescriptor PartitionIdentityConflict =
+        Describe("world_streaming.partition.identity_conflict", ErrorSeverity::Error,
+                 "The world-partition descriptor repeats a layer or exact cell identity.",
+                 "Remove duplicate identities and regenerate the canonical world index.", true);
     const ErrorCodeDescriptor SourceDescriptorInvalid =
         Describe("world_streaming.source.descriptor_invalid", ErrorSeverity::Error,
                  "A streaming source descriptor or admission context is structurally invalid.",
@@ -70,4 +90,20 @@ namespace Horo::WorldStreaming::WorldStreamingErrors {
         Describe("world_streaming.source.lifecycle_unavailable", ErrorSeverity::Warning,
                  "The streaming source owner is cancelling or closed to new admission.",
                  "Finish owner retirement or submit the source to a new active owner lifetime.", false);
+    const ErrorCodeDescriptor SourceShapeInvalid =
+        Describe("world_streaming.source.shape_invalid", ErrorSeverity::Error,
+                 "A streaming source shape is malformed or exceeds the bounded evaluation contract.",
+                 "Use ordered finite geometry within the declared source range limits.", true);
+    const ErrorCodeDescriptor SourceShapeUnsupported =
+        Describe("world_streaming.source.shape_unsupported", ErrorSeverity::Error,
+                 "The evaluating host does not support the requested streaming source shape.",
+                 "Enable the shape capability or submit a supported bounded source shape.", true);
+    const ErrorCodeDescriptor SourceDesiredStateInvalid =
+        Describe("world_streaming.source.desired_state_invalid", ErrorSeverity::Error,
+                 "A streaming source desired state combines residency and retention inconsistently.",
+                 "Use releasable retention for Unloaded, or request Loaded or Activated before pinning.", true);
+    const ErrorCodeDescriptor SourceDesiredStateUnsupported =
+        Describe("world_streaming.source.desired_state_unsupported", ErrorSeverity::Error,
+                 "A streaming source desired-state value is not supported by this contract version.",
+                 "Use Unloaded, Loaded or Activated residency with Releasable or Pinned retention.", true);
 }  // namespace Horo::WorldStreaming::WorldStreamingErrors

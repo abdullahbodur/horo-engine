@@ -72,4 +72,20 @@ namespace Horo::Runtime::SaveErrors {
     const ErrorCodeDescriptor ArchiveChunkHashMismatch{kDomain, ErrorCode{"save.archive.chunk_hash_mismatch"}, kError,
                                                        "Decoded save chunk bytes do not match their declared digest.",
                                                        "Reject the archive and retain it for corruption diagnostics."};
+    const ErrorCodeDescriptor SaveRootConfigurationInvalid{kDomain, ErrorCode{"save.root.configuration_invalid"}, kError,
+                                                           "The platform save-root configuration is invalid.",
+                                                           "Provide the required absolute platform state directory."};
+    const ErrorCodeDescriptor SaveRootPlatformUnsupported{kDomain, ErrorCode{"save.root.platform_unsupported"}, kError,
+                                                          "The selected save-root platform convention is unsupported.",
+                                                          "Compose a Windows, macOS, Linux, or explicit test resolver."};
+    const ErrorCodeDescriptor SaveRootUnavailable{kDomain,
+                                                  ErrorCode{"save.root.unavailable"},
+                                                  kError,
+                                                  "The product save root is unavailable.",
+                                                  "Check user-state storage availability and directory permissions.",
+                                                  true,
+                                                  true};
+    const ErrorCodeDescriptor SaveRootContainmentViolation{kDomain, ErrorCode{"save.root.containment_violation"}, kError,
+                                                           "The product save root failed containment validation.",
+                                                           "Remove redirected or unexpected entries beneath the approved state root."};
 }  // namespace Horo::Runtime::SaveErrors

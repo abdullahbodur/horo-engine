@@ -131,6 +131,7 @@ add_library(HoroRuntime STATIC
         runtime/lifecycle/RuntimeErrors.cpp
         runtime/save/SaveErrors.cpp
         runtime/save/SaveIdentity.cpp
+        runtime/save/SaveRootResolver.cpp
         runtime/save/SaveParticipantRegistry.cpp
         runtime/save/SaveArchiveMetadata.cpp
         runtime/save/SaveCompatibility.cpp
@@ -142,7 +143,10 @@ target_include_directories(HoroRuntime PUBLIC ${PROJECT_SOURCE_DIR}/include)
 target_link_libraries(HoroRuntime PUBLIC HoroEngine::Foundation PRIVATE nlohmann_json::nlohmann_json)
 
 add_library(HoroNetworkApi STATIC
+        runtime/networking/api/MessageCodecRegistry.cpp
         runtime/networking/api/NetworkErrors.cpp
+        runtime/networking/api/PacketBuffer.cpp
+        runtime/networking/api/PacketQueue.cpp
         runtime/networking/api/ProtocolIdentityRegistry.cpp
         runtime/networking/api/ReplicationDescriptor.cpp
         runtime/networking/api/ReplicationDescriptorRegistry.cpp
@@ -341,6 +345,7 @@ add_library(HoroPhysics STATIC
         physics/PhysicsCapabilities.cpp
         physics/PhysicsConstraintDescriptor.cpp
         physics/PhysicsCookedShapeDescriptor.cpp
+        physics/PhysicsDiagnostics.cpp
         physics/PhysicsErrors.cpp
         physics/PhysicsFilterIdentity.cpp
         physics/PhysicsHandleRegistry.h
@@ -401,14 +406,17 @@ target_compile_features(HoroNavigationNull PUBLIC cxx_std_20)
 target_link_libraries(HoroNavigationNull PUBLIC HoroEngine::NavigationApi)
 
 add_library(HoroWorldStreaming STATIC
+        runtime/world_streaming/StreamingDesiredState.cpp
         runtime/world_streaming/StreamingSourceDescriptor.cpp
+        runtime/world_streaming/StreamingSourceRange.cpp
         runtime/world_streaming/WorldCellQuantization.cpp
+        runtime/world_streaming/WorldPartitionDescriptor.cpp
         runtime/world_streaming/WorldStreamingErrors.cpp
         runtime/world_streaming/WorldStreamingIdentity.cpp
 )
 add_library(HoroEngine::WorldStreaming ALIAS HoroWorldStreaming)
 target_compile_features(HoroWorldStreaming PUBLIC cxx_std_20)
-target_link_libraries(HoroWorldStreaming PUBLIC HoroEngine::Foundation)
+target_link_libraries(HoroWorldStreaming PUBLIC HoroEngine::Foundation HoroEngine::Assets)
 
 add_library(HoroPrefab STATIC
         runtime/prefab/PrefabErrors.cpp
