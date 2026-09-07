@@ -27,12 +27,40 @@ namespace Horo::Extensions {
         std::size_t maximumPlatforms{32};              /**< Maximum compatibility platforms. */
     };
 
+    /** @brief Explicit authority granted to one extension module. */
+    enum class ExtensionModuleRole : std::uint8_t {
+        BackendCapability,
+        EditorPresentation,
+        HeadlessTooling,
+        ScriptProvider,
+        RuntimeParticipant,
+    };
+
+    /** @brief One module-owned, backend-neutral service contract export. */
+    struct ExtensionServiceExportManifest {
+        std::string id;       /**< Stable service export identity. */
+        std::string contract; /**< Stable callable contract identity. */
+        std::string version;  /**< Canonical semantic API version. */
+    };
+
+    /** @brief One service contract required by a module. */
+    struct ExtensionServiceImportManifest {
+        std::string id;             /**< Stable import identity local to the module. */
+        std::string service;        /**< Required service export identity. */
+        std::string contract;       /**< Required callable contract identity. */
+        std::string minimumVersion; /**< Minimum compatible semantic API version. */
+    };
+
     /** @brief One versioned native or declarative module exported by an extension package. */
     struct ExtensionModuleManifest {
-        std::string id;      /**< Stable module identity. */
-        std::string version; /**< Canonical semantic module version. */
-        std::string kind;    /**< Host-defined module kind. */
-        std::string entry;   /**< Optional package-relative native entry name. */
+        std::string id;                                      /**< Stable module identity. */
+        std::string version;                                 /**< Canonical semantic module version. */
+        std::string kind;                                    /**< Host-defined module kind. */
+        std::string entry;                                   /**< Optional package-relative native entry name. */
+        std::vector<ExtensionModuleRole> roles;              /**< Explicit module authorities; empty only for decoded legacy input. */
+        std::vector<std::string> dependencies;               /**< Required local module identities. */
+        std::vector<ExtensionServiceExportManifest> exports; /**< Services owned by this module. */
+        std::vector<ExtensionServiceImportManifest> imports; /**< Services consumed by this module. */
     };
 
     /** @brief One manifest-declared contribution bound to a module in the same package. */

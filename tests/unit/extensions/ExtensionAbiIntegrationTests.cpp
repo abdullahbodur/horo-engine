@@ -33,7 +33,7 @@ namespace Horo::Extensions::Tests {
             {
                 std::ofstream manifest(packageRoot / "extension.json");
                 manifest
-                    << R"({"id":"com.example.abi","version":"1.0.0","modules":[{"id":"com.example.abi.native","version":"1.0.0","kind":"asset_importer","entry":")"
+                    << R"({"id":"com.example.abi","version":"1.0.0","modules":[{"id":"com.example.abi.native","version":"1.0.0","kind":"asset_importer","roles":["backend-capability"],"entry":")"
                     << libraryPath.filename().generic_string() << R"("}]})";
                 REQUIRE(manifest.good());
             }

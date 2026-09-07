@@ -344,6 +344,7 @@ horo_configure_target_header_boundary(HoroExtensions PUBLIC_HEADERS
     Horo/Extensions/ExtensionInventory.h
     Horo/Extensions/ExtensionManager.h
     Horo/Extensions/ExtensionManifest.h
+    Horo/Extensions/ExtensionModuleResolution.h
     Horo/Extensions/ExtensionMarketplace.h
 )
 

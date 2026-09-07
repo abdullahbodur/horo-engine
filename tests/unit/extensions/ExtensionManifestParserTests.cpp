@@ -49,7 +49,8 @@ namespace Horo::Extensions::Tests {
                     "id": "com.example.importer.native",
                     "version": "2.0.0",
                     "kind": "asset_importer",
-                    "entry": "bin/importer"
+                    "entry": "bin/importer",
+                    "roles": ["backend-capability"]
                 }],
                 "contributions": [{
                     "type": "asset.importer",
@@ -74,7 +75,8 @@ namespace Horo::Extensions::Tests {
         SECTION("transitional package envelope remains explicit") {
             auto result = ParseExtensionManifest(R"json({
                 "package": {"id": "com.example.legacy", "version": "1.0.0"},
-                "modules": [{"id": "com.example.legacy.native", "version": "1.0.0", "kind": "native"}]
+                "modules": [{"id": "com.example.legacy.native", "version": "1.0.0", "kind": "native",
+                             "roles": ["backend-capability"]}]
             })json");
             REQUIRE(result.HasValue());
             CHECK(result.Value().schemaVersion == 1);
@@ -118,6 +120,42 @@ namespace Horo::Extensions::Tests {
             auto result = ParseExtensionManifest("[]");
             RequireError(result, "$", "extension.manifest.invalid_type");
         }
+    }
+
+    TEST_CASE("Extension manifest owns explicit multi-module roles and service edges", "[Extensions][Manifest]") {
+        auto result = ParseExtensionManifest(R"json({
+            "schemaVersion": 1,
+            "id": "com.example.hybrid",
+            "version": "1.0.0",
+            "modules": [{
+                "id": "com.example.hybrid.backend",
+                "version": "2.0.0",
+                "kind": "native",
+                "roles": ["backend-capability", "headless-tooling"],
+                "exports": [{"id": "com.example.hybrid.service", "contract": "com.horo.example", "version": "2.1.0"}]
+            }, {
+                "id": "com.example.hybrid.editor",
+                "version": "1.0.0",
+                "kind": "native",
+                "roles": ["editor-presentation"],
+                "dependencies": ["com.example.hybrid.backend"],
+                "imports": [{"id": "com.example.hybrid.import", "service": "com.example.hybrid.service",
+                             "contract": "com.horo.example", "minimumVersion": "2.0.0"}]
+            }]
+        })json");
+
+        REQUIRE(result.HasValue());
+        REQUIRE(result.Value().modules.size() == 2);
+        CHECK(result.Value().modules.front().roles.size() == 2);
+        CHECK(result.Value().modules.front().exports.front().id == "com.example.hybrid.service");
+        CHECK(result.Value().modules.back().dependencies.front() == "com.example.hybrid.backend");
+        CHECK(result.Value().modules.back().imports.front().minimumVersion == "2.0.0");
+
+        auto unknownRole = ParseExtensionManifest(R"json({
+            "id":"com.example.test","version":"1.0.0",
+            "modules":[{"id":"com.example.test.native","version":"1.0.0","kind":"native","roles":["gui-ish"]}]
+        })json");
+        RequireError(unknownRole, "$.modules[0].roles[0]", "extension.manifest.invalid_value");
     }
 
     TEST_CASE("Extension manifest enforces syntax resource limits before validation", "[Extensions][Manifest]") {

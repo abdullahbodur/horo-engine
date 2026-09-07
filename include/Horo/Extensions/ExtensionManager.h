@@ -1,6 +1,7 @@
 #pragma once
 
 #include "Horo/Extensions/ExtensionManifest.h"
+#include "Horo/Extensions/ExtensionModuleResolution.h"
 #include "Horo/Foundation/Result.h"
 #include "Horo/Foundation/TransparentString.h"
 
@@ -18,9 +19,8 @@ namespace Horo::Extensions {
     /** @brief Represents a loaded extension instance. */
     struct LoadedExtension {
         ExtensionManifest manifest;
-        std::shared_ptr<ExtensionModuleLifetime> lifetime;
-        std::string moduleId;
-        std::string moduleVersion;
+        std::vector<std::shared_ptr<ExtensionModuleLifetime>> lifetimes;
+        std::vector<std::string> moduleIds;
     };
 
     /**
@@ -32,7 +32,8 @@ namespace Horo::Extensions {
          * @brief Creates an extension manager bound to an optional unsealed importer catalog.
          * @param importerCatalog Host-owned candidate catalog receiving transactional asset.importer registrations.
          */
-        explicit ExtensionManager(Assets::AssetImporterCatalog *importerCatalog = nullptr);
+        explicit ExtensionManager(Assets::AssetImporterCatalog *importerCatalog = nullptr,
+                                  ExtensionHostProfile hostProfile = ExtensionHostProfile::Interactive);
         ~ExtensionManager();
         ExtensionManager(const ExtensionManager &) = delete;
         ExtensionManager &operator=(const ExtensionManager &) = delete;
@@ -65,6 +66,7 @@ namespace Horo::Extensions {
 
     private:
         Assets::AssetImporterCatalog *m_importerCatalog{};
+        ExtensionHostProfile m_hostProfile{ExtensionHostProfile::Interactive};
         TransparentStringMap<std::unique_ptr<LoadedExtension>> m_loadedExtensions;
     };
 

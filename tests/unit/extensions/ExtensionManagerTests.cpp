@@ -127,6 +127,7 @@ namespace Horo::Extensions::Tests {
                     "id": "com.example.test.importer",
                     "version": "2.0.0",
                     "kind": "asset_importer",
+                    "roles": ["backend-capability"],
                     "entry": "test_importer"
                 }]
             })";
@@ -162,7 +163,8 @@ namespace Horo::Extensions::Tests {
                 "modules": [{
                     "id": "com.example.top-level.importer",
                     "version": "4.1.0",
-                    "kind": "asset_importer"
+                    "kind": "asset_importer",
+                    "roles": ["backend-capability"]
                 }]
             })");
             REQUIRE(result.HasValue());
@@ -245,6 +247,62 @@ namespace Horo::Extensions::Tests {
         REQUIRE(inventory.InstallFromDirectory(source).HasError());
     }
 
+#ifdef HORO_ABI_FIXTURE_0
+    TEST_CASE_METHOD(ExtensionManagerTestFixture, "Extension manager stages multi-module packages atomically", "[Extensions][Modules]") {
+        const fs::path source = fs::absolute(HORO_ABI_FIXTURE_0);
+        const std::string extension = source.extension().string();
+        fs::copy_file(source, tempDir / ("backend" + extension), fs::copy_options::overwrite_existing);
+        fs::copy_file(source, tempDir / ("editor" + extension), fs::copy_options::overwrite_existing);
+
+        const auto writeManifest = [this](const std::string &modules) {
+            std::ofstream output{tempDir / "extension.json", std::ios::binary | std::ios::trunc};
+            output << "{\"id\":\"com.example.multi\",\"version\":\"1.0.0\",\"modules\":" << modules << '}';
+        };
+
+        SECTION("all selected siblings publish as one loaded package") {
+            writeManifest("[{\"id\":\"com.example.multi.backend\",\"version\":\"1.0.0\",\"kind\":\"native\","
+                          "\"roles\":[\"backend-capability\"],\"entry\":\"backend" +
+                          extension +
+                          "\"},"
+                          "{\"id\":\"com.example.multi.editor\",\"version\":\"1.0.0\",\"kind\":\"native\","
+                          "\"roles\":[\"editor-presentation\"],\"dependencies\":[\"com.example.multi.backend\"],"
+                          "\"entry\":\"editor" +
+                          extension + "\"}]");
+            ExtensionManager manager;
+            REQUIRE(manager.LoadExtension(fs::absolute(tempDir).string()).HasValue());
+            CHECK(manager.GetLoadedExtensionIds() == std::vector<std::string>{"com.example.multi"});
+        }
+
+        SECTION("a failing sibling rolls back the complete activation attempt") {
+            writeManifest("[{\"id\":\"com.example.multi.backend\",\"version\":\"1.0.0\",\"kind\":\"native\","
+                          "\"roles\":[\"backend-capability\"],\"entry\":\"backend" +
+                          extension +
+                          "\"},"
+                          "{\"id\":\"com.example.multi.editor\",\"version\":\"1.0.0\",\"kind\":\"native\","
+                          "\"roles\":[\"editor-presentation\"],\"dependencies\":[\"com.example.multi.backend\"],"
+                          "\"entry\":\"missing" +
+                          extension + "\"}]");
+            ExtensionManager manager;
+            REQUIRE(manager.LoadExtension(fs::absolute(tempDir).string()).HasError());
+            CHECK(manager.GetLoadedExtensionIds().empty());
+        }
+
+        SECTION("headless activation does not construct an optional presentation sibling") {
+            writeManifest("[{\"id\":\"com.example.multi.backend\",\"version\":\"1.0.0\",\"kind\":\"native\","
+                          "\"roles\":[\"backend-capability\"],\"entry\":\"backend" +
+                          extension +
+                          "\"},"
+                          "{\"id\":\"com.example.multi.editor\",\"version\":\"1.0.0\",\"kind\":\"native\","
+                          "\"roles\":[\"editor-presentation\"],\"dependencies\":[\"com.example.multi.backend\"],"
+                          "\"entry\":\"missing" +
+                          extension + "\"}]");
+            ExtensionManager manager{nullptr, ExtensionHostProfile::Headless};
+            REQUIRE(manager.LoadExtension(fs::absolute(tempDir).string()).HasValue());
+            CHECK(manager.GetLoadedExtensionIds() == std::vector<std::string>{"com.example.multi"});
+        }
+    }
+#endif
+
 #ifdef HORO_BASIC_EXTENSION_DIR
     TEST_CASE_METHOD(ExtensionManagerTestFixture, "Extension inventory installs an absolute local package disabled by default",
                      "[Extensions][Inventory]") {
@@ -321,6 +379,57 @@ namespace Horo::Extensions::Tests {
         const auto *retained = published.Value()->FindById("com.horo.examples.asset-importer-basic.raw");
         REQUIRE(retained != nullptr);
         REQUIRE(retained->packageId == "existing.package");
+    }
+
+    TEST_CASE_METHOD(ExtensionManagerTestFixture, "A failed sibling cannot publish an earlier module contribution",
+                     "[Extensions][Assets][Modules]") {
+        const fs::path sourceRoot = fs::absolute(HORO_BASIC_EXTENSION_DIR);
+        fs::path libraryPath;
+        for (const fs::directory_entry &entry : fs::directory_iterator{sourceRoot}) {
+            const std::string extension = entry.path().extension().string();
+            if (extension == ".dll" || extension == ".dylib" || extension == ".so") {
+                libraryPath = entry.path();
+                break;
+            }
+        }
+        REQUIRE_FALSE(libraryPath.empty());
+        fs::copy_file(libraryPath, tempDir / libraryPath.filename(), fs::copy_options::overwrite_existing);
+
+        std::ofstream manifest{tempDir / "extension.json", std::ios::binary | std::ios::trunc};
+        manifest << R"json({
+            "id":"com.horo.examples.asset-importer-basic",
+            "version":"1.0.0",
+            "modules":[{
+                "id":"com.horo.examples.asset-importer-basic.native",
+                "version":"1.0.0",
+                "kind":"asset_importer",
+                "roles":["backend-capability","headless-tooling"],
+                "entry":")json"
+                 << libraryPath.filename().generic_string() << R"json("
+            },{
+                "id":"com.horo.examples.asset-importer-basic.presentation",
+                "version":"1.0.0",
+                "kind":"native",
+                "roles":["editor-presentation"],
+                "dependencies":["com.horo.examples.asset-importer-basic.native"],
+                "entry":"missing)json"
+                 << libraryPath.extension().string() << R"json("
+            }],
+            "contributions":[{
+                "type":"asset.importer",
+                "id":"com.horo.examples.asset-importer-basic.raw",
+                "module":"com.horo.examples.asset-importer-basic.native"
+            }]
+        })json";
+        manifest.close();
+
+        Assets::AssetImporterCatalog catalog;
+        ExtensionManager manager{&catalog};
+        REQUIRE(manager.LoadExtension(fs::absolute(tempDir).string()).HasError());
+        CHECK(manager.GetLoadedExtensionIds().empty());
+        auto published = catalog.Publish();
+        REQUIRE(published.HasValue());
+        CHECK(published.Value()->FindById("com.horo.examples.asset-importer-basic.raw") == nullptr);
     }
 
     TEST_CASE_METHOD(ExtensionManagerTestFixture, "External asset importer loads, previews, reimports, and survives manager release",

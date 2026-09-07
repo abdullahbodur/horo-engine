@@ -11,6 +11,7 @@
       "id": "com.horo.examples.asset-importer-basic.native",
       "version": "1.0.0",
       "kind": "asset_importer",
+      "roles": ["backend-capability", "headless-tooling"],
       "entry": "horo_asset_importer_basic"
     }
   ],
