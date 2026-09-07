@@ -15,13 +15,14 @@ namespace Horo::AI {
         }
 
         [[nodiscard]] bool IsKnown(const BlackboardValueKind value) noexcept {
+            using enum BlackboardValueKind;
             switch (value) {
-                case BlackboardValueKind::Boolean:
-                case BlackboardValueKind::SignedInteger:
-                case BlackboardValueKind::Scalar:
-                case BlackboardValueKind::EntityReference:
-                case BlackboardValueKind::AssetReference:
-                case BlackboardValueKind::WorldCoordinate:
+                case Boolean:
+                case SignedInteger:
+                case Scalar:
+                case EntityReference:
+                case AssetReference:
+                case WorldCoordinate:
                     return true;
             }
             return false;
@@ -64,19 +65,20 @@ namespace Horo::AI {
         }
 
         [[nodiscard]] BlackboardValueKind KindOf(const BlackboardScalarValue &value) noexcept {
+            using enum BlackboardValueKind;
             return std::visit([]<typename Value>(const Value &) {
                 using T = std::remove_cvref_t<Value>;
                 if constexpr (std::is_same_v<T, bool>)
-                    return BlackboardValueKind::Boolean;
+                    return Boolean;
                 if constexpr (std::is_same_v<T, std::int64_t>)
-                    return BlackboardValueKind::SignedInteger;
+                    return SignedInteger;
                 if constexpr (std::is_same_v<T, double>)
-                    return BlackboardValueKind::Scalar;
+                    return Scalar;
                 if constexpr (std::is_same_v<T, BlackboardStoredEntityReference>)
-                    return BlackboardValueKind::EntityReference;
+                    return EntityReference;
                 if constexpr (std::is_same_v<T, BlackboardStoredAssetReference>)
-                    return BlackboardValueKind::AssetReference;
-                return BlackboardValueKind::WorldCoordinate;
+                    return AssetReference;
+                return WorldCoordinate;
             }, value);
         }
 
@@ -213,7 +215,7 @@ namespace Horo::AI {
             new (std::nothrow) std::array<BlackboardKeyDescriptor, MaximumBlackboardKeys>{}};
         if (keys == nullptr)
             return Result<BlackboardSchema>::Failure(MakeError(AIErrors::BlackboardStorageUnavailable));
-        std::copy(descriptor.keys.begin(), descriptor.keys.end(), keys->begin());
+        std::ranges::copy(descriptor.keys, keys->begin());
         for (std::size_t index = 0; index < descriptor.keys.size(); ++index) {
             if (const auto key = ValidateKey((*keys)[index]); key.HasError())
                 return Result<BlackboardSchema>::Failure(key.ErrorValue());
@@ -222,8 +224,8 @@ namespace Horo::AI {
                   [](const BlackboardKeyDescriptor &left, const BlackboardKeyDescriptor &right) {
             return left.key.Value() < right.key.Value();
         });
-        const auto end = keys->begin() + static_cast<std::ptrdiff_t>(descriptor.keys.size());
-        if (std::adjacent_find(keys->begin(), end, [](const BlackboardKeyDescriptor &left, const BlackboardKeyDescriptor &right) {
+        if (const auto end = keys->begin() + static_cast<std::ptrdiff_t>(descriptor.keys.size());
+            std::adjacent_find(keys->begin(), end, [](const BlackboardKeyDescriptor &left, const BlackboardKeyDescriptor &right) {
             return left.key == right.key;
         }) != end)
             return Result<BlackboardSchema>::Failure(MakeError(AIErrors::DescriptorConflict));
