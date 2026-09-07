@@ -63,6 +63,14 @@ namespace Horo::Tests::FullEditorActions {
                 ui.ItemClick(item);
                 ui.Yield();
             }
+
+            const auto selectComboOption = [&ui](const char *combo, const int option) {
+                ui.ItemClick(combo);
+                ui.ItemClick(("//**/###combo_option_" + std::to_string(option)).c_str());
+                ui.Yield();
+            };
+            selectComboOption("//**/###camera_projection", 1);
+            selectComboOption("//**/###light_kind", 2);
         });
     }
 
@@ -117,25 +125,42 @@ namespace Horo::Tests::FullEditorActions {
                     Editor::EditorMenuInvocation{Editor::EditorMenuAction::OpenEditorSettings, std::nullopt});
                 ui.Yield();
                 IM_CHECK(ui.ItemExists("//**/###settings_apply"));
+                ui.ItemClick("//**/###startup");
+                ui.ItemClick("//**/###combo_option_1");
                 ui.ItemClick("//**/confirm-exit/toggle");
+                ui.ItemClick("//**/restore-workspace/toggle");
+                ui.ItemInputValue("//**/##default-scene", "assets/scenes/coverage.horo");
                 ui.ItemClick("//**/Appearance/nav");
                 ui.Yield();
+                ui.ItemInputValue("//**/##custom-theme", "coverage-theme.json");
                 ui.ItemInputValue("//**/##font-size", "15");
                 ui.ItemClick("//**/Input/nav");
                 ui.Yield();
                 ui.ItemClick("//**/invert-y/toggle");
                 ui.ItemClick("//**/Rendering/nav");
                 ui.Yield();
+                ui.ItemClick("//**/###viewport");
+                ui.ItemClick("//**/###combo_option_2");
                 ui.ItemClick("//**/grid/toggle");
+                ui.ItemClick("//**/###tier");
+                ui.ItemClick("//**/###combo_option_2");
+                ui.ItemInputValue("//**/##texture-budget", "768 MB");
                 ui.ItemClick("//**/Audio/nav");
                 ui.Yield();
+                ui.ItemClick("//**/###audio-device");
+                ui.ItemClick("//**/###combo_option_1");
                 ui.ItemClick("//**/audio-enabled/toggle");
                 ui.ItemClick("//**/Network/nav");
                 ui.Yield();
                 ui.ItemInputValue("//**/##max-clients", "6");
+                ui.ItemInputValue("//**/##download-threads", "3");
                 ui.ItemClick("//**/Diagnostics/nav");
                 ui.Yield();
+                ui.ItemClick("//**/###log-level");
+                ui.ItemClick("//**/###combo_option_2");
                 ui.ItemClick("//**/write-log/toggle");
+                ui.ItemClick("//**/capture-stutter/toggle");
+                ui.ItemInputValue("//**/##stutter", "24.5");
                 ui.ItemClick("//**/Extensions/nav");
                 ui.Yield();
                 ui.ItemClick("//**/Restore Defaults");

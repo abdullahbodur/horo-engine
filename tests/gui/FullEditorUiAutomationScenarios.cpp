@@ -258,7 +258,7 @@ namespace {
             Tests::FullEditorActions::SelectOrthographicProjection(pipeline, editor);
             Tests::FullEditorActions::ExerciseWorkspacePanels(pipeline, editor);
             Tests::FullEditorActions::ExerciseAssetImport(pipeline, editor);
-        }, Tests::EditorUiScenarioBudget::Extended(1800), &editor.Input());
+        }, Tests::EditorUiScenarioBudget::Extended(2400), &editor.Input());
 
         INFO(result.testEngineLog);
         REQUIRE_FALSE(result.frameBudgetExceeded);

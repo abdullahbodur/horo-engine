@@ -22,7 +22,7 @@ namespace Horo::Editor::Tests {
             ImGuiIO &io = ImGui::GetIO();
             io.DisplaySize = displaySize;
             io.DeltaTime = 1.0F / 60.0F;
-            ImFont *const defaultFont = io.Fonts->AddFontDefault();
+            ImFont *const defaultFont = (io.FontDefault = io.Fonts->AddFontDefault());
             static_cast<void>(io.Fonts->Build());
             fonts_ = {.sans = defaultFont, .sansCompact = defaultFont, .sansEmphasis = defaultFont, .icon = defaultFont};
         }

@@ -97,6 +97,14 @@ namespace Horo::Tests {
             }
         }
 
+        void WriteEmptySceneFixture(const std::filesystem::path &path) {
+            std::ofstream scene(path, std::ios::binary);
+            scene << R"({"schemaVersion":1,"objects":[]})";
+            scene.close();
+            if (!scene)
+                throw std::runtime_error("Unable to write recent-project E2E scene.");
+        }
+
         [[nodiscard]] std::filesystem::path SeedRecentProjectFixture(const std::filesystem::path &projectsRoot, const std::string &name,
                                                                      const IEditorUiTestSurface &surface) {
             const Application::EngineReleaseVersion release = Application::CurrentEngineReleaseVersion();
@@ -122,7 +130,7 @@ namespace Horo::Tests {
             metadata.close();
             if (!metadata)
                 throw std::runtime_error("Unable to write recent-project E2E metadata.");
-            std::ofstream(projectRoot / "assets/scenes/main.horo", std::ios::binary) << R"({"schemaVersion":1,"objects":[]})";
+            WriteEmptySceneFixture(projectRoot / "assets/scenes/main.horo");
 
             if (!Editor::SaveRecentProjectsToDisk(
                     {Editor::RecentProjectEntry{name, projectRoot.string(), "Just now", "empty", std::nullopt}})) {
