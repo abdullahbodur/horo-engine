@@ -125,4 +125,21 @@ namespace Horo::Runtime::Ui::UiErrors {
                                                    "Submit the transition only from its declared owner-thread lifecycle state.",
                                                    false,
                                                    false};
+    /** @copydoc DiagnosticInvalid */
+    const ErrorCodeDescriptor
+        DiagnosticInvalid{UiDomain,
+                          ErrorCode{"runtime_ui.diagnostic.invalid"},
+                          ErrorSeverity::Error,
+                          "The Runtime UI diagnostic evidence is invalid.",
+                          "Provide a known category, canonical Runtime UI error and bounded ordered correlation fields.",
+                          false,
+                          false};
+    /** @copydoc DiagnosticUnsupported */
+    const ErrorCodeDescriptor DiagnosticUnsupported{UiDomain,
+                                                    ErrorCode{"runtime_ui.diagnostic.unsupported"},
+                                                    ErrorSeverity::Error,
+                                                    "The Runtime UI diagnostic source is unsupported.",
+                                                    "Use a declared Runtime UI category and canonical horo.runtime_ui error descriptor.",
+                                                    false,
+                                                    false};
 }  // namespace Horo::Runtime::Ui::UiErrors

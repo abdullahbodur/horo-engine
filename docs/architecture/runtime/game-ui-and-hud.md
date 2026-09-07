@@ -728,6 +728,15 @@ Game UI exposes bounded metrics:
 
 Metrics follow [Observability Metrics And Profiling](../observability/observability-performance.md).
 
+Runtime UI diagnostic evidence uses nine closed categories: document, layout,
+text, input, focus, binding, render, accessibility and lifecycle. A record owns
+one canonical Runtime UI error code, severity, a bounded message and at most six
+typed correlation fields in stable key order. Document, element and canvas values
+reuse Runtime UI identities; player, viewport and Foundation operation values are
+dependency-neutral scalar projections used only as evidence and never establish
+new identity authority. The operation `Error` remains control-flow authority. A
+diagnostic record is inert and owns no log sink, store, renderer or runtime state.
+
 ## Testing
 
 Required tests cover:

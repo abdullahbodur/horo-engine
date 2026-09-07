@@ -165,6 +165,7 @@ add_library(HoroRuntimeUi STATIC
         runtime/ui/UiErrors.cpp
         runtime/ui/UiIdentity.cpp
         runtime/ui/UiDocument.cpp
+        runtime/ui/UiDiagnostics.cpp
 )
 add_library(HoroEngine::RuntimeUi ALIAS HoroRuntimeUi)
 target_compile_features(HoroRuntimeUi PUBLIC cxx_std_20)
