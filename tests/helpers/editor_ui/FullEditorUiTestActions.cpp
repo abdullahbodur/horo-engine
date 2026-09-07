@@ -4,6 +4,7 @@
 #include "Horo/Editor/EditorMenuModel.h"
 #include "Horo/Editor/GuiScreenHost.h"
 
+#include <fstream>
 #include <imgui_test_engine/imgui_te_context.h>
 #include <string>
 
@@ -42,6 +43,26 @@ namespace Horo::Tests::FullEditorActions {
             ui.SetRef("//$FOCUSED");
             ui.MenuClick("Delete");
             ui.Yield();
+        });
+    }
+
+    void ExerciseInspectorComponents(UiScenarioPipe &pipeline) {
+        pipeline.Step("Add every built-in optional component through the Inspector", [](ImGuiTestContext &ui) {
+            ui.ItemClick("//**/##hierarchy_object_row");
+            ui.Yield();
+            if (!ui.ItemExists("//**/###InspectorAddComponent")) {
+                ui.ItemClick("//**/horo.inspector/##ActivityItem");
+                ui.Yield();
+            }
+            IM_CHECK(ui.ItemExists("//**/###InspectorAddComponent"));
+            constexpr const char *componentItems[]{"//**/###inspector_component_camera", "//**/###inspector_component_light",
+                                                   "//**/Trigger Volume", "//**/Audio Source"};
+            for (const char *const item : componentItems) {
+                ui.ItemClick("//**/###InspectorAddComponent");
+                ui.Yield();
+                ui.ItemClick(item);
+                ui.Yield();
+            }
         });
     }
 
@@ -96,11 +117,29 @@ namespace Horo::Tests::FullEditorActions {
                     Editor::EditorMenuInvocation{Editor::EditorMenuAction::OpenEditorSettings, std::nullopt});
                 ui.Yield();
                 IM_CHECK(ui.ItemExists("//**/###settings_apply"));
-                constexpr const char *sections[]{"Appearance", "Input", "Rendering", "Audio", "Network", "Diagnostics", "Extensions"};
-                for (const char *const section : sections) {
-                    ui.ItemClick(("//**/" + std::string{section} + "/nav").c_str());
-                    ui.Yield();
-                }
+                ui.ItemClick("//**/confirm-exit/toggle");
+                ui.ItemClick("//**/Appearance/nav");
+                ui.Yield();
+                ui.ItemInputValue("//**/##font-size", "15");
+                ui.ItemClick("//**/Input/nav");
+                ui.Yield();
+                ui.ItemClick("//**/invert-y/toggle");
+                ui.ItemClick("//**/Rendering/nav");
+                ui.Yield();
+                ui.ItemClick("//**/grid/toggle");
+                ui.ItemClick("//**/Audio/nav");
+                ui.Yield();
+                ui.ItemClick("//**/audio-enabled/toggle");
+                ui.ItemClick("//**/Network/nav");
+                ui.Yield();
+                ui.ItemInputValue("//**/##max-clients", "6");
+                ui.ItemClick("//**/Diagnostics/nav");
+                ui.Yield();
+                ui.ItemClick("//**/write-log/toggle");
+                ui.ItemClick("//**/Extensions/nav");
+                ui.Yield();
+                ui.ItemClick("//**/Restore Defaults");
+                ui.ItemClick("//**/###settings_apply");
                 ui.ItemClick("//**/###settings_cancel");
             });
         }
@@ -110,5 +149,29 @@ namespace Horo::Tests::FullEditorActions {
         AddInputMappingStep(pipeline);
         AddGlobalDockSteps(pipeline);
         AddSettingsStep(pipeline, editor);
+    }
+
+    void ExerciseAssetImport(UiScenarioPipe &pipeline, FullEditorUiTestHost &editor) {
+        pipeline.Step("Import a mesh through the asset-import modal", [&editor](ImGuiTestContext &ui) {
+            const std::filesystem::path source = editor.Screens().CurrentProjectRoot() / "coverage_triangle.obj";
+            std::ofstream fixture{source, std::ios::binary};
+            fixture << "v 0 0 0\nv 1 0 0\nv 0 1 0\nf 1 2 3\n";
+            fixture.close();
+            IM_CHECK(std::filesystem::is_regular_file(source));
+
+            ui.Yield();
+            editor.Screens().HandleDropFiles({source});
+            for (int frame = 0; frame < 5; ++frame)
+                ui.Yield();
+            for (int frame = 0; frame < 30 && !ui.ItemExists("//**/##ImportTab0"); ++frame)
+                ui.Yield();
+            IM_CHECK(ui.ItemExists("//**/##ImportTab0"));
+            for (int tab = 1; tab < 4; ++tab) {
+                ui.ItemClick(("//**/##ImportTab" + std::to_string(tab)).c_str());
+                ui.Yield();
+            }
+            ui.ItemClick("//**/Cancel");
+            ui.Yield();
+        });
     }
 }  // namespace Horo::Tests::FullEditorActions
