@@ -420,23 +420,25 @@ namespace Horo::Extensions {
             }
 
             [[nodiscard]] static std::optional<ExtensionModuleRole> ParseRole(const std::string_view value) {
+                using enum ExtensionModuleRole;
                 if (value == "backend-capability")
-                    return ExtensionModuleRole::BackendCapability;
+                    return BackendCapability;
                 if (value == "editor-presentation")
-                    return ExtensionModuleRole::EditorPresentation;
+                    return EditorPresentation;
                 if (value == "headless-tooling")
-                    return ExtensionModuleRole::HeadlessTooling;
+                    return HeadlessTooling;
                 if (value == "script-provider")
-                    return ExtensionModuleRole::ScriptProvider;
+                    return ScriptProvider;
                 if (value == "runtime-participant")
-                    return ExtensionModuleRole::RuntimeParticipant;
+                    return RuntimeParticipant;
                 return std::nullopt;
             }
 
-            [[nodiscard]] bool ParseModuleRoles(const Json &module, const std::string_view path, std::vector<ExtensionModuleRole> &roles) {
-                const auto found = module.find("roles");
+            [[nodiscard]] bool ParseModuleRoles(const Json &moduleObject, const std::string_view path,
+                                                std::vector<ExtensionModuleRole> &roles) {
+                const auto found = moduleObject.find("roles");
                 const std::string rolesPath = ChildPath(path, "roles");
-                if (found == module.end())
+                if (found == moduleObject.end())
                     return true;
                 if (!found->is_array())
                     return Reject(rolesPath, "extension.manifest.invalid_type", "Module roles must be an array.");
@@ -457,10 +459,10 @@ namespace Horo::Extensions {
                 return true;
             }
 
-            [[nodiscard]] bool ParseModuleDependencies(const Json &module, const std::string_view path,
+            [[nodiscard]] bool ParseModuleDependencies(const Json &moduleObject, const std::string_view path,
                                                        std::vector<std::string> &dependencies) {
-                const auto found = module.find("dependencies");
-                if (found == module.end())
+                const auto found = moduleObject.find("dependencies");
+                if (found == moduleObject.end())
                     return true;
                 const std::string dependenciesPath = ChildPath(path, "dependencies");
                 if (!found->is_array())
@@ -483,11 +485,11 @@ namespace Horo::Extensions {
             }
 
             template <typename Entry, typename ParseEntry>
-            [[nodiscard]] bool ParseModuleServiceEntries(const Json &module, const std::string_view path, const std::string_view fieldName,
-                                                         const std::string_view entryName, std::vector<Entry> &entries,
-                                                         ParseEntry parseEntry) {
-                const auto found = module.find(fieldName);
-                if (found == module.end())
+            [[nodiscard]] bool ParseModuleServiceEntries(const Json &moduleObject, const std::string_view path,
+                                                         const std::string_view fieldName, const std::string_view entryName,
+                                                         std::vector<Entry> &entries, ParseEntry parseEntry) {
+                const auto found = moduleObject.find(fieldName);
+                if (found == moduleObject.end())
                     return true;
                 const std::string entriesPath = ChildPath(path, fieldName);
                 if (!found->is_array())
@@ -515,9 +517,9 @@ namespace Horo::Extensions {
                 return true;
             }
 
-            [[nodiscard]] bool ParseModuleExports(const Json &module, const std::string_view path,
+            [[nodiscard]] bool ParseModuleExports(const Json &moduleObject, const std::string_view path,
                                                   std::vector<ExtensionServiceExportManifest> &exports) {
-                return ParseModuleServiceEntries(module, path, "exports", "export", exports,
+                return ParseModuleServiceEntries(moduleObject, path, "exports", "export", exports,
                                                  [this](const Json &encoded, const std::string_view elementPath,
                                                         ExtensionServiceExportManifest &value) {
                     if (!AllowFields(encoded, elementPath, {"id", "contract", "version"}) ||
@@ -530,9 +532,9 @@ namespace Horo::Extensions {
                 });
             }
 
-            [[nodiscard]] bool ParseModuleImports(const Json &module, const std::string_view path,
+            [[nodiscard]] bool ParseModuleImports(const Json &moduleObject, const std::string_view path,
                                                   std::vector<ExtensionServiceImportManifest> &imports) {
-                return ParseModuleServiceEntries(module, path, "imports", "import", imports,
+                return ParseModuleServiceEntries(moduleObject, path, "imports", "import", imports,
                                                  [this](const Json &encoded, const std::string_view elementPath,
                                                         ExtensionServiceImportManifest &value) {
                     if (!AllowFields(encoded, elementPath, {"id", "service", "contract", "minimumVersion"}) ||
