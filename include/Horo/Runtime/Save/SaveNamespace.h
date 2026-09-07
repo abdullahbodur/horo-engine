@@ -92,7 +92,7 @@ namespace Horo::Runtime {
     private:
         friend Result<CanonicalSaveNamespaceKey> EncodeSaveNamespaceKey(const SaveNamespaceId &);
         /** @brief Constructs a key after typed namespace validation. */
-        explicit CanonicalSaveNamespaceKey(std::array<std::byte, CanonicalSaveNamespaceKeyBytes> bytes) noexcept;
+        explicit CanonicalSaveNamespaceKey(const std::array<std::byte, CanonicalSaveNamespaceKeyBytes> &bytes) noexcept;
 
         std::array<std::byte, CanonicalSaveNamespaceKeyBytes> bytes_{};
     };

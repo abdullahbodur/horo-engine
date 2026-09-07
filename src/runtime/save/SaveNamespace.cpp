@@ -5,7 +5,6 @@
 #include <algorithm>
 #include <concepts>
 #include <ranges>
-#include <type_traits>
 
 namespace Horo::Runtime {
     namespace {
@@ -47,7 +46,7 @@ namespace Horo::Runtime {
     }
 
     /** @copydoc CanonicalSaveNamespaceKey::CanonicalSaveNamespaceKey */
-    CanonicalSaveNamespaceKey::CanonicalSaveNamespaceKey(std::array<std::byte, CanonicalSaveNamespaceKeyBytes> bytes) noexcept
+    CanonicalSaveNamespaceKey::CanonicalSaveNamespaceKey(const std::array<std::byte, CanonicalSaveNamespaceKeyBytes> &bytes) noexcept
         : bytes_(bytes) {}
 
     /** @copydoc CanonicalSaveNamespaceKey::Bytes */
@@ -57,13 +56,14 @@ namespace Horo::Runtime {
 
     /** @copydoc ClassifySaveNamespaceTransition */
     Result<SaveNamespaceTransitionKind> ClassifySaveNamespaceTransition(const SaveNamespaceId &current, const SaveNamespaceId &requested) {
+        using enum SaveNamespaceTransitionKind;
         if (!current.IsValid() || !requested.IsValid())
             return Result<SaveNamespaceTransitionKind>::Failure(MakeError(SaveErrors::NamespaceInvalid));
         if (current == requested)
-            return Result<SaveNamespaceTransitionKind>::Success(SaveNamespaceTransitionKind::Unchanged);
+            return Result<SaveNamespaceTransitionKind>::Success(Unchanged);
         if (current.product != requested.product || current.environment != requested.environment)
-            return Result<SaveNamespaceTransitionKind>::Success(SaveNamespaceTransitionKind::ExplicitMigrationRequired);
-        return Result<SaveNamespaceTransitionKind>::Success(SaveNamespaceTransitionKind::RebindRequired);
+            return Result<SaveNamespaceTransitionKind>::Success(ExplicitMigrationRequired);
+        return Result<SaveNamespaceTransitionKind>::Success(RebindRequired);
     }
 
     /** @copydoc ValidateSaveNamespaceAccess */
@@ -86,8 +86,7 @@ namespace Horo::Runtime {
         bytes[kVersionOffset] = static_cast<std::byte>(SaveNamespaceEncodingVersion);
         CopyIdentity(namespaceId.product.Bytes(), bytes, kProductOffset);
         CopyIdentity(namespaceId.environment.Bytes(), bytes, kEnvironmentOffset);
-        std::visit([&bytes](const auto &owner) {
-            using Owner = std::remove_cvref_t<decltype(owner)>;
+        std::visit([&bytes]<typename Owner>(const Owner &owner) {
             if constexpr (std::same_as<Owner, UserProfileOwner>) {
                 bytes[kOwnerKindOffset] = kUserProfileKind;
                 CopyIdentity(owner.user.Bytes(), bytes, kOwnerPrimaryOffset);
