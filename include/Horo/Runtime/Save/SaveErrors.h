@@ -60,4 +60,10 @@ namespace Horo::Runtime::SaveErrors {
     extern const ErrorCodeDescriptor SaveRootUnavailable;
     /** @brief A save-root component redirected or resolved outside its approved parent. */
     extern const ErrorCodeDescriptor SaveRootContainmentViolation;
+    /** @brief A save namespace omitted a required typed identity or revision. */
+    extern const ErrorCodeDescriptor NamespaceInvalid;
+    /** @brief No user/profile namespace is currently available for admission. */
+    extern const ErrorCodeDescriptor NamespaceUnavailable;
+    /** @brief A captured namespace or binding revision no longer matches the active binding. */
+    extern const ErrorCodeDescriptor NamespaceStale;
 }  // namespace Horo::Runtime::SaveErrors
