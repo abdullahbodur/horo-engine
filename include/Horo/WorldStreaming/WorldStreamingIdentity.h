@@ -20,6 +20,8 @@ namespace Horo::WorldStreaming {
         struct StreamingSourceIdTag;
         /** @brief Tag that keeps source descriptor revisions distinct from identities and residency generations. */
         struct StreamingSourceRevisionTag;
+        /** @brief Tag that keeps immutable authoring-page revisions distinct from runtime source revisions. */
+        struct WorldAuthoringRevisionTag;
         /** @brief Tag that keeps partition epochs distinct from other non-zero counters. */
         struct PartitionEpochTag;
         /** @brief Tag that keeps streaming generations distinct from other non-zero counters. */
@@ -103,6 +105,10 @@ namespace Horo::WorldStreaming {
     using StreamingSourceRevision =
         Foundation::Detail::NonZeroId64<Detail::StreamingSourceRevisionTag, WorldStreamingErrors::IdentityInvalid>;
 
+    /** @brief Monotonic immutable revision of one source-controlled world-authoring page. */
+    using WorldAuthoringRevision =
+        Foundation::Detail::NonZeroId64<Detail::WorldAuthoringRevisionTag, WorldStreamingErrors::IdentityInvalid>;
+
     /** @brief Mounted partition incarnation; zero is invalid and issued values never wrap or repeat. */
     using PartitionEpoch = Foundation::Detail::NonZeroId64<Detail::PartitionEpochTag, WorldStreamingErrors::IdentityInvalid>;
 
@@ -170,6 +176,9 @@ namespace Horo::WorldStreaming {
     /** @brief Returns the next non-wrapping source revision. @param current Current valid source revision. @return Next revision or
      * GenerationExhausted. */
     [[nodiscard]] Result<StreamingSourceRevision> NextStreamingSourceRevision(StreamingSourceRevision current);
+    /** @brief Returns the next non-wrapping authoring-page revision. @param current Current valid revision. @return Next revision or
+     * GenerationExhausted. */
+    [[nodiscard]] Result<WorldAuthoringRevision> NextWorldAuthoringRevision(WorldAuthoringRevision current);
 
     /** @brief Encodes exact worldGuid bytes. @param value World identity. @return Canonical 16-byte representation. */
     [[nodiscard]] SerializedWorldPartitionId SerializeWorldPartitionId(const WorldPartitionId &value) noexcept;

@@ -511,6 +511,35 @@ world need not be live in memory. BakeStreamingCells reads authored pages/assets
 through that policy. Play/Preview uses separate RuntimeScene/partition state and
 cannot delete or mutate document-owned content through runtime eviction.
 
+## World Authoring Source And Collaboration Contract
+
+World authoring version one uses independently source-controlled **spatial page
+assets** as its durable document granularity. Each page is identified by stable
+`AssetId`, belongs to one `WorldPartitionId` and publishes immutable monotonic
+`WorldAuthoringRevision` values. The Editor document service owns writable page
+state, commands, history, dirty/save/recovery state and editing pins. World Streaming
+owns only the inert versioned policy and pure admission validation; it does not open
+files, contact a source-control provider or mutate an Editor document.
+
+An authoring page is deliberately not a `StreamingCellId`, `.wcell` archive or
+`world.index` entry. Offline bake captures exact immutable page revisions and may
+project one page into several cooked cells, or combine several pages into one cooked
+cell, without changing page identity or source. Cooked layout changes therefore do
+not rename authoring documents or redefine collaboration boundaries.
+
+Publication uses optimistic compare-and-swap at page granularity. A replacement
+names the stable page asset, current expected revision and its exact non-wrapping
+successor. Source-control checkout, locks and presence are advisory workflow evidence;
+they are never the authority that permits a stale revision to overwrite the current
+page. A mismatch, identity conflict, unsupported policy, capacity limit or exhausted
+revision returns a typed result and leaves the existing page unchanged.
+
+The authoring owner admits a bounded number of open pages. Cancelling closes new
+admission while existing page operations retire; Closed rejects all admission.
+Replacement and shutdown never rewrite or delete an already published page in place.
+Provider integration, merge UI and Editor persistence remain application/Editor
+responsibilities layered over this contract rather than alternate sources of truth.
+
 ## Error Handling And Shutdown
 
 All fallible operations follow ADR-008 Result/Error. Lifecycle errors preserve the
