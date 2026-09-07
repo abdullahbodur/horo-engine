@@ -65,19 +65,24 @@ namespace Horo::Network {
             });
         }
 
+        bool ParseIpv4Octet(const std::string_view field, std::uint8_t &octet) noexcept {
+            if (field.empty() || field.size() > 3 || (field.size() > 1 && field.front() == '0'))
+                return false;
+            std::uint32_t value{};
+            const auto [parsedEnd, error] = std::from_chars(field.data(), field.data() + field.size(), value);
+            if (error != std::errc{} || parsedEnd != field.data() + field.size() || value > 255)
+                return false;
+            octet = static_cast<std::uint8_t>(value);
+            return true;
+        }
+
         bool ParseIpv4(const std::string_view text, std::array<std::uint8_t, NetworkAddress::Ipv6ByteCount> &bytes) noexcept {
             std::size_t start{};
             for (std::size_t octet = 0; octet < NetworkAddress::Ipv4ByteCount; ++octet) {
                 const auto separator = text.find('.', start);
                 const auto end = separator == std::string_view::npos ? text.size() : separator;
-                const auto field = text.substr(start, end - start);
-                if (field.empty() || field.size() > 3 || (field.size() > 1 && field.front() == '0'))
+                if (!ParseIpv4Octet(text.substr(start, end - start), bytes[octet]))
                     return false;
-                std::uint32_t value{};
-                const auto [parsedEnd, error] = std::from_chars(field.data(), field.data() + field.size(), value);
-                if (error != std::errc{} || parsedEnd != field.data() + field.size() || value > 255)
-                    return false;
-                bytes[octet] = static_cast<std::uint8_t>(value);
                 if (octet + 1 < NetworkAddress::Ipv4ByteCount) {
                     if (separator == std::string_view::npos)
                         return false;
@@ -120,9 +125,7 @@ namespace Horo::Network {
             return false;
         }
 
-        bool ParseIpv6(const std::string_view text, std::array<std::uint8_t, NetworkAddress::Ipv6ByteCount> &bytes) noexcept {
-            if (text.empty() || text.find('.') != std::string_view::npos || text.find('%') != std::string_view::npos)
-                return false;
+        bool ParseIpv6Groups(const std::string_view text, std::array<std::uint16_t, 8> &groups) noexcept {
             const auto compression = text.find("::");
             if (compression != std::string_view::npos && text.find("::", compression + 2) != std::string_view::npos)
                 return false;
@@ -131,18 +134,22 @@ namespace Horo::Network {
             std::array<std::uint16_t, 8> right{};
             std::size_t leftCount{};
             std::size_t rightCount{};
-            if (compression == std::string_view::npos) {
-                if (!ParseIpv6Side(text, left, leftCount) || leftCount != left.size())
-                    return false;
-            } else {
-                if (!ParseIpv6Side(text.substr(0, compression), left, leftCount) ||
-                    !ParseIpv6Side(text.substr(compression + 2), right, rightCount) || leftCount + rightCount >= left.size())
-                    return false;
-            }
-
-            std::array<std::uint16_t, 8> groups{};
+            if (compression == std::string_view::npos)
+                return ParseIpv6Side(text, groups, leftCount) && leftCount == groups.size();
+            if (!ParseIpv6Side(text.substr(0, compression), left, leftCount) ||
+                !ParseIpv6Side(text.substr(compression + 2), right, rightCount) || leftCount + rightCount >= groups.size())
+                return false;
             std::copy_n(left.begin(), leftCount, groups.begin());
             std::copy_n(right.begin(), rightCount, groups.end() - static_cast<std::ptrdiff_t>(rightCount));
+            return true;
+        }
+
+        bool ParseIpv6(const std::string_view text, std::array<std::uint8_t, NetworkAddress::Ipv6ByteCount> &bytes) noexcept {
+            if (text.empty() || text.find('.') != std::string_view::npos || text.find('%') != std::string_view::npos)
+                return false;
+            std::array<std::uint16_t, 8> groups{};
+            if (!ParseIpv6Groups(text, groups))
+                return false;
             for (std::size_t index = 0; index < groups.size(); ++index) {
                 bytes[index * 2] = static_cast<std::uint8_t>(groups[index] >> 8U);
                 bytes[index * 2 + 1] = static_cast<std::uint8_t>(groups[index] & 0xffU);
