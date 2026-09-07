@@ -244,6 +244,13 @@ target_compile_features(HoroVfxApiTests PRIVATE cxx_std_20)
 target_link_libraries(HoroVfxApiTests PRIVATE HoroEngine::VfxApi)
 horo_register_catch_test(HoroVfxApiTests LABELS "unit;vfx;headless")
 
+add_executable(HoroCinematicModelTests
+        unit/runtime/cinematic/CinematicIdentityTests.cpp
+)
+target_compile_features(HoroCinematicModelTests PRIVATE cxx_std_20)
+target_link_libraries(HoroCinematicModelTests PRIVATE HoroEngine::CinematicModel)
+horo_register_catch_test(HoroCinematicModelTests LABELS "unit;cinematic;headless")
+
 add_executable(HoroNavigationApiTests
         support/navigation/DeterministicNavigationProvider.cpp
         unit/runtime/navigation/NavigationAreaRegistryTests.cpp
