@@ -114,7 +114,7 @@ namespace Horo::Runtime {
         }
 
         /** @brief Rejects every operation without retaining its request. @return SaveErrors::CompositionUnsupported. */
-        [[nodiscard]] Result<SaveCompositionOperationId> Submit(SaveCompositionRequest request) const;
+        [[nodiscard]] Result<SaveCompositionOperationId> Submit(const SaveCompositionRequest &request) const;
 
         /** @brief Performs no work. @return False. */
         [[nodiscard]] constexpr bool AdvanceOne() const noexcept {
@@ -157,7 +157,7 @@ namespace Horo::Runtime {
         /** @brief Validates and copies a request into the bounded FIFO. @param request Owned request.
          * @return Non-zero identity, or a stable invalid/capacity error. No operation executes during admission.
          */
-        [[nodiscard]] Result<SaveCompositionOperationId> Submit(SaveCompositionRequest request);
+        [[nodiscard]] Result<SaveCompositionOperationId> Submit(const SaveCompositionRequest &request);
         /** @brief Advances exactly one scheduler step for the oldest non-terminal operation.
          * @return True when an operation consumed a wait or evaluation step; false when idle.
          */

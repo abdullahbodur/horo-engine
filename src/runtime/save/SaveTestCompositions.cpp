@@ -16,10 +16,11 @@ namespace Horo::Runtime {
         }
 
         [[nodiscard]] bool IsKnownKind(const SaveCompositionOperationKind kind) noexcept {
+            using enum SaveCompositionOperationKind;
             switch (kind) {
-                case SaveCompositionOperationKind::Store:
-                case SaveCompositionOperationKind::Load:
-                case SaveCompositionOperationKind::Remove:
+                case Store:
+                case Load:
+                case Remove:
                     return true;
             }
             return false;
@@ -36,7 +37,7 @@ namespace Horo::Runtime {
     }  // namespace
 
     /** @copydoc NullSaveComposition::Submit */
-    Result<SaveCompositionOperationId> NullSaveComposition::Submit(SaveCompositionRequest) const {
+    Result<SaveCompositionOperationId> NullSaveComposition::Submit(const SaveCompositionRequest &) const {
         return CompositionFailure(SaveErrors::CompositionUnsupported);
     }
 
@@ -73,13 +74,14 @@ namespace Horo::Runtime {
         }
 
         [[nodiscard]] bool IsTerminal(const SaveCompositionOperationState state) noexcept {
+            using enum SaveCompositionOperationState;
             switch (state) {
-                case SaveCompositionOperationState::Queued:
-                case SaveCompositionOperationState::Waiting:
+                case Queued:
+                case Waiting:
                     return false;
-                case SaveCompositionOperationState::Completed:
-                case SaveCompositionOperationState::Failed:
-                case SaveCompositionOperationState::Cancelled:
+                case Completed:
+                case Failed:
+                case Cancelled:
                     return true;
             }
             std::terminate();
@@ -100,7 +102,7 @@ namespace Horo::Runtime {
                     Fail(operation, SaveErrors::CompositionCapacityExceeded);
                     return;
                 }
-                state.objects.push_back(State::StoredObject{operation.request.address, operation.request.bytes});
+                state.objects.emplace_back(operation.request.address, operation.request.bytes);
             }
             operation.snapshot.state = SaveCompositionOperationState::Completed;
             operation.snapshot.commit = SaveCompositionCommitOutcome::Committed;
@@ -138,7 +140,7 @@ namespace Horo::Runtime {
         : state_(std::move(state)) {}
 
     /** @copydoc DeterministicMockSaveComposition::Submit */
-    Result<SaveCompositionOperationId> DeterministicMockSaveComposition::Submit(SaveCompositionRequest request) {
+    Result<SaveCompositionOperationId> DeterministicMockSaveComposition::Submit(const SaveCompositionRequest &request) {
         if (!IsKnownKind(request.kind) || !IsKnownFault(request.fault) || !request.address.slot.IsValid())
             return CompositionFailure(SaveErrors::CompositionInvalid);
         if (request.bytes.size() > state_->limits.maximumBytesPerObject)
@@ -151,10 +153,11 @@ namespace Horo::Runtime {
 
         const SaveCompositionOperationId operationId = state_->nextOperation;
         ++state_->nextOperation.value;
-        const auto kind = request.kind;
-        const auto delay = request.delaySteps;
+        SaveCompositionRequest ownedRequest = request;
+        const auto kind = ownedRequest.kind;
+        const auto delay = ownedRequest.delaySteps;
         state_->operations.push_back(State::Operation{
-            .request = std::move(request),
+            .request = std::move(ownedRequest),
             .snapshot = SaveCompositionOperationSnapshot{.operation = operationId, .kind = kind},
             .remainingDelay = delay,
         });
