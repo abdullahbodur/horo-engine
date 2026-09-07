@@ -432,6 +432,35 @@ namespace Horo::Extensions::Tests {
         CHECK(published.Value()->FindById("com.horo.examples.asset-importer-basic.raw") == nullptr);
     }
 
+    TEST_CASE_METHOD(ExtensionManagerTestFixture, "Extension manager rejects incompatible artifacts before library loading",
+                     "[Extensions][Compatibility]") {
+#if defined(_WIN32)
+        constexpr std::string_view OtherPlatform = "linux";
+#else
+        constexpr std::string_view OtherPlatform = "windows";
+#endif
+        std::ofstream manifest{tempDir / "extension.json", std::ios::binary | std::ios::trunc};
+        manifest << R"json({
+            "id":"com.example.incompatible",
+            "version":"1.0.0",
+            "modules":[{
+                "id":"com.example.incompatible.native",
+                "version":"1.0.0",
+                "kind":"native",
+                "roles":["backend-capability"],
+                "abi":{"major":1,"minimumMinor":1},
+                "entries":[{"platform":")json"
+                 << OtherPlatform << R"json(","architecture":"x86_64","buildProfile":"debug","entry":"missing-library"}]
+            }]
+        })json";
+        manifest.close();
+
+        ExtensionManager manager;
+        const auto loaded = manager.LoadExtension(fs::absolute(tempDir).string());
+        REQUIRE(loaded.HasError());
+        CHECK_THAT(loaded.ErrorValue().message, Catch::Matchers::ContainsSubstring("rejected compatibility requirement"));
+    }
+
     TEST_CASE_METHOD(ExtensionManagerTestFixture, "External asset importer loads, previews, reimports, and survives manager release",
                      "[Extensions][Assets]") {
         using namespace Horo::Assets;

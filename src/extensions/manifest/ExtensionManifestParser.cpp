@@ -3,10 +3,12 @@
 
 #include <array>
 #include <initializer_list>
+#include <limits>
 #include <optional>
 #include <ranges>
 #include <set>
 #include <string>
+#include <tuple>
 #include <utility>
 
 namespace Horo::Extensions {
@@ -291,7 +293,24 @@ namespace Horo::Extensions {
                     return false;
                 if (!ParseModules(document, manifest))
                     return false;
+                if (!ValidateCompatibilityAuthority(manifest))
+                    return false;
                 return ParseContributions(document, manifest);
+            }
+
+            [[nodiscard]] bool ValidateCompatibilityAuthority(const ExtensionManifest &manifest) {
+                const bool hasTypedAbi = std::ranges::any_of(manifest.modules, [](const ExtensionModuleManifest &moduleManifest) {
+                    return moduleManifest.abi.has_value();
+                });
+                if (!manifest.sdkAbi.empty() && hasTypedAbi)
+                    return Reject("$.compatibility.sdkAbi", "extension.manifest.ambiguous_field",
+                                  "Legacy SDK ABI and typed module ABI requirements cannot both be declared.");
+                const bool hasTypedEntries = std::ranges::any_of(manifest.modules, [](const ExtensionModuleManifest &moduleManifest) {
+                    return !moduleManifest.entries.empty();
+                });
+                return manifest.platforms.empty() || !hasTypedEntries ||
+                       Reject("$.compatibility.platforms", "extension.manifest.ambiguous_field",
+                              "Legacy platforms and typed module entries cannot both be declared.");
             }
 
             [[nodiscard]] bool ParseCompatibility(const Json &document, ExtensionManifest &manifest) {
@@ -392,12 +411,17 @@ namespace Horo::Extensions {
             [[nodiscard]] bool ParseModule(const Json &value, const std::string_view path, ExtensionModuleManifest &moduleManifest) {
                 if (!value.is_object())
                     return Reject(path, "extension.manifest.invalid_type", "Module must be an object.");
-                if (!AllowFields(value, path, {"id", "version", "kind", "entry", "roles", "dependencies", "exports", "imports"}))
+                if (!AllowFields(value, path,
+                                 {"id", "version", "kind", "entry", "roles", "dependencies", "exports", "imports", "abi", "entries",
+                                  "requiredCapabilities"}))
                     return false;
                 return ReadModuleFields(value, path, moduleManifest) && ValidateModuleValues(path, moduleManifest) &&
                        ParseModuleRoles(value, path, moduleManifest.roles) &&
                        ParseModuleDependencies(value, path, moduleManifest.dependencies) &&
-                       ParseModuleExports(value, path, moduleManifest.exports) && ParseModuleImports(value, path, moduleManifest.imports);
+                       ParseModuleExports(value, path, moduleManifest.exports) && ParseModuleImports(value, path, moduleManifest.imports) &&
+                       ParseModuleAbi(value, path, moduleManifest.abi) &&
+                       ParseModuleEntries(value, path, moduleManifest.entry, moduleManifest.entries) &&
+                       ParseModuleCapabilities(value, path, moduleManifest.requiredCapabilities);
             }
 
             [[nodiscard]] bool ReadModuleFields(const Json &value, const std::string_view path, ExtensionModuleManifest &moduleManifest) {
@@ -416,6 +440,137 @@ namespace Horo::Extensions {
                 if (!moduleManifest.entry.empty() && !IsSafeEntry(moduleManifest.entry))
                     return Reject(ChildPath(path, "entry"), "extension.manifest.invalid_path",
                                   "Module entry must be a safe package-relative path.");
+                return true;
+            }
+
+            [[nodiscard]] bool ParseModuleAbi(const Json &moduleObject, const std::string_view path,
+                                              std::optional<ExtensionAbiRequirement> &requirement) {
+                const auto found = moduleObject.find("abi");
+                if (found == moduleObject.end())
+                    return true;
+                const std::string abiPath = ChildPath(path, "abi");
+                if (!found->is_object())
+                    return Reject(abiPath, "extension.manifest.invalid_type", "Module ABI requirement must be an object.");
+                if (!AllowFields(*found, abiPath, {"major", "minimumMinor"}))
+                    return false;
+                const auto major = found->find("major");
+                const auto minimumMinor = found->find("minimumMinor");
+                if (major == found->end() || minimumMinor == found->end())
+                    return Reject(abiPath, "extension.manifest.missing_field", "Module ABI major and minimumMinor are required.");
+                if (!major->is_number_unsigned() || !minimumMinor->is_number_unsigned())
+                    return Reject(abiPath, "extension.manifest.invalid_type", "Module ABI versions must be unsigned integers.");
+                const std::uint64_t majorValue = major->get<std::uint64_t>();
+                const std::uint64_t minorValue = minimumMinor->get<std::uint64_t>();
+                if (majorValue == 0 || majorValue > std::numeric_limits<std::uint32_t>::max() ||
+                    minorValue > std::numeric_limits<std::uint32_t>::max())
+                    return Reject(abiPath, "extension.manifest.invalid_value", "Module ABI versions are outside supported bounds.");
+                requirement = ExtensionAbiRequirement{static_cast<std::uint32_t>(majorValue), static_cast<std::uint32_t>(minorValue)};
+                return true;
+            }
+
+            [[nodiscard]] static std::optional<ExtensionHostPlatform> ParseHostPlatform(const std::string_view value) noexcept {
+                if (value == "windows")
+                    return ExtensionHostPlatform::Windows;
+                if (value == "macos")
+                    return ExtensionHostPlatform::MacOS;
+                if (value == "linux")
+                    return ExtensionHostPlatform::Linux;
+                return std::nullopt;
+            }
+
+            [[nodiscard]] static std::optional<ExtensionHostArchitecture> ParseHostArchitecture(const std::string_view value) noexcept {
+                if (value == "x86_64")
+                    return ExtensionHostArchitecture::X86_64;
+                if (value == "arm64")
+                    return ExtensionHostArchitecture::Arm64;
+                return std::nullopt;
+            }
+
+            [[nodiscard]] static std::optional<ExtensionBuildProfile> ParseBuildProfile(const std::string_view value) noexcept {
+                if (value == "debug")
+                    return ExtensionBuildProfile::Debug;
+                if (value == "release")
+                    return ExtensionBuildProfile::Release;
+                return std::nullopt;
+            }
+
+            [[nodiscard]] bool ParseModuleEntry(const Json &encoded, const std::string_view path, ExtensionNativeEntryManifest &entry) {
+                if (!encoded.is_object())
+                    return Reject(path, "extension.manifest.invalid_type", "Module entry variant must be an object.");
+                if (!AllowFields(encoded, path, {"platform", "architecture", "buildProfile", "entry"}))
+                    return false;
+                std::string platform;
+                std::string architecture;
+                std::string buildProfile;
+                if (!ReadString(encoded, "platform", path, platform, limits_.maximumIdentifierBytes, true) ||
+                    !ReadString(encoded, "architecture", path, architecture, limits_.maximumIdentifierBytes, true) ||
+                    !ReadString(encoded, "buildProfile", path, buildProfile, limits_.maximumIdentifierBytes, true) ||
+                    !ReadString(encoded, "entry", path, entry.entry, MaximumEntryBytes, true))
+                    return false;
+                const auto parsedPlatform = ParseHostPlatform(platform);
+                const auto parsedArchitecture = ParseHostArchitecture(architecture);
+                const auto parsedBuildProfile = ParseBuildProfile(buildProfile);
+                if (!parsedPlatform || !parsedArchitecture || !parsedBuildProfile)
+                    return Reject(path, "extension.manifest.invalid_value", "Module entry selector is not recognized.");
+                if (!IsSafeEntry(entry.entry))
+                    return Reject(ChildPath(path, "entry"), "extension.manifest.invalid_path",
+                                  "Module entry must be a safe package-relative path.");
+                entry.platform = *parsedPlatform;
+                entry.architecture = *parsedArchitecture;
+                entry.buildProfile = *parsedBuildProfile;
+                return true;
+            }
+
+            [[nodiscard]] bool ParseModuleEntries(const Json &moduleObject, const std::string_view path, const std::string_view legacyEntry,
+                                                  std::vector<ExtensionNativeEntryManifest> &entries) {
+                const auto found = moduleObject.find("entries");
+                if (found == moduleObject.end())
+                    return true;
+                const std::string entriesPath = ChildPath(path, "entries");
+                if (!legacyEntry.empty())
+                    return Reject(entriesPath, "extension.manifest.ambiguous_field",
+                                  "Legacy entry and typed entries cannot both be declared.");
+                if (!found->is_array())
+                    return Reject(entriesPath, "extension.manifest.invalid_type", "Module entries must be an array.");
+                if (found->empty() || found->size() > limits_.maximumPlatforms)
+                    return Reject(entriesPath, "extension.manifest.collection_limit", "Module entry count is outside its limit.");
+                std::set<std::tuple<ExtensionHostPlatform, ExtensionHostArchitecture, ExtensionBuildProfile>> selectors;
+                entries.reserve(found->size());
+                for (std::size_t index = 0; index < found->size(); ++index) {
+                    ExtensionNativeEntryManifest entry;
+                    const std::string elementPath = ElementPath(entriesPath, index);
+                    if (!ParseModuleEntry((*found)[index], elementPath, entry))
+                        return false;
+                    if (!selectors.emplace(entry.platform, entry.architecture, entry.buildProfile).second)
+                        return Reject(elementPath, "extension.manifest.duplicate_identifier", "Module entry selector must be unique.");
+                    entries.push_back(std::move(entry));
+                }
+                return true;
+            }
+
+            [[nodiscard]] bool ParseModuleCapabilities(const Json &moduleObject, const std::string_view path,
+                                                       std::vector<std::string> &capabilities) {
+                const auto found = moduleObject.find("requiredCapabilities");
+                if (found == moduleObject.end())
+                    return true;
+                const std::string capabilitiesPath = ChildPath(path, "requiredCapabilities");
+                if (!found->is_array())
+                    return Reject(capabilitiesPath, "extension.manifest.invalid_type", "Required capabilities must be an array.");
+                if (found->size() > limits_.maximumContributions)
+                    return Reject(capabilitiesPath, "extension.manifest.collection_limit", "Required capability count exceeds its limit.");
+                std::set<std::string, std::less<>> identities;
+                for (std::size_t index = 0; index < found->size(); ++index) {
+                    const std::string elementPath = ElementPath(capabilitiesPath, index);
+                    const Json &encoded = (*found)[index];
+                    if (!encoded.is_string())
+                        return Reject(elementPath, "extension.manifest.invalid_type", "Capability ID must be a string.");
+                    std::string capability = encoded.get<std::string>();
+                    if (!IsCanonicalId(capability, limits_.maximumIdentifierBytes))
+                        return Reject(elementPath, "extension.manifest.invalid_identifier", "Capability ID is not canonical.");
+                    if (!identities.insert(capability).second)
+                        return Reject(elementPath, "extension.manifest.duplicate_identifier", "Capability ID must be unique.");
+                    capabilities.push_back(std::move(capability));
+                }
                 return true;
             }
 

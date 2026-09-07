@@ -32,7 +32,7 @@ namespace Horo::Extensions {
             return (value.data != nullptr || value.length == 0) && value.length <= kMaximumModuleIdentityBytes;
         }
 
-        [[nodiscard]] fs::path NativeLibraryPath(const ExtensionManifest &manifest, const ExtensionModuleManifest &manifestModule) {
+        [[nodiscard]] fs::path NativeLibraryPath(const ExtensionManifest &manifest, const std::string_view selectedEntry) {
 #if defined(_WIN32)
             constexpr std::string_view extension = ".dll";
 #elif defined(__APPLE__)
@@ -40,7 +40,7 @@ namespace Horo::Extensions {
 #else
             constexpr std::string_view extension = ".so";
 #endif
-            fs::path entry = manifestModule.entry.empty() ? fs::path{manifest.id} : fs::path{manifestModule.entry};
+            fs::path entry = selectedEntry.empty() ? fs::path{manifest.id} : fs::path{selectedEntry};
             if (!entry.has_extension())
                 entry += extension;
             return fs::path{manifest.rootPath} / entry;
@@ -78,10 +78,9 @@ namespace Horo::Extensions {
             return true;
         }
 
-        [[nodiscard]] Result<fs::path> ResolveModuleLibraryPath(const ExtensionManifest &manifest,
-                                                                const ExtensionModuleManifest &manifestModule) {
-            const fs::path libraryPath = NativeLibraryPath(manifest, manifestModule);
-            fs::path moduleEntry = manifestModule.entry.empty() ? fs::path{manifest.id} : fs::path{manifestModule.entry};
+        [[nodiscard]] Result<fs::path> ResolveModuleLibraryPath(const ExtensionManifest &manifest, const std::string_view selectedEntry) {
+            const fs::path libraryPath = NativeLibraryPath(manifest, selectedEntry);
+            fs::path moduleEntry = selectedEntry.empty() ? fs::path{manifest.id} : fs::path{selectedEntry};
             if (!moduleEntry.has_extension()) {
 #if defined(_WIN32)
                 moduleEntry += ".dll";
@@ -95,6 +94,32 @@ namespace Horo::Extensions {
                 return Result<fs::path>::Failure(
                     MakeError(ExtensionErrors::InvalidManifest, "Native module entry must resolve inside its absolute package root."));
             return Result<fs::path>::Success(libraryPath);
+        }
+
+        [[nodiscard]] constexpr ExtensionHostPlatform CurrentHostPlatform() noexcept {
+#if defined(_WIN32)
+            return ExtensionHostPlatform::Windows;
+#elif defined(__APPLE__)
+            return ExtensionHostPlatform::MacOS;
+#else
+            return ExtensionHostPlatform::Linux;
+#endif
+        }
+
+        [[nodiscard]] constexpr ExtensionHostArchitecture CurrentHostArchitecture() noexcept {
+#if defined(__aarch64__) || defined(_M_ARM64)
+            return ExtensionHostArchitecture::Arm64;
+#else
+            return ExtensionHostArchitecture::X86_64;
+#endif
+        }
+
+        [[nodiscard]] constexpr ExtensionBuildProfile CurrentBuildProfile() noexcept {
+#if defined(NDEBUG)
+            return ExtensionBuildProfile::Release;
+#else
+            return ExtensionBuildProfile::Debug;
+#endif
         }
 
         void SafeUnload(HoroExtensionUnloadFunc unload, HoroExtensionModuleApi &moduleApi,  // NOSONAR(cpp:S5205)
@@ -276,7 +301,18 @@ namespace Horo::Extensions {
             return Result<std::string>::Failure(manifestResult.ErrorValue());
 
         ExtensionManifest manifest = std::move(manifestResult).Value();
-        auto planResult = ResolveExtensionModules(manifest, m_hostProfile);
+        constexpr ExtensionHostEnvironment Host{
+            .profile = ExtensionHostProfile::Interactive,
+            .platform = CurrentHostPlatform(),
+            .architecture = CurrentHostArchitecture(),
+            .buildProfile = CurrentBuildProfile(),
+            .engineVersion = "0.1.0",
+            .abiMajor = HORO_EXTENSION_ABI_VERSION,
+            .abiMinor = HORO_EXTENSION_ABI_MINOR_VERSION,
+        };
+        ExtensionHostEnvironment host = Host;
+        host.profile = m_hostProfile;
+        auto planResult = ResolveExtensionModules(manifest, host);
         if (planResult.HasError())
             return Result<std::string>::Failure(planResult.ErrorValue());
         ExtensionModulePlan plan = std::move(planResult).Value();
@@ -284,13 +320,14 @@ namespace Horo::Extensions {
         std::vector<std::shared_ptr<ExtensionModuleLifetime>> lifetimes;
         std::vector<Assets::AssetImporterContribution> contributions;
         lifetimes.reserve(plan.moduleIds.size());
-        for (const std::string &moduleId : plan.moduleIds) {
+        for (std::size_t moduleIndex = 0; moduleIndex < plan.moduleIds.size(); ++moduleIndex) {
+            const std::string &moduleId = plan.moduleIds[moduleIndex];
             const auto manifestModule = std::ranges::find(manifest.modules, moduleId, &ExtensionModuleManifest::id);
             if (manifestModule == manifest.modules.end())
                 return Result<std::string>::Failure(
                     MakeError(ExtensionErrors::ModuleResolutionFailed, "Resolved module is absent from the package manifest."));
 
-            auto libraryPathResult = ResolveModuleLibraryPath(manifest, *manifestModule);
+            auto libraryPathResult = ResolveModuleLibraryPath(manifest, plan.selectedEntries[moduleIndex]);
             if (libraryPathResult.HasError())
                 return Result<std::string>::Failure(libraryPathResult.ErrorValue());
             auto loadResult = Platform::LoadDynamicLibrary(libraryPathResult.Value().string());

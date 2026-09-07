@@ -132,6 +132,10 @@ namespace Horo::Extensions::Tests {
                 "version": "2.0.0",
                 "kind": "native",
                 "roles": ["backend-capability", "headless-tooling"],
+                "abi": {"major": 1, "minimumMinor": 1},
+                "requiredCapabilities": ["com.horo.assets"],
+                "entries": [{"platform":"linux", "architecture":"x86_64", "buildProfile":"debug",
+                             "entry":"bin/linux-x86_64-debug/module"}],
                 "exports": [{"id": "com.example.hybrid.service", "contract": "com.horo.example", "version": "2.1.0"}]
             }, {
                 "id": "com.example.hybrid.editor",
@@ -147,6 +151,10 @@ namespace Horo::Extensions::Tests {
         REQUIRE(result.HasValue());
         REQUIRE(result.Value().modules.size() == 2);
         CHECK(result.Value().modules.front().roles.size() == 2);
+        REQUIRE(result.Value().modules.front().abi.has_value());
+        CHECK(result.Value().modules.front().abi->minimumMinor == 1);
+        CHECK(result.Value().modules.front().entries.front().entry == "bin/linux-x86_64-debug/module");
+        CHECK(result.Value().modules.front().requiredCapabilities == std::vector<std::string>{"com.horo.assets"});
         CHECK(result.Value().modules.front().exports.front().id == "com.example.hybrid.service");
         CHECK(result.Value().modules.back().dependencies.front() == "com.example.hybrid.backend");
         CHECK(result.Value().modules.back().imports.front().minimumVersion == "2.0.0");
@@ -156,6 +164,21 @@ namespace Horo::Extensions::Tests {
             "modules":[{"id":"com.example.test.native","version":"1.0.0","kind":"native","roles":["gui-ish"]}]
         })json");
         RequireError(unknownRole, "$.modules[0].roles[0]", "extension.manifest.invalid_value");
+
+        auto competingEntries = ParseExtensionManifest(R"json({
+            "id":"com.example.test","version":"1.0.0",
+            "modules":[{"id":"com.example.test.native","version":"1.0.0","kind":"native","entry":"legacy",
+                        "entries":[{"platform":"linux","architecture":"x86_64","buildProfile":"debug","entry":"typed"}]}]
+        })json");
+        RequireError(competingEntries, "$.modules[0].entries", "extension.manifest.ambiguous_field");
+
+        auto duplicateSelectors = ParseExtensionManifest(R"json({
+            "id":"com.example.test","version":"1.0.0",
+            "modules":[{"id":"com.example.test.native","version":"1.0.0","kind":"native","entries":[
+                {"platform":"linux","architecture":"x86_64","buildProfile":"debug","entry":"first"},
+                {"platform":"linux","architecture":"x86_64","buildProfile":"debug","entry":"second"}]}]
+        })json");
+        RequireError(duplicateSelectors, "$.modules[0].entries[1]", "extension.manifest.duplicate_identifier");
     }
 
     TEST_CASE("Extension manifest enforces syntax resource limits before validation", "[Extensions][Manifest]") {
