@@ -97,4 +97,16 @@ namespace Horo::Runtime::SaveErrors {
     const ErrorCodeDescriptor NamespaceStale{kDomain, ErrorCode{"save.namespace.stale"}, kError,
                                              "The captured save namespace binding is stale.",
                                              "Reject the operation and acquire the current namespace binding."};
+    const ErrorCodeDescriptor SlotMetadataInvalid{kDomain, ErrorCode{"save.slot.metadata_invalid"}, kError,
+                                                  "Trusted save-slot publication metadata is invalid.",
+                                                  "Supply complete typed catalog facts from a committed publication."};
+    const ErrorCodeDescriptor SlotMetadataLimitExceeded{kDomain, ErrorCode{"save.slot.metadata_limit_exceeded"}, kError,
+                                                        "Trusted save-slot publication metadata exceeds an admission bound.",
+                                                        "Reduce bounded provenance metadata or revise the trusted product limit."};
+    const ErrorCodeDescriptor SlotDisplayMetadataInvalid{kDomain, ErrorCode{"save.slot.display_metadata_invalid"}, kError,
+                                                         "Save-slot presentation metadata is invalid.",
+                                                         "Use optional bounded well-formed UTF-8 presentation text."};
+    const ErrorCodeDescriptor SlotGenerationConflict{kDomain, ErrorCode{"save.slot.generation_conflict"}, kError,
+                                                     "A save-slot replacement does not advance the same logical slot.",
+                                                     "Keep the slot identity and allocate a new publication generation."};
 }  // namespace Horo::Runtime::SaveErrors

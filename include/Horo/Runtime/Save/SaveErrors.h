@@ -66,4 +66,12 @@ namespace Horo::Runtime::SaveErrors {
     extern const ErrorCodeDescriptor NamespaceUnavailable;
     /** @brief A captured namespace or binding revision no longer matches the active binding. */
     extern const ErrorCodeDescriptor NamespaceStale;
+    /** @brief Trusted slot publication metadata is incomplete or uses an unknown typed value. */
+    extern const ErrorCodeDescriptor SlotMetadataInvalid;
+    /** @brief Trusted slot publication metadata exceeded an explicit admission bound. */
+    extern const ErrorCodeDescriptor SlotMetadataLimitExceeded;
+    /** @brief Caller-owned slot presentation is oversized or is not well-formed UTF-8. */
+    extern const ErrorCodeDescriptor SlotDisplayMetadataInvalid;
+    /** @brief A replacement changed logical slot identity or reused the committed generation. */
+    extern const ErrorCodeDescriptor SlotGenerationConflict;
 }  // namespace Horo::Runtime::SaveErrors
