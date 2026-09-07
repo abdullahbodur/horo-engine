@@ -273,6 +273,15 @@ namespace Horo::Extensions::Tests {
             CHECK(manager.GetLoadedExtensionIds() == std::vector<std::string>{"com.example.multi"});
         }
 
+        SECTION("explicit host capabilities admit a required module before activation") {
+            writeManifest("[{\"id\":\"com.example.multi.backend\",\"version\":\"1.0.0\",\"kind\":\"native\","
+                          "\"roles\":[\"backend-capability\"],\"entry\":\"backend" +
+                          extension + "\",\"requiredCapabilities\":[\"com.horo.assets\"]}]");
+            ExtensionManager manager{nullptr, ExtensionHostProfile::Interactive, {"com.horo.assets", "com.horo.assets", ""}};
+            REQUIRE(manager.LoadExtension(fs::absolute(tempDir).string()).HasValue());
+            CHECK(manager.GetLoadedExtensionIds() == std::vector<std::string>{"com.example.multi"});
+        }
+
         SECTION("a failing sibling rolls back the complete activation attempt") {
             writeManifest("[{\"id\":\"com.example.multi.backend\",\"version\":\"1.0.0\",\"kind\":\"native\","
                           "\"roles\":[\"backend-capability\"],\"entry\":\"backend" +
@@ -459,6 +468,34 @@ namespace Horo::Extensions::Tests {
         const auto loaded = manager.LoadExtension(fs::absolute(tempDir).string());
         REQUIRE(loaded.HasError());
         CHECK_THAT(loaded.ErrorValue().message, Catch::Matchers::ContainsSubstring("rejected compatibility requirement"));
+    }
+
+    TEST_CASE_METHOD(ExtensionManagerTestFixture, "Extension manager maps explicit host capabilities into compatibility admission",
+                     "[Extensions][Compatibility]") {
+        std::ofstream manifest{tempDir / "extension.json", std::ios::binary | std::ios::trunc};
+        manifest << R"json({
+            "id":"com.example.capability",
+            "version":"1.0.0",
+            "modules":[{
+                "id":"com.example.capability.native",
+                "version":"1.0.0",
+                "kind":"native",
+                "entry":"missing-library",
+                "roles":["backend-capability"],
+                "requiredCapabilities":["com.horo.assets"]
+            }]
+        })json";
+        manifest.close();
+
+        ExtensionManager withoutCapability;
+        const auto rejected = withoutCapability.LoadExtension(fs::absolute(tempDir).string());
+        REQUIRE(rejected.HasError());
+        CHECK_THAT(rejected.ErrorValue().message, Catch::Matchers::ContainsSubstring("rejected compatibility requirement"));
+
+        ExtensionManager withCapability{nullptr, ExtensionHostProfile::Interactive, {"com.horo.assets"}};
+        const auto admitted = withCapability.LoadExtension(fs::absolute(tempDir).string());
+        REQUIRE(admitted.HasError());
+        CHECK_THAT(admitted.ErrorValue().message, !Catch::Matchers::ContainsSubstring("rejected compatibility requirement"));
     }
 
     TEST_CASE_METHOD(ExtensionManagerTestFixture, "External asset importer loads, previews, reimports, and survives manager release",

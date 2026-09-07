@@ -23,6 +23,7 @@ namespace Horo::Extensions {
 
         constexpr std::uint32_t kMaximumModuleIdentityBytes = 256;
         constexpr ExtensionManifestLimits kManifestLimits{};
+        constexpr std::size_t kMaximumHostCapabilities = kManifestLimits.maximumContributions;
 
         [[nodiscard]] std::string_view View(const HoroExtensionStringView value) noexcept {
             return value.data != nullptr ? std::string_view{value.data, value.length} : std::string_view{};
@@ -32,7 +33,7 @@ namespace Horo::Extensions {
             return (value.data != nullptr || value.length == 0) && value.length <= kMaximumModuleIdentityBytes;
         }
 
-        [[nodiscard]] fs::path NativeLibraryPath(const ExtensionManifest &manifest, const std::string_view selectedEntry) {
+        [[nodiscard]] fs::path NativeLibraryEntryPath(const ExtensionManifest &manifest, const std::string_view selectedEntry) {
 #if defined(_WIN32)
             constexpr std::string_view extension = ".dll";
 #elif defined(__APPLE__)
@@ -43,7 +44,7 @@ namespace Horo::Extensions {
             fs::path entry = selectedEntry.empty() ? fs::path{manifest.id} : fs::path{selectedEntry};
             if (!entry.has_extension())
                 entry += extension;
-            return fs::path{manifest.rootPath} / entry;
+            return entry;
         }
 
         [[nodiscard]] bool IsContainedLibraryPath(const fs::path &packageRoot, const fs::path &libraryPath) {
@@ -79,17 +80,8 @@ namespace Horo::Extensions {
         }
 
         [[nodiscard]] Result<fs::path> ResolveModuleLibraryPath(const ExtensionManifest &manifest, const std::string_view selectedEntry) {
-            const fs::path libraryPath = NativeLibraryPath(manifest, selectedEntry);
-            fs::path moduleEntry = selectedEntry.empty() ? fs::path{manifest.id} : fs::path{selectedEntry};
-            if (!moduleEntry.has_extension()) {
-#if defined(_WIN32)
-                moduleEntry += ".dll";
-#elif defined(__APPLE__)
-                moduleEntry += ".dylib";
-#else
-                moduleEntry += ".so";
-#endif
-            }
+            const fs::path moduleEntry = NativeLibraryEntryPath(manifest, selectedEntry);
+            const fs::path libraryPath = fs::path{manifest.rootPath} / moduleEntry;
             if (!HasSafeModuleEntry(manifest.rootPath, moduleEntry) || !IsContainedLibraryPath(manifest.rootPath, libraryPath))
                 return Result<fs::path>::Failure(
                     MakeError(ExtensionErrors::InvalidManifest, "Native module entry must resolve inside its absolute package root."));
@@ -120,6 +112,30 @@ namespace Horo::Extensions {
 #else
             return ExtensionBuildProfile::Debug;
 #endif
+        }
+
+        [[nodiscard]] ExtensionHostEnvironment CurrentHostEnvironment(const ExtensionHostProfile profile,
+                                                                      const std::span<const std::string_view> capabilities) noexcept {
+            return {
+                .profile = profile,
+                .platform = CurrentHostPlatform(),
+                .architecture = CurrentHostArchitecture(),
+                .buildProfile = CurrentBuildProfile(),
+                .engineVersion = "0.1.0",
+                .abiMajor = HORO_EXTENSION_ABI_VERSION,
+                .abiMinor = HORO_EXTENSION_ABI_MINOR_VERSION,
+                .capabilities = capabilities,
+            };
+        }
+
+        void CanonicalizeHostCapabilities(std::vector<std::string> &capabilities) {
+            std::erase_if(capabilities, [](const std::string &capability) {
+                return capability.empty() || capability.size() > kManifestLimits.maximumIdentifierBytes;
+            });
+            std::ranges::sort(capabilities);
+            capabilities.erase(std::ranges::unique(capabilities).begin(), capabilities.end());
+            if (capabilities.size() > kMaximumHostCapabilities)
+                capabilities.resize(kMaximumHostCapabilities);
         }
 
         void SafeUnload(HoroExtensionUnloadFunc unload, HoroExtensionModuleApi &moduleApi,  // NOSONAR(cpp:S5205)
@@ -285,8 +301,11 @@ namespace Horo::Extensions {
     }  // namespace
 
     /** @copydoc ExtensionManager::ExtensionManager */
-    ExtensionManager::ExtensionManager(Assets::AssetImporterCatalog *importerCatalog, const ExtensionHostProfile hostProfile)
-        : m_importerCatalog(importerCatalog), m_hostProfile(hostProfile) {}
+    ExtensionManager::ExtensionManager(Assets::AssetImporterCatalog *importerCatalog, const ExtensionHostProfile hostProfile,
+                                       std::vector<std::string> hostCapabilities)
+        : m_importerCatalog(importerCatalog), m_hostProfile(hostProfile), m_hostCapabilities(std::move(hostCapabilities)) {
+        CanonicalizeHostCapabilities(m_hostCapabilities);
+    }
 
     ExtensionManager::~ExtensionManager() {
         UnloadAll();
@@ -301,17 +320,12 @@ namespace Horo::Extensions {
             return Result<std::string>::Failure(manifestResult.ErrorValue());
 
         ExtensionManifest manifest = std::move(manifestResult).Value();
-        constexpr ExtensionHostEnvironment Host{
-            .profile = ExtensionHostProfile::Interactive,
-            .platform = CurrentHostPlatform(),
-            .architecture = CurrentHostArchitecture(),
-            .buildProfile = CurrentBuildProfile(),
-            .engineVersion = "0.1.0",
-            .abiMajor = HORO_EXTENSION_ABI_VERSION,
-            .abiMinor = HORO_EXTENSION_ABI_MINOR_VERSION,
-        };
-        ExtensionHostEnvironment host = Host;
-        host.profile = m_hostProfile;
+        std::vector<std::string_view> capabilityViews;
+        capabilityViews.reserve(m_hostCapabilities.size());
+        std::ranges::transform(m_hostCapabilities, std::back_inserter(capabilityViews), [](const std::string &capability) {
+            return std::string_view{capability};
+        });
+        const ExtensionHostEnvironment host = CurrentHostEnvironment(m_hostProfile, capabilityViews);
         auto planResult = ResolveExtensionModules(manifest, host);
         if (planResult.HasError())
             return Result<std::string>::Failure(planResult.ErrorValue());
