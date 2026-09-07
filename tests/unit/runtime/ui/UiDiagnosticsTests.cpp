@@ -20,59 +20,58 @@ namespace Horo::Runtime::Ui {
         }
 
         /** @brief Requires one exact Runtime UI diagnostic-construction failure. */
-        void RequireDiagnosticFailure(const Result<UiDiagnosticRecord> &result, const ErrorCodeDescriptor &expected) {
-            REQUIRE(result.HasError());
-            REQUIRE(result.ErrorValue().code.Value() == expected.code.Value());
+        void RequireUiFailure(const Result<UiDiagnosticRecord> &result, const ErrorCodeDescriptor &expected) {
+            REQUIRE((result.HasError() && result.ErrorValue().code.Value() == expected.code.Value()));
         }
 
         TEST_CASE("Runtime UI diagnostic categories expose stable derived names", "[runtime_ui][diagnostics]") {
-            const std::array cases{
-                std::pair{UiDiagnosticCategory::Document, std::string_view{"runtime_ui.document"}},
-                std::pair{UiDiagnosticCategory::Layout, std::string_view{"runtime_ui.layout"}},
-                std::pair{UiDiagnosticCategory::Text, std::string_view{"runtime_ui.text"}},
-                std::pair{UiDiagnosticCategory::Input, std::string_view{"runtime_ui.input"}},
-                std::pair{UiDiagnosticCategory::Focus, std::string_view{"runtime_ui.focus"}},
-                std::pair{UiDiagnosticCategory::Binding, std::string_view{"runtime_ui.binding"}},
-                std::pair{UiDiagnosticCategory::Render, std::string_view{"runtime_ui.render"}},
-                std::pair{UiDiagnosticCategory::Accessibility, std::string_view{"runtime_ui.accessibility"}},
-                std::pair{UiDiagnosticCategory::Lifecycle, std::string_view{"runtime_ui.lifecycle"}},
-            };
-            for (const auto &[category, name] : cases)
-                REQUIRE(UiDiagnosticCategoryName(category) == name);
+            REQUIRE(UiDiagnosticCategoryName(UiDiagnosticCategory::Document) == "runtime_ui.document");
+            REQUIRE(UiDiagnosticCategoryName(UiDiagnosticCategory::Layout) == "runtime_ui.layout");
+            REQUIRE(UiDiagnosticCategoryName(UiDiagnosticCategory::Text) == "runtime_ui.text");
+            REQUIRE(UiDiagnosticCategoryName(UiDiagnosticCategory::Input) == "runtime_ui.input");
+            REQUIRE(UiDiagnosticCategoryName(UiDiagnosticCategory::Focus) == "runtime_ui.focus");
+            REQUIRE(UiDiagnosticCategoryName(UiDiagnosticCategory::Binding) == "runtime_ui.binding");
+            REQUIRE(UiDiagnosticCategoryName(UiDiagnosticCategory::Render) == "runtime_ui.render");
+            REQUIRE(UiDiagnosticCategoryName(UiDiagnosticCategory::Accessibility) == "runtime_ui.accessibility");
+            REQUIRE(UiDiagnosticCategoryName(UiDiagnosticCategory::Lifecycle) == "runtime_ui.lifecycle");
             REQUIRE(UiDiagnosticCategoryName(static_cast<UiDiagnosticCategory>(255)).empty());
         }
 
         TEST_CASE("Runtime UI diagnostic records map every canonical error and reject invented sources", "[runtime_ui][diagnostics]") {
             REQUIRE(UiDiagnosticErrorDescriptors().size() == 17);
             for (const ErrorCodeDescriptor *descriptor : UiDiagnosticErrorDescriptors()) {
+                CAPTURE(descriptor->code.Value());
                 const auto record = MakeUiDiagnosticRecord(UiDiagnosticCategory::Document, MakeError(*descriptor));
-                REQUIRE(record.HasValue());
-                REQUIRE(record.Value().code.Value() == descriptor->code.Value());
+                REQUIRE((record.HasValue() && record.Value().code.Value() == descriptor->code.Value()));
             }
 
-            auto invented = MakeError(UiErrors::DiagnosticInvalid);
-            invented.code = ErrorCode{"runtime_ui.future.invented"};
-            RequireDiagnosticFailure(MakeUiDiagnosticRecord(UiDiagnosticCategory::Document, invented), UiErrors::DiagnosticUnsupported);
-            invented.domain = ErrorDomainId{"horo.physics"};
-            RequireDiagnosticFailure(MakeUiDiagnosticRecord(UiDiagnosticCategory::Document, invented), UiErrors::DiagnosticUnsupported);
+            SECTION("unknown code") {
+                auto invented = MakeError(UiErrors::DiagnosticInvalid);
+                invented.code = ErrorCode{"runtime_ui.future.invented"};
+                RequireUiFailure(MakeUiDiagnosticRecord(UiDiagnosticCategory::Document, invented), UiErrors::DiagnosticUnsupported);
+            }
+            SECTION("foreign domain") {
+                auto foreign = MakeError(UiErrors::DiagnosticInvalid);
+                foreign.domain = ErrorDomainId{"horo.physics"};
+                RequireUiFailure(MakeUiDiagnosticRecord(UiDiagnosticCategory::Document, foreign), UiErrors::DiagnosticUnsupported);
+            }
         }
 
         TEST_CASE("Runtime UI diagnostic severity mapping is complete and preserves fatal evidence", "[runtime_ui][diagnostics]") {
-            auto error = MakeError(UiErrors::DocumentInvalid);
-            const std::array cases{
-                std::pair{ErrorSeverity::Info, DiagnosticSeverity::Note},
-                std::pair{ErrorSeverity::Warning, DiagnosticSeverity::Warning},
-                std::pair{ErrorSeverity::Error, DiagnosticSeverity::Error},
-                std::pair{ErrorSeverity::Critical, DiagnosticSeverity::Fatal},
-            };
-            for (const auto &[source, expected] : cases) {
+            const auto verify = [](const ErrorSeverity source, const DiagnosticSeverity expected) {
+                auto error = MakeError(UiErrors::DocumentInvalid);
                 error.severity = source;
                 const auto record = MakeUiDiagnosticRecord(UiDiagnosticCategory::Lifecycle, error);
-                REQUIRE(record.HasValue());
-                REQUIRE(record.Value().severity == expected);
-            }
+                REQUIRE((record.HasValue() && record.Value().severity == expected));
+            };
+            verify(ErrorSeverity::Info, DiagnosticSeverity::Note);
+            verify(ErrorSeverity::Warning, DiagnosticSeverity::Warning);
+            verify(ErrorSeverity::Error, DiagnosticSeverity::Error);
+            verify(ErrorSeverity::Critical, DiagnosticSeverity::Fatal);
+
+            auto error = MakeError(UiErrors::DocumentInvalid);
             error.severity = static_cast<ErrorSeverity>(255);
-            RequireDiagnosticFailure(MakeUiDiagnosticRecord(UiDiagnosticCategory::Lifecycle, error), UiErrors::DiagnosticInvalid);
+            RequireUiFailure(MakeUiDiagnosticRecord(UiDiagnosticCategory::Lifecycle, error), UiErrors::DiagnosticInvalid);
         }
 
         TEST_CASE("Runtime UI diagnostic records own complete ordered correlation evidence", "[runtime_ui][diagnostics]") {
@@ -106,36 +105,34 @@ namespace Horo::Runtime::Ui {
         TEST_CASE("Runtime UI diagnostic construction rejects correlation ordering type and range errors", "[runtime_ui][diagnostics]") {
             const auto error = MakeError(UiErrors::DiagnosticInvalid);
             std::array<UiDiagnosticCorrelationEntry, MaximumUiDiagnosticCorrelationEntries + 1> oversized{};
-            RequireDiagnosticFailure(MakeUiDiagnosticRecord(UiDiagnosticCategory::Input, error, oversized), UiErrors::DiagnosticInvalid);
+            RequireUiFailure(MakeUiDiagnosticRecord(UiDiagnosticCategory::Input, error, oversized), UiErrors::DiagnosticInvalid);
 
             const std::array duplicate{
                 UiDiagnosticCorrelationEntry{UiDiagnosticCorrelationKey::Player, std::uint64_t{0}},
                 UiDiagnosticCorrelationEntry{UiDiagnosticCorrelationKey::Player, std::uint64_t{1}},
             };
-            RequireDiagnosticFailure(MakeUiDiagnosticRecord(UiDiagnosticCategory::Input, error, duplicate), UiErrors::DiagnosticInvalid);
+            RequireUiFailure(MakeUiDiagnosticRecord(UiDiagnosticCategory::Input, error, duplicate), UiErrors::DiagnosticInvalid);
             const std::array unordered{
                 UiDiagnosticCorrelationEntry{UiDiagnosticCorrelationKey::Operation, std::uint64_t{2}},
                 UiDiagnosticCorrelationEntry{UiDiagnosticCorrelationKey::Viewport, std::uint64_t{1}},
             };
-            RequireDiagnosticFailure(MakeUiDiagnosticRecord(UiDiagnosticCategory::Render, error, unordered), UiErrors::DiagnosticInvalid);
+            RequireUiFailure(MakeUiDiagnosticRecord(UiDiagnosticCategory::Render, error, unordered), UiErrors::DiagnosticInvalid);
             const std::array wrongType{
                 UiDiagnosticCorrelationEntry{UiDiagnosticCorrelationKey::Document, std::uint64_t{1}},
             };
-            RequireDiagnosticFailure(MakeUiDiagnosticRecord(UiDiagnosticCategory::Document, error, wrongType), UiErrors::DiagnosticInvalid);
+            RequireUiFailure(MakeUiDiagnosticRecord(UiDiagnosticCategory::Document, error, wrongType), UiErrors::DiagnosticInvalid);
             const std::array unknownKey{
                 UiDiagnosticCorrelationEntry{static_cast<UiDiagnosticCorrelationKey>(255), std::uint64_t{1}},
             };
-            RequireDiagnosticFailure(MakeUiDiagnosticRecord(UiDiagnosticCategory::Document, error, unknownKey),
-                                     UiErrors::DiagnosticInvalid);
+            RequireUiFailure(MakeUiDiagnosticRecord(UiDiagnosticCategory::Document, error, unknownKey), UiErrors::DiagnosticInvalid);
 
             const std::array playerOverflow{
                 UiDiagnosticCorrelationEntry{UiDiagnosticCorrelationKey::Player, std::uint64_t{256}},
             };
-            RequireDiagnosticFailure(MakeUiDiagnosticRecord(UiDiagnosticCategory::Input, error, playerOverflow),
-                                     UiErrors::DiagnosticInvalid);
+            RequireUiFailure(MakeUiDiagnosticRecord(UiDiagnosticCategory::Input, error, playerOverflow), UiErrors::DiagnosticInvalid);
             for (const UiDiagnosticCorrelationKey key : {UiDiagnosticCorrelationKey::Viewport, UiDiagnosticCorrelationKey::Operation}) {
                 const std::array zero{UiDiagnosticCorrelationEntry{key, std::uint64_t{0}}};
-                RequireDiagnosticFailure(MakeUiDiagnosticRecord(UiDiagnosticCategory::Lifecycle, error, zero), UiErrors::DiagnosticInvalid);
+                RequireUiFailure(MakeUiDiagnosticRecord(UiDiagnosticCategory::Lifecycle, error, zero), UiErrors::DiagnosticInvalid);
             }
         }
 
@@ -145,21 +142,20 @@ namespace Horo::Runtime::Ui {
             const std::array invalidDocument{
                 UiDiagnosticCorrelationEntry{UiDiagnosticCorrelationKey::Document, UiDocumentId{}},
             };
-            RequireDiagnosticFailure(MakeUiDiagnosticRecord(UiDiagnosticCategory::Document, error, invalidDocument),
-                                     UiErrors::DiagnosticInvalid);
+            RequireUiFailure(MakeUiDiagnosticRecord(UiDiagnosticCategory::Document, error, invalidDocument), UiErrors::DiagnosticInvalid);
 
             error.message.assign(MaximumUiDiagnosticMessageBytes, 'a');
             const auto boundary = MakeUiDiagnosticRecord(UiDiagnosticCategory::Text, error);
             REQUIRE(boundary.HasValue());
             error.message.push_back('b');
             const auto original = error.message;
-            RequireDiagnosticFailure(MakeUiDiagnosticRecord(UiDiagnosticCategory::Text, error), UiErrors::DiagnosticInvalid);
+            RequireUiFailure(MakeUiDiagnosticRecord(UiDiagnosticCategory::Text, error), UiErrors::DiagnosticInvalid);
             REQUIRE(error.message == original);
 
             error.message.clear();
-            RequireDiagnosticFailure(MakeUiDiagnosticRecord(UiDiagnosticCategory::Text, error), UiErrors::DiagnosticInvalid);
-            RequireDiagnosticFailure(MakeUiDiagnosticRecord(static_cast<UiDiagnosticCategory>(255), MakeError(UiErrors::DocumentInvalid)),
-                                     UiErrors::DiagnosticUnsupported);
+            RequireUiFailure(MakeUiDiagnosticRecord(UiDiagnosticCategory::Text, error), UiErrors::DiagnosticInvalid);
+            RequireUiFailure(MakeUiDiagnosticRecord(static_cast<UiDiagnosticCategory>(255), MakeError(UiErrors::DocumentInvalid)),
+                             UiErrors::DiagnosticUnsupported);
         }
 
         TEST_CASE("Runtime UI diagnostic evidence survives source retirement without hidden owner state", "[runtime_ui][diagnostics]") {
