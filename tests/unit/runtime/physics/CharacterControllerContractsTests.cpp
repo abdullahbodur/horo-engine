@@ -201,6 +201,27 @@ namespace Horo::Character {
             REQUIRE(result.contacts[0].shape.world == PhysicsWorld(12));
         }
 
+        TEST_CASE("Character validation partitions preserve public error precedence", "[physics][character][validation]") {
+            auto descriptor = Descriptor();
+            descriptor.sceneGeneration = 0;
+            descriptor.capsule.radiusMeters = 0;
+            RequireError(ValidateCharacterControllerDescriptor(descriptor), CharacterErrors::WorldInvalid);
+
+            descriptor = Descriptor();
+            CharacterMovementRequest request{{}, 0, 0};
+            RequireError(ValidateCharacterMovementRequest(request, descriptor.sceneGeneration, descriptor.characterWorld),
+                         CharacterErrors::HandleMalformed);
+
+            auto result = MovementResult(descriptor);
+            result.controller = {};
+            result.tick = 0;
+            result.collisions = static_cast<CharacterCollisionFlags>(1U << 15U);
+            RequireError(ValidateCharacterMovementResult(result, descriptor), CharacterErrors::HandleMalformed);
+
+            result.controller = Controller(descriptor);
+            RequireError(ValidateCharacterMovementResult(result, descriptor), CharacterErrors::DescriptorInvalid);
+        }
+
         TEST_CASE("Character errors expose stable actionable identities", "[physics][character][errors]") {
             const std::array<const ErrorCodeDescriptor *, 9> descriptors{{
                 &CharacterErrors::WorldInvalid,

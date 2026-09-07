@@ -26,6 +26,104 @@ namespace Horo::Character {
             return material.asset.IsValid() && material.assetGeneration != 0 && material.slot.IsValid();
         }
 
+        /** @brief Checks descriptor generation and paired world identities before field validation. */
+        [[nodiscard]] Result<void> ValidateDescriptorWorlds(const CharacterControllerDescriptor &descriptor) {
+            if (descriptor.sceneGeneration == 0 || !descriptor.characterWorld.IsValid() || !descriptor.physicsWorld.IsValid())
+                return Result<void>::Failure(MakeError(CharacterErrors::WorldInvalid));
+            return Result<void>::Success();
+        }
+
+        /** @brief Checks capsule and controller-space numeric basis fields. */
+        [[nodiscard]] Result<void> ValidateDescriptorGeometry(const CharacterControllerDescriptor &descriptor) {
+            if (const auto capsule = Physics::ValidatePhysicsShapeDescriptor(Physics::PhysicsShapeDescriptor{descriptor.capsule});
+                capsule.HasError())
+                return Result<void>::Failure(MakeError(CharacterErrors::DescriptorInvalid, "Controller capsule dimensions are invalid."));
+            if (!Math::IsFinite(descriptor.collisionRootPosition) || !IsUnit(descriptor.up) || !Math::IsFinite(descriptor.gravity))
+                return Result<void>::Failure(MakeError(CharacterErrors::DescriptorInvalid));
+            return Result<void>::Success();
+        }
+
+        /** @brief Checks canonical collision and material identities. */
+        [[nodiscard]] Result<void> ValidateDescriptorBindings(const CharacterControllerDescriptor &descriptor) {
+            if (!descriptor.collisionProfile.IsValid() || !descriptor.queryChannel.IsValid() ||
+                !IsMaterialValid(descriptor.defaultMaterial))
+                return Result<void>::Failure(MakeError(CharacterErrors::DescriptorInvalid));
+            return Result<void>::Success();
+        }
+
+        /** @brief Checks finite non-negative controller tuning values. */
+        [[nodiscard]] bool IsFiniteNonNegative(const float value) noexcept {
+            return std::isfinite(value) && value >= 0;
+        }
+
+        /** @brief Checks controller scalar policy without changing capacity error precedence. */
+        [[nodiscard]] Result<void> ValidateDescriptorPolicy(const CharacterControllerDescriptor &descriptor) {
+            if (!std::isfinite(descriptor.skinWidthMeters) || descriptor.skinWidthMeters <= 0 ||
+                !IsFiniteNonNegative(descriptor.minimumMoveDistanceMeters) || !IsFiniteNonNegative(descriptor.maximumStepHeightMeters) ||
+                !IsFiniteNonNegative(descriptor.maximumSlopeDegrees) || descriptor.maximumSlopeDegrees > 90)
+                return Result<void>::Failure(MakeError(CharacterErrors::DescriptorInvalid));
+            if (descriptor.maximumContacts == 0 || descriptor.maximumContacts > MaximumCharacterContacts)
+                return Result<void>::Failure(MakeError(CharacterErrors::CapacityExceeded));
+            return Result<void>::Success();
+        }
+
+        /** @brief Checks request tick and optional numeric intent before stance support. */
+        [[nodiscard]] Result<void> ValidateRequestIntent(const CharacterMovementRequest &request) {
+            if (request.tick == 0 || request.sequence == 0 ||
+                (request.desiredVelocityMetersPerSecond.has_value() && !Math::IsFinite(*request.desiredVelocityMetersPerSecond)) ||
+                (request.desiredHeading.has_value() && !IsUnit(*request.desiredHeading)))
+                return Result<void>::Failure(MakeError(CharacterErrors::RequestInvalid));
+            return Result<void>::Success();
+        }
+
+        /** @brief Checks that a stance discriminator is one of the supported typed values. */
+        [[nodiscard]] Result<void> ValidateStance(const CharacterStanceIntent stance) {
+            switch (stance) {
+                using enum CharacterStanceIntent;
+                case Keep:
+                case Stand:
+                case Crouch:
+                    return Result<void>::Success();
+            }
+            return Result<void>::Failure(MakeError(CharacterErrors::OperationUnsupported));
+        }
+
+        /** @brief Checks movement metadata before flags, capacities and surface evidence. */
+        [[nodiscard]] Result<void> ValidateResultMetadata(const CharacterMovementResult &result) {
+            if (result.tick == 0 || result.sequence == 0 || !Math::IsFinite(result.finalPosition) || !IsUnit(result.finalHeading) ||
+                !Math::IsFinite(result.achievedVelocityMetersPerSecond) || !IsUnit(result.up) ||
+                !std::isfinite(result.groundSlopeDegrees) || result.groundSlopeDegrees < 0 || result.groundSlopeDegrees > 180)
+                return Result<void>::Failure(MakeError(CharacterErrors::DescriptorInvalid, "Movement result metadata is invalid."));
+            return Result<void>::Success();
+        }
+
+        /** @brief Checks collision bits and admitted contact/truncation bounds. */
+        [[nodiscard]] Result<void> ValidateResultBounds(const CharacterMovementResult &result,
+                                                        const CharacterControllerDescriptor &descriptor) {
+            using FlagValue = std::underlying_type_t<CharacterCollisionFlags>;
+            if ((static_cast<FlagValue>(result.collisions) & ~static_cast<FlagValue>(KnownCollisionFlags)) != 0)
+                return Result<void>::Failure(MakeError(CharacterErrors::OperationUnsupported));
+            if (result.contactCount > descriptor.maximumContacts || result.contactCount > result.contacts.size())
+                return Result<void>::Failure(MakeError(CharacterErrors::CapacityExceeded));
+            if (result.truncated && result.contactCount != descriptor.maximumContacts)
+                return Result<void>::Failure(
+                    MakeError(CharacterErrors::DescriptorInvalid, "Truncation requires a full admitted contact prefix."));
+            return Result<void>::Success();
+        }
+
+        /** @brief Checks coherent grounded or airborne surface evidence. */
+        [[nodiscard]] Result<void> ValidateGroundEvidence(const CharacterMovementResult &result) {
+            if (result.grounded) {
+                if (!IsUnit(result.groundNormal) || !result.groundMaterial.has_value() || !IsMaterialValid(*result.groundMaterial))
+                    return Result<void>::Failure(
+                        MakeError(CharacterErrors::DescriptorInvalid, "Grounded result lacks valid surface evidence."));
+            } else if (result.groundMaterial.has_value()) {
+                return Result<void>::Failure(
+                    MakeError(CharacterErrors::DescriptorInvalid, "Airborne result cannot claim ground material evidence."));
+            }
+            return Result<void>::Success();
+        }
+
         /** @brief Validates one active contact against the descriptor's Physics world. */
         [[nodiscard]] Result<void> ValidateContact(const CharacterSurfaceContact &contact, const Physics::PhysicsWorldId expectedWorld) {
             if (!contact.shape.IsValid() || contact.shape.world != expectedWorld)
@@ -76,22 +174,13 @@ namespace Horo::Character {
 
     /** @copydoc ValidateCharacterControllerDescriptor */
     Result<void> ValidateCharacterControllerDescriptor(const CharacterControllerDescriptor &descriptor) {
-        if (descriptor.sceneGeneration == 0 || !descriptor.characterWorld.IsValid() || !descriptor.physicsWorld.IsValid())
-            return Result<void>::Failure(MakeError(CharacterErrors::WorldInvalid));
-        if (const auto capsule = Physics::ValidatePhysicsShapeDescriptor(Physics::PhysicsShapeDescriptor{descriptor.capsule});
-            capsule.HasError())
-            return Result<void>::Failure(MakeError(CharacterErrors::DescriptorInvalid, "Controller capsule dimensions are invalid."));
-        if (!Math::IsFinite(descriptor.collisionRootPosition) || !IsUnit(descriptor.up) || !Math::IsFinite(descriptor.gravity) ||
-            !descriptor.collisionProfile.IsValid() || !descriptor.queryChannel.IsValid() || !IsMaterialValid(descriptor.defaultMaterial))
-            return Result<void>::Failure(MakeError(CharacterErrors::DescriptorInvalid));
-        if (!std::isfinite(descriptor.skinWidthMeters) || descriptor.skinWidthMeters <= 0 ||
-            !std::isfinite(descriptor.minimumMoveDistanceMeters) || descriptor.minimumMoveDistanceMeters < 0 ||
-            !std::isfinite(descriptor.maximumStepHeightMeters) || descriptor.maximumStepHeightMeters < 0 ||
-            !std::isfinite(descriptor.maximumSlopeDegrees) || descriptor.maximumSlopeDegrees < 0 || descriptor.maximumSlopeDegrees > 90)
-            return Result<void>::Failure(MakeError(CharacterErrors::DescriptorInvalid));
-        if (descriptor.maximumContacts == 0 || descriptor.maximumContacts > MaximumCharacterContacts)
-            return Result<void>::Failure(MakeError(CharacterErrors::CapacityExceeded));
-        return Result<void>::Success();
+        if (const auto worlds = ValidateDescriptorWorlds(descriptor); worlds.HasError())
+            return worlds;
+        if (const auto geometry = ValidateDescriptorGeometry(descriptor); geometry.HasError())
+            return geometry;
+        if (const auto bindings = ValidateDescriptorBindings(descriptor); bindings.HasError())
+            return bindings;
+        return ValidateDescriptorPolicy(descriptor);
     }
 
     /** @copydoc ValidateCharacterMovementRequest */
@@ -100,18 +189,9 @@ namespace Horo::Character {
         if (auto owner = ValidateCharacterControllerHandleOwner(request.controller, expectedSceneGeneration, expectedWorld);
             owner.HasError())
             return owner;
-        if (request.tick == 0 || request.sequence == 0 ||
-            (request.desiredVelocityMetersPerSecond.has_value() && !Math::IsFinite(*request.desiredVelocityMetersPerSecond)) ||
-            (request.desiredHeading.has_value() && !IsUnit(*request.desiredHeading)))
-            return Result<void>::Failure(MakeError(CharacterErrors::RequestInvalid));
-        switch (request.stance) {
-            using enum CharacterStanceIntent;
-            case Keep:
-            case Stand:
-            case Crouch:
-                return Result<void>::Success();
-        }
-        return Result<void>::Failure(MakeError(CharacterErrors::OperationUnsupported));
+        if (const auto intent = ValidateRequestIntent(request); intent.HasError())
+            return intent;
+        return ValidateStance(request.stance);
     }
 
     /** @copydoc ValidateCharacterMovementResult */
@@ -121,26 +201,12 @@ namespace Horo::Character {
         if (auto owner = ValidateCharacterControllerHandleOwner(result.controller, descriptor.sceneGeneration, descriptor.characterWorld);
             owner.HasError())
             return owner;
-        if (result.tick == 0 || result.sequence == 0 || !Math::IsFinite(result.finalPosition) || !IsUnit(result.finalHeading) ||
-            !Math::IsFinite(result.achievedVelocityMetersPerSecond) || !IsUnit(result.up) || !std::isfinite(result.groundSlopeDegrees) ||
-            result.groundSlopeDegrees < 0 || result.groundSlopeDegrees > 180)
-            return Result<void>::Failure(MakeError(CharacterErrors::DescriptorInvalid, "Movement result metadata is invalid."));
-        using FlagValue = std::underlying_type_t<CharacterCollisionFlags>;
-        if ((static_cast<FlagValue>(result.collisions) & ~static_cast<FlagValue>(KnownCollisionFlags)) != 0)
-            return Result<void>::Failure(MakeError(CharacterErrors::OperationUnsupported));
-        if (result.contactCount > descriptor.maximumContacts || result.contactCount > result.contacts.size())
-            return Result<void>::Failure(MakeError(CharacterErrors::CapacityExceeded));
-        if (result.truncated && result.contactCount != descriptor.maximumContacts)
-            return Result<void>::Failure(
-                MakeError(CharacterErrors::DescriptorInvalid, "Truncation requires a full admitted contact prefix."));
-        if (result.grounded) {
-            if (!IsUnit(result.groundNormal) || !result.groundMaterial.has_value() || !IsMaterialValid(*result.groundMaterial))
-                return Result<void>::Failure(
-                    MakeError(CharacterErrors::DescriptorInvalid, "Grounded result lacks valid surface evidence."));
-        } else if (result.groundMaterial.has_value()) {
-            return Result<void>::Failure(
-                MakeError(CharacterErrors::DescriptorInvalid, "Airborne result cannot claim ground material evidence."));
-        }
+        if (const auto metadata = ValidateResultMetadata(result); metadata.HasError())
+            return metadata;
+        if (const auto bounds = ValidateResultBounds(result, descriptor); bounds.HasError())
+            return bounds;
+        if (const auto ground = ValidateGroundEvidence(result); ground.HasError())
+            return ground;
         for (std::uint32_t index = 0; index < result.contactCount; ++index) {
             const auto contact = ValidateContact(result.contacts[index], descriptor.physicsWorld);
             if (contact.HasError())
