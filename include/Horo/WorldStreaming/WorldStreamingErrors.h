@@ -12,7 +12,7 @@ namespace Horo::WorldStreaming::WorldStreamingErrors {
     extern const ErrorCodeDescriptor IdentityInvalid;
     /** @brief A canonical serialized identity is malformed or contains a reserved value. */
     extern const ErrorCodeDescriptor SerializedIdentityInvalid;
-    /** @brief A partition epoch, cell-attempt generation, or source revision cannot advance without wrapping. */
+    /** @brief A partition epoch, cell-attempt generation, runtime-source revision, or authoring-page revision cannot advance. */
     extern const ErrorCodeDescriptor GenerationExhausted;
     /** @brief A world-cell grid has zero/overflowing cell size, inverted bounds, or no LODs. */
     extern const ErrorCodeDescriptor QuantizationPolicyInvalid;

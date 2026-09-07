@@ -29,8 +29,8 @@ namespace Horo::WorldStreaming::WorldStreamingErrors {
                  "Rebuild the world index or source descriptor with canonical little-endian identity bytes.", true);
     const ErrorCodeDescriptor GenerationExhausted =
         Describe("world_streaming.generation.exhausted", ErrorSeverity::Critical,
-                 "A world-partition epoch, cell generation, or source revision cannot advance without wrapping.",
-                 "Retire the exhausted incarnation, slot, or source; never wrap an issued streaming counter.", false);
+                 "A world-partition epoch, cell generation, runtime-source revision, or authoring-page revision cannot advance.",
+                 "Retire the exhausted incarnation, slot, source, or page; never wrap an issued world-streaming counter.", false);
     const ErrorCodeDescriptor QuantizationPolicyInvalid =
         Describe("world_streaming.quantization.policy_invalid", ErrorSeverity::Error,
                  "The world-cell quantization policy has invalid size, bounds, or LOD limits.",
