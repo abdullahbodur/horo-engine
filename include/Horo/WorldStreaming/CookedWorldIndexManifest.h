@@ -66,7 +66,7 @@ namespace Horo::WorldStreaming {
          */
         [[nodiscard]] static Result<CookedWorldIndexManifest> Create(WorldPartitionDescriptor &&descriptor,
                                                                      std::span<const CookedWorldCellManifestCandidate> cells,
-                                                                     CookedWorldIndexManifestLimits limits);
+                                                                     const CookedWorldIndexManifestLimits &limits);
 
         /** @brief Returns the sole owned topology and package-location authority. @return Immutable descriptor reference. */
         [[nodiscard]] const WorldPartitionDescriptor &Descriptor() const noexcept {
