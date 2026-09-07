@@ -14,7 +14,7 @@ namespace Horo::Tests::FullEditorActions {
                          "###hierarchy_create_primitive.mesh.box");
         });
         pipeline.Step("Observe the created object across the workspace", [](ImGuiTestContext &ui) {
-            IM_CHECK(ui.ItemInfo("//**/Hierarchy object###hierarchy_object_row").ID != 0);
+            IM_CHECK(ui.ItemInfo("//**/##hierarchy_object_row").ID != 0);
         });
     }
 

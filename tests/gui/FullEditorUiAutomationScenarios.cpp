@@ -79,14 +79,14 @@ namespace {
                 ui.MenuClick("###hierarchy_create_root/"
                              "###hierarchy_create_workspace.create.group.cameras/"
                              "###hierarchy_create_primitive.object.camera");
-                ui.ItemClick("//**/Box###hierarchy_object_row");
+                ui.ItemClick("//**/##hierarchy_object_row");
                 ui.Yield();
                 if (!ui.ItemExists("//**/###InspectorAddComponent")) {
                     ui.ItemClick("//**/horo.inspector/##ActivityItem");
                     ui.Yield();
                 }
                 if (!ui.ItemExists("//**/###InspectorAddComponent")) {
-                    ui.ItemClick("//**/Box###hierarchy_object_row");
+                    ui.ItemClick("//**/##hierarchy_object_row");
                     ui.Yield();
                 }
                 IM_CHECK(ui.ItemExists("//**/###InspectorAddComponent"));
@@ -241,7 +241,7 @@ namespace {
         Tests::EditorUiTestHarness harness;
         Tests::FullEditorUiTestHost editor{harness.Surface(), locale};
         CAPTURE(std::string{editor.RendererName()});
-        const Tests::FullEditorProjectSetup project{.name = "ProjectJourney", .templateId = "empty"};
+        const Tests::FullEditorProjectSetup project{.name = "ProjectJourney", .templateId = "3d-starter"};
         const std::filesystem::path projectRoot = editor.ProjectsRoot() / project.name;
 
         const Tests::EditorUiScenarioResult result =

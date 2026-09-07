@@ -182,7 +182,7 @@ namespace Horo::Tests {
             io.IniFilename = nullptr;
             io.LogFilename = nullptr;
             io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;
-            io.Fonts->AddFontDefault();
+            io.FontDefault = io.Fonts->AddFontDefault();
             static_cast<void>(io.Fonts->Build());
 
             surface_->Initialize(*context_);

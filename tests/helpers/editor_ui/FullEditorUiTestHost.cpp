@@ -106,18 +106,22 @@ namespace Horo::Tests {
 
             const std::filesystem::path projectRoot = projectsRoot / name;
             std::filesystem::create_directories(projectRoot / ".horo");
+            std::filesystem::create_directories(projectRoot / "assets/scenes");
             const nlohmann::json document{{"horoVersion", Application::FormatHoroVersion(release.value)},
                                           {"persistentContract", Application::FormatPersistentContractHash(decision->persistentContract)},
                                           {"projectId", "recent-project-e2e"},
                                           {"name", name},
                                           {"projectVersion", "0.1.0"},
                                           {"createdAt", "2026-07-22T00:00:00Z"},
-                                          {"settings", {{"renderBackend", surface.RendererName() == "metal" ? "metal" : "opengl"}}}};
+                                          {"settings",
+                                           {{"renderBackend", surface.RendererName() == "metal" ? "metal" : "opengl"},
+                                            {"defaultScene", "assets/scenes/main.horo"}}}};
             std::ofstream metadata(projectRoot / ".horo/project.json", std::ios::binary);
             metadata << document.dump(2) << '\n';
             metadata.close();
             if (!metadata)
                 throw std::runtime_error("Unable to write recent-project E2E metadata.");
+            std::ofstream(projectRoot / "assets/scenes/main.horo", std::ios::binary) << R"({"schemaVersion":1,"objects":[]})";
 
             if (!Editor::SaveRecentProjectsToDisk(
                     {Editor::RecentProjectEntry{name, projectRoot.string(), "Just now", "empty", std::nullopt}})) {
@@ -140,7 +144,7 @@ namespace Horo::Tests {
               preflight(transactions), recentInspection(jobs, preflight), rendererAvailability(MakeRendererAvailability(testSurface)),
               open(jobs, files, preflight, mutations, transactions, rendererAvailability), surface(testSurface),
               viewportRenderer(testSurface.ViewportRenderer()),
-              fonts{ImGui::GetIO().Fonts->Fonts.front(), ImGui::GetIO().Fonts->Fonts.front(), ImGui::GetIO().Fonts->Fonts.front()},
+              fonts{ImGui::GetIO().FontDefault, ImGui::GetIO().FontDefault, ImGui::GetIO().FontDefault, ImGui::GetIO().FontDefault},
               theme{fonts}, settingsSnapshot(settings.Snapshot()), gui{engineEvents, editorEvents, localization, theme, settingsSnapshot} {
             std::filesystem::create_directories(home);
             std::filesystem::create_directories(projectsRoot);
