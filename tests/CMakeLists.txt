@@ -955,6 +955,11 @@ add_executable(HoroRuntimeSaveIdentityTests
 )
 target_compile_features(HoroRuntimeSaveIdentityTests PRIVATE cxx_std_20)
 target_link_libraries(HoroRuntimeSaveIdentityTests PRIVATE HoroEngine::Runtime)
+add_executable(HoroRuntimeSaveNamespaceTests
+        unit/runtime/save/SaveNamespaceTests.cpp
+)
+target_compile_features(HoroRuntimeSaveNamespaceTests PRIVATE cxx_std_20)
+target_link_libraries(HoroRuntimeSaveNamespaceTests PRIVATE HoroEngine::Runtime)
 add_executable(HoroRuntimeSaveParticipantRegistryTests
         unit/runtime/save/SaveParticipantRegistryTests.cpp
 )
@@ -1303,6 +1308,7 @@ set(HORO_CATCH_TEST_TARGETS
         HoroEditorViewportResourceTests
         HoroRuntimeLifecycleTests
         HoroRuntimeSaveIdentityTests
+        HoroRuntimeSaveNamespaceTests
         HoroRuntimeSaveParticipantRegistryTests
         HoroRuntimeUiIdentityTests
         HoroRuntimeUiDocumentTests

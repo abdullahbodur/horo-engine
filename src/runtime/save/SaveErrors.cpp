@@ -72,4 +72,13 @@ namespace Horo::Runtime::SaveErrors {
     const ErrorCodeDescriptor ArchiveChunkHashMismatch{kDomain, ErrorCode{"save.archive.chunk_hash_mismatch"}, kError,
                                                        "Decoded save chunk bytes do not match their declared digest.",
                                                        "Reject the archive and retain it for corruption diagnostics."};
+    const ErrorCodeDescriptor NamespaceInvalid{kDomain, ErrorCode{"save.namespace.invalid"}, kError,
+                                               "A save namespace identity or revision is invalid.",
+                                               "Supply complete non-zero typed namespace identities and revisions."};
+    const ErrorCodeDescriptor NamespaceUnavailable{kDomain, ErrorCode{"save.namespace.unavailable"}, kError,
+                                                   "No save namespace is available for the requested operation.",
+                                                   "Bind an available user/profile or server-world namespace first."};
+    const ErrorCodeDescriptor NamespaceStale{kDomain, ErrorCode{"save.namespace.stale"}, kError,
+                                             "The captured save namespace binding is stale.",
+                                             "Reject the operation and acquire the current namespace binding."};
 }  // namespace Horo::Runtime::SaveErrors
