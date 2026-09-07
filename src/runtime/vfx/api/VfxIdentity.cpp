@@ -20,15 +20,16 @@ namespace Horo::Vfx {
     /** @copydoc MakeDeterministicVfxIdentityComposition */
     Result<VfxIdentityComposition> MakeDeterministicVfxIdentityComposition(const VfxIdentityScope scope, const std::uint32_t firstSlot,
                                                                            const std::uint32_t generation) {
-        constexpr auto IdentityCount = static_cast<std::uint32_t>(CompositionSlot::Count);
-        if (!scope.IsValid() || generation == 0 || firstSlot > EffectSystemId::InvalidSlot - IdentityCount)
+        using enum CompositionSlot;
+        if (constexpr auto IdentityCount = static_cast<std::uint32_t>(Count);
+            !scope.IsValid() || generation == 0 || firstSlot > EffectSystemId::InvalidSlot - IdentityCount)
             return Result<VfxIdentityComposition>::Failure(MakeError(VfxErrors::IdentityInvalid));
 
         return Result<VfxIdentityComposition>::Success({
-            .effect = ComposedIdentity<EffectSystemIdentityTag>(scope, firstSlot, CompositionSlot::Effect, generation),
-            .emitter = ComposedIdentity<EmitterIdentityTag>(scope, firstSlot, CompositionSlot::Emitter, generation),
-            .particles = ComposedIdentity<ParticleBufferIdentityTag>(scope, firstSlot, CompositionSlot::ParticleBuffer, generation),
-            .decal = ComposedIdentity<DecalIdentityTag>(scope, firstSlot, CompositionSlot::Decal, generation),
+            .effect = ComposedIdentity<EffectSystemIdentityTag>(scope, firstSlot, Effect, generation),
+            .emitter = ComposedIdentity<EmitterIdentityTag>(scope, firstSlot, Emitter, generation),
+            .particles = ComposedIdentity<ParticleBufferIdentityTag>(scope, firstSlot, ParticleBuffer, generation),
+            .decal = ComposedIdentity<DecalIdentityTag>(scope, firstSlot, Decal, generation),
         });
     }
 }  // namespace Horo::Vfx
