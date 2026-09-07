@@ -5,12 +5,14 @@
 #include "Horo/Assets/AssetImporter.h"
 #include "Horo/Extensions/ExtensionAbi.h"
 #include "Horo/Extensions/ExtensionErrors.h"
+#include "Horo/Extensions/ExtensionModuleResolution.h"
 #include "Horo/Foundation/Logging/Logger.h"
 #include "Horo/Platform/DynamicLibrary.h"
 
 #include <algorithm>
 #include <filesystem>
 #include <fstream>
+#include <iterator>
 #include <ranges>
 #include <sstream>
 #include <string_view>
@@ -143,9 +145,6 @@ namespace Horo::Extensions {
             if (loaded.contains(manifest.id))
                 return Result<ExtensionManifest>::Failure(
                     MakeError(ExtensionErrors::LoadFailed, "An extension with this package ID is already loaded."));
-            if (manifest.modules.size() != 1)
-                return Result<ExtensionManifest>::Failure(
-                    MakeError(ExtensionErrors::InvalidManifest, "The current native loader requires exactly one module per package."));
             return Result<ExtensionManifest>::Success(std::move(manifest));
         }
 
@@ -261,7 +260,8 @@ namespace Horo::Extensions {
     }  // namespace
 
     /** @copydoc ExtensionManager::ExtensionManager */
-    ExtensionManager::ExtensionManager(Assets::AssetImporterCatalog *importerCatalog) : m_importerCatalog(importerCatalog) {}
+    ExtensionManager::ExtensionManager(Assets::AssetImporterCatalog *importerCatalog, const ExtensionHostProfile hostProfile)
+        : m_importerCatalog(importerCatalog), m_hostProfile(hostProfile) {}
 
     ExtensionManager::~ExtensionManager() {
         UnloadAll();
@@ -276,30 +276,43 @@ namespace Horo::Extensions {
             return Result<std::string>::Failure(manifestResult.ErrorValue());
 
         ExtensionManifest manifest = std::move(manifestResult).Value();
-        const ExtensionModuleManifest &manifestModule = manifest.modules.front();
-        const std::string declaredModuleId = manifestModule.id;
-        const std::string declaredModuleVersion = manifestModule.version;
-        auto libraryPathResult = ResolveModuleLibraryPath(manifest, manifestModule);
-        if (libraryPathResult.HasError())
-            return Result<std::string>::Failure(libraryPathResult.ErrorValue());
+        auto planResult = ResolveExtensionModules(manifest, m_hostProfile);
+        if (planResult.HasError())
+            return Result<std::string>::Failure(planResult.ErrorValue());
+        ExtensionModulePlan plan = std::move(planResult).Value();
 
-        auto loadResult = Platform::LoadDynamicLibrary(libraryPathResult.Value().string());
-        if (loadResult.HasError())
-            return Result<std::string>::Failure(loadResult.ErrorValue());
-        std::shared_ptr<Platform::DynamicLibrary> library{std::move(loadResult).Value()};
+        std::vector<std::shared_ptr<ExtensionModuleLifetime>> lifetimes;
+        std::vector<Assets::AssetImporterContribution> contributions;
+        lifetimes.reserve(plan.moduleIds.size());
+        for (const std::string &moduleId : plan.moduleIds) {
+            const auto manifestModule = std::ranges::find(manifest.modules, moduleId, &ExtensionModuleManifest::id);
+            if (manifestModule == manifest.modules.end())
+                return Result<std::string>::Failure(
+                    MakeError(ExtensionErrors::ModuleResolutionFailed, "Resolved module is absent from the package manifest."));
 
-        auto activatedResult = ActivateModule(library, manifest, manifestModule);
-        if (activatedResult.HasError())
-            return Result<std::string>::Failure(activatedResult.ErrorValue());
-        ActivatedModule activated = std::move(activatedResult).Value();
-        if (auto committed = CommitContributions(activated.contributions, m_importerCatalog); committed.HasError())
+            auto libraryPathResult = ResolveModuleLibraryPath(manifest, *manifestModule);
+            if (libraryPathResult.HasError())
+                return Result<std::string>::Failure(libraryPathResult.ErrorValue());
+            auto loadResult = Platform::LoadDynamicLibrary(libraryPathResult.Value().string());
+            if (loadResult.HasError())
+                return Result<std::string>::Failure(loadResult.ErrorValue());
+            std::shared_ptr<Platform::DynamicLibrary> library{std::move(loadResult).Value()};
+            auto activatedResult = ActivateModule(library, manifest, *manifestModule);
+            if (activatedResult.HasError())
+                return Result<std::string>::Failure(activatedResult.ErrorValue());
+
+            ActivatedModule activated = std::move(activatedResult).Value();
+            lifetimes.push_back(std::move(activated.lifetime));
+            contributions.insert(contributions.end(), std::make_move_iterator(activated.contributions.begin()),
+                                 std::make_move_iterator(activated.contributions.end()));
+        }
+        if (auto committed = CommitContributions(contributions, m_importerCatalog); committed.HasError())
             return Result<std::string>::Failure(committed.ErrorValue());
 
         auto loadedExtension = std::make_unique<LoadedExtension>();
         loadedExtension->manifest = std::move(manifest);
-        loadedExtension->lifetime = std::move(activated.lifetime);
-        loadedExtension->moduleId = declaredModuleId;
-        loadedExtension->moduleVersion = declaredModuleVersion;
+        loadedExtension->lifetimes = std::move(lifetimes);
+        loadedExtension->moduleIds = std::move(plan.moduleIds);
         const std::string extensionId = loadedExtension->manifest.id;
         m_loadedExtensions.try_emplace(extensionId, std::move(loadedExtension));
 

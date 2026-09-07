@@ -392,9 +392,12 @@ namespace Horo::Extensions {
             [[nodiscard]] bool ParseModule(const Json &value, const std::string_view path, ExtensionModuleManifest &moduleManifest) {
                 if (!value.is_object())
                     return Reject(path, "extension.manifest.invalid_type", "Module must be an object.");
-                if (!AllowFields(value, path, {"id", "version", "kind", "entry"}))
+                if (!AllowFields(value, path, {"id", "version", "kind", "entry", "roles", "dependencies", "exports", "imports"}))
                     return false;
-                return ReadModuleFields(value, path, moduleManifest) && ValidateModuleValues(path, moduleManifest);
+                return ReadModuleFields(value, path, moduleManifest) && ValidateModuleValues(path, moduleManifest) &&
+                       ParseModuleRoles(value, path, moduleManifest.roles) &&
+                       ParseModuleDependencies(value, path, moduleManifest.dependencies) &&
+                       ParseModuleExports(value, path, moduleManifest.exports) && ParseModuleImports(value, path, moduleManifest.imports);
             }
 
             [[nodiscard]] bool ReadModuleFields(const Json &value, const std::string_view path, ExtensionModuleManifest &moduleManifest) {
@@ -414,6 +417,135 @@ namespace Horo::Extensions {
                     return Reject(ChildPath(path, "entry"), "extension.manifest.invalid_path",
                                   "Module entry must be a safe package-relative path.");
                 return true;
+            }
+
+            [[nodiscard]] static std::optional<ExtensionModuleRole> ParseRole(const std::string_view value) {
+                using enum ExtensionModuleRole;
+                if (value == "backend-capability")
+                    return BackendCapability;
+                if (value == "editor-presentation")
+                    return EditorPresentation;
+                if (value == "headless-tooling")
+                    return HeadlessTooling;
+                if (value == "script-provider")
+                    return ScriptProvider;
+                if (value == "runtime-participant")
+                    return RuntimeParticipant;
+                return std::nullopt;
+            }
+
+            [[nodiscard]] bool ParseModuleRoles(const Json &moduleObject, const std::string_view path,
+                                                std::vector<ExtensionModuleRole> &roles) {
+                const auto found = moduleObject.find("roles");
+                const std::string rolesPath = ChildPath(path, "roles");
+                if (found == moduleObject.end())
+                    return true;
+                if (!found->is_array())
+                    return Reject(rolesPath, "extension.manifest.invalid_type", "Module roles must be an array.");
+                if (found->empty() || found->size() > 5)
+                    return Reject(rolesPath, "extension.manifest.collection_limit", "Module role count must be between one and five.");
+                for (std::size_t index = 0; index < found->size(); ++index) {
+                    const Json &encoded = (*found)[index];
+                    const std::string elementPath = ElementPath(rolesPath, index);
+                    if (!encoded.is_string())
+                        return Reject(elementPath, "extension.manifest.invalid_type", "Module role must be a string.");
+                    const auto role = ParseRole(encoded.get_ref<const std::string &>());
+                    if (!role.has_value())
+                        return Reject(elementPath, "extension.manifest.invalid_value", "Module role is not recognized.");
+                    if (std::ranges::find(roles, *role) != roles.end())
+                        return Reject(elementPath, "extension.manifest.duplicate_identifier", "Module role must be unique.");
+                    roles.push_back(*role);
+                }
+                return true;
+            }
+
+            [[nodiscard]] bool ParseModuleDependencies(const Json &moduleObject, const std::string_view path,
+                                                       std::vector<std::string> &dependencies) {
+                const auto found = moduleObject.find("dependencies");
+                if (found == moduleObject.end())
+                    return true;
+                const std::string dependenciesPath = ChildPath(path, "dependencies");
+                if (!found->is_array())
+                    return Reject(dependenciesPath, "extension.manifest.invalid_type", "Module dependencies must be an array.");
+                if (found->size() > limits_.maximumModules)
+                    return Reject(dependenciesPath, "extension.manifest.collection_limit", "Module dependency count exceeds its limit.");
+                for (std::size_t index = 0; index < found->size(); ++index) {
+                    const Json &encoded = (*found)[index];
+                    const std::string elementPath = ElementPath(dependenciesPath, index);
+                    if (!encoded.is_string())
+                        return Reject(elementPath, "extension.manifest.invalid_type", "Module dependency must be a string.");
+                    std::string dependency = encoded.get<std::string>();
+                    if (!IsCanonicalId(dependency, limits_.maximumIdentifierBytes))
+                        return Reject(elementPath, "extension.manifest.invalid_identifier", "Module dependency is not canonical.");
+                    if (std::ranges::find(dependencies, dependency) != dependencies.end())
+                        return Reject(elementPath, "extension.manifest.duplicate_identifier", "Module dependency must be unique.");
+                    dependencies.push_back(std::move(dependency));
+                }
+                return true;
+            }
+
+            template <typename Entry, typename ParseEntry>
+            [[nodiscard]] bool ParseModuleServiceEntries(const Json &moduleObject, const std::string_view path,
+                                                         const std::string_view fieldName, const std::string_view entryName,
+                                                         std::vector<Entry> &entries, ParseEntry parseEntry) {
+                const auto found = moduleObject.find(fieldName);
+                if (found == moduleObject.end())
+                    return true;
+                const std::string entriesPath = ChildPath(path, fieldName);
+                if (!found->is_array())
+                    return Reject(entriesPath, "extension.manifest.invalid_type",
+                                  "Module " + std::string{entryName} + "s must be an array.");
+                if (found->size() > limits_.maximumContributions)
+                    return Reject(entriesPath, "extension.manifest.collection_limit",
+                                  "Module " + std::string{entryName} + " count exceeds its limit.");
+
+                std::set<std::string, std::less<>> identities;
+                for (std::size_t index = 0; index < found->size(); ++index) {
+                    const Json &encoded = (*found)[index];
+                    const std::string elementPath = ElementPath(entriesPath, index);
+                    Entry value;
+                    if (!encoded.is_object())
+                        return Reject(elementPath, "extension.manifest.invalid_type",
+                                      "Module " + std::string{entryName} + " must be an object.");
+                    if (!parseEntry(encoded, elementPath, value))
+                        return false;
+                    if (!identities.insert(value.id).second)
+                        return Reject(ChildPath(elementPath, "id"), "extension.manifest.duplicate_identifier",
+                                      "Service " + std::string{entryName} + " ID must be unique within a module.");
+                    entries.push_back(std::move(value));
+                }
+                return true;
+            }
+
+            [[nodiscard]] bool ParseModuleExports(const Json &moduleObject, const std::string_view path,
+                                                  std::vector<ExtensionServiceExportManifest> &exports) {
+                return ParseModuleServiceEntries(moduleObject, path, "exports", "export", exports,
+                                                 [this](const Json &encoded, const std::string_view elementPath,
+                                                        ExtensionServiceExportManifest &value) {
+                    if (!AllowFields(encoded, elementPath, {"id", "contract", "version"}) ||
+                        !ReadId(encoded, "id", elementPath, value.id) || !ReadId(encoded, "contract", elementPath, value.contract) ||
+                        !ReadString(encoded, "version", elementPath, value.version, MaximumSemanticVersionBytes, true))
+                        return false;
+                    return IsCanonicalSemanticVersion(value.version) ||
+                           Reject(ChildPath(elementPath, "version"), "extension.manifest.invalid_version",
+                                  "Service export version must be canonical semantic version text.");
+                });
+            }
+
+            [[nodiscard]] bool ParseModuleImports(const Json &moduleObject, const std::string_view path,
+                                                  std::vector<ExtensionServiceImportManifest> &imports) {
+                return ParseModuleServiceEntries(moduleObject, path, "imports", "import", imports,
+                                                 [this](const Json &encoded, const std::string_view elementPath,
+                                                        ExtensionServiceImportManifest &value) {
+                    if (!AllowFields(encoded, elementPath, {"id", "service", "contract", "minimumVersion"}) ||
+                        !ReadId(encoded, "id", elementPath, value.id) || !ReadId(encoded, "service", elementPath, value.service) ||
+                        !ReadId(encoded, "contract", elementPath, value.contract) ||
+                        !ReadString(encoded, "minimumVersion", elementPath, value.minimumVersion, MaximumSemanticVersionBytes, true))
+                        return false;
+                    return IsCanonicalSemanticVersion(value.minimumVersion) ||
+                           Reject(ChildPath(elementPath, "minimumVersion"), "extension.manifest.invalid_version",
+                                  "Service import minimum version must be canonical semantic version text.");
+                });
             }
 
             [[nodiscard]] bool ParseContributions(const Json &document, ExtensionManifest &manifest) {

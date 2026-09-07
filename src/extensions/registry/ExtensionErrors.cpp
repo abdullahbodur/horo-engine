@@ -52,4 +52,14 @@ namespace Horo::Extensions::ExtensionErrors {
         .retryable = false,
         .userActionable = true,
     };
+
+    const ErrorCodeDescriptor ModuleResolutionFailed{
+        .domain = Domain,
+        .code = ErrorCode{"module_resolution_failed"},
+        .defaultSeverity = ErrorSeverity::Error,
+        .summary = "The extension package module graph could not be resolved.",
+        .remediationHint = "Check module roles, local dependencies, service imports, export versions, and cycles.",
+        .retryable = false,
+        .userActionable = true,
+    };
 }  // namespace Horo::Extensions::ExtensionErrors
