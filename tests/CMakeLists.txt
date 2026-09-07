@@ -245,6 +245,7 @@ add_executable(HoroWorldStreamingTests
         unit/runtime/world_streaming/StreamingSourceDescriptorTests.cpp
         unit/runtime/world_streaming/StreamingSourceRangeTests.cpp
         unit/runtime/world_streaming/WorldCellQuantizationTests.cpp
+        unit/runtime/world_streaming/WorldPartitionDescriptorTests.cpp
         unit/runtime/world_streaming/WorldStreamingIdentityTests.cpp
 )
 target_compile_features(HoroWorldStreamingTests PRIVATE cxx_std_20)

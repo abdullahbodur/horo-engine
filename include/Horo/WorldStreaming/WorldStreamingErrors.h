@@ -22,6 +22,16 @@ namespace Horo::WorldStreaming::WorldStreamingErrors {
     extern const ErrorCodeDescriptor LodUnsupported;
     /** @brief The deterministic cell coordinate falls outside the inclusive manifest grid bounds. */
     extern const ErrorCodeDescriptor CellOutOfBounds;
+    /** @brief A world-partition descriptor is incomplete or contains malformed fields. */
+    extern const ErrorCodeDescriptor PartitionDescriptorInvalid;
+    /** @brief A world-partition descriptor uses an unsupported schema version. */
+    extern const ErrorCodeDescriptor PartitionVersionUnsupported;
+    /** @brief World content bounds are unordered, overflow the grid envelope, or lie outside it. */
+    extern const ErrorCodeDescriptor PartitionBoundsInvalid;
+    /** @brief A partition descriptor exceeds mandatory host storage limits. */
+    extern const ErrorCodeDescriptor PartitionCapacityExceeded;
+    /** @brief A partition descriptor repeats a layer or exact cell identity. */
+    extern const ErrorCodeDescriptor PartitionIdentityConflict;
     /** @brief A streaming source descriptor or admission context is structurally invalid. */
     extern const ErrorCodeDescriptor SourceDescriptorInvalid;
     /** @brief A streaming source intent is not supported by this contract version. */
