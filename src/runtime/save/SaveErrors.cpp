@@ -88,4 +88,13 @@ namespace Horo::Runtime::SaveErrors {
     const ErrorCodeDescriptor SaveRootContainmentViolation{kDomain, ErrorCode{"save.root.containment_violation"}, kError,
                                                            "The product save root failed containment validation.",
                                                            "Remove redirected or unexpected entries beneath the approved state root."};
+    const ErrorCodeDescriptor NamespaceInvalid{kDomain, ErrorCode{"save.namespace.invalid"}, kError,
+                                               "A save namespace identity or revision is invalid.",
+                                               "Supply complete non-zero typed namespace identities and revisions."};
+    const ErrorCodeDescriptor NamespaceUnavailable{kDomain, ErrorCode{"save.namespace.unavailable"}, kError,
+                                                   "No save namespace is available for the requested operation.",
+                                                   "Bind an available user/profile or server-world namespace first."};
+    const ErrorCodeDescriptor NamespaceStale{kDomain, ErrorCode{"save.namespace.stale"}, kError,
+                                             "The captured save namespace binding is stale.",
+                                             "Reject the operation and acquire the current namespace binding."};
 }  // namespace Horo::Runtime::SaveErrors
