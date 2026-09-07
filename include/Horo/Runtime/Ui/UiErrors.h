@@ -38,4 +38,8 @@ namespace Horo::Runtime::Ui::UiErrors {
     extern const ErrorCodeDescriptor CanvasReferenceInvalid;
     /** @brief A runtime instance cannot admit the requested lifecycle transition. */
     extern const ErrorCodeDescriptor InstanceStateInvalid;
+    /** @brief Runtime UI diagnostic evidence is malformed or exceeds its fixed bounds. */
+    extern const ErrorCodeDescriptor DiagnosticInvalid;
+    /** @brief A Runtime UI diagnostic category or source error is not part of the declared contract. */
+    extern const ErrorCodeDescriptor DiagnosticUnsupported;
 }  // namespace Horo::Runtime::Ui::UiErrors
