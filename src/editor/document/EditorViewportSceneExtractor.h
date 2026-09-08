@@ -50,8 +50,14 @@ namespace Horo::Editor {
             return m_snapshot.runtimeSceneId;
         }
 
+        /** @brief Returns the handoff generation changed by every snapshot replacement or clear. */
+        [[nodiscard]] std::uint64_t Generation() const noexcept {
+            return m_generation;
+        }
+
     private:
         EditorViewportSceneSnapshot m_snapshot{};
+        std::uint64_t m_generation{};
     };
 
     /** @brief Resolved object and parent world matrices used by editor manipulation tools. */

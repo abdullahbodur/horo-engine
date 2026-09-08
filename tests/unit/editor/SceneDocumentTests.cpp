@@ -22,6 +22,19 @@ namespace {
         return std::fabs(lhs - rhs) < 0.0001F;
     }
 
+    TEST_CASE("Viewport Scene State Advances Its Handoff Generation", "[unit][editor]") {
+        using namespace Horo::Editor;
+
+        EditorViewportSceneState state;
+        REQUIRE((state.Generation() == 0));
+
+        state.Replace({});
+        REQUIRE((state.Generation() == 1));
+
+        state.Clear();
+        REQUIRE((state.Generation() == 2));
+    }
+
     TEST_CASE("Catalog Owns Stable Core Primitive Ids", "[unit][editor]") {
         using namespace Horo::Runtime;
         const PrimitiveDescriptor *box = PrimitiveCatalog::Find("primitive.mesh.box");

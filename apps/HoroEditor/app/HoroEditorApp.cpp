@@ -840,7 +840,7 @@ namespace Horo::Editor {
                 passCount_ = 0;
                 const EditorViewportSceneView viewportScene = viewportSceneState_->View();
                 if (const EditorViewportExtent viewportExtent = p_->presentation.viewportRenderer.RequestedExtent();
-                    CanSubmitViewportPass(viewportExtent)) {
+                    preparedViewportSceneGeneration_ == viewportSceneState_->Generation() && CanSubmitViewportPass(viewportExtent)) {
                     if (const Result<void> resized = ResizeLegacyViewportTarget(viewportExtent); resized.HasError())
                         return resized;
                     passes_[passCount_++] =
@@ -911,6 +911,7 @@ namespace Horo::Editor {
                                                                                                .lights = viewportScene.lights});
                 if (prepared.HasError())
                     return Result<void>::Failure(prepared.ErrorValue());
+                preparedViewportSceneGeneration_ = viewportSceneState_->Generation();
                 if (prepared.Value().has_value())
                     p_->presentation.viewportTarget = *prepared.Value();
                 return Result<void>::Success();
@@ -952,6 +953,7 @@ namespace Horo::Editor {
             Render::FramebufferExtent committedOutputExtent_{};
             std::array<Render::RenderPassDescriptor, 2> passes_{};
             std::size_t passCount_{};
+            std::uint64_t preparedViewportSceneGeneration_{};
             std::optional<Render::RenderFrameScope> frame_;
             bool nativeMenuInstalled_{false};
         };
