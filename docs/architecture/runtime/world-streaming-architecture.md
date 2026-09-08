@@ -119,6 +119,19 @@ second manifest or topology authority. Existing descriptor-only callers migrate 
 constructing the cooked aggregate at the Asset Pipeline/runtime handoff once complete
 cell metadata is available; partial/default cooked metadata is not accepted.
 
+`WorldSpatialAssignment` is the inert WST-004.3 cook-stage projection that maps
+page-scoped authored-object addresses and exact immutable authoring revisions onto
+descriptor cells. Candidate bounds use inclusive canonical millimeters and the
+descriptor's checked half-open quantization policy; a candidate spanning several
+cells produces every intersected declared cell in canonical layer, LOD, Z, Y, X
+order. Construction rejects duplicate object addresses, malformed or out-of-content
+bounds, absent layers or cells, unsupported LODs, and mandatory object/cell ceilings
+without publishing partial state. The result owns only the stable partition identity,
+object revision metadata, and flat cell assignments: it neither retains nor repeats
+the descriptor's grid, topology, layers, or package references. The contract performs
+no I/O, authoring mutation, runtime registration, cancellation, or shutdown work;
+later spanning-object and dependency cook stages consume its immutable output.
+
 PartitionEpoch identifies a mounted partition incarnation. It changes on world
 replacement/reload, including replacement by the same worldGuid. StreamingGeneration
 changes on each new cell attempt and when an attempt is invalidated; it does not

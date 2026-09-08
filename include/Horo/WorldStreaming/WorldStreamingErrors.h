@@ -40,6 +40,16 @@ namespace Horo::WorldStreaming::WorldStreamingErrors {
     extern const ErrorCodeDescriptor CookedManifestIdentityConflict;
     /** @brief A cooked cell dependency is invalid, duplicated, self-referential, or absent from the manifest. */
     extern const ErrorCodeDescriptor CookedManifestDependencyInvalid;
+    /** @brief A spatial-assignment request is empty, malformed, or has unordered/out-of-partition bounds. */
+    extern const ErrorCodeDescriptor SpatialAssignmentInvalid;
+    /** @brief A spatial-assignment request repeats one stable authored-object address. */
+    extern const ErrorCodeDescriptor SpatialAssignmentIdentityConflict;
+    /** @brief Spatial assignment exceeds an object-count, per-object-cell, or total-assignment ceiling. */
+    extern const ErrorCodeDescriptor SpatialAssignmentCapacityExceeded;
+    /** @brief A requested spatial-assignment layer is not declared by the authoritative descriptor. */
+    extern const ErrorCodeDescriptor SpatialAssignmentUnsupported;
+    /** @brief A quantized object intersects a cell absent from the authoritative descriptor. */
+    extern const ErrorCodeDescriptor SpatialAssignmentCellUnavailable;
     /** @brief A streaming source descriptor or admission context is structurally invalid. */
     extern const ErrorCodeDescriptor SourceDescriptorInvalid;
     /** @brief A streaming source intent is not supported by this contract version. */

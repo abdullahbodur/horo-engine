@@ -82,6 +82,26 @@ namespace Horo::WorldStreaming::WorldStreamingErrors {
         Describe("world_streaming.cooked_manifest.dependency_invalid", ErrorSeverity::Error,
                  "A cooked cell dependency is invalid, duplicated, self-referential, or absent from the manifest.",
                  "Emit unique required cell identities that belong to the same cooked partition.", true);
+    const ErrorCodeDescriptor SpatialAssignmentInvalid =
+        Describe("world_streaming.spatial_assignment.invalid", ErrorSeverity::Error,
+                 "A spatial-assignment request is empty, malformed, or outside the partition content bounds.",
+                 "Provide valid page, object, revision, layer and LOD data with ordered canonical bounds.", true);
+    const ErrorCodeDescriptor SpatialAssignmentIdentityConflict =
+        Describe("world_streaming.spatial_assignment.identity_conflict", ErrorSeverity::Error,
+                 "A spatial-assignment request repeats one stable authored-object address.",
+                 "Submit exactly one immutable revision for each page-scoped authored object.", true);
+    const ErrorCodeDescriptor SpatialAssignmentCapacityExceeded =
+        Describe("world_streaming.spatial_assignment.capacity_exceeded", ErrorSeverity::Error,
+                 "Spatial assignment exceeds a mandatory object or cell-count ceiling.",
+                 "Reduce authored-object coverage or choose explicitly larger supported cook limits.", true);
+    const ErrorCodeDescriptor SpatialAssignmentUnsupported =
+        Describe("world_streaming.spatial_assignment.unsupported", ErrorSeverity::Error,
+                 "A spatial-assignment request names a layer absent from the partition descriptor.",
+                 "Assign the object to a layer declared by the authoritative partition descriptor.", true);
+    const ErrorCodeDescriptor SpatialAssignmentCellUnavailable =
+        Describe("world_streaming.spatial_assignment.cell_unavailable", ErrorSeverity::Error,
+                 "A quantized authored object intersects a cell absent from the partition descriptor.",
+                 "Declare every intersected cell or apply an explicit spanning-object cook policy.", true);
     const ErrorCodeDescriptor SourceDescriptorInvalid =
         Describe("world_streaming.source.descriptor_invalid", ErrorSeverity::Error,
                  "A streaming source descriptor or admission context is structurally invalid.",
