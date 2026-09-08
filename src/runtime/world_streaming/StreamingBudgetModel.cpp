@@ -225,8 +225,7 @@ namespace Horo::WorldStreaming {
     Result<StreamingBudgetEvaluation> EvaluateStreamingBudget(const StreamingBudgetPolicy &policy, const StreamingBudgetSample &sample,
                                                               const StreamingBudgetAmounts &request,
                                                               const StreamingBudgetEvaluationContext &context) {
-        const auto validation = ValidateEvaluationInputs(policy, sample, request, context);
-        if (validation.HasError())
+        if (const auto validation = ValidateEvaluationInputs(policy, sample, request, context); validation.HasError())
             return Result<StreamingBudgetEvaluation>::Failure(validation.ErrorValue());
 
         std::array<std::uint64_t, StreamingBudgetDimensionCount> projected{};
