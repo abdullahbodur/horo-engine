@@ -407,6 +407,22 @@ priority. Pins are owner-scoped demands, released explicitly or on owner teardow
 they do not grant budget bypass. If pinned mandatory content cannot fit, admission
 fails visibly and the owning host chooses a safe pause/loading/failure behavior.
 
+Overlapping source state is reduced from an immutable, bounded snapshot for one
+exact partition epoch and cell. Contributor order, registration order and container
+iteration never affect the result. Effective residency is the strongest requested
+`Unloaded < Loaded < Activated` value. The pinned residency floor is computed
+separately from pinned contributors only: for example, Loaded+Pinned combined with
+Activated+Releasable yields effective Activated with a pinned floor of Loaded, not
+an invented Activated pin. Empty input explicitly reduces to Unloaded with no pin.
+
+Reduction retains canonical minimal source/owner/revision provenance so removal or
+replacement recomputes from a new snapshot instead of mutating an ambient counter.
+Duplicate source identities, foreign partition epochs and contributor-capacity
+violations fail transactionally. Source admission and owner cancellation are
+validated before snapshot publication; reduction performs no registration, range
+query, priority ranking, budget reservation or cell-state mutation. Priority,
+distance, age and stable scheduling ties remain the WST-002.5 policy owner.
+
 Priority uses the maximum of `basePriority * typeMultiplier * override / (distance + epsilon)`
 plus a bounded queue-age boost. Inputs are finite; epsilon is positive (default 1 m).
 Default type multipliers are Camera 1.0, Gameplay 0.9, NetworkRelevance 0.8 and Preload
