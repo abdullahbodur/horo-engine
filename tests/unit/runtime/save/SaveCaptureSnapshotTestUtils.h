@@ -164,6 +164,8 @@ namespace Horo::Runtime::CaptureTestSupport {
 
     template <typename T> inline void RequireError(const Result<T> &result, const ErrorCodeDescriptor &expected) {
         REQUIRE(result.HasError());
+        INFO(result.ErrorValue().message);
         REQUIRE(result.ErrorValue().code.Value() == expected.code.Value());
+        REQUIRE_FALSE(result.ErrorValue().message.empty());
     }
 }  // namespace Horo::Runtime::CaptureTestSupport
