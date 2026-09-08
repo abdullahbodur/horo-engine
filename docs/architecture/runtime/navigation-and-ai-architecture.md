@@ -406,6 +406,24 @@ stable Scene object/component/contribution IDs. Moving or renaming source preser
 those identities. Render geometry is not implicit input; every geometry contribution
 names an exact validated source/collision artifact.
 
+`NavigationSourceGeometrySnapshot` is the owned NAV-002.6 geometry boundary inside
+that larger bake-input capture. It accepts only immutable static-collider, terrain,
+procedural-generation, and approved-custom contribution views. There is deliberately
+no renderer producer kind or renderer dependency: an explicit render-derived policy,
+if introduced later, must remain versioned and cannot displace available canonical
+collision/navigation geometry. Capture validates positive canonical-metre transforms,
+finite transformed vertices, indexed non-degenerate triangles, stable producer and
+contribution identities, area/material semantics, and qualified contribution, vertex,
+triangle, and owned-byte bounds before publishing any snapshot.
+
+The snapshot copies all geometry, sorts contributions by stable authored identity,
+and attaches producer identity, contribution identity, exact source revision/digest,
+and original triangle index to every canonical triangle. Workers retain only its
+immutable views. Before later bake adoption, the owner supplies the complete current
+source observation set; any capture-revision, source-revision, digest, missing, or
+additional contribution mismatch rejects the attempt as stale. The snapshot itself
+has no clock, worker, cancellation, publication, or shutdown lifecycle.
+
 Bake captures one bounded revision-consistent snapshot with exact project, Scene,
 definition, registry, package, geometry, profile, settings, coordinate, schema,
 cooker and provider provenance. The host's Asset Pipeline adapter registers the
