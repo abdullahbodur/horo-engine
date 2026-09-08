@@ -34,6 +34,34 @@ namespace Horo::WorldStreaming {
             sum = left + right;
             return true;
         }
+
+        [[nodiscard]] bool IsMalformedEvaluation(const StreamingBudgetSample &sample, const StreamingBudgetAmounts &request,
+                                                 const StreamingBudgetEvaluationContext &context) noexcept {
+            return !context.expectedPolicyRevision.IsValid() || !context.expectedSampleRevision.IsValid() ||
+                   !IsValidTime(context.evaluationTime) || context.evaluationTime < sample.ObservedAt() || request.IsZero();
+        }
+
+        [[nodiscard]] bool HasStaleRevision(const StreamingBudgetPolicy &policy, const StreamingBudgetSample &sample,
+                                            const StreamingBudgetEvaluationContext &context) noexcept {
+            return context.expectedPolicyRevision != policy.Revision() || sample.PolicyRevision() != policy.Revision() ||
+                   context.expectedSampleRevision != sample.Revision();
+        }
+
+        [[nodiscard]] Result<void> ValidateEvaluationInputs(const StreamingBudgetPolicy &policy, const StreamingBudgetSample &sample,
+                                                            const StreamingBudgetAmounts &request,
+                                                            const StreamingBudgetEvaluationContext &context) {
+            if (IsMalformedEvaluation(sample, request, context))
+                return Internal::Failure<void>(WorldStreamingErrors::BudgetModelInvalid);
+            if (HasStaleRevision(policy, sample, context))
+                return Internal::Failure<void>(WorldStreamingErrors::BudgetRevisionStale);
+
+            std::chrono::nanoseconds windowEnd{};
+            if (!TryWindowEnd(sample.WindowStart(), policy.SamplingWindow(), windowEnd))
+                return Internal::Failure<void>(WorldStreamingErrors::BudgetSampleInvalid);
+            if (context.evaluationTime >= windowEnd)
+                return Internal::Failure<void>(WorldStreamingErrors::BudgetSampleStale);
+            return Result<void>::Success();
+        }
     }  // namespace
 
     /** @copydoc StreamingBudgetAmounts::Create */
@@ -136,9 +164,8 @@ namespace Horo::WorldStreaming {
                                                                 const StreamingBudgetSampleRevision revision,
                                                                 const std::chrono::nanoseconds windowStart,
                                                                 const std::chrono::nanoseconds observedAt, StreamingBudgetAmounts usage) {
-        std::chrono::nanoseconds windowEnd{};
-        if (!revision.IsValid() || !TryWindowEnd(windowStart, policy.SamplingWindow(), windowEnd) || observedAt < windowStart ||
-            observedAt >= windowEnd)
+        if (std::chrono::nanoseconds windowEnd{}; !revision.IsValid() || !TryWindowEnd(windowStart, policy.SamplingWindow(), windowEnd) ||
+                                                  observedAt < windowStart || observedAt >= windowEnd)
             return Internal::Failure<StreamingBudgetSample>(WorldStreamingErrors::BudgetSampleInvalid);
         return Result<StreamingBudgetSample>::Success(
             StreamingBudgetSample{policy.Revision(), revision, windowStart, observedAt, std::move(usage)});
@@ -198,18 +225,9 @@ namespace Horo::WorldStreaming {
     Result<StreamingBudgetEvaluation> EvaluateStreamingBudget(const StreamingBudgetPolicy &policy, const StreamingBudgetSample &sample,
                                                               const StreamingBudgetAmounts &request,
                                                               const StreamingBudgetEvaluationContext &context) {
-        if (!context.expectedPolicyRevision.IsValid() || !context.expectedSampleRevision.IsValid() ||
-            !IsValidTime(context.evaluationTime) || context.evaluationTime < sample.ObservedAt() || request.IsZero())
-            return Internal::Failure<StreamingBudgetEvaluation>(WorldStreamingErrors::BudgetModelInvalid);
-        if (context.expectedPolicyRevision != policy.Revision() || sample.PolicyRevision() != policy.Revision() ||
-            context.expectedSampleRevision != sample.Revision())
-            return Internal::Failure<StreamingBudgetEvaluation>(WorldStreamingErrors::BudgetRevisionStale);
-
-        std::chrono::nanoseconds windowEnd{};
-        if (!TryWindowEnd(sample.WindowStart(), policy.SamplingWindow(), windowEnd))
-            return Internal::Failure<StreamingBudgetEvaluation>(WorldStreamingErrors::BudgetSampleInvalid);
-        if (context.evaluationTime >= windowEnd)
-            return Internal::Failure<StreamingBudgetEvaluation>(WorldStreamingErrors::BudgetSampleStale);
+        const auto validation = ValidateEvaluationInputs(policy, sample, request, context);
+        if (validation.HasError())
+            return Result<StreamingBudgetEvaluation>::Failure(validation.ErrorValue());
 
         std::array<std::uint64_t, StreamingBudgetDimensionCount> projected{};
         std::optional<StreamingBudgetDimension> pressureDimension;
