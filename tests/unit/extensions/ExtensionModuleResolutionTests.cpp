@@ -36,6 +36,35 @@ namespace Horo::Extensions::Tests {
                 .capabilities = Capabilities,
             };
         }
+
+        struct CompatibilityFixture {
+            ExtensionManifest manifest;
+            ExtensionModuleManifest module;
+        };
+
+        [[nodiscard]] CompatibilityFixture CompatibleNativeModule() {
+            CompatibilityFixture fixture;
+            fixture.manifest.engineMin = "0.1.0";
+            fixture.manifest.engineMax = "0.2.0";
+            fixture.module = Module("com.example.backend", ExtensionModuleRole::BackendCapability);
+            fixture.module.abi = ExtensionAbiRequirement{.major = 1, .minimumMinor = 1};
+            fixture.module.requiredCapabilities = {"com.horo.assets"};
+            fixture.module.entries = {
+                {.platform = ExtensionHostPlatform::Linux,
+                 .architecture = ExtensionHostArchitecture::X86_64,
+                 .buildProfile = ExtensionBuildProfile::Debug,
+                 .entry = "bin/linux-x86_64-debug/module"},
+                {.platform = ExtensionHostPlatform::MacOS,
+                 .architecture = ExtensionHostArchitecture::X86_64,
+                 .buildProfile = ExtensionBuildProfile::Debug,
+                 .entry = "bin/macos-x86_64-debug/module"},
+                {.platform = ExtensionHostPlatform::Windows,
+                 .architecture = ExtensionHostArchitecture::X86_64,
+                 .buildProfile = ExtensionBuildProfile::Debug,
+                 .entry = "bin/windows-x86_64-debug/module"},
+            };
+            return fixture;
+        }
     }  // namespace
 
     TEST_CASE("Extension module resolution is deterministic and binds service ownership", "[Extensions][Resolution]") {
@@ -138,26 +167,7 @@ namespace Horo::Extensions::Tests {
     }
 
     TEST_CASE("Extension module compatibility selects only an exact admitted native entry", "[Extensions][Resolution][Compatibility]") {
-        ExtensionManifest manifest;
-        manifest.engineMin = "0.1.0";
-        manifest.engineMax = "0.2.0";
-        ExtensionModuleManifest module = Module("com.example.backend", ExtensionModuleRole::BackendCapability);
-        module.abi = ExtensionAbiRequirement{.major = 1, .minimumMinor = 1};
-        module.requiredCapabilities = {"com.horo.assets"};
-        module.entries = {
-            {.platform = ExtensionHostPlatform::Linux,
-             .architecture = ExtensionHostArchitecture::X86_64,
-             .buildProfile = ExtensionBuildProfile::Debug,
-             .entry = "bin/linux-x86_64-debug/module"},
-            {.platform = ExtensionHostPlatform::MacOS,
-             .architecture = ExtensionHostArchitecture::X86_64,
-             .buildProfile = ExtensionBuildProfile::Debug,
-             .entry = "bin/macos-x86_64-debug/module"},
-            {.platform = ExtensionHostPlatform::Windows,
-             .architecture = ExtensionHostArchitecture::X86_64,
-             .buildProfile = ExtensionBuildProfile::Debug,
-             .entry = "bin/windows-x86_64-debug/module"},
-        };
+        auto [manifest, module] = CompatibleNativeModule();
 
         struct PlatformCase {
             ExtensionHostPlatform platform;
@@ -176,7 +186,10 @@ namespace Horo::Extensions::Tests {
             REQUIRE(accepted.IsCompatible());
             CHECK(accepted.selectedEntry == expectedEntry);
         }
+    }
 
+    TEST_CASE("Extension module compatibility rejects unsupported native entry selectors", "[Extensions][Resolution][Compatibility]") {
+        auto [manifest, module] = CompatibleNativeModule();
         auto host = Host();
         std::erase_if(module.entries, [](const ExtensionNativeEntryManifest &entry) {
             return entry.platform == ExtensionHostPlatform::MacOS;

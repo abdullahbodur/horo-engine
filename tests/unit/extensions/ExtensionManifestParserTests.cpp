@@ -164,7 +164,9 @@ namespace Horo::Extensions::Tests {
             "modules":[{"id":"com.example.test.native","version":"1.0.0","kind":"native","roles":["gui-ish"]}]
         })json");
         RequireError(unknownRole, "$.modules[0].roles[0]", "extension.manifest.invalid_value");
+    }
 
+    TEST_CASE("Extension manifest rejects competing typed entry authority", "[Extensions][Manifest]") {
         auto competingEntries = ParseExtensionManifest(R"json({
             "id":"com.example.test","version":"1.0.0",
             "modules":[{"id":"com.example.test.native","version":"1.0.0","kind":"native","entry":"legacy",

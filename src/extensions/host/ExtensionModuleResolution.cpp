@@ -5,6 +5,7 @@
 #include <algorithm>
 #include <array>
 #include <charconv>
+#include <format>
 #include <map>
 #include <optional>
 #include <ranges>
@@ -155,6 +156,26 @@ namespace Horo::Extensions {
             return Result<void>::Success();
         }
 
+        [[nodiscard]] Result<void> ValidateModuleDefinition(const ExtensionManifest &manifest,
+                                                            const ExtensionModuleManifest &moduleManifest,
+                                                            const ExtensionManifestLimits &limits) {
+            if (moduleManifest.roles.empty())
+                return Result<void>::Failure(MakeError(ExtensionErrors::ModuleResolutionFailed,
+                                                       "A module has no explicit role. Involved modules: " + moduleManifest.id + '.'));
+            if (moduleManifest.roles.size() > 5 || moduleManifest.dependencies.size() > limits.maximumModules ||
+                moduleManifest.exports.size() > limits.maximumContributions || moduleManifest.imports.size() > limits.maximumContributions)
+                return Result<void>::Failure(
+                    MakeError(ExtensionErrors::ModuleResolutionFailed,
+                              "Module metadata exceeds a bounded count. Involved modules: " + moduleManifest.id + '.'));
+            if (!moduleManifest.exports.empty() && !HasRole(moduleManifest, ExtensionModuleRole::BackendCapability))
+                return Result<void>::Failure(
+                    MakeError(ExtensionErrors::ModuleResolutionFailed,
+                              "A service export requires backend-capability authority. Involved modules: " + moduleManifest.id + '.'));
+            if (auto authorityResult = ValidateCompatibilityAuthority(manifest, moduleManifest); authorityResult.HasError())
+                return authorityResult;
+            return ValidateNativeEntrySelectors(moduleManifest);
+        }
+
         [[nodiscard]] Result<ModuleIndex> ValidateAndIndexModules(const ExtensionManifest &manifest) {
             const ExtensionManifestLimits limits;
             if (manifest.modules.empty() || manifest.modules.size() > limits.maximumModules)
@@ -166,24 +187,8 @@ namespace Horo::Extensions {
 
             ModuleIndex modules;
             for (const ExtensionModuleManifest &moduleManifest : manifest.modules) {
-                if (moduleManifest.roles.empty())
-                    return Result<ModuleIndex>::Failure(
-                        MakeError(ExtensionErrors::ModuleResolutionFailed,
-                                  "A module has no explicit role. Involved modules: " + moduleManifest.id + '.'));
-                if (moduleManifest.roles.size() > 5 || moduleManifest.dependencies.size() > limits.maximumModules ||
-                    moduleManifest.exports.size() > limits.maximumContributions ||
-                    moduleManifest.imports.size() > limits.maximumContributions)
-                    return Result<ModuleIndex>::Failure(
-                        MakeError(ExtensionErrors::ModuleResolutionFailed,
-                                  "Module metadata exceeds a bounded count. Involved modules: " + moduleManifest.id + '.'));
-                if (!moduleManifest.exports.empty() && !HasRole(moduleManifest, ExtensionModuleRole::BackendCapability))
-                    return Result<ModuleIndex>::Failure(
-                        MakeError(ExtensionErrors::ModuleResolutionFailed,
-                                  "A service export requires backend-capability authority. Involved modules: " + moduleManifest.id + '.'));
-                if (auto authorityResult = ValidateCompatibilityAuthority(manifest, moduleManifest); authorityResult.HasError())
-                    return Result<ModuleIndex>::Failure(authorityResult.ErrorValue());
-                if (auto entryResult = ValidateNativeEntrySelectors(moduleManifest); entryResult.HasError())
-                    return Result<ModuleIndex>::Failure(entryResult.ErrorValue());
+                if (auto validationResult = ValidateModuleDefinition(manifest, moduleManifest, limits); validationResult.HasError())
+                    return Result<ModuleIndex>::Failure(validationResult.ErrorValue());
                 if (!modules.try_emplace(moduleManifest.id, &moduleManifest).second)
                     return Result<ModuleIndex>::Failure(
                         MakeError(ExtensionErrors::ModuleResolutionFailed,
@@ -337,20 +342,21 @@ namespace Horo::Extensions {
         [[nodiscard]] std::optional<ExtensionModuleCompatibility> EvaluateAbiCompatibility(const ExtensionManifest &manifest,
                                                                                            const ExtensionModuleManifest &moduleManifest,
                                                                                            const ExtensionHostEnvironment &host) {
-            const ExtensionAbiRequirement abi = moduleManifest.abi.value_or(ExtensionAbiRequirement{});
-            if ((!manifest.sdkAbi.empty() && manifest.sdkAbi != "horo.extension-1") || abi.major != host.abiMajor ||
+            if (const ExtensionAbiRequirement abi = moduleManifest.abi.value_or(ExtensionAbiRequirement{});
+                (!manifest.sdkAbi.empty() && manifest.sdkAbi != "horo.extension-1") || abi.major != host.abiMajor ||
                 abi.minimumMinor > host.abiMinor)
                 return Rejection(moduleManifest, ExtensionCompatibilityStatus::AbiUnsupported,
-                                 std::to_string(abi.major) + '.' + std::to_string(abi.minimumMinor));
+                                 std::format("{}.{}", abi.major, abi.minimumMinor));
             return std::nullopt;
         }
 
         [[nodiscard]] std::optional<ExtensionModuleCompatibility> EvaluateCapabilities(const ExtensionModuleManifest &moduleManifest,
                                                                                        const ExtensionHostEnvironment &host) {
-            const auto missing = std::ranges::find_if(moduleManifest.requiredCapabilities, [&host](const std::string &capability) {
+            if (const auto missing = std::ranges::find_if(moduleManifest.requiredCapabilities,
+                                                          [&host](const std::string &capability) {
                 return std::ranges::find(host.capabilities, capability) == host.capabilities.end();
             });
-            if (missing != moduleManifest.requiredCapabilities.end())
+                missing != moduleManifest.requiredCapabilities.end())
                 return Rejection(moduleManifest, ExtensionCompatibilityStatus::CapabilityUnavailable, *missing);
             return std::nullopt;
         }
@@ -367,13 +373,14 @@ namespace Horo::Extensions {
                 return {.moduleId = moduleManifest.id, .selectedEntry = moduleManifest.entry};
             }
 
-            const auto platform = std::ranges::find(moduleManifest.entries, host.platform, &ExtensionNativeEntryManifest::platform);
-            if (platform == moduleManifest.entries.end())
+            if (const auto platform = std::ranges::find(moduleManifest.entries, host.platform, &ExtensionNativeEntryManifest::platform);
+                platform == moduleManifest.entries.end())
                 return Rejection(moduleManifest, HostPlatformUnsupported, std::string{PlatformName(host.platform)});
-            const auto architecture = std::ranges::find_if(moduleManifest.entries, [&host](const ExtensionNativeEntryManifest &entry) {
+            if (const auto architecture = std::ranges::find_if(moduleManifest.entries,
+                                                               [&host](const ExtensionNativeEntryManifest &entry) {
                 return entry.platform == host.platform && entry.architecture == host.architecture;
             });
-            if (architecture == moduleManifest.entries.end())
+                architecture == moduleManifest.entries.end())
                 return Rejection(moduleManifest, HostArchitectureUnsupported, std::string{ArchitectureName(host.architecture)});
             const auto selected = std::ranges::find_if(moduleManifest.entries, [&host](const ExtensionNativeEntryManifest &entry) {
                 return entry.platform == host.platform && entry.architecture == host.architecture &&
@@ -382,6 +389,41 @@ namespace Horo::Extensions {
             if (selected == moduleManifest.entries.end())
                 return Rejection(moduleManifest, BuildProfileUnsupported, std::string{BuildProfileName(host.buildProfile)});
             return {.moduleId = moduleManifest.id, .selectedEntry = selected->entry};
+        }
+
+        [[nodiscard]] Result<void> ApplyHostProfile(std::vector<std::string> &order, const DependencyIndex &dependencies,
+                                                    const ModuleIndex &modules, const ExtensionHostProfile profile) {
+            if (profile != ExtensionHostProfile::Headless)
+                return Result<void>::Success();
+            if (auto headlessResult = ValidateHeadlessDependencies(dependencies, modules); headlessResult.HasError())
+                return headlessResult;
+            std::erase_if(order, [&modules](const std::string &moduleId) {
+                return IsPresentationOnly(*modules.at(moduleId));
+            });
+            return Result<void>::Success();
+        }
+
+        [[nodiscard]] Result<ExtensionModulePlan> BuildCompatiblePlan(std::vector<std::string> &&order, const ExtensionManifest &manifest,
+                                                                      const ModuleIndex &modules, const ExtensionHostEnvironment &host) {
+            ExtensionModulePlan plan{.moduleIds = std::move(order)};
+            plan.selectedEntries.reserve(plan.moduleIds.size());
+            for (const std::string &moduleId : plan.moduleIds) {
+                const ExtensionModuleCompatibility compatibility =
+                    EvaluateExtensionModuleCompatibility(manifest, *modules.at(moduleId), host);
+                if (!compatibility.IsCompatible())
+                    return Result<ExtensionModulePlan>::Failure(
+                        MakeError(ExtensionErrors::ModuleResolutionFailed,
+                                  "Module '" + moduleId + "' rejected compatibility requirement '" + compatibility.requirement + "'."));
+                plan.selectedEntries.push_back(compatibility.selectedEntry);
+            }
+
+            const std::set<std::string, std::less<>> selected(plan.moduleIds.begin(), plan.moduleIds.end());
+            for (const ExtensionContributionManifest &contribution : manifest.contributions) {
+                if (selected.contains(contribution.owningModule))
+                    plan.contributions.push_back(contribution);
+            }
+            std::ranges::sort(plan.contributions, {}, &ExtensionContributionManifest::id);
+            return Result<ExtensionModulePlan>::Success(std::move(plan));
         }
     }  // namespace
 
@@ -422,30 +464,8 @@ namespace Horo::Extensions {
             return Result<ExtensionModulePlan>::Failure(orderResult.ErrorValue());
         std::vector<std::string> order = std::move(orderResult).Value();
 
-        if (host.profile == ExtensionHostProfile::Headless) {
-            if (auto headlessResult = ValidateHeadlessDependencies(dependencies, modules); headlessResult.HasError())
-                return Result<ExtensionModulePlan>::Failure(headlessResult.ErrorValue());
-            std::erase_if(order, [&modules](const std::string &moduleId) {
-                return IsPresentationOnly(*modules.at(moduleId));
-            });
-        }
-
-        ExtensionModulePlan plan{.moduleIds = std::move(order)};
-        plan.selectedEntries.reserve(plan.moduleIds.size());
-        for (const std::string &moduleId : plan.moduleIds) {
-            const ExtensionModuleCompatibility compatibility = EvaluateExtensionModuleCompatibility(manifest, *modules.at(moduleId), host);
-            if (!compatibility.IsCompatible())
-                return Result<ExtensionModulePlan>::Failure(
-                    MakeError(ExtensionErrors::ModuleResolutionFailed,
-                              "Module '" + moduleId + "' rejected compatibility requirement '" + compatibility.requirement + "'."));
-            plan.selectedEntries.push_back(compatibility.selectedEntry);
-        }
-        const std::set<std::string, std::less<>> selected(plan.moduleIds.begin(), plan.moduleIds.end());
-        for (const ExtensionContributionManifest &contribution : manifest.contributions) {
-            if (selected.contains(contribution.owningModule))
-                plan.contributions.push_back(contribution);
-        }
-        std::ranges::sort(plan.contributions, {}, &ExtensionContributionManifest::id);
-        return Result<ExtensionModulePlan>::Success(std::move(plan));
+        if (auto profileResult = ApplyHostProfile(order, dependencies, modules, host.profile); profileResult.HasError())
+            return Result<ExtensionModulePlan>::Failure(profileResult.ErrorValue());
+        return BuildCompatiblePlan(std::move(order), manifest, modules, host);
     }
 }  // namespace Horo::Extensions
