@@ -84,15 +84,16 @@ namespace Horo::Render {
 
         [[nodiscard]] constexpr RenderGraphHazard Hazards(const RenderGraphSynchronizationAccess before,
                                                           const RenderGraphSynchronizationAccess after) noexcept {
-            RenderGraphHazard hazards = RenderGraphHazard::None;
+            using enum RenderGraphHazard;
+            RenderGraphHazard hazards = None;
             if (Writes(before) && Reads(after)) {
-                hazards = hazards | RenderGraphHazard::ReadAfterWrite;
+                hazards = hazards | ReadAfterWrite;
             }
             if (Reads(before) && Writes(after)) {
-                hazards = hazards | RenderGraphHazard::WriteAfterRead;
+                hazards = hazards | WriteAfterRead;
             }
             if (Writes(before) && Writes(after)) {
-                hazards = hazards | RenderGraphHazard::WriteAfterWrite;
+                hazards = hazards | WriteAfterWrite;
             }
             return hazards;
         }
@@ -175,7 +176,7 @@ namespace Horo::Render {
                     if (!assignment.IsValid()) {
                         return Result<void>::Failure(MakeError(RenderGraphSynchronizationErrors::InvalidQueueTopology));
                     }
-                    const std::size_t role = static_cast<std::size_t>(assignment.role);
+                    const auto role = static_cast<std::size_t>(assignment.role);
                     if (queuesByRole_[role].has_value()) {
                         return Result<void>::Failure(MakeError(RenderGraphSynchronizationErrors::InvalidQueueTopology));
                     }
@@ -232,8 +233,8 @@ namespace Horo::Render {
                         scheduled_[pass.id.value - 1]) {
                         return Result<void>::Failure(MakeError(RenderGraphSynchronizationErrors::InvalidSchedule));
                     }
-                    const std::size_t role = static_cast<std::size_t>(passes[pass.id.value - 1].queue);
-                    if (role >= queuesByRole_.size() || !queuesByRole_[role].has_value()) {
+                    if (const auto role = static_cast<std::size_t>(passes[pass.id.value - 1].queue);
+                        role >= queuesByRole_.size() || !queuesByRole_[role].has_value()) {
                         return Result<void>::Failure(MakeError(RenderGraphSynchronizationErrors::InvalidQueueTopology));
                     }
                     scheduled_[pass.id.value - 1] = true;
@@ -291,9 +292,9 @@ namespace Horo::Render {
                 if (hazards == RenderGraphHazard::None) {
                     hazards = RenderGraphHazard::StateChange;
                 }
-                transitions_.push_back({resource, previous.pass, pass, previous.state, next, hazards});
+                transitions_.emplace_back(resource, previous.pass, pass, previous.state, next, hazards);
                 if (previous.state.access != RenderGraphSynchronizationAccess::None && previous.state.queue != next.queue) {
-                    transfers_.push_back({resource, previous.pass, pass, previous.state.queue, next.queue});
+                    transfers_.emplace_back(resource, previous.pass, pass, previous.state.queue, next.queue);
                 }
             }
 
