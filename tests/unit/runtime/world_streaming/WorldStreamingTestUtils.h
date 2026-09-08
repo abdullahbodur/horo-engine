@@ -1,12 +1,24 @@
 #pragma once
 
+#include "Horo/Assets/AssetId.h"
 #include "Horo/WorldStreaming/StreamingSourceDescriptor.h"
 #include "Horo/WorldStreaming/WorldStreamingIdentity.h"
 
+#include <array>
 #include <catch2/catch_test_macros.hpp>
 #include <cstdint>
 
 namespace Horo::WorldStreaming::TestSupport {
+    inline Assets::AssetId Asset(const std::uint8_t discriminator) {
+        std::array<std::uint8_t, 16> bytes{};
+        bytes.back() = discriminator;
+        return Assets::AssetId::FromBytes(bytes);
+    }
+
+    inline StreamingLayerId Layer(const std::uint16_t value = 2) {
+        return StreamingLayerId::Create(value).Value();
+    }
+
     template <typename Identity> Identity IdentityFrom(const std::uint64_t value) {
         const auto result = Identity::Create(value);
         REQUIRE(result.HasValue());

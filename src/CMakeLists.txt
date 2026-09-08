@@ -448,6 +448,7 @@ add_library(HoroWorldStreaming STATIC
         runtime/world_streaming/WorldCellQuantization.cpp
         runtime/world_streaming/WorldPartitionDescriptor.cpp
         runtime/world_streaming/WorldSpatialAssignment.cpp
+        runtime/world_streaming/WorldSpanningObjectPlan.cpp
         runtime/world_streaming/WorldStreamingErrors.cpp
         runtime/world_streaming/WorldStreamingIdentity.cpp
 )

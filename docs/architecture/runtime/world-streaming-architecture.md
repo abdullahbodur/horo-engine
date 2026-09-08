@@ -584,6 +584,25 @@ Replacement and shutdown never rewrite or delete an already published page in pl
 Provider integration, merge UI and Editor persistence remain application/Editor
 responsibilities layered over this contract rather than alternate sources of truth.
 
+### Spanning-object cook policy
+
+Spatial assignment first records every descriptor-owned cell covered by an exact
+authored-object revision. `WorldSpanningObjectPlan` then applies a separate bounded,
+in-memory policy stage when that coverage exceeds the host's direct-cell threshold.
+Every oversized object must choose exactly one explicit outcome: one covered cell
+owns it, its later payload cook splits it per covered cell, or it is placed in the
+non-spatial cooked tier. Objects at or below the threshold remain direct and cannot
+silently carry an unused oversized-object directive.
+
+Single-cell ownership names an exact cell already present in the source assignment;
+the cook stage never guesses an anchor from iteration order. Split placement retains
+the canonical covered-cell sequence as deterministic fragment destinations but does
+not define geometry splitting or a persistent wire schema. Non-spatial placement has
+an explicit zero-cell result rather than a hidden global bucket. Address and revision
+mismatches, duplicate or foreign directives, unknown policies, missing decisions and
+capacity exhaustion fail transactionally without changing the spatial assignment.
+Serialization, payload production and runtime residency remain later owner stages.
+
 ## Error Handling And Shutdown
 
 All fallible operations follow ADR-008 Result/Error. Lifecycle errors preserve the

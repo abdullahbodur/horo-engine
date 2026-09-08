@@ -102,6 +102,30 @@ namespace Horo::WorldStreaming::WorldStreamingErrors {
         Describe("world_streaming.spatial_assignment.cell_unavailable", ErrorSeverity::Error,
                  "A quantized authored object intersects a cell absent from the partition descriptor.",
                  "Declare every intersected cell or apply an explicit spanning-object cook policy.", true);
+    const ErrorCodeDescriptor SpanningObjectPlanInvalid =
+        Describe("world_streaming.spanning_object.invalid", ErrorSeverity::Error,
+                 "A spanning-object plan or directive is malformed, missing, or applied to a direct object.",
+                 "Provide one valid explicit directive only for each object exceeding the direct-cell threshold.", true);
+    const ErrorCodeDescriptor SpanningObjectPlanIdentityConflict =
+        Describe("world_streaming.spanning_object.identity_conflict", ErrorSeverity::Error,
+                 "A spanning-object directive is duplicated or names an object absent from spatial assignment.",
+                 "Provide at most one directive for each exact object admitted by the spatial-assignment result.", true);
+    const ErrorCodeDescriptor SpanningObjectPlanRevisionStale =
+        Describe("world_streaming.spanning_object.revision_stale", ErrorSeverity::Warning,
+                 "A spanning-object directive does not match the admitted immutable object revision.",
+                 "Rebuild policy directives from the exact spatial-assignment snapshot being cooked.", false);
+    const ErrorCodeDescriptor SpanningObjectPlanUnsupported =
+        Describe("world_streaming.spanning_object.unsupported", ErrorSeverity::Error,
+                 "A spanning-object directive uses an unsupported cook policy.",
+                 "Use explicit single-cell ownership, per-cell splitting, or non-spatial placement.", true);
+    const ErrorCodeDescriptor SpanningObjectPlanCapacityExceeded =
+        Describe("world_streaming.spanning_object.capacity_exceeded", ErrorSeverity::Error,
+                 "A spanning-object plan exceeds a mandatory object or placement-cell ceiling.",
+                 "Reduce object coverage or choose explicitly larger supported cook limits.", true);
+    const ErrorCodeDescriptor SpanningObjectPlanOwnerUnavailable =
+        Describe("world_streaming.spanning_object.owner_unavailable", ErrorSeverity::Error,
+                 "The explicit single-cell owner is not covered by the source spatial assignment.",
+                 "Choose one canonical cell from the exact object's spatial-assignment coverage.", true);
     const ErrorCodeDescriptor DependencyPlanInvalid =
         Describe("world_streaming.dependency_plan.invalid", ErrorSeverity::Error,
                  "A dependency-plan request contains malformed, duplicated, self-referential, or missing source data.",

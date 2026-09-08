@@ -11,18 +11,10 @@
 
 namespace Horo::WorldStreaming {
     namespace {
+        using TestSupport::Asset;
         using TestSupport::IdentityFrom;
+        using TestSupport::Layer;
         using TestSupport::RequireError;
-
-        Assets::AssetId Asset(const std::uint8_t discriminator) {
-            std::array<std::uint8_t, 16> bytes{};
-            bytes.back() = discriminator;
-            return Assets::AssetId::FromBytes(bytes);
-        }
-
-        StreamingLayerId Layer(const std::uint16_t value = 2) {
-            return StreamingLayerId::Create(value).Value();
-        }
 
         [[nodiscard]] bool ShouldOmitCell(const bool omitOrigin, const std::int32_t x, const std::int32_t y, const std::int32_t z,
                                           const std::uint8_t lod, const StreamingLayerId layer) {
