@@ -73,8 +73,8 @@ namespace Horo::Render {
         }
 
         [[nodiscard]] bool IsDepthFormat(const RenderTextureFormat format) noexcept {
-            return format == RenderTextureFormat::Depth16Unorm || format == RenderTextureFormat::Depth24Stencil8 ||
-                   format == RenderTextureFormat::Depth32Float || format == RenderTextureFormat::Depth32FloatStencil8;
+            using enum RenderTextureFormat;
+            return format == Depth16Unorm || format == Depth24Stencil8 || format == Depth32Float || format == Depth32FloatStencil8;
         }
 
         [[nodiscard]] bool TextureDescriptorSupports(const RenderTextureDescriptor &descriptor, const RenderGraphUsageKind usage) noexcept {
@@ -212,8 +212,8 @@ namespace Horo::Render {
                         return Result<void>::Failure(MakeError(RenderGraphLifetimeErrors::InvalidSchedule));
                     }
                     const bool retained = entry.disposition == RenderGraphPassDispositionKind::Retained;
-                    const bool culled = entry.disposition == RenderGraphPassDispositionKind::Culled;
-                    if ((!retained && !culled) || retained != (passPositions_[GraphIndex(entry.pass)] != NoUse)) {
+                    if (const bool culled = entry.disposition == RenderGraphPassDispositionKind::Culled;
+                        (!retained && !culled) || retained != (passPositions_[GraphIndex(entry.pass)] != NoUse)) {
                         return Result<void>::Failure(MakeError(RenderGraphLifetimeErrors::InvalidSchedule));
                     }
                     dispositions[GraphIndex(entry.pass)] = 1;
@@ -334,7 +334,7 @@ namespace Horo::Render {
                     auto found = classes.find(key);
                     if (found == classes.end()) {
                         const RenderGraphCompatibilityClassId id{static_cast<std::uint32_t>(classes.size() + 1)};
-                        found = classes.emplace(key, id).first;
+                        found = classes.try_emplace(key, id).first;
                     }
                     compatibilityByResource_[index] = found->second;
                 }
@@ -343,7 +343,7 @@ namespace Horo::Render {
             [[nodiscard]] Result<void> AssignAllocationSlots() {
                 const std::vector<std::size_t> resources = UsedTransientResources();
                 std::map<SlotGroupKey, SlotGroup> groups;
-                std::vector<std::size_t> previousResourceBySlot(graph_.Resources().size() + 1, NoUse);
+                std::vector previousResourceBySlot(graph_.Resources().size() + 1, NoUse);
                 std::uint32_t nextSlot = 1;
                 for (const std::size_t resource : resources) {
                     if (const Result<void> assigned = AssignResourceSlot(resource, groups, previousResourceBySlot, nextSlot);
