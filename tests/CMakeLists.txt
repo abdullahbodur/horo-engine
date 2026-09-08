@@ -944,6 +944,7 @@ target_link_libraries(HoroRenderBackendRegistryTests
         HoroEngine::RenderNull
 )
 add_executable(HoroRenderGraphTests
+        unit/runtime/renderer/RenderGraphExecutionTests.cpp
         unit/runtime/renderer/RenderGraphTests.cpp
         unit/runtime/renderer/RenderGraphValidationTests.cpp
         unit/runtime/renderer/RenderGraphSynchronizationTests.cpp

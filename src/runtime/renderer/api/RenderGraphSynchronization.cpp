@@ -6,6 +6,7 @@
 #include <format>
 #include <new>
 #include <optional>
+#include <utility>
 
 namespace Horo::Render {
     namespace {
@@ -170,6 +171,17 @@ namespace Horo::Render {
                 return std::move(transfers_);
             }
 
+            [[nodiscard]] std::vector<RenderQueueAssignment> TakeQueueAssignments() const {
+                std::vector<RenderQueueAssignment> assignments;
+                assignments.reserve(queuesByRole_.size());
+                for (std::size_t role = 0; role < queuesByRole_.size(); ++role) {
+                    if (queuesByRole_[role]) {
+                        assignments.emplace_back(static_cast<RenderQueueRole>(role), *queuesByRole_[role]);
+                    }
+                }
+                return assignments;
+            }
+
         private:
             [[nodiscard]] Result<void> ValidateQueueTopology() {
                 for (const RenderQueueAssignment assignment : queues_) {
@@ -326,13 +338,37 @@ namespace Horo::Render {
     }  // namespace
 
     /** @copydoc RenderGraphSynchronizationPlan::RenderGraphSynchronizationPlan */
-    RenderGraphSynchronizationPlan::RenderGraphSynchronizationPlan(RenderGraphOwnerId owner, std::vector<RenderGraphTransition> transitions,
+    RenderGraphSynchronizationPlan::RenderGraphSynchronizationPlan(RenderGraphOwnerId owner,
+                                                                   std::vector<RenderQueueAssignment> queueAssignments,
+                                                                   std::vector<RenderGraphTransition> transitions,
                                                                    std::vector<RenderGraphOwnershipTransfer> transfers) noexcept
-        : owner_(owner), transitions_(std::move(transitions)), transfers_(std::move(transfers)) {}
+        : owner_(owner), queueAssignments_(std::move(queueAssignments)), transitions_(std::move(transitions)),
+          transfers_(std::move(transfers)) {}
+
+    /** @copydoc RenderGraphSynchronizationPlan::RenderGraphSynchronizationPlan */
+    RenderGraphSynchronizationPlan::RenderGraphSynchronizationPlan(RenderGraphSynchronizationPlan &&other) noexcept
+        : owner_(std::exchange(other.owner_, {})), queueAssignments_(std::move(other.queueAssignments_)),
+          transitions_(std::move(other.transitions_)), transfers_(std::move(other.transfers_)) {}
+
+    /** @copydoc RenderGraphSynchronizationPlan::operator= */
+    RenderGraphSynchronizationPlan &RenderGraphSynchronizationPlan::operator=(RenderGraphSynchronizationPlan &&other) noexcept {
+        if (this != &other) {
+            owner_ = std::exchange(other.owner_, {});
+            queueAssignments_ = std::move(other.queueAssignments_);
+            transitions_ = std::move(other.transitions_);
+            transfers_ = std::move(other.transfers_);
+        }
+        return *this;
+    }
 
     /** @copydoc RenderGraphSynchronizationPlan::Owner */
     RenderGraphOwnerId RenderGraphSynchronizationPlan::Owner() const noexcept {
         return owner_;
+    }
+
+    /** @copydoc RenderGraphSynchronizationPlan::QueueAssignments */
+    std::span<const RenderQueueAssignment> RenderGraphSynchronizationPlan::QueueAssignments() const noexcept {
+        return queueAssignments_;
     }
 
     /** @copydoc RenderGraphSynchronizationPlan::Transitions */
@@ -359,7 +395,8 @@ namespace Horo::Render {
                 return Result<RenderGraphSynchronizationPlan>::Failure(compiled.ErrorValue());
             }
             return Result<RenderGraphSynchronizationPlan>::Success(
-                RenderGraphSynchronizationPlan{graph.Owner(), compiler.TakeTransitions(), compiler.TakeTransfers()});
+                RenderGraphSynchronizationPlan{graph.Owner(), compiler.TakeQueueAssignments(), compiler.TakeTransitions(),
+                                               compiler.TakeTransfers()});
         } catch (const std::bad_alloc &) {
             return Result<RenderGraphSynchronizationPlan>::Failure(MakeError(RenderGraphSynchronizationErrors::AllocationFailed));
         }
