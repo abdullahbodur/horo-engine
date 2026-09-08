@@ -22,6 +22,16 @@ namespace Horo::WorldStreaming::WorldStreamingErrors {
     extern const ErrorCodeDescriptor CellOperationUnsupported;
     /** @brief A known cell operation transition is not legal from the current phase. */
     extern const ErrorCodeDescriptor CellOperationTransitionInvalid;
+    /** @brief A scheduler admission ledger, request, or reservation is malformed. */
+    extern const ErrorCodeDescriptor SchedulerAdmissionInvalid;
+    /** @brief A scheduler slot cannot be reserved within the configured concurrent-operation ceiling. */
+    extern const ErrorCodeDescriptor SchedulerCapacityExceeded;
+    /** @brief A scheduler operation already owns a reservation in this ledger. */
+    extern const ErrorCodeDescriptor SchedulerReservationConflict;
+    /** @brief A release does not name the exact retained reservation and operation fence. */
+    extern const ErrorCodeDescriptor SchedulerReservationStale;
+    /** @brief Scheduler admission is draining, closed, or waiting for an operation to retire. */
+    extern const ErrorCodeDescriptor SchedulerLifecycleUnavailable;
     /** @brief A world-cell grid has zero/overflowing cell size, inverted bounds, or no LODs. */
     extern const ErrorCodeDescriptor QuantizationPolicyInvalid;
     /** @brief A coordinate cannot be translated relative to the grid origin without signed overflow. */

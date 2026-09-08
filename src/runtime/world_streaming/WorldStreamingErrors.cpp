@@ -47,6 +47,26 @@ namespace Horo::WorldStreaming::WorldStreamingErrors {
         Describe("world_streaming.cell_operation.transition_invalid", ErrorSeverity::Error,
                  "A known cell operation transition is not legal from the current phase.",
                  "Follow the queued, admitted, preparing, activating, retiring, and terminal lifecycle order.", false);
+    const ErrorCodeDescriptor SchedulerAdmissionInvalid =
+        Describe("world_streaming.scheduler.admission_invalid", ErrorSeverity::Error,
+                 "A scheduler admission ledger, request, or reservation is malformed.",
+                 "Use a positive slot limit and a valid queued operation with its exact issued reservation.", true);
+    const ErrorCodeDescriptor SchedulerCapacityExceeded =
+        Describe("world_streaming.scheduler.capacity_exceeded", ErrorSeverity::Warning,
+                 "The scheduler cannot reserve another concurrent-operation slot.",
+                 "Wait for an admitted operation to reach acknowledged terminal retirement before retrying.", false);
+    const ErrorCodeDescriptor SchedulerReservationConflict =
+        Describe("world_streaming.scheduler.reservation_conflict", ErrorSeverity::Error,
+                 "The cell operation already owns a reservation in this scheduler ledger.",
+                 "Reuse the retained reservation instead of admitting the exact operation twice.", false);
+    const ErrorCodeDescriptor SchedulerReservationStale =
+        Describe("world_streaming.scheduler.reservation_stale", ErrorSeverity::Warning,
+                 "A release does not name the exact retained reservation and operation fence.",
+                 "Route completion to the matching reservation and fenced operation attempt.", false);
+    const ErrorCodeDescriptor SchedulerLifecycleUnavailable =
+        Describe("world_streaming.scheduler.lifecycle_unavailable", ErrorSeverity::Warning,
+                 "Scheduler admission is draining, closed, or waiting for an operation to retire.",
+                 "Do not admit during shutdown and retain slots until their exact operations become terminal.", false);
     const ErrorCodeDescriptor QuantizationPolicyInvalid =
         Describe("world_streaming.quantization.policy_invalid", ErrorSeverity::Error,
                  "The world-cell quantization policy has invalid size, bounds, or LOD limits.",
