@@ -151,121 +151,116 @@ TEST_CASE("Render graph compilation gives unordered resource hazards a determini
     }
 }
 
-TEST_CASE("Render graph compilation rejects cycles and duplicate dependencies", "[runtime][renderer][render-graph]") {
-    SECTION("cycle") {
-        RenderGraphLimits limits{.maxPasses = 4, .maxResources = 1, .maxUsages = 1, .maxDependencies = 3};
-        RenderGraphBuilder builder = RequireBuilder(limits);
-        const auto first = builder.AddPass(RenderPassKind::Graphics, RenderQueueRole::Graphics);
-        const auto second = builder.AddPass(RenderPassKind::Graphics, RenderQueueRole::Graphics);
-        const auto third = builder.AddPass(RenderPassKind::Graphics, RenderQueueRole::Graphics);
-        const auto disconnected = builder.AddPass(RenderPassKind::Graphics, RenderQueueRole::Graphics);
-        REQUIRE(first.HasValue());
-        REQUIRE(second.HasValue());
-        REQUIRE(third.HasValue());
-        REQUIRE(disconnected.HasValue());
-        REQUIRE(builder.AddDependency({first.Value(), second.Value(), RenderGraphDependencyKind::ExecutionOrder}).HasValue());
-        REQUIRE(builder.AddDependency({second.Value(), third.Value(), RenderGraphDependencyKind::ResourceHazard}).HasValue());
-        REQUIRE(builder.AddDependency({third.Value(), first.Value(), RenderGraphDependencyKind::ExecutionOrder}).HasValue());
-        auto finalized = builder.Finalize();
-        REQUIRE(finalized.HasValue());
-        RenderGraph graph = std::move(finalized).Value();
-        const auto rejected = CompileRenderGraph(graph);
-        RequireError(rejected, "render.graph.dependency_cycle");
-        REQUIRE(rejected.ErrorValue().message.find("pass IDs 1 2 3") != std::string::npos);
-        REQUIRE(rejected.ErrorValue().message.find(" 4") == std::string::npos);
-    }
-
-    SECTION("duplicate edge") {
-        RenderGraphLimits limits{.maxPasses = 2, .maxResources = 1, .maxUsages = 1, .maxDependencies = 2};
-        RenderGraphBuilder builder = RequireBuilder(limits);
-        const auto first = builder.AddPass(RenderPassKind::Graphics, RenderQueueRole::Graphics);
-        const auto second = builder.AddPass(RenderPassKind::Graphics, RenderQueueRole::Graphics);
-        REQUIRE(first.HasValue());
-        REQUIRE(second.HasValue());
-        REQUIRE(builder.AddDependency({first.Value(), second.Value(), RenderGraphDependencyKind::ExecutionOrder}).HasValue());
-        REQUIRE(builder.AddDependency({first.Value(), second.Value(), RenderGraphDependencyKind::ExecutionOrder}).HasValue());
-        auto finalized = builder.Finalize();
-        REQUIRE(finalized.HasValue());
-        RenderGraph graph = std::move(finalized).Value();
-        const auto rejected = CompileRenderGraph(graph);
-        RequireError(rejected, "render.graph.dependency_invalid");
-        REQUIRE(rejected.ErrorValue().message.find("Pass 1 -> pass 2") != std::string::npos);
-    }
-
-    SECTION("different dependency reasons are preserved") {
-        RenderGraphLimits limits{.maxPasses = 2, .maxResources = 1, .maxUsages = 1, .maxDependencies = 2};
-        RenderGraphBuilder builder = RequireBuilder(limits);
-        const auto first = builder.AddPass(RenderPassKind::Graphics, RenderQueueRole::Graphics);
-        const auto second = builder.AddPass(RenderPassKind::Graphics, RenderQueueRole::Graphics);
-        REQUIRE(first.HasValue());
-        REQUIRE(second.HasValue());
-        REQUIRE(builder.AddDependency({first.Value(), second.Value(), RenderGraphDependencyKind::ExecutionOrder}).HasValue());
-        REQUIRE(builder.AddDependency({first.Value(), second.Value(), RenderGraphDependencyKind::ResourceHazard}).HasValue());
-        RenderGraph graph = RequireGraph(builder);
-        REQUIRE(graph.Dependencies().size() == 2);
-        REQUIRE(RequireSchedule(graph).OrderedPasses().size() == 2);
-    }
+TEST_CASE("Render graph compilation rejects disconnected dependency cycles", "[runtime][renderer][render-graph]") {
+    RenderGraphLimits limits{.maxPasses = 4, .maxResources = 1, .maxUsages = 1, .maxDependencies = 3};
+    RenderGraphBuilder builder = RequireBuilder(limits);
+    const auto first = builder.AddPass(RenderPassKind::Graphics, RenderQueueRole::Graphics);
+    const auto second = builder.AddPass(RenderPassKind::Graphics, RenderQueueRole::Graphics);
+    const auto third = builder.AddPass(RenderPassKind::Graphics, RenderQueueRole::Graphics);
+    const auto disconnected = builder.AddPass(RenderPassKind::Graphics, RenderQueueRole::Graphics);
+    REQUIRE(first.HasValue());
+    REQUIRE(second.HasValue());
+    REQUIRE(third.HasValue());
+    REQUIRE(disconnected.HasValue());
+    REQUIRE(builder.AddDependency({first.Value(), second.Value(), RenderGraphDependencyKind::ExecutionOrder}).HasValue());
+    REQUIRE(builder.AddDependency({second.Value(), third.Value(), RenderGraphDependencyKind::ResourceHazard}).HasValue());
+    REQUIRE(builder.AddDependency({third.Value(), first.Value(), RenderGraphDependencyKind::ExecutionOrder}).HasValue());
+    auto finalized = builder.Finalize();
+    REQUIRE(finalized.HasValue());
+    RenderGraph graph = std::move(finalized).Value();
+    const auto rejected = CompileRenderGraph(graph);
+    RequireError(rejected, "render.graph.dependency_cycle");
+    REQUIRE(rejected.ErrorValue().message.find("pass IDs 1 2 3") != std::string::npos);
+    REQUIRE(rejected.ErrorValue().message.find(" 4") == std::string::npos);
 }
 
-TEST_CASE("Render graph compilation validates transient initialization", "[runtime][renderer][render-graph]") {
-    SECTION("read before write") {
-        RenderGraphBuilder builder = RequireBuilder();
-        const auto reader = builder.AddPass(RenderPassKind::Compute, RenderQueueRole::Compute);
-        const auto transient = builder.AddTransientResource(RenderGraphResourceKind::Buffer);
-        REQUIRE(reader.HasValue());
-        REQUIRE(transient.HasValue());
-        REQUIRE(builder.AddUsage({reader.Value(), transient.Value(), RenderGraphAccess::Read, RenderGraphUsageKind::Storage}).HasValue());
-        auto finalized = builder.Finalize();
-        REQUIRE(finalized.HasValue());
-        RenderGraph graph = std::move(finalized).Value();
-        RequireError(CompileRenderGraph(graph), "render.graph.read_before_write");
-    }
+TEST_CASE("Render graph compilation rejects exact duplicate dependencies", "[runtime][renderer][render-graph]") {
+    RenderGraphLimits limits{.maxPasses = 2, .maxResources = 1, .maxUsages = 1, .maxDependencies = 2};
+    RenderGraphBuilder builder = RequireBuilder(limits);
+    const auto first = builder.AddPass(RenderPassKind::Graphics, RenderQueueRole::Graphics);
+    const auto second = builder.AddPass(RenderPassKind::Graphics, RenderQueueRole::Graphics);
+    REQUIRE(first.HasValue());
+    REQUIRE(second.HasValue());
+    REQUIRE(builder.AddDependency({first.Value(), second.Value(), RenderGraphDependencyKind::ExecutionOrder}).HasValue());
+    REQUIRE(builder.AddDependency({first.Value(), second.Value(), RenderGraphDependencyKind::ExecutionOrder}).HasValue());
+    auto finalized = builder.Finalize();
+    REQUIRE(finalized.HasValue());
+    RenderGraph graph = std::move(finalized).Value();
+    const auto rejected = CompileRenderGraph(graph);
+    RequireError(rejected, "render.graph.dependency_invalid");
+    REQUIRE(rejected.ErrorValue().message.find("Pass 1 -> pass 2") != std::string::npos);
+}
 
-    SECTION("imported content defers exact initial-state validation") {
-        RenderGraphBuilder builder = RequireBuilder();
-        const auto reader = builder.AddPass(RenderPassKind::Compute, RenderQueueRole::Compute);
-        const auto imported = builder.ImportBuffer(BufferHandle(), RenderGraphResourceClass::Persistent);
-        REQUIRE(reader.HasValue());
-        REQUIRE(imported.HasValue());
-        REQUIRE(builder.AddUsage({reader.Value(), imported.Value(), RenderGraphAccess::Read, RenderGraphUsageKind::Storage}).HasValue());
-        auto finalized = builder.Finalize();
-        REQUIRE(finalized.HasValue());
-        RenderGraph graph = std::move(finalized).Value();
-        auto compiled = CompileRenderGraph(graph);
-        REQUIRE(compiled.HasValue());
-        REQUIRE(compiled.Value().OrderedPasses().size() == 1);
-    }
+TEST_CASE("Render graph compilation preserves different dependency reasons", "[runtime][renderer][render-graph]") {
+    RenderGraphLimits limits{.maxPasses = 2, .maxResources = 1, .maxUsages = 1, .maxDependencies = 2};
+    RenderGraphBuilder builder = RequireBuilder(limits);
+    const auto first = builder.AddPass(RenderPassKind::Graphics, RenderQueueRole::Graphics);
+    const auto second = builder.AddPass(RenderPassKind::Graphics, RenderQueueRole::Graphics);
+    REQUIRE(first.HasValue());
+    REQUIRE(second.HasValue());
+    REQUIRE(builder.AddDependency({first.Value(), second.Value(), RenderGraphDependencyKind::ExecutionOrder}).HasValue());
+    REQUIRE(builder.AddDependency({first.Value(), second.Value(), RenderGraphDependencyKind::ResourceHazard}).HasValue());
+    RenderGraph graph = RequireGraph(builder);
+    REQUIRE(graph.Dependencies().size() == 2);
+    REQUIRE(RequireSchedule(graph).OrderedPasses().size() == 2);
+}
 
-    SECTION("dependency order cannot move a producer after its reader") {
-        RenderGraphLimits limits{.maxPasses = 2, .maxResources = 1, .maxUsages = 2, .maxDependencies = 1};
-        RenderGraphBuilder builder = RequireBuilder(limits);
-        const auto reader = builder.AddPass(RenderPassKind::Compute, RenderQueueRole::Compute);
-        const auto producer = builder.AddPass(RenderPassKind::Compute, RenderQueueRole::Compute);
-        const auto transient = builder.AddTransientResource(RenderGraphResourceKind::Buffer);
-        REQUIRE(reader.HasValue());
-        REQUIRE(producer.HasValue());
-        REQUIRE(transient.HasValue());
-        REQUIRE(builder.AddUsage({reader.Value(), transient.Value(), RenderGraphAccess::Read, RenderGraphUsageKind::Storage}).HasValue());
-        REQUIRE(
-            builder.AddUsage({producer.Value(), transient.Value(), RenderGraphAccess::Write, RenderGraphUsageKind::Storage}).HasValue());
-        REQUIRE(builder.AddDependency({reader.Value(), producer.Value(), RenderGraphDependencyKind::ExecutionOrder}).HasValue());
-        auto finalized = builder.Finalize();
-        REQUIRE(finalized.HasValue());
-        RenderGraph graph = std::move(finalized).Value();
-        RequireError(CompileRenderGraph(graph), "render.graph.read_before_write");
-    }
+TEST_CASE("Render graph compilation rejects transient reads without a writer", "[runtime][renderer][render-graph]") {
+    RenderGraphBuilder builder = RequireBuilder();
+    const auto reader = builder.AddPass(RenderPassKind::Compute, RenderQueueRole::Compute);
+    const auto transient = builder.AddTransientResource(RenderGraphResourceKind::Buffer);
+    REQUIRE(reader.HasValue());
+    REQUIRE(transient.HasValue());
+    REQUIRE(builder.AddUsage({reader.Value(), transient.Value(), RenderGraphAccess::Read, RenderGraphUsageKind::Storage}).HasValue());
+    auto finalized = builder.Finalize();
+    REQUIRE(finalized.HasValue());
+    RenderGraph graph = std::move(finalized).Value();
+    RequireError(CompileRenderGraph(graph), "render.graph.read_before_write");
+}
 
-    SECTION("exported transient data requires a writer") {
-        RenderGraphBuilder builder = RequireBuilder();
-        REQUIRE(builder.AddPass(RenderPassKind::Graphics, RenderQueueRole::Graphics).HasValue());
-        const auto transient = builder.AddTransientResource(RenderGraphResourceKind::Texture);
-        REQUIRE(transient.HasValue());
-        REQUIRE(builder.ExportResource(transient.Value()).HasValue());
-        auto finalized = builder.Finalize();
-        REQUIRE(finalized.HasValue());
-        RenderGraph graph = std::move(finalized).Value();
-        RequireError(CompileRenderGraph(graph), "render.graph.read_before_write");
-    }
+TEST_CASE("Render graph compilation defers imported initial-state validation", "[runtime][renderer][render-graph]") {
+    RenderGraphBuilder builder = RequireBuilder();
+    const auto reader = builder.AddPass(RenderPassKind::Compute, RenderQueueRole::Compute);
+    const auto imported = builder.ImportBuffer(BufferHandle(), RenderGraphResourceClass::Persistent);
+    REQUIRE(reader.HasValue());
+    REQUIRE(imported.HasValue());
+    REQUIRE(builder.AddUsage({reader.Value(), imported.Value(), RenderGraphAccess::Read, RenderGraphUsageKind::Storage}).HasValue());
+    auto finalized = builder.Finalize();
+    REQUIRE(finalized.HasValue());
+    RenderGraph graph = std::move(finalized).Value();
+    auto compiled = CompileRenderGraph(graph);
+    REQUIRE(compiled.HasValue());
+    REQUIRE(compiled.Value().OrderedPasses().size() == 1);
+}
+
+TEST_CASE("Render graph compilation rejects producers ordered after readers", "[runtime][renderer][render-graph]") {
+    RenderGraphLimits limits{.maxPasses = 2, .maxResources = 1, .maxUsages = 2, .maxDependencies = 1};
+    RenderGraphBuilder builder = RequireBuilder(limits);
+    const auto reader = builder.AddPass(RenderPassKind::Compute, RenderQueueRole::Compute);
+    const auto producer = builder.AddPass(RenderPassKind::Compute, RenderQueueRole::Compute);
+    const auto transient = builder.AddTransientResource(RenderGraphResourceKind::Buffer);
+    REQUIRE(reader.HasValue());
+    REQUIRE(producer.HasValue());
+    REQUIRE(transient.HasValue());
+    REQUIRE(builder.AddUsage({reader.Value(), transient.Value(), RenderGraphAccess::Read, RenderGraphUsageKind::Storage}).HasValue());
+    REQUIRE(builder.AddUsage({producer.Value(), transient.Value(), RenderGraphAccess::Write, RenderGraphUsageKind::Storage}).HasValue());
+    REQUIRE(builder.AddDependency({reader.Value(), producer.Value(), RenderGraphDependencyKind::ExecutionOrder}).HasValue());
+    auto finalized = builder.Finalize();
+    REQUIRE(finalized.HasValue());
+    RenderGraph graph = std::move(finalized).Value();
+    RequireError(CompileRenderGraph(graph), "render.graph.read_before_write");
+}
+
+TEST_CASE("Render graph compilation rejects unwritten transient exports", "[runtime][renderer][render-graph]") {
+    RenderGraphBuilder builder = RequireBuilder();
+    REQUIRE(builder.AddPass(RenderPassKind::Graphics, RenderQueueRole::Graphics).HasValue());
+    const auto transient = builder.AddTransientResource(RenderGraphResourceKind::Texture);
+    REQUIRE(transient.HasValue());
+    REQUIRE(builder.ExportResource(transient.Value()).HasValue());
+    auto finalized = builder.Finalize();
+    REQUIRE(finalized.HasValue());
+    RenderGraph graph = std::move(finalized).Value();
+    RequireError(CompileRenderGraph(graph), "render.graph.read_before_write");
 }
 
 TEST_CASE("Render graph compilation culls transitive unused transient work", "[runtime][renderer][render-graph]") {
