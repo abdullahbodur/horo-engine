@@ -280,6 +280,24 @@ save: its source scene/revision remains explicit and its storage leases keep it 
 PIE stop/session shutdown can still request cancellation before the durable commit
 gate. A capture not yet completed against its expected incarnation fails stale.
 
+`RuntimeSaveCaptureBuilder` is the public owner-safe-point coordinator for this cut. It
+invokes each core `ICanonicalStateAdapter` with an exact value-only
+`CanonicalCaptureContext` and a call-scoped host sink. The context exposes participant
+and operation bytes, record/segment capacity and the eager-copy ceiling before the
+adapter produces state. The sink may copy a small borrowed record into core-owned
+storage or admit an already immutable, concurrently readable segmented/COW payload
+lease; large state is not forced through one eager contiguous copy. Every retained
+payload is destroyed while its adapter/registry lease still pins module code.
+
+`Seal` requires every record of each required or participating optional capture owner,
+establishes canonical participant/record order, and returns `RuntimeSaveSnapshot` with
+an immutable manifest-facing participant projection. Descriptor-approved optional
+omission is explicit in that projection rather than inferred later by an encoder. The
+sealed snapshot exposes no participant adapter, so background encoding, cancellation
+cleanup and shutdown can observe only immutable payload segments and stable capture
+provenance. No borrowed span, mutable runtime pointer or module-owned container
+allocator crosses the safe-point boundary.
+
 ### Thumbnail Capture
 
 Thumbnail acquisition is a separate renderer-owned asynchronous readback request

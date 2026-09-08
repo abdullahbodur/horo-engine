@@ -15,6 +15,10 @@
 #include <vector>
 
 namespace Horo::Runtime {
+    struct CanonicalCaptureContext;
+    class ICanonicalCaptureSink;
+    enum class CanonicalCaptureDisposition : std::uint8_t;
+
     /** @brief Maximum participants admitted by one runtime-save registry generation. */
     inline constexpr std::size_t MaximumSaveParticipantCount = 256;
 
@@ -81,6 +85,15 @@ namespace Horo::Runtime {
     class ICanonicalStateAdapter {
     public:
         virtual ~ICanonicalStateAdapter() = default;
+
+        /**
+         * @brief Captures one coherent participant through a host-owned bounded sink.
+         * @param context Exact safe-point provenance and remaining admitted allocation budget.
+         * @param sink Call-scoped host sink; adapters must not retain it.
+         * @return Captured/omitted disposition or a typed participant failure.
+         */
+        [[nodiscard]] virtual Result<CanonicalCaptureDisposition> Capture(const CanonicalCaptureContext &context,
+                                                                          ICanonicalCaptureSink &sink) const = 0;
     };
 
     /** @brief One immutable descriptor and its owned adapter lease. */

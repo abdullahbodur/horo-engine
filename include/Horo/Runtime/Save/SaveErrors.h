@@ -38,6 +38,24 @@ namespace Horo::Runtime::SaveErrors {
     extern const ErrorCodeDescriptor ParticipantDependencyCycle;
     /** @brief The registry generation cannot advance without reusing a value. */
     extern const ErrorCodeDescriptor ParticipantRegistryGenerationExhausted;
+    /** @brief Capture evidence or operation bounds are missing, zero, or outside qualified maxima. */
+    extern const ErrorCodeDescriptor CaptureContextInvalid;
+    /** @brief The capture request does not address the exact pinned participant registry generation. */
+    extern const ErrorCodeDescriptor CaptureRegistryStale;
+    /** @brief A captured record has an unknown owner, mismatched schema, role, or record identity. */
+    extern const ErrorCodeDescriptor CaptureRecordInvalid;
+    /** @brief A participant or operation-wide capture payload/count bound would be exceeded. */
+    extern const ErrorCodeDescriptor CaptureBudgetExceeded;
+    /** @brief One stable canonical record was supplied more than once to a capture. */
+    extern const ErrorCodeDescriptor CaptureRecordDuplicate;
+    /** @brief Required or partially supplied participant records are missing at snapshot seal. */
+    extern const ErrorCodeDescriptor CaptureIncomplete;
+    /** @brief A sealed capture builder was reused after immutable publication. */
+    extern const ErrorCodeDescriptor CaptureAlreadySealed;
+    /** @brief Host-owned capture bookkeeping or copied payload storage could not be allocated. */
+    extern const ErrorCodeDescriptor CaptureAllocationFailed;
+    /** @brief A participant violated the scoped sink, omission, or one-shot capture contract. */
+    extern const ErrorCodeDescriptor CaptureAdapterContractInvalid;
     /** @brief Save header JSON was malformed, noncanonical, or had an invalid exact shape. */
     extern const ErrorCodeDescriptor ArchiveHeaderInvalid;
     /** @brief Save manifest JSON was malformed, noncanonical, duplicated, or out of order. */
