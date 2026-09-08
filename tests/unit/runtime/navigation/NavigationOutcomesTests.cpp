@@ -222,14 +222,26 @@ namespace Horo::Navigation {
 
         TEST_CASE("Navigation error descriptors keep admission and terminal identities distinct", "[navigation][error]") {
             const std::array descriptors{
-                &NavigationErrors::IdentityInvalid,       &NavigationErrors::InvalidHandle,
-                &NavigationErrors::GenerationExhausted,   &NavigationErrors::CapabilityDescriptorInvalid,
-                &NavigationErrors::CapabilityStale,       &NavigationErrors::OperationUnsupported,
-                &NavigationErrors::CapabilityUnavailable, &NavigationErrors::QueryLimitExceeded,
-                &NavigationErrors::AdmissionRejected,     &NavigationErrors::QueryCancelled,
-                &NavigationErrors::StaleSnapshot,         &NavigationErrors::NoNavigationData,
-                &NavigationErrors::ProviderFailed,        &NavigationErrors::OutcomeDescriptorInvalid,
-                &NavigationErrors::InvalidWorld,          &NavigationErrors::CapacityExceeded,
+                &NavigationErrors::IdentityInvalid,
+                &NavigationErrors::InvalidHandle,
+                &NavigationErrors::GenerationExhausted,
+                &NavigationErrors::CapabilityDescriptorInvalid,
+                &NavigationErrors::CapabilityStale,
+                &NavigationErrors::OperationUnsupported,
+                &NavigationErrors::CapabilityUnavailable,
+                &NavigationErrors::QueryLimitExceeded,
+                &NavigationErrors::AdmissionRejected,
+                &NavigationErrors::QueryCancelled,
+                &NavigationErrors::StaleSnapshot,
+                &NavigationErrors::NoNavigationData,
+                &NavigationErrors::ProviderFailed,
+                &NavigationErrors::OutcomeDescriptorInvalid,
+                &NavigationErrors::InvalidWorld,
+                &NavigationErrors::CapacityExceeded,
+                &NavigationErrors::SourceGeometryInvalid,
+                &NavigationErrors::SourceGeometryUnsupported,
+                &NavigationErrors::SourceGeometryCapacityExceeded,
+                &NavigationErrors::SourceGeometryStale,
             };
             for (std::size_t first = 0; first < descriptors.size(); ++first) {
                 REQUIRE(descriptors[first]->domain.Value() == "horo.navigation");

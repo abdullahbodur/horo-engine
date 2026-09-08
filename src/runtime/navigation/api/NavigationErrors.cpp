@@ -213,4 +213,42 @@ namespace Horo::Navigation::NavigationErrors {
         .retryable = false,
         .userActionable = true,
     };
+    const ErrorCodeDescriptor SourceGeometryInvalid{
+        .domain = NavigationDomain,
+        .code = ErrorCode{"navigation.source_geometry.invalid"},
+        .defaultSeverity = ErrorSeverity::Error,
+        .summary = "A navigation bake-source geometry snapshot is invalid.",
+        .remediationHint = "Provide stable identities, finite canonical transforms and vertices, valid non-degenerate indexed triangles, "
+                           "and positive bounds.",
+        .retryable = false,
+        .userActionable = true,
+    };
+    const ErrorCodeDescriptor SourceGeometryUnsupported{
+        .domain = NavigationDomain,
+        .code = ErrorCode{"navigation.source_geometry.unsupported"},
+        .defaultSeverity = ErrorSeverity::Error,
+        .summary = "The navigation geometry producer kind is unsupported.",
+        .remediationHint =
+            "Use a canonical static collider, terrain, procedural-generation, or explicitly approved custom producer snapshot.",
+        .retryable = false,
+        .userActionable = true,
+    };
+    const ErrorCodeDescriptor SourceGeometryCapacityExceeded{
+        .domain = NavigationDomain,
+        .code = ErrorCode{"navigation.source_geometry.capacity_exceeded"},
+        .defaultSeverity = ErrorSeverity::Error,
+        .summary = "Navigation source geometry exceeds a qualified capture bound.",
+        .remediationHint = "Reduce the bake scope or use a qualified lower-detail canonical source without truncating geometry.",
+        .retryable = false,
+        .userActionable = true,
+    };
+    const ErrorCodeDescriptor SourceGeometryStale{
+        .domain = NavigationDomain,
+        .code = ErrorCode{"navigation.source_geometry.stale"},
+        .defaultSeverity = ErrorSeverity::Warning,
+        .summary = "Navigation source geometry changed after immutable capture.",
+        .remediationHint = "Capture a new complete geometry snapshot before continuing or publishing the bake attempt.",
+        .retryable = true,
+        .userActionable = false,
+    };
 }  // namespace Horo::Navigation::NavigationErrors
