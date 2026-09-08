@@ -14,6 +14,14 @@ namespace Horo::WorldStreaming::WorldStreamingErrors {
     extern const ErrorCodeDescriptor SerializedIdentityInvalid;
     /** @brief A partition epoch, cell-attempt generation, runtime-source revision, or authoring-page revision cannot advance. */
     extern const ErrorCodeDescriptor GenerationExhausted;
+    /** @brief A cell operation has a malformed identity, fence, or initial representation. */
+    extern const ErrorCodeDescriptor CellOperationInvalid;
+    /** @brief A completion or command does not name the exact cell operation and fence. */
+    extern const ErrorCodeDescriptor CellOperationStale;
+    /** @brief A cell operation transition value is unknown to this contract version. */
+    extern const ErrorCodeDescriptor CellOperationUnsupported;
+    /** @brief A known cell operation transition is not legal from the current phase. */
+    extern const ErrorCodeDescriptor CellOperationTransitionInvalid;
     /** @brief A world-cell grid has zero/overflowing cell size, inverted bounds, or no LODs. */
     extern const ErrorCodeDescriptor QuantizationPolicyInvalid;
     /** @brief A coordinate cannot be translated relative to the grid origin without signed overflow. */

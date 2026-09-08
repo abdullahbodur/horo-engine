@@ -267,6 +267,7 @@ horo_register_catch_test(HoroNavigationApiTests LABELS "unit;navigation;headless
 
 add_executable(HoroWorldStreamingTests
         unit/runtime/world_streaming/CookedWorldIndexManifestTests.cpp
+        unit/runtime/world_streaming/StreamingCellOperationTests.cpp
         unit/runtime/world_streaming/WorldDependencyPlanTests.cpp
         unit/runtime/world_streaming/WorldAuthoringContractTests.cpp
         unit/runtime/world_streaming/StreamingDesiredStateTests.cpp

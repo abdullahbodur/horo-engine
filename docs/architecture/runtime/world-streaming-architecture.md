@@ -264,6 +264,16 @@ reservation or raw entity dependency.
 
 There are five normal states plus Failed, six enum values in total:
 
+Cell-operation execution is a separate, fenced transaction state and does not
+duplicate the canonical residency state below. Every operation owns a non-zero
+operation identity plus its exact `StreamingFence` and progresses through Queued,
+Admitted, Preparing, Activating, Retiring, and Terminal phases. Cancellation,
+failure, replacement, or shutdown before admission may terminate directly because
+no work or resources were accepted. Once admitted, those requests enter Retiring;
+their terminal disposition is published only after the matching operation and fence
+receive retirement acknowledgement. Stale publication remains rejected while an old
+retiring attempt can still accept its own exact acknowledgement and reclaim resources.
+
 ```cpp
 enum class StreamingCellState : uint8_t {
     Unloaded, Loading, Resident, Active, Evicting, Failed
