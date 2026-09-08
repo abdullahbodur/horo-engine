@@ -59,6 +59,22 @@ namespace {
         const std::array requirements{RenderGraphTransientRequirement{texture, TextureDescriptor(format)}};
         RequireError(CompileRenderGraphLifetimePlan(graph, schedule, requirements), "render.graph.lifetime.descriptor_invalid");
     }
+
+    struct SingleBufferPlanFixture {
+        RenderGraph graph;
+        RenderGraphSchedule schedule;
+        RenderGraphLifetimePlan plan;
+    };
+
+    SingleBufferPlanFixture CompileSingleBufferPlan(RenderGraphBuilder &builder, const RenderGraphPassRef pass,
+                                                    const RenderGraphResourceId resource) {
+        RequireUsage(builder, {pass, resource, RenderGraphAccess::Write, RenderGraphUsageKind::Storage});
+        RenderGraph graph = RequireGraph(builder);
+        RenderGraphSchedule schedule = RequireSchedule(graph);
+        const std::array requirements{RenderGraphTransientRequirement{resource, BufferDescriptor()}};
+        RenderGraphLifetimePlan plan = RequireLifetimePlan(graph, schedule, requirements);
+        return {std::move(graph), std::move(schedule), std::move(plan)};
+    }
 }  // namespace
 
 TEST_CASE("Render graph lifetime plan records retained first and last uses", "[runtime][renderer][render-graph][lifetime]") {
@@ -98,18 +114,13 @@ TEST_CASE("Render graph lifetime plan excludes culled-only transient uses", "[ru
     const auto culled =
         RequirePass(builder, RenderPassKind::Compute, RenderQueueRole::Compute, RenderGraphPassCullPolicy::AllowCullIfOutputsUnused);
     const auto transient = RequireResource(builder.AddTransientResource(RenderGraphResourceKind::Buffer));
-    RequireUsage(builder, {culled, transient, RenderGraphAccess::Write, RenderGraphUsageKind::Storage});
+    SingleBufferPlanFixture fixture = CompileSingleBufferPlan(builder, culled, transient);
 
-    RenderGraph graph = RequireGraph(builder);
-    RenderGraphSchedule schedule = RequireSchedule(graph);
-    const std::array requirements{RenderGraphTransientRequirement{transient, BufferDescriptor()}};
-    RenderGraphLifetimePlan plan = RequireLifetimePlan(graph, schedule, requirements);
-
-    REQUIRE(schedule.OrderedPasses().empty());
-    REQUIRE(Lifetime(plan, transient).disposition == RenderGraphLifetimeDisposition::Unused);
-    REQUIRE_FALSE(Lifetime(plan, transient).firstPass.IsValid());
-    REQUIRE(plan.AllocationRequirements().empty());
-    REQUIRE(plan.AliasOpportunities().empty());
+    REQUIRE(fixture.schedule.OrderedPasses().empty());
+    REQUIRE(Lifetime(fixture.plan, transient).disposition == RenderGraphLifetimeDisposition::Unused);
+    REQUIRE_FALSE(Lifetime(fixture.plan, transient).firstPass.IsValid());
+    REQUIRE(fixture.plan.AllocationRequirements().empty());
+    REQUIRE(fixture.plan.AliasOpportunities().empty());
 }
 
 TEST_CASE("Render graph lifetime plan assigns deterministic compatible alias slots", "[runtime][renderer][render-graph][lifetime]") {
@@ -318,14 +329,11 @@ TEST_CASE("Render graph lifetime plan has explicit move-only ownership", "[runti
     RenderGraphBuilder builder = RequireBuilder();
     const auto transient = RequireResource(builder.AddTransientResource(RenderGraphResourceKind::Buffer));
     const auto pass = RequirePass(builder, RenderPassKind::Compute, RenderQueueRole::Compute);
-    RequireUsage(builder, {pass, transient, RenderGraphAccess::Write, RenderGraphUsageKind::Storage});
-    RenderGraph graph = RequireGraph(builder);
-    RenderGraphSchedule schedule = RequireSchedule(graph);
-    const std::array requirements{RenderGraphTransientRequirement{transient, BufferDescriptor()}};
-    RenderGraphLifetimePlan plan = RequireLifetimePlan(graph, schedule, requirements);
+    SingleBufferPlanFixture fixture = CompileSingleBufferPlan(builder, pass, transient);
+    RenderGraphLifetimePlan plan{std::move(fixture.plan)};
     RenderGraphLifetimePlan moved{std::move(plan)};
     REQUIRE_FALSE(plan.Owner().IsValid());
-    REQUIRE(moved.Owner() == graph.Owner());
+    REQUIRE(moved.Owner() == fixture.graph.Owner());
     REQUIRE(moved.AllocationRequirements().size() == 1);
 }
 
