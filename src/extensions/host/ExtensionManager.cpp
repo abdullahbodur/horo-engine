@@ -129,7 +129,7 @@ namespace Horo::Extensions {
         }
 
         void CanonicalizeHostCapabilities(std::vector<std::string> &capabilities) {
-            std::erase_if(capabilities, [](const std::string &capability) {
+            std::erase_if(capabilities, [](const std::string_view capability) {
                 return capability.empty() || capability.size() > kManifestLimits.maximumIdentifierBytes;
             });
             std::ranges::sort(capabilities);
