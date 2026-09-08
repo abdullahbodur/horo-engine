@@ -657,7 +657,14 @@ namespace Horo::Editor::Ui {
     [[nodiscard]] TextEditResult DrawEditableObjTitle(const char *id, std::string &value, size_t maximumBytes,
                                                       const EditableObjectTitleBadge &badge, const Theme::Fonts &fonts, bool error = false);
 
-    bool DrawPropSection(const char *label, const Theme::Fonts &fonts, bool removable = false);
+    /**
+     * @brief Draws an Inspector component header and optional localized removal menu.
+     * @param label Localized component title and stable ImGui identity.
+     * @param fonts Editor typography handles.
+     * @param removeLabel Localized removal action, or null when the component is not removable.
+     * @return True when the removal action was selected.
+     */
+    bool DrawPropSection(const char *label, const Theme::Fonts &fonts, const char *removeLabel = nullptr);
     void DrawPropRow(const char *label, const char *value, const Theme::Fonts &fonts);
 
     /** @brief Semantic text tone for shared context-menu actions. */

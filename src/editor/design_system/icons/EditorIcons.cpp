@@ -71,6 +71,38 @@ namespace Horo::Editor::Ui {
             context.drawList.AddLine({x + 6.0F, y + 1.0F}, {x + w - 6.0F, y + 1.0F}, context.color, 1.3F);
         }
 
+        void DrawResetIcon(const IconDrawContext &context) {
+            const ImVec2 center = context.Center();
+            const float radius = std::min(context.size.x, context.size.y) * 0.34F;
+            context.drawList.PathClear();
+            context.drawList.PathArcTo(center, radius, -0.35F * std::numbers::pi_v<float>, 1.55F * std::numbers::pi_v<float>, 18);
+            context.drawList.PathStroke(context.color, 0, 1.4F);
+            context.drawList.AddTriangleFilled({center.x - radius - 1.0F, center.y - 1.0F}, {center.x - radius + 4.0F, center.y - 4.0F},
+                                               {center.x - radius + 4.0F, center.y + 2.0F}, context.color);
+        }
+
+        void DrawCheckIcon(const IconDrawContext &context) {
+            const auto [x, y] = context.position;
+            const auto [w, h] = context.size;
+            context.drawList.AddRect({x + 1.5F, y + 1.5F}, {x + w - 1.5F, y + h - 1.5F}, context.color, 1.5F, 0, 1.3F);
+            context.drawList.AddLine({x + 4.0F, y + h * 0.52F}, {x + w * 0.43F, y + h - 4.0F}, context.color, 1.4F);
+            context.drawList.AddLine({x + w * 0.43F, y + h - 4.0F}, {x + w - 3.5F, y + 4.0F}, context.color, 1.4F);
+        }
+
+        void DrawSettingsIcon(const IconDrawContext &context) {
+            const ImVec2 center = context.Center();
+            const float radius = std::min(context.size.x, context.size.y) * 0.25F;
+            context.drawList.AddCircle(center, radius, context.color, 16, 1.3F);
+            context.drawList.AddCircleFilled(center, std::max(1.0F, radius * 0.28F), context.color, 10);
+            for (int tooth = 0; tooth < 8; ++tooth) {
+                const float angle = static_cast<float>(tooth) * std::numbers::pi_v<float> * 0.25F;
+                const ImVec2 direction{std::cos(angle), std::sin(angle)};
+                context.drawList.AddLine({center.x + direction.x * radius * 1.25F, center.y + direction.y * radius * 1.25F},
+                                         {center.x + direction.x * radius * 1.75F, center.y + direction.y * radius * 1.75F}, context.color,
+                                         1.4F);
+            }
+        }
+
         void DrawVisibilityIcon(const IconDrawContext &context, const bool crossedOut) {
             const ImVec2 center = context.Center();
             const float glyphSize = std::min(context.size.x, context.size.y);
@@ -256,6 +288,9 @@ namespace Horo::Editor::Ui {
             IconDescriptor{"action.rename", DrawRenameIcon},
             IconDescriptor{"action.duplicate", DrawDuplicateIcon},
             IconDescriptor{"action.delete", DrawDeleteIcon},
+            IconDescriptor{"action.reset", DrawResetIcon},
+            IconDescriptor{"action.check", DrawCheckIcon},
+            IconDescriptor{"action.settings", DrawSettingsIcon},
             IconDescriptor{"action.visibility", DrawVisibilityOnIcon},
             IconDescriptor{"action.visibility_off", DrawVisibilityOffIcon},
             IconDescriptor{"action.lock", DrawLockIcon},

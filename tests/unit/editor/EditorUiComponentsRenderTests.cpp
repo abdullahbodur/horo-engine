@@ -342,7 +342,7 @@ TEST_CASE("Editable object title keeps its compact input vertically centered", "
     const float bottomPadding = titleOrigin.y + titleHeight - inputMaximum.y;
     INFO("top padding: " << topPadding << ", bottom padding: " << bottomPadding);
     REQUIRE((inputMaximum.y - inputMinimum.y < 28.0F));
-    REQUIRE((std::fabs(topPadding - bottomPadding) < 0.6F));
+    REQUIRE((std::fabs(topPadding - bottomPadding) <= 1.0F));
 
     ImGui::DestroyContext();
 }

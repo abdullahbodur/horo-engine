@@ -106,6 +106,51 @@ namespace Horo::Editor::Theme {
         return {0.0F, 0.0F, 0.0F, 0.55F};
     }
 
+    /** @brief Blends two theme colors without escaping the active palette. */
+    [[nodiscard]] inline ImVec4 Mix(const ImVec4 &from, const ImVec4 &to, const float amount) {
+        return {
+            from.x + (to.x - from.x) * amount,
+            from.y + (to.y - from.y) * amount,
+            from.z + (to.z - from.z) * amount,
+            from.w + (to.w - from.w) * amount,
+        };
+    }
+
+    /** @brief Returns the subtly accent-cooled Inspector card surface. */
+    [[nodiscard]] inline ImVec4 InspectorCardSurface() {
+        return Mix(Bg1(), Accent(), 0.025F);
+    }
+
+    /** @brief Returns the raised Inspector component-header surface. */
+    [[nodiscard]] inline ImVec4 InspectorHeaderSurface() {
+        return Mix(Bg2(), Accent(), 0.03F);
+    }
+
+    /** @brief Returns the Inspector field surface between window and raised tiers. */
+    [[nodiscard]] inline ImVec4 InspectorFieldSurface() {
+        return Mix(Mix(Bg1(), Bg3(), 0.55F), Accent(), 0.025F);
+    }
+
+    /** @brief Returns the slightly deeper object-name field surface used above Inspector cards. */
+    [[nodiscard]] inline ImVec4 InspectorTitleFieldSurface() {
+        return Mix(Mix(Bg1(), Bg3(), 0.4F), Accent(), 0.02F);
+    }
+
+    /** @brief Returns the cool side-dock border treatment used by Inspector cards and fields. */
+    [[nodiscard]] inline ImVec4 InspectorBorder() {
+        return Mix(Border(), Accent(), 0.02F);
+    }
+
+    /** @brief Returns the compact editor-menu surface used by root and nested popups. */
+    [[nodiscard]] inline ImVec4 MenuSurface() {
+        return Mix(Bg1(), Accent(), 0.015F);
+    }
+
+    /** @brief Returns the stronger cool border used around editor-menu popups. */
+    [[nodiscard]] inline ImVec4 MenuBorder() {
+        return Mix(BorderStrong(), Accent(), 0.03F);
+    }
+
     [[nodiscard]] inline ImU32 U32(const ImVec4 &c) {
         return ImGui::GetColorU32(c);
     }

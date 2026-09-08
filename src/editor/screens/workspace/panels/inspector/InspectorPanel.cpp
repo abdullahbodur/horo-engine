@@ -150,9 +150,10 @@ namespace Horo::Editor {
             explicit InspectorCard(const char *id) {
                 ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, {0.0F, 0.0F});
                 ImGui::PushStyleVar(ImGuiStyleVar_ChildRounding, 5.0F);
-                ImGui::PushStyleColor(ImGuiCol_ChildBg, Theme::Bg1());
-                ImGui::BeginChild(id, {0.0F, 0.0F}, ImGuiChildFlags_Borders | ImGuiChildFlags_AutoResizeY |
-                                                           ImGuiChildFlags_AlwaysAutoResize,
+                ImGui::PushStyleColor(ImGuiCol_ChildBg, Theme::InspectorCardSurface());
+                ImGui::PushStyleColor(ImGuiCol_Border, Theme::InspectorBorder());
+                ImGui::BeginChild(id, {0.0F, 0.0F},
+                                  ImGuiChildFlags_Borders | ImGuiChildFlags_AutoResizeY | ImGuiChildFlags_AlwaysAutoResize,
                                   ImGuiWindowFlags_NoScrollbar);
             }
 
@@ -163,18 +164,27 @@ namespace Horo::Editor {
             InspectorCard(const InspectorCard &) = delete;
             InspectorCard &operator=(const InspectorCard &) = delete;
 
+            void BeginBody() {
+                if (!bodyOpen_) {
+                    ImGui::SetCursorPosY(ImGui::GetCursorPosY() + 7.0F);
+                    bodyOpen_ = true;
+                }
+            }
+
             void Finish() {
                 if (!open_)
                     return;
+                if (bodyOpen_)
+                    ImGui::SetCursorPosY(ImGui::GetCursorPosY() + 7.0F);
                 ImGui::EndChild();
-                ImGui::PopStyleColor();
+                ImGui::PopStyleColor(2);
                 ImGui::PopStyleVar(2);
-                ImGui::SetCursorPosY(ImGui::GetCursorPosY() + 4.0F);
                 open_ = false;
             }
 
         private:
             bool open_{true};
+            bool bodyOpen_{false};
         };
     }  // namespace
 
@@ -370,7 +380,9 @@ namespace Horo::Editor {
             bool removeRequested = false;
             {
                 InspectorCard card("##BehaviorCard");
-                removeRequested = Ui::DrawPropSection(sectionLabel.c_str(), context.theme.fonts, true);
+                removeRequested = Ui::DrawPropSection(sectionLabel.c_str(), context.theme.fonts,
+                                                      context.localization.Get("editor", "workspace.inspector.remove_component").c_str());
+                card.BeginBody();
                 if (int enabled = edited.enabled ? 1 : 0;
                     Ui::DrawComboPropRow(context.localization.Get("editor", "workspace.inspector.behavior_enabled").c_str(), "enabled",
                                          enabled, enabledEntries, context.theme.fonts)) {
@@ -443,6 +455,7 @@ namespace Horo::Editor {
         {
             InspectorCard card("##TransformCard");
             Ui::DrawPropSection(context.localization.Get("editor", "workspace.inspector.transform").c_str(), context.theme.fonts);
+            card.BeginBody();
             position = Ui::DrawFloat3PropRow(context.localization.Get("editor", "workspace.inspector.position").c_str(), "position",
                                              draft.position, context.theme.fonts, 0.05F, draft.mixed.position);
             rotation = Ui::DrawFloat3PropRow(context.localization.Get("editor", "workspace.inspector.rotation").c_str(), "rotation",
@@ -470,8 +483,10 @@ namespace Horo::Editor {
             return {};
 
         InspectorCard card("##CameraCard");
-        const bool removeRequested = Ui::DrawPropSection(context.localization.Get("editor", "workspace.inspector.camera").c_str(),
-                                                         context.theme.fonts, true);
+        const bool removeRequested =
+            Ui::DrawPropSection(context.localization.Get("editor", "workspace.inspector.camera").c_str(), context.theme.fonts,
+                                context.localization.Get("editor", "workspace.inspector.remove_component").c_str());
+        card.BeginBody();
 
         const std::array<const char *, 2> projectionEntries{
             context.localization.Get("editor", "workspace.inspector.camera_projection_perspective").c_str(),
@@ -530,7 +545,9 @@ namespace Horo::Editor {
 
         InspectorCard card("##LightCard");
         const bool removeRequested =
-            Ui::DrawPropSection(context.localization.Get("editor", "workspace.inspector.light").c_str(), context.theme.fonts, true);
+            Ui::DrawPropSection(context.localization.Get("editor", "workspace.inspector.light").c_str(), context.theme.fonts,
+                                context.localization.Get("editor", "workspace.inspector.remove_component").c_str());
+        card.BeginBody();
 
         const std::array<const char *, 3> kindEntries{
             context.localization.Get("editor", "workspace.inspector.light_kind_directional").c_str(),
@@ -640,8 +657,10 @@ namespace Horo::Editor {
             return {};
 
         InspectorCard card("##TriggerVolumeCard");
-        const bool removeRequested = Ui::DrawPropSection(context.localization.Get("editor", "workspace.inspector.trigger_volume").c_str(),
-                                                         context.theme.fonts, true);
+        const bool removeRequested =
+            Ui::DrawPropSection(context.localization.Get("editor", "workspace.inspector.trigger_volume").c_str(), context.theme.fonts,
+                                context.localization.Get("editor", "workspace.inspector.remove_component").c_str());
+        card.BeginBody();
 
         const std::array<const char *, 4> shapeEntries{
             context.localization.Get("editor", "workspace.inspector.trigger_volume_shape_box").c_str(),
@@ -667,7 +686,9 @@ namespace Horo::Editor {
 
         InspectorCard card("##AudioSourceCard");
         const bool removeRequested =
-            Ui::DrawPropSection(context.localization.Get("editor", "workspace.inspector.audio_source").c_str(), context.theme.fonts, true);
+            Ui::DrawPropSection(context.localization.Get("editor", "workspace.inspector.audio_source").c_str(), context.theme.fonts,
+                                context.localization.Get("editor", "workspace.inspector.remove_component").c_str());
+        card.BeginBody();
 
         const std::array<const char *, 2> kindEntries{
             context.localization.Get("editor", "workspace.inspector.audio_source_kind_native_clip").c_str(),

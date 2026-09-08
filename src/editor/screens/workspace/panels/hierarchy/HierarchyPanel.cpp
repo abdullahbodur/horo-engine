@@ -852,9 +852,9 @@ namespace Horo::Editor {
             ImGui::OpenPopup("##HierarchyCreatePopup");
         if (toolbar.focusSearchPressed)
             requestSearchFocus_ = true;
-        if (ImGui::BeginPopup("##HierarchyCreatePopup")) {
+        if (Ui::BeginMenuPopup("##HierarchyCreatePopup")) {
             DrawCreateMenuItems(GetPrimitiveCreateMenuItems(), std::nullopt, cmd, ctx);
-            ImGui::EndPopup();
+            Ui::EndMenuPopup();
         }
 
         const PanelInteractionState interaction = DrawSearch(size.x, uiScale, ctx);
