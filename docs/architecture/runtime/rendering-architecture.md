@@ -1390,6 +1390,24 @@ ambient registry effects. Dependency DAG validation, read-before-write validatio
 cycle detection, pass culling, lifetime compilation, barrier synthesis, and backend
 translation remain separate render-graph delivery stages.
 
+The validation stage is a synchronous, backend-neutral compile over immutable graph
+metadata and is bounded by the graph's admitted capacities. It rejects exact duplicate
+dependency records while preserving distinct dependency reasons for the same endpoints,
+cycles (including disconnected cycles), and transient reads without an ordered producer.
+Imported resources are treated as initialized only for this coarse graph stage; exact
+initial-state and generation evidence is deliberately deferred to ADR-175 state/hazard
+synthesis and is not claimed by this schedule.
+Stable topological ordering uses authoring order to break dependency ties, producing a
+total schedule even when resource users have no authored dependency path. That total
+order is the input to ADR-175 hazard synthesis: RAW, WAR, and WAW transitions are derived
+there, so authors do not duplicate resource hazards merely to make ordering deterministic.
+Culling is opt-in per pass. The default conservative policy retains the pass regardless of
+its declared writes; only a pass explicitly marked cullable may be removed when its
+transient outputs cannot affect an export, imported-resource mutation, external
+synchronization, or another retained pass. Producer and explicit predecessor closure is
+retained. The owning schedule records retained passes in dependency order and a typed
+authoring-order disposition/reason for every pass without borrowing graph storage.
+
 The graph:
 
 - validates read-before-write and cycles

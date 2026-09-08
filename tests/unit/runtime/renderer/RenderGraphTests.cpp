@@ -36,6 +36,7 @@ namespace {
         REQUIRE(created.HasValue());
         return std::move(created).Value();
     }
+
 }  // namespace
 
 TEST_CASE("Render graph records retain backend-neutral typed identities", "[runtime][renderer][render-graph]") {
@@ -76,18 +77,22 @@ TEST_CASE("Render graph errors expose stable actionable identities", "[runtime][
         &RenderGraphErrors::AllocationFailed,
         &RenderGraphErrors::BuilderClosed,
         &RenderGraphErrors::CapacityExceeded,
+        &RenderGraphErrors::DependencyCycle,
         &RenderGraphErrors::EmptyGraph,
         &RenderGraphErrors::IncompatibleQueue,
         &RenderGraphErrors::InvalidDependency,
         &RenderGraphErrors::InvalidExport,
+        &RenderGraphErrors::InvalidGraph,
         &RenderGraphErrors::InvalidImport,
         &RenderGraphErrors::InvalidLimits,
         &RenderGraphErrors::InvalidPass,
         &RenderGraphErrors::InvalidResource,
         &RenderGraphErrors::InvalidUsage,
         &RenderGraphErrors::OwnerExhausted,
+        &RenderGraphErrors::ReadBeforeWrite,
         &RenderGraphErrors::UnsupportedDependencyKind,
         &RenderGraphErrors::UnsupportedPassKind,
+        &RenderGraphErrors::UnsupportedPassCullPolicy,
         &RenderGraphErrors::UnsupportedQueueRole,
         &RenderGraphErrors::UnsupportedResourceKind,
         &RenderGraphErrors::UnsupportedResourceClass,
@@ -112,6 +117,8 @@ TEST_CASE("Render graph storage is move-only and immutable through its views", "
     STATIC_REQUIRE_FALSE(std::is_copy_assignable_v<RenderGraph>);
     STATIC_REQUIRE(std::is_move_constructible_v<RenderGraph>);
     STATIC_REQUIRE(std::is_same_v<decltype(std::declval<const RenderGraph &>().Passes()), std::span<const RenderGraphPass>>);
+    STATIC_REQUIRE_FALSE(std::is_copy_constructible_v<RenderGraphSchedule>);
+    STATIC_REQUIRE(std::is_move_constructible_v<RenderGraphSchedule>);
 }
 
 TEST_CASE("Render graph builder owns finite storage and explicit lifecycle", "[runtime][renderer][render-graph]") {
@@ -147,6 +154,9 @@ TEST_CASE("Render graph pass authoring rejects unsupported and incompatible queu
             "render.graph.pass_kind_unsupported");
     REQUIRE(builder.AddPass(RenderPassKind::Graphics, static_cast<RenderQueueRole>(255)).ErrorValue().code.Value() ==
             "render.graph.queue_role_unsupported");
+    REQUIRE(builder.AddPass(RenderPassKind::Graphics, RenderQueueRole::Graphics, static_cast<RenderGraphPassCullPolicy>(255))
+                .ErrorValue()
+                .code.Value() == "render.graph.pass_cull_policy_unsupported");
 
     auto pass = builder.AddPass(RenderPassKind::Graphics, RenderQueueRole::Graphics);
     REQUIRE(pass.HasValue());
