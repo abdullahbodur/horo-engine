@@ -3,6 +3,7 @@
 #include "RenderGraphValidationInternal.h"
 
 #include <algorithm>
+#include <format>
 #include <functional>
 #include <limits>
 #include <new>
@@ -108,13 +109,13 @@ namespace Horo::Render {
                     }
                     const std::size_t before = PassIndex(dependency.before);
                     const std::size_t after = PassIndex(dependency.after);
-                    const std::uint64_t edge =
-                        (static_cast<std::uint64_t>(before) * passCount_ + after) * 3U + static_cast<std::uint8_t>(dependency.kind);
-                    if (!edges.emplace(edge).second) {
-                        return Result<void>::Failure(MakeError(RenderGraphErrors::InvalidDependency,
-                                                               "Pass " + std::to_string(dependency.before.id.value) + " -> pass " +
-                                                                   std::to_string(dependency.after.id.value) + " repeats dependency kind " +
-                                                                   std::to_string(static_cast<std::uint8_t>(dependency.kind)) + "."));
+                    if (const std::uint64_t edge =
+                            (static_cast<std::uint64_t>(before) * passCount_ + after) * 3U + static_cast<std::uint8_t>(dependency.kind);
+                        !edges.emplace(edge).second) {
+                        return Result<void>::Failure(
+                            MakeError(RenderGraphErrors::InvalidDependency,
+                                      std::format("Pass {} -> pass {} repeats dependency kind {}.", dependency.before.id.value,
+                                                  dependency.after.id.value, static_cast<std::uint8_t>(dependency.kind))));
                     }
                     successors_[before].push_back(after);
                     predecessors_[after].push_back(before);
@@ -153,10 +154,9 @@ namespace Horo::Render {
 
             [[nodiscard]] std::string DescribeCycle() const {
                 constexpr std::size_t Unseen = std::numeric_limits<std::size_t>::max();
-                std::vector<std::size_t> positions(passCount_, Unseen);
+                std::vector positions(passCount_, Unseen);
                 std::vector<std::size_t> path;
-                std::size_t current =
-                    static_cast<std::size_t>(std::find_if(indegrees_.begin(), indegrees_.end(), [](const std::size_t degree) {
+                auto current = static_cast<std::size_t>(std::ranges::find_if(indegrees_, [](const std::size_t degree) {
                     return degree != 0;
                 }) - indegrees_.begin());
                 while (positions[current] == Unseen) {
@@ -166,12 +166,12 @@ namespace Horo::Render {
                 }
 
                 std::vector<std::size_t> cycle{path.begin() + static_cast<std::ptrdiff_t>(positions[current]), path.end()};
-                std::sort(cycle.begin(), cycle.end());
+                std::ranges::sort(cycle);
                 std::string message{"Dependency cycle contains pass IDs"};
                 for (const std::size_t pass : cycle) {
-                    message += " " + std::to_string(graph_.Passes()[pass].reference.id.value);
+                    message += std::format(" {}", graph_.Passes()[pass].reference.id.value);
                 }
-                return message + ".";
+                return std::format("{}.", message);
             }
 
             [[nodiscard]] std::size_t SmallestRemainingPredecessor(const std::size_t pass) const noexcept {
@@ -186,7 +186,7 @@ namespace Horo::Render {
 
             [[nodiscard]] Result<void> ValidateResourcesAndSeedLiveness() {
                 constexpr std::size_t NoPass = std::numeric_limits<std::size_t>::max();
-                std::vector<std::size_t> lastWriter(graph_.Resources().size(), NoPass);
+                std::vector lastWriter(graph_.Resources().size(), NoPass);
                 for (const std::size_t pass : topologicalOrder_) {
                     if (const Result<void> reads = ValidatePassReads(pass, lastWriter); reads.HasError()) {
                         return reads;
@@ -212,9 +212,8 @@ namespace Horo::Render {
                     if (lastWriter[resource] == NoPass &&
                         graph_.Resources()[resource].resourceClass == RenderGraphResourceClass::Transient) {
                         return Result<void>::Failure(MakeError(RenderGraphErrors::ReadBeforeWrite,
-                                                               "Pass " + std::to_string(usage.pass.id.value) +
-                                                                   " reads transient resource " + std::to_string(usage.resource.value) +
-                                                                   " before an ordered write."));
+                                                               std::format("Pass {} reads transient resource {} before an ordered write.",
+                                                                           usage.pass.id.value, usage.resource.value)));
                     }
                     RecordDataPredecessor(pass, lastWriter[resource]);
                 }
@@ -301,20 +300,18 @@ namespace Horo::Render {
                 }
                 for (std::size_t pass = 0; pass < passCount_; ++pass) {
                     const bool retained = live_[pass] != 0;
-                    records.passDispositions.push_back(
-                        {graph_.Passes()[pass].reference,
-                         retained ? RenderGraphPassDispositionKind::Retained : RenderGraphPassDispositionKind::Culled,
-                         retained ? reasons_[pass] : CullReason(pass)});
+                    records.passDispositions.emplace_back(graph_.Passes()[pass].reference,
+                                                          retained ? RenderGraphPassDispositionKind::Retained
+                                                                   : RenderGraphPassDispositionKind::Culled,
+                                                          retained ? reasons_[pass] : CullReason(pass));
                 }
                 return records;
             }
 
             [[nodiscard]] RenderGraphPassDispositionReason CullReason(const std::size_t pass) const noexcept {
-                const auto isCulled = [this](const std::size_t successor) {
+                if (const auto isCulled = [this](const std::size_t successor) {
                     return live_[successor] == 0;
-                };
-                if (std::any_of(successors_[pass].begin(), successors_[pass].end(), isCulled) ||
-                    std::any_of(dataSuccessors_[pass].begin(), dataSuccessors_[pass].end(), isCulled)) {
+                }; std::ranges::any_of(successors_[pass], isCulled) || std::ranges::any_of(dataSuccessors_[pass], isCulled)) {
                     return RenderGraphPassDispositionReason::OnlyRequiredByCulledPasses;
                 }
                 return RenderGraphPassDispositionReason::UnusedTransientOutputs;
