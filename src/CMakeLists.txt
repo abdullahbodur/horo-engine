@@ -494,6 +494,8 @@ add_library(HoroRenderApi STATIC
         runtime/renderer/api/RenderGraphErrors.cpp
         runtime/renderer/api/RenderGraphSynchronization.cpp
         runtime/renderer/api/RenderGraphSynchronizationErrors.cpp
+        runtime/renderer/api/RenderGraphLifetime.cpp
+        runtime/renderer/api/RenderGraphLifetimeErrors.cpp
         runtime/renderer/api/RenderGraphValidation.cpp
         runtime/renderer/api/RenderResourceDescriptorErrors.cpp
         runtime/renderer/api/RenderResourceDescriptors.cpp
