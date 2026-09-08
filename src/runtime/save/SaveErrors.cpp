@@ -51,6 +51,37 @@ namespace Horo::Runtime::SaveErrors {
                                                                      ErrorSeverity::Critical,
                                                                      "The save participant registry generation is exhausted.",
                                                                      "Stop the owning runtime instead of reusing a registry generation."};
+    const ErrorCodeDescriptor CaptureContextInvalid{kDomain, ErrorCode{"save.capture.context_invalid"}, kError,
+                                                    "Runtime save capture evidence or bounds are invalid.",
+                                                    "Capture at one issued safe point with finite qualified limits."};
+    const ErrorCodeDescriptor CaptureRegistryStale{kDomain, ErrorCode{"save.capture.registry_stale"}, kError,
+                                                   "Runtime save capture addressed a different participant registry generation.",
+                                                   "Restart capture with the exact currently pinned registry snapshot."};
+    const ErrorCodeDescriptor CaptureRecordInvalid{kDomain, ErrorCode{"save.capture.record_invalid"}, kError,
+                                                   "A canonical capture record contradicts its participant registration.",
+                                                   "Use a registered capture owner, exact schema, and owned record identity."};
+    const ErrorCodeDescriptor CaptureBudgetExceeded{kDomain, ErrorCode{"save.capture.budget_exceeded"}, kError,
+                                                    "Runtime save capture would exceed a declared participant or operation bound.",
+                                                    "Reject or defer capture before allocating detached payload storage."};
+    const ErrorCodeDescriptor CaptureRecordDuplicate{kDomain, ErrorCode{"save.capture.record_duplicate"}, kError,
+                                                     "A canonical record occurs more than once in one runtime save capture.",
+                                                     "Supply each participant-owned record exactly once."};
+    const ErrorCodeDescriptor CaptureIncomplete{kDomain, ErrorCode{"save.capture.incomplete"}, kError,
+                                                "Runtime save capture is missing required participant records.",
+                                                "Capture every owned record for required or participating optional owners at one epoch."};
+    const ErrorCodeDescriptor CaptureAlreadySealed{kDomain, ErrorCode{"save.capture.already_sealed"}, kError,
+                                                   "The runtime save capture builder is sealed, spent, or moved from.",
+                                                   "Create a new owner-safe-point builder for another capture."};
+    const ErrorCodeDescriptor CaptureAllocationFailed{kDomain,
+                                                      ErrorCode{"save.capture.allocation_failed"},
+                                                      kError,
+                                                      "Host-owned runtime save capture storage could not be allocated.",
+                                                      "Release admitted capture memory and retry at a later safe point.",
+                                                      true};
+    const ErrorCodeDescriptor
+        CaptureAdapterContractInvalid{kDomain, ErrorCode{"save.capture.adapter_contract_invalid"}, kError,
+                                      "A runtime save participant violated its scoped capture contract.",
+                                      "Fix the adapter to honor its exact context, sink failures, and omission disposition."};
     const ErrorCodeDescriptor ArchiveHeaderInvalid{kDomain, ErrorCode{"save.archive.header_invalid"}, kError,
                                                    "Save archive header metadata is invalid.",
                                                    "Use the exact bounded canonical header schema and required fields."};

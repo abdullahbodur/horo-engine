@@ -1014,6 +1014,11 @@ add_executable(HoroRuntimeSaveParticipantRegistryTests
 )
 target_compile_features(HoroRuntimeSaveParticipantRegistryTests PRIVATE cxx_std_20)
 target_link_libraries(HoroRuntimeSaveParticipantRegistryTests PRIVATE HoroEngine::Runtime)
+add_executable(HoroRuntimeSaveCaptureSnapshotTests
+        unit/runtime/save/SaveCaptureSnapshotTests.cpp
+)
+target_compile_features(HoroRuntimeSaveCaptureSnapshotTests PRIVATE cxx_std_20)
+target_link_libraries(HoroRuntimeSaveCaptureSnapshotTests PRIVATE HoroEngine::Runtime)
 add_executable(HoroRuntimeUiIdentityTests
         unit/runtime/ui/UiIdentityTests.cpp
 )
@@ -1381,6 +1386,7 @@ set(HORO_CATCH_TEST_TARGETS
         HoroRuntimeSaveRootResolverTests
         HoroRuntimeSaveNamespaceTests
         HoroRuntimeSaveParticipantRegistryTests
+        HoroRuntimeSaveCaptureSnapshotTests
         HoroRuntimeUiIdentityTests
         HoroRuntimeUiDocumentTests
         HoroRuntimeUiDiagnosticsTests

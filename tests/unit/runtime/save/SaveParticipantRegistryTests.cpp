@@ -1,5 +1,5 @@
+#include "Horo/Runtime/Save/SaveCaptureSnapshot.h"
 #include "Horo/Runtime/Save/SaveErrors.h"
-#include "Horo/Runtime/Save/SaveParticipantRegistry.h"
 
 #include <catch2/catch_test_macros.hpp>
 #include <memory>
@@ -14,6 +14,11 @@ namespace Horo::Runtime {
 
             ~TestAdapter() override {
                 ++*destructionCount_;
+            }
+
+            [[nodiscard]] Result<CanonicalCaptureDisposition> Capture(const CanonicalCaptureContext &,
+                                                                      ICanonicalCaptureSink &) const override {
+                return Result<CanonicalCaptureDisposition>::Success(CanonicalCaptureDisposition::Omitted);
             }
 
         private:
