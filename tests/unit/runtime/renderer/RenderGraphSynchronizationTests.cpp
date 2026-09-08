@@ -24,107 +24,139 @@ namespace Horo::Render {
                                                           const std::span<const RenderGraphImportedState> states = {}) {
             return SynthesizeRenderGraphSynchronization(graph, schedule, SharedQueue, states);
         }
+
+        struct CompiledGraph {
+            RenderGraph graph;
+            RenderGraphSchedule schedule;
+        };
+
+        CompiledGraph RequireCompiledGraph(RenderGraphBuilder &builder) {
+            RenderGraph graph = RequireGraph(builder);
+            RenderGraphSchedule schedule = RequireSchedule(graph);
+            return {std::move(graph), std::move(schedule)};
+        }
+
+        struct WriteReadGraph {
+            RenderGraphPassRef write;
+            RenderGraphPassRef read;
+            CompiledGraph compiled;
+        };
+
+        WriteReadGraph RequireWriteReadGraph() {
+            RenderGraphBuilder builder = RequireBuilder();
+            const RenderGraphPassRef write = RequirePass(builder, RenderPassKind::Graphics, RenderQueueRole::Graphics);
+            const RenderGraphPassRef read = RequirePass(builder, RenderPassKind::Compute, RenderQueueRole::Compute);
+            const RenderGraphResourceId resource = RequireResource(builder.AddTransientResource(RenderGraphResourceKind::Buffer));
+            RequireUsage(builder, {write, resource, RenderGraphAccess::Write, RenderGraphUsageKind::Storage});
+            RequireUsage(builder, {read, resource, RenderGraphAccess::Read, RenderGraphUsageKind::Sampled});
+            return {write, read, RequireCompiledGraph(builder)};
+        }
+
+        struct ThreeUseGraph {
+            std::array<RenderGraphPassRef, 3> passes;
+            CompiledGraph compiled;
+        };
+
+        ThreeUseGraph RequireThreeUseComputeGraph(const std::array<RenderGraphAccess, 3> accesses,
+                                                  const std::array<RenderGraphUsageKind, 3> operations) {
+            RenderGraphBuilder builder = RequireBuilder();
+            std::array<RenderGraphPassRef, 3> passes;
+            for (RenderGraphPassRef &pass : passes) {
+                pass = RequirePass(builder, RenderPassKind::Compute, RenderQueueRole::Compute);
+            }
+            const RenderGraphResourceId resource = RequireResource(builder.AddTransientResource(RenderGraphResourceKind::Buffer));
+            for (std::size_t index = 0; index < passes.size(); ++index) {
+                RequireUsage(builder, {passes[index], resource, accesses[index], operations[index]});
+            }
+            return {passes, RequireCompiledGraph(builder)};
+        }
+
+        RenderGraphImportedState ComputeBufferReadState(const RenderGraphResourceId resource) {
+            return {resource, BufferState(RenderGraphSynchronizationAccess::Read, RenderGraphSynchronizationOperation::Sampled, {1},
+                                          RenderGraphPipelineScope::Compute)};
+        }
+
+        struct ImportedBufferReadBuilder {
+            RenderGraphBuilder builder;
+            RenderGraphPassRef pass;
+            RenderGraphResourceId resource;
+        };
+
+        ImportedBufferReadBuilder RequireImportedBufferReadBuilder() {
+            RenderGraphBuilder builder = RequireBuilder();
+            const RenderGraphPassRef pass = RequirePass(builder, RenderPassKind::Compute, RenderQueueRole::Compute);
+            const RenderGraphResourceId resource =
+                RequireResource(builder.ImportBuffer(BufferHandle(), RenderGraphResourceClass::Persistent));
+            RequireUsage(builder, {pass, resource, RenderGraphAccess::Read, RenderGraphUsageKind::Sampled});
+            return {std::move(builder), pass, resource};
+        }
     }  // namespace
 
     TEST_CASE("Synchronization synthesis derives RAW and WAW transitions deterministically", "[renderer][render-graph][sync]") {
-        RenderGraphBuilder builder = RequireBuilder();
-        const RenderGraphPassRef write = RequirePass(builder, RenderPassKind::Compute, RenderQueueRole::Compute);
-        const RenderGraphPassRef overwrite = RequirePass(builder, RenderPassKind::Compute, RenderQueueRole::Compute);
-        const RenderGraphPassRef read = RequirePass(builder, RenderPassKind::Compute, RenderQueueRole::Compute);
-        const RenderGraphResourceId resource = RequireResource(builder.AddTransientResource(RenderGraphResourceKind::Buffer));
-        RequireUsage(builder, {write, resource, RenderGraphAccess::Write, RenderGraphUsageKind::Storage});
-        RequireUsage(builder, {overwrite, resource, RenderGraphAccess::Write, RenderGraphUsageKind::Storage});
-        RequireUsage(builder, {read, resource, RenderGraphAccess::Read, RenderGraphUsageKind::Sampled});
-        RenderGraph graph = RequireGraph(builder);
-        RenderGraphSchedule schedule = RequireSchedule(graph);
+        ThreeUseGraph fixture =
+            RequireThreeUseComputeGraph({RenderGraphAccess::Write, RenderGraphAccess::Write, RenderGraphAccess::Read},
+                                        {RenderGraphUsageKind::Storage, RenderGraphUsageKind::Storage, RenderGraphUsageKind::Sampled});
 
-        auto synthesized = Synthesize(graph, schedule);
+        auto synthesized = Synthesize(fixture.compiled.graph, fixture.compiled.schedule);
         REQUIRE(synthesized.HasValue());
         const auto transitions = synthesized.Value().Transitions();
         REQUIRE(transitions.size() == 3);
         CHECK(transitions[0].hazards == RenderGraphHazard::Initial);
         CHECK(transitions[0].oldState.access == RenderGraphSynchronizationAccess::None);
-        CHECK(transitions[0].after == write);
+        CHECK(transitions[0].after == fixture.passes[0]);
         CHECK(HasRenderGraphHazard(transitions[1].hazards, RenderGraphHazard::WriteAfterWrite));
-        CHECK(transitions[1].before == write);
-        CHECK(transitions[1].after == overwrite);
+        CHECK(transitions[1].before == fixture.passes[0]);
+        CHECK(transitions[1].after == fixture.passes[1]);
         CHECK(HasRenderGraphHazard(transitions[2].hazards, RenderGraphHazard::ReadAfterWrite));
-        CHECK(transitions[2].before == overwrite);
-        CHECK(transitions[2].after == read);
+        CHECK(transitions[2].before == fixture.passes[1]);
+        CHECK(transitions[2].after == fixture.passes[2]);
     }
 
     TEST_CASE("Compatible imported reads share state without a barrier", "[renderer][render-graph][sync]") {
-        RenderGraphBuilder builder = RequireBuilder();
-        const RenderGraphPassRef first = RequirePass(builder, RenderPassKind::Compute, RenderQueueRole::Compute);
-        const RenderGraphPassRef second = RequirePass(builder, RenderPassKind::Compute, RenderQueueRole::Compute);
-        const RenderGraphResourceId resource = RequireResource(builder.ImportBuffer(BufferHandle(), RenderGraphResourceClass::Persistent));
-        RequireUsage(builder, {first, resource, RenderGraphAccess::Read, RenderGraphUsageKind::Sampled});
-        RequireUsage(builder, {second, resource, RenderGraphAccess::Read, RenderGraphUsageKind::Sampled});
-        RenderGraph graph = RequireGraph(builder);
-        RenderGraphSchedule schedule = RequireSchedule(graph);
-        const std::array initial{RenderGraphImportedState{resource, BufferState(RenderGraphSynchronizationAccess::Read,
-                                                                                RenderGraphSynchronizationOperation::Sampled, {1},
-                                                                                RenderGraphPipelineScope::Compute)}};
+        ImportedBufferReadBuilder fixture = RequireImportedBufferReadBuilder();
+        const RenderGraphPassRef second = RequirePass(fixture.builder, RenderPassKind::Compute, RenderQueueRole::Compute);
+        RequireUsage(fixture.builder, {second, fixture.resource, RenderGraphAccess::Read, RenderGraphUsageKind::Sampled});
+        CompiledGraph compiled = RequireCompiledGraph(fixture.builder);
+        const std::array initial{ComputeBufferReadState(fixture.resource)};
 
-        auto synthesized = Synthesize(graph, schedule, initial);
+        auto synthesized = Synthesize(compiled.graph, compiled.schedule, initial);
         REQUIRE(synthesized.HasValue());
         CHECK(synthesized.Value().Transitions().empty());
         CHECK(synthesized.Value().OwnershipTransfers().empty());
     }
 
     TEST_CASE("Distinct effective queues emit one matched ownership transfer", "[renderer][render-graph][sync]") {
-        RenderGraphBuilder builder = RequireBuilder();
-        const RenderGraphPassRef write = RequirePass(builder, RenderPassKind::Graphics, RenderQueueRole::Graphics);
-        const RenderGraphPassRef read = RequirePass(builder, RenderPassKind::Compute, RenderQueueRole::Compute);
-        const RenderGraphResourceId resource = RequireResource(builder.AddTransientResource(RenderGraphResourceKind::Buffer));
-        RequireUsage(builder, {write, resource, RenderGraphAccess::Write, RenderGraphUsageKind::Storage});
-        RequireUsage(builder, {read, resource, RenderGraphAccess::Read, RenderGraphUsageKind::Sampled});
-        RenderGraph graph = RequireGraph(builder);
-        RenderGraphSchedule schedule = RequireSchedule(graph);
+        WriteReadGraph fixture = RequireWriteReadGraph();
         constexpr std::array queues{
             RenderQueueAssignment{RenderQueueRole::Graphics, RenderQueueId{5}},
             RenderQueueAssignment{RenderQueueRole::Compute, RenderQueueId{8}},
         };
 
-        auto synthesized = SynthesizeRenderGraphSynchronization(graph, schedule, queues, {});
+        auto synthesized = SynthesizeRenderGraphSynchronization(fixture.compiled.graph, fixture.compiled.schedule, queues, {});
         REQUIRE(synthesized.HasValue());
         REQUIRE(synthesized.Value().OwnershipTransfers().size() == 1);
         const RenderGraphOwnershipTransfer &transfer = synthesized.Value().OwnershipTransfers().front();
-        CHECK(transfer.releaseAfter == write);
-        CHECK(transfer.acquireBefore == read);
+        CHECK(transfer.releaseAfter == fixture.write);
+        CHECK(transfer.acquireBefore == fixture.read);
         CHECK(transfer.sourceQueue == RenderQueueId{5});
         CHECK(transfer.destinationQueue == RenderQueueId{8});
     }
 
     TEST_CASE("Aliased queue roles do not invent ownership transfers", "[renderer][render-graph][sync]") {
-        RenderGraphBuilder builder = RequireBuilder();
-        const RenderGraphPassRef write = RequirePass(builder, RenderPassKind::Graphics, RenderQueueRole::Graphics);
-        const RenderGraphPassRef read = RequirePass(builder, RenderPassKind::Compute, RenderQueueRole::Compute);
-        const RenderGraphResourceId resource = RequireResource(builder.AddTransientResource(RenderGraphResourceKind::Buffer));
-        RequireUsage(builder, {write, resource, RenderGraphAccess::Write, RenderGraphUsageKind::Storage});
-        RequireUsage(builder, {read, resource, RenderGraphAccess::Read, RenderGraphUsageKind::Sampled});
-        RenderGraph graph = RequireGraph(builder);
-        RenderGraphSchedule schedule = RequireSchedule(graph);
+        WriteReadGraph fixture = RequireWriteReadGraph();
 
-        auto synthesized = Synthesize(graph, schedule);
+        auto synthesized = Synthesize(fixture.compiled.graph, fixture.compiled.schedule);
         REQUIRE(synthesized.HasValue());
         CHECK(synthesized.Value().Transitions().size() == 2);
         CHECK(synthesized.Value().OwnershipTransfers().empty());
     }
 
     TEST_CASE("Read-write uses retain every applicable hazard reason", "[renderer][render-graph][sync]") {
-        RenderGraphBuilder builder = RequireBuilder();
-        const RenderGraphPassRef write = RequirePass(builder, RenderPassKind::Compute, RenderQueueRole::Compute);
-        const RenderGraphPassRef firstReadWrite = RequirePass(builder, RenderPassKind::Compute, RenderQueueRole::Compute);
-        const RenderGraphPassRef secondReadWrite = RequirePass(builder, RenderPassKind::Compute, RenderQueueRole::Compute);
-        const RenderGraphResourceId resource = RequireResource(builder.AddTransientResource(RenderGraphResourceKind::Buffer));
-        RequireUsage(builder, {write, resource, RenderGraphAccess::Write, RenderGraphUsageKind::Storage});
-        RequireUsage(builder, {firstReadWrite, resource, RenderGraphAccess::ReadWrite, RenderGraphUsageKind::Storage});
-        RequireUsage(builder, {secondReadWrite, resource, RenderGraphAccess::ReadWrite, RenderGraphUsageKind::Storage});
-        RenderGraph graph = RequireGraph(builder);
-        RenderGraphSchedule schedule = RequireSchedule(graph);
+        ThreeUseGraph fixture =
+            RequireThreeUseComputeGraph({RenderGraphAccess::Write, RenderGraphAccess::ReadWrite, RenderGraphAccess::ReadWrite},
+                                        {RenderGraphUsageKind::Storage, RenderGraphUsageKind::Storage, RenderGraphUsageKind::Storage});
 
-        auto synthesized = Synthesize(graph, schedule);
+        auto synthesized = Synthesize(fixture.compiled.graph, fixture.compiled.schedule);
         REQUIRE(synthesized.HasValue());
         REQUIRE(synthesized.Value().Transitions().size() == 3);
         const RenderGraphHazard hazards = synthesized.Value().Transitions()[2].hazards;
@@ -149,14 +181,13 @@ namespace Horo::Render {
         const RenderGraphPassRef pass = RequirePass(builder, RenderPassKind::Graphics, RenderQueueRole::Graphics);
         const RenderGraphResourceId resource = RequireResource(builder.ImportTexture(TextureHandle(), RenderGraphResourceClass::External));
         RequireUsage(builder, {pass, resource, RenderGraphAccess::Read, RenderGraphUsageKind::Sampled});
-        RenderGraph graph = RequireGraph(builder);
-        RenderGraphSchedule schedule = RequireSchedule(graph);
+        CompiledGraph compiled = RequireCompiledGraph(builder);
 
-        RequireError(Synthesize(graph, schedule), "render.graph.synchronization.initial_state_missing");
+        RequireError(Synthesize(compiled.graph, compiled.schedule), "render.graph.synchronization.initial_state_missing");
 
         const std::array invalid{RenderGraphImportedState{resource, BufferState(RenderGraphSynchronizationAccess::Read,
                                                                                 RenderGraphSynchronizationOperation::Sampled)}};
-        RequireError(Synthesize(graph, schedule, invalid), "render.graph.synchronization.initial_state_invalid");
+        RequireError(Synthesize(compiled.graph, compiled.schedule, invalid), "render.graph.synchronization.initial_state_invalid");
 
         const RenderGraphLogicalState valid{RenderGraphSynchronizationAccess::Read,
                                             RenderGraphSynchronizationOperation::Sampled,
@@ -164,7 +195,7 @@ namespace Horo::Render {
                                             RenderGraphTextureLayout::ShaderReadOnly,
                                             {1}};
         const std::array duplicate{RenderGraphImportedState{resource, valid}, RenderGraphImportedState{resource, valid}};
-        RequireError(Synthesize(graph, schedule, duplicate), "render.graph.synchronization.initial_state_duplicate");
+        RequireError(Synthesize(compiled.graph, compiled.schedule, duplicate), "render.graph.synchronization.initial_state_duplicate");
     }
 
     TEST_CASE("Synthesis rejects incomplete or ambiguous queue topology", "[renderer][render-graph][sync]") {
@@ -172,33 +203,26 @@ namespace Horo::Render {
         const RenderGraphPassRef pass = RequirePass(builder, RenderPassKind::Compute, RenderQueueRole::Compute);
         const RenderGraphResourceId resource = RequireResource(builder.AddTransientResource(RenderGraphResourceKind::Buffer));
         RequireUsage(builder, {pass, resource, RenderGraphAccess::Write, RenderGraphUsageKind::Storage});
-        RenderGraph graph = RequireGraph(builder);
-        RenderGraphSchedule schedule = RequireSchedule(graph);
+        CompiledGraph compiled = RequireCompiledGraph(builder);
 
         constexpr std::array missing{RenderQueueAssignment{RenderQueueRole::Graphics, RenderQueueId{1}}};
-        RequireError(SynthesizeRenderGraphSynchronization(graph, schedule, missing, {}),
+        RequireError(SynthesizeRenderGraphSynchronization(compiled.graph, compiled.schedule, missing, {}),
                      "render.graph.synchronization.queue_topology_invalid");
 
         constexpr std::array duplicate{
             RenderQueueAssignment{RenderQueueRole::Compute, RenderQueueId{1}},
             RenderQueueAssignment{RenderQueueRole::Compute, RenderQueueId{2}},
         };
-        RequireError(SynthesizeRenderGraphSynchronization(graph, schedule, duplicate, {}),
+        RequireError(SynthesizeRenderGraphSynchronization(compiled.graph, compiled.schedule, duplicate, {}),
                      "render.graph.synchronization.queue_topology_invalid");
     }
 
     TEST_CASE("Synthesis rejects a pass-internal state conflict", "[renderer][render-graph][sync]") {
-        RenderGraphBuilder builder = RequireBuilder();
-        const RenderGraphPassRef pass = RequirePass(builder, RenderPassKind::Compute, RenderQueueRole::Compute);
-        const RenderGraphResourceId resource = RequireResource(builder.ImportBuffer(BufferHandle(), RenderGraphResourceClass::Persistent));
-        RequireUsage(builder, {pass, resource, RenderGraphAccess::Read, RenderGraphUsageKind::Sampled});
-        RequireUsage(builder, {pass, resource, RenderGraphAccess::Write, RenderGraphUsageKind::Storage});
-        RenderGraph graph = RequireGraph(builder);
-        RenderGraphSchedule schedule = RequireSchedule(graph);
-        const std::array initial{RenderGraphImportedState{resource, BufferState(RenderGraphSynchronizationAccess::Read,
-                                                                                RenderGraphSynchronizationOperation::Sampled, {1},
-                                                                                RenderGraphPipelineScope::Compute)}};
+        ImportedBufferReadBuilder fixture = RequireImportedBufferReadBuilder();
+        RequireUsage(fixture.builder, {fixture.pass, fixture.resource, RenderGraphAccess::Write, RenderGraphUsageKind::Storage});
+        CompiledGraph compiled = RequireCompiledGraph(fixture.builder);
+        const std::array initial{ComputeBufferReadState(fixture.resource)};
 
-        RequireError(Synthesize(graph, schedule, initial), "render.graph.synchronization.state_unsupported");
+        RequireError(Synthesize(compiled.graph, compiled.schedule, initial), "render.graph.synchronization.state_unsupported");
     }
 }  // namespace Horo::Render
