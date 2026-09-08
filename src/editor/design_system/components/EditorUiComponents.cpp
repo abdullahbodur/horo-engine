@@ -1900,21 +1900,21 @@ namespace Horo::Editor::Ui {
     /** @copydoc BeginContextSubmenu */
     bool BeginContextSubmenu(const char *label, const Theme::Fonts &fonts, const std::string_view iconToken) {
         static_cast<void>(iconToken);
+        const std::string popupId = std::string{"##submenu_popup_"} + label;
+        const bool wasOpen = ImGui::IsPopupOpen(popupId.c_str());
         ImGui::PushID(label);
-        constexpr const char *popupId = "##submenu_popup";
-        const bool wasOpen = ImGui::IsPopupOpen(popupId);
         const ContextMenuRow row = DrawContextMenuRow("##submenu", wasOpen, true);
+        ImGui::PopID();
         DrawContextMenuRowPresentation(row, label, nullptr, fonts, Theme::Text(), row.hovered || wasOpen, true);
         if (row.hovered || row.activated)
-            ImGui::OpenPopup(popupId);
+            ImGui::OpenPopup(popupId.c_str());
 
         ImGui::SetNextWindowPos({ImGui::GetWindowPos().x + ImGui::GetWindowWidth() - 1.0F, row.minimum.y - ScaledLayoutValue(4.0F)});
         ImGui::SetNextWindowSizeConstraints({ScaledLayoutValue(224.0F), 0.0F}, {ScaledLayoutValue(340.0F), FLT_MAX});
         PushContextPopupWindowStyle();
-        const bool open = ImGui::BeginPopup(popupId, ImGuiWindowFlags_NoMove);
+        const bool open = ImGui::BeginPopup(popupId.c_str(), ImGuiWindowFlags_NoMove);
         if (!open)
             PopContextPopupWindowStyle();
-        ImGui::PopID();
         return open;
     }
 

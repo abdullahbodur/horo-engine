@@ -102,6 +102,10 @@ TEST_CASE("Workspace popup rows keep the design-system menu geometry", "[unit][e
     static_cast<void>(ContextMenuItem("Create", nullptr, fonts));
     const float rowHeight = ImGui::GetItemRectSize().y;
     const float popupWidth = ImGui::GetWindowWidth();
+    ImGui::OpenPopup("##submenu_popup_GameObject###submenu");
+    REQUIRE(BeginContextSubmenu("GameObject###submenu", fonts));
+    static_cast<void>(ContextMenuItem("Box", nullptr, fonts));
+    EndContextSubmenu();
     EndMenuPopup();
     ImGui::End();
     ImGui::Render();
