@@ -76,6 +76,15 @@ namespace {
         return std::make_unique<TestBackendProvider>(behavior, probe);
     }
 
+    [[nodiscard]] std::unique_ptr<IRenderBackend> CreateNullBackend() {
+        RenderBackendRegistry registry;
+        Check(RegisterNullRenderBackend(registry).HasValue());
+        Check(registry.Seal().HasValue());
+        auto created = registry.Create(RenderBackendId{"null"});
+        Check(created.HasValue());
+        return std::move(created).Value();
+    }
+
     TEST_CASE("Registry Owns Provider And Defers Invocation Until Create", "[unit][runtime][renderer]") {
         ProviderProbe probe;
         {
@@ -234,13 +243,7 @@ namespace {
     }
 
     TEST_CASE("Null Provider Is Inert Until Explicit Initialization", "[unit][runtime][renderer]") {
-        RenderBackendRegistry registry;
-        Check(RegisterNullRenderBackend(registry).HasValue());
-        Check(registry.Seal().HasValue());
-
-        auto created = registry.Create(RenderBackendId{"null"});
-        Check(created.HasValue());
-        std::unique_ptr<IRenderBackend> backend = std::move(created).Value();
+        std::unique_ptr<IRenderBackend> backend = CreateNullBackend();
 
         const FrameDescriptor frame{.frameNumber = 1, .outputExtent = {1280, 720}};
         auto beforeInitialize = backend->BeginFrame(frame);
@@ -254,12 +257,7 @@ namespace {
     }
 
     TEST_CASE("Null Backend Validates Frame Lifecycle Without Gpu Work", "[unit][runtime][renderer]") {
-        RenderBackendRegistry registry;
-        Check(RegisterNullRenderBackend(registry).HasValue());
-        Check(registry.Seal().HasValue());
-        auto created = registry.Create(RenderBackendId{"null"});
-        Check(created.HasValue());
-        std::unique_ptr<IRenderBackend> backend = std::move(created).Value();
+        std::unique_ptr<IRenderBackend> backend = CreateNullBackend();
         Check(backend->Initialize(RenderBackendConfig{}).HasValue());
 
         const RenderExecutionPlan inactivePlan{};
@@ -311,29 +309,16 @@ namespace {
     }
 
     TEST_CASE("Null backend satisfies the shared backend contract", "[unit][runtime][renderer][contract]") {
-        const auto createBackend = [] {
-            RenderBackendRegistry registry;
-            Check(RegisterNullRenderBackend(registry).HasValue());
-            Check(registry.Seal().HasValue());
-            auto created = registry.Create(RenderBackendId{"null"});
-            Check(created.HasValue());
-            return std::move(created).Value();
-        };
         Test::RunBackendContractSuite(
             Test::BackendContractExpectations{
                 .id = RenderBackendId{"null"},
                 .presentsToWindow = false,
             },
-            createBackend);
+            &CreateNullBackend);
     }
 
     TEST_CASE("Null Backend Rejects Presentation Requirements", "[unit][runtime][renderer]") {
-        RenderBackendRegistry registry;
-        Check(RegisterNullRenderBackend(registry).HasValue());
-        Check(registry.Seal().HasValue());
-        auto created = registry.Create(RenderBackendId{"null"});
-        Check(created.HasValue());
-        std::unique_ptr<IRenderBackend> backend = std::move(created).Value();
+        std::unique_ptr<IRenderBackend> backend = CreateNullBackend();
 
         const Result<void> initialized = backend->Initialize(RenderBackendConfig{.requirePresentation = true});
         Check(initialized.HasError());
@@ -341,12 +326,7 @@ namespace {
     }
 
     TEST_CASE("Null Backend Validates And Realizes Generic Resources", "[unit][runtime][renderer][resource]") {
-        RenderBackendRegistry registry;
-        Check(RegisterNullRenderBackend(registry).HasValue());
-        Check(registry.Seal().HasValue());
-        auto created = registry.Create(RenderBackendId{"null"});
-        Check(created.HasValue());
-        std::unique_ptr<IRenderBackend> backend = std::move(created).Value();
+        std::unique_ptr<IRenderBackend> backend = CreateNullBackend();
 
         const std::array<std::byte, 12> bytes{};
         const RenderBufferDescriptor vertexDescriptor{
@@ -392,41 +372,21 @@ namespace {
     }
 
     TEST_CASE("Null Backend Rejects Invalid Configuration And Frame Extent", "[unit][runtime][renderer]") {
-        RenderBackendRegistry registry;
-        Check(RegisterNullRenderBackend(registry).HasValue());
-        Check(registry.Seal().HasValue());
+        Check(CreateNullBackend()->Initialize(RenderBackendConfig{.maxFramesInFlight = 0}).ErrorValue().code.Value() ==
+              "render.backend.invalid_config");
 
-        auto invalidConfigurationBackend = registry.Create(RenderBackendId{"null"});
-        Check(invalidConfigurationBackend.HasValue());
-        Check(std::move(invalidConfigurationBackend)
-                  .Value()
-                  ->Initialize(RenderBackendConfig{.maxFramesInFlight = 0})
-                  .ErrorValue()
-                  .code.Value() == "render.backend.invalid_config");
+        Check(
+            CreateNullBackend()->Initialize(RenderBackendConfig{.presentMode = static_cast<PresentMode>(0xFF)}).ErrorValue().code.Value() ==
+            "render.backend.invalid_config");
 
-        auto invalidPresentModeBackend = registry.Create(RenderBackendId{"null"});
-        Check(invalidPresentModeBackend.HasValue());
-        Check(std::move(invalidPresentModeBackend)
-                  .Value()
-                  ->Initialize(RenderBackendConfig{.presentMode = static_cast<PresentMode>(0xFF)})
-                  .ErrorValue()
-                  .code.Value() == "render.backend.invalid_config");
-
-        auto invalidFrameBackend = registry.Create(RenderBackendId{"null"});
-        Check(invalidFrameBackend.HasValue());
-        auto backend = std::move(invalidFrameBackend).Value();
+        std::unique_ptr<IRenderBackend> backend = CreateNullBackend();
         Check(backend->Initialize(RenderBackendConfig{}).HasValue());
         Check(backend->BeginFrame(FrameDescriptor{.frameNumber = 1, .outputExtent = {0, 720}}).ErrorValue().code.Value() ==
               "render.backend.invalid_frame_descriptor");
     }
 
     TEST_CASE("Null Backend Validates Primary Output Attachments", "[unit][runtime][renderer]") {
-        RenderBackendRegistry registry;
-        Check(RegisterNullRenderBackend(registry).HasValue());
-        Check(registry.Seal().HasValue());
-        auto created = registry.Create(RenderBackendId{"null"});
-        Check(created.HasValue());
-        std::unique_ptr<IRenderBackend> backend = std::move(created).Value();
+        std::unique_ptr<IRenderBackend> backend = CreateNullBackend();
         Check(backend->Initialize(RenderBackendConfig{}).HasValue());
 
         auto begun = backend->BeginFrame(FrameDescriptor{.frameNumber = 9, .outputExtent = {640, 360}});
