@@ -261,7 +261,7 @@ namespace Horo::Runtime {
         };
 
         RuntimeSaveCaptureBuilder(RuntimeSaveCaptureProvenance provenance, SaveParticipantRegistrySnapshot participants,
-                                  RuntimeSaveCaptureLimits limits, std::vector<ParticipantUsage> usage,
+                                  const RuntimeSaveCaptureLimits &limits, std::vector<ParticipantUsage> usage,
                                   RecordAdmissions recordAdmissions) noexcept;
         void MoveFrom(RuntimeSaveCaptureBuilder &&other) noexcept;
         void MarkSpent() noexcept;

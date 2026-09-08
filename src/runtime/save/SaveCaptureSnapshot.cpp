@@ -5,6 +5,7 @@
 #include <algorithm>
 #include <cstddef>
 #include <cstdint>
+#include <exception>
 #include <memory>
 #include <new>
 #include <tuple>
@@ -172,8 +173,9 @@ namespace Horo::Runtime {
     }
 
     RuntimeSaveCaptureBuilder::RuntimeSaveCaptureBuilder(RuntimeSaveCaptureProvenance provenance,
-                                                         SaveParticipantRegistrySnapshot participants, RuntimeSaveCaptureLimits limits,
-                                                         std::vector<ParticipantUsage> usage, RecordAdmissions recordAdmissions) noexcept
+                                                         SaveParticipantRegistrySnapshot participants,
+                                                         const RuntimeSaveCaptureLimits &limits, std::vector<ParticipantUsage> usage,
+                                                         RecordAdmissions recordAdmissions) noexcept
         : provenance_(std::move(provenance)), participants_(std::move(participants)), limits_(limits), usage_(std::move(usage)),
           recordAdmissions_(std::move(recordAdmissions)) {}
 
@@ -193,8 +195,7 @@ namespace Horo::Runtime {
     Result<RuntimeSaveCaptureBuilder> RuntimeSaveCaptureBuilder::Create(RuntimeSaveCaptureProvenance provenance,
                                                                         SaveParticipantRegistrySnapshot participants,
                                                                         const RuntimeSaveCaptureLimits &limits) {
-        const Result<void> valid = ValidateCreationContext(provenance, participants, limits);
-        if (valid.HasError())
+        if (const Result<void> valid = ValidateCreationContext(provenance, participants, limits); valid.HasError())
             return Result<RuntimeSaveCaptureBuilder>::Failure(valid.ErrorValue());
 
         try {
@@ -244,7 +245,7 @@ namespace Horo::Runtime {
         for (const SaveParticipantBinding &binding : participants.Bindings()) {
             if (HasSaveParticipantRole(binding.Descriptor().roles, SaveParticipantRole::Capture)) {
                 for (const SaveRecordId &record : binding.Descriptor().ownedRecords)
-                    state.records.emplace(record, RecordAdmission{.participantIndex = participantIndex});
+                    state.records.try_emplace(record, RecordAdmission{.participantIndex = participantIndex});
             }
             ++participantIndex;
         }
@@ -280,7 +281,7 @@ namespace Horo::Runtime {
         } catch (const std::bad_alloc &) {
             RollbackCapture(initialRecordCount, initialPayloadBytes, initialSegmentCount, std::move(usageCheckpoint));
             return Result<void>::Failure(MakeError(SaveErrors::CaptureAllocationFailed));
-        } catch (...) {
+        } catch (const std::exception &) {
             RollbackCapture(initialRecordCount, initialPayloadBytes, initialSegmentCount, std::move(usageCheckpoint));
             return Result<void>::Failure(MakeError(SaveErrors::CaptureAdapterContractInvalid));
         }
@@ -376,8 +377,7 @@ namespace Horo::Runtime {
     void RuntimeSaveCaptureBuilder::RollbackCapture(const std::size_t recordCount, const std::uint64_t payloadBytes,
                                                     const std::size_t segments, std::vector<ParticipantUsage> usage) noexcept {
         while (records_.size() > recordCount) {
-            const auto admission = recordAdmissions_.find(records_.back().Record().record);
-            if (admission != recordAdmissions_.end())
+            if (const auto admission = recordAdmissions_.find(records_.back().Record().record); admission != recordAdmissions_.end())
                 admission->second.captured = false;
             records_.pop_back();
         }
@@ -425,8 +425,7 @@ namespace Horo::Runtime {
                                                               const std::size_t segments) const {
         if (!HasValidRecord(record))
             return Result<void>::Failure(MakeError(SaveErrors::CaptureRecordInvalid));
-        const auto admission = recordAdmissions_.find(record.record);
-        if (admission->second.captured)
+        if (const auto admission = recordAdmissions_.find(record.record); admission->second.captured)
             return Result<void>::Failure(MakeError(SaveErrors::CaptureRecordDuplicate));
         if (!FitsAdmission(record, byteLength, segments))
             return Result<void>::Failure(MakeError(SaveErrors::CaptureBudgetExceeded));
@@ -460,15 +459,15 @@ namespace Horo::Runtime {
 
     Result<CanonicalCaptureDisposition> RuntimeSaveCaptureBuilder::ValidateParticipantProjection(
         const SaveParticipantBinding &binding) const {
+        using enum CanonicalCaptureDisposition;
         const CanonicalStateParticipantDescriptor &descriptor = binding.Descriptor();
         const ParticipantUsage *usage = FindUsage(descriptor.participant);
         const bool captured = usage != nullptr && usage->recordCount != 0;
         if (!HasCompleteParticipantProjection(descriptor, usage, captured))
             return Result<CanonicalCaptureDisposition>::Failure(MakeError(SaveErrors::CaptureIncomplete));
-        if (usage != nullptr && usage->resolved && usage->disposition == CanonicalCaptureDisposition::Omitted && captured)
+        if (usage != nullptr && usage->resolved && usage->disposition == Omitted && captured)
             return Result<CanonicalCaptureDisposition>::Failure(MakeError(SaveErrors::CaptureAdapterContractInvalid));
-        return Result<CanonicalCaptureDisposition>::Success(captured ? CanonicalCaptureDisposition::Captured
-                                                                     : CanonicalCaptureDisposition::Omitted);
+        return Result<CanonicalCaptureDisposition>::Success(captured ? Captured : Omitted);
     }
 
     void RuntimeSaveCaptureBuilder::AppendParticipantProjection(std::vector<CanonicalCaptureParticipantProjection> &projection,
