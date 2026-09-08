@@ -154,7 +154,7 @@ namespace Horo::Navigation {
          */
         [[nodiscard]] static Result<NavigationSourceGeometrySnapshot> Create(NavigationSourceSnapshotRevision revision,
                                                                              std::span<const NavigationSourceContributionInput> inputs,
-                                                                             NavigationSourceGeometryLimits limits = {});
+                                                                             const NavigationSourceGeometryLimits &limits = {});
 
         /** @brief Returns the exact complete-capture revision. @return Non-zero capture revision. */
         [[nodiscard]] NavigationSourceSnapshotRevision Revision() const noexcept;
@@ -177,7 +177,7 @@ namespace Horo::Navigation {
                                                    std::span<const NavigationSourceObservation> currentSources) const;
 
     private:
-        NavigationSourceGeometrySnapshot(NavigationSourceSnapshotRevision revision, NavigationSourceGeometryLimits limits,
+        NavigationSourceGeometrySnapshot(NavigationSourceSnapshotRevision revision, const NavigationSourceGeometryLimits &limits,
                                          std::vector<NavigationSourceContribution> contributions, std::vector<Math::Vec3> vertices,
                                          std::vector<NavigationSourceTriangle> triangles) noexcept;
 

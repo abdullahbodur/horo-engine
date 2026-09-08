@@ -17,7 +17,7 @@ namespace Horo::Navigation {
             return kind >= NavigationSourceProducerKind::StaticCollider && kind < NavigationSourceProducerKind::Count;
         }
 
-        [[nodiscard]] constexpr bool IsValidLimits(const NavigationSourceGeometryLimits limits) noexcept {
+        [[nodiscard]] constexpr bool IsValidLimits(const NavigationSourceGeometryLimits &limits) noexcept {
             return limits.maxContributions > 0 && limits.maxContributions <= NavigationSourceGeometryLimits::MaximumContributions &&
                    limits.maxVertices > 0 && limits.maxVertices <= NavigationSourceGeometryLimits::MaximumVertices &&
                    limits.maxTriangles > 0 && limits.maxTriangles <= NavigationSourceGeometryLimits::MaximumTriangles &&
@@ -80,7 +80,7 @@ namespace Horo::Navigation {
         }
 
         [[nodiscard]] Result<GeometryTotals> Measure(const std::span<const NavigationSourceContributionInput *const> ordered,
-                                                     const NavigationSourceGeometryLimits limits) {
+                                                     const NavigationSourceGeometryLimits &limits) {
             GeometryTotals totals{};
             for (const auto *input : ordered) {
                 if (!AccumulateCounts(*input, totals))
@@ -189,7 +189,7 @@ namespace Horo::Navigation {
 
         [[nodiscard]] Result<void> ValidateCreateRequest(const NavigationSourceSnapshotRevision revision,
                                                          const std::span<const NavigationSourceContributionInput> inputs,
-                                                         const NavigationSourceGeometryLimits limits) {
+                                                         const NavigationSourceGeometryLimits &limits) {
             if (!revision.IsValid() || !IsValidLimits(limits) || inputs.empty())
                 return Failure<void>(NavigationErrors::SourceGeometryInvalid);
             if (inputs.size() > limits.maxContributions)
@@ -201,7 +201,7 @@ namespace Horo::Navigation {
     /** @copydoc NavigationSourceGeometrySnapshot::Create */
     Result<NavigationSourceGeometrySnapshot> NavigationSourceGeometrySnapshot::Create(
         const NavigationSourceSnapshotRevision revision, const std::span<const NavigationSourceContributionInput> inputs,
-        const NavigationSourceGeometryLimits limits) {
+        const NavigationSourceGeometryLimits &limits) {
         if (const auto requestValidation = ValidateCreateRequest(revision, inputs, limits); requestValidation.HasError())
             return Result<NavigationSourceGeometrySnapshot>::Failure(requestValidation.ErrorValue());
 
@@ -215,7 +215,7 @@ namespace Horo::Navigation {
         std::ranges::sort(ordered, [](const auto *left, const auto *right) {
             return SourceKey(left->producer, left->contribution) < SourceKey(right->producer, right->contribution);
         });
-        if (std::adjacent_find(ordered.begin(), ordered.end(), [](const auto *left, const auto *right) {
+        if (std::ranges::adjacent_find(ordered, [](const auto *left, const auto *right) {
             return SourceKey(left->producer, left->contribution) == SourceKey(right->producer, right->contribution);
         }) != ordered.end())
             return Failure<NavigationSourceGeometrySnapshot>(NavigationErrors::DescriptorConflict);
@@ -291,7 +291,7 @@ namespace Horo::Navigation {
     }
 
     NavigationSourceGeometrySnapshot::NavigationSourceGeometrySnapshot(const NavigationSourceSnapshotRevision revision,
-                                                                       const NavigationSourceGeometryLimits limits,
+                                                                       const NavigationSourceGeometryLimits &limits,
                                                                        std::vector<NavigationSourceContribution> contributions,
                                                                        std::vector<Math::Vec3> vertices,
                                                                        std::vector<NavigationSourceTriangle> triangles) noexcept
