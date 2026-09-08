@@ -1,10 +1,10 @@
 #include "Horo/Runtime/Render/RenderGraph.h"
 #include "Horo/Runtime/Render/RenderGraphErrors.h"
+#include "RenderGraphTestUtils.h"
 
 #include <array>
 #include <catch2/catch_test_macros.hpp>
 #include <string>
-#include <string_view>
 #include <thread>
 #include <type_traits>
 #include <utility>
@@ -12,30 +12,7 @@
 namespace {
     using namespace Horo;
     using namespace Horo::Render;
-
-    template <typename T> void RequireError(const Result<T> &result, const std::string_view code) {
-        REQUIRE(result.HasError());
-        REQUIRE(result.ErrorValue().code.Value() == code);
-        REQUIRE_FALSE(result.ErrorValue().message.empty());
-    }
-
-    RenderGraphLimits SmallLimits() {
-        return {.maxPasses = 3, .maxResources = 2, .maxUsages = 3, .maxDependencies = 2};
-    }
-
-    RenderBufferHandle BufferHandle(const std::uint32_t slot = 1) {
-        return {{41}, slot, 1};
-    }
-
-    RenderTextureHandle TextureHandle(const std::uint32_t slot = 1) {
-        return {{42}, slot, 1};
-    }
-
-    RenderGraphBuilder RequireBuilder(const RenderGraphLimits &limits = SmallLimits()) {
-        auto created = RenderGraphBuilder::Create(limits);
-        REQUIRE(created.HasValue());
-        return std::move(created).Value();
-    }
+    using namespace Horo::Render::Test;
 
 }  // namespace
 
