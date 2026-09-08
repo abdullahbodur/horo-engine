@@ -1,0 +1,377 @@
+#include "Horo/Runtime/Render/TemporalHistory.h"
+#include "Horo/Runtime/Render/TemporalHistoryErrors.h"
+
+#include <algorithm>
+#include <array>
+#include <catch2/catch_test_macros.hpp>
+#include <string>
+#include <thread>
+#include <utility>
+
+namespace {
+    using namespace Horo;
+    using namespace Horo::Render;
+
+    TemporalHistoryCompatibility Compatibility(const std::uint64_t colorGeneration = 1,
+                                               const FramebufferExtent renderExtent = {1280, 720}) {
+        return {
+            .view = {17},
+            .provider = {1},
+            .mode = {1},
+            .renderExtent = renderExtent,
+            .targetExtent = {1920, 1080},
+            .providerGeneration = 1,
+            .modeGeneration = 1,
+            .surfaceGeneration = 1,
+            .rasterGeneration = 1,
+            .colorGeneration = colorGeneration,
+            .exposureGeneration = 1,
+            .inputSchemaGeneration = 1,
+            .deviceGeneration = 1,
+            .projectionGeneration = 1,
+            .jitterGeneration = 1,
+            .sceneOriginGeneration = 1,
+            .motionGeneration = 1,
+            .recipeGeneration = 1,
+        };
+    }
+
+    std::array<RenderTextureHandle, 2> Resources(const std::uint32_t generation = 1) {
+        return {{{{9}, 1, generation}, {{9}, 2, generation}}};
+    }
+
+    TemporalHistoryStore Store(const TemporalHistoryLimits &limits = {.maxHistories = 2, .maxResourcesPerHistory = 2}) {
+        auto created = TemporalHistoryStore::Create(limits);
+        REQUIRE(created.HasValue());
+        return std::move(created).Value();
+    }
+
+    TemporalHistoryHandle AddHistory(TemporalHistoryStore &store) {
+        const auto resources = Resources();
+        auto added = store.Add(Compatibility(), resources);
+        REQUIRE(added.HasValue());
+        return added.Value();
+    }
+
+    void RequireErrorCode(const Error &error, const ErrorCodeDescriptor &descriptor) {
+        REQUIRE(error.domain.Value() == descriptor.domain.Value());
+        REQUIRE(error.code.Value() == descriptor.code.Value());
+        REQUIRE_FALSE(error.message.empty());
+        REQUIRE_FALSE(descriptor.remediationHint.empty());
+    }
+}  // namespace
+
+TEST_CASE("Temporal history identities and capacities are bounded", "[runtime][renderer][temporal-history]") {
+    REQUIRE(TemporalHistoryOwnerId{1}.IsValid());
+    REQUIRE_FALSE(TemporalHistoryOwnerId{}.IsValid());
+    REQUIRE(RenderViewId{1}.IsValid());
+    REQUIRE(TemporalHistoryProviderId{1}.IsValid());
+    REQUIRE(TemporalHistoryModeId{1}.IsValid());
+    REQUIRE(Compatibility().IsValid());
+    REQUIRE(TemporalHistoryLimits{}.IsValid());
+
+    auto invalidLimits = TemporalHistoryLimits{};
+    invalidLimits.maxHistories = 0;
+    auto rejected = TemporalHistoryStore::Create(invalidLimits);
+    REQUIRE(rejected.HasError());
+    RequireErrorCode(rejected.ErrorValue(), TemporalHistoryErrors::InvalidLimits);
+
+    auto store = Store({.maxHistories = 1, .maxResourcesPerHistory = 2});
+    AddHistory(store);
+    const auto resources = Resources();
+    auto full = store.Add(Compatibility(2), resources);
+    REQUIRE(full.HasError());
+    RequireErrorCode(full.ErrorValue(), TemporalHistoryErrors::CapacityExceeded);
+}
+
+TEST_CASE("Temporal compatibility requires every ADR-040 identity dimension", "[runtime][renderer][temporal-history]") {
+    auto compatibility = Compatibility();
+    compatibility.provider = {};
+    REQUIRE_FALSE(compatibility.IsValid());
+    compatibility = Compatibility();
+    compatibility.mode = {};
+    REQUIRE_FALSE(compatibility.IsValid());
+    compatibility = Compatibility();
+    compatibility.renderExtent = {};
+    REQUIRE_FALSE(compatibility.IsValid());
+    compatibility = Compatibility();
+    compatibility.targetExtent = {};
+    REQUIRE_FALSE(compatibility.IsValid());
+
+    constexpr std::array generationMembers{
+        &TemporalHistoryCompatibility::providerGeneration,    &TemporalHistoryCompatibility::modeGeneration,
+        &TemporalHistoryCompatibility::surfaceGeneration,     &TemporalHistoryCompatibility::rasterGeneration,
+        &TemporalHistoryCompatibility::colorGeneration,       &TemporalHistoryCompatibility::exposureGeneration,
+        &TemporalHistoryCompatibility::inputSchemaGeneration, &TemporalHistoryCompatibility::deviceGeneration,
+        &TemporalHistoryCompatibility::projectionGeneration,  &TemporalHistoryCompatibility::jitterGeneration,
+        &TemporalHistoryCompatibility::sceneOriginGeneration, &TemporalHistoryCompatibility::motionGeneration,
+        &TemporalHistoryCompatibility::recipeGeneration,
+    };
+    for (const auto member : generationMembers) {
+        compatibility = Compatibility();
+        compatibility.*member = 0;
+        REQUIRE_FALSE(compatibility.IsValid());
+    }
+}
+
+TEST_CASE("Invalid descriptors and texture identities are rejected", "[runtime][renderer][temporal-history]") {
+    auto store = Store();
+    const auto resources = Resources();
+    auto invalidCompatibility = Compatibility();
+    invalidCompatibility.deviceGeneration = 0;
+    auto invalidDescriptor = store.Add(invalidCompatibility, resources);
+    REQUIRE(invalidDescriptor.HasError());
+    RequireErrorCode(invalidDescriptor.ErrorValue(), TemporalHistoryErrors::InvalidDescriptor);
+
+    const std::array<RenderTextureHandle, 1> invalidResources{};
+    auto invalidResource = store.Add(Compatibility(), invalidResources);
+    REQUIRE(invalidResource.HasError());
+    RequireErrorCode(invalidResource.ErrorValue(), TemporalHistoryErrors::InvalidDescriptor);
+}
+
+TEST_CASE("First publish establishes readable temporal history", "[runtime][renderer][temporal-history]") {
+    auto store = Store();
+    const auto handle = AddHistory(store);
+
+    auto first = store.BeginFrame(handle, 100, 0);
+    REQUIRE(first.HasValue());
+    REQUIRE_FALSE(first.Value().canReadPrevious);
+    REQUIRE(first.Value().resetCause == TemporalHistoryResetCause::FirstFrame);
+    REQUIRE(first.Value().contentGeneration == 1);
+    REQUIRE(store.Publish(first.Value()).HasValue());
+
+    auto second = store.BeginFrame(handle, 101, 100);
+    REQUIRE(second.HasValue());
+    REQUIRE(second.Value().canReadPrevious);
+    REQUIRE_FALSE(second.Value().resetCause.has_value());
+    REQUIRE(second.Value().compatibility == Compatibility());
+    REQUIRE(std::ranges::equal(second.Value().resources, Resources()));
+    REQUIRE(store.Publish(second.Value()).HasValue());
+}
+
+TEST_CASE("Failed frames never advance temporal history", "[runtime][renderer][temporal-history]") {
+    auto store = Store();
+    const auto handle = AddHistory(store);
+    auto first = store.BeginFrame(handle, 4, 0);
+    REQUIRE(first.HasValue());
+    REQUIRE(store.Abandon(first.Value()).HasValue());
+
+    auto retry = store.BeginFrame(handle, 4, 0);
+    REQUIRE(retry.HasValue());
+    REQUIRE(retry.Value().contentGeneration == 1);
+    REQUIRE(retry.Value().resetCause == TemporalHistoryResetCause::FirstFrame);
+    REQUIRE(store.Publish(retry.Value()).HasValue());
+
+    auto skipped = store.BeginFrame(handle, 6, 5);
+    REQUIRE(skipped.HasValue());
+    REQUIRE_FALSE(skipped.Value().canReadPrevious);
+    REQUIRE(skipped.Value().resetCause == TemporalHistoryResetCause::MissingPredecessor);
+}
+
+TEST_CASE("Abandoned frame snapshots cannot complete a same-id retry", "[runtime][renderer][temporal-history]") {
+    auto store = Store();
+    const auto handle = AddHistory(store);
+    auto abandoned = store.BeginFrame(handle, 4, 0);
+    REQUIRE(abandoned.HasValue());
+    REQUIRE(store.Abandon(abandoned.Value()).HasValue());
+
+    auto retry = store.BeginFrame(handle, 4, 0);
+    REQUIRE(retry.HasValue());
+    REQUIRE(retry.Value().attempt != abandoned.Value().attempt);
+    auto stalePublish = store.Publish(abandoned.Value());
+    REQUIRE(stalePublish.HasError());
+    RequireErrorCode(stalePublish.ErrorValue(), TemporalHistoryErrors::InvalidFrame);
+    auto staleAbandon = store.Abandon(abandoned.Value());
+    REQUIRE(staleAbandon.HasError());
+    RequireErrorCode(staleAbandon.ErrorValue(), TemporalHistoryErrors::InvalidFrame);
+    REQUIRE(store.Publish(retry.Value()).HasValue());
+}
+
+TEST_CASE("Mutated frame validation fields cannot publish", "[runtime][renderer][temporal-history]") {
+    auto store = Store();
+    const auto handle = AddHistory(store);
+    auto begun = store.BeginFrame(handle, 1, 0);
+    REQUIRE(begun.HasValue());
+
+    auto mutated = begun.Value();
+    mutated.resetCause = TemporalHistoryResetCause::CameraCut;
+    auto rejected = store.Publish(mutated);
+    REQUIRE(rejected.HasError());
+    RequireErrorCode(rejected.ErrorValue(), TemporalHistoryErrors::InvalidFrame);
+    REQUIRE(store.Publish(begun.Value()).HasValue());
+}
+
+TEST_CASE("Explicit reset replaces resources and reports exact cause", "[runtime][renderer][temporal-history]") {
+    auto store = Store();
+    const auto handle = AddHistory(store);
+    auto first = store.BeginFrame(handle, 1, 0);
+    REQUIRE(first.HasValue());
+    REQUIRE(store.Publish(first.Value()).HasValue());
+
+    const auto resizedResources = Resources(2);
+    REQUIRE(store.Reset(handle, Compatibility(1, {1920, 1080}), resizedResources, TemporalHistoryResetCause::Resize).HasValue());
+    auto resized = store.BeginFrame(handle, 2, 1);
+    REQUIRE(resized.HasValue());
+    REQUIRE_FALSE(resized.Value().canReadPrevious);
+    REQUIRE(resized.Value().resetCause == TemporalHistoryResetCause::Resize);
+    REQUIRE(std::ranges::equal(resized.Value().resources, resizedResources));
+    REQUIRE(store.Publish(resized.Value()).HasValue());
+
+    REQUIRE(store.Reset(handle, Compatibility(2, {1920, 1080}), resizedResources, TemporalHistoryResetCause::ColorPlanChange).HasValue());
+    auto profile = store.BeginFrame(handle, 3, 2);
+    REQUIRE(profile.HasValue());
+    REQUIRE(profile.Value().resetCause == TemporalHistoryResetCause::ColorPlanChange);
+}
+
+TEST_CASE("Compatibility replacements publish exact reset provenance", "[runtime][renderer][temporal-history]") {
+    auto store = Store();
+    const auto handle = AddHistory(store);
+    const auto resources = Resources();
+    auto first = store.BeginFrame(handle, 1, 0);
+    REQUIRE(first.HasValue());
+    REQUIRE(store.Publish(first.Value()).HasValue());
+
+    struct Replacement {
+        TemporalHistoryCompatibility compatibility;
+        TemporalHistoryResetCause cause;
+    };
+
+    auto provider = Compatibility();
+    provider.provider = {2};
+    auto mode = provider;
+    mode.mode = {2};
+    auto projection = mode;
+    projection.projectionGeneration = 2;
+    auto sceneMotion = projection;
+    sceneMotion.sceneOriginGeneration = 2;
+    sceneMotion.motionGeneration = 2;
+    const std::array replacements{
+        Replacement{provider, TemporalHistoryResetCause::ProviderReplacement},
+        Replacement{mode, TemporalHistoryResetCause::ModeReplacement},
+        Replacement{projection, TemporalHistoryResetCause::ProjectionChange},
+        Replacement{sceneMotion, TemporalHistoryResetCause::SceneDiscontinuity},
+    };
+
+    std::uint64_t frameId = 2;
+    for (const Replacement &replacement : replacements) {
+        REQUIRE(store.Reset(handle, replacement.compatibility, resources, replacement.cause).HasValue());
+        auto frame = store.BeginFrame(handle, frameId, frameId - 1);
+        REQUIRE(frame.HasValue());
+        REQUIRE(frame.Value().compatibility == replacement.compatibility);
+        REQUIRE(frame.Value().resetCause == replacement.cause);
+        REQUIRE_FALSE(frame.Value().canReadPrevious);
+        REQUIRE(store.Publish(frame.Value()).HasValue());
+        ++frameId;
+    }
+}
+
+TEST_CASE("View replacement starts a new per-view real-frame sequence", "[runtime][renderer][temporal-history]") {
+    auto store = Store();
+    const auto handle = AddHistory(store);
+    auto oldView = store.BeginFrame(handle, 100, 0);
+    REQUIRE(oldView.HasValue());
+    REQUIRE(store.Publish(oldView.Value()).HasValue());
+
+    auto newViewCompatibility = Compatibility();
+    newViewCompatibility.view = {18};
+    const auto resources = Resources();
+    REQUIRE(store.Reset(handle, newViewCompatibility, resources, TemporalHistoryResetCause::ViewReplacement).HasValue());
+    auto newView = store.BeginFrame(handle, 1, 0);
+    REQUIRE(newView.HasValue());
+    REQUIRE(newView.Value().contentGeneration == 1);
+    REQUIRE(newView.Value().resetCause == TemporalHistoryResetCause::ViewReplacement);
+}
+
+TEST_CASE("Camera cuts and invalid inputs are explicit without fallback", "[runtime][renderer][temporal-history]") {
+    auto store = Store();
+    const auto handle = AddHistory(store);
+    const auto resources = Resources();
+    REQUIRE(store.Reset(handle, Compatibility(), resources, TemporalHistoryResetCause::CameraCut).HasValue());
+
+    auto frame = store.BeginFrame(handle, 9, 8);
+    REQUIRE(frame.HasValue());
+    REQUIRE(frame.Value().resetCause == TemporalHistoryResetCause::CameraCut);
+
+    auto overlapping = store.BeginFrame(handle, 10, 9);
+    REQUIRE(overlapping.HasError());
+    RequireErrorCode(overlapping.ErrorValue(), TemporalHistoryErrors::FrameAlreadyPending);
+    auto resetPending = store.Reset(handle, Compatibility(), resources, TemporalHistoryResetCause::ExplicitRequest);
+    REQUIRE(resetPending.HasError());
+    RequireErrorCode(resetPending.ErrorValue(), TemporalHistoryErrors::FrameAlreadyPending);
+
+    auto retirePending = store.Retire(handle);
+    REQUIRE(retirePending.HasError());
+    RequireErrorCode(retirePending.ErrorValue(), TemporalHistoryErrors::FrameAlreadyPending);
+}
+
+TEST_CASE("Foreign handles and unknown reset causes are rejected", "[runtime][renderer][temporal-history]") {
+    auto owner = Store();
+    auto other = Store();
+    const auto handle = AddHistory(owner);
+    auto foreign = other.BeginFrame(handle, 1, 0);
+    REQUIRE(foreign.HasError());
+    RequireErrorCode(foreign.ErrorValue(), TemporalHistoryErrors::WrongOwner);
+
+    const auto resources = Resources();
+    auto invalidCause = owner.Reset(handle, Compatibility(), resources, static_cast<TemporalHistoryResetCause>(255));
+    REQUIRE(invalidCause.HasError());
+    RequireErrorCode(invalidCause.ErrorValue(), TemporalHistoryErrors::InvalidResetCause);
+}
+
+TEST_CASE("Retirement invalidates generations and shutdown is idempotent", "[runtime][renderer][temporal-history]") {
+    auto store = Store();
+    const auto stale = AddHistory(store);
+    REQUIRE(store.Retire(stale).HasValue());
+    const auto size = store.Size();
+    REQUIRE(size.HasValue());
+    REQUIRE(size.Value() == 0);
+
+    const auto replacement = AddHistory(store);
+    REQUIRE(replacement.slot == stale.slot);
+    REQUIRE(replacement.generation != stale.generation);
+    auto staleUse = store.BeginFrame(stale, 1, 0);
+    REQUIRE(staleUse.HasError());
+    RequireErrorCode(staleUse.ErrorValue(), TemporalHistoryErrors::InvalidHandle);
+
+    REQUIRE(store.Shutdown().HasValue());
+    REQUIRE(store.Shutdown().HasValue());
+    auto stopped = store.BeginFrame(replacement, 1, 0);
+    REQUIRE(stopped.HasError());
+    RequireErrorCode(stopped.ErrorValue(), TemporalHistoryErrors::StoreStopped);
+}
+
+TEST_CASE("Temporal history mutation remains owner-thread affine", "[runtime][renderer][temporal-history]") {
+    auto store = Store();
+    const auto handle = AddHistory(store);
+    std::string observedCode;
+    std::thread worker([&] {
+        const auto result = store.BeginFrame(handle, 1, 0);
+        observedCode = result.HasError() ? result.ErrorValue().code.Value() : "unexpected.success";
+    });
+    worker.join();
+    REQUIRE(observedCode == TemporalHistoryErrors::WrongThread.code.Value());
+
+    std::string sizeCode;
+    std::thread observer([&] {
+        const auto result = store.Size();
+        sizeCode = result.HasError() ? result.ErrorValue().code.Value() : "unexpected.success";
+    });
+    observer.join();
+    REQUIRE(sizeCode == TemporalHistoryErrors::WrongThread.code.Value());
+}
+
+TEST_CASE("Temporal history errors expose stable actionable identities", "[runtime][renderer][temporal-history]") {
+    const std::array descriptors{
+        &TemporalHistoryErrors::AllocationFailed,  &TemporalHistoryErrors::CapacityExceeded,  &TemporalHistoryErrors::FrameAlreadyPending,
+        &TemporalHistoryErrors::InvalidDescriptor, &TemporalHistoryErrors::InvalidFrame,      &TemporalHistoryErrors::InvalidHandle,
+        &TemporalHistoryErrors::InvalidLimits,     &TemporalHistoryErrors::InvalidResetCause, &TemporalHistoryErrors::OwnerExhausted,
+        &TemporalHistoryErrors::ResetRequired,     &TemporalHistoryErrors::StoreStopped,      &TemporalHistoryErrors::WrongOwner,
+        &TemporalHistoryErrors::WrongThread,
+    };
+    for (const ErrorCodeDescriptor *descriptor : descriptors) {
+        REQUIRE(descriptor->domain.Value() == "render.temporal_history");
+        REQUIRE_FALSE(descriptor->code.Value().empty());
+        REQUIRE_FALSE(descriptor->summary.empty());
+        REQUIRE_FALSE(descriptor->remediationHint.empty());
+    }
+}
