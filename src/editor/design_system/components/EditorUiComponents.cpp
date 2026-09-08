@@ -136,6 +136,19 @@ namespace Horo::Editor::Ui {
             ImGui::PopStyleVar(4);
         }
 
+        void PushMenuDropdownWindowStyle() {
+            ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, {ScaledLayoutValue(4.0F), ScaledLayoutValue(4.0F)});
+            ImGui::PushStyleVar(ImGuiStyleVar_PopupRounding, Theme::GetActiveTokens().radii.control);
+            ImGui::PushStyleVar(ImGuiStyleVar_PopupBorderSize, 1.0F);
+            ImGui::PushStyleColor(ImGuiCol_PopupBg, Theme::MenuSurface());
+            ImGui::PushStyleColor(ImGuiCol_Border, Theme::MenuBorder());
+        }
+
+        void PopMenuDropdownWindowStyle() {
+            ImGui::PopStyleColor(2);
+            ImGui::PopStyleVar(3);
+        }
+
         struct ContextMenuRow {
             ImVec2 minimum;
             ImVec2 maximum;
@@ -143,7 +156,8 @@ namespace Horo::Editor::Ui {
             bool hovered{false};
         };
 
-        [[nodiscard]] ContextMenuRow DrawContextMenuRow(const char *id, const bool selected, const bool keepPopupOpen = false) {
+        [[nodiscard]] ContextMenuRow DrawContextMenuRow(const char *id, const bool selected, const bool keepPopupOpen = false,
+                                                        const bool enabled = true) {
             constexpr float rowHeight = 30.0F;
             ImGui::PushStyleColor(ImGuiCol_Header, ImVec4{});
             ImGui::PushStyleColor(ImGuiCol_HeaderHovered, ImVec4{});
@@ -151,6 +165,8 @@ namespace Horo::Editor::Ui {
             ImGuiSelectableFlags flags = ImGuiSelectableFlags_None;
             if (keepPopupOpen)
                 flags |= ImGuiSelectableFlags_NoAutoClosePopups;
+            if (!enabled)
+                flags |= ImGuiSelectableFlags_Disabled;
             const bool activated = ImGui::Selectable(id, selected, flags, {ImGui::GetContentRegionAvail().x, ScaledLayoutValue(rowHeight)});
             ImGui::PopStyleColor(3);
             return {
@@ -1885,16 +1901,39 @@ namespace Horo::Editor::Ui {
         PopContextPopupWindowStyle();
     }
 
+    /** @copydoc BeginMenuDropdown */
+    bool BeginMenuDropdown(const char *label, const Theme::Fonts &fonts) {
+        ImGui::SetNextWindowSizeConstraints({ScaledLayoutValue(224.0F), 0.0F}, {ScaledLayoutValue(340.0F), FLT_MAX});
+        PushMenuDropdownWindowStyle();
+        bool open = false;
+        {
+            Theme::ScopedTextStyle textStyle(fonts.sans, 14.0F * Theme::GetActiveTokens().sizes.uiScale, Theme::FontPx::Sans);
+            open = ImGui::BeginMenu(label);
+        }
+        if (open)
+            ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, {0.0F, 0.0F});
+        else
+            PopMenuDropdownWindowStyle();
+        return open;
+    }
+
+    /** @copydoc EndMenuDropdown */
+    void EndMenuDropdown() {
+        ImGui::PopStyleVar();
+        ImGui::EndMenu();
+        PopMenuDropdownWindowStyle();
+    }
+
     /** @copydoc ContextMenuItem */
     bool ContextMenuItem(const char *label, const char *shortcut, const Theme::Fonts &fonts, const ContextMenuItemTone tone,
-                         const std::string_view iconToken) {
+                         const std::string_view iconToken, const bool enabled) {
         static_cast<void>(iconToken);
         ImGui::PushID(label);
-        const ContextMenuRow row = DrawContextMenuRow("##item", false);
-        DrawContextMenuRowPresentation(row, label, shortcut, fonts, tone == ContextMenuItemTone::Danger ? Theme::Err() : Theme::Text(),
-                                       row.hovered, false);
+        const ContextMenuRow row = DrawContextMenuRow("##item", false, false, enabled);
+        const ImVec4 textColor = !enabled ? Theme::Dim() : tone == ContextMenuItemTone::Danger ? Theme::Err() : Theme::Text();
+        DrawContextMenuRowPresentation(row, label, shortcut, fonts, textColor, row.hovered && enabled, false);
         ImGui::PopID();
-        return row.activated;
+        return enabled && row.activated;
     }
 
     /** @copydoc BeginContextSubmenu */

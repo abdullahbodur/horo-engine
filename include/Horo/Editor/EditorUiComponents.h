@@ -693,15 +693,29 @@ namespace Horo::Editor::Ui {
     void EndMenuPopup();
 
     /**
+     * @brief Opens a menu-bar dropdown using the shared workspace popup surface.
+     * @param label Localized menu-bar label and stable ImGui identity.
+     * @param fonts Editor typography handles.
+     * @return True while the dropdown is open; pair with @ref EndMenuDropdown.
+     */
+    [[nodiscard]] bool BeginMenuDropdown(const char *label, const Theme::Fonts &fonts);
+
+    /** @brief Ends a menu-bar dropdown opened by @ref BeginMenuDropdown. */
+    void EndMenuDropdown();
+
+    /**
      * @brief Draws one shared context-menu action row.
      * @param label Localized action label.
      * @param shortcut Optional platform shortcut label.
      * @param fonts Editor typography handles.
      * @param tone Semantic action tone.
+     * @param iconToken Optional semantic icon token.
+     * @param enabled Whether the action accepts input.
      * @return True when the action was activated.
      */
     [[nodiscard]] bool ContextMenuItem(const char *label, const char *shortcut, const Theme::Fonts &fonts,
-                                       ContextMenuItemTone tone = ContextMenuItemTone::Normal, std::string_view iconToken = {});
+                                       ContextMenuItemTone tone = ContextMenuItemTone::Normal, std::string_view iconToken = {},
+                                       bool enabled = true);
 
     /** @brief Opens one shared nested context-menu category row. */
     [[nodiscard]] bool BeginContextSubmenu(const char *label, const Theme::Fonts &fonts, std::string_view iconToken = {});

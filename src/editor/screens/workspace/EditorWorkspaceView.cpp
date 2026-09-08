@@ -460,22 +460,23 @@ namespace Horo::Editor {
                                       EditorWorkspaceViewCommandData &outCommand, const EditorGuiContext &context) {
             for (const EditorMenuItem &item : parent.children) {
                 if (item.kind == EditorMenuItemKind::Separator) {
-                    ImGui::Separator();
+                    Ui::ContextMenuSeparator();
                     continue;
                 }
 
                 const std::string &label = context.localization.Get("editor", item.labelKey);
                 if (item.kind == EditorMenuItemKind::Submenu) {
-                    if (ImGui::BeginMenu(label.c_str())) {
+                    if (Ui::BeginContextSubmenu(label.c_str(), context.theme.fonts, item.iconToken)) {
                         DrawFallbackMenuChildren(item, viewModel, outCommand, context);
-                        ImGui::EndMenu();
+                        Ui::EndContextSubmenu();
                     }
                     continue;
                 }
 
                 const bool enabled = IsFallbackMenuItemEnabled(item, viewModel);
                 if (const char *shortcut = item.shortcut.empty() ? nullptr : item.shortcut.data();
-                    ImGui::MenuItem(label.c_str(), shortcut, false, enabled)) {
+                    Ui::ContextMenuItem(label.c_str(), shortcut, context.theme.fonts, Ui::ContextMenuItemTone::Normal, item.iconToken,
+                                        enabled)) {
                     outCommand.menuInvocation = EditorMenuInvocation{item.action, item.primitive};
                 }
             }
@@ -514,9 +515,9 @@ namespace Horo::Editor {
 
             for (const EditorMenuItem &menu : GetEditorMenuModel().menus) {
                 const std::string &label = m_context.localization.Get("editor", menu.labelKey);
-                if (ImGui::BeginMenu(label.c_str())) {
+                if (Ui::BeginMenuDropdown(label.c_str(), m_context.theme.fonts)) {
                     DrawFallbackMenuChildren(menu, viewModel, outCommand, m_context);
-                    ImGui::EndMenu();
+                    Ui::EndMenuDropdown();
                 }
             }
 
@@ -1355,8 +1356,7 @@ namespace Horo::Editor {
             constexpr float indicatorInset = 3.0F;
             const float indicatorX = options.indicatorOnRight ? itemMax.x - indicatorWidth : itemMin.x;
             geometry.drawList->AddRectFilled(ImVec2(indicatorX, itemMin.y + indicatorInset),
-                                             ImVec2(indicatorX + indicatorWidth, itemMax.y - indicatorInset),
-                                             Theme::U32(Theme::Accent()));
+                                             ImVec2(indicatorX + indicatorWidth, itemMax.y - indicatorInset), Theme::U32(Theme::Accent()));
         }
         const ImU32 iconColor = isActive || hovered ? Theme::U32(Theme::Text()) : Theme::U32(Theme::Muted());
         panel->DrawIcon(geometry.drawList, itemMin, ImVec2(geometry.cellWidth, geometry.cellHeight), iconColor);

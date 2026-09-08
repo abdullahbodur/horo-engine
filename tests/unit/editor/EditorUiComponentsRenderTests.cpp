@@ -116,6 +116,44 @@ TEST_CASE("Workspace popup rows keep the design-system menu geometry", "[unit][e
     ImGui::DestroyContext();
 }
 
+TEST_CASE("Menu-bar dropdowns reuse workspace popup rows", "[unit][editor][gui][design-system]") {
+    using namespace Horo::Editor;
+    using namespace Horo::Editor::Ui;
+
+    IMGUI_CHECKVERSION();
+    ImGui::CreateContext();
+    ImGuiIO &io = ImGui::GetIO();
+    io.DisplaySize = {640.0F, 480.0F};
+    io.DeltaTime = 1.0F / 60.0F;
+    io.Fonts->AddFontDefault();
+    static_cast<void>(io.Fonts->Build());
+    ImFont *defaultFont = io.Fonts->Fonts.front();
+    const Theme::Fonts fonts{
+        .sans = defaultFont,
+        .sansCompact = defaultFont,
+        .sansEmphasis = defaultFont,
+        .icon = defaultFont,
+    };
+
+    ImGui::NewFrame();
+    ImGui::Begin("MenuBarDropdownTest", nullptr, ImGuiWindowFlags_MenuBar);
+    REQUIRE(ImGui::BeginMenuBar());
+    ImGui::OpenPopup("Window");
+    REQUIRE(BeginMenuDropdown("Window", fonts));
+    static_cast<void>(ContextMenuItem("Workspace", nullptr, fonts));
+    const float rowHeight = ImGui::GetItemRectSize().y;
+    const float popupWidth = ImGui::GetWindowWidth();
+    EndMenuDropdown();
+    ImGui::EndMenuBar();
+    ImGui::End();
+    ImGui::Render();
+
+    REQUIRE(rowHeight == Catch::Approx(30.0F));
+    REQUIRE(popupWidth >= 224.0F);
+
+    ImGui::DestroyContext();
+}
+
 TEST_CASE("Component metrics use theme overrides while global scaling is disabled", "[unit][editor][gui][design-system]") {
     using namespace Horo::Editor;
     using namespace Horo::Editor::DesignSystem;
