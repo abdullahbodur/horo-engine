@@ -182,6 +182,18 @@ namespace Horo::WorldStreaming::WorldStreamingErrors {
         Describe("world_streaming.source.desired_state_unsupported", ErrorSeverity::Error,
                  "A streaming source desired-state value is not supported by this contract version.",
                  "Use Unloaded, Loaded or Activated residency with Releasable or Pinned retention.", true);
+    const ErrorCodeDescriptor SourceReductionInvalid =
+        Describe("world_streaming.source_reduction.invalid", ErrorSeverity::Error,
+                 "A desired-state reduction context or mandatory limit is malformed.",
+                 "Provide a valid partition incarnation and cell with a positive contributor ceiling.", true);
+    const ErrorCodeDescriptor SourceReductionIdentityConflict =
+        Describe("world_streaming.source_reduction.identity_conflict", ErrorSeverity::Error,
+                 "A desired-state reduction repeats one stable source identity.",
+                 "Present exactly one admitted immutable revision for each contributing source.", true);
+    const ErrorCodeDescriptor SourceReductionCapacityExceeded =
+        Describe("world_streaming.source_reduction.capacity_exceeded", ErrorSeverity::Error,
+                 "A desired-state reduction exceeds its bounded contributor ceiling.",
+                 "Reduce overlapping source demand or increase the host-configured per-cell contributor limit.", false);
     const ErrorCodeDescriptor AuthoringContractInvalid =
         Describe("world_streaming.authoring.contract_invalid", ErrorSeverity::Error,
                  "A world-authoring contract, page request, or authority snapshot is malformed.",

@@ -90,6 +90,12 @@ namespace Horo::WorldStreaming::WorldStreamingErrors {
     extern const ErrorCodeDescriptor SourceDesiredStateInvalid;
     /** @brief A source desired-state residency or retention value is not supported by this contract version. */
     extern const ErrorCodeDescriptor SourceDesiredStateUnsupported;
+    /** @brief A desired-state reduction context or mandatory limit is malformed. */
+    extern const ErrorCodeDescriptor SourceReductionInvalid;
+    /** @brief A desired-state reduction repeats one stable source identity. */
+    extern const ErrorCodeDescriptor SourceReductionIdentityConflict;
+    /** @brief A desired-state reduction exceeds its bounded contributor ceiling. */
+    extern const ErrorCodeDescriptor SourceReductionCapacityExceeded;
     /** @brief A world-authoring contract, page descriptor, request, or authority snapshot is malformed. */
     extern const ErrorCodeDescriptor AuthoringContractInvalid;
     /** @brief The requested world-authoring contract schema version is unsupported. */
