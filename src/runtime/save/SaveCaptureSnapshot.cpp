@@ -193,43 +193,62 @@ namespace Horo::Runtime {
     Result<RuntimeSaveCaptureBuilder> RuntimeSaveCaptureBuilder::Create(RuntimeSaveCaptureProvenance provenance,
                                                                         SaveParticipantRegistrySnapshot participants,
                                                                         const RuntimeSaveCaptureLimits &limits) {
-        if (!HasValidCaptureProvenance(provenance) || !HasValidCaptureLimits(limits) || !participants.IsValid() ||
-            participants.Bindings().size() > limits.maximumParticipants)
-            return Result<RuntimeSaveCaptureBuilder>::Failure(MakeError(SaveErrors::CaptureContextInvalid));
-        if (provenance.registryGeneration != participants.Generation())
-            return Result<RuntimeSaveCaptureBuilder>::Failure(MakeError(SaveErrors::CaptureRegistryStale));
+        const Result<void> valid = ValidateCreationContext(provenance, participants, limits);
+        if (valid.HasError())
+            return Result<RuntimeSaveCaptureBuilder>::Failure(valid.ErrorValue());
 
         try {
-            std::vector<ParticipantUsage> usage;
-            usage.reserve(participants.Bindings().size());
-            std::size_t totalOwnedRecords = 0;
-            for (const SaveParticipantBinding &binding : participants.Bindings()) {
-                if (HasSaveParticipantRole(binding.Descriptor().roles, SaveParticipantRole::Capture)) {
-                    if (binding.Descriptor().ownedRecords.size() > MaximumRuntimeSaveCaptureRecords - totalOwnedRecords)
-                        return Result<RuntimeSaveCaptureBuilder>::Failure(MakeError(SaveErrors::CaptureContextInvalid));
-                    totalOwnedRecords += binding.Descriptor().ownedRecords.size();
-                }
-                usage.push_back({.participant = binding.Descriptor().participant});
-            }
+            auto admission = BuildAdmissionState(participants);
+            if (admission.HasError())
+                return Result<RuntimeSaveCaptureBuilder>::Failure(admission.ErrorValue());
             std::vector<OwnedCanonicalSnapshot> records;
             records.reserve(limits.maximumRecords);
-            RecordAdmissions recordAdmissions;
-            recordAdmissions.reserve(totalOwnedRecords);
-            std::size_t participantIndex = 0;
-            for (const SaveParticipantBinding &binding : participants.Bindings()) {
-                if (HasSaveParticipantRole(binding.Descriptor().roles, SaveParticipantRole::Capture)) {
-                    for (const SaveRecordId &record : binding.Descriptor().ownedRecords)
-                        recordAdmissions.emplace(record, RecordAdmission{.participantIndex = participantIndex});
-                }
-                ++participantIndex;
-            }
-            RuntimeSaveCaptureBuilder builder{std::move(provenance), std::move(participants), limits, std::move(usage),
-                                              std::move(recordAdmissions)};
+            AdmissionState state = std::move(admission).Value();
+            RuntimeSaveCaptureBuilder builder{std::move(provenance), std::move(participants), limits, std::move(state.usage),
+                                              std::move(state.records)};
             builder.records_ = std::move(records);
             return Result<RuntimeSaveCaptureBuilder>::Success(std::move(builder));
         } catch (const std::bad_alloc &) {
             return Result<RuntimeSaveCaptureBuilder>::Failure(MakeError(SaveErrors::CaptureAllocationFailed));
         }
+    }
+
+    Result<void> RuntimeSaveCaptureBuilder::ValidateCreationContext(const RuntimeSaveCaptureProvenance &provenance,
+                                                                    const SaveParticipantRegistrySnapshot &participants,
+                                                                    const RuntimeSaveCaptureLimits &limits) {
+        if (!HasValidCaptureProvenance(provenance) || !HasValidCaptureLimits(limits) || !participants.IsValid())
+            return Result<void>::Failure(MakeError(SaveErrors::CaptureContextInvalid));
+        if (participants.Bindings().size() > limits.maximumParticipants)
+            return Result<void>::Failure(MakeError(SaveErrors::CaptureContextInvalid));
+        if (provenance.registryGeneration != participants.Generation())
+            return Result<void>::Failure(MakeError(SaveErrors::CaptureRegistryStale));
+        return Result<void>::Success();
+    }
+
+    Result<RuntimeSaveCaptureBuilder::AdmissionState> RuntimeSaveCaptureBuilder::BuildAdmissionState(
+        const SaveParticipantRegistrySnapshot &participants) {
+        AdmissionState state;
+        state.usage.reserve(participants.Bindings().size());
+        std::size_t totalOwnedRecords = 0;
+        for (const SaveParticipantBinding &binding : participants.Bindings()) {
+            if (HasSaveParticipantRole(binding.Descriptor().roles, SaveParticipantRole::Capture)) {
+                if (binding.Descriptor().ownedRecords.size() > MaximumRuntimeSaveCaptureRecords - totalOwnedRecords)
+                    return Result<AdmissionState>::Failure(MakeError(SaveErrors::CaptureContextInvalid));
+                totalOwnedRecords += binding.Descriptor().ownedRecords.size();
+            }
+            state.usage.push_back({.participant = binding.Descriptor().participant});
+        }
+
+        state.records.reserve(totalOwnedRecords);
+        std::size_t participantIndex = 0;
+        for (const SaveParticipantBinding &binding : participants.Bindings()) {
+            if (HasSaveParticipantRole(binding.Descriptor().roles, SaveParticipantRole::Capture)) {
+                for (const SaveRecordId &record : binding.Descriptor().ownedRecords)
+                    state.records.emplace(record, RecordAdmission{.participantIndex = participantIndex});
+            }
+            ++participantIndex;
+        }
+        return Result<AdmissionState>::Success(std::move(state));
     }
 
     /** @copydoc RuntimeSaveCaptureBuilder::CaptureParticipants */
@@ -434,33 +453,52 @@ namespace Horo::Runtime {
         return Result<void>::Success();
     }
 
+    bool RuntimeSaveCaptureBuilder::HasCompleteParticipantProjection(const CanonicalStateParticipantDescriptor &descriptor,
+                                                                     const ParticipantUsage *usage, const bool captured) noexcept {
+        return !(descriptor.required || captured) || (usage != nullptr && usage->recordCount == descriptor.ownedRecords.size());
+    }
+
+    Result<CanonicalCaptureDisposition> RuntimeSaveCaptureBuilder::ValidateParticipantProjection(
+        const SaveParticipantBinding &binding) const {
+        const CanonicalStateParticipantDescriptor &descriptor = binding.Descriptor();
+        const ParticipantUsage *usage = FindUsage(descriptor.participant);
+        const bool captured = usage != nullptr && usage->recordCount != 0;
+        if (!HasCompleteParticipantProjection(descriptor, usage, captured))
+            return Result<CanonicalCaptureDisposition>::Failure(MakeError(SaveErrors::CaptureIncomplete));
+        if (usage != nullptr && usage->resolved && usage->disposition == CanonicalCaptureDisposition::Omitted && captured)
+            return Result<CanonicalCaptureDisposition>::Failure(MakeError(SaveErrors::CaptureAdapterContractInvalid));
+        return Result<CanonicalCaptureDisposition>::Success(captured ? CanonicalCaptureDisposition::Captured
+                                                                     : CanonicalCaptureDisposition::Omitted);
+    }
+
+    void RuntimeSaveCaptureBuilder::AppendParticipantProjection(std::vector<CanonicalCaptureParticipantProjection> &projection,
+                                                                const SaveParticipantBinding &binding,
+                                                                const CanonicalCaptureDisposition disposition) const {
+        const CanonicalStateParticipantDescriptor &descriptor = binding.Descriptor();
+        CanonicalCaptureParticipantProjection entry{
+            .participant = descriptor.participant,
+            .schemaVersion = descriptor.schemaVersion,
+            .scope = descriptor.scope,
+            .required = descriptor.required,
+            .disposition = disposition,
+        };
+        if (disposition == CanonicalCaptureDisposition::Captured) {
+            entry.records = descriptor.ownedRecords;
+            std::ranges::sort(entry.records);
+        }
+        projection.push_back(std::move(entry));
+    }
+
     Result<std::vector<CanonicalCaptureParticipantProjection>> RuntimeSaveCaptureBuilder::BuildParticipantProjection() const {
         std::vector<CanonicalCaptureParticipantProjection> projection;
         projection.reserve(participants_.Bindings().size());
         for (const SaveParticipantBinding &binding : participants_.Bindings()) {
-            const CanonicalStateParticipantDescriptor &descriptor = binding.Descriptor();
-            if (!HasSaveParticipantRole(descriptor.roles, SaveParticipantRole::Capture))
+            if (!HasSaveParticipantRole(binding.Descriptor().roles, SaveParticipantRole::Capture))
                 continue;
-            const ParticipantUsage *usage = FindUsage(descriptor.participant);
-            const bool captured = usage != nullptr && usage->recordCount != 0;
-            if ((descriptor.required || captured) && (usage == nullptr || usage->recordCount != descriptor.ownedRecords.size()))
-                return Result<std::vector<CanonicalCaptureParticipantProjection>>::Failure(MakeError(SaveErrors::CaptureIncomplete));
-            if (usage != nullptr && usage->resolved && usage->disposition == CanonicalCaptureDisposition::Omitted && captured)
-                return Result<std::vector<CanonicalCaptureParticipantProjection>>::Failure(
-                    MakeError(SaveErrors::CaptureAdapterContractInvalid));
-
-            CanonicalCaptureParticipantProjection entry{
-                .participant = descriptor.participant,
-                .schemaVersion = descriptor.schemaVersion,
-                .scope = descriptor.scope,
-                .required = descriptor.required,
-                .disposition = captured ? CanonicalCaptureDisposition::Captured : CanonicalCaptureDisposition::Omitted,
-            };
-            if (captured) {
-                entry.records = descriptor.ownedRecords;
-                std::ranges::sort(entry.records);
-            }
-            projection.push_back(std::move(entry));
+            const Result<CanonicalCaptureDisposition> disposition = ValidateParticipantProjection(binding);
+            if (disposition.HasError())
+                return Result<std::vector<CanonicalCaptureParticipantProjection>>::Failure(disposition.ErrorValue());
+            AppendParticipantProjection(projection, binding, disposition.Value());
         }
         return Result<std::vector<CanonicalCaptureParticipantProjection>>::Success(std::move(projection));
     }

@@ -255,6 +255,11 @@ namespace Horo::Runtime {
 
         using RecordAdmissions = std::unordered_map<SaveRecordId, RecordAdmission, PersistentSaveIdentityHash<SaveRecordIdentityTag>>;
 
+        struct AdmissionState final {
+            std::vector<ParticipantUsage> usage;
+            RecordAdmissions records;
+        };
+
         RuntimeSaveCaptureBuilder(RuntimeSaveCaptureProvenance provenance, SaveParticipantRegistrySnapshot participants,
                                   RuntimeSaveCaptureLimits limits, std::vector<ParticipantUsage> usage,
                                   RecordAdmissions recordAdmissions) noexcept;
@@ -270,6 +275,15 @@ namespace Horo::Runtime {
         [[nodiscard]] Result<void> ValidateAdmission(const CanonicalCaptureRecord &record, std::uint64_t byteLength,
                                                      std::size_t segmentCount) const;
         [[nodiscard]] Result<void> CaptureBinding(const SaveParticipantBinding &binding);
+        [[nodiscard]] static Result<void> ValidateCreationContext(const RuntimeSaveCaptureProvenance &provenance,
+                                                                  const SaveParticipantRegistrySnapshot &participants,
+                                                                  const RuntimeSaveCaptureLimits &limits);
+        [[nodiscard]] static Result<AdmissionState> BuildAdmissionState(const SaveParticipantRegistrySnapshot &participants);
+        [[nodiscard]] static bool HasCompleteParticipantProjection(const CanonicalStateParticipantDescriptor &descriptor,
+                                                                   const ParticipantUsage *usage, bool captured) noexcept;
+        [[nodiscard]] Result<CanonicalCaptureDisposition> ValidateParticipantProjection(const SaveParticipantBinding &binding) const;
+        void AppendParticipantProjection(std::vector<CanonicalCaptureParticipantProjection> &projection,
+                                         const SaveParticipantBinding &binding, CanonicalCaptureDisposition disposition) const;
         [[nodiscard]] Result<std::vector<CanonicalCaptureParticipantProjection>> BuildParticipantProjection() const;
         [[nodiscard]] Result<void> AdmitPayload(CanonicalCaptureRecord record, std::shared_ptr<const IImmutableCanonicalPayload> payload,
                                                 std::uint64_t byteLength, std::size_t segmentCount);

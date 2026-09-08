@@ -1016,6 +1016,7 @@ target_compile_features(HoroRuntimeSaveParticipantRegistryTests PRIVATE cxx_std_
 target_link_libraries(HoroRuntimeSaveParticipantRegistryTests PRIVATE HoroEngine::Runtime)
 add_executable(HoroRuntimeSaveCaptureSnapshotTests
         unit/runtime/save/SaveCaptureSnapshotTests.cpp
+        unit/runtime/save/SaveCaptureSnapshotEdgeTests.cpp
 )
 target_compile_features(HoroRuntimeSaveCaptureSnapshotTests PRIVATE cxx_std_20)
 target_link_libraries(HoroRuntimeSaveCaptureSnapshotTests PRIVATE HoroEngine::Runtime)
