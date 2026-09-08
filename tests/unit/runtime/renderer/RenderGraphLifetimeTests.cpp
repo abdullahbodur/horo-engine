@@ -40,6 +40,25 @@ namespace {
         REQUIRE(resource.value <= plan.Lifetimes().size());
         return plan.Lifetimes()[resource.value - 1];
     }
+
+    void RequireDistinctSlots(const RenderGraph &graph, const RenderGraphSchedule &schedule,
+                              const std::span<const RenderGraphTransientRequirement> requirements) {
+        RenderGraphLifetimePlan plan = RequireLifetimePlan(graph, schedule, requirements);
+        REQUIRE(plan.AliasOpportunities().empty());
+        REQUIRE(plan.AllocationRequirements().size() == 2);
+        REQUIRE(plan.AllocationRequirements().front().slot != plan.AllocationRequirements().back().slot);
+    }
+
+    void RequireAttachmentFormatRejected(const RenderGraphUsageKind usage, const RenderTextureFormat format) {
+        RenderGraphBuilder builder = RequireBuilder();
+        const auto texture = RequireResource(builder.AddTransientResource(RenderGraphResourceKind::Texture));
+        const auto pass = RequirePass(builder, RenderPassKind::Graphics, RenderQueueRole::Graphics);
+        RequireUsage(builder, {pass, texture, RenderGraphAccess::Write, usage});
+        RenderGraph graph = RequireGraph(builder);
+        RenderGraphSchedule schedule = RequireSchedule(graph);
+        const std::array requirements{RenderGraphTransientRequirement{texture, TextureDescriptor(format)}};
+        RequireError(CompileRenderGraphLifetimePlan(graph, schedule, requirements), "render.graph.lifetime.descriptor_invalid");
+    }
 }  // namespace
 
 TEST_CASE("Render graph lifetime plan records retained first and last uses", "[runtime][renderer][render-graph][lifetime]") {
@@ -151,10 +170,7 @@ TEST_CASE("Render graph lifetime plan keeps touching and overlapping lifetimes s
         RenderGraphTransientRequirement{a, TextureDescriptor()},
         RenderGraphTransientRequirement{b, TextureDescriptor()},
     };
-    RenderGraphLifetimePlan plan = RequireLifetimePlan(graph, schedule, requirements);
-
-    REQUIRE(plan.AliasOpportunities().empty());
-    REQUIRE(plan.AllocationRequirements()[0].slot != plan.AllocationRequirements()[1].slot);
+    RequireDistinctSlots(graph, schedule, requirements);
 }
 
 TEST_CASE("Render graph lifetime plan does not alias across queue roles", "[runtime][renderer][render-graph][lifetime]") {
@@ -177,37 +193,17 @@ TEST_CASE("Render graph lifetime plan does not alias across queue roles", "[runt
             RenderGraphTransientRequirement{first, BufferDescriptor()},
             RenderGraphTransientRequirement{second, BufferDescriptor()},
         };
-        RenderGraphLifetimePlan plan = RequireLifetimePlan(graph, schedule, requirements);
-        REQUIRE(plan.AliasOpportunities().empty());
-        REQUIRE(plan.AllocationRequirements()[0].slot != plan.AllocationRequirements()[1].slot);
+        RequireDistinctSlots(graph, schedule, requirements);
     }
 }
 
 TEST_CASE("Render graph lifetime plan validates attachment format classes", "[runtime][renderer][render-graph][lifetime]") {
     SECTION("color attachment rejects depth format") {
-        RenderGraphBuilder builder = RequireBuilder();
-        const auto pass = RequirePass(builder, RenderPassKind::Graphics, RenderQueueRole::Graphics);
-        const auto texture = RequireResource(builder.AddTransientResource(RenderGraphResourceKind::Texture));
-        RequireUsage(builder, {pass, texture, RenderGraphAccess::Write, RenderGraphUsageKind::ColorAttachment});
-        RenderGraph graph = RequireGraph(builder);
-        RenderGraphSchedule schedule = RequireSchedule(graph);
-        const std::array requirements{
-            RenderGraphTransientRequirement{texture, TextureDescriptor(RenderTextureFormat::Depth32Float)},
-        };
-        RequireError(CompileRenderGraphLifetimePlan(graph, schedule, requirements), "render.graph.lifetime.descriptor_invalid");
+        RequireAttachmentFormatRejected(RenderGraphUsageKind::ColorAttachment, RenderTextureFormat::Depth32Float);
     }
 
     SECTION("depth attachment rejects color format") {
-        RenderGraphBuilder builder = RequireBuilder();
-        const auto pass = RequirePass(builder, RenderPassKind::Graphics, RenderQueueRole::Graphics);
-        const auto texture = RequireResource(builder.AddTransientResource(RenderGraphResourceKind::Texture));
-        RequireUsage(builder, {pass, texture, RenderGraphAccess::Write, RenderGraphUsageKind::DepthStencilAttachment});
-        RenderGraph graph = RequireGraph(builder);
-        RenderGraphSchedule schedule = RequireSchedule(graph);
-        const std::array requirements{
-            RenderGraphTransientRequirement{texture, TextureDescriptor(RenderTextureFormat::Rgba8Unorm)},
-        };
-        RequireError(CompileRenderGraphLifetimePlan(graph, schedule, requirements), "render.graph.lifetime.descriptor_invalid");
+        RequireAttachmentFormatRejected(RenderGraphUsageKind::DepthStencilAttachment, RenderTextureFormat::Rgba8Unorm);
     }
 }
 
@@ -255,8 +251,8 @@ TEST_CASE("Render graph alias chains obey their exact finite capacity", "[runtim
 
 TEST_CASE("Render graph lifetime planning rejects invalid requirement sets", "[runtime][renderer][render-graph][lifetime]") {
     RenderGraphBuilder builder = RequireBuilder();
-    const auto pass = RequirePass(builder, RenderPassKind::Compute, RenderQueueRole::Compute);
     const auto transient = RequireResource(builder.AddTransientResource(RenderGraphResourceKind::Buffer));
+    const auto pass = RequirePass(builder, RenderPassKind::Compute, RenderQueueRole::Compute);
     const auto imported = RequireResource(builder.ImportBuffer(BufferHandle(), RenderGraphResourceClass::Persistent));
     RequireUsage(builder, {pass, transient, RenderGraphAccess::Write, RenderGraphUsageKind::Storage});
     RenderGraph graph = RequireGraph(builder);
@@ -320,8 +316,8 @@ TEST_CASE("Render graph lifetime plan has explicit move-only ownership", "[runti
     STATIC_REQUIRE(std::is_move_assignable_v<RenderGraphLifetimePlan>);
 
     RenderGraphBuilder builder = RequireBuilder();
-    const auto pass = RequirePass(builder, RenderPassKind::Compute, RenderQueueRole::Compute);
     const auto transient = RequireResource(builder.AddTransientResource(RenderGraphResourceKind::Buffer));
+    const auto pass = RequirePass(builder, RenderPassKind::Compute, RenderQueueRole::Compute);
     RequireUsage(builder, {pass, transient, RenderGraphAccess::Write, RenderGraphUsageKind::Storage});
     RenderGraph graph = RequireGraph(builder);
     RenderGraphSchedule schedule = RequireSchedule(graph);

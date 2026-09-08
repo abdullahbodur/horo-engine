@@ -16,6 +16,14 @@ namespace Horo::Render {
     namespace {
         constexpr std::size_t NoUse = std::numeric_limits<std::size_t>::max();
 
+        [[nodiscard]] constexpr std::size_t GraphIndex(const RenderGraphPassRef pass) noexcept {
+            return pass.id.value - 1;
+        }
+
+        [[nodiscard]] constexpr std::size_t GraphIndex(const RenderGraphResourceId resource) noexcept {
+            return resource.value - 1;
+        }
+
         struct CompatibilityKey {
             std::array<std::uint64_t, 10> values{};
 
@@ -188,11 +196,11 @@ namespace Horo::Render {
                 std::vector<std::uint8_t> scheduled(graph_.Passes().size(), 0);
                 for (std::size_t position = 0; position < schedule_.OrderedPasses().size(); ++position) {
                     const RenderGraphPassRef pass = schedule_.OrderedPasses()[position];
-                    if (!IsPassValid(pass) || scheduled[PassIndex(pass)] != 0) {
+                    if (!IsPassValid(pass) || scheduled[GraphIndex(pass)] != 0) {
                         return Result<void>::Failure(MakeError(RenderGraphLifetimeErrors::InvalidSchedule));
                     }
-                    scheduled[PassIndex(pass)] = 1;
-                    passPositions_[PassIndex(pass)] = position;
+                    scheduled[GraphIndex(pass)] = 1;
+                    passPositions_[GraphIndex(pass)] = position;
                 }
                 return Result<void>::Success();
             }
@@ -200,15 +208,15 @@ namespace Horo::Render {
             [[nodiscard]] Result<void> ValidatePassDispositions() const {
                 std::vector<std::uint8_t> dispositions(graph_.Passes().size(), 0);
                 for (const RenderGraphPassDisposition &entry : schedule_.PassDispositions()) {
-                    if (!IsPassValid(entry.pass) || dispositions[PassIndex(entry.pass)] != 0) {
+                    if (!IsPassValid(entry.pass) || dispositions[GraphIndex(entry.pass)] != 0) {
                         return Result<void>::Failure(MakeError(RenderGraphLifetimeErrors::InvalidSchedule));
                     }
                     const bool retained = entry.disposition == RenderGraphPassDispositionKind::Retained;
                     const bool culled = entry.disposition == RenderGraphPassDispositionKind::Culled;
-                    if ((!retained && !culled) || retained != (passPositions_[PassIndex(entry.pass)] != NoUse)) {
+                    if ((!retained && !culled) || retained != (passPositions_[GraphIndex(entry.pass)] != NoUse)) {
                         return Result<void>::Failure(MakeError(RenderGraphLifetimeErrors::InvalidSchedule));
                     }
-                    dispositions[PassIndex(entry.pass)] = 1;
+                    dispositions[GraphIndex(entry.pass)] = 1;
                 }
                 return Result<void>::Success();
             }
@@ -234,7 +242,7 @@ namespace Horo::Render {
                     if (!IsResourceValid(requirement.resource)) {
                         return Result<void>::Failure(MakeError(RenderGraphLifetimeErrors::UnexpectedRequirement));
                     }
-                    const std::size_t resourceIndex = ResourceIndex(requirement.resource);
+                    const std::size_t resourceIndex = GraphIndex(requirement.resource);
                     const RenderGraphResource &resource = graph_.Resources()[resourceIndex];
                     if (resource.resourceClass != RenderGraphResourceClass::Transient) {
                         return Result<void>::Failure(MakeError(RenderGraphLifetimeErrors::UnexpectedRequirement));
@@ -263,7 +271,7 @@ namespace Horo::Render {
             [[nodiscard]] Result<void> ValidateRequirementUsages() const {
                 for (const RenderGraphResourceUsage &usage : graph_.Usages()) {
                     if (IsResourceValid(usage.resource)) {
-                        const std::size_t resource = ResourceIndex(usage.resource);
+                        const std::size_t resource = GraphIndex(usage.resource);
                         if (requirementByResource_[resource] != nullptr &&
                             !DescriptorSupports(requirementByResource_[resource]->descriptor, usage.kind)) {
                             return Result<void>::Failure(MakeError(RenderGraphLifetimeErrors::DescriptorInvalid));
@@ -281,12 +289,12 @@ namespace Horo::Render {
                     if (!IsPassValid(usage.pass) || !IsResourceValid(usage.resource)) {
                         continue;
                     }
-                    const std::size_t position = passPositions_[PassIndex(usage.pass)];
+                    const std::size_t position = passPositions_[GraphIndex(usage.pass)];
                     if (position == NoUse) {
                         continue;
                     }
-                    const std::size_t resource = ResourceIndex(usage.resource);
-                    RecordAliasRole(resource, graph_.Passes()[PassIndex(usage.pass)].queue);
+                    const std::size_t resource = GraphIndex(usage.resource);
+                    RecordAliasRole(resource, graph_.Passes()[GraphIndex(usage.pass)].queue);
                     RenderGraphResourceLifetime &lifetime = lifetimes_[resource];
                     if (lifetime.disposition == RenderGraphLifetimeDisposition::Unused) {
                         lifetime.firstPass = usage.pass;
@@ -420,12 +428,12 @@ namespace Horo::Render {
 
             [[nodiscard]] bool IsPassValid(const RenderGraphPassRef pass) const noexcept {
                 return pass.owner == graph_.Owner() && pass.id.value > 0 && pass.id.value <= graph_.Passes().size() &&
-                       graph_.Passes()[PassIndex(pass)].reference == pass;
+                       graph_.Passes()[GraphIndex(pass)].reference == pass;
             }
 
             [[nodiscard]] bool IsResourceValid(const RenderGraphResourceId resource) const noexcept {
                 return resource.owner == graph_.Owner() && resource.value > 0 && resource.value <= graph_.Resources().size() &&
-                       graph_.Resources()[ResourceIndex(resource)].id == resource;
+                       graph_.Resources()[GraphIndex(resource)].id == resource;
             }
 
             [[nodiscard]] bool IsUsedTransient(const std::size_t resource) const noexcept {
@@ -435,14 +443,6 @@ namespace Horo::Render {
 
             [[nodiscard]] bool CanAlias(const std::size_t resource) const noexcept {
                 return IsUsedTransient(resource) && aliasRoleByResource_[resource].has_value() && mixedAliasRole_[resource] == 0;
-            }
-
-            [[nodiscard]] static std::size_t PassIndex(const RenderGraphPassRef pass) noexcept {
-                return pass.id.value - 1;
-            }
-
-            [[nodiscard]] static std::size_t ResourceIndex(const RenderGraphResourceId resource) noexcept {
-                return resource.value - 1;
             }
 
             const RenderGraph &graph_;
