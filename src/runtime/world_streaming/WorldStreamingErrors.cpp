@@ -31,6 +31,22 @@ namespace Horo::WorldStreaming::WorldStreamingErrors {
         Describe("world_streaming.generation.exhausted", ErrorSeverity::Critical,
                  "A world-partition epoch, cell generation, runtime-source revision, or authoring-page revision cannot advance.",
                  "Retire the exhausted incarnation, slot, source, or page; never wrap an issued world-streaming counter.", false);
+    const ErrorCodeDescriptor CellOperationInvalid =
+        Describe("world_streaming.cell_operation.invalid", ErrorSeverity::Error,
+                 "A cell operation has a malformed identity, fence, or initial representation.",
+                 "Use a non-zero operation identity and the exact valid fence issued for the cell attempt.", true);
+    const ErrorCodeDescriptor CellOperationStale =
+        Describe("world_streaming.cell_operation.stale", ErrorSeverity::Warning,
+                 "A command or completion does not name the exact cell operation and fence.",
+                 "Discard stale publication while routing retirement acknowledgement to its matching retained operation.", false);
+    const ErrorCodeDescriptor CellOperationUnsupported =
+        Describe("world_streaming.cell_operation.unsupported", ErrorSeverity::Error,
+                 "A cell operation transition value is unsupported by this contract version.",
+                 "Use one of the declared typed cell-operation transitions.", true);
+    const ErrorCodeDescriptor CellOperationTransitionInvalid =
+        Describe("world_streaming.cell_operation.transition_invalid", ErrorSeverity::Error,
+                 "A known cell operation transition is not legal from the current phase.",
+                 "Follow the queued, admitted, preparing, activating, retiring, and terminal lifecycle order.", false);
     const ErrorCodeDescriptor QuantizationPolicyInvalid =
         Describe("world_streaming.quantization.policy_invalid", ErrorSeverity::Error,
                  "The world-cell quantization policy has invalid size, bounds, or LOD limits.",

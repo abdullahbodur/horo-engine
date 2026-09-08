@@ -223,6 +223,7 @@ horo_configure_target_header_boundary(HoroNavigationNull PUBLIC_HEADERS
 )
 horo_configure_target_header_boundary(HoroWorldStreaming PUBLIC_HEADERS
     Horo/WorldStreaming/CookedWorldIndexManifest.h
+    Horo/WorldStreaming/StreamingCellOperation.h
     Horo/WorldStreaming/WorldDependencyPlan.h
     Horo/WorldStreaming/WorldAuthoringContract.h
     Horo/WorldStreaming/StreamingDesiredState.h
