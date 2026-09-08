@@ -29,14 +29,36 @@ namespace {
             return entry.disposition == RenderGraphPassDispositionKind::Culled;
         }));
     }
+
+    struct GraphicsPassTriplet {
+        RenderGraphPassRef first;
+        RenderGraphPassRef second;
+        RenderGraphPassRef third;
+    };
+
+    GraphicsPassTriplet RequireGraphicsPassTriplet(RenderGraphBuilder &builder) {
+        return {
+            RequirePass(builder, RenderPassKind::Graphics, RenderQueueRole::Graphics),
+            RequirePass(builder, RenderPassKind::Graphics, RenderQueueRole::Graphics),
+            RequirePass(builder, RenderPassKind::Graphics, RenderQueueRole::Graphics),
+        };
+    }
+
+    RenderGraph RequireTwoPassDependencyGraph(const RenderGraphDependencyKind repeatedReason) {
+        RenderGraphLimits limits{.maxPasses = 2, .maxResources = 1, .maxUsages = 1, .maxDependencies = 2};
+        RenderGraphBuilder builder = RequireBuilder(limits);
+        const auto first = RequirePass(builder, RenderPassKind::Graphics, RenderQueueRole::Graphics);
+        const auto second = RequirePass(builder, RenderPassKind::Graphics, RenderQueueRole::Graphics);
+        RequireDependency(builder, {first, second, RenderGraphDependencyKind::ExecutionOrder});
+        RequireDependency(builder, {first, second, repeatedReason});
+        return RequireGraph(builder);
+    }
 }  // namespace
 
 TEST_CASE("Render graph compilation produces deterministic dependency order", "[runtime][renderer][render-graph]") {
     RenderGraphLimits limits{.maxPasses = 4, .maxResources = 1, .maxUsages = 1, .maxDependencies = 2};
     RenderGraphBuilder builder = RequireBuilder(limits);
-    const auto first = RequirePass(builder, RenderPassKind::Graphics, RenderQueueRole::Graphics);
-    const auto second = RequirePass(builder, RenderPassKind::Graphics, RenderQueueRole::Graphics);
-    const auto third = RequirePass(builder, RenderPassKind::Graphics, RenderQueueRole::Graphics);
+    const auto [first, second, third] = RequireGraphicsPassTriplet(builder);
     const auto fourth = RequirePass(builder, RenderPassKind::Graphics, RenderQueueRole::Graphics);
     RequireDependency(builder, {third, first, RenderGraphDependencyKind::ExecutionOrder});
     RequireDependency(builder, {second, first, RenderGraphDependencyKind::ExecutionOrder});
@@ -104,9 +126,7 @@ TEST_CASE("Render graph compilation gives unordered resource hazards a determini
 TEST_CASE("Render graph compilation rejects disconnected dependency cycles", "[runtime][renderer][render-graph]") {
     RenderGraphLimits limits{.maxPasses = 4, .maxResources = 1, .maxUsages = 1, .maxDependencies = 3};
     RenderGraphBuilder builder = RequireBuilder(limits);
-    const auto first = RequirePass(builder, RenderPassKind::Graphics, RenderQueueRole::Graphics);
-    const auto second = RequirePass(builder, RenderPassKind::Graphics, RenderQueueRole::Graphics);
-    const auto third = RequirePass(builder, RenderPassKind::Graphics, RenderQueueRole::Graphics);
+    const auto [first, second, third] = RequireGraphicsPassTriplet(builder);
     RequirePass(builder, RenderPassKind::Graphics, RenderQueueRole::Graphics);
     RequireDependency(builder, {first, second, RenderGraphDependencyKind::ExecutionOrder});
     RequireDependency(builder, {second, third, RenderGraphDependencyKind::ResourceHazard});
@@ -119,26 +139,14 @@ TEST_CASE("Render graph compilation rejects disconnected dependency cycles", "[r
 }
 
 TEST_CASE("Render graph compilation rejects exact duplicate dependencies", "[runtime][renderer][render-graph]") {
-    RenderGraphLimits limits{.maxPasses = 2, .maxResources = 1, .maxUsages = 1, .maxDependencies = 2};
-    RenderGraphBuilder builder = RequireBuilder(limits);
-    const auto first = RequirePass(builder, RenderPassKind::Graphics, RenderQueueRole::Graphics);
-    const auto second = RequirePass(builder, RenderPassKind::Graphics, RenderQueueRole::Graphics);
-    RequireDependency(builder, {first, second, RenderGraphDependencyKind::ExecutionOrder});
-    RequireDependency(builder, {first, second, RenderGraphDependencyKind::ExecutionOrder});
-    RenderGraph graph = RequireGraph(builder);
+    RenderGraph graph = RequireTwoPassDependencyGraph(RenderGraphDependencyKind::ExecutionOrder);
     const auto rejected = CompileRenderGraph(graph);
     RequireError(rejected, "render.graph.dependency_invalid");
     REQUIRE(rejected.ErrorValue().message.find("Pass 1 -> pass 2") != std::string::npos);
 }
 
 TEST_CASE("Render graph compilation preserves different dependency reasons", "[runtime][renderer][render-graph]") {
-    RenderGraphLimits limits{.maxPasses = 2, .maxResources = 1, .maxUsages = 1, .maxDependencies = 2};
-    RenderGraphBuilder builder = RequireBuilder(limits);
-    const auto first = RequirePass(builder, RenderPassKind::Graphics, RenderQueueRole::Graphics);
-    const auto second = RequirePass(builder, RenderPassKind::Graphics, RenderQueueRole::Graphics);
-    RequireDependency(builder, {first, second, RenderGraphDependencyKind::ExecutionOrder});
-    RequireDependency(builder, {first, second, RenderGraphDependencyKind::ResourceHazard});
-    RenderGraph graph = RequireGraph(builder);
+    RenderGraph graph = RequireTwoPassDependencyGraph(RenderGraphDependencyKind::ResourceHazard);
     REQUIRE(graph.Dependencies().size() == 2);
     REQUIRE(RequireSchedule(graph).OrderedPasses().size() == 2);
 }
