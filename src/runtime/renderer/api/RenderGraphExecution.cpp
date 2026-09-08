@@ -85,8 +85,8 @@ namespace Horo::Render {
                     if (!assignment.IsValid()) {
                         return Result<void>::Failure(MakeError(RenderGraphExecutionErrors::InvalidQueueTopology));
                     }
-                    const std::size_t role = static_cast<std::size_t>(assignment.role);
-                    if (queuesByRole_[role]) {
+                    const auto role = static_cast<std::size_t>(assignment.role);
+                    if (queuesByRole_[role].has_value()) {
                         return Result<void>::Failure(MakeError(RenderGraphExecutionErrors::InvalidQueueTopology));
                     }
                     queuesByRole_[role] = assignment.queue;
@@ -95,12 +95,12 @@ namespace Horo::Render {
             }
 
             [[nodiscard]] Result<void> AddPass(const RenderGraphPassRef reference) {
-                if (!IsKnownPass(reference, graph_) || passPositions_[reference.id.value - 1]) {
+                if (!IsKnownPass(reference, graph_) || passPositions_[reference.id.value - 1].has_value()) {
                     return Result<void>::Failure(MakeError(RenderGraphExecutionErrors::InvalidSchedule));
                 }
                 const RenderGraphPass &source = graph_.Passes()[reference.id.value - 1];
-                const std::size_t role = static_cast<std::size_t>(source.queue);
-                if (role >= queuesByRole_.size() || !queuesByRole_[role]) {
+                const auto role = static_cast<std::size_t>(source.queue);
+                if (role >= queuesByRole_.size() || !queuesByRole_[role].has_value()) {
                     return Result<void>::Failure(MakeError(RenderGraphExecutionErrors::InvalidQueueTopology));
                 }
                 passPositions_[reference.id.value - 1] = passes_.size();
@@ -126,7 +126,7 @@ namespace Horo::Render {
             }
 
             [[nodiscard]] std::optional<RenderQueueId> QueueFor(const RenderGraphPassRef pass) const noexcept {
-                if (const auto position = Position(pass)) {
+                if (const auto position = Position(pass); position.has_value()) {
                     return passes_[*position].queue;
                 }
                 return std::nullopt;
@@ -138,15 +138,15 @@ namespace Horo::Render {
                     if (!assignment.IsValid()) {
                         return Result<void>::Failure(MakeError(RenderGraphExecutionErrors::InvalidSynchronization));
                     }
-                    const std::size_t role = static_cast<std::size_t>(assignment.role);
-                    if (synchronizationQueues[role]) {
+                    const auto role = static_cast<std::size_t>(assignment.role);
+                    if (synchronizationQueues[role].has_value()) {
                         return Result<void>::Failure(MakeError(RenderGraphExecutionErrors::InvalidSynchronization));
                     }
                     synchronizationQueues[role] = assignment.queue;
                 }
                 for (const RenderGraphPassRef pass : schedule_.OrderedPasses()) {
-                    const std::size_t role = static_cast<std::size_t>(graph_.Passes()[pass.id.value - 1].queue);
-                    if (!synchronizationQueues[role] || synchronizationQueues[role] != queuesByRole_[role]) {
+                    const auto role = static_cast<std::size_t>(graph_.Passes()[pass.id.value - 1].queue);
+                    if (!synchronizationQueues[role].has_value() || synchronizationQueues[role] != queuesByRole_[role]) {
                         return Result<void>::Failure(MakeError(RenderGraphExecutionErrors::InvalidSynchronization));
                     }
                 }
@@ -158,7 +158,7 @@ namespace Horo::Render {
                     if (!IsKnownResource(usage.resource, graph_)) {
                         return Result<void>::Failure(MakeError(RenderGraphExecutionErrors::InvalidGraph));
                     }
-                    if (const auto position = Position(usage.pass); position) {
+                    if (const auto position = Position(usage.pass); position.has_value()) {
                         ++counts[*position];
                     }
                 }
@@ -169,8 +169,9 @@ namespace Horo::Render {
                 for (const RenderGraphTransition &transition : synchronization_.Transitions()) {
                     const auto after = Position(transition.after);
                     const auto beforeQueue = QueueFor(transition.before);
-                    const bool beforeValid = !transition.before.IsValid() || (beforeQueue && transition.oldState.queue == *beforeQueue);
-                    if (!after || !beforeValid || transition.newState.queue != passes_[*after].queue ||
+                    if (const bool beforeValid =
+                            !transition.before.IsValid() || (beforeQueue.has_value() && transition.oldState.queue == *beforeQueue);
+                        !after.has_value() || !beforeValid || transition.newState.queue != passes_[*after].queue ||
                         !IsKnownResource(transition.resource, graph_)) {
                         return Result<void>::Failure(MakeError(RenderGraphExecutionErrors::InvalidSynchronization));
                     }
@@ -182,10 +183,10 @@ namespace Horo::Render {
             [[nodiscard]] Result<void> CountDependencies(std::vector<std::size_t> &counts) const {
                 for (const RenderGraphDependency &dependency : graph_.Dependencies()) {
                     const auto after = Position(dependency.after);
-                    if (after && !Position(dependency.before)) {
+                    if (after.has_value() && !Position(dependency.before).has_value()) {
                         return Result<void>::Failure(MakeError(RenderGraphExecutionErrors::InvalidSchedule));
                     }
-                    if (after) {
+                    if (after.has_value()) {
                         ++counts[*after];
                     }
                 }
@@ -195,9 +196,11 @@ namespace Horo::Render {
             [[nodiscard]] bool IsTransferValid(const RenderGraphOwnershipTransfer &transfer) const noexcept {
                 const auto acquire = Position(transfer.acquireBefore);
                 const auto releaseQueue = QueueFor(transfer.releaseAfter);
-                const bool releaseValid = !transfer.releaseAfter.IsValid() || (releaseQueue && transfer.sourceQueue == *releaseQueue);
-                return acquire && releaseValid && IsKnownResource(transfer.resource, graph_) && transfer.sourceQueue.IsValid() &&
-                       transfer.destinationQueue == passes_[*acquire].queue && transfer.sourceQueue != transfer.destinationQueue;
+                const bool releaseValid =
+                    !transfer.releaseAfter.IsValid() || (releaseQueue.has_value() && transfer.sourceQueue == *releaseQueue);
+                return acquire.has_value() && releaseValid && IsKnownResource(transfer.resource, graph_) &&
+                       transfer.sourceQueue.IsValid() && transfer.destinationQueue == passes_[*acquire].queue &&
+                       transfer.sourceQueue != transfer.destinationQueue;
             }
 
             [[nodiscard]] Result<void> CountTransfers(std::vector<std::size_t> &releaseCounts,
@@ -207,10 +210,10 @@ namespace Horo::Render {
                         return Result<void>::Failure(MakeError(RenderGraphExecutionErrors::InvalidSynchronization));
                     }
                     const auto acquire = Position(transfer.acquireBefore);
-                    if (!acquire) {
+                    if (!acquire.has_value()) {
                         return Result<void>::Failure(MakeError(RenderGraphExecutionErrors::InvalidSynchronization));
                     }
-                    if (const auto release = Position(transfer.releaseAfter)) {
+                    if (const auto release = Position(transfer.releaseAfter); release.has_value()) {
                         ++releaseCounts[*release];
                     }
                     ++acquireCounts[*acquire];
@@ -308,16 +311,10 @@ namespace Horo::Render {
     }  // namespace
 
     /** @copydoc CompiledRenderGraphExecution::CompiledRenderGraphExecution */
-    CompiledRenderGraphExecution::CompiledRenderGraphExecution(RenderGraphOwnerId owner, std::vector<RenderGraphResource> resources,
-                                                               std::vector<RenderGraphExecutionPass> passes,
-                                                               std::vector<RenderGraphResourceUsage> usages,
-                                                               std::vector<RenderGraphDependency> dependencies,
-                                                               std::vector<RenderGraphTransition> transitions,
-                                                               std::vector<RenderGraphOwnershipTransfer> releaseTransfers,
-                                                               std::vector<RenderGraphOwnershipTransfer> acquireTransfers) noexcept
-        : owner_(owner), resources_(std::move(resources)), passes_(std::move(passes)), usages_(std::move(usages)),
-          dependencies_(std::move(dependencies)), transitions_(std::move(transitions)), releaseTransfers_(std::move(releaseTransfers)),
-          acquireTransfers_(std::move(acquireTransfers)) {}
+    CompiledRenderGraphExecution::CompiledRenderGraphExecution(RenderGraphOwnerId owner, Storage storage) noexcept
+        : owner_(owner), resources_(std::move(storage.resources)), passes_(std::move(storage.passes)), usages_(std::move(storage.usages)),
+          dependencies_(std::move(storage.dependencies)), transitions_(std::move(storage.transitions)),
+          releaseTransfers_(std::move(storage.releaseTransfers)), acquireTransfers_(std::move(storage.acquireTransfers)) {}
 
     /** @copydoc CompiledRenderGraphExecution::CompiledRenderGraphExecution */
     CompiledRenderGraphExecution::CompiledRenderGraphExecution(CompiledRenderGraphExecution &&other) noexcept
@@ -391,9 +388,12 @@ namespace Horo::Render {
             }
             std::vector resources(graph.Resources().begin(), graph.Resources().end());
             return Result<CompiledRenderGraphExecution>::Success(
-                CompiledRenderGraphExecution{graph.Owner(), std::move(resources), compiler.TakePasses(), compiler.TakeUsages(),
-                                             compiler.TakeDependencies(), compiler.TakeTransitions(), compiler.TakeReleaseTransfers(),
-                                             compiler.TakeAcquireTransfers()});
+                CompiledRenderGraphExecution{graph.Owner(),
+                                             CompiledRenderGraphExecution::Storage{std::move(resources), compiler.TakePasses(),
+                                                                                   compiler.TakeUsages(), compiler.TakeDependencies(),
+                                                                                   compiler.TakeTransitions(),
+                                                                                   compiler.TakeReleaseTransfers(),
+                                                                                   compiler.TakeAcquireTransfers()}});
         } catch (const std::bad_alloc &) {
             return Result<CompiledRenderGraphExecution>::Failure(MakeError(RenderGraphExecutionErrors::AllocationFailed));
         }

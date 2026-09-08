@@ -107,12 +107,18 @@ namespace Horo::Render {
                                                                                 const RenderGraphSynchronizationPlan &,
                                                                                 std::span<const RenderQueueAssignment>);
 
+        struct Storage {
+            std::vector<RenderGraphResource> resources;
+            std::vector<RenderGraphExecutionPass> passes;
+            std::vector<RenderGraphResourceUsage> usages;
+            std::vector<RenderGraphDependency> dependencies;
+            std::vector<RenderGraphTransition> transitions;
+            std::vector<RenderGraphOwnershipTransfer> releaseTransfers;
+            std::vector<RenderGraphOwnershipTransfer> acquireTransfers;
+        };
+
         /** @brief Adopts fully validated, backend-neutral execution storage. */
-        CompiledRenderGraphExecution(RenderGraphOwnerId owner, std::vector<RenderGraphResource> resources,
-                                     std::vector<RenderGraphExecutionPass> passes, std::vector<RenderGraphResourceUsage> usages,
-                                     std::vector<RenderGraphDependency> dependencies, std::vector<RenderGraphTransition> transitions,
-                                     std::vector<RenderGraphOwnershipTransfer> releaseTransfers,
-                                     std::vector<RenderGraphOwnershipTransfer> acquireTransfers) noexcept;
+        CompiledRenderGraphExecution(RenderGraphOwnerId owner, Storage storage) noexcept;
 
         RenderGraphOwnerId owner_;
         std::vector<RenderGraphResource> resources_;
