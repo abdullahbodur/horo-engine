@@ -97,11 +97,9 @@ namespace Horo::Editor::Ui {
             const float height = ScaledLayoutValue(31.0F);
             const float horizontalPadding = ScaledLayoutValue(8.0F);
             const float minimumControlWidth = ScaledLayoutValue(90.0F);
-            const float availableLabelWidth = std::max(ScaledLayoutValue(56.0F), width - horizontalPadding * 2.0F - minimumControlWidth);
             const float labelFontSize = InspectorTypography::Label * scale;
-            const float measuredLabelWidth = fonts.sans->CalcTextSizeA(labelFontSize, FLT_MAX, 0.0F, label).x + ScaledLayoutValue(8.0F);
-            const float labelWidth = std::clamp(std::max(ScaledLayoutValue(68.0F), measuredLabelWidth), ScaledLayoutValue(56.0F),
-                                                std::min(ScaledLayoutValue(130.0F), availableLabelWidth));
+            const float labelWidth = std::min(ScaledLayoutValue(68.0F),
+                                              std::max(ScaledLayoutValue(56.0F), width - horizontalPadding * 2.0F - minimumControlWidth));
 
             ImDrawList *drawList = ImGui::GetWindowDrawList();
             drawList->PushClipRect({position.x + horizontalPadding, position.y},
@@ -1571,7 +1569,8 @@ namespace Horo::Editor::Ui {
         for (size_t i = 0; i < tabs.size(); ++i) {
             const bool isActive = (static_cast<int>(i) == activeTab);
 
-            const ImVec2 textSize = ImGui::CalcTextSize(tabs[i]);
+            const float tabFontSize = 14.0F * Theme::GetActiveTokens().sizes.uiScale;
+            const ImVec2 textSize = fonts.sans->CalcTextSizeA(tabFontSize, FLT_MAX, 0.0F, tabs[i]);
             auto buttonSize = ImVec2(textSize.x + 26.0f, tabH);  // padding 13px * 2
 
             const ImVec2 p = ImGui::GetCursorScreenPos();
@@ -1587,9 +1586,8 @@ namespace Horo::Editor::Ui {
                 textColor = Theme::Dim();  // hover color
 
             // Draw text
-            const float tabFontSize = 12.0F * Theme::GetActiveTokens().sizes.uiScale;
             const float textY = p.y + (tabH - tabFontSize) * 0.5F;
-            dl->AddText(fonts.sansCompact, tabFontSize, ImVec2(p.x + 13.0f, textY), ImGui::GetColorU32(textColor), tabs[i]);
+            dl->AddText(fonts.sans, tabFontSize, ImVec2(p.x + 13.0f, textY), ImGui::GetColorU32(textColor), tabs[i]);
 
             // Active underline
             if (isActive) {
@@ -1741,9 +1739,9 @@ namespace Horo::Editor::Ui {
         constexpr float toolGap = 2.0F;
         constexpr float iconInset = 4.0F;
         const float toolsX = pos.x + w - toolSize * 3.0F - toolGap * 2.0F - 4.0F;
-        DrawEditorIcon(dl, UiIcon::Reset, {toolsX + iconInset, pos.y + 9.0F}, {16.0F, 16.0F}, Theme::U32(Theme::Muted()));
+        DrawEditorIcon(dl, UiIcon::Reset, {toolsX + iconInset, pos.y + 9.0F}, {16.0F, 16.0F}, Theme::U32(Theme::Muted()), fonts.icon);
         DrawEditorIcon(dl, UiIcon::Check, {toolsX + toolSize + toolGap + iconInset, pos.y + 9.0F}, {16.0F, 16.0F},
-                       Theme::U32(Theme::Accent()));
+                       Theme::U32(Theme::Accent()), fonts.icon);
 
         bool removeRequested = false;
         const float settingsX = toolsX + (toolSize + toolGap) * 2.0F;
@@ -1757,14 +1755,15 @@ namespace Horo::Editor::Ui {
                 dl->AddRectFilled({settingsX, pos.y + 5.0F}, {settingsX + toolSize, pos.y + 5.0F + toolSize}, Theme::U32(Theme::Hover()),
                                   3.0F);
             DrawEditorIcon(dl, UiIcon::Settings, {settingsX + iconInset, pos.y + 9.0F}, {16.0F, 16.0F},
-                           Theme::U32(hovered ? Theme::Text() : Theme::Muted()));
+                           Theme::U32(hovered ? Theme::Text() : Theme::Muted()), fonts.icon);
             if (BeginMenuPopup("##component_settings")) {
                 removeRequested = ContextMenuItem(removeLabel, nullptr, fonts, ContextMenuItemTone::Danger, "action.delete");
                 EndMenuPopup();
             }
             ImGui::PopID();
         } else {
-            DrawEditorIcon(dl, UiIcon::Settings, {settingsX + iconInset, pos.y + 9.0F}, {16.0F, 16.0F}, Theme::U32(Theme::Muted()));
+            DrawEditorIcon(dl, UiIcon::Settings, {settingsX + iconInset, pos.y + 9.0F}, {16.0F, 16.0F}, Theme::U32(Theme::Muted()),
+                           fonts.icon);
         }
 
         ImGui::SetCursorScreenPos(ImVec2(pos.x, pos.y + h));
@@ -1854,7 +1853,7 @@ namespace Horo::Editor::Ui {
         PushContextMenuRowStyle();
         bool activated = false;
         {
-            Theme::ScopedTextStyle textStyle(fonts.sans, 12.0F * Theme::GetActiveTokens().sizes.uiScale, Theme::FontPx::Sans);
+            Theme::ScopedTextStyle textStyle(fonts.sans, 14.0F * Theme::GetActiveTokens().sizes.uiScale, Theme::FontPx::Sans);
             activated = ImGui::MenuItem(label, shortcut);
         }
         PopContextMenuRowStyle();
@@ -1873,6 +1872,7 @@ namespace Horo::Editor::Ui {
         ImGui::PushStyleColor(ImGuiCol_HeaderActive, Theme::AccentSoft());
         PushContextPopupWindowStyle();
         PushContextMenuRowStyle();
+        ImGui::SetNextWindowSizeConstraints({ScaledLayoutValue(224.0F), 0.0F}, {ScaledLayoutValue(340.0F), FLT_MAX});
         const float itemInnerSpacingY = ImGui::GetStyle().ItemInnerSpacing.y;
         // ImGui intentionally overlaps child menus by ItemInnerSpacing.x. The
         // editor popup treatment uses visible borders, so align those borders
@@ -1880,7 +1880,7 @@ namespace Horo::Editor::Ui {
         ImGui::PushStyleVar(ImGuiStyleVar_ItemInnerSpacing, {0.0F, itemInnerSpacingY});
         bool open = false;
         {
-            Theme::ScopedTextStyle textStyle(fonts.sans, 12.0F * Theme::GetActiveTokens().sizes.uiScale, Theme::FontPx::Sans);
+            Theme::ScopedTextStyle textStyle(fonts.sans, 14.0F * Theme::GetActiveTokens().sizes.uiScale, Theme::FontPx::Sans);
             open = ImGui::BeginMenu(label);
         }
         ImGui::PopStyleVar();

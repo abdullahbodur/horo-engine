@@ -336,6 +336,38 @@ namespace Horo::Editor::Ui {
             const auto index = static_cast<std::size_t>(icon);
             return index < kIconDescriptors.size() ? std::optional{index} : std::nullopt;
         }
+
+        [[nodiscard]] constexpr ImWchar MaterialSymbolGlyph(const UiIcon icon) noexcept {
+            switch (icon) {
+                case UiIcon::Reset:
+                    return 0xF053;  // restart_alt
+                case UiIcon::Check:
+                    return 0xE834;  // check_box
+                case UiIcon::Settings:
+                    return 0xE8B8;  // settings
+                default:
+                    return 0;
+            }
+        }
+
+        [[nodiscard]] std::array<char, 4> EncodeBasicMultilingualPlaneGlyph(const ImWchar codepoint) noexcept {
+            if (codepoint < 0x80)
+                return {static_cast<char>(codepoint), '\0', '\0', '\0'};
+            if (codepoint < 0x800) {
+                return {
+                    static_cast<char>(0xC0 | (codepoint >> 6)),
+                    static_cast<char>(0x80 | (codepoint & 0x3F)),
+                    '\0',
+                    '\0',
+                };
+            }
+            return {
+                static_cast<char>(0xE0 | (codepoint >> 12)),
+                static_cast<char>(0x80 | ((codepoint >> 6) & 0x3F)),
+                static_cast<char>(0x80 | (codepoint & 0x3F)),
+                '\0',
+            };
+        }
     }  // namespace
 
     /** @copydoc UiIconRegistry::Resolve */
@@ -359,10 +391,33 @@ namespace Horo::Editor::Ui {
         return index.has_value() ? kIconDescriptors[*index].token : std::string_view{};
     }
 
+    /** @copydoc UiIconRegistry::MaterialSymbolGlyphRanges */
+    std::span<const ImWchar> UiIconRegistry::MaterialSymbolGlyphRanges() noexcept {
+        static constexpr std::array<ImWchar, 13> ranges{
+            0xE000, 0xE003,  // status icons
+            0xE834, 0xE835,  // check_box
+            0xE86C, 0xE86D,  // check_circle
+            0xE8B8, 0xE8B9,  // settings
+            0xEF4A, 0xEF4B,  // circle
+            0xF053, 0xF054,  // restart_alt
+            0,
+        };
+        return ranges;
+    }
+
     /** @copydoc DrawEditorIcon */
-    void DrawEditorIcon(ImDrawList *drawList, const UiIcon icon, const ImVec2 position, const ImVec2 size, const ImU32 color) {
+    void DrawEditorIcon(ImDrawList *drawList, const UiIcon icon, const ImVec2 position, const ImVec2 size, const ImU32 color,
+                        ImFont *const iconFont) {
         if (drawList == nullptr || icon == UiIcon::None)
             return;
+        if (const ImWchar glyph = MaterialSymbolGlyph(icon); glyph != 0 && iconFont != nullptr && iconFont->FindGlyphNoFallback(glyph)) {
+            const std::array utf8 = EncodeBasicMultilingualPlaneGlyph(glyph);
+            const float glyphSize = std::min(size.x, size.y);
+            const ImVec2 textSize = iconFont->CalcTextSizeA(glyphSize, FLT_MAX, 0.0F, utf8.data());
+            drawList->AddText(iconFont, glyphSize, {position.x + (size.x - textSize.x) * 0.5F, position.y + (size.y - textSize.y) * 0.5F},
+                              color, utf8.data());
+            return;
+        }
         const std::optional<std::size_t> index = IconIndex(icon);
         if (index.has_value())
             kIconDescriptors[*index].renderer(IconDrawContext{*drawList, position, size, color});

@@ -60,6 +60,20 @@ TEST_CASE("Editor icon registry resolves canonical and catalog tokens", "[unit][
     REQUIRE_FALSE(UiIconRegistry::Resolve("unknown.icon").has_value());
     REQUIRE(std::string(UiIconRegistry::Token(UiIcon::VisibilityOff)) == "action.visibility_off");
     REQUIRE(UiIconRegistry::Token(UiIcon::None).empty());
+
+    const std::span glyphRanges = UiIconRegistry::MaterialSymbolGlyphRanges();
+    REQUIRE(glyphRanges.size() >= 3U);
+    REQUIRE(glyphRanges.back() == 0);
+    const auto containsGlyph = [glyphRanges](const ImWchar glyph) {
+        for (std::size_t index = 0; index + 1U < glyphRanges.size() && glyphRanges[index] != 0; index += 2U) {
+            if (glyph >= glyphRanges[index] && glyph <= glyphRanges[index + 1U])
+                return true;
+        }
+        return false;
+    };
+    REQUIRE(containsGlyph(0xE834));
+    REQUIRE(containsGlyph(0xE8B8));
+    REQUIRE(containsGlyph(0xF053));
 }
 
 TEST_CASE("Component metrics use theme overrides while global scaling is disabled", "[unit][editor][gui][design-system]") {

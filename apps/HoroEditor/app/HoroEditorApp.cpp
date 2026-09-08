@@ -9,6 +9,7 @@
 #include "Horo/Editor/EditorConfiguration.h"
 #include "Horo/Editor/EditorDataBus.h"
 #include "Horo/Editor/EditorGuiContext.h"
+#include "Horo/Editor/EditorIcons.h"
 #include "Horo/Editor/EditorMenuModel.h"
 #include "Horo/Editor/EditorSettingsEvents.h"
 #include "Horo/Editor/EditorSettingsService.h"
@@ -253,13 +254,11 @@ namespace Horo::Editor {
             f.sansEmphasis = io.Fonts->AddFontFromFileTTF(AssetPath("fonts/inter/InterVariable.ttf").c_str(), Theme::FontPx::SansEmphasis,
                                                           &emphasisCfg, ranges);
 
-            // Material Symbols icon font — only the codepoints we need for editor UI icons.
-            // Covers: error(U+E000), warning(U+E002), check_circle(U+E86C), circle(U+EF4A)
-            static constexpr std::array<ImWchar, 7> iconRanges{0xE000, 0xE003, 0xE86C, 0xE86D, 0xEF4A, 0xEF4B, 0};
             ImFontConfig iconCfg{};
             iconCfg.OversampleH = 3;
             iconCfg.OversampleV = 2;
             iconCfg.RasterizerDensity = rasterizerDensity;
+            const std::span iconRanges = Ui::UiIconRegistry::MaterialSymbolGlyphRanges();
             f.icon = io.Fonts->AddFontFromFileTTF(AssetPath("fonts/MaterialSymbolsOutlined.ttf").c_str(), Theme::FontPx::Icon, &iconCfg,
                                                   iconRanges.data());
             if (f.sans)
