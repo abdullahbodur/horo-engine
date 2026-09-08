@@ -2,12 +2,21 @@
 #include "Horo/WorldStreaming/WorldStreamingErrors.h"
 #include "WorldStreamingTestUtils.h"
 
+#include <array>
 #include <catch2/catch_test_macros.hpp>
+#include <utility>
 
 namespace Horo::WorldStreaming {
     namespace {
         using TestSupport::IdentityFrom;
         using TestSupport::RequireError;
+
+        constexpr auto InterruptionCases = std::to_array<std::pair<StreamingCellOperationTransition, StreamingCellOperationOutcome>>({
+            {StreamingCellOperationTransition::Cancel, StreamingCellOperationOutcome::Cancelled},
+            {StreamingCellOperationTransition::Fail, StreamingCellOperationOutcome::Failed},
+            {StreamingCellOperationTransition::Replace, StreamingCellOperationOutcome::Replaced},
+            {StreamingCellOperationTransition::Shutdown, StreamingCellOperationOutcome::Shutdown},
+        });
 
         [[nodiscard]] StreamingCellOperationHandle Handle(const std::uint64_t operation = 7, const std::uint64_t generation = 5) {
             return {
@@ -57,12 +66,7 @@ namespace Horo::WorldStreaming {
         }
 
         TEST_CASE("Queued interruption terminates without a false retirement barrier", "[unit][world_streaming][cell_operation]") {
-            for (const auto [transition, outcome] : {
-                     std::pair{StreamingCellOperationTransition::Cancel, StreamingCellOperationOutcome::Cancelled},
-                     std::pair{StreamingCellOperationTransition::Fail, StreamingCellOperationOutcome::Failed},
-                     std::pair{StreamingCellOperationTransition::Replace, StreamingCellOperationOutcome::Replaced},
-                     std::pair{StreamingCellOperationTransition::Shutdown, StreamingCellOperationOutcome::Shutdown},
-                 }) {
+            for (const auto [transition, outcome] : InterruptionCases) {
                 const auto terminal = Advance(StreamingCellOperation::Create(Handle()).Value(), transition);
                 REQUIRE(terminal.State() == StreamingCellOperationState::Terminal);
                 REQUIRE(terminal.Outcome() == outcome);
@@ -73,12 +77,7 @@ namespace Horo::WorldStreaming {
                   "[unit][world_streaming][cell_operation][retirement]") {
             for (const auto state :
                  {StreamingCellOperationState::Admitted, StreamingCellOperationState::Preparing, StreamingCellOperationState::Activating}) {
-                for (const auto [transition, outcome] : {
-                         std::pair{StreamingCellOperationTransition::Cancel, StreamingCellOperationOutcome::Cancelled},
-                         std::pair{StreamingCellOperationTransition::Fail, StreamingCellOperationOutcome::Failed},
-                         std::pair{StreamingCellOperationTransition::Replace, StreamingCellOperationOutcome::Replaced},
-                         std::pair{StreamingCellOperationTransition::Shutdown, StreamingCellOperationOutcome::Shutdown},
-                     }) {
+                for (const auto [transition, outcome] : InterruptionCases) {
                     auto retiring = Advance(Accepted(state), transition);
                     REQUIRE(retiring.State() == StreamingCellOperationState::Retiring);
                     REQUIRE(retiring.Outcome() == outcome);

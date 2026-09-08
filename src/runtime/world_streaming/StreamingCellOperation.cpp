@@ -2,6 +2,8 @@
 
 #include "Horo/WorldStreaming/WorldStreamingErrors.h"
 
+#include <algorithm>
+#include <array>
 #include <utility>
 
 namespace Horo::WorldStreaming {
@@ -15,20 +17,58 @@ namespace Horo::WorldStreaming {
                    transition <= StreamingCellOperationTransition::AcknowledgeRetirement;
         }
 
-        [[nodiscard]] StreamingCellOperationOutcome InterruptionOutcome(const StreamingCellOperationTransition transition) noexcept {
-            switch (transition) {
-                case StreamingCellOperationTransition::Cancel:
-                    return StreamingCellOperationOutcome::Cancelled;
-                case StreamingCellOperationTransition::Fail:
-                    return StreamingCellOperationOutcome::Failed;
-                case StreamingCellOperationTransition::Replace:
-                    return StreamingCellOperationOutcome::Replaced;
-                case StreamingCellOperationTransition::Shutdown:
-                    return StreamingCellOperationOutcome::Shutdown;
-                default:
-                    return StreamingCellOperationOutcome::None;
-            }
-        }
+        struct TransitionRule final {
+            StreamingCellOperationState source;
+            StreamingCellOperationTransition transition;
+            StreamingCellOperationState destination;
+            StreamingCellOperationOutcome outcome;
+            bool retainOutcome{};
+        };
+
+        constexpr auto TransitionRules = std::to_array<TransitionRule>({
+            {StreamingCellOperationState::Queued, StreamingCellOperationTransition::Admit, StreamingCellOperationState::Admitted,
+             StreamingCellOperationOutcome::None},
+            {StreamingCellOperationState::Admitted, StreamingCellOperationTransition::BeginPreparation,
+             StreamingCellOperationState::Preparing, StreamingCellOperationOutcome::None},
+            {StreamingCellOperationState::Preparing, StreamingCellOperationTransition::BeginActivation,
+             StreamingCellOperationState::Activating, StreamingCellOperationOutcome::None},
+            {StreamingCellOperationState::Activating, StreamingCellOperationTransition::Complete, StreamingCellOperationState::Terminal,
+             StreamingCellOperationOutcome::Succeeded},
+            {StreamingCellOperationState::Queued, StreamingCellOperationTransition::Cancel, StreamingCellOperationState::Terminal,
+             StreamingCellOperationOutcome::Cancelled},
+            {StreamingCellOperationState::Queued, StreamingCellOperationTransition::Fail, StreamingCellOperationState::Terminal,
+             StreamingCellOperationOutcome::Failed},
+            {StreamingCellOperationState::Queued, StreamingCellOperationTransition::Replace, StreamingCellOperationState::Terminal,
+             StreamingCellOperationOutcome::Replaced},
+            {StreamingCellOperationState::Queued, StreamingCellOperationTransition::Shutdown, StreamingCellOperationState::Terminal,
+             StreamingCellOperationOutcome::Shutdown},
+            {StreamingCellOperationState::Admitted, StreamingCellOperationTransition::Cancel, StreamingCellOperationState::Retiring,
+             StreamingCellOperationOutcome::Cancelled},
+            {StreamingCellOperationState::Admitted, StreamingCellOperationTransition::Fail, StreamingCellOperationState::Retiring,
+             StreamingCellOperationOutcome::Failed},
+            {StreamingCellOperationState::Admitted, StreamingCellOperationTransition::Replace, StreamingCellOperationState::Retiring,
+             StreamingCellOperationOutcome::Replaced},
+            {StreamingCellOperationState::Admitted, StreamingCellOperationTransition::Shutdown, StreamingCellOperationState::Retiring,
+             StreamingCellOperationOutcome::Shutdown},
+            {StreamingCellOperationState::Preparing, StreamingCellOperationTransition::Cancel, StreamingCellOperationState::Retiring,
+             StreamingCellOperationOutcome::Cancelled},
+            {StreamingCellOperationState::Preparing, StreamingCellOperationTransition::Fail, StreamingCellOperationState::Retiring,
+             StreamingCellOperationOutcome::Failed},
+            {StreamingCellOperationState::Preparing, StreamingCellOperationTransition::Replace, StreamingCellOperationState::Retiring,
+             StreamingCellOperationOutcome::Replaced},
+            {StreamingCellOperationState::Preparing, StreamingCellOperationTransition::Shutdown, StreamingCellOperationState::Retiring,
+             StreamingCellOperationOutcome::Shutdown},
+            {StreamingCellOperationState::Activating, StreamingCellOperationTransition::Cancel, StreamingCellOperationState::Retiring,
+             StreamingCellOperationOutcome::Cancelled},
+            {StreamingCellOperationState::Activating, StreamingCellOperationTransition::Fail, StreamingCellOperationState::Retiring,
+             StreamingCellOperationOutcome::Failed},
+            {StreamingCellOperationState::Activating, StreamingCellOperationTransition::Replace, StreamingCellOperationState::Retiring,
+             StreamingCellOperationOutcome::Replaced},
+            {StreamingCellOperationState::Activating, StreamingCellOperationTransition::Shutdown, StreamingCellOperationState::Retiring,
+             StreamingCellOperationOutcome::Shutdown},
+            {StreamingCellOperationState::Retiring, StreamingCellOperationTransition::AcknowledgeRetirement,
+             StreamingCellOperationState::Terminal, StreamingCellOperationOutcome::None, true},
+        });
     }  // namespace
 
     /** @copydoc StreamingCellOperationHandle::IsValid */
@@ -74,33 +114,13 @@ namespace Horo::WorldStreaming {
         if (!IsKnown(transition))
             return Failure<StreamingCellOperation>(WorldStreamingErrors::CellOperationUnsupported);
 
-        if (state_ == StreamingCellOperationState::Queued && transition == StreamingCellOperationTransition::Admit)
-            return Result<StreamingCellOperation>::Success(
-                StreamingCellOperation{handle_, StreamingCellOperationState::Admitted, StreamingCellOperationOutcome::None});
-        if (state_ == StreamingCellOperationState::Admitted && transition == StreamingCellOperationTransition::BeginPreparation)
-            return Result<StreamingCellOperation>::Success(
-                StreamingCellOperation{handle_, StreamingCellOperationState::Preparing, StreamingCellOperationOutcome::None});
-        if (state_ == StreamingCellOperationState::Preparing && transition == StreamingCellOperationTransition::BeginActivation)
-            return Result<StreamingCellOperation>::Success(
-                StreamingCellOperation{handle_, StreamingCellOperationState::Activating, StreamingCellOperationOutcome::None});
-        if (state_ == StreamingCellOperationState::Activating && transition == StreamingCellOperationTransition::Complete)
-            return Result<StreamingCellOperation>::Success(
-                StreamingCellOperation{handle_, StreamingCellOperationState::Terminal, StreamingCellOperationOutcome::Succeeded});
-
-        const auto interruption = InterruptionOutcome(transition);
-        if (state_ == StreamingCellOperationState::Queued && interruption != StreamingCellOperationOutcome::None)
-            return Result<StreamingCellOperation>::Success(
-                StreamingCellOperation{handle_, StreamingCellOperationState::Terminal, interruption});
-        if ((state_ == StreamingCellOperationState::Admitted || state_ == StreamingCellOperationState::Preparing ||
-             state_ == StreamingCellOperationState::Activating) &&
-            interruption != StreamingCellOperationOutcome::None)
-            return Result<StreamingCellOperation>::Success(
-                StreamingCellOperation{handle_, StreamingCellOperationState::Retiring, interruption});
-        if (state_ == StreamingCellOperationState::Retiring && transition == StreamingCellOperationTransition::AcknowledgeRetirement)
-            return Result<StreamingCellOperation>::Success(
-                StreamingCellOperation{handle_, StreamingCellOperationState::Terminal, outcome_});
-
-        return Failure<StreamingCellOperation>(WorldStreamingErrors::CellOperationTransitionInvalid);
+        const auto rule = std::ranges::find_if(TransitionRules, [this, transition](const TransitionRule &candidate) {
+            return candidate.source == state_ && candidate.transition == transition;
+        });
+        if (rule == TransitionRules.end())
+            return Failure<StreamingCellOperation>(WorldStreamingErrors::CellOperationTransitionInvalid);
+        const auto successorOutcome = rule->retainOutcome ? outcome_ : rule->outcome;
+        return Result<StreamingCellOperation>::Success(StreamingCellOperation{handle_, rule->destination, successorOutcome});
     }
 
     StreamingCellOperation::StreamingCellOperation(StreamingCellOperationHandle handle, const StreamingCellOperationState state,
