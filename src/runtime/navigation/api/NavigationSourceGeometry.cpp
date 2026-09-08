@@ -202,15 +202,13 @@ namespace Horo::Navigation {
     Result<NavigationSourceGeometrySnapshot> NavigationSourceGeometrySnapshot::Create(
         const NavigationSourceSnapshotRevision revision, const std::span<const NavigationSourceContributionInput> inputs,
         const NavigationSourceGeometryLimits limits) {
-        const auto requestValidation = ValidateCreateRequest(revision, inputs, limits);
-        if (requestValidation.HasError())
+        if (const auto requestValidation = ValidateCreateRequest(revision, inputs, limits); requestValidation.HasError())
             return Result<NavigationSourceGeometrySnapshot>::Failure(requestValidation.ErrorValue());
 
         std::vector<const NavigationSourceContributionInput *> ordered;
         ordered.reserve(inputs.size());
         for (const auto &input : inputs) {
-            const auto validation = ValidateInputMetadata(input);
-            if (validation.HasError())
+            if (const auto validation = ValidateInputMetadata(input); validation.HasError())
                 return Result<NavigationSourceGeometrySnapshot>::Failure(validation.ErrorValue());
             ordered.push_back(&input);
         }
@@ -232,8 +230,7 @@ namespace Horo::Navigation {
         vertices.reserve(static_cast<std::size_t>(totals.Value().vertices));
         triangles.reserve(static_cast<std::size_t>(totals.Value().triangles));
         for (const auto *input : ordered) {
-            const auto appended = AppendContribution(*input, vertices, triangles, contributions);
-            if (appended.HasError())
+            if (const auto appended = AppendContribution(*input, vertices, triangles, contributions); appended.HasError())
                 return Failure<NavigationSourceGeometrySnapshot>(NavigationErrors::SourceGeometryInvalid);
         }
         return Result<NavigationSourceGeometrySnapshot>::Success(
