@@ -50,6 +50,18 @@ namespace Horo::WorldStreaming::WorldStreamingErrors {
     extern const ErrorCodeDescriptor SpatialAssignmentUnsupported;
     /** @brief A quantized object intersects a cell absent from the authoritative descriptor. */
     extern const ErrorCodeDescriptor SpatialAssignmentCellUnavailable;
+    /** @brief A spanning-object plan or directive is malformed, missing, or applied below its threshold. */
+    extern const ErrorCodeDescriptor SpanningObjectPlanInvalid;
+    /** @brief A spanning-object directive repeats or names an object absent from spatial assignment. */
+    extern const ErrorCodeDescriptor SpanningObjectPlanIdentityConflict;
+    /** @brief A spanning-object directive does not match the assigned immutable object revision. */
+    extern const ErrorCodeDescriptor SpanningObjectPlanRevisionStale;
+    /** @brief A spanning-object directive uses an unknown policy value. */
+    extern const ErrorCodeDescriptor SpanningObjectPlanUnsupported;
+    /** @brief A spanning-object plan exceeds its object or aggregate placement-cell ceiling. */
+    extern const ErrorCodeDescriptor SpanningObjectPlanCapacityExceeded;
+    /** @brief An explicit single-cell owner is not covered by the source spatial assignment. */
+    extern const ErrorCodeDescriptor SpanningObjectPlanOwnerUnavailable;
     /** @brief A dependency-plan request has malformed, unknown, self-referential, duplicated, or missing source data. */
     extern const ErrorCodeDescriptor DependencyPlanInvalid;
     /** @brief A dependency endpoint revision does not match the admitted spatial-assignment revision. */
