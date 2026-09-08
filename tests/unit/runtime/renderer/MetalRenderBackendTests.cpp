@@ -1,4 +1,5 @@
 #include "Horo/Runtime/Render/RenderFrontend.h"
+#include "renderer/RenderBackendContractSuite.h"
 #include "runtime/renderer/modules/metal/MetalBackendInternal.h"
 
 #include <array>
@@ -463,5 +464,19 @@ namespace {
         Check(initialized.HasError());
         Check(initialized.ErrorValue().code.Value() == "render.metal.unsupported_frames_in_flight");
         Check(state.createCount == 0);
+    }
+
+    TEST_CASE("Metal backend satisfies the shared backend contract", "[unit][runtime][renderer][contract]") {
+        PortState state;
+        FakePresentationPort port{state};
+        MetalEditorGraphicsBridge bridge;
+        const Test::BackendContractExpectations expectations{
+            .id = RenderBackendId{"metal"},
+            .presentsToWindow = true,
+        };
+        Test::CheckModuleInfo(GetMetalRenderBackendModuleInfo(), expectations, RenderPresentationKind::Metal);
+        Test::RunBackendContractSuite(expectations, [&port, &state, &bridge] {
+            return CreateBackend(port, state, bridge);
+        });
     }
 }  // namespace

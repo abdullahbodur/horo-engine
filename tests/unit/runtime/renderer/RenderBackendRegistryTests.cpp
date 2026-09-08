@@ -1,6 +1,7 @@
 #include "Horo/Runtime/Render/NullBackendModule.h"
 #include "Horo/Runtime/Render/RenderBackend.h"
 #include "Horo/Runtime/Render/RenderBackendRegistry.h"
+#include "renderer/RenderBackendContractSuite.h"
 
 #include <array>
 #include <catch2/catch_test_macros.hpp>
@@ -307,6 +308,23 @@ namespace {
         Check(backend->Resize(FramebufferExtent{1920, 1080}).HasValue());
         backend->Shutdown();
         backend->Shutdown();
+    }
+
+    TEST_CASE("Null backend satisfies the shared backend contract", "[unit][runtime][renderer][contract]") {
+        const auto createBackend = [] {
+            RenderBackendRegistry registry;
+            Check(RegisterNullRenderBackend(registry).HasValue());
+            Check(registry.Seal().HasValue());
+            auto created = registry.Create(RenderBackendId{"null"});
+            Check(created.HasValue());
+            return std::move(created).Value();
+        };
+        Test::RunBackendContractSuite(
+            Test::BackendContractExpectations{
+                .id = RenderBackendId{"null"},
+                .presentsToWindow = false,
+            },
+            createBackend);
     }
 
     TEST_CASE("Null Backend Rejects Presentation Requirements", "[unit][runtime][renderer]") {

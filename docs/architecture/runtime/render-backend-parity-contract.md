@@ -540,6 +540,30 @@ frontend, OpenGL, Metal, or Null boundary; its code identifies the operation and
 failure class; its summary and remediation hint provide the actionable cause.
 Tests compare descriptor fields rather than parsing message text.
 
+### Shared Harness Realization
+
+`tests/support/renderer/RenderBackendContractSuite.h` owns the deterministic
+backend lifecycle harness. Each backend supplies only a factory and typed
+expectations for its module identity and presentation capability. The harness
+then applies the same initialization, frame, execution, presentation, resize,
+token, abort, malformed-plan, and repeated-shutdown assertions. Backend-specific
+fixtures remain responsible for injected
+native failures and realization details; they supplement rather than replace the
+shared cases.
+
+| Backend | Shared harness target | Additional deterministic evidence | Native qualification |
+|---|---|---|---|
+| Null | `HoroRenderBackendRegistryTests` | Registry and generic-resource validation | Not applicable; Null makes no native-support claim. |
+| OpenGL | `HoroRenderOpenGLTests` | Fake presentation port, command dispatch, rollback, resource validation | Display-capable OpenGL GPU smoke and editor first-frame lane. |
+| Metal | `HoroRenderMetalTests` | Fake presentation port/runtime, rollback, resource validation | macOS Metal GPU smoke and editor first-frame lane. |
+
+Every applicable shared section must pass with zero unexpected skips, crashes,
+timeouts, or leaked backend instances. A backend-specific unsupported result is
+accepted only where the shared contract marks the capability optional and the
+fixture declares that typed outcome. Native qualification still requires every
+applicable platform row below; the deterministic harness cannot turn missing
+hardware evidence into a pass.
+
 The deterministic resource tests run without a display or GPU and must pass on
 every supported CI host. Native GPU smoke tests run only in their documented
 hardware/display lanes and pass only when all pixel/readback assertions succeed

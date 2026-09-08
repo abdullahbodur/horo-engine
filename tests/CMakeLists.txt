@@ -938,6 +938,7 @@ add_executable(HoroRenderBackendRegistryTests
 )
 
 target_compile_features(HoroRenderBackendRegistryTests PRIVATE cxx_std_20)
+target_include_directories(HoroRenderBackendRegistryTests PRIVATE ${PROJECT_SOURCE_DIR}/tests/support)
 target_link_libraries(HoroRenderBackendRegistryTests
         PRIVATE
         HoroEngine::RenderNull
@@ -1207,6 +1208,7 @@ if (HORO_BUILD_RENDER_OPENGL)
     target_compile_features(HoroRenderOpenGLTests PRIVATE cxx_std_20)
     target_include_directories(HoroRenderOpenGLTests PRIVATE
             ${PROJECT_SOURCE_DIR}/src/runtime/renderer/modules/opengl
+            ${PROJECT_SOURCE_DIR}/tests/support
     )
     target_link_libraries(HoroRenderOpenGLTests
             PRIVATE
@@ -1250,7 +1252,10 @@ if (HORO_BUILD_RENDER_METAL)
     )
 
     target_compile_features(HoroRenderMetalTests PRIVATE cxx_std_20)
-    target_include_directories(HoroRenderMetalTests PRIVATE ${PROJECT_SOURCE_DIR}/src)
+    target_include_directories(HoroRenderMetalTests PRIVATE
+            ${PROJECT_SOURCE_DIR}/src
+            ${PROJECT_SOURCE_DIR}/tests/support
+    )
     target_link_libraries(HoroRenderMetalTests
             PRIVATE
             HoroEngine::RenderFrontend
