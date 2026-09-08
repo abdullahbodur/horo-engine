@@ -945,6 +945,7 @@ target_link_libraries(HoroRenderBackendRegistryTests
 )
 add_executable(HoroRenderGraphTests
         unit/runtime/renderer/RenderGraphTests.cpp
+        unit/runtime/renderer/RenderGraphValidationTests.cpp
 )
 target_compile_features(HoroRenderGraphTests PRIVATE cxx_std_20)
 target_link_libraries(HoroRenderGraphTests PRIVATE HoroEngine::RenderApi)

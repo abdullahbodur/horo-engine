@@ -1,6 +1,7 @@
 #include "Horo/Runtime/Render/RenderGraph.h"
 
 #include "Horo/Runtime/Render/RenderGraphErrors.h"
+#include "RenderGraphValidationInternal.h"
 
 #include <array>
 #include <atomic>
@@ -60,21 +61,6 @@ namespace Horo::Render {
                 return std::get<RenderTextureHandle>(binding).IsValid();
             }
             return false;
-        }
-
-        /** @brief Reports whether the access value belongs to the public contract. */
-        [[nodiscard]] bool IsKnown(const RenderGraphAccess access) noexcept {
-            return static_cast<std::uint8_t>(access) <= static_cast<std::uint8_t>(RenderGraphAccess::ReadWrite);
-        }
-
-        /** @brief Reports whether the usage kind belongs to the public contract. */
-        [[nodiscard]] bool IsKnown(const RenderGraphUsageKind kind) noexcept {
-            return static_cast<std::uint8_t>(kind) <= static_cast<std::uint8_t>(RenderGraphUsageKind::CopyDestination);
-        }
-
-        /** @brief Reports whether the dependency kind belongs to the public contract. */
-        [[nodiscard]] bool IsKnown(const RenderGraphDependencyKind kind) noexcept {
-            return static_cast<std::uint8_t>(kind) <= static_cast<std::uint8_t>(RenderGraphDependencyKind::ExternalSynchronization);
         }
 
         /** @brief Reports whether a declared queue can carry the pass kind. */
@@ -241,7 +227,8 @@ namespace Horo::Render {
     }
 
     /** @copydoc RenderGraphBuilder::AddPass */
-    Result<RenderGraphPassRef> RenderGraphBuilder::AddPass(const RenderPassKind kind, const RenderQueueRole queue) {
+    Result<RenderGraphPassRef> RenderGraphBuilder::AddPass(const RenderPassKind kind, const RenderQueueRole queue,
+                                                           const RenderGraphPassCullPolicy cullPolicy) {
         if (const Result<void> open = ValidateOpenOnOwnerThread(); open.HasError()) {
             return Result<RenderGraphPassRef>::Failure(open.ErrorValue());
         }
@@ -251,6 +238,9 @@ namespace Horo::Render {
         if (!IsKnown(queue)) {
             return Result<RenderGraphPassRef>::Failure(MakeError(RenderGraphErrors::UnsupportedQueueRole));
         }
+        if (!Detail::IsKnown(cullPolicy)) {
+            return Result<RenderGraphPassRef>::Failure(MakeError(RenderGraphErrors::UnsupportedPassCullPolicy));
+        }
         if (!IsQueueCompatible(kind, queue)) {
             return Result<RenderGraphPassRef>::Failure(MakeError(RenderGraphErrors::IncompatibleQueue));
         }
@@ -259,7 +249,7 @@ namespace Horo::Render {
         }
 
         const RenderGraphPassRef reference{owner_, RenderPassId{static_cast<std::uint32_t>(passes_.size() + 1)}};
-        passes_.emplace_back(reference, kind, queue);
+        passes_.emplace_back(reference, kind, queue, cullPolicy);
         return Result<RenderGraphPassRef>::Success(reference);
     }
 
@@ -367,7 +357,7 @@ namespace Horo::Render {
         if (const Result<void> references = ValidateDependencyReferences(dependency); references.HasError()) {
             return references;
         }
-        if (!IsKnown(dependency.kind)) {
+        if (!Detail::IsKnown(dependency.kind)) {
             return Result<void>::Failure(MakeError(RenderGraphErrors::UnsupportedDependencyKind));
         }
 
@@ -463,7 +453,7 @@ namespace Horo::Render {
 
     /** @copydoc RenderGraphBuilder::ValidateUsageSemantics */
     Result<void> RenderGraphBuilder::ValidateUsageSemantics(const RenderGraphResourceUsage &usage) const {
-        if (!IsKnown(usage.access) || !IsKnown(usage.kind)) {
+        if (!Detail::IsKnown(usage.access) || !Detail::IsKnown(usage.kind)) {
             return Result<void>::Failure(MakeError(RenderGraphErrors::UnsupportedUsage));
         }
 
