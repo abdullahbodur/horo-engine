@@ -3,9 +3,11 @@
 #include "Horo/Runtime/Save/SaveErrors.h"
 
 #include <algorithm>
+#include <array>
 #include <cstddef>
 #include <cstdint>
 #include <exception>
+#include <functional>
 #include <memory>
 #include <new>
 #include <tuple>
@@ -13,6 +15,11 @@
 
 namespace Horo::Runtime {
     namespace {
+        /** @brief Evaluates a fixed set of independent invariants without embedding control flow in the caller. */
+        template <std::size_t Count> [[nodiscard]] constexpr bool AllTrue(const std::array<bool, Count> &conditions) noexcept {
+            return std::ranges::all_of(conditions, std::identity{});
+        }
+
         /** @brief Core-owned immutable payload used for bounded eager copies. */
         class CopiedCanonicalPayload final : public IImmutableCanonicalPayload {
         public:
@@ -36,17 +43,18 @@ namespace Horo::Runtime {
 
         /** @brief Reports whether operation capture bounds are finite and within qualified hard ceilings. */
         [[nodiscard]] bool HasValidCaptureLimits(const RuntimeSaveCaptureLimits &limits) noexcept {
-            return limits.maximumParticipants != 0 && limits.maximumParticipants <= MaximumSaveParticipantCount &&
-                   limits.maximumRecords != 0 && limits.maximumRecords <= MaximumRuntimeSaveCaptureRecords && limits.maximumSegments != 0 &&
-                   limits.maximumSegments <= MaximumRuntimeSaveCaptureSegments && limits.maximumPayloadBytes != 0 &&
-                   limits.maximumPayloadBytes <= MaximumRuntimeSaveCapturePayloadBytes && limits.maximumCopiedRecordBytes != 0 &&
-                   limits.maximumCopiedRecordBytes <= MaximumRuntimeSaveCapturePayloadBytes;
+            return AllTrue(std::array{limits.maximumParticipants != 0, limits.maximumParticipants <= MaximumSaveParticipantCount,
+                                      limits.maximumRecords != 0, limits.maximumRecords <= MaximumRuntimeSaveCaptureRecords,
+                                      limits.maximumSegments != 0, limits.maximumSegments <= MaximumRuntimeSaveCaptureSegments,
+                                      limits.maximumPayloadBytes != 0, limits.maximumPayloadBytes <= MaximumRuntimeSaveCapturePayloadBytes,
+                                      limits.maximumCopiedRecordBytes != 0,
+                                      limits.maximumCopiedRecordBytes <= MaximumRuntimeSaveCapturePayloadBytes});
         }
 
         /** @brief Reports whether stable capture evidence identifies one exact safe-point observation. */
         [[nodiscard]] bool HasValidCaptureProvenance(const RuntimeSaveCaptureProvenance &provenance) noexcept {
-            return provenance.capturedState.IsValid() && provenance.epoch.IsValid() && provenance.sceneIncarnation != 0 &&
-                   provenance.sceneRevision != 0 && provenance.registryGeneration != 0;
+            return AllTrue(std::array{provenance.capturedState.IsValid(), provenance.epoch.IsValid(), provenance.sceneIncarnation != 0,
+                                      provenance.sceneRevision != 0, provenance.registryGeneration != 0});
         }
 
         /** @brief Establishes deterministic whole-snapshot canonical record order. */
@@ -147,8 +155,8 @@ namespace Horo::Runtime {
 
     /** @copydoc RuntimeSaveSnapshot::IsValid */
     bool RuntimeSaveSnapshot::IsValid() const noexcept {
-        return records_ != nullptr && projection_ != nullptr && participants_.IsValid() && HasValidCaptureProvenance(provenance_) &&
-               provenance_.registryGeneration == participants_.Generation();
+        return AllTrue(std::array{records_ != nullptr, projection_ != nullptr, participants_.IsValid(),
+                                  HasValidCaptureProvenance(provenance_), provenance_.registryGeneration == participants_.Generation()});
     }
 
     /** @copydoc RuntimeSaveSnapshot::Provenance */
@@ -403,10 +411,10 @@ namespace Horo::Runtime {
         const auto admission = recordAdmissions_.find(record.record);
         if (binding == nullptr || admission == recordAdmissions_.end() || admission->second.participantIndex >= usage_.size())
             return false;
-        return record.participant.IsValid() && record.schemaVersion.IsValid() && record.record.IsValid() &&
-               HasSaveParticipantRole(binding->Descriptor().roles, SaveParticipantRole::Capture) &&
-               binding->Descriptor().schemaVersion == record.schemaVersion &&
-               usage_[admission->second.participantIndex].participant == record.participant;
+        return AllTrue(std::array{record.participant.IsValid(), record.schemaVersion.IsValid(), record.record.IsValid(),
+                                  HasSaveParticipantRole(binding->Descriptor().roles, SaveParticipantRole::Capture),
+                                  binding->Descriptor().schemaVersion == record.schemaVersion,
+                                  usage_[admission->second.participantIndex].participant == record.participant});
     }
 
     bool RuntimeSaveCaptureBuilder::FitsAdmission(const CanonicalCaptureRecord &record, const std::uint64_t byteLength,
