@@ -24,11 +24,11 @@ namespace Horo::WorldStreaming::WorldStreamingErrors {
     extern const ErrorCodeDescriptor CellOperationTransitionInvalid;
     /** @brief A scheduler admission ledger, request, or reservation is malformed. */
     extern const ErrorCodeDescriptor SchedulerAdmissionInvalid;
-    /** @brief A scheduler slot cannot be reserved within the configured concurrent-operation ceiling. */
+    /** @brief Scheduler operation count or generic capacity cannot be reserved within configured ceilings. */
     extern const ErrorCodeDescriptor SchedulerCapacityExceeded;
     /** @brief A scheduler operation already owns a reservation in this ledger. */
     extern const ErrorCodeDescriptor SchedulerReservationConflict;
-    /** @brief A release does not name the exact retained reservation and operation fence. */
+    /** @brief A scheduler command does not name the exact owner-scoped reservation and operation fence. */
     extern const ErrorCodeDescriptor SchedulerReservationStale;
     /** @brief Scheduler admission is draining, closed, or waiting for an operation to retire. */
     extern const ErrorCodeDescriptor SchedulerLifecycleUnavailable;

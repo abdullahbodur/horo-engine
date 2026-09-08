@@ -3,6 +3,10 @@
 #include "Horo/WorldStreaming/WorldStreamingErrors.h"
 
 #include <algorithm>
+#include <limits>
+#include <new>
+#include <stdexcept>
+#include <utility>
 
 namespace Horo::WorldStreaming {
     namespace {
@@ -10,70 +14,128 @@ namespace Horo::WorldStreaming {
             return Result<T>::Failure(MakeError(descriptor));
         }
 
-        [[nodiscard]] StreamingSchedulerReservation MakeReservation(const StreamingCellOperationHandle &operation) {
-            return {
-                .id = StreamingSchedulerReservationId::Create(operation.operation.Value()).Value(),
-                .operation = operation,
-            };
+        template <typename Entries> [[nodiscard]] auto FindReservation(Entries &entries, const StreamingSchedulerReservationId id) {
+            return std::ranges::find_if(entries, [id](const auto &entry) {
+                return entry.reservation.id == id;
+            });
+        }
+
+        /** @brief Validates the immutable caller-owned portion of one admission request. */
+        [[nodiscard]] bool IsAdmissionRequestValid(const StreamingCellOperation &operation,
+                                                   const std::uint64_t requiredCapacityUnits) noexcept {
+            return operation.Handle().IsValid() && operation.State() == StreamingCellOperationState::Queued && requiredCapacityUnits > 0;
         }
     }  // namespace
 
+    /** @copydoc StreamingSchedulerAdmissionLimits::IsValid */
+    bool StreamingSchedulerAdmissionLimits::IsValid() const noexcept {
+        return concurrentOperations > 0 && concurrentOperations <= MaximumConcurrentOperations && capacityUnits > 0;
+    }
+
     /** @copydoc StreamingSchedulerReservation::IsValid */
     bool StreamingSchedulerReservation::IsValid() const noexcept {
-        return id.IsValid() && operation.IsValid() && id.Value() == operation.operation.Value();
+        return owner.IsValid() && id.IsValid() && operation.IsValid() && capacityUnits > 0;
     }
 
     /** @copydoc StreamingSchedulerAdmissionLedger::Create */
-    Result<StreamingSchedulerAdmissionLedger> StreamingSchedulerAdmissionLedger::Create(const std::uint32_t capacity) {
-        if (capacity == 0)
+    Result<StreamingSchedulerAdmissionLedger> StreamingSchedulerAdmissionLedger::Create(const StreamingSchedulerLedgerId owner,
+                                                                                        const StreamingSchedulerAdmissionLimits limits) {
+        if (!owner.IsValid() || !limits.IsValid())
             return Failure<StreamingSchedulerAdmissionLedger>(WorldStreamingErrors::SchedulerAdmissionInvalid);
-        return Result<StreamingSchedulerAdmissionLedger>::Success(StreamingSchedulerAdmissionLedger{capacity});
+
+        StreamingSchedulerAdmissionLedger ledger{owner, limits};
+        try {
+            ledger.entries_.reserve(limits.concurrentOperations);
+        } catch (const std::bad_alloc &) {
+            return Failure<StreamingSchedulerAdmissionLedger>(WorldStreamingErrors::SchedulerCapacityExceeded);
+        } catch (const std::length_error &) {
+            return Failure<StreamingSchedulerAdmissionLedger>(WorldStreamingErrors::SchedulerCapacityExceeded);
+        }
+        return Result<StreamingSchedulerAdmissionLedger>::Success(std::move(ledger));
     }
 
     /** @copydoc StreamingSchedulerAdmissionLedger::TryAdmit */
-    Result<StreamingSchedulerAdmission> StreamingSchedulerAdmissionLedger::TryAdmit(const StreamingCellOperation &operation) {
-        if (state_ != StreamingSchedulerAdmissionState::Accepting)
-            return Failure<StreamingSchedulerAdmission>(WorldStreamingErrors::SchedulerLifecycleUnavailable);
-        if (!operation.Handle().IsValid() || operation.State() != StreamingCellOperationState::Queued || operation.IsTerminal())
-            return Failure<StreamingSchedulerAdmission>(WorldStreamingErrors::SchedulerAdmissionInvalid);
-        if (reservations_.size() >= capacity_)
-            return Failure<StreamingSchedulerAdmission>(WorldStreamingErrors::SchedulerCapacityExceeded);
-
-        const auto reservation = MakeReservation(operation.Handle());
-        if (std::ranges::any_of(reservations_, [&reservation](const StreamingSchedulerReservation &current) {
-            return current.id == reservation.id || current.operation == reservation.operation;
+    Result<StreamingSchedulerReservation> StreamingSchedulerAdmissionLedger::TryAdmit(const StreamingCellOperation &operation,
+                                                                                      const std::uint64_t requiredCapacityUnits) {
+        using enum StreamingSchedulerAdmissionState;
+        if (state_ != Accepting)
+            return Failure<StreamingSchedulerReservation>(WorldStreamingErrors::SchedulerLifecycleUnavailable);
+        if (!IsAdmissionRequestValid(operation, requiredCapacityUnits))
+            return Failure<StreamingSchedulerReservation>(WorldStreamingErrors::SchedulerAdmissionInvalid);
+        if (entries_.size() >= limits_.concurrentOperations || requiredCapacityUnits > limits_.capacityUnits - reservedCapacityUnits_)
+            return Failure<StreamingSchedulerReservation>(WorldStreamingErrors::SchedulerCapacityExceeded);
+        if (std::ranges::any_of(entries_, [&operation](const Entry &entry) {
+            return entry.operation.Handle() == operation.Handle();
         }))
-            return Failure<StreamingSchedulerAdmission>(WorldStreamingErrors::SchedulerReservationConflict);
+            return Failure<StreamingSchedulerReservation>(WorldStreamingErrors::SchedulerReservationConflict);
+        if (nextReservationValue_ == 0)
+            return Failure<StreamingSchedulerReservation>(WorldStreamingErrors::GenerationExhausted);
 
         const auto admitted = operation.Advance(operation.Handle(), StreamingCellOperationTransition::Admit);
         if (admitted.HasError())
-            return Result<StreamingSchedulerAdmission>::Failure(admitted.ErrorValue());
+            return Result<StreamingSchedulerReservation>::Failure(admitted.ErrorValue());
+        const StreamingSchedulerReservation reservation{
+            .owner = owner_,
+            .id = StreamingSchedulerReservationId::Create(nextReservationValue_).Value(),
+            .operation = operation.Handle(),
+            .capacityUnits = requiredCapacityUnits,
+        };
 
-        reservations_.push_back(reservation);
-        return Result<StreamingSchedulerAdmission>::Success({.operation = admitted.Value(), .reservation = reservation});
+        entries_.push_back({.reservation = reservation, .operation = admitted.Value()});
+        reservedCapacityUnits_ += requiredCapacityUnits;
+        nextReservationValue_ = nextReservationValue_ == std::numeric_limits<std::uint64_t>::max() ? 0 : nextReservationValue_ + 1;
+        return Result<StreamingSchedulerReservation>::Success(reservation);
+    }
+
+    /** @copydoc StreamingSchedulerAdmissionLedger::Advance */
+    Result<StreamingCellOperation> StreamingSchedulerAdmissionLedger::Advance(const StreamingSchedulerReservation &reservation,
+                                                                              const StreamingCellOperationTransition transition) {
+        if (!reservation.IsValid())
+            return Failure<StreamingCellOperation>(WorldStreamingErrors::SchedulerAdmissionInvalid);
+        const auto found = FindReservation(entries_, reservation.id);
+        if (reservation.owner != owner_ || found == entries_.end() || found->reservation != reservation)
+            return Failure<StreamingCellOperation>(WorldStreamingErrors::SchedulerReservationStale);
+
+        const auto successor = found->operation.Advance(found->operation.Handle(), transition);
+        if (successor.HasError())
+            return Result<StreamingCellOperation>::Failure(successor.ErrorValue());
+        found->operation = successor.Value();
+        return Result<StreamingCellOperation>::Success(found->operation);
     }
 
     /** @copydoc StreamingSchedulerAdmissionLedger::Release */
-    Result<void> StreamingSchedulerAdmissionLedger::Release(const StreamingSchedulerReservation &reservation,
-                                                            const StreamingCellOperation &operation) {
+    Result<void> StreamingSchedulerAdmissionLedger::Release(const StreamingSchedulerReservation &reservation) {
         if (!reservation.IsValid())
             return Result<void>::Failure(MakeError(WorldStreamingErrors::SchedulerAdmissionInvalid));
-        const auto found = std::ranges::find(reservations_, reservation.id, &StreamingSchedulerReservation::id);
-        if (found == reservations_.end() || *found != reservation || operation.Handle() != reservation.operation)
+        const auto found = FindReservation(entries_, reservation.id);
+        if (reservation.owner != owner_ || found == entries_.end() || found->reservation != reservation)
             return Result<void>::Failure(MakeError(WorldStreamingErrors::SchedulerReservationStale));
-        if (!operation.IsTerminal())
+        if (!found->operation.IsTerminal())
             return Result<void>::Failure(MakeError(WorldStreamingErrors::SchedulerLifecycleUnavailable));
 
-        reservations_.erase(found);
-        if (state_ == StreamingSchedulerAdmissionState::Draining && reservations_.empty())
-            state_ = StreamingSchedulerAdmissionState::Closed;
+        reservedCapacityUnits_ -= found->reservation.capacityUnits;
+        entries_.erase(found);
+        using enum StreamingSchedulerAdmissionState;
+        if (state_ == Draining && entries_.empty())
+            state_ = Closed;
         return Result<void>::Success();
     }
 
     /** @copydoc StreamingSchedulerAdmissionLedger::BeginShutdown */
     void StreamingSchedulerAdmissionLedger::BeginShutdown() noexcept {
-        if (state_ == StreamingSchedulerAdmissionState::Accepting)
-            state_ = reservations_.empty() ? StreamingSchedulerAdmissionState::Closed : StreamingSchedulerAdmissionState::Draining;
+        using enum StreamingSchedulerAdmissionState;
+        if (state_ == Accepting)
+            state_ = entries_.empty() ? Closed : Draining;
+    }
+
+    /** @copydoc StreamingSchedulerAdmissionLedger::Owner */
+    StreamingSchedulerLedgerId StreamingSchedulerAdmissionLedger::Owner() const noexcept {
+        return owner_;
+    }
+
+    /** @copydoc StreamingSchedulerAdmissionLedger::Limits */
+    StreamingSchedulerAdmissionLimits StreamingSchedulerAdmissionLedger::Limits() const noexcept {
+        return limits_;
     }
 
     /** @copydoc StreamingSchedulerAdmissionLedger::State */
@@ -81,17 +143,17 @@ namespace Horo::WorldStreaming {
         return state_;
     }
 
-    /** @copydoc StreamingSchedulerAdmissionLedger::Capacity */
-    std::uint32_t StreamingSchedulerAdmissionLedger::Capacity() const noexcept {
-        return capacity_;
-    }
-
     /** @copydoc StreamingSchedulerAdmissionLedger::ReservedCount */
     std::size_t StreamingSchedulerAdmissionLedger::ReservedCount() const noexcept {
-        return reservations_.size();
+        return entries_.size();
     }
 
-    StreamingSchedulerAdmissionLedger::StreamingSchedulerAdmissionLedger(const std::uint32_t capacity) : capacity_(capacity) {
-        reservations_.reserve(capacity);
+    /** @copydoc StreamingSchedulerAdmissionLedger::ReservedCapacityUnits */
+    std::uint64_t StreamingSchedulerAdmissionLedger::ReservedCapacityUnits() const noexcept {
+        return reservedCapacityUnits_;
     }
+
+    StreamingSchedulerAdmissionLedger::StreamingSchedulerAdmissionLedger(const StreamingSchedulerLedgerId owner,
+                                                                         const StreamingSchedulerAdmissionLimits limits) noexcept
+        : owner_(owner), limits_(limits) {}
 }  // namespace Horo::WorldStreaming

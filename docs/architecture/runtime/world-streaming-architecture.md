@@ -368,14 +368,18 @@ the renderer does not acquire world-cell policy ownership.
 5. ReleaseReservation occurs on acknowledged retirement, never just on Cancel or
    a scheduled GPU free. Old partition work and caller-held leases remain charged.
 
-The scheduler admission layer implements the queue-slot portion as an authority-owned,
-bounded ledger. A successful transaction both retains an exact operation-and-fence
-reservation and advances the immutable operation from Queued to Admitted; every
-expected rejection leaves both unchanged. A successful operation releases its slot
-at terminal completion. Cancellation, failure, replacement, and shutdown retain the
-slot through Retiring and release only after exact retirement acknowledgement.
-Shutdown closes new admission first and reaches Closed only after retained slots drain.
-CPU, I/O, memory, and frame-time dimensions remain the separate WST-003.3 policy.
+The scheduler admission layer implements an authority-owned, bounded ledger for
+operation count and positive generic capacity units supplied by host policy. A
+successful transaction retains an owner-scoped operation-and-fence reservation and
+advances a ledger-owned canonical operation from Queued to Admitted; every expected
+rejection leaves both unchanged. Only the ledger advances admitted work, so a stale
+caller snapshot cannot forge release. Successful operations release capacity at
+terminal completion. Cancellation, failure, replacement, and shutdown retain capacity
+through Retiring and release only after exact retirement acknowledgement. Shutdown
+closes new admission first and reaches Closed only after retained reservations drain.
+The ledger is confined to StreamingAuthorityRole and must be drained or transferred
+before its owner is destroyed. WST-003.3 defines the multidimensional CPU, I/O,
+memory, and frame-time policy that supplies these bounded admission charges.
 
 The governing invariant is that a cell cannot enter a state whose required resources
 have not been admitted. The host validates per-provider costs and rejects unsupported

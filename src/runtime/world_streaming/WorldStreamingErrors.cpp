@@ -50,10 +50,10 @@ namespace Horo::WorldStreaming::WorldStreamingErrors {
     const ErrorCodeDescriptor SchedulerAdmissionInvalid =
         Describe("world_streaming.scheduler.admission_invalid", ErrorSeverity::Error,
                  "A scheduler admission ledger, request, or reservation is malformed.",
-                 "Use a positive slot limit and a valid queued operation with its exact issued reservation.", true);
+                 "Use a valid ledger owner, positive bounded limits, and a valid queued operation with a positive capacity charge.", true);
     const ErrorCodeDescriptor SchedulerCapacityExceeded =
         Describe("world_streaming.scheduler.capacity_exceeded", ErrorSeverity::Warning,
-                 "The scheduler cannot reserve another concurrent-operation slot.",
+                 "The scheduler cannot reserve the requested operation count or generic capacity.",
                  "Wait for an admitted operation to reach acknowledged terminal retirement before retrying.", false);
     const ErrorCodeDescriptor SchedulerReservationConflict =
         Describe("world_streaming.scheduler.reservation_conflict", ErrorSeverity::Error,
@@ -61,12 +61,12 @@ namespace Horo::WorldStreaming::WorldStreamingErrors {
                  "Reuse the retained reservation instead of admitting the exact operation twice.", false);
     const ErrorCodeDescriptor SchedulerReservationStale =
         Describe("world_streaming.scheduler.reservation_stale", ErrorSeverity::Warning,
-                 "A release does not name the exact retained reservation and operation fence.",
-                 "Route completion to the matching reservation and fenced operation attempt.", false);
+                 "A scheduler command does not name the exact owner-scoped reservation and operation fence.",
+                 "Route the command to the owning ledger with its exact reservation token.", false);
     const ErrorCodeDescriptor SchedulerLifecycleUnavailable =
         Describe("world_streaming.scheduler.lifecycle_unavailable", ErrorSeverity::Warning,
                  "Scheduler admission is draining, closed, or waiting for an operation to retire.",
-                 "Do not admit during shutdown and retain slots until their exact operations become terminal.", false);
+                 "Do not admit during shutdown and retain capacity until exact canonical operations become terminal.", false);
     const ErrorCodeDescriptor QuantizationPolicyInvalid =
         Describe("world_streaming.quantization.policy_invalid", ErrorSeverity::Error,
                  "The world-cell quantization policy has invalid size, bounds, or LOD limits.",
