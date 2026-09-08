@@ -336,18 +336,20 @@ namespace Horo::Physics {
         auto world = runtime->PrepareWorld(Test::SmallWorldSettings()).Value();
         REQUIRE(world->Activate(PhysicsWorldId::Create(202).Value()).HasValue());
 
-        SolverJobTrace trace;
-        const std::array solverJobs{PhysicsSolverJob{.context = &trace, .execute = RunSolverJob},
-                                    PhysicsSolverJob{.context = &trace, .execute = RunSolverJob}};
+        SolverJobTrace failingTrace;
+        SolverJobTrace siblingTrace;
+        const std::array solverJobs{PhysicsSolverJob{.context = &failingTrace, .execute = RunSolverJob},
+                                    PhysicsSolverJob{.context = &siblingTrace, .execute = RunSolverJob}};
         constexpr Duration fixedDelta = Duration::FromNanoseconds(16'666'667);
         const PhysicsSolverJobBatch batch{.jobs = solverJobs.data(),
                                           .jobCount = static_cast<std::uint32_t>(solverJobs.size()),
                                           .joinTimeout = Duration::FromMilliseconds(500)};
         REQUIRE(world->AdvanceFixedTick({.simulationTick = 1, .fixedDelta = fixedDelta, .solverJobs = batch}).HasValue());
-        REQUIRE(trace.completed.load(std::memory_order_acquire) == solverJobs.size());
+        REQUIRE(failingTrace.completed.load(std::memory_order_acquire) == 1);
+        REQUIRE(siblingTrace.completed.load(std::memory_order_acquire) == 1);
         RequirePublishedTick(world->PublishedTick(), 1, 1, 0);
 
-        trace.fail.store(true, std::memory_order_release);
+        failingTrace.fail.store(true, std::memory_order_release);
         const auto failed = world->AdvanceFixedTick({.simulationTick = 2, .fixedDelta = fixedDelta, .solverJobs = batch});
         REQUIRE(failed.HasError());
         REQUIRE(failed.ErrorValue().code.Value() == PhysicsErrors::InitializationFailed.code.Value());

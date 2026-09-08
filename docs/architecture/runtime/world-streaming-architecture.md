@@ -381,6 +381,27 @@ The ledger is confined to StreamingAuthorityRole and must be drained or transfer
 before its owner is destroyed. WST-003.3 defines the multidimensional CPU, I/O,
 memory, and frame-time policy that supplies these bounded admission charges.
 
+`StreamingBudgetModel` is the inert WST-003.3 policy and observation boundary.
+Every amount vector explicitly carries exactly one known value for CPU-resident,
+GPU-resident, staging, in-flight I/O, queue/scratch, retired-resource, and
+owner-work-time dimensions; omitted dimensions are invalid rather than assumed to
+be zero. Byte dimensions and owner-work nanoseconds remain independent and are never
+summed into a synthetic capacity. One immutable policy revision owns a soft target
+and positive hard limit for each dimension plus a positive monotonic sampling window.
+
+An immutable usage sample captures the exact policy revision, its own monotonic
+revision, a half-open service-time window, observation time, and a complete owned
+usage vector. Evaluation requires the authority's expected policy/sample revisions
+and a time in the same window. Stale revisions or completed windows return typed
+failures. Projected arithmetic is checked per dimension: equality with a soft target
+or hard limit is permitted, crossing a soft target returns an explicit defer decision,
+and crossing/overflowing a hard limit rejects the request without changing the sample.
+Policy replacement never edits or erases already observed usage; if a lowered limit
+is below retained usage, new admission remains rejected until real retirement is
+observed. The model owns no reservation lifecycle, clock, worker, allocation, or
+ambient registry. The authority composes a successful projection with the scheduler
+transaction, and acknowledged retirement supplies later samples.
+
 The governing invariant is that a cell cannot enter a state whose required resources
 have not been admitted. The host validates per-provider costs and rejects unsupported
 unbounded allocations. Default budgets are configurable: four concurrent loads,

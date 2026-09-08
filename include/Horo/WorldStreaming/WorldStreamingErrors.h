@@ -32,6 +32,18 @@ namespace Horo::WorldStreaming::WorldStreamingErrors {
     extern const ErrorCodeDescriptor SchedulerReservationStale;
     /** @brief Scheduler admission is draining, closed, or waiting for an operation to retire. */
     extern const ErrorCodeDescriptor SchedulerLifecycleUnavailable;
+    /** @brief A multidimensional budget vector, policy, request, or evaluation context is malformed. */
+    extern const ErrorCodeDescriptor BudgetModelInvalid;
+    /** @brief A budget vector or policy names a resource dimension unsupported by this contract version. */
+    extern const ErrorCodeDescriptor BudgetDimensionUnsupported;
+    /** @brief A budget policy or usage sample revision no longer matches current authority state. */
+    extern const ErrorCodeDescriptor BudgetRevisionStale;
+    /** @brief A budget sample has malformed window timing. */
+    extern const ErrorCodeDescriptor BudgetSampleInvalid;
+    /** @brief A budget sample belongs to an earlier completed sampling window. */
+    extern const ErrorCodeDescriptor BudgetSampleStale;
+    /** @brief Projected usage overflows or exceeds one independent hard resource limit. */
+    extern const ErrorCodeDescriptor BudgetCapacityExceeded;
     /** @brief A world-cell grid has zero/overflowing cell size, inverted bounds, or no LODs. */
     extern const ErrorCodeDescriptor QuantizationPolicyInvalid;
     /** @brief A coordinate cannot be translated relative to the grid origin without signed overflow. */
