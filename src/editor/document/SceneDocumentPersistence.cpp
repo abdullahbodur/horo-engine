@@ -750,8 +750,11 @@ namespace Horo::Editor {
                 return Result<std::optional<LoadedProjectScene>>::Failure(
                     PersistenceError(ScenePathInvalid, "Project metadata does not contain settings.defaultScene."));
             }
-            const std::filesystem::path relativeScene =
-                std::filesystem::path{metadata["settings"]["defaultScene"].get<std::string>()}.lexically_normal();
+            const std::string configuredScene = metadata["settings"]["defaultScene"].get<std::string>();
+            if (configuredScene.empty()) {
+                return Result<std::optional<LoadedProjectScene>>::Success(std::nullopt);
+            }
+            const std::filesystem::path relativeScene = std::filesystem::path{configuredScene}.lexically_normal();
             if (!IsSafeProjectRelativePath(relativeScene)) {
                 return Result<std::optional<LoadedProjectScene>>::Failure(
                     PersistenceError(ScenePathInvalid, "Project defaultScene must be a safe project-relative path."));

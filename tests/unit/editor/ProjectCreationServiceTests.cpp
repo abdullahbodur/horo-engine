@@ -120,6 +120,41 @@ namespace {
         jobs.Shutdown(Horo::ShutdownPolicy::Drain);
     }
 
+    TEST_CASE("Creates An Empty Project Without A Default Scene", "[unit][editor][project-creation]") {
+        TemporaryDirectory temporary;
+        Horo::JobSystem jobs{{.workerCount = 1, .maxQueuedJobs = 4}};
+        Horo::EngineDataBus bus;
+        Horo::Editor::ProjectCreationService service{jobs, bus};
+        const auto root = temporary.Path() / "EmptyGame";
+        auto request = ValidRequest(root);
+        request.templateId = "empty";
+        request.defaultScene.clear();
+        request.includeStarterContent = false;
+
+        const auto started = service.StartCreate(std::move(request));
+        REQUIRE((started.HasValue()));
+        const auto snapshot = WaitForTerminal(service, started.Value().id);
+        REQUIRE((snapshot.state == Horo::Editor::ProjectCreationOperationState::Succeeded));
+        REQUIRE((std::filesystem::is_directory(root / "assets/scenes")));
+        REQUIRE((std::filesystem::is_empty(root / "assets/scenes")));
+        REQUIRE((Read(root / ".horo/project.json").find("\"defaultScene\": \"\"") != std::string::npos));
+        jobs.Shutdown(Horo::ShutdownPolicy::Drain);
+    }
+
+    TEST_CASE("Rejects A Default Scene Without Starter Content", "[unit][editor][project-creation]") {
+        TemporaryDirectory temporary;
+        Horo::JobSystem jobs{{.workerCount = 1, .maxQueuedJobs = 4}};
+        Horo::EngineDataBus bus;
+        Horo::Editor::ProjectCreationService service{jobs, bus};
+        auto request = ValidRequest(temporary.Path() / "IncoherentGame");
+        request.includeStarterContent = false;
+
+        const auto started = service.StartCreate(std::move(request));
+        REQUIRE((started.HasError()));
+        REQUIRE((started.ErrorValue().code.Value() == "project_creation.invalid_request"));
+        jobs.Shutdown(Horo::ShutdownPolicy::Drain);
+    }
+
     TEST_CASE("Refuses Occupied Destination Without Overwriting It", "[unit][editor]") {
         TemporaryDirectory temporary;
         const auto root = temporary.Path() / "occupied";

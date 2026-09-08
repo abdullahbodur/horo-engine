@@ -278,6 +278,31 @@ namespace {
             REQUIRE(editor.RendererReady());
     }
 
+    TEST_CASE("Empty project opens without a configured default scene", "[ui][imgui][editor][e2e][project-creation]") {
+        Tests::EditorUiTestHarness harness;
+        Tests::FullEditorUiTestHost editor{harness.Surface(), "en-US"};
+        const Tests::FullEditorProjectSetup project{.name = "EmptyProjectJourney", .templateId = "empty"};
+        const std::filesystem::path projectRoot = editor.ProjectsRoot() / project.name;
+
+        const Tests::EditorUiScenarioResult result =
+            harness.RunScenario("full_editor", "empty_project_journey", [&editor](ImGuiTestContext *context) {
+            editor.DrawFrame(context);
+        }, [&editor, project](Tests::UiScenarioPipe &pipeline) {
+            Tests::FullEditorSetups::CreateProjectAndOpenWorkspace(pipeline, editor, project);
+        }, Tests::EditorUiScenarioBudget::Extended(1400), &editor.Input());
+
+        INFO(result.testEngineLog);
+        REQUIRE_FALSE(result.frameBudgetExceeded);
+        REQUIRE_FALSE(result.cancelled);
+        REQUIRE(result.exception == nullptr);
+        REQUIRE(result.Succeeded());
+        REQUIRE(editor.ActiveRoute() == Editor::GuiRouteKind::EditorWorkspace);
+        REQUIRE(std::filesystem::is_empty(projectRoot / "assets/scenes"));
+        std::ifstream metadataInput{projectRoot / ".horo/project.json", std::ios::binary};
+        const std::string metadata{std::istreambuf_iterator<char>{metadataInput}, std::istreambuf_iterator<char>{}};
+        REQUIRE((metadata.find("\"defaultScene\": \"\"") != std::string::npos));
+    }
+
     TEST_CASE("Lua behavior completes the editor Play journey", "[ui][imgui][editor][e2e][gameplay][lua]") {
         const Tests::EditorUiScenarioResult result = RunBehaviorPlayJourney(GameplayRuntimeKind::Lua);
         INFO(result.testEngineLog);

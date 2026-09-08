@@ -69,8 +69,9 @@ namespace Horo::Editor {
     /**
      * @brief Resolves and parses the project's configured default scene.
      * @param absoluteProjectRoot Absolute project root containing `.horo/project.json`.
-     * @return Parsed existing scene, an empty optional when project metadata is absent, or a typed
-     * validation/read error. A configured but missing default scene is a read error.
+     * @return Parsed existing scene, an empty optional when project metadata is absent or its
+     * default scene is empty, or a typed validation/read error. A configured but missing default
+     * scene is a read error.
      */
     [[nodiscard]] Result<std::optional<LoadedProjectScene>> LoadProjectDefaultScene(const std::filesystem::path &absoluteProjectRoot);
 

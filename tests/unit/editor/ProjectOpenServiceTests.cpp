@@ -283,6 +283,19 @@ TEST_CASE("Project open validates the default scene before workspace preparation
     std::filesystem::remove(project.root / "assets/scenes/main.horo");
     requireSceneFailure(open());
 
+    nlohmann::json metadata = ReadJson(project.root / ".horo/project.json");
+    metadata["settings"]["defaultScene"] = "";
+    std::ofstream(project.root / ".horo/project.json", std::ios::trunc) << metadata.dump(2) << '\n';
+    const ProjectOpenProgressSnapshot emptyScene = open();
+    REQUIRE((emptyScene.outcome == ProjectOpenOutcome::ReadyToActivate));
+    REQUIRE((emptyScene.readySession.has_value()));
+    auto emptySceneReservation = service.ReserveSession(*emptyScene.readySession);
+    REQUIRE((emptySceneReservation.HasValue()));
+    REQUIRE((std::move(emptySceneReservation).Value().Commit().HasValue()));
+
+    metadata["settings"]["defaultScene"] = "assets/scenes/main.horo";
+    std::ofstream(project.root / ".horo/project.json", std::ios::trunc) << metadata.dump(2) << '\n';
+
     std::ofstream(project.root / "assets/scenes/main.horo", std::ios::trunc) << "{ malformed";
     requireSceneFailure(open());
 
@@ -296,7 +309,7 @@ TEST_CASE("Project open validates the default scene before workspace preparation
     std::ofstream(project.root / "assets/scenes/main.horo", std::ios::trunc) << duplicateObjectScene;
     requireSceneFailure(open());
 
-    nlohmann::json metadata = ReadJson(project.root / ".horo/project.json");
+    metadata = ReadJson(project.root / ".horo/project.json");
     metadata["settings"]["defaultScene"] = "../outside.horo";
     std::ofstream(project.root / ".horo/project.json", std::ios::trunc) << metadata.dump(2) << '\n';
     requireSceneFailure(open());

@@ -624,8 +624,8 @@ namespace Horo::Editor {
                                                 0, selected ? 1.5F : 1.0F);
         }
 
-        void DrawTemplateCard(ProjectCreationController &controller, const EditorGuiContext &ctx, const int index,
-                              const int currentTemplateIndex, const float cardW, const char *desc) {
+        void DrawTemplateCard(ProjectCreationController &controller, ProjectCreationViewState &state, const EditorGuiContext &ctx,
+                              const int index, const int currentTemplateIndex, const float cardW, const char *desc) {
             using namespace WizardLayout;
 
             ImGui::PushID(index);
@@ -654,16 +654,20 @@ namespace Horo::Editor {
             if (const bool hovered = ImGui::IsItemHovered(); hovered || selected)
                 DrawTemplateCardBorder(selected, hovered);
 
-            if (ImGui::IsItemClicked())
+            if (ImGui::IsItemClicked()) {
                 controller.SetTemplateId(kTemplateIds[index]);
+                const ProjectCreationDraft &draft = controller.Draft();
+                state.defaultScene = draft.defaultScene;
+                state.targetFps = std::to_string(draft.targetFrameRate);
+                state.physicsIndex = draft.physicsEnabled ? 0 : 1;
+            }
 
             ImGui::PopStyleColor(2);
             ImGui::PopStyleVar(3);
             ImGui::PopID();
         }
 
-        void DrawStepTemplate(ProjectCreationController &controller, [[maybe_unused]] ProjectCreationViewState &st,
-                              const EditorGuiContext &ctx) {
+        void DrawStepTemplate(ProjectCreationController &controller, ProjectCreationViewState &st, const EditorGuiContext &ctx) {
             using namespace WizardLayout;
 
             const std::array<std::string, 6> descsStr = {ctx.localization.Get("editor", "project_creation.template.empty.desc"),
@@ -689,7 +693,7 @@ namespace Horo::Editor {
                     ImGui::SameLine(0.0F, TemplateGap);
                 }
 
-                DrawTemplateCard(controller, ctx, i, currentTemplateIndex, cardW, kDescs[i]);
+                DrawTemplateCard(controller, st, ctx, i, currentTemplateIndex, cardW, kDescs[i]);
             }
         }
 
@@ -959,6 +963,7 @@ namespace Horo::Editor {
                 bool inclStarter = controller.Draft().includeStarterContent;
                 CheckboxCss("Include starter content", &inclStarter, ctx);
                 controller.SetIncludeStarterContent(inclStarter);
+                st.defaultScene = controller.Draft().defaultScene;
 
                 ImGui::Dummy({0.0F, CheckGap});
                 bool genCMake = controller.Draft().generateCMakeProject;

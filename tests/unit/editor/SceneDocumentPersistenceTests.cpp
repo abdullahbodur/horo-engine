@@ -378,6 +378,14 @@ TEST_CASE("Project Scene Resolver Rejects A Missing Configured Default Scene", "
     REQUIRE((LoadProjectDefaultScene(project.Root()).HasError()));
 }
 
+TEST_CASE("Project Scene Resolver Accepts An Empty Default Scene", "[unit][editor][persistence]") {
+    TemporaryProject project;
+    project.WriteMetadata("");
+    const auto loaded = LoadProjectDefaultScene(project.Root());
+    REQUIRE((loaded.HasValue()));
+    REQUIRE_FALSE((loaded.Value().has_value()));
+}
+
 TEST_CASE("Project Scene Loader Rejects Unknown Schema Versions", "[unit][editor][persistence]") {
     TemporaryProject project;
     project.WriteMetadata();

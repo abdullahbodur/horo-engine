@@ -478,9 +478,14 @@ namespace Horo::Editor {
                                            "Project name is required and must not contain path separators.");
             if (request.projectRoot.empty() || request.projectRoot.filename().empty())
                 return MakeFoundationError(ProjectCreationErrors::InvalidRequest, "Project root must name a destination directory.");
-            if (!IsSafeProjectRelativePath(request.defaultScene) || std::filesystem::path(request.defaultScene).filename().empty())
+            if (request.includeStarterContent) {
+                if (!IsSafeProjectRelativePath(request.defaultScene) || std::filesystem::path(request.defaultScene).filename().empty())
+                    return MakeFoundationError(ProjectCreationErrors::InvalidRequest,
+                                               "Starter content requires a portable project-relative default scene path.");
+            } else if (!request.defaultScene.empty()) {
                 return MakeFoundationError(ProjectCreationErrors::InvalidRequest,
-                                           "Default scene must be a portable project-relative path.");
+                                           "Default scene must be empty when starter content is excluded.");
+            }
             if (request.targetFrameRate <= 0 || request.minimumCxxStandard < 20)
                 return MakeFoundationError(ProjectCreationErrors::InvalidRequest, "Project numeric settings are outside supported bounds.");
             std::error_code error;
