@@ -6,7 +6,6 @@
 #include <array>
 #include <cstddef>
 #include <cstdint>
-#include <exception>
 #include <functional>
 #include <memory>
 #include <new>
@@ -289,7 +288,7 @@ namespace Horo::Runtime {
         } catch (const std::bad_alloc &) {
             RollbackCapture(initialRecordCount, initialPayloadBytes, initialSegmentCount, std::move(usageCheckpoint));
             return Result<void>::Failure(MakeError(SaveErrors::CaptureAllocationFailed));
-        } catch (const std::exception &) {
+        } catch (...) {  // NOSONAR -- adapter boundaries must normalize non-standard exceptions into the typed contract error.
             RollbackCapture(initialRecordCount, initialPayloadBytes, initialSegmentCount, std::move(usageCheckpoint));
             return Result<void>::Failure(MakeError(SaveErrors::CaptureAdapterContractInvalid));
         }
