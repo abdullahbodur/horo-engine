@@ -132,6 +132,18 @@ the descriptor's grid, topology, layers, or package references. The contract per
 no I/O, authoring mutation, runtime registration, cancellation, or shutdown work;
 later spanning-object and dependency cook stages consume its immutable output.
 
+`WorldDependencyPlan` is the inert in-memory WST-004.5 projection built from one
+`WorldSpatialAssignment` and a bounded authored dependency graph. Hard edges require
+both exact endpoint revisions to be present in the spatial assignment and form
+transitive co-load components; cycles are valid and components are emitted by
+canonical object address. Soft edges require an admitted exact source revision but
+preserve an unresolved exact target for deferred resolution. Duplicate directed
+edges, self references, stale revisions, missing hard targets, and configured graph
+or bundle ceilings fail transactionally. The plan owns only partition identity,
+object-revision bundle members, and canonical soft-reference metadata. It is not a
+second manifest, topology authority, persistent schema, residency owner, or resolver;
+serialization remains deferred until its wire contract is separately ratified.
+
 PartitionEpoch identifies a mounted partition incarnation. It changes on world
 replacement/reload, including replacement by the same worldGuid. StreamingGeneration
 changes on each new cell attempt and when an attempt is invalidated; it does not
