@@ -67,6 +67,30 @@ namespace Horo::WorldStreaming::WorldStreamingErrors {
         Describe("world_streaming.scheduler.lifecycle_unavailable", ErrorSeverity::Warning,
                  "Scheduler admission is draining, closed, or waiting for an operation to retire.",
                  "Do not admit during shutdown and retain capacity until exact canonical operations become terminal.", false);
+    const ErrorCodeDescriptor BudgetModelInvalid =
+        Describe("world_streaming.budget.model_invalid", ErrorSeverity::Error,
+                 "A multidimensional budget vector, policy, request, or evaluation context is malformed.",
+                 "Provide every supported dimension exactly once with valid limits, revisions, timing, and positive requested work.", true);
+    const ErrorCodeDescriptor BudgetDimensionUnsupported =
+        Describe("world_streaming.budget.dimension_unsupported", ErrorSeverity::Error,
+                 "A budget vector or policy names an unsupported resource dimension.",
+                 "Use exactly the typed dimensions declared by this world-streaming contract version.", true);
+    const ErrorCodeDescriptor BudgetRevisionStale =
+        Describe("world_streaming.budget.revision_stale", ErrorSeverity::Warning,
+                 "A budget policy or usage sample revision no longer matches current authority state.",
+                 "Capture the current immutable policy and usage sample before retrying evaluation.", false);
+    const ErrorCodeDescriptor BudgetSampleInvalid =
+        Describe("world_streaming.budget.sample_invalid", ErrorSeverity::Error,
+                 "A budget usage sample has malformed monotonic window timing.",
+                 "Use a non-negative window start and an observation inside the policy's positive half-open sampling window.", true);
+    const ErrorCodeDescriptor BudgetSampleStale =
+        Describe("world_streaming.budget.sample_stale", ErrorSeverity::Warning,
+                 "A budget usage sample belongs to an earlier completed sampling window.",
+                 "Capture a current deterministic usage sample before evaluating new work.", false);
+    const ErrorCodeDescriptor BudgetCapacityExceeded =
+        Describe("world_streaming.budget.capacity_exceeded", ErrorSeverity::Warning,
+                 "Projected usage overflows or exceeds an independent hard resource limit.",
+                 "Defer work, retire charged resources, or select a validated policy that can contain the request.", false);
     const ErrorCodeDescriptor QuantizationPolicyInvalid =
         Describe("world_streaming.quantization.policy_invalid", ErrorSeverity::Error,
                  "The world-cell quantization policy has invalid size, bounds, or LOD limits.",
