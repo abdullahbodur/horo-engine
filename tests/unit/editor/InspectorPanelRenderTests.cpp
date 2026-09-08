@@ -94,7 +94,7 @@ TEST_CASE("Inspector Panel Render Tests", "[unit][editor]") {
     REQUIRE((panel.GetObservedEventTypes() == std::vector<std::string>({"SceneDocumentChangedEvent", "SelectionChangedEvent"})));
 
     command = {};
-    io.AddMousePosEvent(60.0F, 50.0F);
+    io.AddMousePosEvent(60.0F, 65.0F);
     drawFrame();
     command = {};
     io.AddMouseButtonEvent(ImGuiMouseButton_Left, true);
@@ -105,7 +105,7 @@ TEST_CASE("Inspector Panel Render Tests", "[unit][editor]") {
     REQUIRE(io.WantTextInput);
     REQUIRE((command.command == EditorWorkspaceViewCommand::None));
     command = {};
-    io.AddMousePosEvent(170.0F, 116.0F);
+    io.AddMousePosEvent(120.0F, 135.0F);
     drawFrame();
     command = {};
     io.AddMouseButtonEvent(ImGuiMouseButton_Left, true);
@@ -115,8 +115,20 @@ TEST_CASE("Inspector Panel Render Tests", "[unit][editor]") {
     REQUIRE((command.stringPayload == "Hero"));
 
     command = {};
-    io.AddMousePosEvent(200.0F, 116.0F);
+    io.AddMouseButtonEvent(ImGuiMouseButton_Left, false);
     drawFrame();
+    command = {};
+    io.AddMousePosEvent(120.0F, 135.0F);
+    drawFrame();
+    io.AddMouseButtonEvent(ImGuiMouseButton_Left, true);
+    drawFrame();
+    command = {};
+    io.AddMousePosEvent(155.0F, 135.0F);
+    drawFrame();
+    if (command.command == EditorWorkspaceViewCommand::None) {
+        io.AddMousePosEvent(165.0F, 135.0F);
+        drawFrame();
+    }
     REQUIRE((command.command == EditorWorkspaceViewCommand::PreviewObjectTransform));
     REQUIRE((command.transformUpdates.has_value()));
     REQUIRE((command.transformUpdates->front().object == SceneObjectId{7}));

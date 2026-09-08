@@ -624,7 +624,7 @@ namespace Horo::Editor::Ui {
 
     // ── Dock UI ───────────────────────────────────────────────────────────
 
-    int DrawDockTabs(std::span<const char *const> tabs, int activeTab, const Theme::Fonts &fonts);
+    int DrawDockTabs(std::span<const char *const> tabs, int activeTab, const Theme::Fonts &fonts, float height = 26.0F);
 
     void DrawObjTitle(const char *title, const char *badgeText, ImVec4 badgeBg, ImVec4 badgeFg, const Theme::Fonts &fonts);
 
@@ -641,6 +641,7 @@ namespace Horo::Editor::Ui {
         const char *text{""};
         ImVec4 background{};
         ImVec4 foreground{};
+        UiIcon objectIcon{UiIcon::HierarchyGeneric}; /**< Typed icon drawn before the editable object name. */
     };
 
     /**

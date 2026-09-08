@@ -18,7 +18,7 @@ namespace Horo::Editor {
     namespace {
         constexpr float kTabHeight = 36.0F;
         constexpr float kToolbarHeight = 42.0F;
-        constexpr float kSearchRegionHeight = 46.0F;
+        constexpr float kSearchRegionHeight = 30.0F;
         constexpr float kFooterHeight = 28.0F;
         constexpr float kOuterPadding = 6.0F;
         constexpr float kRowActionsWidth = 48.0F;
@@ -54,6 +54,19 @@ namespace Horo::Editor {
             }
         }
 
+        /** @brief Draws an axis-aligned dotted hierarchy guide segment. */
+        void DrawDottedLine(ImDrawList &drawList, const ImVec2 start, const ImVec2 end, const ImU32 color, const float scale) {
+            const float radius = std::max(0.5F, 0.55F * scale);
+            const float step = 3.0F * scale;
+            if (start.x == end.x) {
+                for (float y = start.y; y <= end.y; y += step)
+                    drawList.AddCircleFilled({start.x, y}, radius, color);
+                return;
+            }
+            for (float x = start.x; x <= end.x; x += step)
+                drawList.AddCircleFilled({x, start.y}, radius, color);
+        }
+
         /** @brief Substitutes the hierarchy object count into one complete localized label. */
         [[nodiscard]] std::string FormatObjectCount(std::string pattern, const std::size_t count) {
             constexpr std::string_view token{"{count}"};
@@ -63,88 +76,112 @@ namespace Horo::Editor {
         }
 
         /** @brief Draws the reference-height hierarchy tab without changing shared bottom-dock tabs. */
-        void DrawHierarchyTab(const char *label, const Theme::Fonts &fonts) {
+        void DrawHierarchyTab(const char *label, const Theme::Fonts &fonts, const float uiScale) {
             const ImVec2 minimum = ImGui::GetCursorScreenPos();
             const float width = ImGui::GetContentRegionAvail().x;
+            const float tabHeight = kTabHeight * uiScale;
             ImDrawList &drawList = *ImGui::GetWindowDrawList();
-            drawList.AddRectFilled(minimum, {minimum.x + width, minimum.y + kTabHeight}, Theme::U32(Theme::Bg0()));
-            drawList.AddLine({minimum.x, minimum.y + kTabHeight - 1.0F}, {minimum.x + width, minimum.y + kTabHeight - 1.0F},
+            drawList.AddRectFilled(minimum, {minimum.x + width, minimum.y + tabHeight}, Theme::U32(Theme::Bg0()));
+            drawList.AddLine({minimum.x, minimum.y + tabHeight - uiScale}, {minimum.x + width, minimum.y + tabHeight - uiScale},
                              Theme::U32(Theme::Border()));
 
             ImFont *font = fonts.sans != nullptr ? fonts.sans : ImGui::GetFont();
-            constexpr float fontSize = 12.0F;
+            const float fontSize = 12.0F * uiScale;
             const ImVec2 textSize = font->CalcTextSizeA(fontSize, 100000.0F, 0.0F, label);
-            constexpr float horizontalPadding = 10.0F;
+            const float dockPadding = 10.0F * uiScale;
+            const float horizontalPadding = 10.0F * uiScale;
             const float tabWidth = textSize.x + horizontalPadding * 2.0F;
-            drawList.AddText(font, fontSize, {minimum.x + horizontalPadding, minimum.y + (kTabHeight - textSize.y) * 0.5F},
+            drawList.AddText(font, fontSize, {minimum.x + dockPadding + horizontalPadding, minimum.y + (tabHeight - textSize.y) * 0.5F},
                              Theme::U32(Theme::Text()), label);
-            drawList.AddRectFilled({minimum.x, minimum.y + kTabHeight - 2.0F}, {minimum.x + tabWidth, minimum.y + kTabHeight},
-                                   Theme::U32(Theme::Accent()));
-            ImGui::Dummy({width, kTabHeight});
+            drawList.AddRectFilled({minimum.x + dockPadding, minimum.y + tabHeight - 2.0F * uiScale},
+                                   {minimum.x + dockPadding + tabWidth, minimum.y + tabHeight}, Theme::U32(Theme::Accent()));
+            ImGui::Dummy({width, tabHeight});
+            // A custom-drawn tab is immediately followed by a child region. Remove
+            // ImGui's implicit inter-item gap so the toolbar starts at the CSS tab edge.
+            ImGui::SetCursorScreenPos({minimum.x, minimum.y + tabHeight});
         }
 
         /** @brief Draws one hierarchy toolbar glyph inside a fixed 30-pixel button. */
-        void DrawToolbarGlyph(ImDrawList &drawList, const ToolbarGlyph glyph, const ImVec2 minimum, const ImU32 color) {
-            const ImVec2 origin{minimum.x + 7.0F, minimum.y + 7.0F};
+        void DrawToolbarGlyph(ImDrawList &drawList, const ToolbarGlyph glyph, const ImVec2 minimum, const ImU32 color,
+                              const float uiScale) {
+            const ImVec2 origin{minimum.x + 7.0F * uiScale, minimum.y + 7.0F * uiScale};
             if (glyph == ToolbarGlyph::Create) {
-                drawList.AddLine({origin.x + 8.0F, origin.y + 3.0F}, {origin.x + 8.0F, origin.y + 13.0F}, color, 1.6F);
-                drawList.AddLine({origin.x + 3.0F, origin.y + 8.0F}, {origin.x + 13.0F, origin.y + 8.0F}, color, 1.6F);
+                drawList.AddLine({origin.x + 8.0F * uiScale, origin.y + 3.0F * uiScale},
+                                 {origin.x + 8.0F * uiScale, origin.y + 13.0F * uiScale}, color, 1.6F * uiScale);
+                drawList.AddLine({origin.x + 3.0F * uiScale, origin.y + 8.0F * uiScale},
+                                 {origin.x + 13.0F * uiScale, origin.y + 8.0F * uiScale}, color, 1.6F * uiScale);
             } else if (glyph == ToolbarGlyph::Filter) {
-                const std::array points{ImVec2{origin.x + 2.5F, origin.y + 3.0F},  ImVec2{origin.x + 13.5F, origin.y + 3.0F},
-                                        ImVec2{origin.x + 9.3F, origin.y + 8.0F},  ImVec2{origin.x + 9.3F, origin.y + 12.2F},
-                                        ImVec2{origin.x + 6.7F, origin.y + 13.2F}, ImVec2{origin.x + 6.7F, origin.y + 8.0F}};
-                drawList.AddPolyline(points.data(), points.size(), color, ImDrawFlags_Closed, 1.4F);
+                const std::array points{ImVec2{origin.x + 2.5F * uiScale, origin.y + 3.0F * uiScale},
+                                        ImVec2{origin.x + 13.5F * uiScale, origin.y + 3.0F * uiScale},
+                                        ImVec2{origin.x + 9.3F * uiScale, origin.y + 8.0F * uiScale},
+                                        ImVec2{origin.x + 9.3F * uiScale, origin.y + 12.2F * uiScale},
+                                        ImVec2{origin.x + 6.7F * uiScale, origin.y + 13.2F * uiScale},
+                                        ImVec2{origin.x + 6.7F * uiScale, origin.y + 8.0F * uiScale}};
+                drawList.AddPolyline(points.data(), points.size(), color, ImDrawFlags_Closed, 1.4F * uiScale);
             } else if (glyph == ToolbarGlyph::Sort) {
-                drawList.AddLine({origin.x + 2.0F, origin.y + 4.0F}, {origin.x + 8.0F, origin.y + 4.0F}, color, 1.4F);
-                drawList.AddLine({origin.x + 2.0F, origin.y + 8.0F}, {origin.x + 6.0F, origin.y + 8.0F}, color, 1.4F);
-                drawList.AddLine({origin.x + 2.0F, origin.y + 12.0F}, {origin.x + 4.0F, origin.y + 12.0F}, color, 1.4F);
-                drawList.AddLine({origin.x + 11.0F, origin.y + 3.0F}, {origin.x + 11.0F, origin.y + 13.0F}, color, 1.4F);
-                drawList.AddLine({origin.x + 9.0F, origin.y + 11.0F}, {origin.x + 11.0F, origin.y + 13.0F}, color, 1.4F);
-                drawList.AddLine({origin.x + 11.0F, origin.y + 13.0F}, {origin.x + 13.0F, origin.y + 11.0F}, color, 1.4F);
+                drawList.AddLine({origin.x + 2.0F * uiScale, origin.y + 4.0F * uiScale},
+                                 {origin.x + 8.0F * uiScale, origin.y + 4.0F * uiScale}, color, 1.4F * uiScale);
+                drawList.AddLine({origin.x + 2.0F * uiScale, origin.y + 8.0F * uiScale},
+                                 {origin.x + 6.0F * uiScale, origin.y + 8.0F * uiScale}, color, 1.4F * uiScale);
+                drawList.AddLine({origin.x + 2.0F * uiScale, origin.y + 12.0F * uiScale},
+                                 {origin.x + 4.0F * uiScale, origin.y + 12.0F * uiScale}, color, 1.4F * uiScale);
+                drawList.AddLine({origin.x + 11.0F * uiScale, origin.y + 3.0F * uiScale},
+                                 {origin.x + 11.0F * uiScale, origin.y + 13.0F * uiScale}, color, 1.4F * uiScale);
+                drawList.AddLine({origin.x + 9.0F * uiScale, origin.y + 11.0F * uiScale},
+                                 {origin.x + 11.0F * uiScale, origin.y + 13.0F * uiScale}, color, 1.4F * uiScale);
+                drawList.AddLine({origin.x + 11.0F * uiScale, origin.y + 13.0F * uiScale},
+                                 {origin.x + 13.0F * uiScale, origin.y + 11.0F * uiScale}, color, 1.4F * uiScale);
             } else {
-                drawList.AddCircleFilled({origin.x + 8.0F, origin.y + 3.5F}, 1.0F, color);
-                drawList.AddCircleFilled({origin.x + 8.0F, origin.y + 8.0F}, 1.0F, color);
-                drawList.AddCircleFilled({origin.x + 8.0F, origin.y + 12.5F}, 1.0F, color);
+                drawList.AddCircleFilled({origin.x + 8.0F * uiScale, origin.y + 3.5F * uiScale}, uiScale, color);
+                drawList.AddCircleFilled({origin.x + 8.0F * uiScale, origin.y + 8.0F * uiScale}, uiScale, color);
+                drawList.AddCircleFilled({origin.x + 8.0F * uiScale, origin.y + 12.5F * uiScale}, uiScale, color);
             }
         }
 
         /** @brief Draws one hierarchy toolbar button and reports a primary-button activation. */
-        bool DrawToolbarButton(const char *id, const ToolbarGlyph glyph, const ImVec2 minimum, const bool primary, const char *tooltip) {
-            constexpr ImVec2 size{30.0F, 30.0F};
+        bool DrawToolbarButton(const char *id, const ToolbarGlyph glyph, const ImVec2 minimum, const bool primary, const char *tooltip,
+                               const float uiScale) {
+            const ImVec2 size{30.0F * uiScale, 30.0F * uiScale};
             ImGui::SetCursorScreenPos(minimum);
             ImGui::InvisibleButton(id, size);
             const bool hovered = ImGui::IsItemHovered();
             ImDrawList &drawList = *ImGui::GetWindowDrawList();
             if (primary || hovered) {
-                drawList.AddRectFilled(minimum, {minimum.x + size.x, minimum.y + size.y}, Theme::U32(Theme::Bg2()), 4.0F);
-                drawList.AddRect(minimum, {minimum.x + size.x, minimum.y + size.y}, Theme::U32(Theme::Border()), 4.0F);
+                drawList.AddRectFilled(minimum, {minimum.x + size.x, minimum.y + size.y}, Theme::U32(Theme::Bg2()), 4.0F * uiScale);
+                drawList.AddRect(minimum, {minimum.x + size.x, minimum.y + size.y}, Theme::U32(Theme::Border()), 4.0F * uiScale);
             }
-            DrawToolbarGlyph(drawList, glyph, minimum, Theme::U32(hovered ? Theme::Text() : Theme::Dim()));
+            DrawToolbarGlyph(drawList, glyph, minimum, Theme::U32(hovered ? Theme::Text() : Theme::Muted()), uiScale);
             if (hovered)
                 ImGui::SetTooltip("%s", tooltip);
             return ImGui::IsItemClicked(ImGuiMouseButton_Left);
         }
 
         /** @brief Draws the hierarchy action strip and returns its supported action requests. */
-        HierarchyToolbarResult DrawHierarchyToolbar(const float panelWidth, const EditorGuiContext &context) {
+        HierarchyToolbarResult DrawHierarchyToolbar(const float panelWidth, const EditorGuiContext &context, const float uiScale) {
             const ImVec2 minimum = ImGui::GetCursorScreenPos();
+            const float toolbarHeight = kToolbarHeight * uiScale;
+            const float buttonSize = 30.0F * uiScale;
+            const float gap = 6.0F * uiScale;
             ImDrawList &drawList = *ImGui::GetWindowDrawList();
-            drawList.AddRectFilled(minimum, {minimum.x + panelWidth, minimum.y + kToolbarHeight}, Theme::U32(Theme::Bg1()));
-            drawList.AddLine({minimum.x, minimum.y + kToolbarHeight - 1.0F}, {minimum.x + panelWidth, minimum.y + kToolbarHeight - 1.0F},
-                             Theme::U32(Theme::Border()));
+            drawList.AddRectFilled(minimum, {minimum.x + panelWidth, minimum.y + toolbarHeight}, Theme::U32(Theme::Bg1()));
+            drawList.AddLine({minimum.x, minimum.y + toolbarHeight - uiScale},
+                             {minimum.x + panelWidth, minimum.y + toolbarHeight - uiScale}, Theme::U32(Theme::Border()));
 
             HierarchyToolbarResult result;
-            const float y = minimum.y + 6.0F;
-            result.createPressed = DrawToolbarButton("##HierarchyCreateButton", ToolbarGlyph::Create, {minimum.x + 8.0F, y}, true,
-                                                     context.localization.Get("editor", "workspace.hierarchy.toolbar.create").c_str());
-            const float right = minimum.x + panelWidth - 8.0F;
-            static_cast<void>(DrawToolbarButton("##HierarchyOptionsButton", ToolbarGlyph::More, {right - 30.0F, y}, false,
-                                                context.localization.Get("editor", "workspace.hierarchy.toolbar.options").c_str()));
-            static_cast<void>(DrawToolbarButton("##HierarchySortButton", ToolbarGlyph::Sort, {right - 66.0F, y}, false,
-                                                context.localization.Get("editor", "workspace.hierarchy.toolbar.sort").c_str()));
-            result.focusSearchPressed = DrawToolbarButton("##HierarchyFilterButton", ToolbarGlyph::Filter, {right - 102.0F, y}, false,
-                                                          context.localization.Get("editor", "workspace.hierarchy.toolbar.filter").c_str());
-            ImGui::SetCursorScreenPos({minimum.x, minimum.y + kToolbarHeight});
+            const float y = minimum.y + 6.0F * uiScale;
+            result.createPressed =
+                DrawToolbarButton("##HierarchyCreateButton", ToolbarGlyph::Create, {minimum.x + 8.0F * uiScale, y}, true,
+                                  context.localization.Get("editor", "workspace.hierarchy.toolbar.create").c_str(), uiScale);
+            const float right = minimum.x + panelWidth - 8.0F * uiScale;
+            static_cast<void>(DrawToolbarButton("##HierarchyOptionsButton", ToolbarGlyph::More, {right - buttonSize, y}, false,
+                                                context.localization.Get("editor", "workspace.hierarchy.toolbar.options").c_str(),
+                                                uiScale));
+            static_cast<void>(DrawToolbarButton("##HierarchySortButton", ToolbarGlyph::Sort, {right - buttonSize * 2.0F - gap, y}, false,
+                                                context.localization.Get("editor", "workspace.hierarchy.toolbar.sort").c_str(), uiScale));
+            result.focusSearchPressed =
+                DrawToolbarButton("##HierarchyFilterButton", ToolbarGlyph::Filter, {right - buttonSize * 3.0F - gap * 2.0F, y}, false,
+                                  context.localization.Get("editor", "workspace.hierarchy.toolbar.filter").c_str(), uiScale);
+            ImGui::SetCursorScreenPos({minimum.x, minimum.y + toolbarHeight});
             ImGui::Dummy({panelWidth, 0.0F});
             return result;
         }
@@ -168,24 +205,24 @@ namespace Horo::Editor {
         [[nodiscard]] HierarchyIconPresentation GetIconPresentation(const HierarchyNodeType type) {
             switch (type) {
                 case HierarchyNodeType::Mesh:
-                    return {Ui::UiIcon::HierarchyMesh, "workspace.hierarchy.type.mesh", Theme::Ok()};
+                    return {Ui::UiIcon::HierarchyMesh, "workspace.hierarchy.type.mesh", Theme::Muted()};
                 case HierarchyNodeType::Empty:
                 case HierarchyNodeType::Collection:
                     return {Ui::UiIcon::HierarchyGeneric, "workspace.hierarchy.type.empty", Theme::Muted()};
                 case HierarchyNodeType::Light:
-                    return {Ui::UiIcon::Light, "workspace.hierarchy.type.light", Theme::Warn()};
+                    return {Ui::UiIcon::Light, "workspace.hierarchy.type.light", Theme::Muted()};
                 case HierarchyNodeType::PointLight:
-                    return {Ui::UiIcon::PointLight, "workspace.hierarchy.type.light_point", Theme::Warn()};
+                    return {Ui::UiIcon::PointLight, "workspace.hierarchy.type.light_point", Theme::Muted()};
                 case HierarchyNodeType::DirectionalLight:
-                    return {Ui::UiIcon::DirectionalLight, "workspace.hierarchy.type.light_directional", Theme::Warn()};
+                    return {Ui::UiIcon::DirectionalLight, "workspace.hierarchy.type.light_directional", Theme::Muted()};
                 case HierarchyNodeType::SpotLight:
-                    return {Ui::UiIcon::SpotLight, "workspace.hierarchy.type.light_spot", Theme::Warn()};
+                    return {Ui::UiIcon::SpotLight, "workspace.hierarchy.type.light_spot", Theme::Muted()};
                 case HierarchyNodeType::Camera:
-                    return {Ui::UiIcon::Camera, "workspace.hierarchy.type.camera", Theme::Accent()};
+                    return {Ui::UiIcon::Camera, "workspace.hierarchy.type.camera", Theme::Muted()};
                 case HierarchyNodeType::TriggerVolume:
-                    return {Ui::UiIcon::TriggerVolume, "workspace.hierarchy.type.volume", Theme::Warn()};
+                    return {Ui::UiIcon::TriggerVolume, "workspace.hierarchy.type.volume", Theme::Muted()};
                 case HierarchyNodeType::AudioSource:
-                    return {Ui::UiIcon::AudioSource, "workspace.hierarchy.type.audio", BlendColor(Theme::Accent(), Theme::Err(), 0.45F)};
+                    return {Ui::UiIcon::AudioSource, "workspace.hierarchy.type.audio", Theme::Muted()};
             }
             return {Ui::UiIcon::HierarchyGeneric, "workspace.hierarchy.type.empty", Theme::Muted()};
         }
@@ -332,7 +369,6 @@ namespace Horo::Editor {
         bool rowLeftClicked{false};
         bool rowRightClicked{false};
         bool selected{false};
-        bool primarySelected{false};
         bool pointerInActions{false};
         bool assetDropDelivered{false};
         bool searching{false};
@@ -383,30 +419,27 @@ namespace Horo::Editor {
     }
 
     void HierarchyPanel::DrawIcon(ImDrawList *dl, const ImVec2 &pos, const ImVec2 &size, const ImU32 color) {
-        const float ox = pos.x + (size.x - 14.0f) * 0.5f;
-        const float oy = pos.y + (size.y - 14.0f) * 0.5f;
-
-        // Simple hierarchy icon (nodes and branches)
-        dl->AddLine(ImVec2(ox + 2, oy + 2), ImVec2(ox + 12, oy + 2), color, 1.5f);
-        dl->AddLine(ImVec2(ox + 4, oy + 2), ImVec2(ox + 4, oy + 7), color, 1.5f);
-        dl->AddLine(ImVec2(ox + 4, oy + 7), ImVec2(ox + 12, oy + 7), color, 1.5f);
-        dl->AddLine(ImVec2(ox + 4, oy + 7), ImVec2(ox + 4, oy + 12), color, 1.5f);
-        dl->AddLine(ImVec2(ox + 4, oy + 12), ImVec2(ox + 12, oy + 12), color, 1.5f);
+        constexpr float iconSize = 16.0F;
+        const float x = pos.x + (size.x - iconSize) * 0.5F;
+        const float y = pos.y + (size.y - iconSize) * 0.5F;
+        dl->AddRect(ImVec2(x + 2.0F, y + 3.0F), ImVec2(x + 14.0F, y + 13.0F), color, 1.0F, 0, 1.4F);
+        dl->AddLine(ImVec2(x + 6.0F, y + 3.0F), ImVec2(x + 6.0F, y + 13.0F), color, 1.4F);
     }
 
     HierarchyPanel::PanelInteractionState HierarchyPanel::DrawSearch(const float panelWidth, const float uiScale,
                                                                      const EditorGuiContext &context) {
         const ImVec2 windowPosition = ImGui::GetWindowPos();
         ImDrawList &drawList = *ImGui::GetWindowDrawList();
-        const ImVec2 regionMinimum{windowPosition.x, windowPosition.y + kToolbarHeight};
-        const ImVec2 regionMaximum{windowPosition.x + panelWidth, regionMinimum.y + kSearchRegionHeight * uiScale};
-        drawList.AddRectFilled(regionMinimum, regionMaximum, Theme::U32(Theme::Bg0()));
-        drawList.AddLine({regionMinimum.x, regionMaximum.y - 1.0F}, {regionMaximum.x, regionMaximum.y - 1.0F}, Theme::U32(Theme::Border()));
+        const float toolbarHeight = kToolbarHeight * uiScale;
+        const float searchRegionHeight = kSearchRegionHeight * uiScale;
+        const ImVec2 regionMinimum{windowPosition.x, windowPosition.y + toolbarHeight};
+        const ImVec2 regionMaximum{windowPosition.x + panelWidth, regionMinimum.y + searchRegionHeight};
 
-        ImGui::SetCursorPos(ImVec2(8.0F * uiScale, kToolbarHeight + 8.0F * uiScale));
-        ImGui::SetNextItemWidth(std::max(1.0F, panelWidth - 16.0F * uiScale));
-        ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(10.0F * uiScale, 6.5F * uiScale));
-        ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, Theme::Layout::Radius);
+        ImGui::SetCursorPos(ImVec2(0.0F, toolbarHeight));
+        ImGui::SetNextItemWidth(std::max(1.0F, panelWidth));
+        const float verticalPadding = std::max(0.0F, (searchRegionHeight - kHierarchyFontSize * uiScale) * 0.5F);
+        ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(18.0F * uiScale, verticalPadding));
+        ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 0.0F);
         ImGui::PushStyleVar(ImGuiStyleVar_FrameBorderSize, 1.0F);
         ImGui::PushStyleColor(ImGuiCol_FrameBg, Theme::Bg3());
         ImGui::PushStyleColor(ImGuiCol_FrameBgHovered, Theme::Bg3());
@@ -425,12 +458,14 @@ namespace Horo::Editor {
             searchActive = ImGui::IsItemActive();
         }
         const ImVec2 inputMaximum = ImGui::GetItemRectMax();
-        const ImVec2 searchCenter{inputMaximum.x - 16.0F * uiScale, (ImGui::GetItemRectMin().y + inputMaximum.y) * 0.5F};
-        const ImU32 searchColor = Theme::U32(Theme::Dim());
+        const ImVec2 searchCenter{inputMaximum.x - 18.0F * uiScale, (ImGui::GetItemRectMin().y + inputMaximum.y) * 0.5F};
+        const ImU32 searchColor = Theme::U32(Theme::Muted());
         drawList.AddCircle({searchCenter.x - 1.5F * uiScale, searchCenter.y - 1.5F * uiScale}, 4.2F * uiScale, searchColor, 16,
                            1.4F * uiScale);
         drawList.AddLine({searchCenter.x + 1.5F * uiScale, searchCenter.y + 1.5F * uiScale},
                          {searchCenter.x + 5.0F * uiScale, searchCenter.y + 5.0F * uiScale}, searchColor, 1.4F * uiScale);
+        drawList.AddLine({regionMinimum.x, regionMaximum.y - uiScale}, {regionMaximum.x, regionMaximum.y - uiScale},
+                         Theme::U32(Theme::Border()), uiScale);
         const bool panelFocused = ImGui::IsWindowFocused(ImGuiFocusedFlags_ChildWindows);
         ImGui::PopStyleColor(5);
         ImGui::PopStyleVar(3);
@@ -527,19 +562,27 @@ namespace Horo::Editor {
 
     void HierarchyPanel::DrawRowBackground(const RowFrame &frame, const bool hovered) {
         if (frame.selected) {
-            ImVec4 selectedBackground = Theme::Accent();
-            selectedBackground.w = hovered ? 0.17F : 0.13F;
-            frame.drawList.AddRectFilled(frame.geometry.rowMin, frame.geometry.rowMax, Theme::U32(selectedBackground),
-                                         2.0F * frame.uiScale);
-            if (frame.primarySelected)
-                frame.drawList.AddRectFilled(frame.geometry.rowMin,
-                                             {frame.geometry.rowMin.x + 2.0F * frame.uiScale, frame.geometry.rowMax.y},
-                                             Theme::U32(Theme::Accent()), 2.0F * frame.uiScale);
+            constexpr int segmentCount = 12;
+            const float segmentWidth = (frame.geometry.rowMax.x - frame.geometry.rowMin.x) / static_cast<float>(segmentCount);
+            ImVec4 accent = Theme::Accent();
+            for (int segment = 0; segment < segmentCount; ++segment) {
+                const float amount = static_cast<float>(segment) / static_cast<float>(segmentCount - 1);
+                accent.w = (hovered ? 0.22F : 0.20F) + ((hovered ? 0.10F : 0.08F) - (hovered ? 0.22F : 0.20F)) * amount;
+                const ImVec2 minimum{frame.geometry.rowMin.x + segmentWidth * static_cast<float>(segment), frame.geometry.rowMin.y};
+                const ImVec2 maximum{segment == segmentCount - 1 ? frame.geometry.rowMax.x : minimum.x + segmentWidth + 1.0F,
+                                     frame.geometry.rowMax.y};
+                ImDrawFlags corners = ImDrawFlags_None;
+                if (segment == 0)
+                    corners = ImDrawFlags_RoundCornersLeft;
+                else if (segment == segmentCount - 1)
+                    corners = ImDrawFlags_RoundCornersRight;
+                frame.drawList.AddRectFilled(minimum, maximum, Theme::U32(accent), 3.0F * frame.uiScale, corners);
+            }
         } else if (hovered) {
-            frame.drawList.AddRectFilled(frame.geometry.rowMin, frame.geometry.rowMax, Theme::U32(Theme::Hover()), 2.0F * frame.uiScale);
+            frame.drawList.AddRectFilled(frame.geometry.rowMin, frame.geometry.rowMax, Theme::U32(Theme::Hover()), 3.0F * frame.uiScale);
         }
         if (frame.rowFocused)
-            frame.drawList.AddRect(frame.geometry.rowMin, frame.geometry.rowMax, Theme::U32(Theme::BorderStrong()), 2.0F * frame.uiScale, 0,
+            frame.drawList.AddRect(frame.geometry.rowMin, frame.geometry.rowMax, Theme::U32(Theme::BorderStrong()), 3.0F * frame.uiScale, 0,
                                    frame.uiScale);
     }
 
@@ -547,8 +590,10 @@ namespace Horo::Editor {
         const float chevronCenterX = (frame.geometry.chevronMin.x + frame.geometry.chevronMax.x) * 0.5F;
         if (frame.row.depth > 0) {
             const float guideX = frame.geometry.chevronMin.x - 10.0F * frame.uiScale;
-            frame.drawList.AddLine({guideX, frame.geometry.rowMin.y}, {guideX, centerY}, Theme::U32(Theme::Border()), 1.0F);
-            frame.drawList.AddLine({guideX, centerY}, {frame.geometry.chevronMin.x, centerY}, Theme::U32(Theme::Border()), 1.0F);
+            const float guideEndX = std::max(guideX, frame.geometry.typeIconMin.x - 3.0F * frame.uiScale);
+            DrawDottedLine(frame.drawList, {guideX, frame.geometry.rowMin.y}, {guideX, frame.geometry.rowMax.y},
+                           Theme::U32(Theme::BorderStrong()), frame.uiScale);
+            DrawDottedLine(frame.drawList, {guideX, centerY}, {guideEndX, centerY}, Theme::U32(Theme::BorderStrong()), frame.uiScale);
         }
         if (!frame.node.children.empty()) {
             if (frame.node.expanded || frame.searching)
@@ -567,7 +612,7 @@ namespace Horo::Editor {
     void HierarchyPanel::DrawRowTypeIcon(const RowFrame &frame, const EditorGuiContext &context, const float centerY) {
         const HierarchyIconPresentation icon = GetIconPresentation(frame.node.type);
         const float iconSize = 16.0F * frame.uiScale;
-        ImVec4 typeColor = icon.color;
+        ImVec4 typeColor = frame.selected ? Theme::Accent() : icon.color;
         if (frame.node.effectivelyLocked)
             typeColor.w *= 0.65F;
         Ui::DrawEditorIcon(&frame.drawList, icon.icon, {frame.geometry.typeIconMin.x, centerY - iconSize * 0.5F}, {iconSize, iconSize},
@@ -590,7 +635,7 @@ namespace Horo::Editor {
     }
 
     void HierarchyPanel::DrawRowActions(const RowFrame &frame, const RowControls &controls) {
-        if (frame.geometry.layout.visibilityAction.Width() <= 0.0F)
+        if (frame.geometry.layout.visibilityAction.Width() <= 0.0F || (!frame.selected && !controls.IsHovered(frame)))
             return;
         const float actionIconSize =
             std::max(0.0F, std::min({15.0F * frame.uiScale, frame.geometry.layout.visibilityAction.Width() - 4.0F * frame.uiScale,
@@ -657,15 +702,20 @@ namespace Horo::Editor {
     void HierarchyPanel::DrawRowLabel(const RowFrame &frame, EditorWorkspaceViewCommandData &command) {
         const float centerY = frame.geometry.rowMin.y + frame.geometry.layout.height * 0.5F;
         if (renamingId_ != frame.node.id) {
-            if (const bool truncated =
-                    DrawHierarchyLabel({.drawList = frame.drawList,
-                                        .font = frame.nameFont,
-                                        .fontSize = frame.nameFontSize,
-                                        .minimum = frame.geometry.labelMin,
-                                        .maximum = frame.geometry.labelMax,
-                                        .centerY = centerY,
-                                        .color = Theme::U32(frame.node.effectivelyLocked ? Theme::Muted() : Theme::Text()),
-                                        .text = frame.node.name});
+            ImVec4 labelColor = frame.node.children.empty() ? BlendColor(Theme::Muted(), Theme::Text(), 0.36F)
+                                                            : BlendColor(Theme::Muted(), Theme::Text(), 0.68F);
+            if (frame.selected)
+                labelColor = Theme::Text();
+            if (frame.node.effectivelyLocked)
+                labelColor = Theme::Muted();
+            if (const bool truncated = DrawHierarchyLabel({.drawList = frame.drawList,
+                                                           .font = frame.nameFont,
+                                                           .fontSize = frame.nameFontSize,
+                                                           .minimum = frame.geometry.labelMin,
+                                                           .maximum = frame.geometry.labelMax,
+                                                           .centerY = centerY,
+                                                           .color = Theme::U32(labelColor),
+                                                           .text = frame.node.name});
                 truncated && ImGui::IsMouseHoveringRect(frame.geometry.labelMin, frame.geometry.labelMax))
                 ImGui::SetTooltip("%s", frame.node.name.c_str());
             return;
@@ -700,13 +750,13 @@ namespace Horo::Editor {
                                   const EditorGuiContext &context) {
         bool pendingDelete = false;
         ImDrawList &drawList = *ImGui::GetWindowDrawList();
-        ImFont &nameFont = *ResolveFont(context.theme.fonts.sans);
         const float nameFontSize = kHierarchyFontSize * uiScale;
         const bool workspaceEligible =
             inputRouter_ != nullptr && workspaceInputContext_ != nullptr && inputRouter_->IsContextActive(*workspaceInputContext_);
 
         for (const HierarchyVisibleRow &row : rows) {
             const HierarchyNode &node = *row.node;
+            ImFont &nameFont = *ResolveFont(node.children.empty() ? context.theme.fonts.sans : context.theme.fonts.sansEmphasis);
             ImGui::PushID(&node.id);
             ImGui::SetCursorPosX(outerPadding);
             const ImVec2 rowMin = ImGui::GetCursorScreenPos();
@@ -755,7 +805,6 @@ namespace Horo::Editor {
                 .rowLeftClicked = rowLeftClicked,
                 .rowRightClicked = rowRightClicked,
                 .selected = editSession_.IsSelected(node.id),
-                .primarySelected = editSession_.SelectedId() == node.id,
                 .pointerInActions = pointerInActions,
                 .assetDropDelivered = assetDropDelivered,
                 .searching = searchBuffer_[0] != '\0',
@@ -791,12 +840,14 @@ namespace Horo::Editor {
         static_cast<void>(pos);
         editSession_.Synchronize(vm);
         const float uiScale = Theme::GetActiveTokens().sizes.uiScale;
-        DrawHierarchyTab(ctx.localization.Get("editor", "workspace.panel.hierarchy").c_str(), ctx.theme.fonts);
+        const float tabHeight = kTabHeight * uiScale;
+        const float toolbarHeight = kToolbarHeight * uiScale;
+        DrawHierarchyTab(ctx.localization.Get("editor", "workspace.panel.hierarchy").c_str(), ctx.theme.fonts, uiScale);
 
         ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0.0F, 0.0F));
-        ImGui::BeginChild("##HierarchyContent", ImVec2(size.x, size.y - kTabHeight), false, ImGuiWindowFlags_NoSavedSettings);
+        ImGui::BeginChild("##HierarchyContent", ImVec2(size.x, size.y - tabHeight), false, ImGuiWindowFlags_NoSavedSettings);
 
-        const HierarchyToolbarResult toolbar = DrawHierarchyToolbar(size.x, ctx);
+        const HierarchyToolbarResult toolbar = DrawHierarchyToolbar(size.x, ctx, uiScale);
         if (toolbar.createPressed)
             ImGui::OpenPopup("##HierarchyCreatePopup");
         if (toolbar.focusSearchPressed)
@@ -812,8 +863,8 @@ namespace Horo::Editor {
         HandleRenameShortcut(interaction);
 
         const float outerPadding = kOuterPadding * uiScale;
-        const float contentHeight = std::max(1.0F, size.y - kTabHeight);
-        const float scrollTop = kToolbarHeight + kSearchRegionHeight * uiScale;
+        const float contentHeight = std::max(1.0F, size.y - tabHeight);
+        const float scrollTop = toolbarHeight + kSearchRegionHeight * uiScale;
         const float scrollHeight = std::max(1.0F, contentHeight - scrollTop - kFooterHeight * uiScale);
         ImGui::SetCursorPos({0.0F, scrollTop});
         ImGui::BeginChild("##HierarchyScroll", {size.x, scrollHeight}, false, ImGuiWindowFlags_NoSavedSettings);

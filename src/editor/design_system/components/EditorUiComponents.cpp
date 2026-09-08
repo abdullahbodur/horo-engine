@@ -64,7 +64,7 @@ namespace Horo::Editor::Ui {
         struct PropertyRowLayout {
             ImVec2 position;
             float width{0.0F};
-            float height{32.0F};
+            float height{31.0F};
             float controlX{0.0F};
             float controlWidth{0.0F};
         };
@@ -73,24 +73,20 @@ namespace Horo::Editor::Ui {
             const ImVec2 position = ImGui::GetCursorScreenPos();
             const float width = ImGui::GetContentRegionAvail().x;
             const float scale = Theme::GetActiveTokens().sizes.uiScale;
-            const float height = ScaledLayoutValue(32.0F);
-            const float horizontalPadding = ScaledLayoutValue(14.0F);
+            const float height = ScaledLayoutValue(31.0F);
+            const float horizontalPadding = ScaledLayoutValue(8.0F);
             const float minimumControlWidth = ScaledLayoutValue(90.0F);
             const float availableLabelWidth = std::max(ScaledLayoutValue(56.0F), width - horizontalPadding * 2.0F - minimumControlWidth);
-            const float measuredLabelWidth =
-                fonts.sans->CalcTextSizeA(fonts.sans->FontSize * scale, FLT_MAX, 0.0F, label).x + ScaledLayoutValue(8.0F);
-            const float labelWidth = std::clamp(std::max(width * 0.38F, measuredLabelWidth), ScaledLayoutValue(56.0F),
+            const float labelFontSize = 10.5F * scale;
+            const float measuredLabelWidth = fonts.sans->CalcTextSizeA(labelFontSize, FLT_MAX, 0.0F, label).x + ScaledLayoutValue(8.0F);
+            const float labelWidth = std::clamp(std::max(ScaledLayoutValue(68.0F), measuredLabelWidth), ScaledLayoutValue(56.0F),
                                                 std::min(ScaledLayoutValue(130.0F), availableLabelWidth));
 
-            ImVec4 borderLight = Theme::Border();
-            borderLight.w = 0.5F;
-            ImGui::GetWindowDrawList()->AddLine({position.x, position.y + height - 1.0F}, {position.x + width, position.y + height - 1.0F},
-                                                ImGui::GetColorU32(borderLight), 1.0F);
             ImDrawList *drawList = ImGui::GetWindowDrawList();
             drawList->PushClipRect({position.x + horizontalPadding, position.y},
                                    {position.x + horizontalPadding + labelWidth - 4.0F, position.y + height}, true);
-            drawList->AddText(fonts.sans, fonts.sans->FontSize, {position.x + horizontalPadding, position.y + ScaledLayoutValue(8.0F)},
-                              Theme::U32(Theme::Muted()), label);
+            const float labelY = position.y + (height - labelFontSize) * 0.5F;
+            drawList->AddText(fonts.sans, labelFontSize, {position.x + horizontalPadding, labelY}, Theme::U32(Theme::Muted()), label);
             drawList->PopClipRect();
 
             const float controlX = position.x + horizontalPadding + labelWidth;
@@ -1536,12 +1532,12 @@ namespace Horo::Editor::Ui {
 
     // ── Dock UI ───────────────────────────────────────────────────────────
 
-    int DrawDockTabs(const std::span<const char *const> tabs, int activeTab, const Theme::Fonts &fonts) {
+    int DrawDockTabs(const std::span<const char *const> tabs, int activeTab, const Theme::Fonts &fonts, const float height) {
         ImDrawList *dl = ImGui::GetWindowDrawList();
         const ImVec2 pos = ImGui::GetCursorScreenPos();
         const float w = ImGui::GetContentRegionAvail().x;
 
-        constexpr float tabH = 26.0f;
+        const float tabH = std::max(1.0F, height);
 
         // Background (--bg-darkest)
         dl->AddRectFilled(pos, ImVec2(pos.x + w, pos.y + tabH), Theme::U32(Theme::Bg0()));
@@ -1572,7 +1568,9 @@ namespace Horo::Editor::Ui {
                 textColor = Theme::Dim();  // hover color
 
             // Draw text
-            dl->AddText(fonts.sansCompact, fonts.sansCompact->FontSize, ImVec2(p.x + 13.0f, p.y + 6.0f), ImGui::GetColorU32(textColor),
+            const float tabFontSize = 12.0F * Theme::GetActiveTokens().sizes.uiScale;
+            const float textY = p.y + (tabH - tabFontSize) * 0.5F;
+            dl->AddText(fonts.sansCompact, tabFontSize, ImVec2(p.x + 13.0f, textY), ImGui::GetColorU32(textColor),
                         tabs[i]);
 
             // Active underline
@@ -1625,29 +1623,35 @@ namespace Horo::Editor::Ui {
         const ImVec2 position = ImGui::GetCursorScreenPos();
         const float width = ImGui::GetContentRegionAvail().x;
         constexpr float height = 38.0F;
-        constexpr float horizontalPadding = 14.0F;
-        constexpr float controlGap = 8.0F;
-        constexpr float controlPaddingX = 9.0F;
+        constexpr float iconSize = 22.0F;
+        constexpr float iconGap = 7.0F;
+        constexpr float controlGap = 6.0F;
+        constexpr float controlPaddingX = 8.0F;
         constexpr float controlPaddingY = 3.0F;
 
-        const float badgeFontSize = fonts.sansCompact->FontSize;
+        const float badgeFontSize = 11.0F * Theme::GetActiveTokens().sizes.uiScale;
         const ImVec2 badgeTextSize = fonts.sansCompact->CalcTextSizeA(badgeFontSize, 1000.0F, 0.0F, badge.text);
         const ImVec2 badgeSize{
             std::min(badgeTextSize.x + 12.0F, std::max(1.0F, width * 0.38F)),
             badgeTextSize.y + 6.0F,
         };
         const ImVec2 badgePosition{
-            position.x + width - horizontalPadding - badgeSize.x,
+            position.x + width - badgeSize.x,
             position.y + (height - badgeSize.y) * 0.5F,
         };
-        const float controlWidth = std::max(1.0F, badgePosition.x - controlGap - (position.x + horizontalPadding));
-        const float effectiveFontHeight = fonts.sans->FontSize * Theme::Scale(fonts.sans->FontSize, Theme::FontPx::Sans);
+        const float controlX = position.x + iconSize + iconGap;
+        const float controlWidth = std::max(1.0F, badgePosition.x - controlGap - controlX);
+        const float titleFontSize = 12.0F * Theme::GetActiveTokens().sizes.uiScale;
+        const float effectiveFontHeight = titleFontSize * Theme::Scale(titleFontSize, Theme::FontPx::SansEmphasis);
         const float controlHeight = effectiveFontHeight + controlPaddingY * 2.0F;
-        const float controlOffsetY = std::max(0.0F, (height - controlHeight) * 0.5F);
+        const float controlOffsetY = std::max(0.0F, (height - controlHeight) * 0.5F - 0.5F);
+
+        DrawEditorIcon(drawList, badge.objectIcon, {position.x, position.y + (height - iconSize) * 0.5F}, {iconSize, iconSize},
+                       Theme::U32(Theme::Accent()));
 
         value.resize(std::min(value.size(), maximumBytes));
         value.resize(maximumBytes, '\0');
-        ImGui::SetCursorScreenPos({position.x + horizontalPadding, position.y + controlOffsetY});
+        ImGui::SetCursorScreenPos({controlX, position.y + controlOffsetY});
         ImGui::PushID(id);
         ImGui::PushItemWidth(controlWidth);
         ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2{controlPaddingX, controlPaddingY});
@@ -1666,7 +1670,7 @@ namespace Horo::Editor::Ui {
         }
         bool submitted = false;
         {
-            Theme::ScopedTextStyle textStyle(fonts.sans, fonts.sans->FontSize, Theme::FontPx::Sans);
+            Theme::ScopedTextStyle textStyle(fonts.sansEmphasis, titleFontSize, Theme::FontPx::SansEmphasis);
             submitted = ImGui::InputText("##value", value.data(), value.size() + 1,
                                          ImGuiInputTextFlags_EnterReturnsTrue | ImGuiInputTextFlags_AutoSelectAll);
         }
@@ -1693,8 +1697,6 @@ namespace Horo::Editor::Ui {
                           {badgePosition.x + 6.0F, badgePosition.y + (badgeSize.y - badgeTextSize.y) * 0.5F},
                           ImGui::GetColorU32(badge.foreground), badge.text);
         drawList->PopClipRect();
-        drawList->AddLine({position.x, position.y + height - 1.0F}, {position.x + width, position.y + height - 1.0F},
-                          Theme::U32(Theme::Border()), 1.0F);
         ImGui::SetCursorScreenPos({position.x, position.y + height});
         return result;
     }
@@ -1703,24 +1705,31 @@ namespace Horo::Editor::Ui {
         ImDrawList *dl = ImGui::GetWindowDrawList();
         const ImVec2 pos = ImGui::GetCursorScreenPos();
         const float w = ImGui::GetContentRegionAvail().x;
-        constexpr float h = 28.0f;
+        constexpr float h = 34.0F;
 
         // background & border
-        dl->AddRectFilled(pos, ImVec2(pos.x + w, pos.y + h), Theme::U32(Theme::Bg0()));
+        dl->AddRectFilled(pos, ImVec2(pos.x + w, pos.y + h), Theme::U32(Theme::Bg2()));
         dl->AddLine(ImVec2(pos.x, pos.y + h - 1.0f), ImVec2(pos.x + w, pos.y + h - 1.0f), Theme::U32(Theme::Border()), 1.0f);
 
-        dl->AddText(fonts.sansCompact, fonts.sansCompact->FontSize, ImVec2(pos.x + 14.0f, pos.y + 8.0f), Theme::U32(Theme::Muted()), label);
+        const ImVec2 chevronCenter{pos.x + 12.0F, pos.y + h * 0.5F};
+        dl->AddTriangleFilled({chevronCenter.x - 3.0F, chevronCenter.y - 2.0F},
+                              {chevronCenter.x + 3.0F, chevronCenter.y - 2.0F},
+                              {chevronCenter.x, chevronCenter.y + 2.0F}, Theme::U32(Theme::Muted()));
+        const char *labelEnd = std::strstr(label, "###");
+        const float headerFontSize = 11.5F * Theme::GetActiveTokens().sizes.uiScale;
+        dl->AddText(fonts.sansEmphasis, headerFontSize, ImVec2(pos.x + 28.0F, pos.y + (h - headerFontSize) * 0.5F),
+                    Theme::U32(Theme::Text()), label, labelEnd);
 
         bool removeRequested = false;
         if (removable) {
-            ImGui::SetCursorScreenPos(ImVec2(pos.x + w - 24.0f, pos.y + 6.0f));
+            ImGui::SetCursorScreenPos(ImVec2(pos.x + w - 28.0F, pos.y + 5.0F));
             ImGui::PushID(label);
-            if (ImGui::InvisibleButton("##remove", ImVec2(16.0f, 16.0f))) {
+            if (ImGui::InvisibleButton("##remove", ImVec2(24.0F, 24.0F))) {
                 removeRequested = true;
             }
             const bool hovered = ImGui::IsItemHovered();
             ImU32 iconColor = Theme::U32(hovered ? Theme::Err() : Theme::Muted());
-            DrawEditorIcon(dl, UiIcon::Delete, ImVec2(pos.x + w - 24.0f, pos.y + 6.0f), ImVec2(16.0f, 16.0f), iconColor);
+            DrawEditorIcon(dl, UiIcon::Delete, ImVec2(pos.x + w - 24.0F, pos.y + 9.0F), ImVec2(16.0F, 16.0F), iconColor);
             ImGui::PopID();
         }
 
@@ -1875,7 +1884,7 @@ namespace Horo::Editor::Ui {
         }
         PropertyEditResult result;
         {
-            Theme::ScopedTextStyle ts(fonts.sansCompact, 14.0F * Theme::GetActiveTokens().sizes.uiScale, Theme::FontPx::SansCompact);
+            Theme::ScopedTextStyle ts(fonts.sansCompact, 11.0F * Theme::GetActiveTokens().sizes.uiScale, Theme::FontPx::SansCompact);
             result.changed = ImGui::DragFloat("##value", &value, options.speed, options.minimum, options.maximum, options.format);
             result.committed = ImGui::IsItemDeactivatedAfterEdit();
         }
@@ -1928,14 +1937,28 @@ namespace Horo::Editor::Ui {
         PushControlStyle();
         Float3PropertyEditResult result;
         {
-            Theme::ScopedTextStyle ts(fonts.sansCompact, 14.0F * Theme::GetActiveTokens().sizes.uiScale, Theme::FontPx::SansCompact);
-            constexpr float axisGap = 3.0F;
+            const float scale = Theme::GetActiveTokens().sizes.uiScale;
+            const float valueFontSize = 11.0F * scale;
+            const float axisFontSize = 10.5F * scale;
+            Theme::ScopedTextStyle ts(fonts.sansCompact, valueFontSize, Theme::FontPx::SansCompact);
+            constexpr std::array<const char *, 3> axisLabels{"X", "Y", "Z"};
+            const std::array axisColors{Theme::Err(), Theme::Ok(), ImVec4{0.30F, 0.65F, 1.0F, 1.0F}};
+            constexpr float axisGap = 5.0F;
+            constexpr float axisLabelWidth = 12.0F;
+            constexpr float axisLabelGap = 2.0F;
             const float axisWidth = std::max(1.0F, (layout.controlWidth - axisGap * 2.0F) / 3.0F);
             for (std::size_t axis = 0; axis < value.size(); ++axis) {
                 if (axis != 0)
                     ImGui::SameLine(0.0F, axisGap);
                 ImGui::PushID(static_cast<int>(axis));
-                ImGui::SetNextItemWidth(axisWidth);
+                const ImVec2 axisPosition = ImGui::GetCursorScreenPos();
+                const ImVec2 axisTextSize = fonts.sansCompact->CalcTextSizeA(axisFontSize, FLT_MAX, 0.0F, axisLabels[axis]);
+                ImGui::GetWindowDrawList()->AddText(fonts.sansCompact, axisFontSize,
+                                                    {axisPosition.x + (axisLabelWidth - axisTextSize.x) * 0.5F,
+                                                     axisPosition.y + (ImGui::GetFrameHeight() - axisTextSize.y) * 0.5F},
+                                                    ImGui::GetColorU32(axisColors[axis]), axisLabels[axis]);
+                ImGui::SetCursorScreenPos({axisPosition.x + axisLabelWidth + axisLabelGap, axisPosition.y});
+                ImGui::SetNextItemWidth(std::max(1.0F, axisWidth - axisLabelWidth - axisLabelGap));
                 result.changedAxes[axis] = ImGui::DragFloat("##value", &value[axis], speed, 0.0F, 0.0F, "%.2f");
                 result.changed = result.changed || result.changedAxes[axis];
                 result.committed = result.committed || ImGui::IsItemDeactivatedAfterEdit();

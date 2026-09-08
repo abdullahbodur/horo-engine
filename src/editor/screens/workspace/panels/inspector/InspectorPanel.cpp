@@ -37,6 +37,26 @@ namespace Horo::Editor {
             return "workspace.inspector.kind.empty";
         }
 
+        /** @brief Maps an authored object kind to its typed Inspector header icon. */
+        [[nodiscard]] Ui::UiIcon KindIcon(const SceneObjectKind kind) noexcept {
+            using enum SceneObjectKind;
+            switch (kind) {
+                case Mesh:
+                    return Ui::UiIcon::HierarchyMesh;
+                case Camera:
+                    return Ui::UiIcon::Camera;
+                case Light:
+                    return Ui::UiIcon::Light;
+                case TriggerVolume:
+                    return Ui::UiIcon::TriggerVolume;
+                case AudioSource:
+                    return Ui::UiIcon::AudioSource;
+                case GameObject:
+                    return Ui::UiIcon::HierarchyGeneric;
+            }
+            return Ui::UiIcon::HierarchyGeneric;
+        }
+
         /** @brief Reports whether the Inspector's degree-based perspective draft is valid. */
         [[nodiscard]] bool IsValidFieldOfViewDegrees(const float value) noexcept {
             return std::isfinite(value) && value > 0.0F && value < 180.0F;
@@ -123,6 +143,39 @@ namespace Horo::Editor {
             ImGui::PopID();
             return fieldCommitted;
         }
+
+        /** @brief Owns one auto-height Inspector component card and its trailing gap. */
+        class InspectorCard final {
+        public:
+            explicit InspectorCard(const char *id) {
+                ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, {0.0F, 0.0F});
+                ImGui::PushStyleVar(ImGuiStyleVar_ChildRounding, 5.0F);
+                ImGui::PushStyleColor(ImGuiCol_ChildBg, Theme::Bg1());
+                ImGui::BeginChild(id, {0.0F, 0.0F}, ImGuiChildFlags_Borders | ImGuiChildFlags_AutoResizeY |
+                                                           ImGuiChildFlags_AlwaysAutoResize,
+                                  ImGuiWindowFlags_NoScrollbar);
+            }
+
+            ~InspectorCard() {
+                Finish();
+            }
+
+            InspectorCard(const InspectorCard &) = delete;
+            InspectorCard &operator=(const InspectorCard &) = delete;
+
+            void Finish() {
+                if (!open_)
+                    return;
+                ImGui::EndChild();
+                ImGui::PopStyleColor();
+                ImGui::PopStyleVar(2);
+                ImGui::SetCursorPosY(ImGui::GetCursorPosY() + 4.0F);
+                open_ = false;
+            }
+
+        private:
+            bool open_{true};
+        };
     }  // namespace
 
     void InspectorPanel::OnAttach(PanelContext &ctx) {
@@ -147,11 +200,11 @@ namespace Horo::Editor {
     void InspectorPanel::DrawPanel([[maybe_unused]] const ImVec2 &pos, const ImVec2 &size, const EditorWorkspaceViewModel &vm,
                                    EditorWorkspaceViewCommandData &cmd, const EditorGuiContext &ctx) {
         const std::array tabNames{ctx.localization.Get("editor", "workspace.panel.inspector").c_str()};
-        Ui::DrawDockTabs(tabNames, 0, ctx.theme.fonts);
+        Ui::DrawDockTabs(tabNames, 0, ctx.theme.fonts, 36.0F);
 
-        ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0.0F, 0.0F));
-        constexpr float footerHeight = 48.0F;
-        ImGui::BeginChild("##Content", ImVec2(size.x, size.y - 28.0F - footerHeight), false, ImGuiWindowFlags_NoSavedSettings);
+        ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(8.0F, 8.0F));
+        ImGui::BeginChild("##Content", ImVec2(size.x, size.y - 36.0F), ImGuiChildFlags_AlwaysUseWindowPadding,
+                          ImGuiWindowFlags_NoSavedSettings);
 
         std::array<SceneObjectId, 1> fallbackSelection{};
         std::span<const SceneObjectId> selectedObjects = vm.selectedObjects;
@@ -159,16 +212,17 @@ namespace Horo::Editor {
             fallbackSelection.front() = *vm.primarySelection;
             selectedObjects = fallbackSelection;
         }
-        if (!selectedObjects.empty() && FindSelectedObject(vm) != nullptr)
+        if (!selectedObjects.empty() && FindSelectedObject(vm) != nullptr) {
             DrawSelection(vm, selectedObjects, cmd, ctx);
-        else
+            if (selectedObjects.size() == 1) {
+                if (const auto *selected = FindSelectedObject(vm); selected != nullptr)
+                    DrawAddComponent(*selected, vm, cmd, ctx);
+            }
+        } else {
             DrawEmptyState(cmd, ctx);
+        }
 
         ImGui::EndChild();
-        if (selectedObjects.size() == 1) {
-            if (const auto *selected = FindSelectedObject(vm); selected != nullptr)
-                DrawAddComponent(*selected, vm, cmd, ctx);
-        }
         ImGui::PopStyleVar();
     }
 
@@ -232,14 +286,19 @@ namespace Horo::Editor {
 
     void InspectorPanel::DrawAddComponent(const SceneObject &object, const EditorWorkspaceViewModel &viewModel,
                                           EditorWorkspaceViewCommandData &command, const EditorGuiContext &context) const {
-        ImGui::SetCursorPosX(14.0F);
-        if (const std::string addComponentLabel =
-                context.localization.Get("editor", "workspace.inspector.add_component") + "###InspectorAddComponent";
-            Ui::Button({.label = addComponentLabel.c_str(),
-                        .variant = Ui::ButtonVariant::Secondary,
-                        .font = context.theme.fonts.sans,
-                        .componentSize = Ui::ComponentSize::Medium,
-                        .style = {.width = Ui::StyleWidth::FillAvailable}})) {
+        const std::string addComponentLabel =
+            "+  " + context.localization.Get("editor", "workspace.inspector.add_component") + "###InspectorAddComponent";
+        ImGui::PushStyleColor(ImGuiCol_Border, Theme::Accent());
+        ImGui::PushStyleVar(ImGuiStyleVar_FrameBorderSize, 1.0F);
+        const bool addComponentPressed = Ui::Button({.label = addComponentLabel.c_str(),
+                                                     .variant = Ui::ButtonVariant::Secondary,
+                                                     .font = context.theme.fonts.sans,
+                                                     .size = {0.0F, 34.0F},
+                                                     .componentSize = Ui::ComponentSize::Small,
+                                                     .style = {.width = Ui::StyleWidth::FillAvailable}});
+        ImGui::PopStyleVar();
+        ImGui::PopStyleColor();
+        if (addComponentPressed) {
             ImGui::OpenPopup("AddComponentPopup");
         }
 
@@ -306,27 +365,30 @@ namespace Horo::Editor {
                         : descriptor->displayName;
             const std::string sectionLabel = sectionText + "###inspector_attached_behavior_" + attached.typeId.Value();
             ImGui::PushID(static_cast<int>(attached.instanceId.value));
-            if (Ui::DrawPropSection(sectionLabel.c_str(), context.theme.fonts, true) &&
-                command.command == EditorWorkspaceViewCommand::None) {
+            Gameplay::BehaviorComponent edited = attached;
+            bool committed = false;
+            bool removeRequested = false;
+            {
+                InspectorCard card("##BehaviorCard");
+                removeRequested = Ui::DrawPropSection(sectionLabel.c_str(), context.theme.fonts, true);
+                if (int enabled = edited.enabled ? 1 : 0;
+                    Ui::DrawComboPropRow(context.localization.Get("editor", "workspace.inspector.behavior_enabled").c_str(), "enabled",
+                                         enabled, enabledEntries, context.theme.fonts)) {
+                    edited.enabled = enabled != 0;
+                    committed = true;
+                }
+                if (!missing) {
+                    for (Gameplay::BehaviorField &field : edited.fields) {
+                        committed |= DrawBehaviorField(field, enabledEntries, context);
+                    }
+                }
+            }
+            if (removeRequested && command.command == EditorWorkspaceViewCommand::None) {
                 command.command = EditorWorkspaceViewCommand::RemoveBehaviorFromObject;
                 command.objectPayload = object.id;
                 command.behaviorInstancePayload = attached.instanceId;
                 ImGui::PopID();
                 continue;
-            }
-
-            Gameplay::BehaviorComponent edited = attached;
-            bool committed = false;
-            if (int enabled = edited.enabled ? 1 : 0;
-                Ui::DrawComboPropRow(context.localization.Get("editor", "workspace.inspector.behavior_enabled").c_str(), "enabled", enabled,
-                                     enabledEntries, context.theme.fonts)) {
-                edited.enabled = enabled != 0;
-                committed = true;
-            }
-            if (!missing) {
-                for (Gameplay::BehaviorField &field : edited.fields) {
-                    committed |= DrawBehaviorField(field, enabledEntries, context);
-                }
             }
             if (committed && command.command == EditorWorkspaceViewCommand::None) {
                 command.command = EditorWorkspaceViewCommand::UpdateBehaviorOnObject;
@@ -357,7 +419,8 @@ namespace Horo::Editor {
         const bool nameWasValid = IsValidSceneObjectName(draft.name);
         const Ui::TextEditResult edit =
             Ui::DrawEditableObjTitle("object_name", draft.name, MaximumSceneObjectNameBytes,
-                                     Ui::EditableObjectTitleBadge{objectKind.c_str(), badgeBackground, Theme::Ok()}, context.theme.fonts,
+                                     Ui::EditableObjectTitleBadge{objectKind.c_str(), badgeBackground, Theme::Ok(), KindIcon(object.kind)},
+                                     context.theme.fonts,
                                      !nameWasValid);
 
         if (edit.active && !m_nameInputContext.IsActive() && m_inputRouter != nullptr) {
@@ -374,16 +437,19 @@ namespace Horo::Editor {
 
     InspectorTransformEdit InspectorPanel::DrawTransformWidgets(const EditorGuiContext &context) {
         InspectorObjectDraft &draft = m_editSession.Draft();
-        Ui::DrawPropSection(context.localization.Get("editor", "workspace.inspector.transform").c_str(), context.theme.fonts);
-        const Ui::Float3PropertyEditResult position =
-            Ui::DrawFloat3PropRow(context.localization.Get("editor", "workspace.inspector.position").c_str(), "position", draft.position,
-                                  context.theme.fonts, 0.05F, draft.mixed.position);
-        const Ui::Float3PropertyEditResult rotation =
-            Ui::DrawFloat3PropRow(context.localization.Get("editor", "workspace.inspector.rotation").c_str(), "rotation",
-                                  draft.rotationDegrees, context.theme.fonts, 0.25F, draft.mixed.rotation);
-        const Ui::Float3PropertyEditResult scale =
-            Ui::DrawFloat3PropRow(context.localization.Get("editor", "workspace.inspector.scale").c_str(), "scale", draft.scale,
-                                  context.theme.fonts, 0.05F, draft.mixed.scale);
+        Ui::Float3PropertyEditResult position;
+        Ui::Float3PropertyEditResult rotation;
+        Ui::Float3PropertyEditResult scale;
+        {
+            InspectorCard card("##TransformCard");
+            Ui::DrawPropSection(context.localization.Get("editor", "workspace.inspector.transform").c_str(), context.theme.fonts);
+            position = Ui::DrawFloat3PropRow(context.localization.Get("editor", "workspace.inspector.position").c_str(), "position",
+                                             draft.position, context.theme.fonts, 0.05F, draft.mixed.position);
+            rotation = Ui::DrawFloat3PropRow(context.localization.Get("editor", "workspace.inspector.rotation").c_str(), "rotation",
+                                             draft.rotationDegrees, context.theme.fonts, 0.25F, draft.mixed.rotation);
+            scale = Ui::DrawFloat3PropRow(context.localization.Get("editor", "workspace.inspector.scale").c_str(), "scale", draft.scale,
+                                          context.theme.fonts, 0.05F, draft.mixed.scale);
+        }
 
         return {
             .changed = position.changed || rotation.changed || scale.changed,
@@ -403,8 +469,9 @@ namespace Horo::Editor {
         if (!draft.camera.has_value())
             return {};
 
-        const bool removeRequested =
-            Ui::DrawPropSection(context.localization.Get("editor", "workspace.inspector.camera").c_str(), context.theme.fonts, true);
+        InspectorCard card("##CameraCard");
+        const bool removeRequested = Ui::DrawPropSection(context.localization.Get("editor", "workspace.inspector.camera").c_str(),
+                                                         context.theme.fonts, true);
 
         const std::array<const char *, 2> projectionEntries{
             context.localization.Get("editor", "workspace.inspector.camera_projection_perspective").c_str(),
@@ -452,6 +519,7 @@ namespace Horo::Editor {
                                  draft.camera->farPlane, context.theme.fonts,
                                  Ui::FloatPropertyOptions{.speed = 1.0F, .error = !farPlaneValid});
         committed = committed || farPlane.committed;
+        card.Finish();
         return {.committed = committed, .removeRequested = removeRequested};
     }
 
@@ -460,6 +528,7 @@ namespace Horo::Editor {
         if (!draft.light.has_value())
             return {};
 
+        InspectorCard card("##LightCard");
         const bool removeRequested =
             Ui::DrawPropSection(context.localization.Get("editor", "workspace.inspector.light").c_str(), context.theme.fonts, true);
 
@@ -524,6 +593,7 @@ namespace Horo::Editor {
             changed = changed || inner.changed || outer.changed;
             committed = committed || inner.committed || outer.committed;
         }
+        card.Finish();
         return {
             .changed = changed,
             .committed = committed,
@@ -569,6 +639,7 @@ namespace Horo::Editor {
         if (!draft.triggerVolume.has_value())
             return {};
 
+        InspectorCard card("##TriggerVolumeCard");
         const bool removeRequested = Ui::DrawPropSection(context.localization.Get("editor", "workspace.inspector.trigger_volume").c_str(),
                                                          context.theme.fonts, true);
 
@@ -585,6 +656,7 @@ namespace Horo::Editor {
         if (shapeChanged)
             draft.triggerVolume->shape = static_cast<Runtime::ColliderShapeType>(shape);
 
+        card.Finish();
         return {.committed = shapeChanged, .removeRequested = removeRequested};
     }
 
@@ -593,6 +665,7 @@ namespace Horo::Editor {
         if (!draft.audioSource.has_value())
             return {};
 
+        InspectorCard card("##AudioSourceCard");
         const bool removeRequested =
             Ui::DrawPropSection(context.localization.Get("editor", "workspace.inspector.audio_source").c_str(), context.theme.fonts, true);
 
@@ -625,6 +698,7 @@ namespace Horo::Editor {
             draft.audioSource->spatial = spatialInt != 0;
 
         const bool committed = kindChanged || gainEdit.committed || spatialChanged;
+        card.Finish();
         return {.committed = committed, .removeRequested = removeRequested};
     }
 
