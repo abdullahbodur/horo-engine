@@ -118,6 +118,28 @@ namespace Horo::Render {
         return Result<Record *>::Success(&record);
     }
 
+    /** @copydoc TemporalHistoryStore::ResolveIdle */
+    Result<TemporalHistoryStore::Record *> TemporalHistoryStore::ResolveIdle(const TemporalHistoryHandle history) {
+        auto resolved = Resolve(history);
+        if (resolved.HasError())
+            return resolved;
+        if (resolved.Value()->pendingFrame != 0)
+            return Result<Record *>::Failure(MakeError(TemporalHistoryErrors::FrameAlreadyPending));
+        return resolved;
+    }
+
+    /** @copydoc TemporalHistoryStore::ResolvePending */
+    Result<TemporalHistoryStore::Record *> TemporalHistoryStore::ResolvePending(const TemporalHistoryFrame &frame) {
+        if (auto state = ValidateThreadAndState(); state.HasError())
+            return Result<Record *>::Failure(state.ErrorValue());
+        auto resolved = Resolve(frame.history);
+        if (resolved.HasError())
+            return resolved;
+        if (auto valid = ValidatePendingFrame(frame, *resolved.Value()); valid.HasError())
+            return Result<Record *>::Failure(valid.ErrorValue());
+        return resolved;
+    }
+
     /** @copydoc TemporalHistoryStore::ValidateFrameRequest */
     Result<void> TemporalHistoryStore::ValidateFrameRequest(const Record &record, const std::uint64_t frameId) const {
         if (record.pendingFrame != 0)
@@ -217,14 +239,10 @@ namespace Horo::Render {
 
     /** @copydoc TemporalHistoryStore::Publish */
     Result<void> TemporalHistoryStore::Publish(const TemporalHistoryFrame &frame) {
-        if (auto state = ValidateThreadAndState(); state.HasError())
-            return state;
-        auto resolved = Resolve(frame.history);
+        auto resolved = ResolvePending(frame);
         if (resolved.HasError())
             return Result<void>::Failure(resolved.ErrorValue());
         Record &record = *resolved.Value();
-        if (auto valid = ValidatePendingFrame(frame, record); valid.HasError())
-            return valid;
         record.contentGeneration = frame.contentGeneration;
         record.lastPublishedFrame = frame.frameId;
         record.pendingFrame = 0;
@@ -238,14 +256,10 @@ namespace Horo::Render {
 
     /** @copydoc TemporalHistoryStore::Abandon */
     Result<void> TemporalHistoryStore::Abandon(const TemporalHistoryFrame &frame) {
-        if (auto state = ValidateThreadAndState(); state.HasError())
-            return state;
-        auto resolved = Resolve(frame.history);
+        auto resolved = ResolvePending(frame);
         if (resolved.HasError())
             return Result<void>::Failure(resolved.ErrorValue());
         Record &record = *resolved.Value();
-        if (auto valid = ValidatePendingFrame(frame, record); valid.HasError())
-            return valid;
         record.pendingFrame = 0;
         record.pendingAttempt = 0;
         record.pendingCanReadPrevious = false;
@@ -262,12 +276,10 @@ namespace Horo::Render {
             return Result<void>::Failure(MakeError(TemporalHistoryErrors::InvalidResetCause));
         if (!compatibility.IsValid() || !AreResourcesValid(resources, m_limits))
             return Result<void>::Failure(MakeError(TemporalHistoryErrors::InvalidDescriptor));
-        auto resolved = Resolve(history);
+        auto resolved = ResolveIdle(history);
         if (resolved.HasError())
             return Result<void>::Failure(resolved.ErrorValue());
         Record &record = *resolved.Value();
-        if (record.pendingFrame != 0)
-            return Result<void>::Failure(MakeError(TemporalHistoryErrors::FrameAlreadyPending));
         try {
             std::vector replacement(resources.begin(), resources.end());
             const bool replacesView = record.compatibility.view != compatibility.view;
@@ -289,12 +301,10 @@ namespace Horo::Render {
     Result<void> TemporalHistoryStore::Retire(const TemporalHistoryHandle history) {
         if (auto state = ValidateThreadAndState(); state.HasError())
             return state;
-        auto resolved = Resolve(history);
+        auto resolved = ResolveIdle(history);
         if (resolved.HasError())
             return Result<void>::Failure(resolved.ErrorValue());
         Record &record = *resolved.Value();
-        if (record.pendingFrame != 0)
-            return Result<void>::Failure(MakeError(TemporalHistoryErrors::FrameAlreadyPending));
         record.resources.clear();
         record.active = false;
         record.valid = false;

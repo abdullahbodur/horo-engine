@@ -38,7 +38,7 @@ namespace Horo::Render {
 
         /** @brief Reports whether every handle component is non-zero. @return True for valid structure. */
         [[nodiscard]] constexpr bool IsValid() const noexcept {
-            return owner.IsValid() && slot != 0 && generation != 0;
+            return owner.value > 0 && slot > 0 && generation > 0;
         }
 
         [[nodiscard]] constexpr auto operator<=>(const TemporalHistoryHandle &) const noexcept = default;
@@ -265,6 +265,8 @@ namespace Horo::Render {
 
         TemporalHistoryStore(TemporalHistoryOwnerId owner, TemporalHistoryLimits limits, std::vector<Record> records) noexcept;
         [[nodiscard]] Result<Record *> Resolve(TemporalHistoryHandle history);
+        [[nodiscard]] Result<Record *> ResolveIdle(TemporalHistoryHandle history);
+        [[nodiscard]] Result<Record *> ResolvePending(const TemporalHistoryFrame &frame);
         [[nodiscard]] Result<void> ValidateFrameRequest(const Record &record, std::uint64_t frameId) const;
         [[nodiscard]] Result<void> ValidatePendingFrame(const TemporalHistoryFrame &frame, const Record &record) const;
         [[nodiscard]] Result<void> ValidateThreadAndState() const;
