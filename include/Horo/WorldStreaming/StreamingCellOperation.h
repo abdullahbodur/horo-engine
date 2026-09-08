@@ -20,6 +20,13 @@ namespace Horo::WorldStreaming {
     using StreamingCellOperationId =
         Foundation::Detail::NonZeroId64<Detail::StreamingCellOperationIdTag, WorldStreamingErrors::IdentityInvalid>;
 
+    /** @brief Bounded work target that determines the normal successful lifecycle. */
+    enum class StreamingCellOperationKind : std::uint8_t {
+        Load,
+        Activate,
+        Retire,
+    };
+
     /** @brief Execution phase of one operation; it does not replace canonical cell residency state. */
     enum class StreamingCellOperationState : std::uint8_t {
         Queued,
@@ -45,6 +52,7 @@ namespace Horo::WorldStreaming {
         Admit,
         BeginPreparation,
         BeginActivation,
+        BeginRetirement,
         Complete,
         Cancel,
         Fail,
@@ -69,12 +77,15 @@ namespace Horo::WorldStreaming {
         /**
          * @brief Creates a queued operation without accepting work or resources.
          * @param handle Exact non-zero operation identity and cell fence.
-         * @return Queued operation or WorldStreamingErrors::CellOperationInvalid.
+         * @param kind Normal work target; invalid enum values are unsupported.
+         * @return Queued operation, CellOperationInvalid, or CellOperationUnsupported.
          */
-        [[nodiscard]] static Result<StreamingCellOperation> Create(StreamingCellOperationHandle handle);
+        [[nodiscard]] static Result<StreamingCellOperation> Create(StreamingCellOperationHandle handle, StreamingCellOperationKind kind);
 
         /** @brief Returns the exact routing identity. @return Borrowed handle owned by this value. */
         [[nodiscard]] const StreamingCellOperationHandle &Handle() const noexcept;
+        /** @brief Returns the normal work target. @return Load, Activate, or Retire. */
+        [[nodiscard]] StreamingCellOperationKind Kind() const noexcept;
         /** @brief Returns the execution phase. @return Current operation phase. */
         [[nodiscard]] StreamingCellOperationState State() const noexcept;
         /** @brief Returns the terminal or pending-retirement disposition. @return None until completion or interruption is requested. */
@@ -93,10 +104,11 @@ namespace Horo::WorldStreaming {
                                                              StreamingCellOperationTransition transition) const;
 
     private:
-        StreamingCellOperation(StreamingCellOperationHandle handle, StreamingCellOperationState state,
+        StreamingCellOperation(StreamingCellOperationHandle handle, StreamingCellOperationKind kind, StreamingCellOperationState state,
                                StreamingCellOperationOutcome outcome) noexcept;
 
         StreamingCellOperationHandle handle_{};
+        StreamingCellOperationKind kind_{StreamingCellOperationKind::Load};
         StreamingCellOperationState state_{StreamingCellOperationState::Queued};
         StreamingCellOperationOutcome outcome_{StreamingCellOperationOutcome::None};
     };

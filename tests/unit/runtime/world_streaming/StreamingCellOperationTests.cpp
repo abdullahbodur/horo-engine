@@ -38,7 +38,7 @@ namespace Horo::WorldStreaming {
         }
 
         [[nodiscard]] StreamingCellOperation Accepted(const StreamingCellOperationState state) {
-            auto operation = StreamingCellOperation::Create(Handle()).Value();
+            auto operation = StreamingCellOperation::Create(Handle(), StreamingCellOperationKind::Activate).Value();
             operation = Advance(std::move(operation), StreamingCellOperationTransition::Admit);
             if (state == StreamingCellOperationState::Admitted)
                 return operation;
@@ -49,7 +49,7 @@ namespace Horo::WorldStreaming {
         }
 
         TEST_CASE("Cell operation completes the explicit normal lifecycle", "[unit][world_streaming][cell_operation]") {
-            auto operation = StreamingCellOperation::Create(Handle()).Value();
+            auto operation = StreamingCellOperation::Create(Handle(), StreamingCellOperationKind::Activate).Value();
             REQUIRE(operation.State() == StreamingCellOperationState::Queued);
             REQUIRE(operation.Outcome() == StreamingCellOperationOutcome::None);
 
@@ -67,7 +67,8 @@ namespace Horo::WorldStreaming {
 
         TEST_CASE("Queued interruption terminates without a false retirement barrier", "[unit][world_streaming][cell_operation]") {
             for (const auto [transition, outcome] : InterruptionCases) {
-                const auto terminal = Advance(StreamingCellOperation::Create(Handle()).Value(), transition);
+                const auto terminal =
+                    Advance(StreamingCellOperation::Create(Handle(), StreamingCellOperationKind::Activate).Value(), transition);
                 REQUIRE(terminal.State() == StreamingCellOperationState::Terminal);
                 REQUIRE(terminal.Outcome() == outcome);
             }
@@ -92,9 +93,11 @@ namespace Horo::WorldStreaming {
         TEST_CASE("Cell operation rejects invalid stale unsupported and skipped transitions without mutation",
                   "[unit][world_streaming][cell_operation]") {
             REQUIRE_FALSE(StreamingCellOperationHandle{}.IsValid());
-            RequireError(StreamingCellOperation::Create({}), WorldStreamingErrors::CellOperationInvalid);
+            RequireError(StreamingCellOperation::Create({}, StreamingCellOperationKind::Load), WorldStreamingErrors::CellOperationInvalid);
+            RequireError(StreamingCellOperation::Create(Handle(), static_cast<StreamingCellOperationKind>(255)),
+                         WorldStreamingErrors::CellOperationUnsupported);
 
-            const auto operation = StreamingCellOperation::Create(Handle()).Value();
+            const auto operation = StreamingCellOperation::Create(Handle(), StreamingCellOperationKind::Activate).Value();
             RequireError(operation.Advance({}, StreamingCellOperationTransition::Admit), WorldStreamingErrors::CellOperationInvalid);
             RequireError(operation.Advance(Handle(8), StreamingCellOperationTransition::Admit), WorldStreamingErrors::CellOperationStale);
             RequireError(operation.Advance(operation.Handle(), static_cast<StreamingCellOperationTransition>(255)),
@@ -108,7 +111,7 @@ namespace Horo::WorldStreaming {
         TEST_CASE("Retired attempt acknowledgement reclaims only its exact old operation",
                   "[unit][world_streaming][cell_operation][fence]") {
             auto oldAttempt = Advance(Accepted(StreamingCellOperationState::Preparing), StreamingCellOperationTransition::Replace);
-            const auto replacement = StreamingCellOperation::Create(Handle(8, 6)).Value();
+            const auto replacement = StreamingCellOperation::Create(Handle(8, 6), StreamingCellOperationKind::Activate).Value();
 
             RequireError(oldAttempt.Advance(replacement.Handle(), StreamingCellOperationTransition::AcknowledgeRetirement),
                          WorldStreamingErrors::CellOperationStale);
@@ -125,6 +128,38 @@ namespace Horo::WorldStreaming {
             RequireError(terminal.Advance(terminal.Handle(), StreamingCellOperationTransition::AcknowledgeRetirement),
                          WorldStreamingErrors::CellOperationTransitionInvalid);
             REQUIRE(terminal.Outcome() == StreamingCellOperationOutcome::Succeeded);
+        }
+
+        TEST_CASE("Load-only and normal retirement operations have bounded successful paths",
+                  "[unit][world_streaming][cell_operation][lifecycle]") {
+            auto load = StreamingCellOperation::Create(Handle(), StreamingCellOperationKind::Load).Value();
+            REQUIRE(load.Kind() == StreamingCellOperationKind::Load);
+            load = Advance(std::move(load), StreamingCellOperationTransition::Admit);
+            load = Advance(std::move(load), StreamingCellOperationTransition::BeginPreparation);
+            load = Advance(std::move(load), StreamingCellOperationTransition::Complete);
+            REQUIRE(load.IsTerminal());
+            REQUIRE(load.Outcome() == StreamingCellOperationOutcome::Succeeded);
+
+            auto retirement = StreamingCellOperation::Create(Handle(8), StreamingCellOperationKind::Retire).Value();
+            retirement = Advance(std::move(retirement), StreamingCellOperationTransition::Admit);
+            retirement = Advance(std::move(retirement), StreamingCellOperationTransition::BeginRetirement);
+            REQUIRE(retirement.State() == StreamingCellOperationState::Retiring);
+            REQUIRE(retirement.Outcome() == StreamingCellOperationOutcome::Succeeded);
+            retirement = Advance(std::move(retirement), StreamingCellOperationTransition::AcknowledgeRetirement);
+            REQUIRE(retirement.IsTerminal());
+            REQUIRE(retirement.Outcome() == StreamingCellOperationOutcome::Succeeded);
+        }
+
+        TEST_CASE("Operation kinds reject normal transitions owned by a different work target", "[unit][world_streaming][cell_operation]") {
+            auto load = StreamingCellOperation::Create(Handle(), StreamingCellOperationKind::Load).Value();
+            load = Advance(std::move(load), StreamingCellOperationTransition::Admit);
+            RequireError(load.Advance(load.Handle(), StreamingCellOperationTransition::BeginRetirement),
+                         WorldStreamingErrors::CellOperationTransitionInvalid);
+
+            auto retirement = StreamingCellOperation::Create(Handle(8), StreamingCellOperationKind::Retire).Value();
+            retirement = Advance(std::move(retirement), StreamingCellOperationTransition::Admit);
+            RequireError(retirement.Advance(retirement.Handle(), StreamingCellOperationTransition::BeginPreparation),
+                         WorldStreamingErrors::CellOperationTransitionInvalid);
         }
     }  // namespace
 }  // namespace Horo::WorldStreaming

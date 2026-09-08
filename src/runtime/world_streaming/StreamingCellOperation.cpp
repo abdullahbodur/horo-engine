@@ -17,11 +17,17 @@ namespace Horo::WorldStreaming {
                    transition <= StreamingCellOperationTransition::AcknowledgeRetirement;
         }
 
+        [[nodiscard]] bool IsKnown(const StreamingCellOperationKind kind) noexcept {
+            return kind >= StreamingCellOperationKind::Load && kind <= StreamingCellOperationKind::Retire;
+        }
+
         struct TransitionRule final {
             StreamingCellOperationState source;
             StreamingCellOperationTransition transition;
             StreamingCellOperationState destination;
             StreamingCellOperationOutcome outcome;
+            StreamingCellOperationKind requiredKind{StreamingCellOperationKind::Load};
+            bool anyKind{true};
             bool retainOutcome{};
         };
 
@@ -29,11 +35,17 @@ namespace Horo::WorldStreaming {
             {StreamingCellOperationState::Queued, StreamingCellOperationTransition::Admit, StreamingCellOperationState::Admitted,
              StreamingCellOperationOutcome::None},
             {StreamingCellOperationState::Admitted, StreamingCellOperationTransition::BeginPreparation,
-             StreamingCellOperationState::Preparing, StreamingCellOperationOutcome::None},
+             StreamingCellOperationState::Preparing, StreamingCellOperationOutcome::None, StreamingCellOperationKind::Load, false},
+            {StreamingCellOperationState::Admitted, StreamingCellOperationTransition::BeginPreparation,
+             StreamingCellOperationState::Preparing, StreamingCellOperationOutcome::None, StreamingCellOperationKind::Activate, false},
             {StreamingCellOperationState::Preparing, StreamingCellOperationTransition::BeginActivation,
-             StreamingCellOperationState::Activating, StreamingCellOperationOutcome::None},
+             StreamingCellOperationState::Activating, StreamingCellOperationOutcome::None, StreamingCellOperationKind::Activate, false},
+            {StreamingCellOperationState::Admitted, StreamingCellOperationTransition::BeginRetirement,
+             StreamingCellOperationState::Retiring, StreamingCellOperationOutcome::Succeeded, StreamingCellOperationKind::Retire, false},
+            {StreamingCellOperationState::Preparing, StreamingCellOperationTransition::Complete, StreamingCellOperationState::Terminal,
+             StreamingCellOperationOutcome::Succeeded, StreamingCellOperationKind::Load, false},
             {StreamingCellOperationState::Activating, StreamingCellOperationTransition::Complete, StreamingCellOperationState::Terminal,
-             StreamingCellOperationOutcome::Succeeded},
+             StreamingCellOperationOutcome::Succeeded, StreamingCellOperationKind::Activate, false},
             {StreamingCellOperationState::Queued, StreamingCellOperationTransition::Cancel, StreamingCellOperationState::Terminal,
              StreamingCellOperationOutcome::Cancelled},
             {StreamingCellOperationState::Queued, StreamingCellOperationTransition::Fail, StreamingCellOperationState::Terminal,
@@ -67,7 +79,7 @@ namespace Horo::WorldStreaming {
             {StreamingCellOperationState::Activating, StreamingCellOperationTransition::Shutdown, StreamingCellOperationState::Retiring,
              StreamingCellOperationOutcome::Shutdown},
             {StreamingCellOperationState::Retiring, StreamingCellOperationTransition::AcknowledgeRetirement,
-             StreamingCellOperationState::Terminal, StreamingCellOperationOutcome::None, true},
+             StreamingCellOperationState::Terminal, StreamingCellOperationOutcome::None, StreamingCellOperationKind::Load, true, true},
         });
     }  // namespace
 
@@ -77,16 +89,24 @@ namespace Horo::WorldStreaming {
     }
 
     /** @copydoc StreamingCellOperation::Create */
-    Result<StreamingCellOperation> StreamingCellOperation::Create(StreamingCellOperationHandle handle) {
+    Result<StreamingCellOperation> StreamingCellOperation::Create(StreamingCellOperationHandle handle,
+                                                                  const StreamingCellOperationKind kind) {
         if (!handle.IsValid())
             return Failure<StreamingCellOperation>(WorldStreamingErrors::CellOperationInvalid);
+        if (!IsKnown(kind))
+            return Failure<StreamingCellOperation>(WorldStreamingErrors::CellOperationUnsupported);
         return Result<StreamingCellOperation>::Success(
-            StreamingCellOperation{std::move(handle), StreamingCellOperationState::Queued, StreamingCellOperationOutcome::None});
+            StreamingCellOperation{std::move(handle), kind, StreamingCellOperationState::Queued, StreamingCellOperationOutcome::None});
     }
 
     /** @copydoc StreamingCellOperation::Handle */
     const StreamingCellOperationHandle &StreamingCellOperation::Handle() const noexcept {
         return handle_;
+    }
+
+    /** @copydoc StreamingCellOperation::Kind */
+    StreamingCellOperationKind StreamingCellOperation::Kind() const noexcept {
+        return kind_;
     }
 
     /** @copydoc StreamingCellOperation::State */
@@ -115,15 +135,17 @@ namespace Horo::WorldStreaming {
             return Failure<StreamingCellOperation>(WorldStreamingErrors::CellOperationUnsupported);
 
         const auto rule = std::ranges::find_if(TransitionRules, [this, transition](const TransitionRule &candidate) {
-            return candidate.source == state_ && candidate.transition == transition;
+            return candidate.source == state_ && candidate.transition == transition &&
+                   (candidate.anyKind || candidate.requiredKind == kind_);
         });
         if (rule == TransitionRules.end())
             return Failure<StreamingCellOperation>(WorldStreamingErrors::CellOperationTransitionInvalid);
         const auto successorOutcome = rule->retainOutcome ? outcome_ : rule->outcome;
-        return Result<StreamingCellOperation>::Success(StreamingCellOperation{handle_, rule->destination, successorOutcome});
+        return Result<StreamingCellOperation>::Success(StreamingCellOperation{handle_, kind_, rule->destination, successorOutcome});
     }
 
-    StreamingCellOperation::StreamingCellOperation(StreamingCellOperationHandle handle, const StreamingCellOperationState state,
+    StreamingCellOperation::StreamingCellOperation(StreamingCellOperationHandle handle, const StreamingCellOperationKind kind,
+                                                   const StreamingCellOperationState state,
                                                    const StreamingCellOperationOutcome outcome) noexcept
-        : handle_(std::move(handle)), state_(state), outcome_(outcome) {}
+        : handle_(std::move(handle)), kind_(kind), state_(state), outcome_(outcome) {}
 }  // namespace Horo::WorldStreaming

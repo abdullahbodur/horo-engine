@@ -273,6 +273,9 @@ no work or resources were accepted. Once admitted, those requests enter Retiring
 their terminal disposition is published only after the matching operation and fence
 receive retirement acknowledgement. Stale publication remains rejected while an old
 retiring attempt can still accept its own exact acknowledgement and reclaim resources.
+The typed operation kind selects a bounded normal path: Load completes after
+preparation, Activate continues through activation, and Retire enters the same
+acknowledged retirement barrier with a successful disposition.
 
 ```cpp
 enum class StreamingCellState : uint8_t {
