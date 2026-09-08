@@ -19,7 +19,16 @@ namespace Horo::Render::Test {
     }
 
     template <typename BackendFactory>
-    void RunBackendContractSuite(const BackendContractExpectations &expectations, BackendFactory &&createBackend) {
+    [[nodiscard]] std::unique_ptr<IRenderBackend> CreateInitializedBackend(const BackendContractExpectations &expectations,
+                                                                           BackendFactory &createBackend) {
+        std::unique_ptr<IRenderBackend> backend = createBackend();
+        REQUIRE(backend != nullptr);
+        REQUIRE(backend->Initialize(RenderBackendConfig{.requirePresentation = expectations.presentsToWindow}).HasValue());
+        return backend;
+    }
+
+    template <typename BackendFactory>
+    void RunLifecycleContract(const BackendContractExpectations &expectations, BackendFactory &createBackend) {
         SECTION("identity, initialization, frame, presentation, and shutdown") {
             std::unique_ptr<IRenderBackend> backend = createBackend();
             REQUIRE(backend != nullptr);
@@ -56,23 +65,27 @@ namespace Horo::Render::Test {
             backend->Shutdown();
             backend->Shutdown();
         }
+    }
 
+    template <typename BackendFactory>
+    void RunInvalidInputContract(const BackendContractExpectations &expectations, BackendFactory &createBackend) {
         SECTION("invalid configuration and extents are rejected deterministically") {
             std::unique_ptr<IRenderBackend> invalidConfiguration = createBackend();
             RequireErrorCode(invalidConfiguration->Initialize(RenderBackendConfig{.maxFramesInFlight = 0}),
                              "render.backend.invalid_config");
 
-            std::unique_ptr<IRenderBackend> backend = createBackend();
-            REQUIRE(backend->Initialize(RenderBackendConfig{.requirePresentation = expectations.presentsToWindow}).HasValue());
+            std::unique_ptr<IRenderBackend> backend = CreateInitializedBackend(expectations, createBackend);
             const Result<FrameToken> zeroExtent = backend->BeginFrame(FrameDescriptor{.frameNumber = 2, .outputExtent = {0, 720}});
             REQUIRE(zeroExtent.HasError());
             REQUIRE(zeroExtent.ErrorValue().code.Value() == "render.backend.invalid_frame_descriptor");
             backend->Shutdown();
         }
+    }
 
+    template <typename BackendFactory>
+    void RunActiveFrameContract(const BackendContractExpectations &expectations, BackendFactory &createBackend) {
         SECTION("active frames reject malformed plans, foreign tokens, and resize") {
-            std::unique_ptr<IRenderBackend> backend = createBackend();
-            REQUIRE(backend->Initialize(RenderBackendConfig{.requirePresentation = expectations.presentsToWindow}).HasValue());
+            std::unique_ptr<IRenderBackend> backend = CreateInitializedBackend(expectations, createBackend);
             const Result<FrameToken> begun = backend->BeginFrame(FrameDescriptor{.frameNumber = 3, .outputExtent = {800, 600}});
             REQUIRE(begun.HasValue());
             const FrameToken frame = begun.Value();
@@ -95,6 +108,13 @@ namespace Horo::Render::Test {
             backend->AbortFrame(reused.Value());
             backend->Shutdown();
         }
+    }
+
+    template <typename BackendFactory>
+    void RunBackendContractSuite(const BackendContractExpectations &expectations, BackendFactory createBackend) {
+        RunLifecycleContract(expectations, createBackend);
+        RunInvalidInputContract(expectations, createBackend);
+        RunActiveFrameContract(expectations, createBackend);
     }
 
     inline void CheckModuleInfo(const RenderBackendModuleInfo &info, const BackendContractExpectations &expectations,
