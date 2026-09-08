@@ -50,6 +50,14 @@ namespace Horo::WorldStreaming::WorldStreamingErrors {
     extern const ErrorCodeDescriptor SpatialAssignmentUnsupported;
     /** @brief A quantized object intersects a cell absent from the authoritative descriptor. */
     extern const ErrorCodeDescriptor SpatialAssignmentCellUnavailable;
+    /** @brief A dependency-plan request has malformed, unknown, self-referential, duplicated, or missing source data. */
+    extern const ErrorCodeDescriptor DependencyPlanInvalid;
+    /** @brief A dependency endpoint revision does not match the admitted spatial-assignment revision. */
+    extern const ErrorCodeDescriptor DependencyPlanRevisionStale;
+    /** @brief A dependency plan exceeds an edge, per-object, bundle-member, or soft-reference ceiling. */
+    extern const ErrorCodeDescriptor DependencyPlanCapacityExceeded;
+    /** @brief A hard dependency target is absent from the admitted spatial assignments. */
+    extern const ErrorCodeDescriptor DependencyPlanHardTargetMissing;
     /** @brief A streaming source descriptor or admission context is structurally invalid. */
     extern const ErrorCodeDescriptor SourceDescriptorInvalid;
     /** @brief A streaming source intent is not supported by this contract version. */

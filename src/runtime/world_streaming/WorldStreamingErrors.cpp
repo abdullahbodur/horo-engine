@@ -102,6 +102,22 @@ namespace Horo::WorldStreaming::WorldStreamingErrors {
         Describe("world_streaming.spatial_assignment.cell_unavailable", ErrorSeverity::Error,
                  "A quantized authored object intersects a cell absent from the partition descriptor.",
                  "Declare every intersected cell or apply an explicit spanning-object cook policy.", true);
+    const ErrorCodeDescriptor DependencyPlanInvalid =
+        Describe("world_streaming.dependency_plan.invalid", ErrorSeverity::Error,
+                 "A dependency-plan request contains malformed, duplicated, self-referential, or missing source data.",
+                 "Provide unique directed edges from admitted authored objects with valid exact endpoints.", true);
+    const ErrorCodeDescriptor DependencyPlanRevisionStale =
+        Describe("world_streaming.dependency_plan.revision_stale", ErrorSeverity::Warning,
+                 "A dependency endpoint revision does not match the admitted spatial-assignment revision.",
+                 "Rebuild the authored graph from the same immutable object revisions used for spatial assignment.", false);
+    const ErrorCodeDescriptor DependencyPlanCapacityExceeded =
+        Describe("world_streaming.dependency_plan.capacity_exceeded", ErrorSeverity::Error,
+                 "A dependency plan exceeds a mandatory edge, bundle, or reference ceiling.",
+                 "Reduce graph density or choose explicitly larger supported cook limits.", true);
+    const ErrorCodeDescriptor DependencyPlanHardTargetMissing =
+        Describe("world_streaming.dependency_plan.hard_target_missing", ErrorSeverity::Error,
+                 "A hard dependency target is absent from the admitted spatial assignments.",
+                 "Include the exact target revision in spatial assignment or change the authored edge to a soft reference.", true);
     const ErrorCodeDescriptor SourceDescriptorInvalid =
         Describe("world_streaming.source.descriptor_invalid", ErrorSeverity::Error,
                  "A streaming source descriptor or admission context is structurally invalid.",
