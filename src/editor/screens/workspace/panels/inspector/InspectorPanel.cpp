@@ -291,9 +291,9 @@ namespace Horo::Editor {
         ImGui::PushStyleColor(ImGuiCol_Border, Theme::Accent());
         ImGui::PushStyleVar(ImGuiStyleVar_FrameBorderSize, 1.0F);
         const bool addComponentPressed = Ui::Button({.label = addComponentLabel.c_str(),
+                                                     .size = {0.0F, 34.0F},
                                                      .variant = Ui::ButtonVariant::Secondary,
                                                      .font = context.theme.fonts.sans,
-                                                     .size = {0.0F, 34.0F},
                                                      .componentSize = Ui::ComponentSize::Small,
                                                      .style = {.width = Ui::StyleWidth::FillAvailable}});
         ImGui::PopStyleVar();
