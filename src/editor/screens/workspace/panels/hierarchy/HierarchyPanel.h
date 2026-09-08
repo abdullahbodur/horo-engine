@@ -66,6 +66,7 @@ namespace Horo::Editor {
         std::array<char, 128> searchBuffer_{};
         std::array<char, 129> renameBuffer_{};
         std::optional<HierarchyNodeId> renamingId_;
+        bool requestSearchFocus_{false};
         bool requestRenameFocus_{false};
         Input::InputRouter *inputRouter_{nullptr};
         Input::InputContextToken *workspaceInputContext_{nullptr};

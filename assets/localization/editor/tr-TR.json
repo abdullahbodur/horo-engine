@@ -52,6 +52,9 @@
     "project_creation.review.compatibility": {
       "text": "Proje uyumluluğu"
     },
+    "project_creation.review.project": {
+      "text": "PROJE"
+    },
     "project_creation.review.project_id_generated": {
       "text": "projectId oluşturulacak"
     },
@@ -877,6 +880,13 @@
     "workspace.hierarchy.type.audio": {"text": "Ses"},
     "workspace.hierarchy.empty": {"text": "Sahne boş"},
     "workspace.hierarchy.search": {"text": "Nesnelerde ara..."},
+    "workspace.hierarchy.toolbar.create": {"text": "Nesne oluştur"},
+    "workspace.hierarchy.toolbar.filter": {"text": "Hiyerarşi filtresine odaklan"},
+    "workspace.hierarchy.toolbar.sort": {"text": "Hiyerarşiyi sırala"},
+    "workspace.hierarchy.toolbar.options": {"text": "Hiyerarşi seçenekleri"},
+    "workspace.hierarchy.drop_to_root": {"text": "Sahne köküne bırak"},
+    "workspace.hierarchy.footer.objects": {"text": "{count} nesne"},
+    "workspace.hierarchy.footer.label": {"text": "Sahne hiyerarşisi"},
     "workspace.hierarchy.no_matches": {"text": "Eşleşen nesne yok"},
     "workspace.hierarchy.rename": {"text": "Yeniden Adlandır"},
     "workspace.hierarchy.duplicate": {"text": "Çoğalt"},

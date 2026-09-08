@@ -52,6 +52,9 @@
     "project_creation.review.compatibility": {
       "text": "Project compatibility"
     },
+    "project_creation.review.project": {
+      "text": "PROJECT"
+    },
     "project_creation.review.project_id_generated": {
       "text": "projectId generated"
     },
@@ -877,6 +880,13 @@
     "workspace.hierarchy.type.audio": {"text": "Audio"},
     "workspace.hierarchy.empty": {"text": "Scene is empty"},
     "workspace.hierarchy.search": {"text": "Search objects..."},
+    "workspace.hierarchy.toolbar.create": {"text": "Create object"},
+    "workspace.hierarchy.toolbar.filter": {"text": "Focus hierarchy filter"},
+    "workspace.hierarchy.toolbar.sort": {"text": "Sort hierarchy"},
+    "workspace.hierarchy.toolbar.options": {"text": "Hierarchy options"},
+    "workspace.hierarchy.drop_to_root": {"text": "Drop to scene root"},
+    "workspace.hierarchy.footer.objects": {"text": "{count} objects"},
+    "workspace.hierarchy.footer.label": {"text": "Scene hierarchy"},
     "workspace.hierarchy.no_matches": {"text": "No matching objects"},
     "workspace.hierarchy.rename": {"text": "Rename"},
     "workspace.hierarchy.duplicate": {"text": "Duplicate"},
