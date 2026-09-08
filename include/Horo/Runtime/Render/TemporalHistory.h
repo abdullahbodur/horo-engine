@@ -262,7 +262,10 @@ namespace Horo::Render {
 
     private:
         struct Record;
-        enum class PendingCompletion : std::uint8_t { Publish, Abandon };
+        enum class PendingCompletion : std::uint8_t {
+            Publish,
+            Abandon,
+        };
 
         TemporalHistoryStore(TemporalHistoryOwnerId owner, TemporalHistoryLimits limits, std::vector<Record> records) noexcept;
         [[nodiscard]] Result<Record *> Resolve(TemporalHistoryHandle history);
