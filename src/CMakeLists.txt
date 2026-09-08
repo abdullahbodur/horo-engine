@@ -501,6 +501,8 @@ add_library(HoroRenderApi STATIC
         runtime/renderer/api/RenderResourceDescriptors.cpp
         runtime/renderer/api/ShaderManifest.cpp
         runtime/renderer/api/ShaderManifestErrors.cpp
+        runtime/renderer/api/TemporalHistory.cpp
+        runtime/renderer/api/TemporalHistoryErrors.cpp
 )
 add_library(HoroEngine::RenderApi ALIAS HoroRenderApi)
 
