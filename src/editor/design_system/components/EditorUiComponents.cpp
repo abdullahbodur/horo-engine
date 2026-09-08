@@ -20,10 +20,13 @@ namespace Horo::Editor::Ui {
             constexpr float Label = 13.0F;
             constexpr float Field = 13.0F;
             constexpr float Axis = 12.5F;
-            constexpr float ComponentTitle = 13.5F;
             constexpr float ObjectTitle = 14.0F;
             constexpr float ObjectMeta = 12.5F;
         }  // namespace InspectorTypography
+
+        namespace CardTypography {
+            constexpr float Title = 13.5F;
+        }  // namespace CardTypography
 
         struct ResolvedPrimitiveStyle {
             DesignSystem::ComponentSizeMetrics metrics;
@@ -178,7 +181,8 @@ namespace Horo::Editor::Ui {
         }
 
         void DrawContextMenuRowPresentation(const ContextMenuRow &row, const char *label, const char *shortcut, const Theme::Fonts &fonts,
-                                            const ImVec4 textColor, const bool highlighted, const bool submenu) {
+                                            const ImVec4 textColor, const bool highlighted, const bool submenu,
+                                            const std::string_view iconToken = {}) {
             ImDrawList *drawList = ImGui::GetWindowDrawList();
             const float scale = Theme::GetActiveTokens().sizes.uiScale;
             const float fontSize = 14.0F * scale;
@@ -187,8 +191,15 @@ namespace Horo::Editor::Ui {
 
             const char *labelEnd = std::strstr(label, "###");
             const float textY = row.minimum.y + (row.maximum.y - row.minimum.y - fontSize) * 0.5F;
-            drawList->AddText(fonts.sans, fontSize, {row.minimum.x + ScaledLayoutValue(10.0F), textY}, Theme::U32(textColor), label,
-                              labelEnd);
+            float labelX = row.minimum.x + ScaledLayoutValue(10.0F);
+            if (const std::optional<UiIcon> icon = UiIconRegistry::Resolve(iconToken); icon.has_value()) {
+                constexpr float iconSize = 16.0F;
+                DrawEditorIcon(drawList, *icon,
+                               {labelX, row.minimum.y + (row.maximum.y - row.minimum.y - ScaledLayoutValue(iconSize)) * 0.5F},
+                               {ScaledLayoutValue(iconSize), ScaledLayoutValue(iconSize)}, Theme::U32(textColor), fonts.icon);
+                labelX += ScaledLayoutValue(23.0F);
+            }
+            drawList->AddText(fonts.sans, fontSize, {labelX, textY}, Theme::U32(textColor), label, labelEnd);
             if (shortcut != nullptr && shortcut[0] != '\0') {
                 const ImVec2 shortcutSize = fonts.sans->CalcTextSizeA(fontSize, FLT_MAX, 0.0F, shortcut);
                 drawList->AddText(fonts.sans, fontSize, {row.maximum.x - ScaledLayoutValue(10.0F) - shortcutSize.x, textY},
@@ -1686,9 +1697,9 @@ namespace Horo::Editor::Ui {
         ImGui::SetCursorScreenPos(ImVec2(pos.x, pos.y + h));
     }
 
-    /** @copydoc DrawEditableObjTitle */
-    TextEditResult DrawEditableObjTitle(const char *id, std::string &value, const size_t maximumBytes,
-                                        const EditableObjectTitleBadge &badge, const Theme::Fonts &fonts, const bool error) {
+    /** @copydoc DrawEditableTitle */
+    TextEditResult DrawEditableTitle(const char *id, std::string &value, const size_t maximumBytes, const Theme::Fonts &fonts,
+                                     const EditableTitleProps &props) {
         TextEditResult result;
         if (maximumBytes == 0)
             return result;
@@ -1696,31 +1707,21 @@ namespace Horo::Editor::Ui {
         ImDrawList *drawList = ImGui::GetWindowDrawList();
         const ImVec2 position = ImGui::GetCursorScreenPos();
         const float width = ImGui::GetContentRegionAvail().x;
-        constexpr float height = 38.0F;
-        constexpr float iconSize = 22.0F;
-        constexpr float iconGap = 7.0F;
-        constexpr float controlGap = 6.0F;
-        constexpr float controlPaddingX = 8.0F;
-        constexpr float controlPaddingY = 3.0F;
-
-        const float badgeFontSize = InspectorTypography::ObjectMeta * Theme::GetActiveTokens().sizes.uiScale;
-        const ImVec2 badgeTextSize = fonts.sansCompact->CalcTextSizeA(badgeFontSize, 1000.0F, 0.0F, badge.text);
-        const ImVec2 badgeSize{
-            std::min(badgeTextSize.x + 12.0F, std::max(1.0F, width * 0.38F)),
-            badgeTextSize.y + 6.0F,
-        };
-        const ImVec2 badgePosition{
-            position.x + width - badgeSize.x,
-            position.y + (height - badgeSize.y) * 0.5F,
-        };
+        const float uiScale = Theme::GetActiveTokens().sizes.uiScale;
+        const float height = 38.0F * uiScale;
+        const float iconSize = 22.0F * uiScale;
+        const float iconGap = 7.0F * uiScale;
+        const float controlGap = 6.0F * uiScale;
+        const float controlPaddingX = 8.0F * uiScale;
         const float controlX = position.x + iconSize + iconGap;
-        const float controlWidth = std::max(1.0F, badgePosition.x - controlGap - controlX);
+        const float controlWidth = std::max(1.0F, position.x + width - props.trailingWidth - controlGap - controlX);
         const float titleFontSize = InspectorTypography::ObjectTitle * Theme::GetActiveTokens().sizes.uiScale;
         const float effectiveFontHeight = titleFontSize * Theme::Scale(titleFontSize, Theme::FontPx::SansEmphasis);
-        const float controlHeight = effectiveFontHeight + controlPaddingY * 2.0F;
+        const float controlHeight = 30.0F * uiScale;
+        const float controlPaddingY = std::max(0.0F, (controlHeight - effectiveFontHeight) * 0.5F);
         const float controlOffsetY = std::max(0.0F, (height - controlHeight) * 0.5F);
 
-        DrawEditorIcon(drawList, badge.objectIcon, {position.x, position.y + (height - iconSize) * 0.5F}, {iconSize, iconSize},
+        DrawEditorIcon(drawList, props.leadingIcon, {position.x, position.y + (height - iconSize) * 0.5F}, {iconSize, iconSize},
                        Theme::U32(Theme::Accent()));
 
         value.resize(std::min(value.size(), maximumBytes));
@@ -1736,7 +1737,7 @@ namespace Horo::Editor::Ui {
         ImGui::PushStyleColor(ImGuiCol_FrameBgActive, Theme::Hover());
         ImGui::PushStyleColor(ImGuiCol_Border, Theme::InspectorBorder());
         ImGui::PushStyleColor(ImGuiCol_Text, Theme::Text());
-        if (error) {
+        if (props.error) {
             ImGui::PushStyleColor(ImGuiCol_FrameBg, Theme::ErrSoft());
             ImGui::PushStyleColor(ImGuiCol_FrameBgHovered, Theme::ErrSoft());
             ImGui::PushStyleColor(ImGuiCol_FrameBgActive, Theme::ErrSoft());
@@ -1753,7 +1754,7 @@ namespace Horo::Editor::Ui {
         const bool deactivated = ImGui::IsItemDeactivated();
         result.cancelled = (result.active || deactivated) && ImGui::IsKeyPressed(ImGuiKey_Escape, false);
         result.committed = !result.cancelled && (submitted || deactivated);
-        if (error)
+        if (props.error)
             ImGui::PopStyleColor(4);
         ImGui::PopStyleColor(5);
         ImGui::PopStyleVar(3);
@@ -1763,69 +1764,135 @@ namespace Horo::Editor::Ui {
         const auto nullPosition = value.find('\0');
         value.resize(nullPosition == std::string::npos ? value.size() : nullPosition);
 
-        drawList->AddRectFilled(badgePosition, {badgePosition.x + badgeSize.x, badgePosition.y + badgeSize.y},
-                                ImGui::GetColorU32(badge.background), 4.0F);
-        drawList->PushClipRect({badgePosition.x + 6.0F, badgePosition.y},
-                               {badgePosition.x + badgeSize.x - 6.0F, badgePosition.y + badgeSize.y}, true);
-        drawList->AddText(fonts.sansCompact, badgeFontSize,
-                          {badgePosition.x + 6.0F, badgePosition.y + (badgeSize.y - badgeTextSize.y) * 0.5F},
-                          ImGui::GetColorU32(badge.foreground), badge.text);
-        drawList->PopClipRect();
         ImGui::SetCursorScreenPos({position.x, position.y + height});
         return result;
     }
 
-    bool DrawPropSection(const char *label, const Theme::Fonts &fonts, const char *removeLabel) {
+    /** @copydoc Card::Card */
+    Card::Card(const CardProps &props) {
+        ImGui::PushID(props.id);
+        expandedStateId_ = ImGui::GetID("##expanded");
+        ImGui::PopID();
+        stateStorage_ = ImGui::GetStateStorage();
+        expanded_ = stateStorage_->GetBool(expandedStateId_, props.defaultExpanded);
+        ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, {0.0F, 0.0F});
+        ImGui::PushStyleVar(ImGuiStyleVar_ChildRounding, 5.0F);
+        ImGui::PushStyleColor(ImGuiCol_ChildBg, Theme::CardSurface());
+        ImGui::PushStyleColor(ImGuiCol_Border, Theme::CardBorder());
+        ImGui::BeginChild(props.id, {0.0F, 0.0F}, ImGuiChildFlags_Borders | ImGuiChildFlags_AutoResizeY | ImGuiChildFlags_AlwaysAutoResize,
+                          ImGuiWindowFlags_NoScrollbar);
+    }
+
+    /** @copydoc Card::~Card */
+    Card::~Card() {
+        Finish();
+    }
+
+    /** @copydoc Card::DrawTitleBar */
+    void Card::DrawTitleBar(const CardTitleBarProps &props) {
         ImDrawList *dl = ImGui::GetWindowDrawList();
         const ImVec2 pos = ImGui::GetCursorScreenPos();
         const float w = ImGui::GetContentRegionAvail().x;
         constexpr float h = 34.0F;
 
-        // background & border
-        dl->AddRectFilled(pos, ImVec2(pos.x + w, pos.y + h), Theme::U32(Theme::InspectorHeaderSurface()));
-        dl->AddLine(ImVec2(pos.x, pos.y + h - 1.0f), ImVec2(pos.x + w, pos.y + h - 1.0f), Theme::U32(Theme::InspectorBorder()), 1.0f);
+        dl->AddRectFilled(pos, ImVec2(pos.x + w, pos.y + h), Theme::U32(Theme::CardHeaderSurface()));
+        dl->AddLine(ImVec2(pos.x, pos.y + h - 1.0F), ImVec2(pos.x + w, pos.y + h - 1.0F), Theme::U32(Theme::CardBorder()), 1.0F);
 
         const ImVec2 chevronCenter{pos.x + 12.0F, pos.y + h * 0.5F};
-        dl->AddTriangleFilled({chevronCenter.x - 3.0F, chevronCenter.y - 2.0F}, {chevronCenter.x + 3.0F, chevronCenter.y - 2.0F},
-                              {chevronCenter.x, chevronCenter.y + 2.0F}, Theme::U32(Theme::Muted()));
-        const char *labelEnd = std::strstr(label, "###");
-        const float headerFontSize = InspectorTypography::ComponentTitle * Theme::GetActiveTokens().sizes.uiScale;
-        dl->AddText(fonts.sansEmphasis, headerFontSize, ImVec2(pos.x + 28.0F, pos.y + (h - headerFontSize) * 0.5F),
-                    Theme::U32(Theme::Text()), label, labelEnd);
+        if (expanded_)
+            dl->AddTriangleFilled({chevronCenter.x - 3.0F, chevronCenter.y - 2.0F}, {chevronCenter.x + 3.0F, chevronCenter.y - 2.0F},
+                                  {chevronCenter.x, chevronCenter.y + 2.0F}, Theme::U32(Theme::Muted()));
+        else
+            dl->AddTriangleFilled({chevronCenter.x - 2.0F, chevronCenter.y - 3.0F}, {chevronCenter.x - 2.0F, chevronCenter.y + 3.0F},
+                                  {chevronCenter.x + 2.0F, chevronCenter.y}, Theme::U32(Theme::Muted()));
+        ImGui::SetCursorScreenPos(pos);
+        ImGui::PushID(props.id);
+        if (ImGui::InvisibleButton("##card_disclosure", {24.0F, h})) {
+            expanded_ = !expanded_;
+            stateStorage_->SetBool(expandedStateId_, expanded_);
+        }
+        ImGui::PopID();
+
+        const float headerFontSize = CardTypography::Title * Theme::GetActiveTokens().sizes.uiScale;
+        ImFont *titleFont = props.fonts.sansEmphasis != nullptr ? props.fonts.sansEmphasis : ImGui::GetFont();
+        dl->AddText(titleFont, headerFontSize, ImVec2(pos.x + 28.0F, pos.y + (h - headerFontSize) * 0.5F), Theme::U32(Theme::Text()),
+                    props.title);
 
         constexpr float toolSize = 24.0F;
         constexpr float toolGap = 2.0F;
         constexpr float iconInset = 4.0F;
-        const float toolsX = pos.x + w - toolSize * 3.0F - toolGap * 2.0F - 4.0F;
-        DrawEditorIcon(dl, UiIcon::Reset, {toolsX + iconInset, pos.y + 9.0F}, {16.0F, 16.0F}, Theme::U32(Theme::Muted()), fonts.icon);
-        DrawEditorIcon(dl, UiIcon::Check, {toolsX + toolSize + toolGap + iconInset, pos.y + 9.0F}, {16.0F, 16.0F},
-                       Theme::U32(Theme::Accent()), fonts.icon);
-
-        bool removeRequested = false;
-        const float settingsX = toolsX + (toolSize + toolGap) * 2.0F;
-        if (removeLabel != nullptr) {
-            ImGui::SetCursorScreenPos({settingsX, pos.y + 5.0F});
-            ImGui::PushID(label);
-            if (ImGui::InvisibleButton("##settings", {toolSize, toolSize}))
-                ImGui::OpenPopup("##component_settings");
-            const bool hovered = ImGui::IsItemHovered();
+        const float toolsWidth = props.actions.empty() ? 0.0F
+                                                       : toolSize * static_cast<float>(props.actions.size()) +
+                                                             toolGap * static_cast<float>(props.actions.size() - 1U);
+        const float toolsX = pos.x + w - toolsWidth - 4.0F;
+        ImGui::PushID(props.id);
+        for (std::size_t index = 0; index < props.actions.size(); ++index) {
+            const CardTitleBarAction &action = props.actions[index];
+            const float x = toolsX + static_cast<float>(index) * (toolSize + toolGap);
+            ImGui::SetCursorScreenPos({x, pos.y + 5.0F});
+            ImGui::PushID(action.id);
+            ImGui::BeginDisabled(!action.enabled);
+            const bool pressed = ImGui::InvisibleButton("##card_action", {toolSize, toolSize});
+            const bool hovered = action.enabled && ImGui::IsItemHovered();
             if (hovered)
-                dl->AddRectFilled({settingsX, pos.y + 5.0F}, {settingsX + toolSize, pos.y + 5.0F + toolSize}, Theme::U32(Theme::Hover()),
-                                  3.0F);
-            DrawEditorIcon(dl, UiIcon::Settings, {settingsX + iconInset, pos.y + 9.0F}, {16.0F, 16.0F},
-                           Theme::U32(hovered ? Theme::Text() : Theme::Muted()), fonts.icon);
-            if (BeginMenuPopup("##component_settings")) {
-                removeRequested = ContextMenuItem(removeLabel, nullptr, fonts, ContextMenuItemTone::Danger, "action.delete");
+                dl->AddRectFilled({x, pos.y + 5.0F}, {x + toolSize, pos.y + 5.0F + toolSize}, Theme::U32(Theme::Hover()), 3.0F);
+            ImVec4 resolvedColor = hovered ? Theme::Text() : action.active ? Theme::Accent() : Theme::Muted();
+            if (!action.enabled)
+                resolvedColor.w *= 0.45F;
+            DrawEditorIcon(dl, action.icon, {x + iconInset, pos.y + 9.0F}, {16.0F, 16.0F}, Theme::U32(resolvedColor), props.fonts.icon);
+            if (hovered && action.title != nullptr && action.title[0] != '\0')
+                ImGui::SetTooltip("%s", action.title);
+            ImGui::EndDisabled();
+            if (pressed) {
+                if (action.menuItems.empty()) {
+                    if (action.onInvoke)
+                        action.onInvoke();
+                } else {
+                    ImGui::OpenPopup("##card_action_menu");
+                }
+            }
+            if (!action.menuItems.empty() && BeginMenuPopup("##card_action_menu")) {
+                for (const CardMenuAction &menuItem : action.menuItems) {
+                    if (menuItem.separatorBefore)
+                        ContextMenuSeparator();
+                    ImGui::PushID(menuItem.id);
+                    const bool selected = ContextMenuItem(menuItem.label, nullptr, props.fonts,
+                                                          menuItem.destructive ? ContextMenuItemTone::Danger : ContextMenuItemTone::Normal,
+                                                          UiIconRegistry::Token(menuItem.icon), menuItem.enabled);
+                    if (selected && menuItem.onInvoke)
+                        menuItem.onInvoke();
+                    ImGui::PopID();
+                }
                 EndMenuPopup();
             }
             ImGui::PopID();
-        } else {
-            DrawEditorIcon(dl, UiIcon::Settings, {settingsX + iconInset, pos.y + 9.0F}, {16.0F, 16.0F}, Theme::U32(Theme::Muted()),
-                           fonts.icon);
         }
+        ImGui::PopID();
 
         ImGui::SetCursorScreenPos(ImVec2(pos.x, pos.y + h));
-        return removeRequested;
+    }
+
+    /** @copydoc Card::BeginBody */
+    bool Card::BeginBody() {
+        if (!expanded_)
+            return false;
+        if (bodyOpen_)
+            return true;
+        ImGui::SetCursorPosY(ImGui::GetCursorPosY() + 7.0F);
+        bodyOpen_ = true;
+        return true;
+    }
+
+    /** @copydoc Card::Finish */
+    void Card::Finish() {
+        if (!open_)
+            return;
+        if (bodyOpen_)
+            ImGui::SetCursorPosY(ImGui::GetCursorPosY() + 7.0F);
+        ImGui::EndChild();
+        ImGui::PopStyleColor(2);
+        ImGui::PopStyleVar(2);
+        open_ = false;
     }
 
     void DrawPropRow(const char *label, const char *value, const Theme::Fonts &fonts) {
@@ -1927,24 +1994,22 @@ namespace Horo::Editor::Ui {
     /** @copydoc ContextMenuItem */
     bool ContextMenuItem(const char *label, const char *shortcut, const Theme::Fonts &fonts, const ContextMenuItemTone tone,
                          const std::string_view iconToken, const bool enabled) {
-        static_cast<void>(iconToken);
         ImGui::PushID(label);
         const ContextMenuRow row = DrawContextMenuRow("##item", false, false, enabled);
         const ImVec4 textColor = !enabled ? Theme::Dim() : tone == ContextMenuItemTone::Danger ? Theme::Err() : Theme::Text();
-        DrawContextMenuRowPresentation(row, label, shortcut, fonts, textColor, row.hovered && enabled, false);
+        DrawContextMenuRowPresentation(row, label, shortcut, fonts, textColor, row.hovered && enabled, false, iconToken);
         ImGui::PopID();
         return enabled && row.activated;
     }
 
     /** @copydoc BeginContextSubmenu */
     bool BeginContextSubmenu(const char *label, const Theme::Fonts &fonts, const std::string_view iconToken) {
-        static_cast<void>(iconToken);
         const std::string popupId = std::string{"##submenu_popup_"} + label;
         const bool wasOpen = ImGui::IsPopupOpen(popupId.c_str());
         ImGui::PushID(label);
         const ContextMenuRow row = DrawContextMenuRow("##submenu", wasOpen, true);
         ImGui::PopID();
-        DrawContextMenuRowPresentation(row, label, nullptr, fonts, Theme::Text(), row.hovered || wasOpen, true);
+        DrawContextMenuRowPresentation(row, label, nullptr, fonts, Theme::Text(), row.hovered || wasOpen, true, iconToken);
         if (row.hovered || row.activated)
             ImGui::OpenPopup(popupId.c_str());
 

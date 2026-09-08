@@ -54,19 +54,6 @@ namespace Horo::Editor {
             }
         }
 
-        /** @brief Draws an axis-aligned dotted hierarchy guide segment. */
-        void DrawDottedLine(ImDrawList &drawList, const ImVec2 start, const ImVec2 end, const ImU32 color, const float scale) {
-            const float radius = std::max(0.5F, 0.55F * scale);
-            const float step = 3.0F * scale;
-            if (start.x == end.x) {
-                for (float y = start.y; y <= end.y; y += step)
-                    drawList.AddCircleFilled({start.x, y}, radius, color);
-                return;
-            }
-            for (float x = start.x; x <= end.x; x += step)
-                drawList.AddCircleFilled({x, start.y}, radius, color);
-        }
-
         /** @brief Substitutes the hierarchy object count into one complete localized label. */
         [[nodiscard]] std::string FormatObjectCount(std::string pattern, const std::size_t count) {
             constexpr std::string_view token{"{count}"};
@@ -588,13 +575,6 @@ namespace Horo::Editor {
 
     void HierarchyPanel::DrawRowTree(const RowFrame &frame, const RowControls &controls, const float centerY) {
         const float chevronCenterX = (frame.geometry.chevronMin.x + frame.geometry.chevronMax.x) * 0.5F;
-        if (frame.row.depth > 0) {
-            const float guideX = frame.geometry.chevronMin.x - 10.0F * frame.uiScale;
-            const float guideEndX = std::max(guideX, frame.geometry.typeIconMin.x - 3.0F * frame.uiScale);
-            DrawDottedLine(frame.drawList, {guideX, frame.geometry.rowMin.y}, {guideX, frame.geometry.rowMax.y},
-                           Theme::U32(Theme::BorderStrong()), frame.uiScale);
-            DrawDottedLine(frame.drawList, {guideX, centerY}, {guideEndX, centerY}, Theme::U32(Theme::BorderStrong()), frame.uiScale);
-        }
         if (!frame.node.children.empty()) {
             if (frame.node.expanded || frame.searching)
                 frame.drawList.AddTriangleFilled({chevronCenterX - 3.0F * frame.uiScale, centerY - 2.0F * frame.uiScale},

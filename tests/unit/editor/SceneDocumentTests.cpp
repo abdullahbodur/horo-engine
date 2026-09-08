@@ -35,6 +35,29 @@ namespace {
         REQUIRE((state.Generation() == 2));
     }
 
+    TEST_CASE("Disabled core components remain authored but are omitted from runtime conversion", "[unit][editor]") {
+        using namespace Horo;
+        using namespace Horo::Editor;
+
+        SceneDocumentSnapshot document{
+            .revision = DocumentRevision{1},
+            .state = DocumentStateId{1},
+            .objects =
+                {
+                    SceneObjectSnapshot{
+                        .id = SceneObjectId{1},
+                        .name = "Disabled Camera",
+                        .components = {.camera = Runtime::CameraComponent{.enabled = false}},
+                    },
+                },
+        };
+        const auto converted = ConvertSceneDocumentToRuntime(document, Runtime::SceneDefinitionId{1});
+        REQUIRE(converted.HasValue());
+        REQUIRE(converted.Value().Entities().size() == 1);
+        REQUIRE_FALSE(converted.Value().Entities().front().components.camera.has_value());
+        REQUIRE(document.objects.front().components.camera.has_value());
+    }
+
     TEST_CASE("Catalog Owns Stable Core Primitive Ids", "[unit][editor]") {
         using namespace Horo::Runtime;
         const PrimitiveDescriptor *box = PrimitiveCatalog::Find("primitive.mesh.box");

@@ -116,14 +116,29 @@ namespace Horo::Editor::Theme {
         };
     }
 
-    /** @brief Returns the subtly accent-cooled Inspector card surface. */
-    [[nodiscard]] inline ImVec4 InspectorCardSurface() {
+    /** @brief Returns the subtly accent-cooled generic panel-card surface. */
+    [[nodiscard]] inline ImVec4 CardSurface() {
         return Mix(Bg1(), Accent(), 0.025F);
     }
 
-    /** @brief Returns the raised Inspector component-header surface. */
-    [[nodiscard]] inline ImVec4 InspectorHeaderSurface() {
+    /** @brief Returns the raised generic card-header surface. */
+    [[nodiscard]] inline ImVec4 CardHeaderSurface() {
         return Mix(Bg2(), Accent(), 0.03F);
+    }
+
+    /** @brief Returns the cool border treatment shared by panel cards and fields. */
+    [[nodiscard]] inline ImVec4 CardBorder() {
+        return Mix(Border(), Accent(), 0.02F);
+    }
+
+    /** @brief Compatibility alias for Inspector call sites migrating to generic cards. */
+    [[nodiscard]] inline ImVec4 InspectorCardSurface() {
+        return CardSurface();
+    }
+
+    /** @brief Compatibility alias for Inspector call sites migrating to generic cards. */
+    [[nodiscard]] inline ImVec4 InspectorHeaderSurface() {
+        return CardHeaderSurface();
     }
 
     /** @brief Returns the Inspector field surface between window and raised tiers. */
@@ -138,7 +153,7 @@ namespace Horo::Editor::Theme {
 
     /** @brief Returns the cool side-dock border treatment used by Inspector cards and fields. */
     [[nodiscard]] inline ImVec4 InspectorBorder() {
-        return Mix(Border(), Accent(), 0.02F);
+        return CardBorder();
     }
 
     /** @brief Returns the compact editor-menu surface used by root and nested popups. */

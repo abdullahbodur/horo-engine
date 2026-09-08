@@ -55,6 +55,8 @@ TEST_CASE("Editor icon registry resolves canonical and catalog tokens", "[unit][
     using Horo::Editor::Ui::UiIconRegistry;
 
     REQUIRE(UiIconRegistry::Resolve("action.delete") == UiIcon::Delete);
+    REQUIRE(UiIconRegistry::Resolve("action.more_vertical") == UiIcon::MoreVertical);
+    REQUIRE(UiIconRegistry::Resolve("action.checkbox_unchecked") == UiIcon::CheckboxUnchecked);
     REQUIRE(UiIconRegistry::Resolve("primitive.light.directional") == UiIcon::DirectionalLight);
     REQUIRE(UiIconRegistry::Resolve("primitive.collider.sphere") == UiIcon::Sphere);
     REQUIRE_FALSE(UiIconRegistry::Resolve("unknown.icon").has_value());
@@ -74,6 +76,143 @@ TEST_CASE("Editor icon registry resolves canonical and catalog tokens", "[unit][
     REQUIRE(containsGlyph(0xE834));
     REQUIRE(containsGlyph(0xE8B8));
     REQUIRE(containsGlyph(0xF053));
+}
+
+TEST_CASE("Generic card title actions invoke caller-owned callbacks", "[unit][editor][gui][design-system]") {
+    using namespace Horo::Editor;
+    using namespace Horo::Editor::Ui;
+
+    IMGUI_CHECKVERSION();
+    ImGui::CreateContext();
+    ImGuiIO &io = ImGui::GetIO();
+    io.DisplaySize = {640.0F, 480.0F};
+    io.DeltaTime = 1.0F / 60.0F;
+    io.Fonts->AddFontDefault();
+    static_cast<void>(io.Fonts->Build());
+    ImFont *defaultFont = io.Fonts->Fonts.front();
+    const Theme::Fonts fonts{
+        .sans = defaultFont,
+        .sansCompact = defaultFont,
+        .sansEmphasis = defaultFont,
+        .icon = defaultFont,
+    };
+
+    bool invoked = false;
+    ImVec2 actionCenter{};
+    const auto drawFrame = [&] {
+        ImGui::SetNextWindowPos({0.0F, 0.0F});
+        ImGui::SetNextWindowSize({320.0F, 180.0F});
+        ImGui::Begin("CardActionTest", nullptr, ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoSavedSettings);
+        {
+            Card card(CardProps{.id = "##card"});
+            const std::array actions{
+                CardTitleBarAction{
+                    .id = "reset",
+                    .icon = UiIcon::Reset,
+                    .title = "Reset",
+                    .onInvoke =
+                        [&invoked] {
+                invoked = true;
+            },
+                },
+            };
+            card.DrawTitleBar({.id = "title", .title = "Component", .fonts = fonts, .actions = actions});
+            const ImVec2 actionMinimum = ImGui::GetItemRectMin();
+            const ImVec2 actionMaximum = ImGui::GetItemRectMax();
+            actionCenter = {(actionMinimum.x + actionMaximum.x) * 0.5F, (actionMinimum.y + actionMaximum.y) * 0.5F};
+            if (card.BeginBody())
+                ImGui::TextUnformatted("Body");
+        }
+        ImGui::End();
+    };
+
+    ImGui::NewFrame();
+    drawFrame();
+    ImGui::Render();
+
+    io.AddMousePosEvent(actionCenter.x, actionCenter.y);
+    ImGui::NewFrame();
+    drawFrame();
+    ImGui::Render();
+
+    io.AddMouseButtonEvent(ImGuiMouseButton_Left, true);
+    ImGui::NewFrame();
+    drawFrame();
+    ImGui::Render();
+
+    io.AddMouseButtonEvent(ImGuiMouseButton_Left, false);
+    ImGui::NewFrame();
+    drawFrame();
+    ImGui::Render();
+
+    REQUIRE(invoked);
+    ImGui::DestroyContext();
+}
+
+TEST_CASE("Generic card disclosure persists and suppresses collapsed body content", "[unit][editor][gui][design-system]") {
+    using namespace Horo::Editor;
+    using namespace Horo::Editor::Ui;
+
+    IMGUI_CHECKVERSION();
+    ImGui::CreateContext();
+    ImGuiIO &io = ImGui::GetIO();
+    io.DisplaySize = {400.0F, 240.0F};
+    io.DeltaTime = 1.0F / 60.0F;
+    io.Fonts->AddFontDefault();
+    static_cast<void>(io.Fonts->Build());
+    ImFont *defaultFont = io.Fonts->Fonts.front();
+    const Theme::Fonts fonts{
+        .sans = defaultFont,
+        .sansCompact = defaultFont,
+        .sansEmphasis = defaultFont,
+        .icon = defaultFont,
+    };
+
+    bool bodyVisible = false;
+    ImVec2 disclosureCenter{};
+    const auto drawFrame = [&] {
+        bodyVisible = false;
+        ImGui::SetNextWindowPos({0.0F, 0.0F});
+        ImGui::SetNextWindowSize({320.0F, 180.0F});
+        ImGui::Begin("CardDisclosureTest", nullptr, ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoSavedSettings);
+        {
+            Card card(CardProps{.id = "##card"});
+            card.DrawTitleBar({.id = "title", .title = "Camera", .fonts = fonts});
+            const ImVec2 disclosureMinimum = ImGui::GetItemRectMin();
+            const ImVec2 disclosureMaximum = ImGui::GetItemRectMax();
+            disclosureCenter = {(disclosureMinimum.x + disclosureMaximum.x) * 0.5F, (disclosureMinimum.y + disclosureMaximum.y) * 0.5F};
+            bodyVisible = card.BeginBody();
+            if (bodyVisible)
+                ImGui::TextUnformatted("Projection");
+        }
+        ImGui::End();
+    };
+
+    ImGui::NewFrame();
+    drawFrame();
+    ImGui::Render();
+    REQUIRE(bodyVisible);
+
+    io.AddMousePosEvent(disclosureCenter.x, disclosureCenter.y);
+    ImGui::NewFrame();
+    drawFrame();
+    ImGui::Render();
+    io.AddMouseButtonEvent(ImGuiMouseButton_Left, true);
+    ImGui::NewFrame();
+    drawFrame();
+    ImGui::Render();
+    io.AddMouseButtonEvent(ImGuiMouseButton_Left, false);
+    ImGui::NewFrame();
+    drawFrame();
+    ImGui::Render();
+    REQUIRE_FALSE(bodyVisible);
+
+    ImGui::NewFrame();
+    drawFrame();
+    ImGui::Render();
+    REQUIRE_FALSE(bodyVisible);
+
+    ImGui::DestroyContext();
 }
 
 TEST_CASE("Workspace popup rows keep the design-system menu geometry", "[unit][editor][gui][design-system]") {
@@ -422,8 +561,7 @@ TEST_CASE("Editable object title keeps its compact input vertically centered", "
     ImGui::Begin("EditableObjectTitleTest");
     const ImVec2 titleOrigin = ImGui::GetCursorScreenPos();
     std::string value{"Box"};
-    static_cast<void>(DrawEditableObjTitle("object_name", value, 128U,
-                                           EditableObjectTitleBadge{"Mesh", ImVec4{0.2F, 0.7F, 0.4F, 0.15F}, Theme::Ok()}, fonts));
+    static_cast<void>(DrawEditableTitle("object_name", value, 128U, fonts, {.leadingIcon = UiIcon::HierarchyMesh, .trailingWidth = 88.0F}));
     const ImVec2 inputMinimum = ImGui::GetItemRectMin();
     const ImVec2 inputMaximum = ImGui::GetItemRectMax();
     ImGui::End();
@@ -433,7 +571,7 @@ TEST_CASE("Editable object title keeps its compact input vertically centered", "
     const float topPadding = inputMinimum.y - titleOrigin.y;
     const float bottomPadding = titleOrigin.y + titleHeight - inputMaximum.y;
     INFO("top padding: " << topPadding << ", bottom padding: " << bottomPadding);
-    REQUIRE((inputMaximum.y - inputMinimum.y < 28.0F));
+    REQUIRE((inputMaximum.y - inputMinimum.y == Catch::Approx(30.0F).margin(1.0F)));
     REQUIRE((std::fabs(topPadding - bottomPadding) <= 1.0F));
 
     ImGui::DestroyContext();

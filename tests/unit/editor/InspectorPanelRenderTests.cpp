@@ -45,6 +45,10 @@ TEST_CASE("Inspector Panel Render Tests", "[unit][editor]") {
     EngineDataBus engineEvents;
     EditorDataBus editorEvents;
     TestLocalization localization;
+    localization.Set("workspace.panel.inspector", "Inspector");
+    localization.Set("workspace.panel.scene", "Scene");
+    localization.Set("workspace.inspector.static", "Static");
+    localization.Set("workspace.inspector.object_options", "Object options");
     ImFont *defaultFont = io.Fonts->Fonts.front();
     const Theme::Fonts fonts{.sans = defaultFont, .sansCompact = defaultFont, .sansEmphasis = defaultFont};
     const ThemeContext theme{.fonts = fonts};

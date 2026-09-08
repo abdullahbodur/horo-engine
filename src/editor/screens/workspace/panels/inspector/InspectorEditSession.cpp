@@ -183,6 +183,25 @@ namespace Horo::Editor {
         if (!allowCommands || m_baselines.empty())
             return {};
 
+        if (edit.resetRequested) {
+            m_draft.position = {};
+            m_draft.rotationDegrees = {};
+            m_draft.scale = {1.0F, 1.0F, 1.0F};
+            m_draft.mixed = {};
+            m_editedAxes = {
+                .position = {true, true, true},
+                .rotation = {true, true, true},
+                .scale = {true, true, true},
+            };
+            m_relativeAxes = {};
+            EditorWorkspaceViewCommandData command;
+            command.command = EditorWorkspaceViewCommand::CommitObjectTransform;
+            command.transformUpdates = BuildTransformUpdates();
+            m_hasTransformPreview = false;
+            m_editedAxes = {};
+            return command;
+        }
+
         if (edit.cancelRequested && m_hasTransformPreview) {
             ResetTransformDraft();
             m_hasTransformPreview = false;

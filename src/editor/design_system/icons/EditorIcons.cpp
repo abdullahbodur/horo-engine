@@ -89,6 +89,12 @@ namespace Horo::Editor::Ui {
             context.drawList.AddLine({x + w * 0.43F, y + h - 4.0F}, {x + w - 3.5F, y + 4.0F}, context.color, 1.4F);
         }
 
+        void DrawUncheckedCheckboxIcon(const IconDrawContext &context) {
+            const auto [x, y] = context.position;
+            const auto [w, h] = context.size;
+            context.drawList.AddRect({x + 1.5F, y + 1.5F}, {x + w - 1.5F, y + h - 1.5F}, context.color, 1.5F, 0, 1.3F);
+        }
+
         void DrawSettingsIcon(const IconDrawContext &context) {
             const ImVec2 center = context.Center();
             const float radius = std::min(context.size.x, context.size.y) * 0.25F;
@@ -101,6 +107,13 @@ namespace Horo::Editor::Ui {
                                          {center.x + direction.x * radius * 1.75F, center.y + direction.y * radius * 1.75F}, context.color,
                                          1.4F);
             }
+        }
+
+        void DrawMoreVerticalIcon(const IconDrawContext &context) {
+            const ImVec2 center = context.Center();
+            const float radius = std::max(1.0F, std::min(context.size.x, context.size.y) * 0.08F);
+            for (const float offset : {-0.28F, 0.0F, 0.28F})
+                context.drawList.AddCircleFilled({center.x, center.y + context.size.y * offset}, radius, context.color, 10);
         }
 
         void DrawVisibilityIcon(const IconDrawContext &context, const bool crossedOut) {
@@ -290,7 +303,9 @@ namespace Horo::Editor::Ui {
             IconDescriptor{"action.delete", DrawDeleteIcon},
             IconDescriptor{"action.reset", DrawResetIcon},
             IconDescriptor{"action.check", DrawCheckIcon},
+            IconDescriptor{"action.checkbox_unchecked", DrawUncheckedCheckboxIcon},
             IconDescriptor{"action.settings", DrawSettingsIcon},
+            IconDescriptor{"action.more_vertical", DrawMoreVerticalIcon},
             IconDescriptor{"action.visibility", DrawVisibilityOnIcon},
             IconDescriptor{"action.visibility_off", DrawVisibilityOffIcon},
             IconDescriptor{"action.lock", DrawLockIcon},
@@ -343,8 +358,12 @@ namespace Horo::Editor::Ui {
                     return 0xF053;  // restart_alt
                 case UiIcon::Check:
                     return 0xE834;  // check_box
+                case UiIcon::CheckboxUnchecked:
+                    return 0xE835;  // check_box_outline_blank
                 case UiIcon::Settings:
                     return 0xE8B8;  // settings
+                case UiIcon::MoreVertical:
+                    return 0xE5D4;  // more_vert
                 default:
                     return 0;
             }
@@ -393,8 +412,9 @@ namespace Horo::Editor::Ui {
 
     /** @copydoc UiIconRegistry::MaterialSymbolGlyphRanges */
     std::span<const ImWchar> UiIconRegistry::MaterialSymbolGlyphRanges() noexcept {
-        static constexpr std::array<ImWchar, 13> ranges{
+        static constexpr std::array<ImWchar, 15> ranges{
             0xE000, 0xE003,  // status icons
+            0xE5D4, 0xE5D5,  // more_vert
             0xE834, 0xE835,  // check_box
             0xE86C, 0xE86D,  // check_circle
             0xE8B8, 0xE8B9,  // settings
