@@ -76,6 +76,42 @@ TEST_CASE("Editor icon registry resolves canonical and catalog tokens", "[unit][
     REQUIRE(containsGlyph(0xF053));
 }
 
+TEST_CASE("Workspace popup rows keep the design-system menu geometry", "[unit][editor][gui][design-system]") {
+    using namespace Horo::Editor;
+    using namespace Horo::Editor::Ui;
+
+    IMGUI_CHECKVERSION();
+    ImGui::CreateContext();
+    ImGuiIO &io = ImGui::GetIO();
+    io.DisplaySize = {640.0F, 480.0F};
+    io.DeltaTime = 1.0F / 60.0F;
+    io.Fonts->AddFontDefault();
+    static_cast<void>(io.Fonts->Build());
+    ImFont *defaultFont = io.Fonts->Fonts.front();
+    const Theme::Fonts fonts{
+        .sans = defaultFont,
+        .sansCompact = defaultFont,
+        .sansEmphasis = defaultFont,
+        .icon = defaultFont,
+    };
+
+    ImGui::NewFrame();
+    ImGui::Begin("PopupGeometryTest");
+    ImGui::OpenPopup("##popup");
+    REQUIRE(BeginMenuPopup("##popup"));
+    static_cast<void>(ContextMenuItem("Create", nullptr, fonts));
+    const float rowHeight = ImGui::GetItemRectSize().y;
+    const float popupWidth = ImGui::GetWindowWidth();
+    EndMenuPopup();
+    ImGui::End();
+    ImGui::Render();
+
+    REQUIRE(rowHeight == Catch::Approx(30.0F));
+    REQUIRE(popupWidth >= 224.0F);
+
+    ImGui::DestroyContext();
+}
+
 TEST_CASE("Component metrics use theme overrides while global scaling is disabled", "[unit][editor][gui][design-system]") {
     using namespace Horo::Editor;
     using namespace Horo::Editor::DesignSystem;

@@ -126,22 +126,64 @@ namespace Horo::Editor::Ui {
             ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, {ScaledLayoutValue(4.0F), ScaledLayoutValue(4.0F)});
             ImGui::PushStyleVar(ImGuiStyleVar_PopupRounding, Theme::GetActiveTokens().radii.control);
             ImGui::PushStyleVar(ImGuiStyleVar_PopupBorderSize, 1.0F);
+            ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, {0.0F, 0.0F});
             ImGui::PushStyleColor(ImGuiCol_PopupBg, Theme::MenuSurface());
             ImGui::PushStyleColor(ImGuiCol_Border, Theme::MenuBorder());
         }
 
         void PopContextPopupWindowStyle() {
             ImGui::PopStyleColor(2);
-            ImGui::PopStyleVar(3);
+            ImGui::PopStyleVar(4);
         }
 
-        void PushContextMenuRowStyle() {
-            ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, {0.0F, 0.0F});
-            ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, {ScaledLayoutValue(10.0F), ScaledLayoutValue(8.0F)});
+        struct ContextMenuRow {
+            ImVec2 minimum;
+            ImVec2 maximum;
+            bool activated{false};
+            bool hovered{false};
+        };
+
+        [[nodiscard]] ContextMenuRow DrawContextMenuRow(const char *id, const bool selected, const bool keepPopupOpen = false) {
+            constexpr float rowHeight = 30.0F;
+            ImGui::PushStyleColor(ImGuiCol_Header, ImVec4{});
+            ImGui::PushStyleColor(ImGuiCol_HeaderHovered, ImVec4{});
+            ImGui::PushStyleColor(ImGuiCol_HeaderActive, ImVec4{});
+            ImGuiSelectableFlags flags = ImGuiSelectableFlags_None;
+            if (keepPopupOpen)
+                flags |= ImGuiSelectableFlags_NoAutoClosePopups;
+            const bool activated = ImGui::Selectable(id, selected, flags, {ImGui::GetContentRegionAvail().x, ScaledLayoutValue(rowHeight)});
+            ImGui::PopStyleColor(3);
+            return {
+                .minimum = ImGui::GetItemRectMin(),
+                .maximum = ImGui::GetItemRectMax(),
+                .activated = activated,
+                .hovered = ImGui::IsItemHovered(),
+            };
         }
 
-        void PopContextMenuRowStyle() {
-            ImGui::PopStyleVar(2);
+        void DrawContextMenuRowPresentation(const ContextMenuRow &row, const char *label, const char *shortcut, const Theme::Fonts &fonts,
+                                            const ImVec4 textColor, const bool highlighted, const bool submenu) {
+            ImDrawList *drawList = ImGui::GetWindowDrawList();
+            const float scale = Theme::GetActiveTokens().sizes.uiScale;
+            const float fontSize = 14.0F * scale;
+            if (highlighted)
+                drawList->AddRectFilled(row.minimum, row.maximum, Theme::U32(Theme::Hover()), ScaledLayoutValue(3.0F));
+
+            const char *labelEnd = std::strstr(label, "###");
+            const float textY = row.minimum.y + (row.maximum.y - row.minimum.y - fontSize) * 0.5F;
+            drawList->AddText(fonts.sans, fontSize, {row.minimum.x + ScaledLayoutValue(10.0F), textY}, Theme::U32(textColor), label,
+                              labelEnd);
+            if (shortcut != nullptr && shortcut[0] != '\0') {
+                const ImVec2 shortcutSize = fonts.sans->CalcTextSizeA(fontSize, FLT_MAX, 0.0F, shortcut);
+                drawList->AddText(fonts.sans, fontSize, {row.maximum.x - ScaledLayoutValue(10.0F) - shortcutSize.x, textY},
+                                  Theme::U32(Theme::Dim()), shortcut);
+            }
+            if (submenu) {
+                const float arrowX = row.maximum.x - ScaledLayoutValue(10.0F);
+                const float arrowY = (row.minimum.y + row.maximum.y) * 0.5F;
+                drawList->AddTriangleFilled({arrowX - 3.0F * scale, arrowY - 4.0F * scale}, {arrowX - 3.0F * scale, arrowY + 4.0F * scale},
+                                            {arrowX + 2.0F * scale, arrowY}, Theme::U32(Theme::Muted()));
+            }
         }
 
         void DrawTableCell(const TableProps &props, const TableRow &row, const std::size_t rowIndex, const std::size_t columnIndex,
@@ -1805,7 +1847,8 @@ namespace Horo::Editor::Ui {
         ImGui::SetNextWindowSizeConstraints({ScaledLayoutValue(224.0F), 0.0F}, {ScaledLayoutValue(340.0F), FLT_MAX});
         PushContextPopupWindowStyle();
         const bool open = ImGui::BeginPopupContextItem(id, ImGuiPopupFlags_MouseButtonRight);
-        PopContextPopupWindowStyle();
+        if (!open)
+            PopContextPopupWindowStyle();
         return open;
     }
 
@@ -1814,13 +1857,15 @@ namespace Horo::Editor::Ui {
         ImGui::SetNextWindowSizeConstraints({ScaledLayoutValue(224.0F), 0.0F}, {ScaledLayoutValue(340.0F), FLT_MAX});
         PushContextPopupWindowStyle();
         const bool open = ImGui::BeginPopupContextWindow(id, ImGuiPopupFlags_MouseButtonRight | ImGuiPopupFlags_NoOpenOverItems);
-        PopContextPopupWindowStyle();
+        if (!open)
+            PopContextPopupWindowStyle();
         return open;
     }
 
     /** @copydoc EndContextMenu */
     void EndContextMenu() {
         ImGui::EndPopup();
+        PopContextPopupWindowStyle();
     }
 
     /** @copydoc BeginMenuPopup */
@@ -1844,60 +1889,51 @@ namespace Horo::Editor::Ui {
     bool ContextMenuItem(const char *label, const char *shortcut, const Theme::Fonts &fonts, const ContextMenuItemTone tone,
                          const std::string_view iconToken) {
         static_cast<void>(iconToken);
-        ImGui::PushStyleColor(ImGuiCol_Header, Theme::Hover());
-        ImGui::PushStyleColor(ImGuiCol_HeaderHovered, Theme::Hover());
-        ImGui::PushStyleColor(ImGuiCol_HeaderActive, Theme::AccentSoft());
-        if (tone == ContextMenuItemTone::Danger) {
-            ImGui::PushStyleColor(ImGuiCol_Text, Theme::Err());
-        }
-        PushContextMenuRowStyle();
-        bool activated = false;
-        {
-            Theme::ScopedTextStyle textStyle(fonts.sans, 14.0F * Theme::GetActiveTokens().sizes.uiScale, Theme::FontPx::Sans);
-            activated = ImGui::MenuItem(label, shortcut);
-        }
-        PopContextMenuRowStyle();
-        if (tone == ContextMenuItemTone::Danger) {
-            ImGui::PopStyleColor();
-        }
-        ImGui::PopStyleColor(3);
-        return activated;
+        ImGui::PushID(label);
+        const ContextMenuRow row = DrawContextMenuRow("##item", false);
+        DrawContextMenuRowPresentation(row, label, shortcut, fonts, tone == ContextMenuItemTone::Danger ? Theme::Err() : Theme::Text(),
+                                       row.hovered, false);
+        ImGui::PopID();
+        return row.activated;
     }
 
     /** @copydoc BeginContextSubmenu */
     bool BeginContextSubmenu(const char *label, const Theme::Fonts &fonts, const std::string_view iconToken) {
         static_cast<void>(iconToken);
-        ImGui::PushStyleColor(ImGuiCol_Header, Theme::Hover());
-        ImGui::PushStyleColor(ImGuiCol_HeaderHovered, Theme::Hover());
-        ImGui::PushStyleColor(ImGuiCol_HeaderActive, Theme::AccentSoft());
-        PushContextPopupWindowStyle();
-        PushContextMenuRowStyle();
+        ImGui::PushID(label);
+        constexpr const char *popupId = "##submenu_popup";
+        const bool wasOpen = ImGui::IsPopupOpen(popupId);
+        const ContextMenuRow row = DrawContextMenuRow("##submenu", wasOpen, true);
+        DrawContextMenuRowPresentation(row, label, nullptr, fonts, Theme::Text(), row.hovered || wasOpen, true);
+        if (row.hovered || row.activated)
+            ImGui::OpenPopup(popupId);
+
+        ImGui::SetNextWindowPos({ImGui::GetWindowPos().x + ImGui::GetWindowWidth() - 1.0F, row.minimum.y - ScaledLayoutValue(4.0F)});
         ImGui::SetNextWindowSizeConstraints({ScaledLayoutValue(224.0F), 0.0F}, {ScaledLayoutValue(340.0F), FLT_MAX});
-        const float itemInnerSpacingY = ImGui::GetStyle().ItemInnerSpacing.y;
-        // ImGui intentionally overlaps child menus by ItemInnerSpacing.x. The
-        // editor popup treatment uses visible borders, so align those borders
-        // edge-to-edge instead of stacking one popup over the previous one.
-        ImGui::PushStyleVar(ImGuiStyleVar_ItemInnerSpacing, {0.0F, itemInnerSpacingY});
-        bool open = false;
-        {
-            Theme::ScopedTextStyle textStyle(fonts.sans, 14.0F * Theme::GetActiveTokens().sizes.uiScale, Theme::FontPx::Sans);
-            open = ImGui::BeginMenu(label);
-        }
-        ImGui::PopStyleVar();
-        PopContextMenuRowStyle();
-        PopContextPopupWindowStyle();
-        ImGui::PopStyleColor(3);
+        PushContextPopupWindowStyle();
+        const bool open = ImGui::BeginPopup(popupId, ImGuiWindowFlags_NoMove);
+        if (!open)
+            PopContextPopupWindowStyle();
+        ImGui::PopID();
         return open;
     }
 
     /** @copydoc EndContextSubmenu */
     void EndContextSubmenu() {
-        ImGui::EndMenu();
+        ImGui::EndPopup();
+        PopContextPopupWindowStyle();
     }
 
     /** @copydoc ContextMenuSeparator */
     void ContextMenuSeparator() {
-        ImGui::Separator();
+        const ImVec2 position = ImGui::GetCursorScreenPos();
+        const float width = ImGui::GetContentRegionAvail().x;
+        const float scale = Theme::GetActiveTokens().sizes.uiScale;
+        constexpr float height = 9.0F;
+        ImGui::GetWindowDrawList()->AddLine({position.x + 5.0F * scale, position.y + 4.0F * scale},
+                                            {position.x + width - 5.0F * scale, position.y + 4.0F * scale}, Theme::U32(Theme::Border()),
+                                            1.0F);
+        ImGui::Dummy({0.0F, height * scale});
     }
 
     /** @copydoc DrawComboPropRow */
