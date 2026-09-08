@@ -237,34 +237,33 @@ namespace Horo::Render {
         return Result<void>::Success();
     }
 
-    /** @copydoc TemporalHistoryStore::Publish */
-    Result<void> TemporalHistoryStore::Publish(const TemporalHistoryFrame &frame) {
+    /** @copydoc TemporalHistoryStore::CompletePending */
+    Result<void> TemporalHistoryStore::CompletePending(const TemporalHistoryFrame &frame, const PendingCompletion completion) {
         auto resolved = ResolvePending(frame);
         if (resolved.HasError())
             return Result<void>::Failure(resolved.ErrorValue());
         Record &record = *resolved.Value();
-        record.contentGeneration = frame.contentGeneration;
-        record.lastPublishedFrame = frame.frameId;
+        if (completion == PendingCompletion::Publish) {
+            record.contentGeneration = frame.contentGeneration;
+            record.lastPublishedFrame = frame.frameId;
+            record.pendingReset.reset();
+            record.valid = true;
+        }
         record.pendingFrame = 0;
         record.pendingAttempt = 0;
         record.pendingCanReadPrevious = false;
         record.pendingFrameReset.reset();
-        record.pendingReset.reset();
-        record.valid = true;
         return Result<void>::Success();
+    }
+
+    /** @copydoc TemporalHistoryStore::Publish */
+    Result<void> TemporalHistoryStore::Publish(const TemporalHistoryFrame &frame) {
+        return CompletePending(frame, PendingCompletion::Publish);
     }
 
     /** @copydoc TemporalHistoryStore::Abandon */
     Result<void> TemporalHistoryStore::Abandon(const TemporalHistoryFrame &frame) {
-        auto resolved = ResolvePending(frame);
-        if (resolved.HasError())
-            return Result<void>::Failure(resolved.ErrorValue());
-        Record &record = *resolved.Value();
-        record.pendingFrame = 0;
-        record.pendingAttempt = 0;
-        record.pendingCanReadPrevious = false;
-        record.pendingFrameReset.reset();
-        return Result<void>::Success();
+        return CompletePending(frame, PendingCompletion::Abandon);
     }
 
     /** @copydoc TemporalHistoryStore::Reset */

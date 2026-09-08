@@ -262,11 +262,13 @@ namespace Horo::Render {
 
     private:
         struct Record;
+        enum class PendingCompletion : std::uint8_t { Publish, Abandon };
 
         TemporalHistoryStore(TemporalHistoryOwnerId owner, TemporalHistoryLimits limits, std::vector<Record> records) noexcept;
         [[nodiscard]] Result<Record *> Resolve(TemporalHistoryHandle history);
         [[nodiscard]] Result<Record *> ResolveIdle(TemporalHistoryHandle history);
         [[nodiscard]] Result<Record *> ResolvePending(const TemporalHistoryFrame &frame);
+        [[nodiscard]] Result<void> CompletePending(const TemporalHistoryFrame &frame, PendingCompletion completion);
         [[nodiscard]] Result<void> ValidateFrameRequest(const Record &record, std::uint64_t frameId) const;
         [[nodiscard]] Result<void> ValidatePendingFrame(const TemporalHistoryFrame &frame, const Record &record) const;
         [[nodiscard]] Result<void> ValidateThreadAndState() const;
