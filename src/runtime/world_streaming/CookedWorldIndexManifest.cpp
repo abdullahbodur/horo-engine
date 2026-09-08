@@ -35,29 +35,56 @@ namespace Horo::WorldStreaming {
             std::uint32_t dependencies{};
         };
 
-        [[nodiscard]] Result<ManifestTotals> ValidateShapeAndTotals(const std::span<const WorldPartitionCellDescriptor> descriptorCells,
-                                                                    const std::span<const CookedWorldCellManifestCandidate> cells,
-                                                                    const CookedWorldIndexManifestLimits &limits) {
-            if (cells.empty())
-                return Invalid<ManifestTotals>(WorldStreamingErrors::CookedManifestInvalid);
-            if (cells.size() != descriptorCells.size())
-                return Invalid<ManifestTotals>(WorldStreamingErrors::CookedManifestIdentityConflict);
-            if (cells.size() > limits.maximumCellEntries)
-                return Invalid<ManifestTotals>(WorldStreamingErrors::CookedManifestCapacityExceeded);
+        /** @brief Validates cell-count invariants before examining candidate contents. */
+        [[nodiscard]] Result<void> ValidateShape(const std::span<const WorldPartitionCellDescriptor> descriptorCells,
+                                                 const std::size_t cellCount, const CookedWorldIndexManifestLimits &limits) {
+            if (cellCount == 0)
+                return Invalid<void>(WorldStreamingErrors::CookedManifestInvalid);
+            if (cellCount != descriptorCells.size())
+                return Invalid<void>(WorldStreamingErrors::CookedManifestIdentityConflict);
+            if (cellCount > limits.maximumCellEntries)
+                return Invalid<void>(WorldStreamingErrors::CookedManifestCapacityExceeded);
+            return Result<void>::Success();
+        }
 
+        /** @brief Reports whether a candidate has a valid identity and non-empty encoded and decoded payloads. */
+        [[nodiscard]] bool HasValidCandidateIntegrity(const CookedWorldCellManifestCandidate &cell) noexcept {
+            return cell.cell.IsValid() && cell.compressedSize != 0 && cell.uncompressedSize != 0;
+        }
+
+        /** @brief Adds one candidate to bounded aggregate counts without partial overflow. */
+        [[nodiscard]] bool TryAccumulateCandidate(const CookedWorldCellManifestCandidate &cell,
+                                                  const CookedWorldIndexManifestLimits &limits, std::uint64_t &dependencyCount,
+                                                  ManifestTotals &totals) noexcept {
+            if (cell.hardDependencies.size() > limits.maximumDependenciesPerCell)
+                return false;
+            return TryAccumulate(cell.hardDependencies.size(), limits.maximumTotalDependencies, dependencyCount) &&
+                   TryAccumulate(cell.compressedSize, limits.maximumCompressedBytes, totals.compressedBytes) &&
+                   TryAccumulate(cell.uncompressedSize, limits.maximumUncompressedBytes, totals.uncompressedBytes);
+        }
+
+        /** @brief Validates candidates and computes bounded aggregate manifest totals. */
+        [[nodiscard]] Result<ManifestTotals> AccumulateTotals(const std::span<const CookedWorldCellManifestCandidate> cells,
+                                                              const CookedWorldIndexManifestLimits &limits) {
             ManifestTotals totals;
             std::uint64_t dependencyCount{};
             for (const auto &cell : cells) {
-                if (!cell.cell.IsValid() || cell.compressedSize == 0 || cell.uncompressedSize == 0)
+                if (!HasValidCandidateIntegrity(cell))
                     return Invalid<ManifestTotals>(WorldStreamingErrors::CookedManifestInvalid);
-                if (cell.hardDependencies.size() > limits.maximumDependenciesPerCell ||
-                    !TryAccumulate(cell.hardDependencies.size(), limits.maximumTotalDependencies, dependencyCount) ||
-                    !TryAccumulate(cell.compressedSize, limits.maximumCompressedBytes, totals.compressedBytes) ||
-                    !TryAccumulate(cell.uncompressedSize, limits.maximumUncompressedBytes, totals.uncompressedBytes))
+                if (!TryAccumulateCandidate(cell, limits, dependencyCount, totals))
                     return Invalid<ManifestTotals>(WorldStreamingErrors::CookedManifestCapacityExceeded);
             }
             totals.dependencies = static_cast<std::uint32_t>(dependencyCount);
             return Result<ManifestTotals>::Success(totals);
+        }
+
+        /** @brief Validates manifest shape and returns aggregate totals transactionally. */
+        [[nodiscard]] Result<ManifestTotals> ValidateShapeAndTotals(const std::span<const WorldPartitionCellDescriptor> descriptorCells,
+                                                                    const std::span<const CookedWorldCellManifestCandidate> cells,
+                                                                    const CookedWorldIndexManifestLimits &limits) {
+            if (const auto shape = ValidateShape(descriptorCells, cells.size(), limits); shape.HasError())
+                return Result<ManifestTotals>::Failure(shape.ErrorValue());
+            return AccumulateTotals(cells, limits);
         }
 
         [[nodiscard]] Result<void> ValidateDependencies(const std::span<const WorldPartitionCellDescriptor> descriptorCells,
