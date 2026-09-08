@@ -1398,6 +1398,22 @@ The graph:
 - provides synchronization requirements to explicit APIs
 - remains backend-neutral
 
+[ADR-175](../../adr/175-render-resource-state-and-barrier-model.md) is the
+normative resource-state and barrier policy. Graph uses carry Horo-owned access,
+operation, stage, range, layout-intent, and effective-queue state; they never
+carry native barrier values. Imported generations declare exact initial and final
+states, while transient resources begin undefined and must be written before
+read. Deterministic compilation detects RAW, WAR, and WAW hazards over checked
+texture subresources or buffer byte ranges and emits normalized transitions.
+
+Queue-role changes become ownership transfers only when ADR-173 resolves them to
+different effective queue identities. Those transfers use matched GPU-side
+release/acquire operations tied to exact queue timeline values, never normal-frame
+CPU waits. Explicit backends translate the complete normalized plan; implicit
+backends realize equivalent ordering and visibility. Unsupported or malformed
+state, range, ownership, generation, or translation evidence rejects the plan
+before execution rather than selecting a hidden fallback.
+
 Simple backends may execute the compiled plan serially. Scene systems do not
 manually order backend commands around hidden global state.
 
