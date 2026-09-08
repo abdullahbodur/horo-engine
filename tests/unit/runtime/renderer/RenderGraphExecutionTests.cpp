@@ -49,8 +49,13 @@ namespace Horo::Render {
             const RenderGraphPassRef write = RequirePass(builder, RenderPassKind::Graphics, RenderQueueRole::Graphics);
             const RenderGraphPassRef read = RequirePass(builder, RenderPassKind::Compute, RenderQueueRole::Compute);
             const RenderGraphResourceId resource = RequireResource(builder.AddTransientResource(RenderGraphResourceKind::Buffer));
-            RequireUsage(builder, {write, resource, RenderGraphAccess::Write, RenderGraphUsageKind::Storage});
-            RequireUsage(builder, {read, resource, RenderGraphAccess::Read, RenderGraphUsageKind::Sampled});
+            const std::array usages{
+                RenderGraphResourceUsage{write, resource, RenderGraphAccess::Write, RenderGraphUsageKind::Storage},
+                RenderGraphResourceUsage{read, resource, RenderGraphAccess::Read, RenderGraphUsageKind::Sampled},
+            };
+            for (const RenderGraphResourceUsage &usage : usages) {
+                RequireUsage(builder, usage);
+            }
             return {write, read, resource};
         }
 
@@ -182,9 +187,10 @@ namespace Horo::Render {
 
     TEST_CASE("Execution compilation verifies topology when imported state needs no transition", "[renderer][render-graph][execution]") {
         RenderGraphBuilder builder = RequireBuilder();
-        const RenderGraphPassRef pass = RequirePass(builder, RenderPassKind::Compute, RenderQueueRole::Compute);
-        const RenderGraphResourceId resource = RequireResource(builder.ImportBuffer(BufferHandle(), RenderGraphResourceClass::Persistent));
-        RequireUsage(builder, {pass, resource, RenderGraphAccess::Read, RenderGraphUsageKind::Sampled});
+        const auto pass = RequirePass(builder, RenderPassKind::Compute, RenderQueueRole::Compute);
+        const auto resource = RequireResource(builder.ImportBuffer(BufferHandle(), RenderGraphResourceClass::Persistent));
+        const RenderGraphResourceUsage read{pass, resource, RenderGraphAccess::Read, RenderGraphUsageKind::Sampled};
+        RequireUsage(builder, read);
         RenderGraph graph = RequireGraph(builder);
         RenderGraphSchedule schedule = RequireSchedule(graph);
         constexpr std::array topologyA{RenderQueueAssignment{RenderQueueRole::Compute, RenderQueueId{11}}};
