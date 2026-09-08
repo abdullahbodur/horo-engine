@@ -79,7 +79,10 @@ namespace Horo::Editor {
             return Result<std::optional<Render::RenderTargetHandle>>::Success(std::nullopt);
         }
 
-        /** @brief Records the panel's desired render-target extent for the current frame. */
+        /**
+         * @brief Records the panel's desired render-target extent for the current frame and next resource boundary.
+         * @param extent Physical-pixel extent, or an invalid extent when the panel cannot render.
+         */
         virtual void RequestExtent(EditorViewportExtent extent) noexcept = 0;
 
         /** @brief Records the panel's world-grid presentation options for the current frame. */
@@ -88,7 +91,7 @@ namespace Horo::Editor {
         /** @brief Records the selected Light visualizer requested for the next viewport pass. */
         virtual void RequestLightVisualizer(const EditorViewportLightVisualizerOptions &options) noexcept = 0;
 
-        /** @brief Returns the most recent panel extent request for static-mesh pass construction. */
+        /** @brief Returns the active target extent when this frame has a panel request, otherwise an invalid extent. */
         [[nodiscard]] virtual EditorViewportExtent RequestedExtent() const noexcept = 0;
 
         /** @brief Returns the clip-depth convention used by this renderer's viewport projection. */

@@ -495,7 +495,10 @@ namespace Horo::Editor {
             return Result<std::optional<Render::RenderTargetHandle>>::Failure(
                 MakeViewportError(RendererErrors::ViewportNotInitialized, "Viewport resource owner is not initialized."));
         }
-        return impl_->resources.Prepare(scene, impl_->requestedExtent);
+        // Resource preparation runs before the panel draws. Consume the preceding
+        // UI frame's request here so the current frame can publish a fresh request
+        // that survives pass execution and advances an asynchronous resize next frame.
+        return impl_->resources.Prepare(scene, std::exchange(impl_->requestedExtent, EditorViewportExtent{}));
     }
 
     /** @copydoc EditorViewportRendererMetal::ExecuteStaticMeshPass */
@@ -504,9 +507,10 @@ namespace Horo::Editor {
             return Result<void>::Failure(
                 MakeViewportError(RendererErrors::ViewportNotInitialized, "Viewport renderer is not initialized."));
         }
-        // A panel must request an extent every UI frame. Consuming the request keeps
-        // hidden/inactive viewport tabs from spending GPU time in the background.
-        const EditorViewportExtent requestedExtent = std::exchange(impl_->requestedExtent, {});
+        // A panel must request an extent every UI frame. PrepareResources consumes
+        // the request at the next frame boundary, so hidden/inactive tabs still stop
+        // rendering without starving a resize that needs multiple boundary advances.
+        const EditorViewportExtent requestedExtent = impl_->requestedExtent;
         if (!requestedExtent.IsValid())
             return Result<void>::Success();
         const EditorViewportExtent allocatedExtent = impl_->resources.AllocatedExtent();
