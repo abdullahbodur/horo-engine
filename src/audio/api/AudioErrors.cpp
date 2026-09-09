@@ -23,6 +23,33 @@ namespace Horo::Audio::AudioErrors {
         .retryable = false,
         .userActionable = true,
     };
+    const ErrorCodeDescriptor AssetSchemaInvalid{
+        .domain = AudioDomain,
+        .code = ErrorCode{"audio.asset_schema.invalid"},
+        .defaultSeverity = ErrorSeverity::Error,
+        .summary = "The persisted audio asset schema is structurally invalid.",
+        .remediationHint = "Correct media bounds, stable identities, annotations, seek metadata or variation settings before cooking.",
+        .retryable = false,
+        .userActionable = true,
+    };
+    const ErrorCodeDescriptor AssetSchemaVersionUnsupported{
+        .domain = AudioDomain,
+        .code = ErrorCode{"audio.asset_schema.version_unsupported"},
+        .defaultSeverity = ErrorSeverity::Error,
+        .summary = "The persisted audio asset schema version is unsupported.",
+        .remediationHint = "Migrate the asset through an Audio-owned supported schema path before cooking.",
+        .retryable = false,
+        .userActionable = true,
+    };
+    const ErrorCodeDescriptor AssetSchemaLimitExceeded{
+        .domain = AudioDomain,
+        .code = ErrorCode{"audio.asset_schema.limit_exceeded"},
+        .defaultSeverity = ErrorSeverity::Error,
+        .summary = "The persisted audio asset schema exceeds an admitted bound.",
+        .remediationHint = "Reduce annotation, seek, variation or label counts to the active validated profile.",
+        .retryable = false,
+        .userActionable = true,
+    };
     const ErrorCodeDescriptor CommandBufferInvalid{
         .domain = AudioDomain,
         .code = ErrorCode{"audio.command_buffer.invalid"},

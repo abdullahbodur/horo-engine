@@ -305,6 +305,7 @@ target_link_libraries(HoroAssets
 target_link_libraries(HoroRuntimeScene PUBLIC HoroEngine::Assets)
 
 add_library(HoroAudioApi STATIC
+        audio/api/AudioAssetSchema.cpp
         audio/api/AudioBackendCapabilities.cpp
         audio/api/AudioCallbackEvents.cpp
         audio/api/AudioDeviceDiscovery.cpp
