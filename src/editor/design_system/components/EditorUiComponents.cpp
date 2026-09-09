@@ -56,16 +56,29 @@ namespace Horo::Editor::Ui {
             };
         }
 
+        /** @brief Pushes the shared frame-state colors used by editor controls. */
+        void PushControlColors(const ImVec4 background, const ImVec4 border, const ImVec4 text) {
+            ImGui::PushStyleColor(ImGuiCol_FrameBg, background);
+            ImGui::PushStyleColor(ImGuiCol_FrameBgHovered, Theme::Hover());
+            ImGui::PushStyleColor(ImGuiCol_FrameBgActive, Theme::Hover());
+            ImGui::PushStyleColor(ImGuiCol_Border, border);
+            ImGui::PushStyleColor(ImGuiCol_Text, text);
+        }
+
+        /** @brief Pushes the shared validation-error colors for editable controls. */
+        void PushErrorControlColors() {
+            ImGui::PushStyleColor(ImGuiCol_FrameBg, Theme::ErrSoft());
+            ImGui::PushStyleColor(ImGuiCol_FrameBgHovered, Theme::ErrSoft());
+            ImGui::PushStyleColor(ImGuiCol_FrameBgActive, Theme::ErrSoft());
+            ImGui::PushStyleColor(ImGuiCol_Border, Theme::Err());
+        }
+
         void PushControlStyle() {
             const auto &metrics = DesignSystem::MetricsFor(Theme::GetActiveTokens(), ComponentSize::Small);
             ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2{metrics.paddingX, metrics.paddingY});
             ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, Theme::GetActiveTokens().radii.control);
             ImGui::PushStyleVar(ImGuiStyleVar_FrameBorderSize, 1.0F);
-            ImGui::PushStyleColor(ImGuiCol_FrameBg, Theme::Bg3());
-            ImGui::PushStyleColor(ImGuiCol_FrameBgHovered, Theme::Hover());
-            ImGui::PushStyleColor(ImGuiCol_FrameBgActive, Theme::Hover());
-            ImGui::PushStyleColor(ImGuiCol_Border, Theme::Border());
-            ImGui::PushStyleColor(ImGuiCol_Text, Theme::Text());
+            PushControlColors(Theme::Bg3(), Theme::Border(), Theme::Text());
         }
 
         void PushInspectorControlStyle() {
@@ -73,11 +86,7 @@ namespace Horo::Editor::Ui {
             ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2{8.0F * scale, 7.0F * scale});
             ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, Theme::GetActiveTokens().radii.control);
             ImGui::PushStyleVar(ImGuiStyleVar_FrameBorderSize, 1.0F);
-            ImGui::PushStyleColor(ImGuiCol_FrameBg, Theme::InspectorFieldSurface());
-            ImGui::PushStyleColor(ImGuiCol_FrameBgHovered, Theme::Hover());
-            ImGui::PushStyleColor(ImGuiCol_FrameBgActive, Theme::Hover());
-            ImGui::PushStyleColor(ImGuiCol_Border, Theme::InspectorBorder());
-            ImGui::PushStyleColor(ImGuiCol_Text, Theme::Text());
+            PushControlColors(Theme::InspectorFieldSurface(), Theme::InspectorBorder(), Theme::Text());
         }
 
         void PopControlStyle() {
@@ -130,17 +139,9 @@ namespace Horo::Editor::Ui {
             ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, layout.controlPadding);
             ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, Theme::GetActiveTokens().radii.control);
             ImGui::PushStyleVar(ImGuiStyleVar_FrameBorderSize, 1.0F);
-            ImGui::PushStyleColor(ImGuiCol_FrameBg, Theme::InspectorTitleFieldSurface());
-            ImGui::PushStyleColor(ImGuiCol_FrameBgHovered, Theme::Hover());
-            ImGui::PushStyleColor(ImGuiCol_FrameBgActive, Theme::Hover());
-            ImGui::PushStyleColor(ImGuiCol_Border, Theme::InspectorBorder());
-            ImGui::PushStyleColor(ImGuiCol_Text, Theme::Text());
-            if (props.error) {
-                ImGui::PushStyleColor(ImGuiCol_FrameBg, Theme::ErrSoft());
-                ImGui::PushStyleColor(ImGuiCol_FrameBgHovered, Theme::ErrSoft());
-                ImGui::PushStyleColor(ImGuiCol_FrameBgActive, Theme::ErrSoft());
-                ImGui::PushStyleColor(ImGuiCol_Border, Theme::Err());
-            }
+            PushControlColors(Theme::InspectorTitleFieldSurface(), Theme::InspectorBorder(), Theme::Text());
+            if (props.error)
+                PushErrorControlColors();
             const float titleFontSize = InspectorTypography::ObjectTitle * Theme::GetActiveTokens().sizes.uiScale;
             bool submitted = false;
             {
@@ -204,13 +205,19 @@ namespace Horo::Editor::Ui {
             ImGui::SetCursorScreenPos({layout.position.x, layout.position.y + layout.height});
         }
 
-        void PushContextPopupWindowStyle() {
+        /** @brief Pushes popup styling shared by context and menu-bar surfaces. */
+        void PushPopupWindowStyle(const bool suppressItemSpacing) {
             ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, {ScaledLayoutValue(4.0F), ScaledLayoutValue(4.0F)});
             ImGui::PushStyleVar(ImGuiStyleVar_PopupRounding, Theme::GetActiveTokens().radii.control);
             ImGui::PushStyleVar(ImGuiStyleVar_PopupBorderSize, 1.0F);
-            ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, {0.0F, 0.0F});
+            if (suppressItemSpacing)
+                ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, {0.0F, 0.0F});
             ImGui::PushStyleColor(ImGuiCol_PopupBg, Theme::MenuSurface());
             ImGui::PushStyleColor(ImGuiCol_Border, Theme::MenuBorder());
+        }
+
+        void PushContextPopupWindowStyle() {
+            PushPopupWindowStyle(true);
         }
 
         void PopContextPopupWindowStyle() {
@@ -219,11 +226,7 @@ namespace Horo::Editor::Ui {
         }
 
         void PushMenuDropdownWindowStyle() {
-            ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, {ScaledLayoutValue(4.0F), ScaledLayoutValue(4.0F)});
-            ImGui::PushStyleVar(ImGuiStyleVar_PopupRounding, Theme::GetActiveTokens().radii.control);
-            ImGui::PushStyleVar(ImGuiStyleVar_PopupBorderSize, 1.0F);
-            ImGui::PushStyleColor(ImGuiCol_PopupBg, Theme::MenuSurface());
-            ImGui::PushStyleColor(ImGuiCol_Border, Theme::MenuBorder());
+            PushPopupWindowStyle(false);
         }
 
         void PopMenuDropdownWindowStyle() {
@@ -1336,12 +1339,8 @@ namespace Horo::Editor::Ui {
         ImGui::PushStyleVar(ImGuiStyleVar_ItemInnerSpacing, ImVec2{8.0F, 0.0F});
         ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, Theme::GetActiveTokens().radii.control);
         ImGui::PushStyleVar(ImGuiStyleVar_FrameBorderSize, 1.0F);
-        ImGui::PushStyleColor(ImGuiCol_FrameBg, Theme::Bg3());
-        ImGui::PushStyleColor(ImGuiCol_FrameBgHovered, Theme::Hover());
-        ImGui::PushStyleColor(ImGuiCol_FrameBgActive, Theme::Hover());
-        ImGui::PushStyleColor(ImGuiCol_Border, Theme::Border());
+        PushControlColors(Theme::Bg3(), Theme::Border(), Theme::Muted());
         ImGui::PushStyleColor(ImGuiCol_CheckMark, Theme::Accent());
-        ImGui::PushStyleColor(ImGuiCol_Text, Theme::Muted());
 
         bool clicked = false;
         {
@@ -2199,12 +2198,8 @@ namespace Horo::Editor::Ui {
         ImGui::PushID(id);
         ImGui::PushItemWidth(layout.controlWidth);
         PushInspectorControlStyle();
-        if (options.error) {
-            ImGui::PushStyleColor(ImGuiCol_FrameBg, Theme::ErrSoft());
-            ImGui::PushStyleColor(ImGuiCol_FrameBgHovered, Theme::ErrSoft());
-            ImGui::PushStyleColor(ImGuiCol_FrameBgActive, Theme::ErrSoft());
-            ImGui::PushStyleColor(ImGuiCol_Border, Theme::Err());
-        }
+        if (options.error)
+            PushErrorControlColors();
         PropertyEditResult result;
         {
             Theme::ScopedTextStyle ts(fonts.sans, InspectorTypography::Field * Theme::GetActiveTokens().sizes.uiScale, Theme::FontPx::Sans);
@@ -2228,12 +2223,8 @@ namespace Horo::Editor::Ui {
         ImGui::PushID(id);
         ImGui::PushItemWidth(layout.controlWidth);
         PushInspectorControlStyle();
-        if (error) {
-            ImGui::PushStyleColor(ImGuiCol_FrameBg, Theme::ErrSoft());
-            ImGui::PushStyleColor(ImGuiCol_FrameBgHovered, Theme::ErrSoft());
-            ImGui::PushStyleColor(ImGuiCol_FrameBgActive, Theme::ErrSoft());
-            ImGui::PushStyleColor(ImGuiCol_Border, Theme::Err());
-        }
+        if (error)
+            PushErrorControlColors();
         PropertyEditResult result;
         {
             Theme::ScopedTextStyle ts(fonts.sans, InspectorTypography::Field * Theme::GetActiveTokens().sizes.uiScale, Theme::FontPx::Sans);

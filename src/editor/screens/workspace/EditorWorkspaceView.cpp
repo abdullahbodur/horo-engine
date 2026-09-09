@@ -84,6 +84,20 @@ namespace Horo::Editor {
             return 3;
         }
 
+        /** @brief Begins an opaque border-backed workspace surface with shared window styling. */
+        void BeginWorkspaceSurface(const char *id, const ImVec2 position, const ImVec2 size, const ImVec2 padding,
+                                   const ImGuiWindowFlags flags) {
+            ImGui::SetNextWindowPos(position);
+            ImGui::SetNextWindowSize(size);
+            ImGui::SetNextWindowBgAlpha(1.0F);
+            ImGui::PushStyleColor(ImGuiCol_WindowBg, Theme::Bg1());
+            ImGui::PushStyleColor(ImGuiCol_Border, Theme::Border());
+            ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 0.0F);
+            ImGui::PushStyleVar(ImGuiStyleVar_WindowBorderSize, 1.0F);
+            ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, padding);
+            ImGui::Begin(id, nullptr, flags);
+        }
+
         void DrawAllocationTarget(const AllocationTarget &target, const EditorWorkspaceViewModel &viewModel,
                                   EditorWorkspaceViewCommandData &outCommand, const bool panelDragEligible) {
             if (target.hitSize.x <= 0.0F || target.hitSize.y <= 0.0F) {
@@ -360,6 +374,17 @@ namespace Horo::Editor {
 
     bool EditorWorkspaceView::PanelDragEligible() const noexcept {
         return m_panelDragCapture.IsActive() && m_inputRouter.IsContextActive(m_panelDragContext);
+    }
+
+    /** @copydoc EditorWorkspaceView::DrawActivityPanelDragSource */
+    void EditorWorkspaceView::DrawActivityPanelDragSource(const std::string &panelId, const std::shared_ptr<IWorkspacePanel> &panel) {
+        if (!ImGui::BeginDragDropSource(ImGuiDragDropFlags_SourceAllowNullID))
+            return;
+        if (EnsurePanelDragCapture()) {
+            ImGui::SetDragDropPayload("HORO_ACTIVITY_BAR_PANEL", panelId.c_str(), panelId.size() + 1);
+            ImGui::TextUnformatted(panel->GetDisplayName().c_str());
+        }
+        ImGui::EndDragDropSource();
     }
 
     void EditorWorkspaceView::OnInputCaptureCancelled(Input::CaptureCancellationReason) noexcept {
@@ -683,18 +708,9 @@ namespace Horo::Editor {
 
     void EditorWorkspaceView::DrawToolbar(const ImVec2 &pos, const ImVec2 &size, const EditorWorkspaceViewModel &viewModel,
                                           EditorWorkspaceViewCommandData &outCommand) {
-        ImGui::SetNextWindowPos(pos);
-        ImGui::SetNextWindowSize(size);
-        ImGui::SetNextWindowBgAlpha(1.0F);
-        ImGui::PushStyleColor(ImGuiCol_WindowBg, Theme::Bg1());
-        ImGui::PushStyleColor(ImGuiCol_Border, Theme::Border());
-        ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 0.0F);
-        ImGui::PushStyleVar(ImGuiStyleVar_WindowBorderSize, 1.0F);
-        ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(10.0F, 0.0F));
-
-        ImGui::Begin("##Toolbar", nullptr,
-                     ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoScrollbar |
-                         ImGuiWindowFlags_NoSavedSettings);
+        BeginWorkspaceSurface("##Toolbar", pos, size, {10.0F, 0.0F},
+                              ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove |
+                                  ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoSavedSettings);
 
         ImDrawList *dl = ImGui::GetWindowDrawList();
 
@@ -854,13 +870,8 @@ namespace Horo::Editor {
             outCommand.targetIndex = static_cast<int>(WorkspaceDockArea::Document);
             outCommand.stringPayload = panelId;
         }
-        if (!m_splitterInteraction.OwnsPrimaryPointer() && ImGui::BeginDragDropSource(ImGuiDragDropFlags_SourceAllowNullID)) {
-            if (EnsurePanelDragCapture()) {
-                ImGui::SetDragDropPayload("HORO_ACTIVITY_BAR_PANEL", panelId.c_str(), panelId.size() + 1);
-                ImGui::TextUnformatted(panel->GetDisplayName().c_str());
-            }
-            ImGui::EndDragDropSource();
-        }
+        if (!m_splitterInteraction.OwnsPrimaryPointer())
+            DrawActivityPanelDragSource(panelId, panel);
         const bool active = panelId == viewModel.activeDocumentPanelId;
         const ImVec2 itemMin(tabX, tabY);
         const ImVec2 itemMax(tabX + tabWidth, tabY + tabHeight);
@@ -1030,17 +1041,9 @@ namespace Horo::Editor {
 
         const auto &panels = m_panelRegistry.GetAllPanels();
 
-        ImGui::SetNextWindowPos(pos);
-        ImGui::SetNextWindowSize(size);
-        ImGui::SetNextWindowBgAlpha(1.0F);
-        ImGui::PushStyleColor(ImGuiCol_WindowBg, Theme::Bg1());
-        ImGui::PushStyleColor(ImGuiCol_Border, Theme::Border());
-        ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 0.0F);
-        ImGui::PushStyleVar(ImGuiStyleVar_WindowBorderSize, 1.0F);
-        ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0.0F, 0.0F));
-
-        ImGui::Begin(windowId, nullptr,
-                     ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoSavedSettings);
+        BeginWorkspaceSurface(windowId, pos, size, {0.0F, 0.0F},
+                              ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove |
+                                  ImGuiWindowFlags_NoSavedSettings);
 
         std::shared_ptr<IWorkspacePanel> activePanel = nullptr;
         for (const auto &p : panels) {
@@ -1241,19 +1244,11 @@ namespace Horo::Editor {
     void EditorWorkspaceView::DrawActivityBar(const ImVec2 &pos, const ImVec2 &size, const WorkspacePanelRegistry &,
                                               const EditorWorkspaceViewModel &viewModel, EditorWorkspaceViewCommandData &outCommand,
                                               const ActivityBarOptions options) {
-        ImGui::SetNextWindowPos(pos);
-        ImGui::SetNextWindowSize(size);
-        ImGui::SetNextWindowBgAlpha(1.0F);
-        ImGui::PushStyleColor(ImGuiCol_WindowBg, Theme::Bg1());
-        ImGui::PushStyleColor(ImGuiCol_Border, Theme::Border());
-        ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 0.0F);
-        ImGui::PushStyleVar(ImGuiStyleVar_WindowBorderSize, 1.0F);
-        ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0.0F, 6.0F));
-
         const char *windowId = options.indicatorOnRight ? "##ActivityRight" : "##ActivityLeft";
-        ImGui::Begin(windowId, nullptr,
-                     ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoScrollbar |
-                         ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoNavInputs | ImGuiWindowFlags_NoNavFocus);
+        BeginWorkspaceSurface(windowId, pos, size, {0.0F, 6.0F},
+                              ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove |
+                                  ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoNavInputs |
+                                  ImGuiWindowFlags_NoNavFocus);
 
         ImDrawList *drawList = ImGui::GetWindowDrawList();
         const ImVec2 windowPos = ImGui::GetWindowPos();
@@ -1356,13 +1351,8 @@ namespace Horo::Editor {
             outCommand.targetIndex = ActivityBarAreaIndex(panelArea);
             outCommand.stringPayload = isActive && !activeInBottomSplit && !activeInSideSplit ? std::string{} : panelId;
         }
-        if (options.allowDragSources && ImGui::BeginDragDropSource(ImGuiDragDropFlags_SourceAllowNullID)) {
-            if (EnsurePanelDragCapture()) {
-                ImGui::SetDragDropPayload("HORO_ACTIVITY_BAR_PANEL", panelId.c_str(), panelId.size() + 1);
-                ImGui::TextUnformatted(panel->GetDisplayName().c_str());
-            }
-            ImGui::EndDragDropSource();
-        }
+        if (options.allowDragSources)
+            DrawActivityPanelDragSource(panelId, panel);
         const bool hovered = ImGui::IsItemHovered();
         ImGui::PopID();
 

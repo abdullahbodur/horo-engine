@@ -75,6 +75,13 @@ namespace Horo::Editor {
         [[nodiscard]] bool EnsurePanelDragCapture();
         [[nodiscard]] bool PanelDragEligible() const noexcept;
 
+        /**
+         * @brief Draws the shared activity/document panel drag source payload.
+         * @param panelId Stable workspace panel identifier used as the payload.
+         * @param panel Panel supplying the drag-preview label.
+         */
+        void DrawActivityPanelDragSource(const std::string &panelId, const std::shared_ptr<IWorkspacePanel> &panel);
+
         void DrawMenuBar(const ImVec2 &display, const EditorWorkspaceViewModel &viewModel,
                          EditorWorkspaceViewCommandData &outCommand) const;
 

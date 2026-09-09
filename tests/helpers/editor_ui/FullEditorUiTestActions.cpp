@@ -142,6 +142,16 @@ namespace Horo::Tests::FullEditorActions {
             });
         }
 
+        /** @brief Waits for the asset card and opens one of its context actions. */
+        void OpenAssetCardAction(ImGuiTestContext &ui, const char *actionPath) {
+            for (int frame = 0; frame < 30 && !ui.ItemExists("//**/##AssetCard"); ++frame)
+                ui.Yield();
+            IM_CHECK(ui.ItemExists("//**/##AssetCard"));
+            ui.ItemClick("//**/##AssetCard", ImGuiMouseButton_Right);
+            ui.ItemClick(actionPath);
+            ui.Yield();
+        }
+
         void AddContentBrowserStep(UiScenarioPipe &pipeline) {
             pipeline.Step("Create and navigate an Asset Browser folder", [](ImGuiTestContext &ui) {
                 if (!ui.ItemExists("//**/Assets")) {
@@ -171,28 +181,16 @@ namespace Horo::Tests::FullEditorActions {
                 ui.ItemClick("//**/Create Folder");
                 ui.Yield();
 
-                for (int frame = 0; frame < 30 && !ui.ItemExists("//**/##AssetCard"); ++frame)
-                    ui.Yield();
-                IM_CHECK(ui.ItemExists("//**/##AssetCard"));
-                ui.ItemClick("//**/##AssetCard", ImGuiMouseButton_Right);
-                ui.ItemClick("//**/###content_browser_action_asset_info");
-                ui.Yield();
+                OpenAssetCardAction(ui, "//**/###content_browser_action_asset_info");
                 ui.KeyPress(ImGuiKey_Escape);
                 ui.Yield();
 
-                ui.ItemClick("//**/##AssetCard", ImGuiMouseButton_Right);
-                ui.ItemClick("//**/###content_browser_action_rename");
-                ui.Yield();
+                OpenAssetCardAction(ui, "//**/###content_browser_action_rename");
                 ui.ItemInputValue("//**/##ContentBrowserRenameInput", "RenamedCoverageFolder");
                 ui.ItemClick("//**/Cancel");
                 ui.Yield();
 
-                for (int frame = 0; frame < 30 && !ui.ItemExists("//**/##AssetCard"); ++frame)
-                    ui.Yield();
-                IM_CHECK(ui.ItemExists("//**/##AssetCard"));
-                ui.ItemClick("//**/##AssetCard", ImGuiMouseButton_Right);
-                ui.ItemClick("//**/###content_browser_action_delete");
-                ui.Yield();
+                OpenAssetCardAction(ui, "//**/###content_browser_action_delete");
                 ui.ItemClick("//**/Cancel");
             });
         }

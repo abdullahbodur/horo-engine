@@ -151,40 +151,36 @@ namespace Horo::Editor {
             state.initialized = true;
         }
 
-        [[nodiscard]] bool HasIdentityBlockingDiagnostic(const ProjectCreationValidation &validation) {
+        /** @brief Reports whether a diagnostic prevents advancing past project identity input. */
+        [[nodiscard]] bool IsIdentityBlockingDiagnostic(const ProjectCreationDiagnosticCode code) noexcept {
             using enum ProjectCreationDiagnosticCode;
+            switch (code) {
+                case ProjectNameRequired:
+                case ProjectNameContainsPathSeparator:
+                case ProjectPathRequired:
+                case ProjectPathOccupied:
+                case ProjectPathNotDirectory:
+                case ProjectPathInaccessible:
+                case ProjectParentNotWritable:
+                    return true;
+                case RendererBackendUnavailable:
+                    return false;
+            }
+            return false;
+        }
+
+        [[nodiscard]] bool HasIdentityBlockingDiagnostic(const ProjectCreationValidation &validation) {
             for (const ProjectCreationDiagnostic &diagnostic : validation.diagnostics) {
-                switch (diagnostic.code) {
-                    case ProjectNameRequired:
-                    case ProjectNameContainsPathSeparator:
-                    case ProjectPathRequired:
-                    case ProjectPathOccupied:
-                    case ProjectPathNotDirectory:
-                    case ProjectPathInaccessible:
-                    case ProjectParentNotWritable:
-                        return true;
-                    case RendererBackendUnavailable:
-                        break;
-                }
+                if (IsIdentityBlockingDiagnostic(diagnostic.code))
+                    return true;
             }
             return false;
         }
 
         [[nodiscard]] const ProjectCreationDiagnostic *FirstIdentityBlockingDiagnostic(const ProjectCreationValidation &validation) {
-            using enum ProjectCreationDiagnosticCode;
             for (const ProjectCreationDiagnostic &diagnostic : validation.diagnostics) {
-                switch (diagnostic.code) {
-                    case ProjectNameRequired:
-                    case ProjectNameContainsPathSeparator:
-                    case ProjectPathRequired:
-                    case ProjectPathOccupied:
-                    case ProjectPathNotDirectory:
-                    case ProjectPathInaccessible:
-                    case ProjectParentNotWritable:
-                        return &diagnostic;
-                    case RendererBackendUnavailable:
-                        break;
-                }
+                if (IsIdentityBlockingDiagnostic(diagnostic.code))
+                    return &diagnostic;
             }
             return nullptr;
         }

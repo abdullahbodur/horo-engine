@@ -232,31 +232,18 @@ TEST_CASE("Workspace popup rows keep the design-system menu geometry", "[unit][e
     using namespace Horo::Editor;
     using namespace Horo::Editor::Ui;
 
-    IMGUI_CHECKVERSION();
-    ImGui::CreateContext();
-    ImGuiIO &io = ImGui::GetIO();
-    io.DisplaySize = {640.0F, 480.0F};
-    io.DeltaTime = 1.0F / 60.0F;
-    io.Fonts->AddFontDefault();
-    static_cast<void>(io.Fonts->Build());
-    ImFont *defaultFont = io.Fonts->Fonts.front();
-    const Theme::Fonts fonts{
-        .sans = defaultFont,
-        .sansCompact = defaultFont,
-        .sansEmphasis = defaultFont,
-        .icon = defaultFont,
-    };
+    ImGuiTestContext imgui{{640.0F, 480.0F}};
 
     ImGui::NewFrame();
     ImGui::Begin("PopupGeometryTest");
     ImGui::OpenPopup("##popup");
     REQUIRE(BeginMenuPopup("##popup"));
-    static_cast<void>(ContextMenuItem("Create", nullptr, fonts));
+    static_cast<void>(ContextMenuItem("Create", nullptr, imgui.fonts));
     const float rowHeight = ImGui::GetItemRectSize().y;
     const float popupWidth = ImGui::GetWindowWidth();
     ImGui::OpenPopup("##submenu_popup_GameObject###submenu");
-    REQUIRE(BeginContextSubmenu("GameObject###submenu", fonts));
-    static_cast<void>(ContextMenuItem("Box", nullptr, fonts));
+    REQUIRE(BeginContextSubmenu("GameObject###submenu", imgui.fonts));
+    static_cast<void>(ContextMenuItem("Box", nullptr, imgui.fonts));
     EndContextSubmenu();
     EndMenuPopup();
     ImGui::End();
@@ -265,35 +252,20 @@ TEST_CASE("Workspace popup rows keep the design-system menu geometry", "[unit][e
     REQUIRE(rowHeight == Catch::Approx(30.0F));
     REQUIRE(popupWidth >= 176.0F);
     REQUIRE(popupWidth < 224.0F);
-
-    ImGui::DestroyContext();
 }
 
 TEST_CASE("Menu-bar dropdowns reuse workspace popup rows", "[unit][editor][gui][design-system]") {
     using namespace Horo::Editor;
     using namespace Horo::Editor::Ui;
 
-    IMGUI_CHECKVERSION();
-    ImGui::CreateContext();
-    ImGuiIO &io = ImGui::GetIO();
-    io.DisplaySize = {640.0F, 480.0F};
-    io.DeltaTime = 1.0F / 60.0F;
-    io.Fonts->AddFontDefault();
-    static_cast<void>(io.Fonts->Build());
-    ImFont *defaultFont = io.Fonts->Fonts.front();
-    const Theme::Fonts fonts{
-        .sans = defaultFont,
-        .sansCompact = defaultFont,
-        .sansEmphasis = defaultFont,
-        .icon = defaultFont,
-    };
+    ImGuiTestContext imgui{{640.0F, 480.0F}};
 
     ImGui::NewFrame();
     ImGui::Begin("MenuBarDropdownTest", nullptr, ImGuiWindowFlags_MenuBar);
     REQUIRE(ImGui::BeginMenuBar());
     ImGui::OpenPopup("Window");
-    REQUIRE(BeginMenuDropdown("Window", fonts));
-    static_cast<void>(ContextMenuItem("Workspace", nullptr, fonts));
+    REQUIRE(BeginMenuDropdown("Window", imgui.fonts));
+    static_cast<void>(ContextMenuItem("Workspace", nullptr, imgui.fonts));
     const float rowHeight = ImGui::GetItemRectSize().y;
     const float popupWidth = ImGui::GetWindowWidth();
     EndMenuDropdown();
@@ -304,8 +276,6 @@ TEST_CASE("Menu-bar dropdowns reuse workspace popup rows", "[unit][editor][gui][
     REQUIRE(rowHeight == Catch::Approx(30.0F));
     REQUIRE(popupWidth >= 176.0F);
     REQUIRE(popupWidth < 224.0F);
-
-    ImGui::DestroyContext();
 }
 
 TEST_CASE("Component metrics use theme overrides while global scaling is disabled", "[unit][editor][gui][design-system]") {
@@ -352,15 +322,8 @@ TEST_CASE("Small toolbar primitives share height and fixed action width", "[unit
     using namespace Horo::Editor::Ui;
 
     Theme::SetUiScalePercent(100);
-    IMGUI_CHECKVERSION();
-    ImGui::CreateContext();
-    ImGuiIO &io = ImGui::GetIO();
-    io.DisplaySize = {800.0F, 240.0F};
-    io.DeltaTime = 1.0F / 60.0F;
-    io.Fonts->AddFontDefault();
-    static_cast<void>(io.Fonts->Build());
-    ImFont *defaultFont = io.Fonts->Fonts.front();
-    const Theme::Fonts fonts{.sans = defaultFont, .sansCompact = defaultFont, .sansEmphasis = defaultFont};
+    ImGuiTestContext imgui{{800.0F, 240.0F}};
+    ImFont *defaultFont = imgui.fonts.sans;
 
     ImVec2 inputSize{};
     ImVec2 buttonSize{};
@@ -374,7 +337,7 @@ TEST_CASE("Small toolbar primitives share height and fixed action width", "[unit
 
     ImGui::NewFrame();
     ImGui::Begin("ToolbarPrimitiveGeometry");
-    static_cast<void>(InputTextControl("##Search", search.data(), search.size(), fonts,
+    static_cast<void>(InputTextControl("##Search", search.data(), search.size(), imgui.fonts,
                                        InputTextOptions{.width = 180.0F, .hint = "Filter...", .componentSize = ComponentSize::Small}));
     inputSize = ImGui::GetItemRectSize();
     ImGui::SameLine();
@@ -387,11 +350,11 @@ TEST_CASE("Small toolbar primitives share height and fixed action width", "[unit
     buttonSize = ImGui::GetItemRectSize();
     ImGui::SameLine();
     ImGui::SetNextItemWidth(104.0F);
-    static_cast<void>(ComboControl("##Status", &status, statuses.data(), static_cast<int>(statuses.size()), fonts,
+    static_cast<void>(ComboControl("##Status", &status, statuses.data(), static_cast<int>(statuses.size()), imgui.fonts,
                                    ComboControlOptions{.componentSize = ComponentSize::Small}));
     comboSize = ImGui::GetItemRectSize();
     ImGui::SameLine();
-    static_cast<void>(MultiSelectField("##Columns", "Columns", columns, visible, fonts, 104.0F, ComponentSize::Small));
+    static_cast<void>(MultiSelectField("##Columns", "Columns", columns, visible, imgui.fonts, 104.0F, ComponentSize::Small));
     multiSelectSize = ImGui::GetItemRectSize();
     ImGui::End();
     ImGui::Render();
@@ -402,26 +365,13 @@ TEST_CASE("Small toolbar primitives share height and fixed action width", "[unit
     REQUIRE(inputSize.y == Catch::Approx(buttonSize.y).margin(0.1F));
     REQUIRE(comboSize.y == Catch::Approx(buttonSize.y).margin(0.1F));
     REQUIRE(multiSelectSize.y == Catch::Approx(buttonSize.y).margin(0.1F));
-    ImGui::DestroyContext();
 }
 
 TEST_CASE("Shared modal shell composes badge split panes and fixed footer", "[unit][editor][gui][design-system]") {
     using namespace Horo::Editor;
     using namespace Horo::Editor::Ui;
 
-    IMGUI_CHECKVERSION();
-    ImGui::CreateContext();
-    ImGuiIO &io = ImGui::GetIO();
-    io.DisplaySize = ImVec2(1280.0F, 720.0F);
-    io.DeltaTime = 1.0F / 60.0F;
-    io.Fonts->AddFontDefault();
-    static_cast<void>(io.Fonts->Build());
-    ImFont *defaultFont = io.Fonts->Fonts.front();
-    const Theme::Fonts fonts{
-        .sans = defaultFont,
-        .sansCompact = defaultFont,
-        .sansEmphasis = defaultFont,
-    };
+    ImGuiTestContext imgui{{1280.0F, 720.0F}};
 
     ImGui::NewFrame();
     bool drewLeading = false;
@@ -437,7 +387,7 @@ TEST_CASE("Shared modal shell composes badge split panes and fixed footer", "[un
                 .headerHeight = 56.0F,
                 .footerHeight = 64.0F,
             },
-            fonts);
+            imgui.fonts);
         REQUIRE((modal.BodyHeight() > 0.0F));
         REQUIRE((modal.FooterStartY() > modal.BodyHeight()));
         REQUIRE_FALSE(modal.CloseRequested());
@@ -452,7 +402,7 @@ TEST_CASE("Shared modal shell composes badge split panes and fixed footer", "[un
             .size = BadgeSize::Medium,
             .leadingIndicator = true,
         };
-        REQUIRE((BadgeWidth(statusPill, fonts) > BadgeWidth(smallBadge, fonts)));
+        REQUIRE((BadgeWidth(statusPill, imgui.fonts) > BadgeWidth(smallBadge, imgui.fonts)));
 
         ModalSplitPane(
             {
@@ -462,12 +412,12 @@ TEST_CASE("Shared modal shell composes badge split panes and fixed footer", "[un
             },
             [&]() {
             drewLeading = true;
-            Badge(smallBadge, fonts);
+            Badge(smallBadge, imgui.fonts);
         }, [&]() {
             drewContent = true;
             const ImVec2 spacing = ImGui::GetStyle().ItemSpacing;
             preservedContentSpacing = spacing.x == 13.0F && spacing.y == 9.0F;
-            Badge(statusPill, fonts);
+            Badge(statusPill, imgui.fonts);
         });
         modal.BeginFooter({20.0F, 12.0F});
         ImGui::TextUnformatted("Footer");
@@ -478,19 +428,13 @@ TEST_CASE("Shared modal shell composes badge split panes and fixed footer", "[un
     REQUIRE(drewLeading);
     REQUIRE(drewContent);
     REQUIRE(preservedContentSpacing);
-    ImGui::DestroyContext();
 }
 
 TEST_CASE("Selectable text block copies a selection spanning multiple lines", "[unit][editor][gui][design-system]") {
     using namespace Horo::Editor::Ui;
 
-    IMGUI_CHECKVERSION();
-    ImGui::CreateContext();
-    ImGuiIO &io = ImGui::GetIO();
-    io.DisplaySize = {640.0F, 360.0F};
-    io.DeltaTime = 1.0F / 60.0F;
-    io.Fonts->AddFontDefault();
-    static_cast<void>(io.Fonts->Build());
+    ImGuiTestContext imgui{{640.0F, 360.0F}};
+    ImGuiIO &io = *imgui.io;
     ImGui::GetPlatformIO().Platform_SetClipboardTextFn = CaptureClipboardText;
 
     std::string text{"first line\nsecond line\nthird line"};
@@ -548,27 +492,13 @@ TEST_CASE("Selectable text block copies a selection spanning multiple lines", "[
     ImGui::Render();
 
     REQUIRE(gClipboardText == text);
-
-    ImGui::DestroyContext();
 }
 
 TEST_CASE("Editable object title keeps its compact input vertically centered", "[unit][editor][gui][design-system]") {
     using namespace Horo::Editor;
     using namespace Horo::Editor::Ui;
 
-    IMGUI_CHECKVERSION();
-    ImGui::CreateContext();
-    ImGuiIO &io = ImGui::GetIO();
-    io.DisplaySize = {480.0F, 240.0F};
-    io.DeltaTime = 1.0F / 60.0F;
-    io.Fonts->AddFontDefault();
-    static_cast<void>(io.Fonts->Build());
-    ImFont *defaultFont = io.Fonts->Fonts.front();
-    const Theme::Fonts fonts{
-        .sans = defaultFont,
-        .sansCompact = defaultFont,
-        .sansEmphasis = defaultFont,
-    };
+    ImGuiTestContext imgui{{480.0F, 240.0F}};
 
     ImGui::NewFrame();
     ImGui::SetNextWindowPos({20.0F, 20.0F});
@@ -576,7 +506,8 @@ TEST_CASE("Editable object title keeps its compact input vertically centered", "
     ImGui::Begin("EditableObjectTitleTest");
     const ImVec2 titleOrigin = ImGui::GetCursorScreenPos();
     std::string value{"Box"};
-    static_cast<void>(DrawEditableTitle("object_name", value, 128U, fonts, {.leadingIcon = UiIcon::HierarchyMesh, .trailingWidth = 88.0F}));
+    static_cast<void>(
+        DrawEditableTitle("object_name", value, 128U, imgui.fonts, {.leadingIcon = UiIcon::HierarchyMesh, .trailingWidth = 88.0F}));
     const ImVec2 inputMinimum = ImGui::GetItemRectMin();
     const ImVec2 inputMaximum = ImGui::GetItemRectMax();
     ImGui::End();
@@ -588,6 +519,4 @@ TEST_CASE("Editable object title keeps its compact input vertically centered", "
     INFO("top padding: " << topPadding << ", bottom padding: " << bottomPadding);
     REQUIRE((inputMaximum.y - inputMinimum.y == Catch::Approx(30.0F).margin(1.0F)));
     REQUIRE((std::fabs(topPadding - bottomPadding) <= 1.0F));
-
-    ImGui::DestroyContext();
 }
