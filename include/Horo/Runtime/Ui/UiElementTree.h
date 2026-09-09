@@ -201,6 +201,11 @@ namespace Horo::Runtime::Ui {
     private:
         struct Storage;
         explicit UiElementTree(std::unique_ptr<Storage> state) noexcept;
+        /** @brief Validates lifecycle, safe point, target identities, revisions, and batch bounds before candidate allocation. */
+        [[nodiscard]] Result<void> ValidateCommitRequest(const UiStructuralCommandBuffer &buffer, UiStructuralCommitPoint point) const;
+        /** @brief Applies a validated non-empty batch to a detached candidate and atomically publishes it. */
+        [[nodiscard]] Result<UiStructuralCommitResult> PublishCandidate(const UiStructuralCommandBuffer &buffer,
+                                                                        UiRuntimeTreeRevision nextRevision);
         std::unique_ptr<Storage> state_;
     };
 }  // namespace Horo::Runtime::Ui

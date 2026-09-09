@@ -204,6 +204,46 @@ namespace Horo::Runtime::Ui {
             return RebuildPreorder();
         }
 
+        /** @brief Initializes occupied slots without publishing partially validated topology. */
+        Result<void> InitializeNodes(const std::span<const UiElementDescriptor> elements) {
+            for (std::uint32_t slot = 0; slot < elements.size(); ++slot) {
+                if (!elements[slot].id.IsValid())
+                    return Failure(UiErrors::ElementTreeInvalid);
+                nodes[slot].id = elements[slot].id;
+                nodes[slot].generation = 1;
+                nodes[slot].occupied = true;
+            }
+            size = static_cast<std::uint32_t>(elements.size());
+            return RebuildIndex();
+        }
+
+        /** @brief Resolves stable parent identities and preserves authored sibling order. */
+        Result<void> LinkNodes(const std::span<const UiElementDescriptor> elements) {
+            std::uint32_t roots{};
+            for (std::uint32_t slot = 0; slot < elements.size(); ++slot) {
+                if (!elements[slot].parent.IsValid()) {
+                    rootSlot = slot;
+                    ++roots;
+                    continue;
+                }
+                const auto parent = FindSlot(elements[slot].parent);
+                if (parent == std::numeric_limits<std::uint32_t>::max())
+                    return Failure(UiErrors::ElementTreeInvalid);
+                nodes[slot].parentSlot = parent + 1;
+                nodes[parent].children.push_back(slot);
+            }
+            return roots == 1 ? Result<void>::Success() : Failure(UiErrors::ElementTreeInvalid);
+        }
+
+        /** @brief Builds and validates a complete initial retained-tree candidate. */
+        Result<void> Populate(const std::span<const UiElementDescriptor> elements) {
+            if (const auto initialized = InitializeNodes(elements); initialized.HasError())
+                return initialized;
+            if (const auto linked = LinkNodes(elements); linked.HasError())
+                return linked;
+            return RebuildPreorder();
+        }
+
         /** @brief Finds the first reusable slot without ever wrapping its generation. */
         Result<std::uint32_t> AcquireSlot() {
             for (std::uint32_t slot = 0; slot < nodes.size(); ++slot) {
@@ -312,46 +352,28 @@ namespace Horo::Runtime::Ui {
         }
     };
 
+    namespace {
+        /** @brief Validates immutable creation inputs before allocating a candidate tree. */
+        Result<void> ValidateTreeCreation(const UiElementTreeDescriptor &descriptor, const std::span<const UiElementDescriptor> elements) {
+            if (!SameOwner(descriptor.instance, descriptor.canvas) || !descriptor.document.IsValid())
+                return Failure(UiErrors::ElementTreeInvalid);
+            if (!descriptor.documentRevision.IsValid() || !descriptor.treeRevision.IsValid())
+                return Failure(UiErrors::RevisionInvalid);
+            if (!descriptor.limits.IsValid() || elements.empty() || elements.size() > descriptor.limits.elements)
+                return Failure(UiErrors::CapacityExceeded);
+            return Result<void>::Success();
+        }
+    }  // namespace
+
     /** @copydoc UiElementTree::Create */
     Result<UiElementTree> UiElementTree::Create(const UiElementTreeDescriptor &descriptor,
                                                 const std::span<const UiElementDescriptor> elements) {
-        const bool identityValid = SameOwner(descriptor.instance, descriptor.canvas) && descriptor.document.IsValid();
-        if (!identityValid)
-            return Failure<UiElementTree>(UiErrors::ElementTreeInvalid);
-        if (!descriptor.documentRevision.IsValid() || !descriptor.treeRevision.IsValid())
-            return Failure<UiElementTree>(UiErrors::RevisionInvalid);
-        if (!descriptor.limits.IsValid() || elements.empty() || elements.size() > descriptor.limits.elements)
-            return Failure<UiElementTree>(UiErrors::CapacityExceeded);
+        if (const auto validated = ValidateTreeCreation(descriptor, elements); validated.HasError())
+            return Result<UiElementTree>::Failure(validated.ErrorValue());
         try {
             auto state = std::make_unique<Storage>(descriptor);
-            for (std::uint32_t slot = 0; slot < elements.size(); ++slot) {
-                if (!elements[slot].id.IsValid())
-                    return Failure<UiElementTree>(UiErrors::ElementTreeInvalid);
-                state->nodes[slot].id = elements[slot].id;
-                state->nodes[slot].generation = 1;
-                state->nodes[slot].occupied = true;
-            }
-            state->size = static_cast<std::uint32_t>(elements.size());
-            if (const auto index = state->RebuildIndex(); index.HasError())
-                return Result<UiElementTree>::Failure(index.ErrorValue());
-
-            std::uint32_t roots{};
-            for (std::uint32_t slot = 0; slot < elements.size(); ++slot) {
-                if (!elements[slot].parent.IsValid()) {
-                    state->rootSlot = slot;
-                    ++roots;
-                    continue;
-                }
-                const auto parent = state->FindSlot(elements[slot].parent);
-                if (parent == std::numeric_limits<std::uint32_t>::max())
-                    return Failure<UiElementTree>(UiErrors::ElementTreeInvalid);
-                state->nodes[slot].parentSlot = parent + 1;
-                state->nodes[parent].children.push_back(slot);
-            }
-            if (roots != 1)
-                return Failure<UiElementTree>(UiErrors::ElementTreeInvalid);
-            if (const auto traversal = state->RebuildPreorder(); traversal.HasError())
-                return Result<UiElementTree>::Failure(traversal.ErrorValue());
+            if (const auto populated = state->Populate(elements); populated.HasError())
+                return Result<UiElementTree>::Failure(populated.ErrorValue());
             return Result<UiElementTree>::Success(UiElementTree{std::move(state)});
         } catch (const std::bad_alloc &) {
             return Failure<UiElementTree>(UiErrors::CapacityExceeded);
@@ -454,24 +476,36 @@ namespace Horo::Runtime::Ui {
     /** @copydoc UiElementTree::CommitDeferred */
     Result<UiStructuralCommitResult> UiElementTree::CommitDeferred(const UiStructuralCommandBuffer &buffer,
                                                                    const UiStructuralCommitPoint point) {
-        if (!state_ || state_->lifecycle != UiElementTreeState::Active)
-            return Failure<UiStructuralCommitResult>(UiErrors::ElementTreeLifecycleUnavailable);
-        if (!IsSafePoint(point))
-            return Failure<UiStructuralCommitResult>(UiErrors::StructuralCommandInvalid);
-        if (buffer.Instance() != state_->descriptor.instance || buffer.Canvas() != state_->descriptor.canvas)
-            return Failure<UiStructuralCommitResult>(UiErrors::HandleOwnerMismatch);
-        if (const auto document = ValidateExpectedUiRevision(buffer.DocumentRevision(), state_->descriptor.documentRevision);
-            document.HasError())
-            return Result<UiStructuralCommitResult>::Failure(document.ErrorValue());
-        if (const auto tree = ValidateExpectedUiRevision(buffer.TreeRevision(), state_->descriptor.treeRevision); tree.HasError())
-            return Result<UiStructuralCommitResult>::Failure(tree.ErrorValue());
-        if (buffer.Commands().size() > state_->descriptor.limits.commands)
-            return Failure<UiStructuralCommitResult>(UiErrors::CapacityExceeded);
+        if (const auto validated = ValidateCommitRequest(buffer, point); validated.HasError())
+            return Result<UiStructuralCommitResult>::Failure(validated.ErrorValue());
         if (buffer.Commands().empty())
             return Result<UiStructuralCommitResult>::Success({state_->descriptor.treeRevision, 0, 0});
         auto nextRevision = state_->descriptor.treeRevision.Next();
         if (nextRevision.HasError())
             return Result<UiStructuralCommitResult>::Failure(nextRevision.ErrorValue());
+        return PublishCandidate(buffer, nextRevision.Value());
+    }
+
+    /** @copydoc UiElementTree::ValidateCommitRequest */
+    Result<void> UiElementTree::ValidateCommitRequest(const UiStructuralCommandBuffer &buffer, const UiStructuralCommitPoint point) const {
+        if (!state_ || state_->lifecycle != UiElementTreeState::Active)
+            return Failure(UiErrors::ElementTreeLifecycleUnavailable);
+        if (!IsSafePoint(point))
+            return Failure(UiErrors::StructuralCommandInvalid);
+        if (buffer.Instance() != state_->descriptor.instance || buffer.Canvas() != state_->descriptor.canvas)
+            return Failure(UiErrors::HandleOwnerMismatch);
+        if (const auto document = ValidateExpectedUiRevision(buffer.DocumentRevision(), state_->descriptor.documentRevision);
+            document.HasError())
+            return document;
+        if (const auto tree = ValidateExpectedUiRevision(buffer.TreeRevision(), state_->descriptor.treeRevision); tree.HasError())
+            return tree;
+        return buffer.Commands().size() <= state_->descriptor.limits.commands ? Result<void>::Success()
+                                                                              : Failure(UiErrors::CapacityExceeded);
+    }
+
+    /** @copydoc UiElementTree::PublishCandidate */
+    Result<UiStructuralCommitResult> UiElementTree::PublishCandidate(const UiStructuralCommandBuffer &buffer,
+                                                                     const UiRuntimeTreeRevision nextRevision) {
         try {
             auto candidate = std::make_unique<Storage>(*state_);
             std::uint32_t removed{};
@@ -483,9 +517,8 @@ namespace Horo::Runtime::Ui {
                 if (const auto derived = candidate->RebuildDerived(); derived.HasError())
                     return Result<UiStructuralCommitResult>::Failure(derived.ErrorValue());
             }
-            candidate->descriptor.treeRevision = nextRevision.Value();
-            const auto result =
-                UiStructuralCommitResult{nextRevision.Value(), static_cast<std::uint32_t>(buffer.Commands().size()), removed};
+            candidate->descriptor.treeRevision = nextRevision;
+            const auto result = UiStructuralCommitResult{nextRevision, static_cast<std::uint32_t>(buffer.Commands().size()), removed};
             state_.swap(candidate);
             return Result<UiStructuralCommitResult>::Success(result);
         } catch (const std::bad_alloc &) {
