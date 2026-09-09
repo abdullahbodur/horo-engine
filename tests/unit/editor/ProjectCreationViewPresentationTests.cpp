@@ -37,6 +37,7 @@ TEST_CASE("Project creation presentation renders every wizard step and template-
     const GuiContentRegion content{0.0F, 0.0F, 1280.0F, 800.0F};
 
     ProjectCreationViewState state;
+    state.highestUnlockedStep = 4;
     for (int step = 1; step <= 4; ++step) {
         state.step = step;
         const ProjectCreationViewCommand command = DrawProjectCreationFrame(fixture, controller, state, renderers, content);
@@ -68,4 +69,22 @@ TEST_CASE("Project creation presentation normalizes an out-of-range step", "[uni
     static_cast<void>(DrawProjectCreationFrame(fixture, controller, state, renderers, GuiContentRegion{0.0F, 0.0F, 640.0F, 480.0F}));
 
     REQUIRE(state.step == 1);
+}
+
+TEST_CASE("Project creation presentation keeps review locked while required identity fields are incomplete",
+          "[unit][editor][gui][project-creation]") {
+    using namespace Horo;
+    using namespace Horo::Editor;
+
+    Tests::EditorGuiContextFixture fixture;
+    const RendererAvailabilitySnapshot renderers{{RendererBackendAvailability{"opengl", "OpenGL", RendererAvailabilityState::Active, {}}},
+                                                 "opengl"};
+    ProjectCreationController controller{renderers};
+    ProjectCreationViewState state;
+    state.step = 4;
+    state.highestUnlockedStep = 4;
+
+    static_cast<void>(DrawProjectCreationFrame(fixture, controller, state, renderers, GuiContentRegion{0.0F, 0.0F, 1280.0F, 800.0F}));
+
+    REQUIRE(state.step == 2);
 }

@@ -37,7 +37,9 @@ namespace Horo::Editor {
         struct ActivityBarGeometry {
             float cellX;
             float contentY;
-            float cellSize;
+            float cellWidth;
+            float cellHeight;
+            float cellGap;
             ImDrawList *drawList;
         };
 

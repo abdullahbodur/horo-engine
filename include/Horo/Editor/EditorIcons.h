@@ -7,6 +7,7 @@
 #include <cstdint>
 #include <imgui.h>
 #include <optional>
+#include <span>
 #include <string_view>
 
 namespace Horo::Editor::Ui {
@@ -19,6 +20,11 @@ namespace Horo::Editor::Ui {
         Rename,
         Duplicate,
         Delete,
+        Reset,
+        Check,
+        CheckboxUnchecked,
+        Settings,
+        MoreVertical,
         Visibility,
         VisibilityOff,
         Lock,
@@ -58,6 +64,12 @@ namespace Horo::Editor::Ui {
          * @return Canonical token, or an empty view for @ref UiIcon::None and invalid values.
          */
         [[nodiscard]] static std::string_view Token(UiIcon icon) noexcept;
+
+        /**
+         * @brief Returns the null-terminated Material Symbols ranges required by the editor icon atlas.
+         * @return ImGui-compatible inclusive glyph-range pairs followed by zero.
+         */
+        [[nodiscard]] static std::span<const ImWchar> MaterialSymbolGlyphRanges() noexcept;
     };
 
     /**
@@ -67,7 +79,8 @@ namespace Horo::Editor::Ui {
      * @param position Upper-left draw position.
      * @param size Available icon bounds.
      * @param color Packed icon color.
+     * @param iconFont Optional centralized Material Symbols font; mapped symbols use it instead of fallback geometry.
      */
-    void DrawEditorIcon(ImDrawList *drawList, UiIcon icon, ImVec2 position, ImVec2 size, ImU32 color);
+    void DrawEditorIcon(ImDrawList *drawList, UiIcon icon, ImVec2 position, ImVec2 size, ImU32 color, ImFont *iconFont = nullptr);
 
 }  // namespace Horo::Editor::Ui

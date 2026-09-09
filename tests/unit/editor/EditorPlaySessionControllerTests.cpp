@@ -120,6 +120,15 @@ TEST_CASE("play session rejects a scene without a runtime camera") {
     REQUIRE(play.LastError().has_value());
 }
 
+TEST_CASE("play session rejects a scene whose authored cameras are disabled") {
+    Gameplay::BehaviorRegistry registry = Registry();
+    Editor::SceneDocumentSnapshot authoring = AuthoringScene();
+    authoring.objects.front().components.camera->enabled = false;
+    Editor::EditorPlaySessionController play;
+    REQUIRE(play.Start(authoring, registry).HasError());
+    REQUIRE(play.State() == Editor::EditorPlaySessionState::Failed);
+}
+
 TEST_CASE("play session reloads behavior factories without replacing current runtime scene state") {
     Gameplay::BehaviorRegistry original = Registry();
     Gameplay::BehaviorRegistry candidate = FastRegistry();

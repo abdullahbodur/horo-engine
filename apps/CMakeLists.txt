@@ -22,9 +22,32 @@ target_link_libraries(horo-engine PRIVATE HoroEngine::Application HoroHostModule
 # The graphical executable is an optional composition root. Foundation and
 # headless hosts must remain buildable when the GUI adapter is intentionally off.
 if(HORO_BUILD_EDITOR_GUI)
+    set(HORO_EDITOR_APP_ID "dev.horo.editor")
+    set(HORO_EDITOR_ASSET_INSTALL_DIR "${CMAKE_INSTALL_DATADIR}/horo-engine/assets")
+
     add_executable(HoroEditor
         HoroEditor/main.cpp
         HoroEditor/app/HoroEditorApp.cpp
+    )
+
+    if(APPLE)
+        # SDL_GetBasePath resolves to Contents/Resources for an application bundle.
+        set(HORO_EDITOR_PACKAGED_ASSET_ROOT_RELATIVE "assets")
+        set(HORO_EDITOR_BUILD_ASSET_ROOT "$<TARGET_BUNDLE_DIR:HoroEditor>/Contents/Resources/assets")
+    else()
+        file(RELATIVE_PATH HORO_EDITOR_PACKAGED_ASSET_ROOT_RELATIVE
+            "${CMAKE_INSTALL_FULL_BINDIR}"
+            "${CMAKE_INSTALL_FULL_DATADIR}/horo-engine/assets"
+        )
+        set(HORO_EDITOR_BUILD_ASSET_ROOT "$<TARGET_FILE_DIR:HoroEditor>/${HORO_EDITOR_PACKAGED_ASSET_ROOT_RELATIVE}")
+    endif()
+
+    add_custom_command(TARGET HoroEditor POST_BUILD
+        COMMAND "${CMAKE_COMMAND}" -E copy_directory
+            "${PROJECT_SOURCE_DIR}/assets"
+            "${HORO_EDITOR_BUILD_ASSET_ROOT}"
+        COMMENT "Staging Horo Editor runtime assets"
+        VERBATIM
     )
 
     if(APPLE)
@@ -36,11 +59,56 @@ if(HORO_BUILD_EDITOR_GUI)
         set_target_properties(HoroEditor PROPERTIES
             MACOSX_BUNDLE TRUE
             MACOSX_BUNDLE_BUNDLE_NAME "Horo Editor"
-            MACOSX_BUNDLE_GUI_IDENTIFIER "dev.horo.editor"
+            MACOSX_BUNDLE_GUI_IDENTIFIER "${HORO_EDITOR_APP_ID}"
             MACOSX_BUNDLE_ICON_FILE "HoroEditor.icns"
             MACOSX_BUNDLE_LONG_VERSION_STRING "${PROJECT_VERSION}"
             MACOSX_BUNDLE_SHORT_VERSION_STRING "${PROJECT_VERSION}"
             MACOSX_BUNDLE_BUNDLE_VERSION "${PROJECT_VERSION}"
+        )
+        install(TARGETS HoroEditor
+            BUNDLE DESTINATION "."
+            COMPONENT Editor
+        )
+        install(DIRECTORY "${PROJECT_SOURCE_DIR}/assets/"
+            DESTINATION "HoroEditor.app/Contents/Resources/assets"
+            COMPONENT Editor
+        )
+    else()
+        install(TARGETS HoroEditor
+            RUNTIME DESTINATION "${CMAKE_INSTALL_BINDIR}"
+            COMPONENT Editor
+        )
+        install(DIRECTORY "${PROJECT_SOURCE_DIR}/assets/"
+            DESTINATION "${HORO_EDITOR_ASSET_INSTALL_DIR}"
+            COMPONENT Editor
+        )
+    endif()
+
+    if(WIN32)
+        set(HORO_EDITOR_WINDOWS_ICON "${CMAKE_CURRENT_SOURCE_DIR}/HoroEditor/resources/windows/HoroEditor.ico")
+        configure_file(
+            "${CMAKE_CURRENT_SOURCE_DIR}/HoroEditor/resources/windows/HoroEditor.rc.in"
+            "${CMAKE_CURRENT_BINARY_DIR}/HoroEditor.rc"
+            @ONLY
+        )
+        target_sources(HoroEditor PRIVATE "${CMAKE_CURRENT_BINARY_DIR}/HoroEditor.rc")
+    endif()
+
+    if(UNIX AND NOT APPLE)
+        set(HORO_EDITOR_DESKTOP_FILE "${CMAKE_CURRENT_BINARY_DIR}/${HORO_EDITOR_APP_ID}.desktop")
+        configure_file(
+            "${CMAKE_CURRENT_SOURCE_DIR}/HoroEditor/resources/linux/HoroEditor.desktop.in"
+            "${HORO_EDITOR_DESKTOP_FILE}"
+            @ONLY
+        )
+        install(FILES "${PROJECT_SOURCE_DIR}/assets/launcher/logo.png"
+            DESTINATION "${CMAKE_INSTALL_DATADIR}/icons/hicolor/1024x1024/apps"
+            RENAME "${HORO_EDITOR_APP_ID}.png"
+            COMPONENT Editor
+        )
+        install(FILES "${HORO_EDITOR_DESKTOP_FILE}"
+            DESTINATION "${CMAKE_INSTALL_DATADIR}/applications"
+            COMPONENT Editor
         )
     endif()
 
@@ -58,7 +126,8 @@ if(HORO_BUILD_EDITOR_GUI)
     target_compile_definitions(HoroEditor
         PRIVATE
             GL_SILENCE_DEPRECATION
-            HORO_EDITOR_ASSET_ROOT="${PROJECT_SOURCE_DIR}/assets"
+            HORO_EDITOR_APP_ID="${HORO_EDITOR_APP_ID}"
+            HORO_EDITOR_PACKAGED_ASSET_ROOT_RELATIVE="${HORO_EDITOR_PACKAGED_ASSET_ROOT_RELATIVE}"
             HORO_ENGINE_VERSION_STRING="${PROJECT_VERSION}"
             HORO_BUILD_CONFIGURATION="$<CONFIG>"
             HORO_SOURCE_REVISION="${HORO_SOURCE_REVISION}"
