@@ -532,6 +532,11 @@ add_executable(HoroReleaseVersionTests
 )
 target_compile_features(HoroReleaseVersionTests PRIVATE cxx_std_20)
 target_link_libraries(HoroReleaseVersionTests PRIVATE HoroEngine::Application)
+add_executable(HoroDistributionModelTests
+        unit/application/DistributionModelTests.cpp
+)
+target_compile_features(HoroDistributionModelTests PRIVATE cxx_std_20)
+target_link_libraries(HoroDistributionModelTests PRIVATE HoroEngine::Application)
 add_executable(HoroProjectMigrationTests
         unit/application/ProjectMigrationTests.cpp
 )
@@ -1348,6 +1353,7 @@ set(HORO_CATCH_TEST_TARGETS
         HoroProjectMetadataTests
         HoroProjectCompatibilityTests
         HoroReleaseVersionTests
+        HoroDistributionModelTests
         HoroProjectMigrationTests
         HoroProjectMigrationTransactionTests
         HoroProjectOpenServiceTests

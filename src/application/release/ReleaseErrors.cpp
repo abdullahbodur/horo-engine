@@ -49,4 +49,22 @@ namespace Horo::Release::ReleaseErrors {
                                    .remediationHint = "Align the engine core and prerelease with the compatibility release identity.",
                                    .retryable = false,
                                    .userActionable = true};
+    const ErrorCodeDescriptor
+        DistributionIdentityInvalid{.domain = Domain,
+                                    .code = ErrorCode{"release.distribution.identity_invalid"},
+                                    .defaultSeverity = ErrorSeverity::Error,
+                                    .summary = "A distribution identity is invalid or ambiguous.",
+                                    .remediationHint = "Provide bounded canonical product, build, package and installation identities.",
+                                    .retryable = false,
+                                    .userActionable = true};
+    const ErrorCodeDescriptor
+        DistributionCombinationUnsupported{.domain = Domain,
+                                           .code = ErrorCode{"release.distribution.combination_unsupported"},
+                                           .defaultSeverity = ErrorSeverity::Error,
+                                           .summary = "The distribution product, platform, artifact class and package format combination "
+                                                      "is unsupported.",
+                                           .remediationHint =
+                                               "Select an explicit package format admitted by the release or distribution profile.",
+                                           .retryable = false,
+                                           .userActionable = true};
 }  // namespace Horo::Release::ReleaseErrors
