@@ -128,12 +128,15 @@ namespace Horo::Render {
     TEST_CASE("Distinct effective queues emit one matched ownership transfer", "[renderer][render-graph][sync]") {
         WriteReadGraph fixture = RequireWriteReadGraph();
         constexpr std::array queues{
-            RenderQueueAssignment{RenderQueueRole::Graphics, RenderQueueId{5}},
             RenderQueueAssignment{RenderQueueRole::Compute, RenderQueueId{8}},
+            RenderQueueAssignment{RenderQueueRole::Graphics, RenderQueueId{5}},
         };
 
         auto synthesized = SynthesizeRenderGraphSynchronization(fixture.compiled.graph, fixture.compiled.schedule, queues, {});
         REQUIRE(synthesized.HasValue());
+        REQUIRE(synthesized.Value().QueueAssignments().size() == 2);
+        CHECK(synthesized.Value().QueueAssignments()[0] == RenderQueueAssignment{RenderQueueRole::Graphics, RenderQueueId{5}});
+        CHECK(synthesized.Value().QueueAssignments()[1] == RenderQueueAssignment{RenderQueueRole::Compute, RenderQueueId{8}});
         REQUIRE(synthesized.Value().OwnershipTransfers().size() == 1);
         const RenderGraphOwnershipTransfer &transfer = synthesized.Value().OwnershipTransfers().front();
         CHECK(transfer.releaseAfter == fixture.write);
