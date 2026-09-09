@@ -169,6 +169,30 @@ namespace Horo::Runtime::Ui::UiErrors {
                                         "completes.",
                                         false,
                                         false};
+    /** @copydoc RenderSnapshotInvalid */
+    const ErrorCodeDescriptor RenderSnapshotInvalid{UiDomain,
+                                                    ErrorCode{"runtime_ui.render_snapshot.invalid"},
+                                                    ErrorSeverity::Error,
+                                                    "The immutable Runtime UI render snapshot is invalid.",
+                                                    "Provide exact owner revisions and complete bounded logical projection tables.",
+                                                    false,
+                                                    false};
+    /** @copydoc RenderCommandInvalid */
+    const ErrorCodeDescriptor RenderCommandInvalid{UiDomain,
+                                                   ErrorCode{"runtime_ui.render_command.invalid"},
+                                                   ErrorSeverity::Error,
+                                                   "A Runtime UI render command is invalid.",
+                                                   "Use resident element handles, finite paint, and valid logical table references.",
+                                                   false,
+                                                   false};
+    /** @copydoc RenderResourceReferenceInvalid */
+    const ErrorCodeDescriptor RenderResourceReferenceInvalid{UiDomain,
+                                                             ErrorCode{"runtime_ui.render_resource_reference.invalid"},
+                                                             ErrorSeverity::Error,
+                                                             "A Runtime UI render resource reference is invalid.",
+                                                             "Provide a stable Horo asset with the exact nonzero revision and semantic role.",
+                                                             false,
+                                                             true};
     /** @copydoc DiagnosticInvalid */
     const ErrorCodeDescriptor
         DiagnosticInvalid{UiDomain,
