@@ -158,7 +158,7 @@ namespace Horo::WorldStreaming {
         [[nodiscard]] const StreamingSchedulerAdmissionLedger &Scheduler() const noexcept;
 
     private:
-        WorldStreamingRuntimeComposition(WorldStreamingRuntimeCompositionConfig config, StreamingSchedulerAdmissionLedger scheduler,
+        WorldStreamingRuntimeComposition(const WorldStreamingRuntimeCompositionConfig &config, StreamingSchedulerAdmissionLedger scheduler,
                                          std::vector<StreamingRuntimeServiceBinding> services) noexcept;
 
         WorldStreamingRuntimeCompositionConfig config_;

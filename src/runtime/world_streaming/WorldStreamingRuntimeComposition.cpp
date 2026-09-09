@@ -21,8 +21,8 @@ namespace Horo::WorldStreaming {
         /** @brief Validates service roles, identities and configured binding ceilings without retaining caller storage. */
         [[nodiscard]] Result<void> ValidateBindings(const std::span<const StreamingRuntimeServiceBinding> services,
                                                     const std::uint32_t maximumFeatureAdapters) {
-            const std::size_t maximumServices = static_cast<std::size_t>(maximumFeatureAdapters) + 3U;
-            if (services.size() > maximumServices)
+            if (const std::size_t maximumServices = static_cast<std::size_t>(maximumFeatureAdapters) + 3U;
+                services.size() > maximumServices)
                 return Failure<void>(WorldStreamingErrors::RuntimeCompositionCapacityExceeded);
 
             std::array<std::size_t, 4> roleCounts{};
@@ -62,8 +62,7 @@ namespace Horo::WorldStreaming {
         /** @brief Validates and copies a complete binding set without publishing partial state. */
         [[nodiscard]] Result<std::vector<StreamingRuntimeServiceBinding>> ValidateAndCopyBindings(
             const std::span<const StreamingRuntimeServiceBinding> services, const std::uint32_t maximumFeatureAdapters) {
-            const auto validation = ValidateBindings(services, maximumFeatureAdapters);
-            if (validation.HasError())
+            if (const auto validation = ValidateBindings(services, maximumFeatureAdapters); validation.HasError())
                 return Result<std::vector<StreamingRuntimeServiceBinding>>::Failure(validation.ErrorValue());
             return CopyCanonicalBindings(services);
         }
@@ -85,7 +84,7 @@ namespace Horo::WorldStreaming {
                maximumFeatureAdapters > 0 && maximumFeatureAdapters <= MaximumFeatureAdapters;
     }
 
-    WorldStreamingRuntimeComposition::WorldStreamingRuntimeComposition(WorldStreamingRuntimeCompositionConfig config,
+    WorldStreamingRuntimeComposition::WorldStreamingRuntimeComposition(const WorldStreamingRuntimeCompositionConfig &config,
                                                                        StreamingSchedulerAdmissionLedger scheduler,
                                                                        std::vector<StreamingRuntimeServiceBinding> services) noexcept
         : config_(config), scheduler_(std::move(scheduler)), services_(std::move(services)) {}
@@ -131,13 +130,14 @@ namespace Horo::WorldStreaming {
     /** @copydoc WorldStreamingRuntimeComposition::RequestCancellation */
     Result<void> WorldStreamingRuntimeComposition::RequestCancellation(const StreamingRuntimeOwnerToken &owner,
                                                                        const StreamingRuntimeCompositionRevision revision) noexcept {
+        using enum WorldStreamingRuntimeCompositionState;
         if (owner != config_.owner || revision != config_.revision)
             return Failure<void>(WorldStreamingErrors::RuntimeCompositionRevisionStale);
-        if (state_ == WorldStreamingRuntimeCompositionState::Closed || state_ == WorldStreamingRuntimeCompositionState::Draining)
+        if (state_ == Closed || state_ == Draining)
             return Failure<void>(WorldStreamingErrors::RuntimeCompositionLifecycleUnavailable);
-        if (state_ == WorldStreamingRuntimeCompositionState::Active) {
+        if (state_ == Active) {
             scheduler_.BeginShutdown();
-            state_ = WorldStreamingRuntimeCompositionState::Cancelling;
+            state_ = Cancelling;
         }
         return Result<void>::Success();
     }
