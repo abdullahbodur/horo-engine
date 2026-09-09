@@ -98,6 +98,9 @@ add_library(HoroApplication STATIC
         application/project/ProjectCompatibility.cpp
         application/project_migration/ProjectMigrationRegistry.cpp
         application/project_migration/ProjectMigrationExecution.cpp
+        application/release/DistributionModel.cpp
+        application/release/ReleaseErrors.cpp
+        application/release/ReleaseVersion.cpp
 )
 add_library(HoroEngine::Application ALIAS HoroApplication)
 target_compile_features(HoroApplication PUBLIC cxx_std_20)

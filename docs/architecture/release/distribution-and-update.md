@@ -67,6 +67,21 @@ A package format defines:
 Package format is not inferred from operating system alone. It is selected by
 the release or distribution profile.
 
+The shared distribution domain represents that decision as an explicit typed
+selection containing product, full release version, platform, architecture,
+build, package, intended installation, and artifact-class identities. Engine
+products and game products retain their distinct release-version types.
+Renderer components carry their own component identity instead of impersonating
+the editor or SDK.
+
+Format descriptors expose install layout, file association, desktop
+integration, uninstall, update, signing, and rollback capabilities without
+native installer SDK types. Admission rejects unsupported product, platform,
+artifact-class, and format combinations before any download or installation
+work. Symbols and diagnostic artifacts have no installation identity and use a
+separate supplemental artifact class rather than entering the ordinary product
+installation path.
+
 ## Game Content, Patch, And DLC Releases
 
 Game releases may contain multiple content units:
