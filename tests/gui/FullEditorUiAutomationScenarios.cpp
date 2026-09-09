@@ -76,9 +76,11 @@ namespace {
             pipeline.Step("Create a Camera and reselect the authored Box", [](ImGuiTestContext &ui) {
                 ui.ItemClick("**/##HierarchyRootDrop", ImGuiMouseButton_Right);
                 ui.SetRef("//$FOCUSED");
-                ui.MenuClick("###hierarchy_create_root/"
-                             "###hierarchy_create_workspace.create.group.cameras/"
-                             "###hierarchy_create_primitive.object.camera");
+                ui.ItemClick("###hierarchy_create_root");
+                ui.Yield();
+                ui.ItemClick("//**/###hierarchy_create_workspace.create.group.cameras");
+                ui.Yield();
+                ui.ItemClick("//**/###hierarchy_create_primitive.object.camera");
                 ui.ItemClick("//**/##hierarchy_object_row");
                 ui.Yield();
                 if (!ui.ItemExists("//**/###InspectorAddComponent")) {

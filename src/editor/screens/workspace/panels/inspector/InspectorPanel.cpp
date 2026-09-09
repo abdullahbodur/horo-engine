@@ -385,15 +385,19 @@ namespace Horo::Editor {
                 command.componentTypePayload = ComponentType::Light;
             }
             if (!object.components.triggerVolume.has_value() &&
-                Ui::ContextMenuItem(context.localization.Get("editor", "workspace.inspector.kind.trigger_volume").c_str(), nullptr,
-                                    context.theme.fonts)) {
+                Ui::ContextMenuItem((context.localization.Get("editor", "workspace.inspector.kind.trigger_volume") +
+                                     "###inspector_component_trigger_volume")
+                                        .c_str(),
+                                    nullptr, context.theme.fonts)) {
                 command.command = EditorWorkspaceViewCommand::AddComponentToObject;
                 command.objectPayload = object.id;
                 command.componentTypePayload = ComponentType::TriggerVolume;
             }
             if (!object.components.audioSource.has_value() &&
-                Ui::ContextMenuItem(context.localization.Get("editor", "workspace.inspector.kind.audio_source").c_str(), nullptr,
-                                    context.theme.fonts)) {
+                Ui::ContextMenuItem((context.localization.Get("editor", "workspace.inspector.kind.audio_source") +
+                                     "###inspector_component_audio_source")
+                                        .c_str(),
+                                    nullptr, context.theme.fonts)) {
                 command.command = EditorWorkspaceViewCommand::AddComponentToObject;
                 command.objectPayload = object.id;
                 command.componentTypePayload = ComponentType::AudioSource;

@@ -2106,11 +2106,14 @@ namespace Horo::Editor::Ui {
     /** @copydoc ContextMenuItem */
     bool ContextMenuItem(const char *label, const char *shortcut, const Theme::Fonts &fonts, const ContextMenuItemTone tone,
                          const std::string_view iconToken, const bool enabled) {
-        ImGui::PushID(label);
-        const ContextMenuRow row = DrawContextMenuRow("##item", false, false, enabled);
+        const char *stableId = std::strstr(label, "###");
+        if (stableId == nullptr)
+            ImGui::PushID(label);
+        const ContextMenuRow row = DrawContextMenuRow(stableId != nullptr ? stableId : "##item", false, false, enabled);
+        if (stableId == nullptr)
+            ImGui::PopID();
         const ImVec4 textColor = !enabled ? Theme::Dim() : tone == ContextMenuItemTone::Danger ? Theme::Err() : Theme::Text();
         DrawContextMenuRowPresentation(row, label, shortcut, fonts, textColor, row.hovered && enabled, false, iconToken);
-        ImGui::PopID();
         return enabled && row.activated;
     }
 
@@ -2118,9 +2121,12 @@ namespace Horo::Editor::Ui {
     bool BeginContextSubmenu(const char *label, const Theme::Fonts &fonts, const std::string_view iconToken) {
         const std::string popupId = std::string{"##submenu_popup_"} + label;
         const bool wasOpen = ImGui::IsPopupOpen(popupId.c_str());
-        ImGui::PushID(label);
-        const ContextMenuRow row = DrawContextMenuRow("##submenu", wasOpen, true);
-        ImGui::PopID();
+        const char *stableId = std::strstr(label, "###");
+        if (stableId == nullptr)
+            ImGui::PushID(label);
+        const ContextMenuRow row = DrawContextMenuRow(stableId != nullptr ? stableId : "##submenu", wasOpen, true);
+        if (stableId == nullptr)
+            ImGui::PopID();
         DrawContextMenuRowPresentation(row, label, nullptr, fonts, Theme::Text(), row.hovered || wasOpen, true, iconToken);
         if (row.hovered || row.activated)
             ImGui::OpenPopup(popupId.c_str());

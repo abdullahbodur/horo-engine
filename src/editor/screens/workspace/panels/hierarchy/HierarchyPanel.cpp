@@ -492,14 +492,18 @@ namespace Horo::Editor {
         }
         Ui::ContextMenuSeparator();
         if (editable &&
-            Ui::ContextMenuItem(context.localization.Get("editor", "workspace.hierarchy.rename").c_str(), "F2", context.theme.fonts))
+            Ui::ContextMenuItem((context.localization.Get("editor", "workspace.hierarchy.rename") + "###hierarchy_action_rename").c_str(),
+                                "F2", context.theme.fonts))
             BeginRename(frame.node.id);
         if (editable &&
-            Ui::ContextMenuItem(context.localization.Get("editor", "workspace.hierarchy.duplicate").c_str(), nullptr, context.theme.fonts))
+            Ui::ContextMenuItem((context.localization.Get("editor", "workspace.hierarchy.duplicate") + "###hierarchy_action_duplicate")
+                                    .c_str(),
+                                nullptr, context.theme.fonts))
             command = HierarchyEditSession::DuplicateCommand(frame.node.id);
         Ui::ContextMenuSeparator();
-        if (editable && Ui::ContextMenuItem(context.localization.Get("editor", "workspace.hierarchy.delete").c_str(), "Delete",
-                                            context.theme.fonts, Ui::ContextMenuItemTone::Danger))
+        if (editable &&
+            Ui::ContextMenuItem((context.localization.Get("editor", "workspace.hierarchy.delete") + "###hierarchy_action_delete").c_str(),
+                                "Delete", context.theme.fonts, Ui::ContextMenuItemTone::Danger))
             pendingDelete = true;
         Ui::EndContextMenu();
     }
