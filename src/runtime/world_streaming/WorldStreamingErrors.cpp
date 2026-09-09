@@ -19,6 +19,27 @@ namespace Horo::WorldStreaming::WorldStreamingErrors {
         }
     }  // namespace
 
+    const ErrorCodeDescriptor FallbackProviderInvalid =
+        Describe("world_streaming.fallback_provider.invalid", ErrorSeverity::Error,
+                 "A fallback streaming provider descriptor is malformed.",
+                 "Provide one valid owner/revision and exactly one cell for SingleCell or no cell for Null.", true);
+    const ErrorCodeDescriptor FallbackProviderUnsupported =
+        Describe("world_streaming.fallback_provider.unsupported", ErrorSeverity::Error,
+                 "The fallback streaming provider mode is unsupported.", "Select the declared SingleCell or Null composition explicitly.",
+                 true);
+    const ErrorCodeDescriptor FallbackProviderCapacityExceeded =
+        Describe("world_streaming.fallback_provider.capacity_exceeded", ErrorSeverity::Error,
+                 "The configured fallback provider cannot publish its single cell within the mandatory ceiling.",
+                 "Allow one published cell or select the explicit Null composition.", true);
+    const ErrorCodeDescriptor FallbackProviderStale =
+        Describe("world_streaming.fallback_provider.stale", ErrorSeverity::Warning,
+                 "A fallback provider operation names a stale owner or configuration revision.",
+                 "Capture the current owner lifetime and issue a strictly newer replacement revision.", false);
+    const ErrorCodeDescriptor FallbackProviderLifecycleUnavailable =
+        Describe("world_streaming.fallback_provider.lifecycle_unavailable", ErrorSeverity::Warning,
+                 "The fallback provider lifecycle no longer accepts this operation.",
+                 "Finish shutdown or create a new provider for the next owner lifetime.", false);
+
     const ErrorCodeDescriptor IdentityInvalid =
         Describe("world_streaming.identity.invalid", ErrorSeverity::Error,
                  "A world-partition identity uses its reserved invalid representation.",

@@ -98,6 +98,9 @@ add_library(HoroApplication STATIC
         application/project/ProjectCompatibility.cpp
         application/project_migration/ProjectMigrationRegistry.cpp
         application/project_migration/ProjectMigrationExecution.cpp
+        application/release/DistributionModel.cpp
+        application/release/ReleaseErrors.cpp
+        application/release/ReleaseVersion.cpp
 )
 add_library(HoroEngine::Application ALIAS HoroApplication)
 target_compile_features(HoroApplication PUBLIC cxx_std_20)
@@ -303,6 +306,7 @@ target_link_libraries(HoroAssets
 target_link_libraries(HoroRuntimeScene PUBLIC HoroEngine::Assets)
 
 add_library(HoroAudioApi STATIC
+        audio/api/AudioAssetSchema.cpp
         audio/api/AudioBackendCapabilities.cpp
         audio/api/AudioCallbackEvents.cpp
         audio/api/AudioDeviceDiscovery.cpp
@@ -442,6 +446,7 @@ target_link_libraries(HoroNavigationNull PUBLIC HoroEngine::NavigationApi)
 
 add_library(HoroWorldStreaming STATIC
         runtime/world_streaming/CookedWorldIndexManifest.cpp
+        runtime/world_streaming/FallbackStreamingProvider.cpp
         runtime/world_streaming/StreamingBudgetModel.cpp
         runtime/world_streaming/StreamingCellOperation.cpp
         runtime/world_streaming/StreamingSchedulerAdmission.cpp
@@ -491,6 +496,8 @@ add_library(HoroRenderApi STATIC
         runtime/renderer/api/RenderAdapter.cpp
         runtime/renderer/api/RenderAdapterErrors.cpp
         runtime/renderer/api/RenderGraph.cpp
+        runtime/renderer/api/RenderGraphExecution.cpp
+        runtime/renderer/api/RenderGraphExecutionErrors.cpp
         runtime/renderer/api/RenderGraphErrors.cpp
         runtime/renderer/api/RenderGraphSynchronization.cpp
         runtime/renderer/api/RenderGraphSynchronizationErrors.cpp

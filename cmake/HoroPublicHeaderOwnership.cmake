@@ -54,6 +54,9 @@ horo_configure_target_header_boundary(HoroApplication PUBLIC_HEADERS
     Horo/Application/ProjectMigration.h
     Horo/Application/ProjectMigrationCatalog.h
     Horo/Application/ProjectVersion.h
+    Horo/Release/DistributionModel.h
+    Horo/Release/ReleaseErrors.h
+    Horo/Release/ReleaseVersion.h
 )
 horo_configure_target_header_boundary(HoroPackages PUBLIC_HEADERS
     Horo/Packages/PackagePath.h
@@ -150,6 +153,7 @@ horo_configure_target_header_boundary(HoroAssets PUBLIC_HEADERS
     Horo/Assets/MeshEditorPayload.h
 )
 horo_configure_target_header_boundary(HoroAudioApi PUBLIC_HEADERS
+    Horo/Audio/AudioAssetSchema.h
     Horo/Audio/AudioBackendCapabilities.h
     Horo/Audio/AudioCallbackEvents.h
     Horo/Audio/AudioDeviceDiscovery.h
@@ -225,6 +229,7 @@ horo_configure_target_header_boundary(HoroNavigationNull PUBLIC_HEADERS
 )
 horo_configure_target_header_boundary(HoroWorldStreaming PUBLIC_HEADERS
     Horo/WorldStreaming/CookedWorldIndexManifest.h
+    Horo/WorldStreaming/FallbackStreamingProvider.h
     Horo/WorldStreaming/StreamingBudgetModel.h
     Horo/WorldStreaming/StreamingCellOperation.h
     Horo/WorldStreaming/StreamingSchedulerAdmission.h
@@ -258,6 +263,8 @@ horo_configure_target_header_boundary(HoroRenderApi PUBLIC_HEADERS
     Horo/Runtime/Render/RenderAdapterErrors.h
     Horo/Runtime/Render/RenderBackend.h
     Horo/Runtime/Render/RenderGraph.h
+    Horo/Runtime/Render/RenderGraphExecution.h
+    Horo/Runtime/Render/RenderGraphExecutionErrors.h
     Horo/Runtime/Render/RenderGraphErrors.h
     Horo/Runtime/Render/RenderGraphSynchronization.h
     Horo/Runtime/Render/RenderGraphSynchronizationErrors.h

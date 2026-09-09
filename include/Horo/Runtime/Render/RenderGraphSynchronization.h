@@ -116,12 +116,17 @@ namespace Horo::Render {
     public:
         RenderGraphSynchronizationPlan(const RenderGraphSynchronizationPlan &) = delete;
         RenderGraphSynchronizationPlan &operator=(const RenderGraphSynchronizationPlan &) = delete;
-        RenderGraphSynchronizationPlan(RenderGraphSynchronizationPlan &&) noexcept = default;
-        RenderGraphSynchronizationPlan &operator=(RenderGraphSynchronizationPlan &&) noexcept = default;
+        RenderGraphSynchronizationPlan(RenderGraphSynchronizationPlan &&other) noexcept;
+        RenderGraphSynchronizationPlan &operator=(RenderGraphSynchronizationPlan &&other) noexcept;
         ~RenderGraphSynchronizationPlan() = default;
 
-        /** @brief Returns the graph owner for which this plan was synthesized. */
+        /** @brief Returns the graph owner for which this plan was synthesized, or invalid after move. */
         [[nodiscard]] RenderGraphOwnerId Owner() const noexcept;
+        /**
+         * @brief Returns the canonical effective queue topology captured during synthesis.
+         * @return Immutable role-ordered view valid for the lifetime of this plan.
+         */
+        [[nodiscard]] std::span<const RenderQueueAssignment> QueueAssignments() const noexcept;
         /** @brief Returns normalized transitions in scheduled-pass and authored-use order. */
         [[nodiscard]] std::span<const RenderGraphTransition> Transitions() const noexcept;
         /** @brief Returns matched ownership transfers in transition order. */
@@ -132,10 +137,12 @@ namespace Horo::Render {
                                                                                            std::span<const RenderQueueAssignment>,
                                                                                            std::span<const RenderGraphImportedState>);
 
-        RenderGraphSynchronizationPlan(RenderGraphOwnerId owner, std::vector<RenderGraphTransition> transitions,
+        RenderGraphSynchronizationPlan(RenderGraphOwnerId owner, std::vector<RenderQueueAssignment> queueAssignments,
+                                       std::vector<RenderGraphTransition> transitions,
                                        std::vector<RenderGraphOwnershipTransfer> transfers) noexcept;
 
         RenderGraphOwnerId owner_;
+        std::vector<RenderQueueAssignment> queueAssignments_;
         std::vector<RenderGraphTransition> transitions_;
         std::vector<RenderGraphOwnershipTransfer> transfers_;
     };
@@ -146,8 +153,10 @@ namespace Horo::Render {
      * The operation is synchronous, allocation-bounded by the graph usage capacity, and does not
      * mutate the graph or schedule. Every imported resource must have exactly one initial state;
      * transient resources start undefined. Queue roles are resolved through the supplied effective
-     * topology, so aliased roles never create a false ownership transfer. Conflicting states within
-     * one pass are rejected because the plan cannot insert a pass-internal barrier. A transient's
+     * topology, so aliased roles never create a false ownership transfer. The plan owns that topology
+     * in canonical role order so downstream compilation can verify provenance even when no transition
+     * is emitted. Conflicting states within one pass are rejected because the plan cannot insert a
+     * pass-internal barrier. A transient's
      * first write emits an explicit `None` to access-state transition; an undefined read is rejected
      * earlier by `CompileRenderGraph` with `RenderGraphErrors::ReadBeforeWrite`.
      *
