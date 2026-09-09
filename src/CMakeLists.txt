@@ -364,6 +364,7 @@ add_library(HoroAudioCommands STATIC
         audio/commands/AudioCommands.cpp
         audio/commands/AudioCommandBuffer.cpp
         audio/commands/AudioCommandStaging.cpp
+        audio/commands/AudioEventQueue.cpp
         audio/commands/ScheduledAudioCommandBatch.cpp
 )
 add_library(HoroEngine::AudioCommands ALIAS HoroAudioCommands)

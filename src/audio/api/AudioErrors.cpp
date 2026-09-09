@@ -5,6 +5,15 @@ namespace Horo::Audio::AudioErrors {
         const ErrorDomainId AudioDomain{"horo.audio"};
     }
 
+    const ErrorCodeDescriptor EventQueueInvalid{
+        .domain = AudioDomain,
+        .code = ErrorCode{"audio.event_queue.invalid"},
+        .defaultSeverity = ErrorSeverity::Error,
+        .summary = "The audio callback-to-control event queue or outcome identity is invalid.",
+        .remediationHint = "Prepare bounded EventStorage and correlate terminal outcomes to exact accepted operations.",
+        .retryable = false,
+        .userActionable = false,
+    };
     const ErrorCodeDescriptor ResamplerInvalid{
         .domain = AudioDomain,
         .code = ErrorCode{"audio.resampler.invalid"},
