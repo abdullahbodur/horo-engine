@@ -105,7 +105,7 @@ namespace Horo::Editor {
 
                 ImGui::TableSetColumnIndex(1);
                 {
-                    Theme::ScopedTextStyle style(context.theme.fonts.sansEmphasis, 15.0F, Theme::FontPx::SansEmphasis);
+                    Theme::ScopedTextStyle style(context.theme.fonts.sansEmphasis, Theme::TextPx::Title(), Theme::FontPx::SansEmphasis);
                     ImGui::PushStyleColor(ImGuiCol_Text, Theme::Text());
                     ImGui::TextUnformatted(displayName.c_str());
                     ImGui::PopStyleColor();
@@ -222,7 +222,7 @@ namespace Horo::Editor {
                 .minimumHeight = 420.0F,
                 .footerHeight = 0.0F,
                 .showClose = true,
-                .titleFontSize = 14.0F,
+                .titleFontSize = Theme::TextPx::Title(),
             },
             context_.theme.fonts);
 

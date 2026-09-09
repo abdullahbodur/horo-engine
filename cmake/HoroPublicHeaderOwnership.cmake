@@ -347,6 +347,7 @@ horo_configure_target_header_boundary(HoroGui PUBLIC_HEADERS
     Horo/Editor/GuiScreen.h
     Horo/Editor/GuiScreenHost.h
     Horo/Editor/IWorkspacePanel.h
+    Horo/Editor/IGlobalDockPane.h
     Horo/Editor/ScreenRegistry.h
     Horo/Editor/SettingsModal.h
     Horo/Editor/SettingsModalDraft.h

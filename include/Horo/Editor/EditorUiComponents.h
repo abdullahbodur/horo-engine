@@ -50,6 +50,33 @@ namespace Horo::Editor::Ui {
      */
     [[nodiscard]] float ScaledLayoutValue(float value) noexcept;
 
+    /** @brief RAII scope for theme-backed tooltip chrome and typography. */
+    class ScopedTooltip {
+    public:
+        /**
+         * @brief Begins a tooltip using shared padding, surface, border, radius, and label typography.
+         * @param fonts Optional editor font set; null preserves the current ImGui font.
+         */
+        explicit ScopedTooltip(const Theme::Fonts *fonts = nullptr);
+
+        /** @brief Ends the tooltip and restores the previous ImGui style. */
+        ~ScopedTooltip();
+
+        ScopedTooltip(const ScopedTooltip &) = delete;
+        ScopedTooltip &operator=(const ScopedTooltip &) = delete;
+
+    private:
+        ImFont *font_{nullptr};
+        float fontScale_{1.0F};
+    };
+
+    /**
+     * @brief Draws a single theme-backed, width-constrained tooltip.
+     * @param text Visible tooltip text.
+     * @param fonts Optional editor font set; null preserves the current ImGui font.
+     */
+    void ShowTooltip(const char *text, const Theme::Fonts *fonts = nullptr);
+
     // ── Button props & primitive ─────────────────────────────────────────
 
     /** @brief Input contract for the shared editor button primitive. */
@@ -279,13 +306,13 @@ namespace Horo::Editor::Ui {
             ImGui::TableSetColumnIndex(0);
             ImGui::BeginGroup();
             {
-                Theme::ScopedTextStyle ts(f.sans, 16.0F, Theme::FontPx::Sans);
+                Theme::ScopedTextStyle ts(f.sans, Theme::TextPx::Body(), Theme::FontPx::Sans);
                 ImGui::PushStyleColor(ImGuiCol_Text, Theme::Text());
                 ImGui::TextUnformatted(label);
                 ImGui::PopStyleColor();
             }
             if (description != nullptr && description[0] != '\0') {
-                Theme::ScopedTextStyle ts(f.sans, 14.0F, Theme::FontPx::Sans);
+                Theme::ScopedTextStyle ts(f.sans, Theme::TextPx::Caption(), Theme::FontPx::Sans);
                 ImGui::PushStyleColor(ImGuiCol_Text, Theme::Dim());
                 ImGui::PushTextWrapPos(ImGui::GetCursorPosX() + ImGui::GetContentRegionAvail().x - 16.0F);
                 ImGui::TextWrapped("%s", description);
@@ -318,11 +345,18 @@ namespace Horo::Editor::Ui {
         std::function<const char *(int index)> disabledTooltip; /**< Optional diagnostic for disabled rows. */
     };
 
+    /** @brief Semantic surface used by a shared combo control. */
+    enum class ComboControlSurface {
+        Default,
+        BottomDockToolbar,
+    };
+
     /** @brief Optional visual configuration shared by combo controls. */
     struct ComboControlOptions {
         bool error{false};
         float height{0.0F};
         ComponentSize componentSize{ComponentSize::Small};
+        ComboControlSurface surface{ComboControlSurface::Default};
     };
 
     /** @brief Renders a styled dropdown with optional error styling. Returns true if the selection changed. */
@@ -342,13 +376,20 @@ namespace Horo::Editor::Ui {
     [[nodiscard]] bool ComboControl(const char *id, int *value, int itemCount, const ComboItemSource &source, const Theme::Fonts &fonts,
                                     ComboControlOptions options = {});
 
+    /** @brief Semantic surface used by a shared text input. */
+    enum class InputTextSurface {
+        Default,
+        BottomDockToolbar,
+    };
+
     /** @brief Optional visual configuration shared by text inputs. */
     struct InputTextOptions {
-        bool error{false};                                 /**< Whether to render validation-error styling. */
-        float width{-1.0F};                                /**< Logical width; negative fills available content. */
-        const char *hint{nullptr};                         /**< Optional placeholder text. */
-        float prefixIconWidth{0.0F};                       /**< Left padding reserved for a caller-drawn icon. */
-        ComponentSize componentSize{ComponentSize::Small}; /**< Shared theme-backed size preset. */
+        bool error{false};                                   /**< Whether to render validation-error styling. */
+        float width{-1.0F};                                  /**< Logical width; negative fills available content. */
+        const char *hint{nullptr};                           /**< Optional placeholder text. */
+        float prefixIconWidth{0.0F};                         /**< Left padding reserved for a caller-drawn icon. */
+        ComponentSize componentSize{ComponentSize::Small};   /**< Shared theme-backed size preset. */
+        InputTextSurface surface{InputTextSurface::Default}; /**< Semantic background surface. */
     };
 
     /**
@@ -509,7 +550,7 @@ namespace Horo::Editor::Ui {
         ImTextureID logo = 0;
         bool showBrandMark = false;
         bool showClose = true;
-        float titleFontSize = 14.0F;
+        float titleFontSize = Theme::TextPx::Title();
         ComponentSize componentSize = ComponentSize::Medium;
     };
 
@@ -624,7 +665,23 @@ namespace Horo::Editor::Ui {
 
     // ── Dock UI ───────────────────────────────────────────────────────────
 
-    int DrawDockTabs(std::span<const char *const> tabs, int activeTab, const Theme::Fonts &fonts, float height = 26.0F);
+    /** @brief Typography and border treatment for a dock tab strip. */
+    enum class DockTabStyle : std::uint8_t {
+        Default,
+        GlobalDock,
+    };
+
+    /**
+     * @brief Draws a horizontal editor dock tab strip.
+     * @param tabs Localized visible tab labels in display order.
+     * @param activeTab Zero-based active tab index.
+     * @param fonts Editor font handles valid for this component call.
+     * @param height Exact strip height.
+     * @param style Semantic visual role for typography and border tokens.
+     * @return The activated tab index, or @p activeTab when no tab was pressed.
+     */
+    int DrawDockTabs(std::span<const char *const> tabs, int activeTab, const Theme::Fonts &fonts, float height = 26.0F,
+                     DockTabStyle style = DockTabStyle::Default);
 
     /**
      * @brief Draws the compact 36-pixel tab strip used by left and right workspace docks.

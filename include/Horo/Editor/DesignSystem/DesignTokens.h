@@ -75,10 +75,43 @@ namespace Horo::Editor::DesignSystem {
 
     /** @brief Semantic typography sizes for the bootstrap GUI. */
     struct TypographyTokens {
-        float sansBase;
-        float sansCompactBase;
-        float sansEmphasisBase;
+        float sansBase;         /**< Standard sans-serif atlas size. */
+        float sansCompactBase;  /**< Compact sans-serif atlas size. */
+        float sansEmphasisBase; /**< Emphasized sans-serif atlas size. */
+        float caption;          /**< Supporting metadata and secondary text. */
+        float label;            /**< Controls, tabs, tree rows, and field labels. */
+        float body;             /**< Standard paragraphs and primary content. */
+        float cardTitle;        /**< Compact titles inside cards and component sections. */
+        float title;            /**< Panel and modal titles. */
+        float heading;          /**< Section headings comparable to an H2. */
+        float display;          /**< Top-level screen headings comparable to an H1. */
     };
+
+    /** @brief Semantic visible-text roles shared by every editor surface. */
+    enum class TypographyRole : std::size_t {
+        Caption,
+        Label,
+        Body,
+        CardTitle,
+        Title,
+        Heading,
+        Display,
+    };
+
+    /**
+     * @brief Enforces the editor's readable minimum and semantic size ordering.
+     * @param typography Typography token set to normalize in place.
+     */
+    inline void NormalizeTypographyTokens(TypographyTokens &typography) noexcept {
+        constexpr float minimumReadableSize = 14.0F;
+        typography.caption = std::max(typography.caption, minimumReadableSize);
+        typography.label = std::max(typography.label, minimumReadableSize);
+        typography.body = std::max(typography.body, minimumReadableSize);
+        typography.cardTitle = std::max(typography.cardTitle, typography.body);
+        typography.title = std::max(typography.title, typography.cardTitle);
+        typography.heading = std::max(typography.heading, typography.title);
+        typography.display = std::max(typography.display, typography.heading);
+    }
 
     /** @brief Shared shape tokens for editor GUI components. */
     struct RadiusTokens {
@@ -109,6 +142,7 @@ namespace Horo::Editor::DesignSystem {
         float bodyPaddingY;
         float sidebarPaddingX;
         float sidebarPaddingY;
+        float propertyRowGap; /**< Vertical separation between adjacent Inspector property controls. */
     };
 
     /** @brief Resolved immutable editor design tokens for one rendered frame. */
@@ -120,6 +154,16 @@ namespace Horo::Editor::DesignSystem {
         SpacingTokens spacing;
         ComponentTokens components;
     };
+
+    /**
+     * @brief Normalizes typography roles and prevents component text from dropping below caption size.
+     * @param tokens Design token set to normalize in place.
+     */
+    inline void NormalizeDesignTokens(DesignTokens &tokens) noexcept {
+        NormalizeTypographyTokens(tokens.typography);
+        for (ComponentSizeMetrics &metrics : tokens.components.sizes)
+            metrics.fontSize = std::max(metrics.fontSize, tokens.typography.caption);
+    }
 
     /**
      * @brief Returns the resolved metrics for one shared component size.
@@ -143,7 +187,7 @@ namespace Horo::Editor::DesignSystem {
 
     /** @brief Applies one global UI scale to resolved component metrics. */
     inline void ApplyGlobalUiScale(DesignTokens &tokens, const float scale) noexcept {
-        const float clamped = std::clamp(scale, 0.75F, 2.0F);
+        const float clamped = std::clamp(scale, 1.0F, 2.0F);
         tokens.sizes.uiScale = clamped;
 
         // Resolve all numeric presentation metrics from one scale so component size,
@@ -151,6 +195,13 @@ namespace Horo::Editor::DesignSystem {
         tokens.typography.sansBase *= clamped;
         tokens.typography.sansCompactBase *= clamped;
         tokens.typography.sansEmphasisBase *= clamped;
+        tokens.typography.caption *= clamped;
+        tokens.typography.label *= clamped;
+        tokens.typography.body *= clamped;
+        tokens.typography.cardTitle *= clamped;
+        tokens.typography.title *= clamped;
+        tokens.typography.heading *= clamped;
+        tokens.typography.display *= clamped;
 
         tokens.radii.control *= clamped;
         tokens.radii.card *= clamped;
@@ -171,6 +222,7 @@ namespace Horo::Editor::DesignSystem {
         tokens.spacing.bodyPaddingY *= clamped;
         tokens.spacing.sidebarPaddingX *= clamped;
         tokens.spacing.sidebarPaddingY *= clamped;
+        tokens.spacing.propertyRowGap *= clamped;
 
         for (ComponentSizeMetrics &metrics : tokens.components.sizes) {
             metrics.fontSize *= clamped;
@@ -209,14 +261,33 @@ namespace Horo::Editor::DesignSystem {
                 ImVec4{0.831F, 0.322F, 0.290F, 1.0F},
                 ImVec4{0.020F, 0.075F, 0.110F, 1.0F},
             },
-            TypographyTokens{16.0F, 14.0F, 16.0F},
+            TypographyTokens{
+                .sansBase = 16.0F,
+                .sansCompactBase = 14.0F,
+                .sansEmphasisBase = 16.0F,
+                .caption = 14.0F,
+                .label = 14.0F,
+                .body = 16.0F,
+                .cardTitle = 16.0F,
+                .title = 18.0F,
+                .heading = 22.0F,
+                .display = 28.0F,
+            },
             RadiusTokens{4.0F, 6.0F, 8.0F},
             SizeTokens{280.0F, 32.0F, 900.0F, 680.0F, 58.0F, 52.0F, 220.0F, 620.0F, 440.0F, 1.0F},
-            SpacingTokens{18.0F, 14.0F, 28.0F, 24.0F, 14.0F, 18.0F},
+            SpacingTokens{
+                .cardPadding = 18.0F,
+                .gridGap = 14.0F,
+                .bodyPaddingX = 28.0F,
+                .bodyPaddingY = 24.0F,
+                .sidebarPaddingX = 14.0F,
+                .sidebarPaddingY = 18.0F,
+                .propertyRowGap = 8.0F,
+            },
             ComponentTokens{
                 std::array{
-                    ComponentSizeMetrics{12.0F, 8.0F, 3.0F, 24.0F, 12.0F},
-                    ComponentSizeMetrics{13.0F, 10.0F, 5.0F, 28.0F, 14.0F},
+                    ComponentSizeMetrics{14.0F, 8.0F, 3.0F, 24.0F, 12.0F},
+                    ComponentSizeMetrics{14.0F, 10.0F, 5.0F, 28.0F, 14.0F},
                     ComponentSizeMetrics{14.0F, 14.0F, 7.0F, 32.0F, 16.0F},
                     ComponentSizeMetrics{16.0F, 18.0F, 10.0F, 40.0F, 20.0F},
                     ComponentSizeMetrics{18.0F, 22.0F, 13.0F, 48.0F, 24.0F},
@@ -224,6 +295,32 @@ namespace Horo::Editor::DesignSystem {
                 std::array{0.0F, 4.0F, 8.0F, 12.0F, 16.0F, 24.0F},
             },
         };
+    }
+
+    /**
+     * @brief Resolves a semantic visible-text size from the active theme tokens.
+     * @param tokens Active resolved design tokens.
+     * @param role Semantic text role requested by the UI surface.
+     * @return Theme-resolved size in logical UI pixels.
+     */
+    [[nodiscard]] constexpr float TypographyFor(const DesignTokens &tokens, const TypographyRole role) noexcept {
+        switch (role) {
+            case TypographyRole::Caption:
+                return tokens.typography.caption;
+            case TypographyRole::Label:
+                return tokens.typography.label;
+            case TypographyRole::Body:
+                return tokens.typography.body;
+            case TypographyRole::CardTitle:
+                return tokens.typography.cardTitle;
+            case TypographyRole::Title:
+                return tokens.typography.title;
+            case TypographyRole::Heading:
+                return tokens.typography.heading;
+            case TypographyRole::Display:
+                return tokens.typography.display;
+        }
+        return tokens.typography.body;
     }
 
 }  // namespace Horo::Editor::DesignSystem

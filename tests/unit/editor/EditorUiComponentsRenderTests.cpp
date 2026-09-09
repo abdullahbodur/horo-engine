@@ -94,10 +94,16 @@ TEST_CASE("Editor icon registry resolves canonical and catalog tokens", "[unit][
     using Horo::Editor::Ui::UiIconRegistry;
 
     REQUIRE(UiIconRegistry::Resolve("action.delete") == UiIcon::Delete);
+    REQUIRE(UiIconRegistry::Resolve("status.info") == UiIcon::Info);
+    REQUIRE(UiIconRegistry::Resolve("status.warning") == UiIcon::Warning);
+    REQUIRE(UiIconRegistry::Resolve("status.error") == UiIcon::Error);
     REQUIRE(UiIconRegistry::Resolve("action.more_vertical") == UiIcon::MoreVertical);
     REQUIRE(UiIconRegistry::Resolve("action.checkbox_unchecked") == UiIcon::CheckboxUnchecked);
     REQUIRE(UiIconRegistry::Resolve("primitive.light.directional") == UiIcon::DirectionalLight);
     REQUIRE(UiIconRegistry::Resolve("primitive.collider.sphere") == UiIcon::Sphere);
+    REQUIRE(UiIconRegistry::Resolve("asset.folder") == UiIcon::Folder);
+    REQUIRE(UiIconRegistry::Resolve("location.package") == UiIcon::Package);
+    REQUIRE(UiIconRegistry::Resolve("navigation.arrow_back") == UiIcon::ArrowBack);
     REQUIRE_FALSE(UiIconRegistry::Resolve("unknown.icon").has_value());
     REQUIRE(std::string(UiIconRegistry::Token(UiIcon::VisibilityOff)) == "action.visibility_off");
     REQUIRE(UiIconRegistry::Token(UiIcon::None).empty());
@@ -114,7 +120,79 @@ TEST_CASE("Editor icon registry resolves canonical and catalog tokens", "[unit][
     };
     REQUIRE(containsGlyph(0xE834));
     REQUIRE(containsGlyph(0xE8B8));
+    REQUIRE(containsGlyph(0xE2C7));
+    REQUIRE(containsGlyph(0xE5C4));
+    REQUIRE(containsGlyph(0xE9B0));
+    REQUIRE(containsGlyph(0xE145));
+    REQUIRE(containsGlyph(0xE1A1));
+    REQUIRE(containsGlyph(0xE88E));
+    REQUIRE(containsGlyph(0xE002));
+    REQUIRE(containsGlyph(0xE000));
+    REQUIRE(containsGlyph(0xE872));
     REQUIRE(containsGlyph(0xF053));
+}
+
+TEST_CASE("Shared tooltip applies theme chrome and restores caller style", "[unit][editor][gui][design-system]") {
+    using namespace Horo::Editor;
+    using namespace Horo::Editor::Ui;
+
+    IMGUI_CHECKVERSION();
+    ImGui::CreateContext();
+    ImGuiIO &io = ImGui::GetIO();
+    io.DisplaySize = {320.0F, 180.0F};
+    io.DeltaTime = 1.0F / 60.0F;
+    io.Fonts->AddFontDefault();
+    static_cast<void>(io.Fonts->Build());
+    ImFont *defaultFont = io.Fonts->Fonts.front();
+    const Theme::Fonts fonts{
+        .sans = defaultFont,
+        .sansCompact = defaultFont,
+        .sansEmphasis = defaultFont,
+        .icon = defaultFont,
+    };
+
+    ImGuiStyle &style = ImGui::GetStyle();
+    style.WindowPadding = {1.0F, 2.0F};
+    style.WindowRounding = 1.0F;
+    style.PopupBorderSize = 0.0F;
+    const ImVec2 originalPadding = style.WindowPadding;
+    const float originalRounding = style.WindowRounding;
+    const float originalBorderSize = style.PopupBorderSize;
+    ImVec2 tooltipPadding{};
+    float tooltipRounding = 0.0F;
+    float tooltipBorderSize = 0.0F;
+    ImVec4 tooltipSurface{};
+    ImVec4 tooltipBorder{};
+
+    ImGui::NewFrame();
+    ImGui::Begin("TooltipStyleTest");
+    {
+        ScopedTooltip tooltip(&fonts);
+        tooltipPadding = style.WindowPadding;
+        tooltipRounding = style.WindowRounding;
+        tooltipBorderSize = style.PopupBorderSize;
+        tooltipSurface = style.Colors[ImGuiCol_PopupBg];
+        tooltipBorder = style.Colors[ImGuiCol_Border];
+        ImGui::TextUnformatted("Dependencies");
+    }
+    const ImVec2 restoredPadding = style.WindowPadding;
+    const float restoredRounding = style.WindowRounding;
+    const float restoredBorderSize = style.PopupBorderSize;
+    ImGui::End();
+    ImGui::Render();
+    ImGui::DestroyContext();
+
+    const auto &tokens = Theme::GetActiveTokens();
+    REQUIRE(tooltipPadding.x == Catch::Approx(DesignSystem::SpacingFor(tokens, SpacingSize::Medium)));
+    REQUIRE(tooltipPadding.y == Catch::Approx(DesignSystem::SpacingFor(tokens, SpacingSize::Small)));
+    REQUIRE(tooltipRounding == Catch::Approx(tokens.radii.card));
+    REQUIRE(tooltipBorderSize >= 1.0F);
+    REQUIRE(tooltipSurface.x == Catch::Approx(Theme::TooltipSurface().x));
+    REQUIRE(tooltipBorder.z == Catch::Approx(Theme::TooltipBorder().z));
+    REQUIRE(restoredPadding.x == Catch::Approx(originalPadding.x));
+    REQUIRE(restoredPadding.y == Catch::Approx(originalPadding.y));
+    REQUIRE(restoredRounding == Catch::Approx(originalRounding));
+    REQUIRE(restoredBorderSize == Catch::Approx(originalBorderSize));
 }
 
 TEST_CASE("Generic card title actions invoke caller-owned callbacks", "[unit][editor][gui][design-system]") {
@@ -305,7 +383,7 @@ TEST_CASE("Component metrics use theme overrides while global scaling is disable
     Theme::ThemeEntry entry;
     REQUIRE(Theme::LoadThemeFromJson(path.string().c_str(), entry));
     const ComponentSizeMetrics &xs = MetricsFor(entry.designTokens, ComponentSize::XS);
-    REQUIRE(xs.fontSize == 11.0F);
+    REQUIRE(xs.fontSize == 14.0F);
     REQUIRE(xs.minimumHeight == 20.0F);
     REQUIRE(SpacingFor(entry.designTokens, SpacingSize::Medium) == 13.0F);
     std::error_code removeError;
@@ -519,4 +597,42 @@ TEST_CASE("Editable object title keeps its compact input vertically centered", "
     INFO("top padding: " << topPadding << ", bottom padding: " << bottomPadding);
     REQUIRE((inputMaximum.y - inputMinimum.y == Catch::Approx(30.0F).margin(1.0F)));
     REQUIRE((std::fabs(topPadding - bottomPadding) <= 1.0F));
+}
+
+TEST_CASE("Inspector property rows use the theme vertical gap", "[unit][editor][gui][design-system]") {
+    using namespace Horo::Editor;
+    using namespace Horo::Editor::Ui;
+
+    Theme::SetUiScalePercent(100);
+    IMGUI_CHECKVERSION();
+    ImGui::CreateContext();
+    ImGuiIO &io = ImGui::GetIO();
+    io.DisplaySize = {480.0F, 240.0F};
+    io.DeltaTime = 1.0F / 60.0F;
+    io.Fonts->AddFontDefault();
+    static_cast<void>(io.Fonts->Build());
+    ImFont *defaultFont = io.Fonts->Fonts.front();
+    const Theme::Fonts fonts{
+        .sans = defaultFont,
+        .sansCompact = defaultFont,
+        .sansEmphasis = defaultFont,
+    };
+
+    ImGui::NewFrame();
+    ImGui::SetNextWindowPos({20.0F, 20.0F});
+    ImGui::SetNextWindowSize({360.0F, 180.0F});
+    ImGui::Begin("InspectorPropertyRowGapTest");
+    float firstValue = 1.0F;
+    float secondValue = 2.0F;
+    static_cast<void>(DrawFloatPropRow("First", "first", firstValue, fonts));
+    const float firstControlBottom = ImGui::GetItemRectMax().y;
+    static_cast<void>(DrawFloatPropRow("Second", "second", secondValue, fonts));
+    const float secondControlTop = ImGui::GetItemRectMin().y;
+    ImGui::End();
+    ImGui::Render();
+
+    const float controlGap = secondControlTop - firstControlBottom;
+    REQUIRE(controlGap == Catch::Approx(Theme::GetActiveTokens().spacing.propertyRowGap).margin(1.0F));
+
+    ImGui::DestroyContext();
 }

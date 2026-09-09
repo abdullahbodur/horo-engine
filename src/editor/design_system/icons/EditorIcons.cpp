@@ -297,6 +297,9 @@ namespace Horo::Editor::Ui {
         constexpr std::array kIconDescriptors{
             IconDescriptor{"", DrawNothing},
             IconDescriptor{"generic", DrawGenericIcon},
+            IconDescriptor{"status.info", DrawNothing},
+            IconDescriptor{"status.warning", DrawNothing},
+            IconDescriptor{"status.error", DrawNothing},
             IconDescriptor{"action.create", DrawCreateIcon},
             IconDescriptor{"action.rename", DrawRenameIcon},
             IconDescriptor{"action.duplicate", DrawDuplicateIcon},
@@ -324,6 +327,30 @@ namespace Horo::Editor::Ui {
             IconDescriptor{"primitive.plane", DrawPlaneIcon},
             IconDescriptor{"primitive.quad", DrawQuadIcon},
             IconDescriptor{"primitive.trigger_volume", DrawQuadIcon},
+            IconDescriptor{"navigation.arrow_back", DrawNothing},
+            IconDescriptor{"navigation.arrow_forward", DrawNothing},
+            IconDescriptor{"navigation.arrow_upward", DrawNothing},
+            IconDescriptor{"action.search", DrawNothing},
+            IconDescriptor{"view.grid", DrawNothing},
+            IconDescriptor{"view.list", DrawNothing},
+            IconDescriptor{"action.create_new_folder", DrawCreateIcon},
+            IconDescriptor{"location.favorite", DrawNothing},
+            IconDescriptor{"location.history", DrawNothing},
+            IconDescriptor{"location.storage", DrawNothing},
+            IconDescriptor{"location.package", DrawNothing},
+            IconDescriptor{"location.account_tree", DrawNothing},
+            IconDescriptor{"location.tag", DrawNothing},
+            IconDescriptor{"asset.folder", DrawNothing},
+            IconDescriptor{"asset.image", DrawNothing},
+            IconDescriptor{"asset.audio_file", DrawAudioSourceIcon},
+            IconDescriptor{"asset.description", DrawGenericIcon},
+            IconDescriptor{"action.pause", DrawNothing},
+            IconDescriptor{"action.download", DrawNothing},
+            IconDescriptor{"action.stop", DrawNothing},
+            IconDescriptor{"action.play", DrawNothing},
+            IconDescriptor{"action.record", DrawNothing},
+            IconDescriptor{"action.volume_off", DrawNothing},
+            IconDescriptor{"action.clear_all", DrawNothing},
         };
 
         struct IconTokenAlias {
@@ -355,6 +382,16 @@ namespace Horo::Editor::Ui {
         [[nodiscard]] constexpr ImWchar MaterialSymbolGlyph(const UiIcon icon) noexcept {
             using enum UiIcon;
             switch (icon) {
+                case Info:
+                    return 0xE88E;  // info
+                case Warning:
+                    return 0xE002;  // warning
+                case Error:
+                    return 0xE000;  // error
+                case Create:
+                    return 0xE145;  // add
+                case Delete:
+                    return 0xE872;  // delete
                 case Reset:
                     return 0xF053;  // restart_alt
                 case Check:
@@ -365,6 +402,54 @@ namespace Horo::Editor::Ui {
                     return 0xE8B8;  // settings
                 case MoreVertical:
                     return 0xE5D4;  // more_vert
+                case UiIcon::ArrowBack:
+                    return 0xE5C4;  // arrow_back
+                case UiIcon::ArrowForward:
+                    return 0xE5C8;  // arrow_forward
+                case UiIcon::ArrowUpward:
+                    return 0xE5D8;  // arrow_upward
+                case UiIcon::Search:
+                    return 0xE8B6;  // search
+                case UiIcon::GridView:
+                    return 0xE9B0;  // grid_view
+                case UiIcon::ViewList:
+                    return 0xE8EF;  // view_list
+                case UiIcon::CreateNewFolder:
+                    return 0xE2CC;  // create_new_folder
+                case UiIcon::Favorite:
+                    return 0xE838;  // star
+                case UiIcon::History:
+                    return 0xE889;  // history
+                case UiIcon::Storage:
+                    return 0xE1DB;  // storage
+                case UiIcon::Package:
+                    return 0xE1A1;  // inventory_2
+                case UiIcon::AccountTree:
+                    return 0xE97A;  // account_tree
+                case UiIcon::Tag:
+                    return 0xE892;  // label
+                case UiIcon::Folder:
+                    return 0xE2C7;  // folder
+                case UiIcon::Image:
+                    return 0xE3F4;  // image
+                case UiIcon::AudioFile:
+                    return 0xEB82;  // audio_file
+                case UiIcon::Description:
+                    return 0xE873;  // description
+                case UiIcon::Pause:
+                    return 0xE034;  // pause
+                case UiIcon::Download:
+                    return 0xE2C4;  // file_download
+                case UiIcon::Stop:
+                    return 0xE047;  // stop
+                case UiIcon::Play:
+                    return 0xE037;  // play_arrow
+                case UiIcon::Record:
+                    return 0xE061;  // fiber_manual_record
+                case UiIcon::VolumeOff:
+                    return 0xE04F;  // volume_off
+                case UiIcon::ClearAll:
+                    return 0xE0B8;  // clear_all
                 default:
                     return 0;
             }
@@ -413,12 +498,27 @@ namespace Horo::Editor::Ui {
 
     /** @copydoc UiIconRegistry::MaterialSymbolGlyphRanges */
     std::span<const ImWchar> UiIconRegistry::MaterialSymbolGlyphRanges() noexcept {
-        static constexpr std::array<ImWchar, 15> ranges{
+        static constexpr std::array<ImWchar, 45> ranges{
             0xE000, 0xE003,  // status icons
-            0xE5D4, 0xE5D5,  // more_vert
-            0xE834, 0xE835,  // check_box
-            0xE86C, 0xE86D,  // check_circle
-            0xE8B8, 0xE8B9,  // settings
+            0xE034, 0xE061,  // media controls
+            0xE0B8, 0xE0B8,  // clear_all
+            0xE145, 0xE145,  // add
+            0xE1A1, 0xE1A1,  // inventory_2
+            0xE1DB, 0xE1DB,  // storage
+            0xE2C7, 0xE2C7,  // folder
+            0xE2CC, 0xE2CC,  // create_new_folder
+            0xE3F4, 0xE3F4,  // image
+            0xE5C4, 0xE5C4,  // arrow_back
+            0xE5C8, 0xE5C8,  // arrow_forward
+            0xE5D4, 0xE5D8,  // more_vert, arrow_upward
+            0xE834, 0xE838,  // check boxes, star
+            0xE86C, 0xE873,  // check_circle, description
+            0xE889, 0xE892,  // history, label
+            0xE8B6, 0xE8B8,  // search, settings
+            0xE8EF, 0xE8EF,  // view_list
+            0xE97A, 0xE97A,  // account_tree
+            0xE9B0, 0xE9B0,  // grid_view
+            0xEB82, 0xEB82,  // audio_file
             0xEF4A, 0xEF4B,  // circle
             0xF053, 0xF054,  // restart_alt
             0,

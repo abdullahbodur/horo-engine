@@ -206,17 +206,28 @@ namespace Horo::Editor::Theme {
                 for (std::size_t index = 0; index < names.size(); ++index)
                     OverrideFloat(*spacingIt, names[index], tokens.components.spacing[index + 1U]);
             }
+            if (const auto spacingIt = tokenJson.find("layoutSpacing"); spacingIt != tokenJson.end() && spacingIt->is_object()) {
+                OverrideFloat(*spacingIt, "propertyRowGap", tokens.spacing.propertyRowGap);
+            }
 
             if (const auto typographyIt = tokenJson.find("typography"); typographyIt != tokenJson.end() && typographyIt->is_object()) {
                 OverrideFloat(*typographyIt, "sansBase", tokens.typography.sansBase);
                 OverrideFloat(*typographyIt, "sansCompactBase", tokens.typography.sansCompactBase);
                 OverrideFloat(*typographyIt, "sansEmphasisBase", tokens.typography.sansEmphasisBase);
+                OverrideFloat(*typographyIt, "caption", tokens.typography.caption);
+                OverrideFloat(*typographyIt, "label", tokens.typography.label);
+                OverrideFloat(*typographyIt, "body", tokens.typography.body);
+                OverrideFloat(*typographyIt, "cardTitle", tokens.typography.cardTitle);
+                OverrideFloat(*typographyIt, "title", tokens.typography.title);
+                OverrideFloat(*typographyIt, "heading", tokens.typography.heading);
+                OverrideFloat(*typographyIt, "display", tokens.typography.display);
             }
             if (const auto radiiIt = tokenJson.find("radii"); radiiIt != tokenJson.end() && radiiIt->is_object()) {
                 OverrideFloat(*radiiIt, "control", tokens.radii.control);
                 OverrideFloat(*radiiIt, "card", tokens.radii.card);
                 OverrideFloat(*radiiIt, "modal", tokens.radii.modal);
             }
+            NormalizeDesignTokens(tokens);
         }
 
         [[nodiscard]] bool ReadJsonColor(const nlohmann::json &value, ImVec4 &color) {

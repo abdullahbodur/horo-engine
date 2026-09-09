@@ -405,7 +405,7 @@ namespace Horo::Editor {
                 return std::isfinite(value) ? std::clamp(value, minValue, maxValue) : minValue;
             };
             const int uiScalePercent = bounded(s.uiScalePercent, 75, 200);
-            const int codeFontSizePx = bounded(s.codeFontSizePx, 8, 24);
+            const int codeFontSizePx = bounded(s.codeFontSizePx, 14, 24);
             const int orbitSensitivity = bounded(s.orbitSensitivity, 10, 300);
             const int panSensitivity = bounded(s.panSensitivity, 10, 300);
             const int masterVolume = bounded(s.masterVolume, 0, 100);
@@ -524,7 +524,7 @@ namespace Horo::Editor {
             settings.languageTag = "en-US";
         }
         clampInt(settings.uiScalePercent, 75, 200, "UI scale must be between 75 and 200 percent.");
-        clampInt(settings.codeFontSizePx, 8, 24, "Code font size must be between 8 and 24 px.");
+        clampInt(settings.codeFontSizePx, 14, 24, "Code font size must be between 14 and 24 px.");
         clampInt(settings.orbitSensitivity, 10, 300, "Orbit sensitivity must be between 10 and 300.");
         clampInt(settings.panSensitivity, 10, 300, "Pan sensitivity must be between 10 and 300.");
         clampInt(settings.masterVolume, 0, 100, "Master volume must be between 0 and 100.");

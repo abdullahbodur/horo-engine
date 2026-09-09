@@ -297,7 +297,7 @@ namespace Horo::Editor {
 
         float leftPanelWidth = 268.0F;
         float rightPanelWidth = 300.0F;
-        float bottomPanelHeight = 238.0F;
+        float bottomPanelHeight = 310.0F;
 
         std::unordered_map<PanelId, WorkspaceDockArea, TransparentStringHash, std::equal_to<>> panelDockAreas;
 

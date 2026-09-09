@@ -29,6 +29,12 @@ namespace Horo::Editor {
         [[nodiscard]] static std::vector<std::size_t> ProjectRecords(std::span<const OperationRecord> operations, std::string_view search);
 
     private:
+        enum class StateFilter : std::uint8_t {
+            All,
+            Running,
+            Failed,
+        };
+
         [[nodiscard]] bool RefreshSnapshot();
         void RebuildFilter();
 
@@ -40,6 +46,7 @@ namespace Horo::Editor {
         std::vector<std::size_t> m_filteredIndices;
         bool m_filterDirty{true};
         bool m_initialFollowTail{true};
-        std::array<bool, 6> m_columnVisible{true, true, true, true, true, true};
+        StateFilter m_stateFilter{StateFilter::All};
+        int m_kindSelection{};
     };
 }  // namespace Horo::Editor

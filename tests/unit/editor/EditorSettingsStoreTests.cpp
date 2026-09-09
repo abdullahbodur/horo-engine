@@ -149,7 +149,7 @@ namespace {
         REQUIRE((std::get<std::string>(before.Get(SettingKey{"editor.theme.active"})) == "horo_dark"));
         REQUIRE((std::get<std::string>(before.Get(SettingKey{"editor.appearance.accent_color"})) == "#04A5FC"));
         REQUIRE((std::get<std::int64_t>(before.Get(SettingKey{"editor.appearance.ui_scale_percent"})) == 100));
-        REQUIRE((std::get<std::int64_t>(before.Get(SettingKey{"editor.appearance.code_font_size_px"})) == 13));
+        REQUIRE((std::get<std::int64_t>(before.Get(SettingKey{"editor.appearance.code_font_size_px"})) == 14));
         REQUIRE((std::get<std::string>(after.Get(SettingKey{"editor.theme.active"})) == "light"));
         REQUIRE((std::get<std::string>(after.Get(SettingKey{"editor.appearance.accent_color"})) == "#112233"));
         REQUIRE((std::get<std::int64_t>(after.Get(SettingKey{"editor.appearance.ui_scale_percent"})) == 125));

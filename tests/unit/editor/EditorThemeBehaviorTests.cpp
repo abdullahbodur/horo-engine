@@ -62,6 +62,9 @@ TEST_CASE("Built-in themes update active style and design tokens", "[unit][edito
         Theme::SetThemePreset(preset);
         Theme::ApplyCurrentTheme();
         REQUIRE(Theme::GetThemePreset() == preset);
+        const ImVec4 toolbar = Theme::BottomDockToolbarSurface();
+        const ImVec4 content = Theme::BottomDockContentSurface();
+        REQUIRE((toolbar.x != content.x || toolbar.y != content.y || toolbar.z != content.z));
     }
     Theme::SetUiScalePercent(150);
     REQUIRE(Theme::GetThemePreset() == Theme::Preset::Light);
@@ -81,10 +84,22 @@ TEST_CASE("Custom theme parsing accepts supported colors and token overrides", "
             "Ignored": "invalid"
         },
         "tokens": {
-            "typography": {"sansBase": 16.0, "sansCompactBase": 13.0, "sansEmphasisBase": 17.0},
+            "typography": {
+                "sansBase": 16.0,
+                "sansCompactBase": 14.0,
+                "sansEmphasisBase": 17.0,
+                "caption": 9.0,
+                "label": 15.0,
+                "body": 17.0,
+                "cardTitle": 18.0,
+                "title": 19.0,
+                "heading": 23.0,
+                "display": 30.0
+            },
             "radii": {"control": 3.0, "card": 7.0, "modal": 11.0},
+            "layoutSpacing": {"propertyRowGap": 10.0},
             "styleSpacing": {"xs": 2.0, "s": 4.0, "m": 8.0, "l": 12.0, "xl": 20.0},
-            "componentSizes": {"m": {"height": 34.0, "paddingX": 10.0, "paddingY": 5.0, "iconSize": 18.0}}
+            "componentSizes": {"m": {"fontSize": 8.0, "height": 34.0, "paddingX": 10.0, "paddingY": 5.0, "iconSize": 18.0}}
         }
     })");
     directory.Write("invalid.json", "{not-json");
@@ -95,7 +110,17 @@ TEST_CASE("Custom theme parsing accepts supported colors and token overrides", "
     REQUIRE_FALSE(custom.isBuiltIn);
     REQUIRE(custom.colors.contains("WindowBg"));
     REQUIRE(custom.designTokens.typography.sansBase == 16.0F);
+    REQUIRE(custom.designTokens.typography.caption == 14.0F);
+    REQUIRE(custom.designTokens.typography.label == 15.0F);
+    REQUIRE(custom.designTokens.typography.body == 17.0F);
+    REQUIRE(custom.designTokens.typography.cardTitle == 18.0F);
+    REQUIRE(custom.designTokens.typography.title == 19.0F);
+    REQUIRE(custom.designTokens.typography.heading == 23.0F);
+    REQUIRE(custom.designTokens.typography.display == 30.0F);
+    REQUIRE(Horo::Editor::DesignSystem::MetricsFor(custom.designTokens, Horo::Editor::DesignSystem::ComponentSize::Medium).fontSize ==
+            14.0F);
     REQUIRE(custom.designTokens.radii.modal == 11.0F);
+    REQUIRE(custom.designTokens.spacing.propertyRowGap == 10.0F);
 
     Theme::ThemeEntry invalid;
     REQUIRE_FALSE(Theme::LoadThemeFromJson((directory.Path() / "invalid.json").string().c_str(), invalid));

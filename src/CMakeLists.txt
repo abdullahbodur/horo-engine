@@ -884,6 +884,7 @@ if (HORO_BUILD_EDITOR_GUI)
             editor/screens/workspace/WorkspacePanelRegistry.cpp
             editor/screens/workspace/DefaultWorkspacePanels.cpp
             editor/screens/workspace/panels/global_dock/GlobalDockPanel.cpp
+            editor/screens/workspace/panels/global_dock/GlobalDockPaneChrome.cpp
             editor/screens/workspace/panels/global_dock/panes/asset_browser/AssetBrowserGrid.cpp
             editor/screens/workspace/panels/global_dock/panes/asset_browser/AssetBrowserActions.cpp
             editor/screens/workspace/panels/global_dock/panes/asset_browser/AssetBrowserCards.cpp
@@ -894,13 +895,11 @@ if (HORO_BUILD_EDITOR_GUI)
             editor/screens/workspace/panels/global_dock/panes/audio/GlobalDockAudioPane.cpp
             editor/screens/workspace/panels/global_dock/panes/build_output/GlobalDockBuildOutputPane.cpp
             editor/screens/workspace/panels/global_dock/panes/console/GlobalDockConsolePane.cpp
-            editor/screens/workspace/panels/global_dock/panes/localization/GlobalDockLocalizationPane.cpp
             editor/screens/workspace/panels/global_dock/panes/mcp/GlobalDockMcpPane.cpp
             editor/screens/workspace/panels/global_dock/panes/network/GlobalDockNetworkPane.cpp
             editor/screens/workspace/panels/global_dock/panes/operations/GlobalDockOperationsPane.cpp
             editor/screens/workspace/panels/global_dock/panes/performance/GlobalDockPerformancePane.cpp
             editor/screens/workspace/panels/global_dock/panes/physics/GlobalDockPhysicsPane.cpp
-            editor/screens/workspace/panels/global_dock/panes/shared/GlobalDockStatusPane.cpp
             editor/screens/workspace/EditorWorkspaceController.cpp
             editor/screens/workspace/EditorWorkspaceControllerCommands.cpp
             editor/screens/workspace/EditorWorkspaceControllerContentBrowser.cpp
