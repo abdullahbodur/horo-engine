@@ -8,6 +8,16 @@
 #include "Horo/Foundation/ErrorCode.h"
 
 namespace Horo::WorldStreaming::WorldStreamingErrors {
+    /** @brief A fallback provider descriptor has malformed ownership, revision, mode-specific or cell data. */
+    extern const ErrorCodeDescriptor FallbackProviderInvalid;
+    /** @brief A fallback provider mode is unknown to this contract version. */
+    extern const ErrorCodeDescriptor FallbackProviderUnsupported;
+    /** @brief A single-cell fallback cannot fit the caller's mandatory published-cell ceiling. */
+    extern const ErrorCodeDescriptor FallbackProviderCapacityExceeded;
+    /** @brief A fallback operation names a foreign owner or non-successor configuration revision. */
+    extern const ErrorCodeDescriptor FallbackProviderStale;
+    /** @brief A cancelling or closed fallback provider rejects replacement or cancellation admission. */
+    extern const ErrorCodeDescriptor FallbackProviderLifecycleUnavailable;
     /** @brief A world-partition identity uses its reserved invalid representation. */
     extern const ErrorCodeDescriptor IdentityInvalid;
     /** @brief A canonical serialized identity is malformed or contains a reserved value. */
