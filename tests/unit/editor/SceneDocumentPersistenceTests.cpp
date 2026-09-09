@@ -156,7 +156,8 @@ namespace {
                                          .primitiveMesh = PrimitiveMeshDescriptor::Defaults(Runtime::PrimitiveMeshType::Box),
                                          .components =
                                              SceneObjectComponentSet{
-                                                 .camera = Runtime::CameraComponent{.nearPlane = 0.25F, .farPlane = 500.0F},
+                                                 .camera =
+                                                     Runtime::CameraComponent{.nearPlane = 0.25F, .farPlane = 500.0F, .enabled = false},
                                                  .light = Runtime::LightComponent{.kind = Runtime::LightKind::Point, .intensity = 3.0F},
                                                  .triggerVolume = Runtime::TriggerVolumeComponent{Runtime::ColliderShapeType::Sphere},
                                                  .audioSource = Runtime::AudioSourceComponent{.gain = 0.75F, .spatial = false},
@@ -376,6 +377,14 @@ TEST_CASE("Project Scene Resolver Rejects A Missing Configured Default Scene", "
     TemporaryProject project;
     project.WriteMetadata();
     REQUIRE((LoadProjectDefaultScene(project.Root()).HasError()));
+}
+
+TEST_CASE("Project Scene Resolver Accepts An Empty Default Scene", "[unit][editor][persistence]") {
+    TemporaryProject project;
+    project.WriteMetadata("");
+    const auto loaded = LoadProjectDefaultScene(project.Root());
+    REQUIRE((loaded.HasValue()));
+    REQUIRE_FALSE((loaded.Value().has_value()));
 }
 
 TEST_CASE("Project Scene Loader Rejects Unknown Schema Versions", "[unit][editor][persistence]") {

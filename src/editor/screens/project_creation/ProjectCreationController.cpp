@@ -142,7 +142,7 @@ namespace Horo::Editor {
             if (draft_.templateId == "empty") {
                 draft_.includeStarterContent = false;
                 draft_.defaultScene = "";
-            } else if (draft_.templateId == "3d-starter") {
+            } else if (draft_.templateId == "3d-starter" || draft_.templateId == "custom") {
                 draft_.includeStarterContent = true;
                 if (draft_.defaultScene.empty()) {
                     draft_.defaultScene = "assets/scenes/main.horo";
@@ -160,12 +160,11 @@ namespace Horo::Editor {
                     draft_.defaultScene = "assets/scenes/benchmark.horo";
                 }
             } else if (draft_.templateId == "package-based") {
+                draft_.includeStarterContent = true;
                 draft_.restorePackages = true;
                 if (draft_.defaultScene.empty()) {
                     draft_.defaultScene = "assets/scenes/main.horo";
                 }
-            } else if (draft_.templateId == "custom" && draft_.defaultScene.empty()) {
-                draft_.defaultScene = "assets/scenes/main.horo";
             }
         }
     }
@@ -243,6 +242,11 @@ namespace Horo::Editor {
     /** @copydoc ProjectCreationController::SetIncludeStarterContent */
     void ProjectCreationController::SetIncludeStarterContent(const bool includeStarterContent) {
         draft_.includeStarterContent = includeStarterContent;
+        if (!includeStarterContent) {
+            draft_.defaultScene.clear();
+        } else if (draft_.defaultScene.empty()) {
+            draft_.defaultScene = "assets/scenes/main.horo";
+        }
     }
 
     /** @copydoc ProjectCreationController::SetGenerateCMakeProject */

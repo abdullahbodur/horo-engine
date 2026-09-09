@@ -273,11 +273,13 @@ namespace Horo::Editor {
             auto defaultScene = LoadProjectDefaultScene(request.projectRoot);
             if (defaultScene.HasError())
                 return fail(OpenError(ProjectOpenErrors::ScenePreflightFailed, defaultScene.ErrorValue().message));
-            if (!defaultScene.Value().has_value() || !defaultScene.Value()->existed)
-                return fail(OpenError(ProjectOpenErrors::ScenePreflightFailed, "The configured project default scene does not exist."));
-            SceneDocument sceneValidation;
-            if (auto validated = sceneValidation.LoadSaved(defaultScene.Value()->objects); validated.HasError())
-                return fail(OpenError(ProjectOpenErrors::ScenePreflightFailed, validated.ErrorValue().message));
+            if (defaultScene.Value().has_value()) {
+                if (!defaultScene.Value()->existed)
+                    return fail(OpenError(ProjectOpenErrors::ScenePreflightFailed, "The configured project default scene does not exist."));
+                SceneDocument sceneValidation;
+                if (auto validated = sceneValidation.LoadSaved(defaultScene.Value()->objects); validated.HasError())
+                    return fail(OpenError(ProjectOpenErrors::ScenePreflightFailed, validated.ErrorValue().message));
+            }
             if (cancellation.IsCancellationRequested() && !compatibility.cancellationDeferred)
                 return fail(OpenError(ProjectOpenErrors::Cancelled));
 

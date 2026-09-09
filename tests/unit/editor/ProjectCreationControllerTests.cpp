@@ -64,6 +64,29 @@ namespace {
         REQUIRE((!ProjectCreationController{DefaultAvailability()}.IsDirty()));
     }
 
+    TEST_CASE("Template Transitions Keep Starter Scene State Coherent", "[unit][editor][project-creation]") {
+        using namespace Horo::Editor;
+
+        ProjectCreationController controller{DefaultAvailability()};
+        controller.SetTemplateId("empty");
+        REQUIRE_FALSE((controller.Draft().includeStarterContent));
+        REQUIRE((controller.Draft().defaultScene.empty()));
+
+        controller.SetTemplateId("custom");
+        REQUIRE((controller.Draft().includeStarterContent));
+        REQUIRE((controller.Draft().defaultScene == "assets/scenes/main.horo"));
+
+        controller.SetTemplateId("empty");
+        controller.SetTemplateId("package-based");
+        REQUIRE((controller.Draft().includeStarterContent));
+        REQUIRE((controller.Draft().defaultScene == "assets/scenes/main.horo"));
+
+        controller.SetIncludeStarterContent(false);
+        REQUIRE((controller.Draft().defaultScene.empty()));
+        controller.SetIncludeStarterContent(true);
+        REQUIRE((controller.Draft().defaultScene == "assets/scenes/main.horo"));
+    }
+
     TEST_CASE("Rejects Blank And Path Like Names", "[unit][editor]") {
         using namespace Horo::Editor;
 

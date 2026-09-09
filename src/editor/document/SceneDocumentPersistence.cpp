@@ -388,6 +388,7 @@ namespace Horo::Editor {
                     {"orthographicHeight", camera.orthographicHeight},
                     {"nearPlane", camera.nearPlane},
                     {"farPlane", camera.farPlane},
+                    {"enabled", camera.enabled},
                 };
             }
             if (components.light.has_value()) {
@@ -406,10 +407,14 @@ namespace Horo::Editor {
                     {"range", light.range},
                     {"innerConeRadians", light.innerConeRadians},
                     {"outerConeRadians", light.outerConeRadians},
+                    {"enabled", light.enabled},
                 };
             }
             if (components.triggerVolume.has_value()) {
-                value["triggerVolume"] = {{"shape", static_cast<std::uint8_t>(components.triggerVolume->shape)}};
+                value["triggerVolume"] = {
+                    {"shape", static_cast<std::uint8_t>(components.triggerVolume->shape)},
+                    {"enabled", components.triggerVolume->enabled},
+                };
             }
             if (components.audioSource.has_value()) {
                 const Runtime::AudioSourceComponent &audio = *components.audioSource;
@@ -417,6 +422,7 @@ namespace Horo::Editor {
                     {"kind", audio.kind == Runtime::AudioSourceKind::NativeClip ? "native_clip" : "middleware_event"},
                     {"gain", audio.gain},
                     {"spatial", audio.spatial},
+                    {"enabled", audio.enabled},
                 };
             }
             if (!components.behaviors.empty()) {
@@ -454,6 +460,7 @@ namespace Horo::Editor {
                 .orthographicHeight = camera.at("orthographicHeight").get<float>(),
                 .nearPlane = camera.at("nearPlane").get<float>(),
                 .farPlane = camera.at("farPlane").get<float>(),
+                .enabled = camera.value("enabled", true),
             });
         }
 
@@ -476,6 +483,7 @@ namespace Horo::Editor {
                 .range = light.at("range").get<float>(),
                 .innerConeRadians = light.at("innerConeRadians").get<float>(),
                 .outerConeRadians = light.at("outerConeRadians").get<float>(),
+                .enabled = light.value("enabled", true),
             });
         }
 
@@ -484,8 +492,10 @@ namespace Horo::Editor {
             if (shape > static_cast<std::uint8_t>(Runtime::ColliderShapeType::StaticPlane)) {
                 return Result<Runtime::TriggerVolumeComponent>::Failure(PersistenceError(SceneInvalid, "Trigger shape is invalid."));
             }
-            return Result<Runtime::TriggerVolumeComponent>::Success(
-                Runtime::TriggerVolumeComponent{static_cast<Runtime::ColliderShapeType>(shape)});
+            return Result<Runtime::TriggerVolumeComponent>::Success(Runtime::TriggerVolumeComponent{
+                .shape = static_cast<Runtime::ColliderShapeType>(shape),
+                .enabled = triggerVolume.value("enabled", true),
+            });
         }
 
         [[nodiscard]] Result<Runtime::AudioSourceComponent> ParseAudioSourceComponent(const Json &audio) {
@@ -497,6 +507,7 @@ namespace Horo::Editor {
                 .kind = kind == "native_clip" ? Runtime::AudioSourceKind::NativeClip : Runtime::AudioSourceKind::MiddlewareEvent,
                 .gain = audio.at("gain").get<float>(),
                 .spatial = audio.at("spatial").get<bool>(),
+                .enabled = audio.value("enabled", true),
             });
         }
 
@@ -750,8 +761,11 @@ namespace Horo::Editor {
                 return Result<std::optional<LoadedProjectScene>>::Failure(
                     PersistenceError(ScenePathInvalid, "Project metadata does not contain settings.defaultScene."));
             }
-            const std::filesystem::path relativeScene =
-                std::filesystem::path{metadata["settings"]["defaultScene"].get<std::string>()}.lexically_normal();
+            const std::string configuredScene = metadata["settings"]["defaultScene"].get<std::string>();
+            if (configuredScene.empty()) {
+                return Result<std::optional<LoadedProjectScene>>::Success(std::nullopt);
+            }
+            const std::filesystem::path relativeScene = std::filesystem::path{configuredScene}.lexically_normal();
             if (!IsSafeProjectRelativePath(relativeScene)) {
                 return Result<std::optional<LoadedProjectScene>>::Failure(
                     PersistenceError(ScenePathInvalid, "Project defaultScene must be a safe project-relative path."));

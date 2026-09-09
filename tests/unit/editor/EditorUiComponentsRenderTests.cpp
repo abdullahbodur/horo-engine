@@ -18,6 +18,45 @@ namespace {
     void CaptureClipboardText(ImGuiContext *, const char *text) {
         gClipboardText = text;
     }
+
+    /** @brief Owns a minimal Dear ImGui context and its shared test font roles. */
+    struct ImGuiTestContext {
+        explicit ImGuiTestContext(const ImVec2 displaySize) {
+            IMGUI_CHECKVERSION();
+            ImGui::CreateContext();
+            io = &ImGui::GetIO();
+            io->DisplaySize = displaySize;
+            io->DeltaTime = 1.0F / 60.0F;
+            io->Fonts->AddFontDefault();
+            static_cast<void>(io->Fonts->Build());
+            ImFont *defaultFont = io->Fonts->Fonts.front();
+            fonts = {.sans = defaultFont, .sansCompact = defaultFont, .sansEmphasis = defaultFont, .icon = defaultFont};
+        }
+
+        ~ImGuiTestContext() {
+            ImGui::DestroyContext();
+        }
+
+        ImGuiIO *io{nullptr};
+        Horo::Editor::Theme::Fonts fonts;
+    };
+
+    /** @brief Renders one complete Dear ImGui test frame. */
+    template <typename DrawFrame> void RenderImGuiFrame(DrawFrame &&drawFrame) {
+        ImGui::NewFrame();
+        drawFrame();
+        ImGui::Render();
+    }
+
+    /** @brief Sends a complete pointer click sequence while rendering each interaction state. */
+    template <typename DrawFrame> void ClickImGuiItem(ImGuiIO &io, const ImVec2 position, DrawFrame &&drawFrame) {
+        io.AddMousePosEvent(position.x, position.y);
+        RenderImGuiFrame(drawFrame);
+        io.AddMouseButtonEvent(ImGuiMouseButton_Left, true);
+        RenderImGuiFrame(drawFrame);
+        io.AddMouseButtonEvent(ImGuiMouseButton_Left, false);
+        RenderImGuiFrame(drawFrame);
+    }
 }  // namespace
 
 namespace Horo::Editor {
@@ -55,11 +94,188 @@ TEST_CASE("Editor icon registry resolves canonical and catalog tokens", "[unit][
     using Horo::Editor::Ui::UiIconRegistry;
 
     REQUIRE(UiIconRegistry::Resolve("action.delete") == UiIcon::Delete);
+    REQUIRE(UiIconRegistry::Resolve("action.more_vertical") == UiIcon::MoreVertical);
+    REQUIRE(UiIconRegistry::Resolve("action.checkbox_unchecked") == UiIcon::CheckboxUnchecked);
     REQUIRE(UiIconRegistry::Resolve("primitive.light.directional") == UiIcon::DirectionalLight);
     REQUIRE(UiIconRegistry::Resolve("primitive.collider.sphere") == UiIcon::Sphere);
     REQUIRE_FALSE(UiIconRegistry::Resolve("unknown.icon").has_value());
     REQUIRE(std::string(UiIconRegistry::Token(UiIcon::VisibilityOff)) == "action.visibility_off");
     REQUIRE(UiIconRegistry::Token(UiIcon::None).empty());
+
+    const std::span glyphRanges = UiIconRegistry::MaterialSymbolGlyphRanges();
+    REQUIRE(glyphRanges.size() >= 3U);
+    REQUIRE(glyphRanges.back() == 0);
+    const auto containsGlyph = [glyphRanges](const ImWchar glyph) {
+        for (std::size_t index = 0; index + 1U < glyphRanges.size() && glyphRanges[index] != 0; index += 2U) {
+            if (glyph >= glyphRanges[index] && glyph <= glyphRanges[index + 1U])
+                return true;
+        }
+        return false;
+    };
+    REQUIRE(containsGlyph(0xE834));
+    REQUIRE(containsGlyph(0xE8B8));
+    REQUIRE(containsGlyph(0xF053));
+}
+
+TEST_CASE("Generic card title actions invoke caller-owned callbacks", "[unit][editor][gui][design-system]") {
+    using namespace Horo::Editor;
+    using namespace Horo::Editor::Ui;
+
+    ImGuiTestContext imgui{{640.0F, 480.0F}};
+
+    bool invoked = false;
+    ImVec2 actionCenter{};
+    const auto drawFrame = [&] {
+        ImGui::SetNextWindowPos({0.0F, 0.0F});
+        ImGui::SetNextWindowSize({320.0F, 180.0F});
+        ImGui::Begin("CardActionTest", nullptr, ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoSavedSettings);
+        {
+            Card card(CardProps{.id = "##card"});
+            const std::array actions{
+                CardTitleBarAction{
+                    .id = "reset",
+                    .icon = UiIcon::Reset,
+                    .title = "Reset",
+                    .onInvoke =
+                        [&invoked] {
+                invoked = true;
+            },
+                },
+            };
+            card.DrawTitleBar({.id = "title", .title = "Component", .fonts = imgui.fonts, .actions = actions});
+            const ImVec2 actionMinimum = ImGui::GetItemRectMin();
+            const ImVec2 actionMaximum = ImGui::GetItemRectMax();
+            actionCenter = {(actionMinimum.x + actionMaximum.x) * 0.5F, (actionMinimum.y + actionMaximum.y) * 0.5F};
+            if (card.BeginBody())
+                ImGui::TextUnformatted("Body");
+        }
+        ImGui::End();
+    };
+
+    RenderImGuiFrame(drawFrame);
+    ClickImGuiItem(*imgui.io, actionCenter, drawFrame);
+
+    REQUIRE(invoked);
+}
+
+TEST_CASE("Generic card disclosure persists and suppresses collapsed body content", "[unit][editor][gui][design-system]") {
+    using namespace Horo::Editor;
+    using namespace Horo::Editor::Ui;
+
+    ImGuiTestContext imgui{{400.0F, 240.0F}};
+
+    bool bodyVisible = false;
+    ImVec2 disclosureCenter{};
+    const auto drawFrame = [&] {
+        bodyVisible = false;
+        ImGui::SetNextWindowPos({0.0F, 0.0F});
+        ImGui::SetNextWindowSize({320.0F, 180.0F});
+        ImGui::Begin("CardDisclosureTest", nullptr, ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoSavedSettings);
+        {
+            Card card(CardProps{.id = "##card"});
+            card.DrawTitleBar({.id = "title", .title = "Camera", .fonts = imgui.fonts});
+            const ImVec2 disclosureMinimum = ImGui::GetItemRectMin();
+            const ImVec2 disclosureMaximum = ImGui::GetItemRectMax();
+            disclosureCenter = {(disclosureMinimum.x + disclosureMaximum.x) * 0.5F, (disclosureMinimum.y + disclosureMaximum.y) * 0.5F};
+            bodyVisible = card.BeginBody();
+            if (bodyVisible)
+                ImGui::TextUnformatted("Projection");
+        }
+        ImGui::End();
+    };
+
+    RenderImGuiFrame(drawFrame);
+    REQUIRE(bodyVisible);
+
+    ClickImGuiItem(*imgui.io, disclosureCenter, drawFrame);
+    REQUIRE_FALSE(bodyVisible);
+
+    RenderImGuiFrame(drawFrame);
+    REQUIRE_FALSE(bodyVisible);
+}
+
+TEST_CASE("Side dock tabs preserve reference padding height and interaction", "[unit][editor][gui][design-system]") {
+    using namespace Horo::Editor;
+    using namespace Horo::Editor::Ui;
+
+    Theme::SetUiScalePercent(100);
+    ImGuiTestContext imgui{{400.0F, 200.0F}};
+    ImFont *defaultFont = imgui.fonts.sans;
+    const std::array<const char *, 2> tabs{"Inspector", "Scene"};
+
+    int activeTab = 0;
+    float startY = 0.0F;
+    float endY = 0.0F;
+    ImVec2 sceneTabCenter{};
+    const auto drawFrame = [&] {
+        ImGui::SetNextWindowPos({0.0F, 0.0F});
+        ImGui::SetNextWindowSize({300.0F, 160.0F});
+        ImGui::Begin("SideDockTabsTest", nullptr, ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoSavedSettings);
+        startY = ImGui::GetCursorScreenPos().y;
+        activeTab = DrawSideDockTabs(tabs, activeTab, imgui.fonts);
+        endY = ImGui::GetCursorScreenPos().y;
+        const float inspectorWidth = defaultFont->CalcTextSizeA(12.0F, 100000.0F, 0.0F, tabs.front()).x + 20.0F;
+        const float sceneWidth = defaultFont->CalcTextSizeA(12.0F, 100000.0F, 0.0F, tabs.back()).x + 20.0F;
+        sceneTabCenter = {ImGui::GetWindowPos().x + ImGui::GetStyle().WindowPadding.x + 10.0F + inspectorWidth + sceneWidth * 0.5F,
+                          startY + 18.0F};
+        ImGui::End();
+    };
+
+    RenderImGuiFrame(drawFrame);
+    REQUIRE(endY - startY == Catch::Approx(36.0F));
+
+    ClickImGuiItem(*imgui.io, sceneTabCenter, drawFrame);
+    REQUIRE(activeTab == 1);
+}
+
+TEST_CASE("Workspace popup rows keep the design-system menu geometry", "[unit][editor][gui][design-system]") {
+    using namespace Horo::Editor;
+    using namespace Horo::Editor::Ui;
+
+    ImGuiTestContext imgui{{640.0F, 480.0F}};
+
+    ImGui::NewFrame();
+    ImGui::Begin("PopupGeometryTest");
+    ImGui::OpenPopup("##popup");
+    REQUIRE(BeginMenuPopup("##popup"));
+    static_cast<void>(ContextMenuItem("Create", nullptr, imgui.fonts));
+    const float rowHeight = ImGui::GetItemRectSize().y;
+    const float popupWidth = ImGui::GetWindowWidth();
+    ImGui::OpenPopup("##submenu_popup_GameObject###submenu");
+    REQUIRE(BeginContextSubmenu("GameObject###submenu", imgui.fonts));
+    static_cast<void>(ContextMenuItem("Box", nullptr, imgui.fonts));
+    EndContextSubmenu();
+    EndMenuPopup();
+    ImGui::End();
+    ImGui::Render();
+
+    REQUIRE(rowHeight == Catch::Approx(30.0F));
+    REQUIRE(popupWidth >= 176.0F);
+    REQUIRE(popupWidth < 224.0F);
+}
+
+TEST_CASE("Menu-bar dropdowns reuse workspace popup rows", "[unit][editor][gui][design-system]") {
+    using namespace Horo::Editor;
+    using namespace Horo::Editor::Ui;
+
+    ImGuiTestContext imgui{{640.0F, 480.0F}};
+
+    ImGui::NewFrame();
+    ImGui::Begin("MenuBarDropdownTest", nullptr, ImGuiWindowFlags_MenuBar);
+    REQUIRE(ImGui::BeginMenuBar());
+    ImGui::OpenPopup("Window");
+    REQUIRE(BeginMenuDropdown("Window", imgui.fonts));
+    static_cast<void>(ContextMenuItem("Workspace", nullptr, imgui.fonts));
+    const float rowHeight = ImGui::GetItemRectSize().y;
+    const float popupWidth = ImGui::GetWindowWidth();
+    EndMenuDropdown();
+    ImGui::EndMenuBar();
+    ImGui::End();
+    ImGui::Render();
+
+    REQUIRE(rowHeight == Catch::Approx(30.0F));
+    REQUIRE(popupWidth >= 176.0F);
+    REQUIRE(popupWidth < 224.0F);
 }
 
 TEST_CASE("Component metrics use theme overrides while global scaling is disabled", "[unit][editor][gui][design-system]") {
@@ -106,15 +322,8 @@ TEST_CASE("Small toolbar primitives share height and fixed action width", "[unit
     using namespace Horo::Editor::Ui;
 
     Theme::SetUiScalePercent(100);
-    IMGUI_CHECKVERSION();
-    ImGui::CreateContext();
-    ImGuiIO &io = ImGui::GetIO();
-    io.DisplaySize = {800.0F, 240.0F};
-    io.DeltaTime = 1.0F / 60.0F;
-    io.Fonts->AddFontDefault();
-    static_cast<void>(io.Fonts->Build());
-    ImFont *defaultFont = io.Fonts->Fonts.front();
-    const Theme::Fonts fonts{.sans = defaultFont, .sansCompact = defaultFont, .sansEmphasis = defaultFont};
+    ImGuiTestContext imgui{{800.0F, 240.0F}};
+    ImFont *defaultFont = imgui.fonts.sans;
 
     ImVec2 inputSize{};
     ImVec2 buttonSize{};
@@ -128,7 +337,7 @@ TEST_CASE("Small toolbar primitives share height and fixed action width", "[unit
 
     ImGui::NewFrame();
     ImGui::Begin("ToolbarPrimitiveGeometry");
-    static_cast<void>(InputTextControl("##Search", search.data(), search.size(), fonts,
+    static_cast<void>(InputTextControl("##Search", search.data(), search.size(), imgui.fonts,
                                        InputTextOptions{.width = 180.0F, .hint = "Filter...", .componentSize = ComponentSize::Small}));
     inputSize = ImGui::GetItemRectSize();
     ImGui::SameLine();
@@ -141,11 +350,11 @@ TEST_CASE("Small toolbar primitives share height and fixed action width", "[unit
     buttonSize = ImGui::GetItemRectSize();
     ImGui::SameLine();
     ImGui::SetNextItemWidth(104.0F);
-    static_cast<void>(ComboControl("##Status", &status, statuses.data(), static_cast<int>(statuses.size()), fonts,
+    static_cast<void>(ComboControl("##Status", &status, statuses.data(), static_cast<int>(statuses.size()), imgui.fonts,
                                    ComboControlOptions{.componentSize = ComponentSize::Small}));
     comboSize = ImGui::GetItemRectSize();
     ImGui::SameLine();
-    static_cast<void>(MultiSelectField("##Columns", "Columns", columns, visible, fonts, 104.0F, ComponentSize::Small));
+    static_cast<void>(MultiSelectField("##Columns", "Columns", columns, visible, imgui.fonts, 104.0F, ComponentSize::Small));
     multiSelectSize = ImGui::GetItemRectSize();
     ImGui::End();
     ImGui::Render();
@@ -156,26 +365,13 @@ TEST_CASE("Small toolbar primitives share height and fixed action width", "[unit
     REQUIRE(inputSize.y == Catch::Approx(buttonSize.y).margin(0.1F));
     REQUIRE(comboSize.y == Catch::Approx(buttonSize.y).margin(0.1F));
     REQUIRE(multiSelectSize.y == Catch::Approx(buttonSize.y).margin(0.1F));
-    ImGui::DestroyContext();
 }
 
 TEST_CASE("Shared modal shell composes badge split panes and fixed footer", "[unit][editor][gui][design-system]") {
     using namespace Horo::Editor;
     using namespace Horo::Editor::Ui;
 
-    IMGUI_CHECKVERSION();
-    ImGui::CreateContext();
-    ImGuiIO &io = ImGui::GetIO();
-    io.DisplaySize = ImVec2(1280.0F, 720.0F);
-    io.DeltaTime = 1.0F / 60.0F;
-    io.Fonts->AddFontDefault();
-    static_cast<void>(io.Fonts->Build());
-    ImFont *defaultFont = io.Fonts->Fonts.front();
-    const Theme::Fonts fonts{
-        .sans = defaultFont,
-        .sansCompact = defaultFont,
-        .sansEmphasis = defaultFont,
-    };
+    ImGuiTestContext imgui{{1280.0F, 720.0F}};
 
     ImGui::NewFrame();
     bool drewLeading = false;
@@ -191,7 +387,7 @@ TEST_CASE("Shared modal shell composes badge split panes and fixed footer", "[un
                 .headerHeight = 56.0F,
                 .footerHeight = 64.0F,
             },
-            fonts);
+            imgui.fonts);
         REQUIRE((modal.BodyHeight() > 0.0F));
         REQUIRE((modal.FooterStartY() > modal.BodyHeight()));
         REQUIRE_FALSE(modal.CloseRequested());
@@ -206,7 +402,7 @@ TEST_CASE("Shared modal shell composes badge split panes and fixed footer", "[un
             .size = BadgeSize::Medium,
             .leadingIndicator = true,
         };
-        REQUIRE((BadgeWidth(statusPill, fonts) > BadgeWidth(smallBadge, fonts)));
+        REQUIRE((BadgeWidth(statusPill, imgui.fonts) > BadgeWidth(smallBadge, imgui.fonts)));
 
         ModalSplitPane(
             {
@@ -216,12 +412,12 @@ TEST_CASE("Shared modal shell composes badge split panes and fixed footer", "[un
             },
             [&]() {
             drewLeading = true;
-            Badge(smallBadge, fonts);
+            Badge(smallBadge, imgui.fonts);
         }, [&]() {
             drewContent = true;
             const ImVec2 spacing = ImGui::GetStyle().ItemSpacing;
             preservedContentSpacing = spacing.x == 13.0F && spacing.y == 9.0F;
-            Badge(statusPill, fonts);
+            Badge(statusPill, imgui.fonts);
         });
         modal.BeginFooter({20.0F, 12.0F});
         ImGui::TextUnformatted("Footer");
@@ -232,19 +428,13 @@ TEST_CASE("Shared modal shell composes badge split panes and fixed footer", "[un
     REQUIRE(drewLeading);
     REQUIRE(drewContent);
     REQUIRE(preservedContentSpacing);
-    ImGui::DestroyContext();
 }
 
 TEST_CASE("Selectable text block copies a selection spanning multiple lines", "[unit][editor][gui][design-system]") {
     using namespace Horo::Editor::Ui;
 
-    IMGUI_CHECKVERSION();
-    ImGui::CreateContext();
-    ImGuiIO &io = ImGui::GetIO();
-    io.DisplaySize = {640.0F, 360.0F};
-    io.DeltaTime = 1.0F / 60.0F;
-    io.Fonts->AddFontDefault();
-    static_cast<void>(io.Fonts->Build());
+    ImGuiTestContext imgui{{640.0F, 360.0F}};
+    ImGuiIO &io = *imgui.io;
     ImGui::GetPlatformIO().Platform_SetClipboardTextFn = CaptureClipboardText;
 
     std::string text{"first line\nsecond line\nthird line"};
@@ -302,27 +492,13 @@ TEST_CASE("Selectable text block copies a selection spanning multiple lines", "[
     ImGui::Render();
 
     REQUIRE(gClipboardText == text);
-
-    ImGui::DestroyContext();
 }
 
 TEST_CASE("Editable object title keeps its compact input vertically centered", "[unit][editor][gui][design-system]") {
     using namespace Horo::Editor;
     using namespace Horo::Editor::Ui;
 
-    IMGUI_CHECKVERSION();
-    ImGui::CreateContext();
-    ImGuiIO &io = ImGui::GetIO();
-    io.DisplaySize = {480.0F, 240.0F};
-    io.DeltaTime = 1.0F / 60.0F;
-    io.Fonts->AddFontDefault();
-    static_cast<void>(io.Fonts->Build());
-    ImFont *defaultFont = io.Fonts->Fonts.front();
-    const Theme::Fonts fonts{
-        .sans = defaultFont,
-        .sansCompact = defaultFont,
-        .sansEmphasis = defaultFont,
-    };
+    ImGuiTestContext imgui{{480.0F, 240.0F}};
 
     ImGui::NewFrame();
     ImGui::SetNextWindowPos({20.0F, 20.0F});
@@ -330,8 +506,8 @@ TEST_CASE("Editable object title keeps its compact input vertically centered", "
     ImGui::Begin("EditableObjectTitleTest");
     const ImVec2 titleOrigin = ImGui::GetCursorScreenPos();
     std::string value{"Box"};
-    static_cast<void>(DrawEditableObjTitle("object_name", value, 128U,
-                                           EditableObjectTitleBadge{"Mesh", ImVec4{0.2F, 0.7F, 0.4F, 0.15F}, Theme::Ok()}, fonts));
+    static_cast<void>(
+        DrawEditableTitle("object_name", value, 128U, imgui.fonts, {.leadingIcon = UiIcon::HierarchyMesh, .trailingWidth = 88.0F}));
     const ImVec2 inputMinimum = ImGui::GetItemRectMin();
     const ImVec2 inputMaximum = ImGui::GetItemRectMax();
     ImGui::End();
@@ -341,8 +517,6 @@ TEST_CASE("Editable object title keeps its compact input vertically centered", "
     const float topPadding = inputMinimum.y - titleOrigin.y;
     const float bottomPadding = titleOrigin.y + titleHeight - inputMaximum.y;
     INFO("top padding: " << topPadding << ", bottom padding: " << bottomPadding);
-    REQUIRE((inputMaximum.y - inputMinimum.y < 28.0F));
-    REQUIRE((std::fabs(topPadding - bottomPadding) < 0.6F));
-
-    ImGui::DestroyContext();
+    REQUIRE((inputMaximum.y - inputMinimum.y == Catch::Approx(30.0F).margin(1.0F)));
+    REQUIRE((std::fabs(topPadding - bottomPadding) <= 1.0F));
 }

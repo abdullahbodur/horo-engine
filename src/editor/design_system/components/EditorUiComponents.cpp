@@ -16,6 +16,18 @@
 
 namespace Horo::Editor::Ui {
     namespace {
+        namespace InspectorTypography {
+            constexpr float Label = 13.0F;
+            constexpr float Field = 13.0F;
+            constexpr float Axis = 12.5F;
+            constexpr float ObjectTitle = 12.0F;
+            constexpr float ObjectMeta = 12.5F;
+        }  // namespace InspectorTypography
+
+        namespace CardTypography {
+            constexpr float Title = 11.5F;
+        }  // namespace CardTypography
+
         struct ResolvedPrimitiveStyle {
             DesignSystem::ComponentSizeMetrics metrics;
             ImVec2 framePadding;
@@ -44,16 +56,37 @@ namespace Horo::Editor::Ui {
             };
         }
 
+        /** @brief Pushes the shared frame-state colors used by editor controls. */
+        void PushControlColors(const ImVec4 background, const ImVec4 border, const ImVec4 text) {
+            ImGui::PushStyleColor(ImGuiCol_FrameBg, background);
+            ImGui::PushStyleColor(ImGuiCol_FrameBgHovered, Theme::Hover());
+            ImGui::PushStyleColor(ImGuiCol_FrameBgActive, Theme::Hover());
+            ImGui::PushStyleColor(ImGuiCol_Border, border);
+            ImGui::PushStyleColor(ImGuiCol_Text, text);
+        }
+
+        /** @brief Pushes the shared validation-error colors for editable controls. */
+        void PushErrorControlColors() {
+            ImGui::PushStyleColor(ImGuiCol_FrameBg, Theme::ErrSoft());
+            ImGui::PushStyleColor(ImGuiCol_FrameBgHovered, Theme::ErrSoft());
+            ImGui::PushStyleColor(ImGuiCol_FrameBgActive, Theme::ErrSoft());
+            ImGui::PushStyleColor(ImGuiCol_Border, Theme::Err());
+        }
+
         void PushControlStyle() {
             const auto &metrics = DesignSystem::MetricsFor(Theme::GetActiveTokens(), ComponentSize::Small);
             ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2{metrics.paddingX, metrics.paddingY});
             ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, Theme::GetActiveTokens().radii.control);
             ImGui::PushStyleVar(ImGuiStyleVar_FrameBorderSize, 1.0F);
-            ImGui::PushStyleColor(ImGuiCol_FrameBg, Theme::Bg3());
-            ImGui::PushStyleColor(ImGuiCol_FrameBgHovered, Theme::Hover());
-            ImGui::PushStyleColor(ImGuiCol_FrameBgActive, Theme::Hover());
-            ImGui::PushStyleColor(ImGuiCol_Border, Theme::Border());
-            ImGui::PushStyleColor(ImGuiCol_Text, Theme::Text());
+            PushControlColors(Theme::Bg3(), Theme::Border(), Theme::Text());
+        }
+
+        void PushInspectorControlStyle() {
+            const float scale = Theme::GetActiveTokens().sizes.uiScale;
+            ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2{8.0F * scale, 7.0F * scale});
+            ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, Theme::GetActiveTokens().radii.control);
+            ImGui::PushStyleVar(ImGuiStyleVar_FrameBorderSize, 1.0F);
+            PushControlColors(Theme::InspectorFieldSurface(), Theme::InspectorBorder(), Theme::Text());
         }
 
         void PopControlStyle() {
@@ -61,10 +94,81 @@ namespace Horo::Editor::Ui {
             ImGui::PopStyleVar(3);
         }
 
+        /** @brief Geometry shared by the editable Inspector title input and its leading icon. */
+        struct EditableTitleLayout {
+            ImVec2 position;
+            float width{0.0F};
+            float height{0.0F};
+            float iconSize{0.0F};
+            float controlX{0.0F};
+            float controlWidth{0.0F};
+            float controlOffsetY{0.0F};
+            ImVec2 controlPadding;
+        };
+
+        /** @brief Resolves editable-title geometry from the current content region and theme scale. */
+        [[nodiscard]] EditableTitleLayout ResolveEditableTitleLayout(const EditableTitleProps &props) {
+            const ImVec2 position = ImGui::GetCursorScreenPos();
+            const float width = ImGui::GetContentRegionAvail().x;
+            const float uiScale = Theme::GetActiveTokens().sizes.uiScale;
+            const float height = 38.0F * uiScale;
+            const float iconSize = 22.0F * uiScale;
+            const float controlX = position.x + iconSize + 7.0F * uiScale;
+            const float controlWidth = std::max(1.0F, position.x + width - props.trailingWidth - 6.0F * uiScale - controlX);
+            const float titleFontSize = InspectorTypography::ObjectTitle * uiScale;
+            const float effectiveFontHeight = titleFontSize * Theme::Scale(titleFontSize, Theme::FontPx::SansEmphasis);
+            const float controlHeight = 30.0F * uiScale;
+            return {
+                .position = position,
+                .width = width,
+                .height = height,
+                .iconSize = iconSize,
+                .controlX = controlX,
+                .controlWidth = controlWidth,
+                .controlOffsetY = std::max(0.0F, (height - controlHeight) * 0.5F),
+                .controlPadding = {8.0F * uiScale, std::max(0.0F, (controlHeight - effectiveFontHeight) * 0.5F)},
+            };
+        }
+
+        /** @brief Draws the styled editable-title input and captures its interaction result. */
+        [[nodiscard]] TextEditResult DrawEditableTitleInput(const char *id, std::string &value, const Theme::Fonts &fonts,
+                                                            const EditableTitleProps &props, const EditableTitleLayout &layout) {
+            ImGui::SetCursorScreenPos({layout.controlX, layout.position.y + layout.controlOffsetY});
+            ImGui::PushID(id);
+            ImGui::PushItemWidth(layout.controlWidth);
+            ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, layout.controlPadding);
+            ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, Theme::GetActiveTokens().radii.control);
+            ImGui::PushStyleVar(ImGuiStyleVar_FrameBorderSize, 1.0F);
+            PushControlColors(Theme::InspectorTitleFieldSurface(), Theme::InspectorBorder(), Theme::Text());
+            if (props.error)
+                PushErrorControlColors();
+            const float titleFontSize = InspectorTypography::ObjectTitle * Theme::GetActiveTokens().sizes.uiScale;
+            bool submitted = false;
+            {
+                Theme::ScopedTextStyle textStyle(fonts.sansEmphasis, titleFontSize, Theme::FontPx::SansEmphasis);
+                submitted = ImGui::InputText("##value", value.data(), value.size() + 1,
+                                             ImGuiInputTextFlags_EnterReturnsTrue | ImGuiInputTextFlags_AutoSelectAll);
+            }
+            const bool active = ImGui::IsItemActive();
+            const bool deactivated = ImGui::IsItemDeactivated();
+            const bool cancelled = (active || deactivated) && ImGui::IsKeyPressed(ImGuiKey_Escape, false);
+            const TextEditResult result{.changed = ImGui::IsItemEdited(),
+                                        .committed = !cancelled && (submitted || deactivated),
+                                        .cancelled = cancelled,
+                                        .active = active};
+            if (props.error)
+                ImGui::PopStyleColor(4);
+            ImGui::PopStyleColor(5);
+            ImGui::PopStyleVar(3);
+            ImGui::PopItemWidth();
+            ImGui::PopID();
+            return result;
+        }
+
         struct PropertyRowLayout {
             ImVec2 position;
             float width{0.0F};
-            float height{32.0F};
+            float height{31.0F};
             float controlX{0.0F};
             float controlWidth{0.0F};
         };
@@ -73,24 +177,18 @@ namespace Horo::Editor::Ui {
             const ImVec2 position = ImGui::GetCursorScreenPos();
             const float width = ImGui::GetContentRegionAvail().x;
             const float scale = Theme::GetActiveTokens().sizes.uiScale;
-            const float height = ScaledLayoutValue(32.0F);
-            const float horizontalPadding = ScaledLayoutValue(14.0F);
+            const float height = ScaledLayoutValue(31.0F);
+            const float horizontalPadding = ScaledLayoutValue(8.0F);
             const float minimumControlWidth = ScaledLayoutValue(90.0F);
-            const float availableLabelWidth = std::max(ScaledLayoutValue(56.0F), width - horizontalPadding * 2.0F - minimumControlWidth);
-            const float measuredLabelWidth =
-                fonts.sans->CalcTextSizeA(fonts.sans->FontSize * scale, FLT_MAX, 0.0F, label).x + ScaledLayoutValue(8.0F);
-            const float labelWidth = std::clamp(std::max(width * 0.38F, measuredLabelWidth), ScaledLayoutValue(56.0F),
-                                                std::min(ScaledLayoutValue(130.0F), availableLabelWidth));
+            const float labelFontSize = InspectorTypography::Label * scale;
+            const float labelWidth = std::min(ScaledLayoutValue(68.0F),
+                                              std::max(ScaledLayoutValue(56.0F), width - horizontalPadding * 2.0F - minimumControlWidth));
 
-            ImVec4 borderLight = Theme::Border();
-            borderLight.w = 0.5F;
-            ImGui::GetWindowDrawList()->AddLine({position.x, position.y + height - 1.0F}, {position.x + width, position.y + height - 1.0F},
-                                                ImGui::GetColorU32(borderLight), 1.0F);
             ImDrawList *drawList = ImGui::GetWindowDrawList();
             drawList->PushClipRect({position.x + horizontalPadding, position.y},
                                    {position.x + horizontalPadding + labelWidth - 4.0F, position.y + height}, true);
-            drawList->AddText(fonts.sans, fonts.sans->FontSize, {position.x + horizontalPadding, position.y + ScaledLayoutValue(8.0F)},
-                              Theme::U32(Theme::Muted()), label);
+            const float labelY = position.y + (height - labelFontSize) * 0.5F;
+            drawList->AddText(fonts.sans, labelFontSize, {position.x + horizontalPadding, labelY}, Theme::U32(Theme::Muted()), label);
             drawList->PopClipRect();
 
             const float controlX = position.x + horizontalPadding + labelWidth;
@@ -107,28 +205,112 @@ namespace Horo::Editor::Ui {
             ImGui::SetCursorScreenPos({layout.position.x, layout.position.y + layout.height});
         }
 
-        void PushContextPopupWindowStyle() {
-            ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, {8.0F, 8.0F});
+        /** @brief Pushes popup styling shared by context and menu-bar surfaces. */
+        void PushPopupWindowStyle(const bool suppressItemSpacing) {
+            ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, {ScaledLayoutValue(4.0F), ScaledLayoutValue(4.0F)});
             ImGui::PushStyleVar(ImGuiStyleVar_PopupRounding, Theme::GetActiveTokens().radii.control);
             ImGui::PushStyleVar(ImGuiStyleVar_PopupBorderSize, 1.0F);
-            ImGui::PushStyleColor(ImGuiCol_PopupBg, Theme::Bg2());
-            ImGui::PushStyleColor(ImGuiCol_Border, Theme::BorderStrong());
+            if (suppressItemSpacing)
+                ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, {0.0F, 0.0F});
+            ImGui::PushStyleColor(ImGuiCol_PopupBg, Theme::MenuSurface());
+            ImGui::PushStyleColor(ImGuiCol_Border, Theme::MenuBorder());
+        }
+
+        void PushContextPopupWindowStyle() {
+            PushPopupWindowStyle(true);
         }
 
         void PopContextPopupWindowStyle() {
             ImGui::PopStyleColor(2);
+            ImGui::PopStyleVar(4);
+        }
+
+        void PushMenuDropdownWindowStyle() {
+            PushPopupWindowStyle(false);
+        }
+
+        void PopMenuDropdownWindowStyle() {
+            ImGui::PopStyleColor(2);
             ImGui::PopStyleVar(3);
         }
 
-        void PushContextMenuRowStyle() {
-            // Context menus can be opened from tightly packed lists whose ItemSpacing is
-            // intentionally zero. Keep that presentation detail from collapsing menu
-            // rows and their hover/selection bounds down to the text height.
-            ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, {0.0F, 6.0F});
+        /** @brief Applies the shared compact width range to the next popup menu. */
+        void SetNextContextMenuSizeConstraints() {
+            constexpr float minimumWidth = 176.0F;
+            constexpr float maximumWidth = 340.0F;
+            ImGui::SetNextWindowSizeConstraints({ScaledLayoutValue(minimumWidth), 0.0F}, {ScaledLayoutValue(maximumWidth), FLT_MAX});
         }
 
-        void PopContextMenuRowStyle() {
-            ImGui::PopStyleVar();
+        struct ContextMenuRow {
+            ImVec2 minimum;
+            ImVec2 maximum;
+            bool activated{false};
+            bool hovered{false};
+        };
+
+        /** @brief Visual content rendered over one custom context-menu row. */
+        struct ContextMenuRowPresentation {
+            const char *label;
+            const char *shortcut;
+            const Theme::Fonts &fonts;
+            ImVec4 textColor;
+            bool highlighted;
+            bool submenu;
+            std::string_view iconToken;
+        };
+
+        [[nodiscard]] ContextMenuRow DrawContextMenuRow(const char *id, const bool selected, const bool keepPopupOpen = false,
+                                                        const bool enabled = true) {
+            constexpr float rowHeight = 30.0F;
+            ImGui::PushStyleColor(ImGuiCol_Header, ImVec4{});
+            ImGui::PushStyleColor(ImGuiCol_HeaderHovered, ImVec4{});
+            ImGui::PushStyleColor(ImGuiCol_HeaderActive, ImVec4{});
+            ImGuiSelectableFlags flags = ImGuiSelectableFlags_None;
+            if (keepPopupOpen)
+                flags |= ImGuiSelectableFlags_NoAutoClosePopups;
+            if (!enabled)
+                flags |= ImGuiSelectableFlags_Disabled;
+            const bool activated = ImGui::Selectable(id, selected, flags, {ImGui::GetContentRegionAvail().x, ScaledLayoutValue(rowHeight)});
+            ImGui::PopStyleColor(3);
+            return {
+                .minimum = ImGui::GetItemRectMin(),
+                .maximum = ImGui::GetItemRectMax(),
+                .activated = activated,
+                .hovered = ImGui::IsItemHovered(),
+            };
+        }
+
+        void DrawContextMenuRowPresentation(const ContextMenuRow &row, const ContextMenuRowPresentation &presentation) {
+            ImDrawList *drawList = ImGui::GetWindowDrawList();
+            const float scale = Theme::GetActiveTokens().sizes.uiScale;
+            const float fontSize = 14.0F * scale;
+            if (presentation.highlighted)
+                drawList->AddRectFilled(row.minimum, row.maximum, Theme::U32(Theme::Hover()), ScaledLayoutValue(3.0F));
+
+            const char *labelEnd = std::strstr(presentation.label, "###");
+            const float textY = row.minimum.y + (row.maximum.y - row.minimum.y - fontSize) * 0.5F;
+            float labelX = row.minimum.x + ScaledLayoutValue(10.0F);
+            if (const std::optional<UiIcon> icon = UiIconRegistry::Resolve(presentation.iconToken); icon.has_value()) {
+                constexpr float iconSize = 16.0F;
+                DrawEditorIcon(drawList, *icon,
+                               {labelX, row.minimum.y + (row.maximum.y - row.minimum.y - ScaledLayoutValue(iconSize)) * 0.5F},
+                               {ScaledLayoutValue(iconSize), ScaledLayoutValue(iconSize)}, Theme::U32(presentation.textColor),
+                               presentation.fonts.icon);
+                labelX += ScaledLayoutValue(23.0F);
+            }
+            drawList->AddText(presentation.fonts.sans, fontSize, {labelX, textY}, Theme::U32(presentation.textColor), presentation.label,
+                              labelEnd);
+            if (presentation.shortcut != nullptr && presentation.shortcut[0] != '\0') {
+                const ImVec2 shortcutSize = presentation.fonts.sans->CalcTextSizeA(fontSize, FLT_MAX, 0.0F, presentation.shortcut);
+                drawList->AddText(presentation.fonts.sans, fontSize, {row.maximum.x - ScaledLayoutValue(10.0F) - shortcutSize.x, textY},
+                                  Theme::U32(Theme::Dim()), presentation.shortcut);
+            }
+            if (presentation.submenu) {
+                const float arrowX = row.maximum.x - ScaledLayoutValue(10.0F);
+                const float arrowY = (row.minimum.y + row.maximum.y) * 0.5F;
+                drawList->AddTriangleFilled({arrowX - 3.0F * scale, arrowY - 4.0F * scale}, {arrowX - 3.0F * scale, arrowY + 4.0F * scale},
+                                            {arrowX + 2.0F * scale, arrowY}, Theme::U32(Theme::Muted()));
+            }
         }
 
         void DrawTableCell(const TableProps &props, const TableRow &row, const std::size_t rowIndex, const std::size_t columnIndex,
@@ -1157,12 +1339,8 @@ namespace Horo::Editor::Ui {
         ImGui::PushStyleVar(ImGuiStyleVar_ItemInnerSpacing, ImVec2{8.0F, 0.0F});
         ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, Theme::GetActiveTokens().radii.control);
         ImGui::PushStyleVar(ImGuiStyleVar_FrameBorderSize, 1.0F);
-        ImGui::PushStyleColor(ImGuiCol_FrameBg, Theme::Bg3());
-        ImGui::PushStyleColor(ImGuiCol_FrameBgHovered, Theme::Hover());
-        ImGui::PushStyleColor(ImGuiCol_FrameBgActive, Theme::Hover());
-        ImGui::PushStyleColor(ImGuiCol_Border, Theme::Border());
+        PushControlColors(Theme::Bg3(), Theme::Border(), Theme::Muted());
         ImGui::PushStyleColor(ImGuiCol_CheckMark, Theme::Accent());
-        ImGui::PushStyleColor(ImGuiCol_Text, Theme::Muted());
 
         bool clicked = false;
         {
@@ -1536,12 +1714,12 @@ namespace Horo::Editor::Ui {
 
     // ── Dock UI ───────────────────────────────────────────────────────────
 
-    int DrawDockTabs(const std::span<const char *const> tabs, int activeTab, const Theme::Fonts &fonts) {
+    int DrawDockTabs(const std::span<const char *const> tabs, int activeTab, const Theme::Fonts &fonts, const float height) {
         ImDrawList *dl = ImGui::GetWindowDrawList();
         const ImVec2 pos = ImGui::GetCursorScreenPos();
         const float w = ImGui::GetContentRegionAvail().x;
 
-        constexpr float tabH = 26.0f;
+        const float tabH = std::max(1.0F, height);
 
         // Background (--bg-darkest)
         dl->AddRectFilled(pos, ImVec2(pos.x + w, pos.y + tabH), Theme::U32(Theme::Bg0()));
@@ -1556,7 +1734,8 @@ namespace Horo::Editor::Ui {
         for (size_t i = 0; i < tabs.size(); ++i) {
             const bool isActive = (static_cast<int>(i) == activeTab);
 
-            const ImVec2 textSize = ImGui::CalcTextSize(tabs[i]);
+            const float tabFontSize = 14.0F * Theme::GetActiveTokens().sizes.uiScale;
+            const ImVec2 textSize = fonts.sans->CalcTextSizeA(tabFontSize, FLT_MAX, 0.0F, tabs[i]);
             auto buttonSize = ImVec2(textSize.x + 26.0f, tabH);  // padding 13px * 2
 
             const ImVec2 p = ImGui::GetCursorScreenPos();
@@ -1572,8 +1751,8 @@ namespace Horo::Editor::Ui {
                 textColor = Theme::Dim();  // hover color
 
             // Draw text
-            dl->AddText(fonts.sansCompact, fonts.sansCompact->FontSize, ImVec2(p.x + 13.0f, p.y + 6.0f), ImGui::GetColorU32(textColor),
-                        tabs[i]);
+            const float textY = p.y + (tabH - tabFontSize) * 0.5F;
+            dl->AddText(fonts.sans, tabFontSize, ImVec2(p.x + 13.0f, textY), ImGui::GetColorU32(textColor), tabs[i]);
 
             // Active underline
             if (isActive) {
@@ -1587,6 +1766,57 @@ namespace Horo::Editor::Ui {
         ImGui::PopStyleVar();
         ImGui::SetCursorScreenPos(ImVec2(pos.x, pos.y + tabH));
 
+        return clickedTab != -1 ? clickedTab : activeTab;
+    }
+
+    /** @copydoc DrawSideDockTabs */
+    int DrawSideDockTabs(const std::span<const char *const> tabs, int activeTab, const Theme::Fonts &fonts) {
+        const float scale = Theme::GetActiveTokens().sizes.uiScale;
+        const float tabHeight = 36.0F * scale;
+        const float dockPadding = 10.0F * scale;
+        const float horizontalPadding = 10.0F * scale;
+        const float fontSize = 12.0F * scale;
+        const float underlineHeight = std::max(1.0F, 2.0F * scale);
+        const ImVec2 origin = ImGui::GetCursorScreenPos();
+        const float width = ImGui::GetContentRegionAvail().x;
+        ImDrawList &drawList = *ImGui::GetWindowDrawList();
+
+        drawList.AddRectFilled(origin, {origin.x + width, origin.y + tabHeight}, Theme::U32(Theme::Bg0()));
+        drawList.AddLine({origin.x, origin.y + tabHeight - scale}, {origin.x + width, origin.y + tabHeight - scale},
+                         Theme::U32(Theme::Border()), std::max(1.0F, scale));
+
+        int clickedTab = -1;
+        float tabX = origin.x + dockPadding;
+        ImFont *font = fonts.sans != nullptr ? fonts.sans : ImGui::GetFont();
+        for (std::size_t index = 0; index < tabs.size(); ++index) {
+            const bool active = static_cast<int>(index) == activeTab;
+            const ImVec2 textSize = font->CalcTextSizeA(fontSize, FLT_MAX, 0.0F, tabs[index]);
+            const float tabWidth = textSize.x + horizontalPadding * 2.0F;
+            const ImVec2 tabPosition{tabX, origin.y};
+
+            ImGui::SetCursorScreenPos(tabPosition);
+            ImGui::PushID(static_cast<int>(index));
+            if (ImGui::InvisibleButton("##side_dock_tab", {tabWidth, tabHeight}))
+                clickedTab = static_cast<int>(index);
+            ImGui::PopID();
+
+            const bool hovered = ImGui::IsItemHovered();
+            ImVec4 textColor = Theme::Muted();
+            if (active)
+                textColor = Theme::Text();
+            else if (hovered)
+                textColor = Theme::Dim();
+            drawList.AddText(font, fontSize, {tabX + horizontalPadding, origin.y + (tabHeight - textSize.y) * 0.5F}, Theme::U32(textColor),
+                             tabs[index]);
+            if (active) {
+                drawList.AddRectFilled({tabX, origin.y + tabHeight - underlineHeight}, {tabX + tabWidth, origin.y + tabHeight},
+                                       Theme::U32(Theme::Accent()));
+            }
+            tabX += tabWidth;
+            ImGui::SameLine(0.0F, 0.0F);
+        }
+
+        ImGui::SetCursorScreenPos({origin.x, origin.y + tabHeight});
         return clickedTab != -1 ? clickedTab : activeTab;
     }
 
@@ -1614,118 +1844,183 @@ namespace Horo::Editor::Ui {
         ImGui::SetCursorScreenPos(ImVec2(pos.x, pos.y + h));
     }
 
-    /** @copydoc DrawEditableObjTitle */
-    TextEditResult DrawEditableObjTitle(const char *id, std::string &value, const size_t maximumBytes,
-                                        const EditableObjectTitleBadge &badge, const Theme::Fonts &fonts, const bool error) {
-        TextEditResult result;
+    /** @copydoc DrawEditableTitle */
+    TextEditResult DrawEditableTitle(const char *id, std::string &value, const size_t maximumBytes, const Theme::Fonts &fonts,
+                                     const EditableTitleProps &props) {
         if (maximumBytes == 0)
-            return result;
+            return {};
 
-        ImDrawList *drawList = ImGui::GetWindowDrawList();
-        const ImVec2 position = ImGui::GetCursorScreenPos();
-        const float width = ImGui::GetContentRegionAvail().x;
-        constexpr float height = 38.0F;
-        constexpr float horizontalPadding = 14.0F;
-        constexpr float controlGap = 8.0F;
-        constexpr float controlPaddingX = 9.0F;
-        constexpr float controlPaddingY = 3.0F;
-
-        const float badgeFontSize = fonts.sansCompact->FontSize;
-        const ImVec2 badgeTextSize = fonts.sansCompact->CalcTextSizeA(badgeFontSize, 1000.0F, 0.0F, badge.text);
-        const ImVec2 badgeSize{
-            std::min(badgeTextSize.x + 12.0F, std::max(1.0F, width * 0.38F)),
-            badgeTextSize.y + 6.0F,
-        };
-        const ImVec2 badgePosition{
-            position.x + width - horizontalPadding - badgeSize.x,
-            position.y + (height - badgeSize.y) * 0.5F,
-        };
-        const float controlWidth = std::max(1.0F, badgePosition.x - controlGap - (position.x + horizontalPadding));
-        const float effectiveFontHeight = fonts.sans->FontSize * Theme::Scale(fonts.sans->FontSize, Theme::FontPx::Sans);
-        const float controlHeight = effectiveFontHeight + controlPaddingY * 2.0F;
-        const float controlOffsetY = std::max(0.0F, (height - controlHeight) * 0.5F);
+        const EditableTitleLayout layout = ResolveEditableTitleLayout(props);
+        DrawEditorIcon(ImGui::GetWindowDrawList(), props.leadingIcon,
+                       {layout.position.x, layout.position.y + (layout.height - layout.iconSize) * 0.5F},
+                       {layout.iconSize, layout.iconSize}, Theme::U32(Theme::Accent()));
 
         value.resize(std::min(value.size(), maximumBytes));
         value.resize(maximumBytes, '\0');
-        ImGui::SetCursorScreenPos({position.x + horizontalPadding, position.y + controlOffsetY});
-        ImGui::PushID(id);
-        ImGui::PushItemWidth(controlWidth);
-        ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2{controlPaddingX, controlPaddingY});
-        ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, Theme::GetActiveTokens().radii.control);
-        ImGui::PushStyleVar(ImGuiStyleVar_FrameBorderSize, 1.0F);
-        ImGui::PushStyleColor(ImGuiCol_FrameBg, Theme::Bg3());
-        ImGui::PushStyleColor(ImGuiCol_FrameBgHovered, Theme::Hover());
-        ImGui::PushStyleColor(ImGuiCol_FrameBgActive, Theme::Hover());
-        ImGui::PushStyleColor(ImGuiCol_Border, Theme::Border());
-        ImGui::PushStyleColor(ImGuiCol_Text, Theme::Text());
-        if (error) {
-            ImGui::PushStyleColor(ImGuiCol_FrameBg, Theme::ErrSoft());
-            ImGui::PushStyleColor(ImGuiCol_FrameBgHovered, Theme::ErrSoft());
-            ImGui::PushStyleColor(ImGuiCol_FrameBgActive, Theme::ErrSoft());
-            ImGui::PushStyleColor(ImGuiCol_Border, Theme::Err());
-        }
-        bool submitted = false;
-        {
-            Theme::ScopedTextStyle textStyle(fonts.sans, fonts.sans->FontSize, Theme::FontPx::Sans);
-            submitted = ImGui::InputText("##value", value.data(), value.size() + 1,
-                                         ImGuiInputTextFlags_EnterReturnsTrue | ImGuiInputTextFlags_AutoSelectAll);
-        }
-        result.changed = ImGui::IsItemEdited();
-        result.active = ImGui::IsItemActive();
-        const bool deactivated = ImGui::IsItemDeactivated();
-        result.cancelled = (result.active || deactivated) && ImGui::IsKeyPressed(ImGuiKey_Escape, false);
-        result.committed = !result.cancelled && (submitted || deactivated);
-        if (error)
-            ImGui::PopStyleColor(4);
-        ImGui::PopStyleColor(5);
-        ImGui::PopStyleVar(3);
-        ImGui::PopItemWidth();
-        ImGui::PopID();
+        const TextEditResult result = DrawEditableTitleInput(id, value, fonts, props, layout);
 
         const auto nullPosition = value.find('\0');
         value.resize(nullPosition == std::string::npos ? value.size() : nullPosition);
 
-        drawList->AddRectFilled(badgePosition, {badgePosition.x + badgeSize.x, badgePosition.y + badgeSize.y},
-                                ImGui::GetColorU32(badge.background), 4.0F);
-        drawList->PushClipRect({badgePosition.x + 6.0F, badgePosition.y},
-                               {badgePosition.x + badgeSize.x - 6.0F, badgePosition.y + badgeSize.y}, true);
-        drawList->AddText(fonts.sansCompact, badgeFontSize,
-                          {badgePosition.x + 6.0F, badgePosition.y + (badgeSize.y - badgeTextSize.y) * 0.5F},
-                          ImGui::GetColorU32(badge.foreground), badge.text);
-        drawList->PopClipRect();
-        drawList->AddLine({position.x, position.y + height - 1.0F}, {position.x + width, position.y + height - 1.0F},
-                          Theme::U32(Theme::Border()), 1.0F);
-        ImGui::SetCursorScreenPos({position.x, position.y + height});
+        ImGui::SetCursorScreenPos({layout.position.x, layout.position.y + layout.height});
         return result;
     }
 
-    bool DrawPropSection(const char *label, const Theme::Fonts &fonts, bool removable) {
+    /** @copydoc Card::Card */
+    Card::Card(const CardProps &props) {
+        ImGui::PushID(props.id);
+        expandedStateId_ = ImGui::GetID("##expanded");
+        ImGui::PopID();
+        stateStorage_ = ImGui::GetStateStorage();
+        expanded_ = stateStorage_->GetBool(expandedStateId_, props.defaultExpanded);
+        ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, {0.0F, 0.0F});
+        ImGui::PushStyleVar(ImGuiStyleVar_ChildRounding, 5.0F);
+        ImGui::PushStyleColor(ImGuiCol_ChildBg, Theme::CardSurface());
+        ImGui::PushStyleColor(ImGuiCol_Border, Theme::CardBorder());
+        ImGui::BeginChild(props.id, {0.0F, 0.0F}, ImGuiChildFlags_Borders | ImGuiChildFlags_AutoResizeY | ImGuiChildFlags_AlwaysAutoResize,
+                          ImGuiWindowFlags_NoScrollbar);
+    }
+
+    /** @copydoc Card::~Card */
+    Card::~Card() {
+        Finish();
+    }
+
+    namespace {
+        /** @brief Draws and dispatches one card action popup menu. */
+        void DrawCardActionMenu(const CardTitleBarAction &action, const Theme::Fonts &fonts) {
+            if (action.menuItems.empty() || !BeginMenuPopup("##card_action_menu"))
+                return;
+            for (const CardMenuAction &menuItem : action.menuItems) {
+                if (menuItem.separatorBefore)
+                    ContextMenuSeparator();
+                ImGui::PushID(menuItem.id);
+                if (const bool selected = ContextMenuItem(menuItem.label, nullptr, fonts,
+                                                          menuItem.destructive ? ContextMenuItemTone::Danger : ContextMenuItemTone::Normal,
+                                                          UiIconRegistry::Token(menuItem.icon), menuItem.enabled);
+                    selected && menuItem.onInvoke)
+                    menuItem.onInvoke();
+                ImGui::PopID();
+            }
+            EndMenuPopup();
+        }
+
+        /** @brief Interaction state produced by one compact card-title action surface. */
+        struct CardTitleActionInteraction {
+            bool pressed{false};
+        };
+
+        /** @brief Draws one compact card-title action surface. */
+        [[nodiscard]] CardTitleActionInteraction DrawCardTitleActionSurface(const CardTitleBarAction &action, const ImVec2 titlePosition,
+                                                                            const float x, ImDrawList &drawList,
+                                                                            const Theme::Fonts &fonts) {
+            constexpr float toolSize = 24.0F;
+            ImGui::SetCursorScreenPos({x, titlePosition.y + 5.0F});
+            ImGui::PushID(action.id);
+            ImGui::BeginDisabled(!action.enabled);
+            const bool pressed = ImGui::InvisibleButton("##card_action", {toolSize, toolSize});
+            const bool hovered = action.enabled && ImGui::IsItemHovered();
+            if (hovered)
+                drawList.AddRectFilled({x, titlePosition.y + 5.0F}, {x + toolSize, titlePosition.y + 5.0F + toolSize},
+                                       Theme::U32(Theme::Hover()), 3.0F);
+            ImVec4 resolvedColor = action.active ? Theme::Accent() : Theme::Muted();
+            if (hovered)
+                resolvedColor = Theme::Text();
+            if (!action.enabled)
+                resolvedColor.w *= 0.45F;
+            DrawEditorIcon(&drawList, action.icon, {x + 4.0F, titlePosition.y + 9.0F}, {16.0F, 16.0F}, Theme::U32(resolvedColor),
+                           fonts.icon);
+            if (hovered && action.title != nullptr && action.title[0] != '\0')
+                ImGui::SetTooltip("%s", action.title);
+            ImGui::EndDisabled();
+            return {.pressed = pressed};
+        }
+
+        /** @brief Dispatches one card-title interaction and its optional popup menu. */
+        void DispatchCardTitleAction(const CardTitleBarAction &action, const bool pressed, const Theme::Fonts &fonts) {
+            if (pressed && action.menuItems.empty() && action.onInvoke)
+                action.onInvoke();
+            if (pressed && !action.menuItems.empty())
+                ImGui::OpenPopup("##card_action_menu");
+            DrawCardActionMenu(action, fonts);
+        }
+
+        /** @brief Draws and dispatches one compact action in a card title bar. */
+        void DrawCardTitleAction(const CardTitleBarAction &action, const ImVec2 titlePosition, const float x, ImDrawList &drawList,
+                                 const Theme::Fonts &fonts) {
+            const CardTitleActionInteraction interaction = DrawCardTitleActionSurface(action, titlePosition, x, drawList, fonts);
+            DispatchCardTitleAction(action, interaction.pressed, fonts);
+            ImGui::PopID();
+        }
+    }  // namespace
+
+    /** @copydoc Card::DrawTitleBar */
+    void Card::DrawTitleBar(const CardTitleBarProps &props) {
         ImDrawList *dl = ImGui::GetWindowDrawList();
         const ImVec2 pos = ImGui::GetCursorScreenPos();
         const float w = ImGui::GetContentRegionAvail().x;
-        constexpr float h = 28.0f;
+        constexpr float h = 34.0F;
 
-        // background & border
-        dl->AddRectFilled(pos, ImVec2(pos.x + w, pos.y + h), Theme::U32(Theme::Bg0()));
-        dl->AddLine(ImVec2(pos.x, pos.y + h - 1.0f), ImVec2(pos.x + w, pos.y + h - 1.0f), Theme::U32(Theme::Border()), 1.0f);
+        dl->AddRectFilled(pos, ImVec2(pos.x + w, pos.y + h), Theme::U32(Theme::CardHeaderSurface()));
+        dl->AddLine(ImVec2(pos.x, pos.y + h - 1.0F), ImVec2(pos.x + w, pos.y + h - 1.0F), Theme::U32(Theme::CardBorder()), 1.0F);
 
-        dl->AddText(fonts.sansCompact, fonts.sansCompact->FontSize, ImVec2(pos.x + 14.0f, pos.y + 8.0f), Theme::U32(Theme::Muted()), label);
-
-        bool removeRequested = false;
-        if (removable) {
-            ImGui::SetCursorScreenPos(ImVec2(pos.x + w - 24.0f, pos.y + 6.0f));
-            ImGui::PushID(label);
-            if (ImGui::InvisibleButton("##remove", ImVec2(16.0f, 16.0f))) {
-                removeRequested = true;
-            }
-            const bool hovered = ImGui::IsItemHovered();
-            ImU32 iconColor = Theme::U32(hovered ? Theme::Err() : Theme::Muted());
-            DrawEditorIcon(dl, UiIcon::Delete, ImVec2(pos.x + w - 24.0f, pos.y + 6.0f), ImVec2(16.0f, 16.0f), iconColor);
-            ImGui::PopID();
+        const ImVec2 chevronCenter{pos.x + 12.0F, pos.y + h * 0.5F};
+        if (expanded_)
+            dl->AddTriangleFilled({chevronCenter.x - 3.0F, chevronCenter.y - 2.0F}, {chevronCenter.x + 3.0F, chevronCenter.y - 2.0F},
+                                  {chevronCenter.x, chevronCenter.y + 2.0F}, Theme::U32(Theme::Muted()));
+        else
+            dl->AddTriangleFilled({chevronCenter.x - 2.0F, chevronCenter.y - 3.0F}, {chevronCenter.x - 2.0F, chevronCenter.y + 3.0F},
+                                  {chevronCenter.x + 2.0F, chevronCenter.y}, Theme::U32(Theme::Muted()));
+        ImGui::SetCursorScreenPos(pos);
+        ImGui::PushID(props.id);
+        if (ImGui::InvisibleButton("##card_disclosure", {24.0F, h})) {
+            expanded_ = !expanded_;
+            stateStorage_->SetBool(expandedStateId_, expanded_);
         }
+        ImGui::PopID();
+
+        const float headerFontSize = CardTypography::Title * Theme::GetActiveTokens().sizes.uiScale;
+        ImFont *titleFont = props.fonts.sansEmphasis != nullptr ? props.fonts.sansEmphasis : ImGui::GetFont();
+        dl->AddText(titleFont, headerFontSize, ImVec2(pos.x + 28.0F, pos.y + (h - headerFontSize) * 0.5F), Theme::U32(Theme::Text()),
+                    props.title);
+
+        constexpr float toolSize = 24.0F;
+        constexpr float toolGap = 2.0F;
+        const float toolsWidth = props.actions.empty() ? 0.0F
+                                                       : toolSize * static_cast<float>(props.actions.size()) +
+                                                             toolGap * static_cast<float>(props.actions.size() - 1U);
+        const float toolsX = pos.x + w - toolsWidth - 4.0F;
+        ImGui::PushID(props.id);
+        for (std::size_t index = 0; index < props.actions.size(); ++index) {
+            const float x = toolsX + static_cast<float>(index) * (toolSize + toolGap);
+            DrawCardTitleAction(props.actions[index], pos, x, *dl, props.fonts);
+        }
+        ImGui::PopID();
 
         ImGui::SetCursorScreenPos(ImVec2(pos.x, pos.y + h));
-        return removeRequested;
+    }
+
+    /** @copydoc Card::BeginBody */
+    bool Card::BeginBody() {
+        if (!expanded_)
+            return false;
+        if (bodyOpen_)
+            return true;
+        ImGui::SetCursorPosY(ImGui::GetCursorPosY() + 7.0F);
+        bodyOpen_ = true;
+        return true;
+    }
+
+    /** @copydoc Card::Finish */
+    void Card::Finish() {
+        if (!open_)
+            return;
+        if (bodyOpen_)
+            ImGui::SetCursorPosY(ImGui::GetCursorPosY() + 7.0F);
+        ImGui::EndChild();
+        ImGui::PopStyleColor(2);
+        ImGui::PopStyleVar(2);
+        open_ = false;
     }
 
     void DrawPropRow(const char *label, const char *value, const Theme::Fonts &fonts) {
@@ -1738,47 +2033,55 @@ namespace Horo::Editor::Ui {
         borderLight.w = 0.5f;
         dl->AddLine(ImVec2(pos.x, pos.y + h - 1.0f), ImVec2(pos.x + w, pos.y + h - 1.0f), ImGui::GetColorU32(borderLight), 1.0f);
 
-        dl->AddText(fonts.sans, fonts.sans->FontSize, ImVec2(pos.x + 14.0f, pos.y + 6.0f), Theme::U32(Theme::Muted()), label);
+        const float scale = Theme::GetActiveTokens().sizes.uiScale;
+        const float labelFontSize = InspectorTypography::Label * scale;
+        const float fieldFontSize = InspectorTypography::Field * scale;
+        dl->AddText(fonts.sans, labelFontSize, ImVec2(pos.x + 14.0f, pos.y + (h - labelFontSize) * 0.5F), Theme::U32(Theme::Muted()),
+                    label);
 
         constexpr float labelW = 80.0f;
         const auto inputPos = ImVec2(pos.x + 14.0f + labelW, pos.y + 4.0f);
         const auto inputSize = ImVec2(w - 28.0f - labelW, h - 8.0f);
 
-        dl->AddRectFilled(inputPos, ImVec2(inputPos.x + inputSize.x, inputPos.y + inputSize.y), Theme::U32(Theme::Bg0()), 4.0f);
-        dl->AddRect(inputPos, ImVec2(inputPos.x + inputSize.x, inputPos.y + inputSize.y), Theme::U32(Theme::Border()), 4.0f);
+        dl->AddRectFilled(inputPos, ImVec2(inputPos.x + inputSize.x, inputPos.y + inputSize.y), Theme::U32(Theme::InspectorFieldSurface()),
+                          4.0f);
+        dl->AddRect(inputPos, ImVec2(inputPos.x + inputSize.x, inputPos.y + inputSize.y), Theme::U32(Theme::InspectorBorder()), 4.0f);
 
-        dl->AddText(fonts.sansCompact, fonts.sansCompact->FontSize, ImVec2(inputPos.x + 8.0f, inputPos.y + 2.0f), Theme::U32(Theme::Text()),
-                    value);
+        dl->AddText(fonts.sans, fieldFontSize, ImVec2(inputPos.x + 8.0f, inputPos.y + (inputSize.y - fieldFontSize) * 0.5F),
+                    Theme::U32(Theme::Text()), value);
 
         ImGui::SetCursorScreenPos(ImVec2(pos.x, pos.y + h));
     }
 
     /** @copydoc BeginContextMenu */
     bool BeginContextMenu(const char *id) {
-        ImGui::SetNextWindowSizeConstraints({220.0F, 0.0F}, {340.0F, FLT_MAX});
+        SetNextContextMenuSizeConstraints();
         PushContextPopupWindowStyle();
         const bool open = ImGui::BeginPopupContextItem(id, ImGuiPopupFlags_MouseButtonRight);
-        PopContextPopupWindowStyle();
+        if (!open)
+            PopContextPopupWindowStyle();
         return open;
     }
 
     /** @copydoc BeginContextWindowMenu */
     bool BeginContextWindowMenu(const char *id) {
-        ImGui::SetNextWindowSizeConstraints({220.0F, 0.0F}, {340.0F, FLT_MAX});
+        SetNextContextMenuSizeConstraints();
         PushContextPopupWindowStyle();
         const bool open = ImGui::BeginPopupContextWindow(id, ImGuiPopupFlags_MouseButtonRight | ImGuiPopupFlags_NoOpenOverItems);
-        PopContextPopupWindowStyle();
+        if (!open)
+            PopContextPopupWindowStyle();
         return open;
     }
 
     /** @copydoc EndContextMenu */
     void EndContextMenu() {
         ImGui::EndPopup();
+        PopContextPopupWindowStyle();
     }
 
     /** @copydoc BeginMenuPopup */
     bool BeginMenuPopup(const char *id) {
-        ImGui::SetNextWindowSizeConstraints({220.0F, 0.0F}, {340.0F, FLT_MAX});
+        SetNextContextMenuSizeConstraints();
         PushContextPopupWindowStyle();
         const bool open = ImGui::BeginPopup(id);
         if (!open) {
@@ -1793,57 +2096,85 @@ namespace Horo::Editor::Ui {
         PopContextPopupWindowStyle();
     }
 
+    /** @copydoc BeginMenuDropdown */
+    bool BeginMenuDropdown(const char *label, const Theme::Fonts &fonts) {
+        SetNextContextMenuSizeConstraints();
+        PushMenuDropdownWindowStyle();
+        bool open = false;
+        {
+            Theme::ScopedTextStyle textStyle(fonts.sans, 14.0F * Theme::GetActiveTokens().sizes.uiScale, Theme::FontPx::Sans);
+            open = ImGui::BeginMenu(label);
+        }
+        if (open)
+            ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, {0.0F, 0.0F});
+        else
+            PopMenuDropdownWindowStyle();
+        return open;
+    }
+
+    /** @copydoc EndMenuDropdown */
+    void EndMenuDropdown() {
+        ImGui::PopStyleVar();
+        ImGui::EndMenu();
+        PopMenuDropdownWindowStyle();
+    }
+
     /** @copydoc ContextMenuItem */
     bool ContextMenuItem(const char *label, const char *shortcut, const Theme::Fonts &fonts, const ContextMenuItemTone tone,
-                         const std::string_view iconToken) {
-        static_cast<void>(fonts);
-        static_cast<void>(iconToken);
-        ImGui::PushStyleColor(ImGuiCol_Header, Theme::Hover());
-        ImGui::PushStyleColor(ImGuiCol_HeaderHovered, Theme::Hover());
-        ImGui::PushStyleColor(ImGuiCol_HeaderActive, Theme::AccentSoft());
-        if (tone == ContextMenuItemTone::Danger) {
-            ImGui::PushStyleColor(ImGuiCol_Text, Theme::Err());
-        }
-        PushContextMenuRowStyle();
-        const bool activated = ImGui::MenuItem(label, shortcut);
-        PopContextMenuRowStyle();
-        if (tone == ContextMenuItemTone::Danger) {
-            ImGui::PopStyleColor();
-        }
-        ImGui::PopStyleColor(3);
-        return activated;
+                         const std::string_view iconToken, const bool enabled) {
+        const char *stableId = std::strstr(label, "###");
+        if (stableId == nullptr)
+            ImGui::PushID(label);
+        const char *rowId = stableId != nullptr ? stableId : "##item";
+        const ContextMenuRow row = DrawContextMenuRow(rowId, false, false, enabled);
+        if (stableId == nullptr)
+            ImGui::PopID();
+        ImVec4 textColor = tone == ContextMenuItemTone::Danger ? Theme::Err() : Theme::Text();
+        if (!enabled)
+            textColor = Theme::Dim();
+        DrawContextMenuRowPresentation(row, {label, shortcut, fonts, textColor, row.hovered && enabled, false, iconToken});
+        return enabled && row.activated;
     }
 
     /** @copydoc BeginContextSubmenu */
     bool BeginContextSubmenu(const char *label, const Theme::Fonts &fonts, const std::string_view iconToken) {
-        static_cast<void>(fonts);
-        static_cast<void>(iconToken);
-        ImGui::PushStyleColor(ImGuiCol_Header, Theme::Hover());
-        ImGui::PushStyleColor(ImGuiCol_HeaderHovered, Theme::Hover());
-        ImGui::PushStyleColor(ImGuiCol_HeaderActive, Theme::AccentSoft());
+        const std::string popupId = std::string{"##submenu_popup_"} + label;
+        const bool wasOpen = ImGui::IsPopupOpen(popupId.c_str());
+        const char *stableId = std::strstr(label, "###");
+        if (stableId == nullptr)
+            ImGui::PushID(label);
+        const ContextMenuRow row = DrawContextMenuRow(stableId != nullptr ? stableId : "##submenu", wasOpen, true);
+        if (stableId == nullptr)
+            ImGui::PopID();
+        DrawContextMenuRowPresentation(row, {label, nullptr, fonts, Theme::Text(), row.hovered || wasOpen, true, iconToken});
+        if (row.hovered || row.activated)
+            ImGui::OpenPopup(popupId.c_str());
+
+        ImGui::SetNextWindowPos({ImGui::GetWindowPos().x + ImGui::GetWindowWidth() - 1.0F, row.minimum.y - ScaledLayoutValue(4.0F)});
+        SetNextContextMenuSizeConstraints();
         PushContextPopupWindowStyle();
-        PushContextMenuRowStyle();
-        const float itemInnerSpacingY = ImGui::GetStyle().ItemInnerSpacing.y;
-        // ImGui intentionally overlaps child menus by ItemInnerSpacing.x. The
-        // editor popup treatment uses visible borders, so align those borders
-        // edge-to-edge instead of stacking one popup over the previous one.
-        ImGui::PushStyleVar(ImGuiStyleVar_ItemInnerSpacing, {0.0F, itemInnerSpacingY});
-        const bool open = ImGui::BeginMenu(label);
-        ImGui::PopStyleVar();
-        PopContextMenuRowStyle();
-        PopContextPopupWindowStyle();
-        ImGui::PopStyleColor(3);
+        const bool open = ImGui::BeginPopup(popupId.c_str(), ImGuiWindowFlags_NoMove);
+        if (!open)
+            PopContextPopupWindowStyle();
         return open;
     }
 
     /** @copydoc EndContextSubmenu */
     void EndContextSubmenu() {
-        ImGui::EndMenu();
+        ImGui::EndPopup();
+        PopContextPopupWindowStyle();
     }
 
     /** @copydoc ContextMenuSeparator */
     void ContextMenuSeparator() {
-        ImGui::Separator();
+        const ImVec2 position = ImGui::GetCursorScreenPos();
+        const float width = ImGui::GetContentRegionAvail().x;
+        const float scale = Theme::GetActiveTokens().sizes.uiScale;
+        constexpr float height = 9.0F;
+        ImGui::GetWindowDrawList()->AddLine({position.x + 5.0F * scale, position.y + 4.0F * scale},
+                                            {position.x + width - 5.0F * scale, position.y + 4.0F * scale}, Theme::U32(Theme::Border()),
+                                            1.0F);
+        ImGui::Dummy({0.0F, height * scale});
     }
 
     /** @copydoc DrawComboPropRow */
@@ -1852,8 +2183,8 @@ namespace Horo::Editor::Ui {
         const PropertyRowLayout layout = BeginPropertyRow(label, fonts);
         ImGui::SetCursorScreenPos({layout.controlX, layout.position.y + 3.0F});
         ImGui::PushItemWidth(layout.controlWidth);
-        const bool changed =
-            ComboControl(id, &value, entries.data(), static_cast<int>(entries.size()), fonts, ComboControlOptions{.height = 26.0F});
+        const bool changed = ComboControl(id, &value, entries.data(), static_cast<int>(entries.size()), fonts,
+                                          ComboControlOptions{.height = 27.0F, .componentSize = ComponentSize::Medium});
         ImGui::PopItemWidth();
         EndPropertyRow(layout);
         return changed;
@@ -1866,16 +2197,12 @@ namespace Horo::Editor::Ui {
         ImGui::SetCursorScreenPos({layout.controlX, layout.position.y + 3.0F});
         ImGui::PushID(id);
         ImGui::PushItemWidth(layout.controlWidth);
-        PushControlStyle();
-        if (options.error) {
-            ImGui::PushStyleColor(ImGuiCol_FrameBg, Theme::ErrSoft());
-            ImGui::PushStyleColor(ImGuiCol_FrameBgHovered, Theme::ErrSoft());
-            ImGui::PushStyleColor(ImGuiCol_FrameBgActive, Theme::ErrSoft());
-            ImGui::PushStyleColor(ImGuiCol_Border, Theme::Err());
-        }
+        PushInspectorControlStyle();
+        if (options.error)
+            PushErrorControlColors();
         PropertyEditResult result;
         {
-            Theme::ScopedTextStyle ts(fonts.sansCompact, 14.0F * Theme::GetActiveTokens().sizes.uiScale, Theme::FontPx::SansCompact);
+            Theme::ScopedTextStyle ts(fonts.sans, InspectorTypography::Field * Theme::GetActiveTokens().sizes.uiScale, Theme::FontPx::Sans);
             result.changed = ImGui::DragFloat("##value", &value, options.speed, options.minimum, options.maximum, options.format);
             result.committed = ImGui::IsItemDeactivatedAfterEdit();
         }
@@ -1895,16 +2222,12 @@ namespace Horo::Editor::Ui {
         ImGui::SetCursorScreenPos({layout.controlX, layout.position.y + 3.0F});
         ImGui::PushID(id);
         ImGui::PushItemWidth(layout.controlWidth);
-        PushControlStyle();
-        if (error) {
-            ImGui::PushStyleColor(ImGuiCol_FrameBg, Theme::ErrSoft());
-            ImGui::PushStyleColor(ImGuiCol_FrameBgHovered, Theme::ErrSoft());
-            ImGui::PushStyleColor(ImGuiCol_FrameBgActive, Theme::ErrSoft());
-            ImGui::PushStyleColor(ImGuiCol_Border, Theme::Err());
-        }
+        PushInspectorControlStyle();
+        if (error)
+            PushErrorControlColors();
         PropertyEditResult result;
         {
-            Theme::ScopedTextStyle ts(fonts.sansCompact, 14.0F * Theme::GetActiveTokens().sizes.uiScale, Theme::FontPx::SansCompact);
+            Theme::ScopedTextStyle ts(fonts.sans, InspectorTypography::Field * Theme::GetActiveTokens().sizes.uiScale, Theme::FontPx::Sans);
             constexpr ImGuiColorEditFlags flags = ImGuiColorEditFlags_NoLabel | ImGuiColorEditFlags_Float | ImGuiColorEditFlags_DisplayRGB |
                                                   ImGuiColorEditFlags_PickerHueWheel;
             result.changed = ImGui::ColorEdit3("##value", value.data(), flags);
@@ -1925,17 +2248,31 @@ namespace Horo::Editor::Ui {
         const PropertyRowLayout layout = BeginPropertyRow(label, fonts);
         ImGui::SetCursorScreenPos({layout.controlX, layout.position.y + 3.0F});
         ImGui::PushID(id);
-        PushControlStyle();
+        PushInspectorControlStyle();
         Float3PropertyEditResult result;
         {
-            Theme::ScopedTextStyle ts(fonts.sansCompact, 14.0F * Theme::GetActiveTokens().sizes.uiScale, Theme::FontPx::SansCompact);
-            constexpr float axisGap = 3.0F;
+            const float scale = Theme::GetActiveTokens().sizes.uiScale;
+            const float valueFontSize = InspectorTypography::Field * scale;
+            const float axisFontSize = InspectorTypography::Axis * scale;
+            Theme::ScopedTextStyle ts(fonts.sans, valueFontSize, Theme::FontPx::Sans);
+            constexpr std::array<const char *, 3> axisLabels{"X", "Y", "Z"};
+            const std::array axisColors{Theme::Err(), Theme::Ok(), ImVec4{0.30F, 0.65F, 1.0F, 1.0F}};
+            constexpr float axisGap = 5.0F;
+            constexpr float axisLabelWidth = 12.0F;
+            constexpr float axisLabelGap = 2.0F;
             const float axisWidth = std::max(1.0F, (layout.controlWidth - axisGap * 2.0F) / 3.0F);
             for (std::size_t axis = 0; axis < value.size(); ++axis) {
                 if (axis != 0)
                     ImGui::SameLine(0.0F, axisGap);
                 ImGui::PushID(static_cast<int>(axis));
-                ImGui::SetNextItemWidth(axisWidth);
+                const ImVec2 axisPosition = ImGui::GetCursorScreenPos();
+                const ImVec2 axisTextSize = fonts.sans->CalcTextSizeA(axisFontSize, FLT_MAX, 0.0F, axisLabels[axis]);
+                ImGui::GetWindowDrawList()->AddText(fonts.sans, axisFontSize,
+                                                    {axisPosition.x + (axisLabelWidth - axisTextSize.x) * 0.5F,
+                                                     axisPosition.y + (ImGui::GetFrameHeight() - axisTextSize.y) * 0.5F},
+                                                    ImGui::GetColorU32(axisColors[axis]), axisLabels[axis]);
+                ImGui::SetCursorScreenPos({axisPosition.x + axisLabelWidth + axisLabelGap, axisPosition.y});
+                ImGui::SetNextItemWidth(std::max(1.0F, axisWidth - axisLabelWidth - axisLabelGap));
                 result.changedAxes[axis] = ImGui::DragFloat("##value", &value[axis], speed, 0.0F, 0.0F, "%.2f");
                 result.changed = result.changed || result.changedAxes[axis];
                 result.committed = result.committed || ImGui::IsItemDeactivatedAfterEdit();

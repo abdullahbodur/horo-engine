@@ -71,6 +71,51 @@ namespace Horo::Editor::Ui {
             context.drawList.AddLine({x + 6.0F, y + 1.0F}, {x + w - 6.0F, y + 1.0F}, context.color, 1.3F);
         }
 
+        void DrawResetIcon(const IconDrawContext &context) {
+            const ImVec2 center = context.Center();
+            const float radius = std::min(context.size.x, context.size.y) * 0.34F;
+            context.drawList.PathClear();
+            context.drawList.PathArcTo(center, radius, -0.35F * std::numbers::pi_v<float>, 1.55F * std::numbers::pi_v<float>, 18);
+            context.drawList.PathStroke(context.color, 0, 1.4F);
+            context.drawList.AddTriangleFilled({center.x - radius - 1.0F, center.y - 1.0F}, {center.x - radius + 4.0F, center.y - 4.0F},
+                                               {center.x - radius + 4.0F, center.y + 2.0F}, context.color);
+        }
+
+        void DrawCheckIcon(const IconDrawContext &context) {
+            const auto [x, y] = context.position;
+            const auto [w, h] = context.size;
+            context.drawList.AddRect({x + 1.5F, y + 1.5F}, {x + w - 1.5F, y + h - 1.5F}, context.color, 1.5F, 0, 1.3F);
+            context.drawList.AddLine({x + 4.0F, y + h * 0.52F}, {x + w * 0.43F, y + h - 4.0F}, context.color, 1.4F);
+            context.drawList.AddLine({x + w * 0.43F, y + h - 4.0F}, {x + w - 3.5F, y + 4.0F}, context.color, 1.4F);
+        }
+
+        void DrawUncheckedCheckboxIcon(const IconDrawContext &context) {
+            const auto [x, y] = context.position;
+            const auto [w, h] = context.size;
+            context.drawList.AddRect({x + 1.5F, y + 1.5F}, {x + w - 1.5F, y + h - 1.5F}, context.color, 1.5F, 0, 1.3F);
+        }
+
+        void DrawSettingsIcon(const IconDrawContext &context) {
+            const ImVec2 center = context.Center();
+            const float radius = std::min(context.size.x, context.size.y) * 0.25F;
+            context.drawList.AddCircle(center, radius, context.color, 16, 1.3F);
+            context.drawList.AddCircleFilled(center, std::max(1.0F, radius * 0.28F), context.color, 10);
+            for (int tooth = 0; tooth < 8; ++tooth) {
+                const float angle = static_cast<float>(tooth) * std::numbers::pi_v<float> * 0.25F;
+                const ImVec2 direction{std::cos(angle), std::sin(angle)};
+                context.drawList.AddLine({center.x + direction.x * radius * 1.25F, center.y + direction.y * radius * 1.25F},
+                                         {center.x + direction.x * radius * 1.75F, center.y + direction.y * radius * 1.75F}, context.color,
+                                         1.4F);
+            }
+        }
+
+        void DrawMoreVerticalIcon(const IconDrawContext &context) {
+            const ImVec2 center = context.Center();
+            const float radius = std::max(1.0F, std::min(context.size.x, context.size.y) * 0.08F);
+            for (const float offset : {-0.28F, 0.0F, 0.28F})
+                context.drawList.AddCircleFilled({center.x, center.y + context.size.y * offset}, radius, context.color, 10);
+        }
+
         void DrawVisibilityIcon(const IconDrawContext &context, const bool crossedOut) {
             const ImVec2 center = context.Center();
             const float glyphSize = std::min(context.size.x, context.size.y);
@@ -256,6 +301,11 @@ namespace Horo::Editor::Ui {
             IconDescriptor{"action.rename", DrawRenameIcon},
             IconDescriptor{"action.duplicate", DrawDuplicateIcon},
             IconDescriptor{"action.delete", DrawDeleteIcon},
+            IconDescriptor{"action.reset", DrawResetIcon},
+            IconDescriptor{"action.check", DrawCheckIcon},
+            IconDescriptor{"action.checkbox_unchecked", DrawUncheckedCheckboxIcon},
+            IconDescriptor{"action.settings", DrawSettingsIcon},
+            IconDescriptor{"action.more_vertical", DrawMoreVerticalIcon},
             IconDescriptor{"action.visibility", DrawVisibilityOnIcon},
             IconDescriptor{"action.visibility_off", DrawVisibilityOffIcon},
             IconDescriptor{"action.lock", DrawLockIcon},
@@ -301,6 +351,43 @@ namespace Horo::Editor::Ui {
             const auto index = static_cast<std::size_t>(icon);
             return index < kIconDescriptors.size() ? std::optional{index} : std::nullopt;
         }
+
+        [[nodiscard]] constexpr ImWchar MaterialSymbolGlyph(const UiIcon icon) noexcept {
+            using enum UiIcon;
+            switch (icon) {
+                case Reset:
+                    return 0xF053;  // restart_alt
+                case Check:
+                    return 0xE834;  // check_box
+                case CheckboxUnchecked:
+                    return 0xE835;  // check_box_outline_blank
+                case Settings:
+                    return 0xE8B8;  // settings
+                case MoreVertical:
+                    return 0xE5D4;  // more_vert
+                default:
+                    return 0;
+            }
+        }
+
+        [[nodiscard]] std::array<char, 4> EncodeBasicMultilingualPlaneGlyph(const ImWchar codepoint) noexcept {
+            if (codepoint < 0x80)
+                return {static_cast<char>(codepoint), '\0', '\0', '\0'};
+            if (codepoint < 0x800) {
+                return {
+                    static_cast<char>(0xC0 | (codepoint >> 6)),
+                    static_cast<char>(0x80 | (codepoint & 0x3F)),
+                    '\0',
+                    '\0',
+                };
+            }
+            return {
+                static_cast<char>(0xE0 | (codepoint >> 12)),
+                static_cast<char>(0x80 | ((codepoint >> 6) & 0x3F)),
+                static_cast<char>(0x80 | (codepoint & 0x3F)),
+                '\0',
+            };
+        }
     }  // namespace
 
     /** @copydoc UiIconRegistry::Resolve */
@@ -324,10 +411,34 @@ namespace Horo::Editor::Ui {
         return index.has_value() ? kIconDescriptors[*index].token : std::string_view{};
     }
 
+    /** @copydoc UiIconRegistry::MaterialSymbolGlyphRanges */
+    std::span<const ImWchar> UiIconRegistry::MaterialSymbolGlyphRanges() noexcept {
+        static constexpr std::array<ImWchar, 15> ranges{
+            0xE000, 0xE003,  // status icons
+            0xE5D4, 0xE5D5,  // more_vert
+            0xE834, 0xE835,  // check_box
+            0xE86C, 0xE86D,  // check_circle
+            0xE8B8, 0xE8B9,  // settings
+            0xEF4A, 0xEF4B,  // circle
+            0xF053, 0xF054,  // restart_alt
+            0,
+        };
+        return ranges;
+    }
+
     /** @copydoc DrawEditorIcon */
-    void DrawEditorIcon(ImDrawList *drawList, const UiIcon icon, const ImVec2 position, const ImVec2 size, const ImU32 color) {
+    void DrawEditorIcon(ImDrawList *drawList, const UiIcon icon, const ImVec2 position, const ImVec2 size, const ImU32 color,
+                        ImFont *const iconFont) {
         if (drawList == nullptr || icon == UiIcon::None)
             return;
+        if (const ImWchar glyph = MaterialSymbolGlyph(icon); glyph != 0 && iconFont != nullptr && iconFont->FindGlyphNoFallback(glyph)) {
+            const std::array utf8 = EncodeBasicMultilingualPlaneGlyph(glyph);
+            const float glyphSize = std::min(size.x, size.y);
+            const ImVec2 textSize = iconFont->CalcTextSizeA(glyphSize, FLT_MAX, 0.0F, utf8.data());
+            drawList->AddText(iconFont, glyphSize, {position.x + (size.x - textSize.x) * 0.5F, position.y + (size.y - textSize.y) * 0.5F},
+                              color, utf8.data());
+            return;
+        }
         const std::optional<std::size_t> index = IconIndex(icon);
         if (index.has_value())
             kIconDescriptors[*index].renderer(IconDrawContext{*drawList, position, size, color});

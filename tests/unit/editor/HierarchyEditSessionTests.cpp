@@ -134,13 +134,13 @@ TEST_CASE("Hierarchy row layout preserves icon columns and safely shrinks the la
 
     const HierarchyRowLayout regular = CalculateHierarchyRowLayout(280.0F, 0, 1.0F, 36.0F);
     REQUIRE((regular.IsValid()));
-    REQUIRE((regular.height == 32.0F));
+    REQUIRE((regular.height == 30.0F));
     REQUIRE((regular.row.minimum == 0.0F));
     REQUIRE((regular.row.maximum == 280.0F));
-    REQUIRE((regular.chevron.minimum == 2.0F));
-    REQUIRE((regular.chevron.Width() == 12.0F));
-    REQUIRE((regular.typeIcon.minimum == 14.0F));
-    REQUIRE((regular.typeIcon.Width() == 22.0F));
+    REQUIRE((regular.chevron.minimum == 7.0F));
+    REQUIRE((regular.chevron.Width() == 13.0F));
+    REQUIRE((regular.typeIcon.minimum == 26.0F));
+    REQUIRE((regular.typeIcon.Width() == 16.0F));
     REQUIRE((regular.label.maximum <= regular.actions.minimum));
     REQUIRE((regular.visibilityAction.Width() == 18.0F));
     REQUIRE((regular.lockAction.Width() == 18.0F));
@@ -153,12 +153,12 @@ TEST_CASE("Hierarchy row layout preserves icon columns and safely shrinks the la
 
     const HierarchyRowLayout child = CalculateHierarchyRowLayout(280.0F, 1, 1.0F, 36.0F);
     const HierarchyRowLayout grandchild = CalculateHierarchyRowLayout(280.0F, 2, 1.0F, 36.0F);
-    REQUIRE((child.typeIcon.minimum - regular.typeIcon.minimum == 12.0F));
-    REQUIRE((grandchild.typeIcon.minimum - child.typeIcon.minimum == 12.0F));
+    REQUIRE((child.typeIcon.minimum - regular.typeIcon.minimum == 18.0F));
+    REQUIRE((grandchild.typeIcon.minimum - child.typeIcon.minimum == 18.0F));
 
     const HierarchyRowLayout leaf = CalculateHierarchyRowLayout(280.0F, 0, 1.0F, 36.0F);
     REQUIRE((leaf.IsValid()));
-    REQUIRE((leaf.chevron.Width() == 12.0F));
+    REQUIRE((leaf.chevron.Width() == 13.0F));
     REQUIRE((leaf.typeIcon.minimum == regular.typeIcon.minimum));
 
     const HierarchyRowLayout narrow = CalculateHierarchyRowLayout(48.0F, 8, 2.0F, 20.0F);
@@ -172,9 +172,9 @@ TEST_CASE("Hierarchy row layout preserves icon columns and safely shrinks the la
     for (const float scale : {0.75F, 1.0F, 1.5F, 2.0F}) {
         const HierarchyRowLayout scaled = CalculateHierarchyRowLayout(280.0F * scale, 0, scale, 48.0F * scale);
         REQUIRE((scaled.IsValid()));
-        REQUIRE((scaled.chevron.minimum == 2.0F * scale));
-        REQUIRE((scaled.chevron.Width() == 12.0F * scale));
-        REQUIRE((scaled.typeIcon.minimum == 14.0F * scale));
+        REQUIRE((scaled.chevron.minimum == 7.0F * scale));
+        REQUIRE((scaled.chevron.Width() == 13.0F * scale));
+        REQUIRE((scaled.typeIcon.minimum == 26.0F * scale));
         REQUIRE((scaled.visibilityAction.Width() == 24.0F * scale));
         REQUIRE((scaled.lockAction.Width() == 24.0F * scale));
         REQUIRE((scaled.visibilityAction.maximum == scaled.lockAction.minimum));
@@ -183,7 +183,7 @@ TEST_CASE("Hierarchy row layout preserves icon columns and safely shrinks the la
     for (const float width : {160.0F, 280.0F, 480.0F}) {
         const HierarchyRowLayout resized = CalculateHierarchyRowLayout(width, 0, 1.0F, 48.0F);
         REQUIRE((resized.IsValid()));
-        REQUIRE((resized.typeIcon.minimum == 14.0F));
-        REQUIRE((resized.actions.maximum == width - 6.0F));
+        REQUIRE((resized.typeIcon.minimum == 26.0F));
+        REQUIRE((resized.actions.maximum == width - 7.0F));
     }
 }

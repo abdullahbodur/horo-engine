@@ -23,7 +23,7 @@ namespace Horo::Editor {
         authoringRevision_ = authoring.revision;
 
         if (std::ranges::none_of(authoring.objects, [](const SceneObjectSnapshot &object) {
-            return object.components.camera.has_value();
+            return object.components.camera.has_value() && object.components.camera->enabled;
         })) {
             Error error = InvalidTransition("Play Mode requires an authored camera component.");
             Fail(error);
