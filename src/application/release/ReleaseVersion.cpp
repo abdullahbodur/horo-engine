@@ -24,8 +24,9 @@ namespace Horo::Release {
                 return false;
             for (std::size_t begin = 0;;) {
                 const std::size_t end = value.find('.', begin);
-                const std::string_view identifier = value.substr(begin, end == std::string_view::npos ? value.size() - begin : end - begin);
-                if (identifier.empty() || !std::ranges::all_of(identifier, IsIdentifierCharacter) ||
+                if (const std::string_view identifier =
+                        value.substr(begin, end == std::string_view::npos ? value.size() - begin : end - begin);
+                    identifier.empty() || !std::ranges::all_of(identifier, IsIdentifierCharacter) ||
                     (rejectNumericLeadingZero && IsNumeric(identifier) && identifier.size() > 1 && identifier.front() == '0'))
                     return false;
                 if (end == std::string_view::npos)
@@ -87,8 +88,7 @@ namespace Horo::Release {
             if (lhs == rhs)
                 return std::strong_ordering::equal;
             const bool lhsNumeric = IsNumeric(lhs);
-            const bool rhsNumeric = IsNumeric(rhs);
-            if (lhsNumeric != rhsNumeric)
+            if (const bool rhsNumeric = IsNumeric(rhs); lhsNumeric != rhsNumeric)
                 return lhsNumeric ? std::strong_ordering::less : std::strong_ordering::greater;
             if (lhsNumeric && lhs.size() != rhs.size())
                 return lhs.size() <=> rhs.size();
