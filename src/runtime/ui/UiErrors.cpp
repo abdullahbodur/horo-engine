@@ -186,13 +186,14 @@ namespace Horo::Runtime::Ui::UiErrors {
                                                    false,
                                                    false};
     /** @copydoc RenderResourceReferenceInvalid */
-    const ErrorCodeDescriptor RenderResourceReferenceInvalid{UiDomain,
-                                                             ErrorCode{"runtime_ui.render_resource_reference.invalid"},
-                                                             ErrorSeverity::Error,
-                                                             "A Runtime UI render resource reference is invalid.",
-                                                             "Provide a stable Horo asset with the exact nonzero revision and semantic role.",
-                                                             false,
-                                                             true};
+    const ErrorCodeDescriptor
+        RenderResourceReferenceInvalid{UiDomain,
+                                       ErrorCode{"runtime_ui.render_resource_reference.invalid"},
+                                       ErrorSeverity::Error,
+                                       "A Runtime UI render resource reference is invalid.",
+                                       "Provide a stable Horo asset with the exact nonzero revision and semantic role.",
+                                       false,
+                                       true};
     /** @copydoc DiagnosticInvalid */
     const ErrorCodeDescriptor
         DiagnosticInvalid{UiDomain,
