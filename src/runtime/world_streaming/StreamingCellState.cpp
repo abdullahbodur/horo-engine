@@ -20,8 +20,8 @@ namespace Horo::WorldStreaming {
 
         /** @brief Reports whether a state may still own cell-scoped resources or live publication. */
         [[nodiscard]] bool RetainsResources(const StreamingCellState state) noexcept {
-            return state == StreamingCellState::Loading || state == StreamingCellState::Resident || state == StreamingCellState::Active ||
-                   state == StreamingCellState::Evicting;
+            using enum StreamingCellState;
+            return state == Loading || state == Resident || state == Active || state == Evicting;
         }
 
         /** @brief Projects a retirement-acknowledged terminal operation onto canonical residency. */
@@ -63,26 +63,24 @@ namespace Horo::WorldStreaming {
         [[nodiscard]] bool CanStartOperation(const StreamingCellState current, const StreamingCellOperation &operation,
                                              const StreamingCellState projected) noexcept {
             using enum StreamingCellOperationKind;
-            if (current == StreamingCellState::Resident)
-                return operation.Kind() == Activate || (operation.Kind() == Retire && projected == StreamingCellState::Evicting);
-            return current == StreamingCellState::Active && operation.Kind() == Retire && projected == StreamingCellState::Evicting;
+            using enum StreamingCellState;
+            if (current == Resident)
+                return operation.Kind() == Activate || (operation.Kind() == Retire && projected == Evicting);
+            return current == Active && operation.Kind() == Retire && projected == Evicting;
         }
 
         /** @brief Checks one projected residency transition without changing the tracked record. */
         [[nodiscard]] bool CanTransition(const StreamingCellState current, const StreamingCellState projected,
                                          const bool sameOperation) noexcept {
+            using enum StreamingCellState;
             if (current == projected)
-                return sameOperation || current == StreamingCellState::Resident;
-            if (current == StreamingCellState::Evicting && !sameOperation)
+                return sameOperation || current == Resident;
+            if (current == Evicting && !sameOperation)
                 return false;
             using Edge = std::pair<StreamingCellState, StreamingCellState>;
-            constexpr std::array AllowedEdges{Edge{StreamingCellState::Loading, StreamingCellState::Resident},
-                                              Edge{StreamingCellState::Loading, StreamingCellState::Evicting},
-                                              Edge{StreamingCellState::Resident, StreamingCellState::Active},
-                                              Edge{StreamingCellState::Resident, StreamingCellState::Evicting},
-                                              Edge{StreamingCellState::Active, StreamingCellState::Evicting},
-                                              Edge{StreamingCellState::Evicting, StreamingCellState::Unloaded},
-                                              Edge{StreamingCellState::Evicting, StreamingCellState::Failed}};
+            constexpr std::array AllowedEdges{Edge{Loading, Resident},  Edge{Loading, Evicting}, Edge{Resident, Active},
+                                              Edge{Resident, Evicting}, Edge{Active, Evicting},  Edge{Evicting, Unloaded},
+                                              Edge{Evicting, Failed}};
             return std::ranges::find(AllowedEdges, Edge{current, projected}) != AllowedEdges.end();
         }
 
@@ -122,11 +120,12 @@ namespace Horo::WorldStreaming {
             exact->state = projected;
             const StreamingCellStateRecord result = *exact;
             const bool terminalResidency = projected == StreamingCellState::Unloaded || projected == StreamingCellState::Failed;
-            const bool newerAttemptExists = terminalResidency && std::ranges::any_of(records, [&result](const auto &candidate) {
+            if (const bool newerAttemptExists = terminalResidency && std::ranges::any_of(records,
+                                                                                         [&result](const auto &candidate) {
                 return SameMountedCell(candidate.operation.fence, result.operation.fence) &&
                        candidate.operation.fence.generation.Value() > result.operation.fence.generation.Value();
             });
-            if (newerAttemptExists)
+                newerAttemptExists)
                 records.erase(exact);
             return Result<StreamingCellStateRecord>::Success(result);
         }
@@ -134,6 +133,7 @@ namespace Horo::WorldStreaming {
         /** @brief Finds a reusable terminal slot while validating same-cell generation ordering. */
         [[nodiscard]] Result<std::size_t> FindReusableSlot(const std::vector<StreamingCellStateRecord> &records,
                                                            const StreamingFence &fence) {
+            using enum StreamingCellState;
             std::size_t reusable = std::numeric_limits<std::size_t>::max();
             for (std::size_t index = 0; index < records.size(); ++index) {
                 const auto &candidate = records[index];
@@ -141,9 +141,9 @@ namespace Horo::WorldStreaming {
                     continue;
                 if (fence.generation.Value() <= candidate.operation.fence.generation.Value())
                     return Failure<std::size_t>(WorldStreamingErrors::CellStateStale);
-                if (candidate.state == StreamingCellState::Unloaded || candidate.state == StreamingCellState::Failed)
+                if (candidate.state == Unloaded || candidate.state == Failed)
                     reusable = index;
-                else if (candidate.state != StreamingCellState::Evicting)
+                else if (candidate.state != Evicting)
                     return Failure<std::size_t>(WorldStreamingErrors::CellStateTransitionInvalid);
             }
             return Result<std::size_t>::Success(reusable);
@@ -185,7 +185,7 @@ namespace Horo::WorldStreaming {
         return owner.IsValid() && maximumTrackedAttempts > 0 && maximumTrackedAttempts <= MaximumTrackedAttempts;
     }
 
-    StreamingCellStateLedger::StreamingCellStateLedger(StreamingCellStateLedgerConfig config,
+    StreamingCellStateLedger::StreamingCellStateLedger(const StreamingCellStateLedgerConfig &config,
                                                        std::vector<StreamingCellStateRecord> records) noexcept
         : config_(config), records_(std::move(records)) {}
 
@@ -239,8 +239,7 @@ namespace Horo::WorldStreaming {
             return Failure<StreamingCellStateRecord>(WorldStreamingErrors::CellStateInvalid);
         if (owner != config_.owner || fence.partition != owner.partition || fence.epoch != owner.epoch)
             return Failure<StreamingCellStateRecord>(WorldStreamingErrors::CellStateStale);
-        const auto found = FindExact(records_, fence);
-        if (found != records_.end())
+        if (const auto found = FindExact(records_, fence); found != records_.end())
             return Result<StreamingCellStateRecord>::Success(*found);
         return Failure<StreamingCellStateRecord>(HasMountedCell(records_, fence) ? WorldStreamingErrors::CellStateStale
                                                                                  : WorldStreamingErrors::CellStateUnresolved);

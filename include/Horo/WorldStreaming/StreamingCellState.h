@@ -106,7 +106,7 @@ namespace Horo::WorldStreaming {
         [[nodiscard]] std::size_t TrackedAttemptCount() const noexcept;
 
     private:
-        StreamingCellStateLedger(StreamingCellStateLedgerConfig config, std::vector<StreamingCellStateRecord> records) noexcept;
+        StreamingCellStateLedger(const StreamingCellStateLedgerConfig &config, std::vector<StreamingCellStateRecord> records) noexcept;
 
         StreamingCellStateLedgerConfig config_;
         std::vector<StreamingCellStateRecord> records_;
