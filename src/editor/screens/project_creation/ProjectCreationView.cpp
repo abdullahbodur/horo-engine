@@ -154,27 +154,10 @@ namespace Horo::Editor {
         /** @brief Reports whether a diagnostic prevents advancing past project identity input. */
         [[nodiscard]] bool IsIdentityBlockingDiagnostic(const ProjectCreationDiagnosticCode code) noexcept {
             using enum ProjectCreationDiagnosticCode;
-            switch (code) {
-                case ProjectNameRequired:
-                case ProjectNameContainsPathSeparator:
-                case ProjectPathRequired:
-                case ProjectPathOccupied:
-                case ProjectPathNotDirectory:
-                case ProjectPathInaccessible:
-                case ProjectParentNotWritable:
-                    return true;
-                case RendererBackendUnavailable:
-                    return false;
-            }
-            return false;
-        }
-
-        [[nodiscard]] bool HasIdentityBlockingDiagnostic(const ProjectCreationValidation &validation) {
-            for (const ProjectCreationDiagnostic &diagnostic : validation.diagnostics) {
-                if (IsIdentityBlockingDiagnostic(diagnostic.code))
-                    return true;
-            }
-            return false;
+            constexpr std::array blockingDiagnostics{ProjectNameRequired,     ProjectNameContainsPathSeparator, ProjectPathRequired,
+                                                     ProjectPathOccupied,     ProjectPathNotDirectory,          ProjectPathInaccessible,
+                                                     ProjectParentNotWritable};
+            return std::ranges::find(blockingDiagnostics, code) != blockingDiagnostics.end();
         }
 
         [[nodiscard]] const ProjectCreationDiagnostic *FirstIdentityBlockingDiagnostic(const ProjectCreationValidation &validation) {
@@ -194,7 +177,7 @@ namespace Horo::Editor {
         }
 
         [[nodiscard]] int HighestValidationAllowedStep(const ProjectCreationValidation &validation) {
-            if (HasIdentityBlockingDiagnostic(validation))
+            if (FirstIdentityBlockingDiagnostic(validation) != nullptr)
                 return 2;
             return validation.IsValid() ? 4 : 3;
         }
@@ -203,7 +186,7 @@ namespace Horo::Editor {
             if (step == 1)
                 return true;
             if (step == 2)
-                return !HasIdentityBlockingDiagnostic(validation);
+                return FirstIdentityBlockingDiagnostic(validation) == nullptr;
             return step == 3 && validation.IsValid();
         }
 
