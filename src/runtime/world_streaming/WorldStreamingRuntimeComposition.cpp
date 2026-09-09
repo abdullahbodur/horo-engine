@@ -12,28 +12,35 @@ namespace Horo::WorldStreaming {
     namespace {
         using Internal::Failure;
 
+        /** @brief Checks whether a service-role value belongs to the supported composition contract. */
         [[nodiscard]] bool KnownRole(const StreamingRuntimeServiceRole role) noexcept {
             using enum StreamingRuntimeServiceRole;
             return role == Planner || role == AssetProvider || role == SceneRuntime || role == FeatureAdapter;
         }
 
-        [[nodiscard]] Result<std::vector<StreamingRuntimeServiceBinding>> ValidateAndCopyBindings(
-            const std::span<const StreamingRuntimeServiceBinding> services, const std::uint32_t maximumFeatureAdapters) {
+        /** @brief Validates service roles, identities and configured binding ceilings without retaining caller storage. */
+        [[nodiscard]] Result<void> ValidateBindings(const std::span<const StreamingRuntimeServiceBinding> services,
+                                                    const std::uint32_t maximumFeatureAdapters) {
             const std::size_t maximumServices = static_cast<std::size_t>(maximumFeatureAdapters) + 3U;
             if (services.size() > maximumServices)
-                return Failure<std::vector<StreamingRuntimeServiceBinding>>(WorldStreamingErrors::RuntimeCompositionCapacityExceeded);
+                return Failure<void>(WorldStreamingErrors::RuntimeCompositionCapacityExceeded);
 
             std::array<std::size_t, 4> roleCounts{};
             for (const auto &service : services) {
                 if (!service.IsValid())
-                    return Failure<std::vector<StreamingRuntimeServiceBinding>>(WorldStreamingErrors::RuntimeCompositionInvalid);
+                    return Failure<void>(WorldStreamingErrors::RuntimeCompositionInvalid);
                 ++roleCounts[static_cast<std::size_t>(service.role)];
             }
             if (roleCounts[0] != 1 || roleCounts[1] != 1 || roleCounts[2] != 1 || roleCounts[3] == 0)
-                return Failure<std::vector<StreamingRuntimeServiceBinding>>(WorldStreamingErrors::RuntimeCompositionInvalid);
+                return Failure<void>(WorldStreamingErrors::RuntimeCompositionInvalid);
             if (roleCounts[3] > maximumFeatureAdapters)
-                return Failure<std::vector<StreamingRuntimeServiceBinding>>(WorldStreamingErrors::RuntimeCompositionCapacityExceeded);
+                return Failure<void>(WorldStreamingErrors::RuntimeCompositionCapacityExceeded);
+            return Result<void>::Success();
+        }
 
+        /** @brief Copies validated bindings, rejects duplicate identities and produces canonical role/identity order. */
+        [[nodiscard]] Result<std::vector<StreamingRuntimeServiceBinding>> CopyCanonicalBindings(
+            const std::span<const StreamingRuntimeServiceBinding> services) {
             try {
                 std::vector<StreamingRuntimeServiceBinding> copy{services.begin(), services.end()};
                 std::ranges::sort(copy, {}, &StreamingRuntimeServiceBinding::id);
@@ -50,6 +57,15 @@ namespace Horo::WorldStreaming {
             } catch (const std::length_error &) {
                 return Failure<std::vector<StreamingRuntimeServiceBinding>>(WorldStreamingErrors::RuntimeCompositionCapacityExceeded);
             }
+        }
+
+        /** @brief Validates and copies a complete binding set without publishing partial state. */
+        [[nodiscard]] Result<std::vector<StreamingRuntimeServiceBinding>> ValidateAndCopyBindings(
+            const std::span<const StreamingRuntimeServiceBinding> services, const std::uint32_t maximumFeatureAdapters) {
+            const auto validation = ValidateBindings(services, maximumFeatureAdapters);
+            if (validation.HasError())
+                return Result<std::vector<StreamingRuntimeServiceBinding>>::Failure(validation.ErrorValue());
+            return CopyCanonicalBindings(services);
         }
     }  // namespace
 
