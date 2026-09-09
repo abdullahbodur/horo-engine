@@ -473,7 +473,8 @@ namespace Horo::Editor {
         for (const Gameplay::BehaviorComponent &attached : object.components.behaviors) {
             const auto descriptorIt =
                 std::ranges::find(viewModel.availableBehaviors, attached.typeId, &Gameplay::BehaviorDescriptor::typeId);
-            const Gameplay::BehaviorDescriptor *descriptor = descriptorIt == viewModel.availableBehaviors.end() ? nullptr : &*descriptorIt;
+            const Gameplay::BehaviorDescriptor *descriptor =
+                descriptorIt == viewModel.availableBehaviors.end() ? nullptr : std::to_address(descriptorIt);
             ImGui::PushID(static_cast<int>(attached.instanceId.value));
             BehaviorCardResult result = DrawBehaviorCard(attached, descriptor, enabledEntries, context);
             using enum EditorWorkspaceViewCommand;

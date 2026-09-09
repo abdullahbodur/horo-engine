@@ -49,7 +49,7 @@ namespace Horo::Editor {
             return false;
         }
 
-        [[nodiscard]] bool IsActivityItemActive(const std::string &panelId, const EditorWorkspaceViewModel &viewModel) {
+        [[nodiscard]] bool IsActivityItemActive(const std::string_view panelId, const EditorWorkspaceViewModel &viewModel) {
             return panelId == viewModel.activeLeftPanelId || panelId == viewModel.activeRightPanelId ||
                    panelId == viewModel.activeLeftTopPanelId || panelId == viewModel.activeLeftBottomPanelId ||
                    panelId == viewModel.activeRightTopPanelId || panelId == viewModel.activeRightBottomPanelId ||
@@ -57,12 +57,12 @@ namespace Horo::Editor {
                    panelId == viewModel.activeBottomPanelId || panelId == viewModel.activeDocumentPanelId;
         }
 
-        [[nodiscard]] bool IsActiveInBottomSplit(const std::string &panelId, const EditorWorkspaceViewModel &viewModel) {
+        [[nodiscard]] bool IsActiveInBottomSplit(const std::string_view panelId, const EditorWorkspaceViewModel &viewModel) {
             return viewModel.bottomDockMode == BottomDockMode::Split &&
                    (panelId == viewModel.activeBottomLeftPanelId || panelId == viewModel.activeBottomRightPanelId);
         }
 
-        [[nodiscard]] bool IsActiveInSideSplit(const std::string &panelId, const EditorWorkspaceViewModel &viewModel) {
+        [[nodiscard]] bool IsActiveInSideSplit(const std::string_view panelId, const EditorWorkspaceViewModel &viewModel) {
             return (viewModel.leftDockMode == SideDockMode::Split &&
                     (panelId == viewModel.activeLeftTopPanelId || panelId == viewModel.activeLeftBottomPanelId)) ||
                    (viewModel.rightDockMode == SideDockMode::Split &&

@@ -43,14 +43,14 @@ namespace Horo::Editor {
         void DrawDashedRect(ImDrawList &drawList, const ImVec2 minimum, const ImVec2 maximum, const ImU32 color, const float scale) {
             const float dash = 4.0F * scale;
             const float step = 7.0F * scale;
-            const int horizontalDashCount = static_cast<int>(std::ceil((maximum.x - minimum.x) / step));
+            const auto horizontalDashCount = static_cast<int>(std::ceil((maximum.x - minimum.x) / step));
             for (int index = 0; index < horizontalDashCount; ++index) {
                 const float x = minimum.x + static_cast<float>(index) * step;
                 const float xEnd = std::min(maximum.x, x + dash);
                 drawList.AddLine({x, minimum.y}, {xEnd, minimum.y}, color, scale);
                 drawList.AddLine({x, maximum.y}, {xEnd, maximum.y}, color, scale);
             }
-            const int verticalDashCount = static_cast<int>(std::ceil((maximum.y - minimum.y) / step));
+            const auto verticalDashCount = static_cast<int>(std::ceil((maximum.y - minimum.y) / step));
             for (int index = 0; index < verticalDashCount; ++index) {
                 const float y = minimum.y + static_cast<float>(index) * step;
                 const float yEnd = std::min(maximum.y, y + dash);
