@@ -787,6 +787,7 @@ add_library(HoroEditorServices STATIC
         editor/hierarchy/HierarchyModel.cpp
         editor/NotificationService.cpp
         editor/input/EditorInputActions.cpp
+        editor/input/EditorScrollSmoother.cpp
         editor/modals/EditorModalHost.cpp
         editor/screens/workspace/WorkspaceLayout.cpp
         editor/screens/workspace/WorkspacePanelHost.cpp

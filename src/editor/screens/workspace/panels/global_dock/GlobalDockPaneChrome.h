@@ -53,6 +53,14 @@ namespace Horo::Editor {
     /** @brief Measures one bottom-dock text run with the provided or fallback font. */
     [[nodiscard]] float MeasureGlobalDockTextWidth(ImFont *font, float size, std::string_view text);
 
+    /**
+     * @brief Resolves the search width left after exact trailing toolbar controls and canonical padding.
+     * @param toolbarWidth Available toolbar width.
+     * @param trailingWidth Exact width reserved for every control following the search field.
+     * @return Search width clamped to a drawable positive extent.
+     */
+    [[nodiscard]] float ResolveGlobalDockSearchWidth(float toolbarWidth, float trailingWidth) noexcept;
+
     /** @brief Draws the canonical bottom-dock search field and returns the next horizontal position. */
     [[nodiscard]] float DrawGlobalDockSearchControl(ImVec2 origin, float width, std::string_view id, std::span<char> buffer,
                                                     std::string_view hint, const Theme::Fonts &fonts);

@@ -56,7 +56,6 @@ namespace Horo::Editor {
 
     void GlobalDockNetworkPane::DrawToolbar(const ImVec2 &contentOrigin, const float contentWidth, const EditorGuiContext &context) {
         const Theme::Fonts &fonts = context.theme.fonts;
-        const float scale = std::max(Theme::GetActiveTokens().sizes.uiScale, 0.01F);
         const GlobalDockPaneMetrics metrics = ResolveGlobalDockPaneMetrics();
         const float availableHeight = std::max(1.0F, ImGui::GetWindowPos().y + ImGui::GetWindowHeight() - contentOrigin.y);
         const GlobalDockPaneRegions regions =
@@ -68,7 +67,7 @@ namespace Horo::Editor {
         DrawGlobalDockToolbarSurface(regions.toolbarOrigin, regions.toolbarWidth, metrics.toolbarHeight);
         const float controlY = regions.toolbarOrigin.y + (metrics.toolbarHeight - metrics.controlHeight) * 0.5F;
         const float fixedWidth = MeasureToolbarActions(context);
-        const float searchWidth = std::max(180.0F * scale, regions.toolbarWidth - metrics.toolbarPaddingX * 2.0F - fixedWidth);
+        const float searchWidth = ResolveGlobalDockSearchWidth(regions.toolbarWidth, fixedWidth);
         float x = regions.toolbarOrigin.x + metrics.toolbarPaddingX;
 
         const std::string &searchHint = localized("workspace.global_dock.network.search");
@@ -89,9 +88,11 @@ namespace Horo::Editor {
                                                           .label =
                                                               localization.Get("editor",
                                                                                m_paused ? "workspace.global_dock.network.resume_capture"
-                                                                                        : "workspace.global_dock.network.pause_capture")},
+                                                                                        : "workspace.global_dock.network.pause_capture"),
+                                                          .icon = m_paused ? Ui::UiIcon::Play : Ui::UiIcon::Pause},
                                GlobalDockToolbarChipProps{.id = "NetworkClear",
-                                                          .label = localization.Get("editor", "workspace.global_dock.network.clear")}};
+                                                          .label = localization.Get("editor", "workspace.global_dock.network.clear"),
+                                                          .icon = Ui::UiIcon::ClearAll}};
         float width = 144.0F * Theme::GetActiveTokens().sizes.uiScale;
         for (const auto &propsItem : props)
             width += MeasureGlobalDockToolbarChip(propsItem, fonts);

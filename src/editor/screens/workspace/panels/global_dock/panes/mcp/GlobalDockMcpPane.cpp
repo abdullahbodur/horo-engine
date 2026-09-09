@@ -102,7 +102,6 @@ namespace Horo::Editor {
 
     void GlobalDockMcpPane::DrawToolbar(const ImVec2 &contentOrigin, const float contentWidth, const EditorGuiContext &context) {
         const Theme::Fonts &fonts = context.theme.fonts;
-        const float scale = std::max(Theme::GetActiveTokens().sizes.uiScale, 0.01F);
         const GlobalDockPaneMetrics metrics = ResolveGlobalDockPaneMetrics();
         const float availableHeight = std::max(1.0F, ImGui::GetWindowPos().y + ImGui::GetWindowHeight() - contentOrigin.y);
         const GlobalDockPaneRegions regions =
@@ -114,14 +113,14 @@ namespace Horo::Editor {
         DrawGlobalDockToolbarSurface(regions.toolbarOrigin, regions.toolbarWidth, metrics.toolbarHeight);
         const float controlY = regions.toolbarOrigin.y + (metrics.toolbarHeight - metrics.controlHeight) * 0.5F;
         const float fixedWidth = MeasureToolbarActions(context);
-        const float searchWidth = std::max(180.0F * scale, regions.toolbarWidth - metrics.toolbarPaddingX * 2.0F - fixedWidth);
+        const float searchWidth = ResolveGlobalDockSearchWidth(regions.toolbarWidth, fixedWidth);
         float x = regions.toolbarOrigin.x + metrics.toolbarPaddingX;
 
         const std::string &searchHint = localized("workspace.global_dock.mcp.search");
         x = DrawGlobalDockSearchControl({x, controlY}, searchWidth, "##McpSearch", m_search, searchHint, fonts);
         DrawFilterActions(x, controlY, context);
         DrawGlobalDockToolbarSeparator(x, controlY);
-        x += metrics.toolbarGap + scale;
+        x += metrics.toolbarGap + Theme::GetActiveTokens().sizes.uiScale;
         DrawSessionActions(x, controlY, context);
     }
 
@@ -135,9 +134,11 @@ namespace Horo::Editor {
                                                 .label = localization.Get("editor", "workspace.global_dock.mcp.filter.errors")};
         const GlobalDockToolbarChipProps pause{.id = "McpPause",
                                                .label = localization.Get("editor", m_paused ? "workspace.global_dock.mcp.resume"
-                                                                                            : "workspace.global_dock.mcp.pause")};
+                                                                                            : "workspace.global_dock.mcp.pause"),
+                                               .icon = m_paused ? Ui::UiIcon::Play : Ui::UiIcon::Pause};
         const GlobalDockToolbarChipProps exportAudit{.id = "McpExport",
-                                                     .label = localization.Get("editor", "workspace.global_dock.mcp.export")};
+                                                     .label = localization.Get("editor", "workspace.global_dock.mcp.export"),
+                                                     .icon = Ui::UiIcon::Download};
         const GlobalDockPaneMetrics metrics = ResolveGlobalDockPaneMetrics();
         return 128.0F * Theme::GetActiveTokens().sizes.uiScale + MeasureGlobalDockToolbarChip(all, fonts) +
                MeasureGlobalDockToolbarChip(mutations, fonts) + MeasureGlobalDockToolbarChip(errors, fonts) +

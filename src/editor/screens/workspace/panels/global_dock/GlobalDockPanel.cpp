@@ -213,7 +213,14 @@ namespace Horo::Editor {
 
     /** @copydoc GlobalDockPanel::DrawIcon */
     void GlobalDockPanel::DrawIcon(ImDrawList *drawList, const ImVec2 &position, const ImVec2 &size, const ImU32 color) {
-        Ui::DrawEditorIcon(drawList, Ui::UiIcon::Generic, position, size, color);
+        const float glyphSize = std::min(size.x, size.y) * 0.72F;
+        const float x = position.x + (size.x - glyphSize) * 0.5F;
+        const float y = position.y + (size.y - glyphSize) * 0.5F;
+        const float stroke = std::max(1.0F, glyphSize * 0.085F);
+        drawList->AddRect({x, y}, {x + glyphSize, y + glyphSize}, color, glyphSize * 0.08F, 0, stroke);
+        drawList->AddLine({x + glyphSize * 0.2F, y + glyphSize * 0.34F}, {x + glyphSize * 0.38F, y + glyphSize * 0.5F}, color, stroke);
+        drawList->AddLine({x + glyphSize * 0.38F, y + glyphSize * 0.5F}, {x + glyphSize * 0.2F, y + glyphSize * 0.66F}, color, stroke);
+        drawList->AddLine({x + glyphSize * 0.5F, y + glyphSize * 0.66F}, {x + glyphSize * 0.78F, y + glyphSize * 0.66F}, color, stroke);
     }
 
     /** @copydoc GlobalDockPanel::DrawPanel */

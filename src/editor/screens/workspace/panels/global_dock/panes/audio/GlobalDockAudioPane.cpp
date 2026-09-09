@@ -64,7 +64,7 @@ namespace Horo::Editor {
         const float controlY = regions.toolbarOrigin.y + (metrics.toolbarHeight - metrics.controlHeight) * 0.5F;
         const float deviceWidth = 138.0F * scale;
         const float fixedWidth = deviceWidth + MeasureToolbarActions(context);
-        const float searchWidth = std::max(180.0F * scale, regions.toolbarWidth - metrics.toolbarPaddingX * 2.0F - fixedWidth);
+        const float searchWidth = ResolveGlobalDockSearchWidth(regions.toolbarWidth, fixedWidth);
         float x = regions.toolbarOrigin.x + metrics.toolbarPaddingX;
 
         const std::string &searchHint = localized("workspace.global_dock.audio.search");
@@ -100,7 +100,7 @@ namespace Horo::Editor {
                                               .icon = Ui::UiIcon::VolumeOff};
         const GlobalDockPaneMetrics metrics = ResolveGlobalDockPaneMetrics();
         return MeasureGlobalDockToolbarChip(meters, fonts) + MeasureGlobalDockToolbarChip(voices, fonts) +
-               MeasureGlobalDockToolbarChip(pause, fonts) + MeasureGlobalDockToolbarChip(mute, fonts) + metrics.toolbarGap * 5.0F +
+               MeasureGlobalDockToolbarChip(pause, fonts) + MeasureGlobalDockToolbarChip(mute, fonts) + metrics.toolbarGap * 6.0F +
                Theme::GetActiveTokens().sizes.uiScale;
     }
 
