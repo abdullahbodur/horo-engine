@@ -52,6 +52,9 @@
     "project_creation.review.compatibility": {
       "text": "Project compatibility"
     },
+    "project_creation.review.project": {
+      "text": "PROJECT"
+    },
     "project_creation.review.project_id_generated": {
       "text": "projectId generated"
     },
@@ -798,6 +801,7 @@
     "status.overflow.hidden": {"text": "status items hidden"},
     "workspace.panel.hierarchy": {"text": "Hierarchy"},
     "workspace.panel.inspector": {"text": "Inspector"},
+    "workspace.panel.scene": {"text": "Scene"},
     "workspace.panel.viewport": {"text": "Viewport"},
     "workspace.panel.game": {"text": "Game"},
     "workspace.game.idle": {"text": "Press Play to start the game."},
@@ -806,6 +810,13 @@
     "workspace.play.step": {"text": "Step"},
     "workspace.play.stop": {"text": "Stop"},
     "workspace.inspector.behavior_enabled": {"text": "Enabled"},
+    "workspace.inspector.component.reset": {"text": "Reset Component"},
+    "workspace.inspector.component.enable": {"text": "Enable Component"},
+    "workspace.inspector.component.disable": {"text": "Disable Component"},
+"workspace.inspector.component.settings": {"text": "Component Settings"},
+"workspace.inspector.static": {"text": "Static"},
+"workspace.inspector.object_options": {"text": "Object options"},
+    "workspace.inspector.scene_unavailable": {"text": "Scene settings are not available yet."},
     "workspace.inspector.behavior_missing": {"text": "Missing Behavior"},
     "workspace.content_browser.action.create_lua_behavior": {"text": "Create Lua Behavior"},
     "workspace.content_browser.action.create_native_behavior": {"text": "Create Native C++ Behavior"},
@@ -877,6 +888,13 @@
     "workspace.hierarchy.type.audio": {"text": "Audio"},
     "workspace.hierarchy.empty": {"text": "Scene is empty"},
     "workspace.hierarchy.search": {"text": "Search objects..."},
+    "workspace.hierarchy.toolbar.create": {"text": "Create object"},
+    "workspace.hierarchy.toolbar.filter": {"text": "Focus hierarchy filter"},
+    "workspace.hierarchy.toolbar.sort": {"text": "Sort hierarchy"},
+    "workspace.hierarchy.toolbar.options": {"text": "Hierarchy options"},
+    "workspace.hierarchy.drop_to_root": {"text": "Drop to scene root"},
+    "workspace.hierarchy.footer.objects": {"text": "{count} objects"},
+    "workspace.hierarchy.footer.label": {"text": "Scene hierarchy"},
     "workspace.hierarchy.no_matches": {"text": "No matching objects"},
     "workspace.hierarchy.rename": {"text": "Rename"},
     "workspace.hierarchy.duplicate": {"text": "Duplicate"},

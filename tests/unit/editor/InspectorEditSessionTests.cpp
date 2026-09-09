@@ -75,6 +75,11 @@ TEST_CASE("Inspector edit session owns transform preview lifecycle", "[unit][edi
         true);
     REQUIRE((committed.command == EditorWorkspaceViewCommand::CommitObjectTransform));
     REQUIRE((committed.transformUpdates->front().localTransform.translation.y == 6.0F));
+
+    const EditorWorkspaceViewCommandData reset = session.ApplyTransformEdit(InspectorTransformEdit{.resetRequested = true}, true);
+    REQUIRE((reset.command == EditorWorkspaceViewCommand::CommitObjectTransform));
+    REQUIRE((reset.transformUpdates->front().localTransform.translation == Horo::Math::Vec3{}));
+    REQUIRE((reset.transformUpdates->front().localTransform.scale == Horo::Math::Vec3{1.0F, 1.0F, 1.0F}));
 }
 
 TEST_CASE("Inspector edit session validates Camera edits and selection reconciliation", "[unit][editor]") {
@@ -88,6 +93,11 @@ TEST_CASE("Inspector edit session validates Camera edits and selection reconcili
     const EditorWorkspaceViewCommandData cameraCommand = session.ApplyCameraEdit(InspectorCameraEdit{.committed = true}, first, true);
     REQUIRE((cameraCommand.command == EditorWorkspaceViewCommand::UpdateCameraComponent));
     REQUIRE((cameraCommand.cameraPayload->nearPlane == 0.5F));
+
+    session.Draft().camera->enabled = false;
+    const EditorWorkspaceViewCommandData disableCommand = session.ApplyCameraEdit(InspectorCameraEdit{.committed = true}, first, true);
+    REQUIRE((disableCommand.command == EditorWorkspaceViewCommand::UpdateCameraComponent));
+    REQUIRE_FALSE(disableCommand.cameraPayload->enabled);
 
     session.Draft().camera->farPlane = 0.25F;
     REQUIRE((!session.IsCameraValid()));

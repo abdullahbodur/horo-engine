@@ -109,8 +109,9 @@ namespace {
     };
 
     ProjectOpenProgressSnapshot PumpToTerminal(ProjectOpenService &service, ProjectOpenOperationId id) {
+        const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(10);
         float previousProgress = 0.0F;
-        for (int i = 0; i < 2000; ++i) {
+        while (std::chrono::steady_clock::now() < deadline) {
             service.PumpOwnerThread();
             auto snapshot = service.Query(id);
             REQUIRE((snapshot.has_value()));

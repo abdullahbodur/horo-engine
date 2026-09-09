@@ -32,6 +32,7 @@ namespace Horo::Runtime {
         float orthographicHeight{10.0F};
         float nearPlane{0.1F};
         float farPlane{1000.0F};
+        bool enabled{true}; /**< Whether runtime camera behavior is active. */
 
         [[nodiscard]] constexpr auto operator<=>(const CameraComponent &) const noexcept = default;
     };
@@ -51,6 +52,7 @@ namespace Horo::Runtime {
         float range{10.0F};
         float innerConeRadians{0.3490659F};
         float outerConeRadians{0.7853982F};
+        bool enabled{true}; /**< Whether runtime lighting behavior is active. */
 
         [[nodiscard]] constexpr auto operator<=>(const LightComponent &) const noexcept = default;
     };
@@ -58,6 +60,7 @@ namespace Horo::Runtime {
     /** @brief Authored overlap volume awaiting runtime physics conversion. */
     struct TriggerVolumeComponent {
         ColliderShapeType shape{ColliderShapeType::Box};
+        bool enabled{true}; /**< Whether runtime overlap behavior is active. */
 
         [[nodiscard]] constexpr auto operator<=>(const TriggerVolumeComponent &) const noexcept = default;
     };
@@ -73,6 +76,7 @@ namespace Horo::Runtime {
         AudioSourceKind kind{AudioSourceKind::NativeClip};
         float gain{1.0F};
         bool spatial{true};
+        bool enabled{true}; /**< Whether runtime audio emission is active. */
 
         [[nodiscard]] constexpr auto operator<=>(const AudioSourceComponent &) const noexcept = default;
     };

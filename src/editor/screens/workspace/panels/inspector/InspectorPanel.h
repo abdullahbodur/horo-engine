@@ -41,7 +41,8 @@ namespace Horo::Editor {
 
         void DrawMultiSelectionTitle(std::size_t selectedObjectCount, const EditorGuiContext &context) const;
 
-        [[nodiscard]] InspectorNameEdit DrawObjectTitleWidgets(const SceneObject &object, const EditorGuiContext &context);
+        [[nodiscard]] InspectorNameEdit DrawObjectTitleWidgets(const SceneObject &object, EditorWorkspaceViewCommandData &command,
+                                                               const EditorGuiContext &context);
         [[nodiscard]] InspectorTransformEdit DrawTransformWidgets(const EditorGuiContext &context);
         [[nodiscard]] InspectorCameraEdit DrawCameraWidgets(const EditorGuiContext &context);
         [[nodiscard]] InspectorLightEdit DrawLightWidgets(const EditorGuiContext &context);
@@ -68,5 +69,6 @@ namespace Horo::Editor {
         Input::InputRouter *m_inputRouter{nullptr};
         Input::InputContextToken m_nameInputContext;
         InspectorEditSession m_editSession;
+        int m_activeTab{0};
     };
 }  // namespace Horo::Editor

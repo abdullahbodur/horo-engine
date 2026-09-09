@@ -51,8 +51,10 @@ namespace Horo::Editor {
         }
         ImGui::EndDisabled();
         Ui::ContextMenuSeparator();
-        if (Ui::ContextMenuItem(localization.Get("editor", "workspace.content_browser.action.create_folder").c_str(), nullptr,
-                                context.theme.fonts, Ui::ContextMenuItemTone::Normal, "action.create")) {
+        if (Ui::ContextMenuItem((localization.Get("editor", "workspace.content_browser.action.create_folder") +
+                                 "###content_browser_action_create_folder")
+                                    .c_str(),
+                                nullptr, context.theme.fonts, Ui::ContextMenuItemTone::Normal, "action.create")) {
             interactionSession.OpenCreateFolder();
         }
         if (Ui::ContextMenuItem((localization.Get("editor", "workspace.content_browser.action.create_lua_behavior") +
@@ -121,12 +123,15 @@ namespace Horo::Editor {
             }
             Ui::ContextMenuSeparator();
         }
-        if (Ui::ContextMenuItem(localization.Get("editor", "workspace.content_browser.action.rename").c_str(), "F2", context.theme.fonts,
-                                Ui::ContextMenuItemTone::Normal, "action.rename")) {
+        if (Ui::ContextMenuItem((localization.Get("editor", "workspace.content_browser.action.rename") + "###content_browser_action_rename")
+                                    .c_str(),
+                                "F2", context.theme.fonts, Ui::ContextMenuItemTone::Normal, "action.rename")) {
             interactionSession.OpenRename(entry);
         }
-        if (Ui::ContextMenuItem(localization.Get("editor", "workspace.content_browser.action.asset_info").c_str(), nullptr,
-                                context.theme.fonts)) {
+        if (Ui::ContextMenuItem((localization.Get("editor", "workspace.content_browser.action.asset_info") +
+                                 "###content_browser_action_asset_info")
+                                    .c_str(),
+                                nullptr, context.theme.fonts)) {
             interactionSession.OpenInfo(entry);
         }
         DrawAssetEntrySpecificActions(entry, command, context);
@@ -139,8 +144,9 @@ namespace Horo::Editor {
             ImGui::SetClipboardText(entry.absolutePath.c_str());
         }
         Ui::ContextMenuSeparator();
-        if (Ui::ContextMenuItem(localization.Get("editor", "workspace.content_browser.action.delete").c_str(), "Delete",
-                                context.theme.fonts, Ui::ContextMenuItemTone::Danger, "action.delete")) {
+        if (Ui::ContextMenuItem((localization.Get("editor", "workspace.content_browser.action.delete") + "###content_browser_action_delete")
+                                    .c_str(),
+                                "Delete", context.theme.fonts, Ui::ContextMenuItemTone::Danger, "action.delete")) {
             interactionSession.OpenDelete(entry);
         }
         Ui::EndContextMenu();

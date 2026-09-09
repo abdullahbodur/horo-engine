@@ -16,7 +16,8 @@ namespace Horo::Editor {
     struct ProjectCreationViewState {  // NOSONAR(cpp:S1820) Transient form state container
         bool initialized = false;
         int step = 1;
-        bool confirmingDiscard = false;
+        int highestUnlockedStep = 1;
+        int lastRenderedStep = 0;
         std::string projectName;
         std::string projectPath;
         std::string projectVersion;
