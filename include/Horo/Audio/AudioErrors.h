@@ -8,6 +8,8 @@
 #include "Horo/Foundation/ErrorCode.h"
 
 namespace Horo::Audio::AudioErrors {
+    /** @brief An audio event queue, completion token or callback outcome is malformed. */
+    extern const ErrorCodeDescriptor EventQueueInvalid;
     extern const ErrorCodeDescriptor ResamplerInvalid;
     extern const ErrorCodeDescriptor ResamplerBudgetExceeded;
     extern const ErrorCodeDescriptor AssetSchemaInvalid;
