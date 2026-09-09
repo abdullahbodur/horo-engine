@@ -25,8 +25,8 @@ namespace Horo::WorldStreaming::WorldStreamingErrors {
                  "Provide one valid owner/revision and exactly one cell for SingleCell or no cell for Null.", true);
     const ErrorCodeDescriptor FallbackProviderUnsupported =
         Describe("world_streaming.fallback_provider.unsupported", ErrorSeverity::Error,
-                 "The fallback streaming provider mode is unsupported.",
-                 "Select the declared SingleCell or Null composition explicitly.", true);
+                 "The fallback streaming provider mode is unsupported.", "Select the declared SingleCell or Null composition explicitly.",
+                 true);
     const ErrorCodeDescriptor FallbackProviderCapacityExceeded =
         Describe("world_streaming.fallback_provider.capacity_exceeded", ErrorSeverity::Error,
                  "The configured fallback provider cannot publish its single cell within the mandatory ceiling.",
