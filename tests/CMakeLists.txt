@@ -180,6 +180,12 @@ add_executable(HoroAudioBackendContractTests
 target_compile_features(HoroAudioBackendContractTests PRIVATE cxx_std_20)
 target_link_libraries(HoroAudioBackendContractTests PRIVATE HoroAudioBackendContract)
 horo_register_catch_test(HoroAudioBackendContractTests LABELS "unit;audio;headless")
+add_executable(HoroAudioNullTests
+        unit/runtime/audio/NullAudioBackendTests.cpp
+)
+target_compile_features(HoroAudioNullTests PRIVATE cxx_std_20)
+target_link_libraries(HoroAudioNullTests PRIVATE HoroEngine::AudioNull)
+horo_register_catch_test(HoroAudioNullTests LABELS "unit;audio;headless")
 add_executable(HoroAudioDspTests
     unit/runtime/audio/ResamplerKernelTests.cpp
     unit/runtime/audio/AudioResamplerTests.cpp

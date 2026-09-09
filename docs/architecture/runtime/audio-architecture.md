@@ -1555,6 +1555,21 @@ lifecycle without opening a device, and advances the deterministic sample clock
 under the same frontend/render contract. It does not claim hardware latency,
 hotplug, device quality or interactive fallback.
 
+`HoroAudioNull` is a build-tree-only concrete peer of the internal Audio backend
+contract. Host composition constructs it explicitly; creating the descriptor does
+not register a service, select a backend, inspect ambient state or perform hardware
+probing. Tests drive admitted control operations with `AdvanceControl` and exact
+negotiated callback blocks with `AdvanceCallback`. The latter uses preallocated,
+64-byte-aligned planar storage and integer remainder accounting, so identical step
+sequences produce identical lifecycle events, render phases and sample-clock
+correlations without wall-clock input.
+
+The Null peer retains the same render port used by interactive backends. Command
+scheduling, voice progression and mixer validation therefore remain owned by the
+backend-neutral render core rather than being reimplemented as Null-only policy.
+Synthetic device-loss and interruption facts are explicit, bounded test inputs;
+they never imply hardware discovery, automatic recovery or fallback selection.
+
 ## Middleware And Extension Boundary
 
 [ADR-069](../../adr/069-audio-extension-capability-and-abi.md) is the single
