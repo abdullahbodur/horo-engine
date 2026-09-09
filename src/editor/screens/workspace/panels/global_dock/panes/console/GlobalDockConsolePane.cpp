@@ -234,7 +234,7 @@ namespace Horo::Editor {
         m_visibleLevelCounts.fill(0U);
         m_selectedSequence.reset();
         m_filterDirty = true;
-        m_initialFollowTail = true;
+        m_hasDrawnRows = false;
     }
 
     /** @copydoc GlobalDockConsolePane::Detach */
@@ -266,9 +266,9 @@ namespace Horo::Editor {
                           ImGuiWindowFlags_AlwaysVerticalScrollbar | ImGuiWindowFlags_NoSavedSettings);
         const bool wasAtBottom = ImGui::GetScrollY() >= std::max(0.0F, ImGui::GetScrollMaxY() - 2.0F);
         DrawLogRows(width, rowsHeight, context);
-        if (m_autoScroll && changed && (wasAtBottom || m_initialFollowTail))
+        if (m_autoScroll && changed && m_hasDrawnRows && wasAtBottom)
             ImGui::SetScrollHereY(1.0F);
-        m_initialFollowTail = false;
+        m_hasDrawnRows = true;
         ImGui::EndChild();
         ImGui::PopStyleColor();
         ImGui::PopStyleVar();

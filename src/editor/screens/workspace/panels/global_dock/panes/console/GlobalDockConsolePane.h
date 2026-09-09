@@ -64,7 +64,7 @@ namespace Horo::Editor {
         std::size_t m_matchingRecordCount{};
         std::array<std::size_t, 3> m_visibleLevelCounts{};
         bool m_filterDirty{true};
-        bool m_initialFollowTail{true};
+        bool m_hasDrawnRows{false};
         bool m_compactRows{false};
         bool m_autoScroll{true};
     };

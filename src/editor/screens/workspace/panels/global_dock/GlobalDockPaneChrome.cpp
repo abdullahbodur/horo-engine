@@ -99,6 +99,12 @@ namespace Horo::Editor {
         return TextWidth(font, size, text);
     }
 
+    /** @copydoc ResolveGlobalDockSearchWidth */
+    float ResolveGlobalDockSearchWidth(const float toolbarWidth, const float trailingWidth) noexcept {
+        const GlobalDockPaneMetrics metrics = ResolveGlobalDockPaneMetrics();
+        return std::max(1.0F, toolbarWidth - metrics.toolbarPaddingX * 2.0F - std::max(0.0F, trailingWidth));
+    }
+
     float DrawGlobalDockSearchControl(const ImVec2 origin, const float width, const std::string_view id, const std::span<char> buffer,
                                       const std::string_view hint, const Theme::Fonts &fonts) {
         const float scale = std::max(Theme::GetActiveTokens().sizes.uiScale, 0.01F);

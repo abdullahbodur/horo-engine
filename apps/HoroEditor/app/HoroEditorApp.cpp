@@ -44,6 +44,7 @@
 #include "editor/EditorServiceErrors.h"
 #include "editor/document/EditorViewportSceneExtractor.h"
 #include "editor/input/EditorInputActions.h"
+#include "editor/input/EditorScrollSmoother.h"
 #include "editor/project_model/RendererAvailability.h"
 #include "editor/renderer/EditorGuiRenderer.h"
 #include "editor/renderer/EditorViewportRenderer.h"
@@ -821,7 +822,15 @@ namespace Horo::Editor {
                 p_->engineEvents.DispatchQueued();
                 SDL_Event event;
                 while (SDL_PollEvent(&event)) {
-                    ImGui_ImplSDL3_ProcessEvent(&event);
+                    if (const bool smoothWheel = event.type == SDL_EVENT_MOUSE_WHEEL &&
+                                                 event.wheel.windowID == SDL_GetWindowID(p_->presentation.window) &&
+                                                 (SDL_GetModState() & SDL_KMOD_CTRL) == 0;
+                        smoothWheel) {
+                        scrollSource_ = event.wheel.which == SDL_TOUCH_MOUSEID ? ImGuiMouseSource_TouchScreen : ImGuiMouseSource_Mouse;
+                        scrollSmoother_.Queue(-event.wheel.x, event.wheel.y);
+                    } else {
+                        ImGui_ImplSDL3_ProcessEvent(&event);
+                    }
                     p_->inputBackend.ProcessEvent(event);
 
                     // SDL3 drag-and-drop: forward dropped file paths to the active import modal.
@@ -856,6 +865,10 @@ namespace Horo::Editor {
                     if (const Result<void> guiBegun = p_->presentation.guiRenderer.BeginFrame(); guiBegun.HasError()) {
                         frame_.reset();
                         return guiBegun;
+                    }
+                    if (const EditorScrollDelta scrollDelta = scrollSmoother_.Consume(ImGui::GetIO().DeltaTime); !scrollDelta.IsEmpty()) {
+                        ImGui::GetIO().AddMouseSourceEvent(scrollSource_);
+                        ImGui::GetIO().AddMouseWheelEvent(scrollDelta.horizontal, scrollDelta.vertical);
                     }
                     ImGui::NewFrame();
 
@@ -999,6 +1012,8 @@ namespace Horo::Editor {
             std::size_t passCount_{};
             std::uint64_t preparedViewportMeshResourceGeneration_{};
             std::optional<Render::RenderFrameScope> frame_;
+            EditorScrollSmoother scrollSmoother_;
+            ImGuiMouseSource scrollSource_{ImGuiMouseSource_Mouse};
             bool nativeMenuInstalled_{false};
         };
 
