@@ -23,11 +23,19 @@ namespace Horo::Audio {
 
         /** @brief Checks all immutable queue dimensions before allocation. */
         bool ValidDescriptor(const AudioEventQueueDescriptor &descriptor) noexcept {
-            return descriptor.owner.IsValid() && descriptor.storageIdentity.IsValid() && descriptor.commandEpoch != 0 &&
-                   MatchesAudioDeviceEpoch(descriptor.callbackEpoch, descriptor.callbackEpoch) &&
-                   descriptor.callbackEpoch.device.owner == descriptor.owner && descriptor.clockDomain != 0 && descriptor.slots >= 2 &&
-                   descriptor.slots <= MaximumAudioEventSlots && std::has_single_bit(descriptor.slots) && descriptor.criticalSlots > 0 &&
-                   descriptor.criticalSlots < descriptor.slots;
+            const bool identityValid = descriptor.owner.IsValid() && descriptor.storageIdentity.IsValid() && descriptor.commandEpoch != 0 &&
+                                       descriptor.clockDomain != 0;
+            const bool epochValid = MatchesAudioDeviceEpoch(descriptor.callbackEpoch, descriptor.callbackEpoch) &&
+                                    descriptor.callbackEpoch.device.owner == descriptor.owner;
+            const bool capacityValid = descriptor.slots >= 2 && descriptor.slots <= MaximumAudioEventSlots &&
+                                       std::has_single_bit(descriptor.slots) && descriptor.criticalSlots > 0 &&
+                                       descriptor.criticalSlots < descriptor.slots;
+            return identityValid && epochValid && capacityValid;
+        }
+
+        /** @brief Projects admitted raw EventStorage into initialized queue records. */
+        std::span<AudioControlEventRecord> RecordSpan(const std::span<std::byte> allocation, const std::uint32_t slots) noexcept {
+            return {static_cast<AudioControlEventRecord *>(static_cast<void *>(allocation.data())), slots};
         }
 
         /** @brief Checks the closed terminal reason vocabulary. */
@@ -116,14 +124,13 @@ namespace Horo::Audio {
 
         /** @brief Initializes every record lifetime in fully admitted EventStorage. */
         State(const AudioEventQueueDescriptor &description, AudioMemoryPool pool, const std::span<std::byte> allocation)
-            : descriptor(description), storage(std::move(pool)),
-              records(static_cast<AudioControlEventRecord *>(static_cast<void *>(allocation.data())), description.slots) {
-            std::uninitialized_value_construct_n(records.data(), records.size());
+            : descriptor(description), storage(std::move(pool)), records(RecordSpan(allocation, description.slots)) {
+            std::ranges::uninitialized_value_construct(records);
         }
 
         /** @brief Ends record lifetimes only after the host has joined both SPSC participants. */
         ~State() {
-            std::destroy_n(records.data(), records.size());
+            std::ranges::destroy(records);
         }
 
         /** @brief Publishes one already validated fixed-size value when its reservation class has capacity. */

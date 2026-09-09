@@ -68,6 +68,39 @@ namespace Horo::Audio {
             return {.epoch = CallbackEpoch(), .sampleFrame = 0, .timestamp = {.clockDomain = 9, .nanoseconds = 0}, .fact = fact};
         }
 
+        void ConsumeTerminals(AudioEventQueue &queue, std::atomic<bool> &stop, std::atomic<bool> &incorrect, std::uint64_t &received,
+                              const std::uint64_t expected, const std::chrono::steady_clock::time_point deadline) {
+            AudioControlEventRecord output;
+            while (!stop.load(std::memory_order_relaxed) && (!queue.IsDrained() || received != expected)) {
+                if (queue.TryConsume(output)) {
+                    ++received;
+                    const auto *voice = std::get_if<AudioVoiceTerminalEvent>(&output.event);
+                    if (!voice || voice->acceptedSequence != received)
+                        incorrect.store(true, std::memory_order_relaxed);
+                } else if (std::chrono::steady_clock::now() >= deadline) {
+                    incorrect.store(true, std::memory_order_relaxed);
+                    stop.store(true, std::memory_order_relaxed);
+                } else {
+                    std::this_thread::yield();
+                }
+            }
+        }
+
+        void PublishTerminals(AudioEventQueue &queue, std::atomic<bool> &stop, std::atomic<bool> &incorrect, const std::uint64_t count,
+                              const std::chrono::steady_clock::time_point deadline) {
+            for (std::uint64_t sequence = 1; sequence <= count && !stop.load(std::memory_order_relaxed); ++sequence) {
+                auto token = Token(sequence);
+                while (queue.TryPublishTerminal(token, Voice(sequence)) == AudioEventPublishStatus::CriticalRetry) {
+                    if (std::chrono::steady_clock::now() >= deadline) {
+                        incorrect.store(true, std::memory_order_relaxed);
+                        stop.store(true, std::memory_order_relaxed);
+                        return;
+                    }
+                    std::this_thread::yield();
+                }
+            }
+        }
+
         TEST_CASE("Audio event queue preparation validates exact bounded producer identity", "[unit][audio][events]") {
             auto descriptor = Descriptor();
             SECTION("owner") {
@@ -256,33 +289,9 @@ namespace Horo::Audio {
             const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(10);
 
             std::thread consumer([&] {
-                AudioControlEventRecord output;
-                while (!stop.load(std::memory_order_relaxed) && (!queue.IsDrained() || received != Count)) {
-                    if (queue.TryConsume(output)) {
-                        ++received;
-                        const auto *voice = std::get_if<AudioVoiceTerminalEvent>(&output.event);
-                        if (!voice || voice->acceptedSequence != received)
-                            incorrect.store(true, std::memory_order_relaxed);
-                    } else if (std::chrono::steady_clock::now() >= deadline) {
-                        incorrect.store(true, std::memory_order_relaxed);
-                        stop.store(true, std::memory_order_relaxed);
-                    } else {
-                        std::this_thread::yield();
-                    }
-                }
+                ConsumeTerminals(queue, stop, incorrect, received, Count, deadline);
             });
-
-            for (std::uint64_t sequence = 1; sequence <= Count && !stop.load(std::memory_order_relaxed); ++sequence) {
-                auto token = Token(sequence);
-                while (queue.TryPublishTerminal(token, Voice(sequence)) == AudioEventPublishStatus::CriticalRetry) {
-                    if (std::chrono::steady_clock::now() >= deadline) {
-                        incorrect.store(true, std::memory_order_relaxed);
-                        stop.store(true, std::memory_order_relaxed);
-                        break;
-                    }
-                    std::this_thread::yield();
-                }
-            }
+            PublishTerminals(queue, stop, incorrect, Count, deadline);
             queue.Close();
             consumer.join();
             REQUIRE_FALSE(incorrect.load());
