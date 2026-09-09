@@ -4,6 +4,7 @@
 
 #include <algorithm>
 #include <array>
+#include <memory>
 #include <string_view>
 
 namespace Horo::Release {
@@ -91,7 +92,7 @@ namespace Horo::Release {
 
         [[nodiscard]] const FormatDescriptor *FindDescriptor(const DistributionPackageFormat format) noexcept {
             const auto descriptor = std::ranges::find(FormatDescriptors, format, &FormatDescriptor::format);
-            return descriptor == FormatDescriptors.end() ? nullptr : &*descriptor;
+            return descriptor == FormatDescriptors.end() ? nullptr : std::to_address(descriptor);
         }
 
         [[nodiscard]] bool ProductVersionMatches(const DistributionArtifactIdentity &artifact) noexcept {
@@ -117,15 +118,15 @@ namespace Horo::Release {
         }
 
         [[nodiscard]] bool SupportsProduct(const DistributionProductIdentity &product, const DistributionPackageFormat format) noexcept {
-            if (product.kind == DistributionProductKind::RendererComponent)
-                return format == DistributionPackageFormat::ZipArchive || format == DistributionPackageFormat::TarGzip;
-            if (product.kind == DistributionProductKind::GameDedicatedServer)
-                return format != DistributionPackageFormat::MacAppBundle && format != DistributionPackageFormat::LinuxAppImage &&
-                       format != DistributionPackageFormat::StorePackage;
-            if (product.kind == DistributionProductKind::PublicSdk)
-                return format != DistributionPackageFormat::WindowsExeInstaller && format != DistributionPackageFormat::MacDmg &&
-                       format != DistributionPackageFormat::MacAppBundle && format != DistributionPackageFormat::LinuxAppImage &&
-                       format != DistributionPackageFormat::StorePackage;
+            using enum DistributionPackageFormat;
+            using enum DistributionProductKind;
+            if (product.kind == RendererComponent)
+                return format == ZipArchive || format == TarGzip;
+            if (product.kind == GameDedicatedServer)
+                return format != MacAppBundle && format != LinuxAppImage && format != StorePackage;
+            if (product.kind == PublicSdk)
+                return format != WindowsExeInstaller && format != MacDmg && format != MacAppBundle && format != LinuxAppImage &&
+                       format != StorePackage;
             return true;
         }
     }  // namespace
