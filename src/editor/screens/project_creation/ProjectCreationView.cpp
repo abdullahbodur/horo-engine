@@ -60,8 +60,6 @@ namespace Horo::Editor {
             constexpr float TemplateGap = 10.0F;
             constexpr float TemplateH = 92.0F;
             constexpr float TemplatePad = 14.0F;
-            constexpr float TemplateNamePx = 15.0F;
-            constexpr float TemplateDescPx = 13.0F;
 
             constexpr float GridGap = 16.0F;
             constexpr float CardPad = 18.0F;
@@ -415,7 +413,7 @@ namespace Horo::Editor {
             ImGui::PushStyleColor(ImGuiCol_CheckMark, Theme::Accent());
             ImGui::PushStyleColor(ImGuiCol_Text, Theme::Muted());
             {
-                ScopedTextStyle ts(ctx.theme.fonts.sans, 15.0F, Theme::FontPx::Sans);
+                ScopedTextStyle ts(ctx.theme.fonts.sans, Theme::TextPx::Label(), Theme::FontPx::Sans);
                 ImGui::Checkbox(label, value);
             }
             ImGui::PopStyleColor(6);
@@ -438,7 +436,7 @@ namespace Horo::Editor {
                 ImGui::SameLine(0.0F, 9.0F);
             }
             {
-                ScopedTextStyle ts(ctx.theme.fonts.sansEmphasis, 16.0F, FontPx::SansEmphasis);
+                ScopedTextStyle ts(ctx.theme.fonts.sansEmphasis, TextPx::Title(), FontPx::SansEmphasis);
                 ImGui::PushStyleColor(ImGuiCol_Text, Text());
                 const std::string title = ctx.localization.Get("editor", "project_creation.title");
                 ImGui::TextUnformatted(title.c_str());
@@ -447,7 +445,7 @@ namespace Horo::Editor {
 
             ImGui::SetCursorPos({HeaderPadX, 36.0F});
             {
-                ScopedTextStyle ts(ctx.theme.fonts.sansCompact, 13.0F, FontPx::SansCompact);
+                ScopedTextStyle ts(ctx.theme.fonts.sansCompact, TextPx::Caption(), FontPx::SansCompact);
                 ImGui::PushStyleColor(ImGuiCol_Text, Dim());
                 const std::string subtitle = ctx.localization.Get("editor", "project_creation.subtitle");
                 ImGui::TextUnformatted(subtitle.c_str());
@@ -487,19 +485,19 @@ namespace Horo::Editor {
             drawList.AddCircle(circleCenter, 11.0F, U32(active ? Accent() : Border()), 24, 1.0F);
             static constexpr std::array<const char *, 5> stepNumbers = {"", "1", "2", "3", "4"};
             ImFont *numberFont = context.theme.fonts.sansCompact ? context.theme.fonts.sansCompact : ImGui::GetFont();
-            constexpr float numberFontSize = 13.0F;
+            const float numberFontSize = TextPx::Label();
             const ImVec2 numberSize = numberFont->CalcTextSizeA(numberFontSize, FLT_MAX, 0.0F, stepNumbers[step]);
             drawList.AddText(numberFont, numberFontSize, {circleCenter.x - numberSize.x * 0.5F, circleCenter.y - numberSize.y * 0.5F},
                              U32(active ? DarkText() : Dim()), stepNumbers[step]);
 
             ImGui::SetCursorScreenPos({rowMin.x + 42.0F, rowMin.y + 7.0F});
             {
-                ScopedTextStyle labelStyle(context.theme.fonts.sans, 15.0F, FontPx::Sans);
+                ScopedTextStyle labelStyle(context.theme.fonts.sans, TextPx::Body(), FontPx::Sans);
                 ImGui::TextColored(active ? Text() : Muted(), "%s", label);
             }
             ImGui::SetCursorScreenPos({rowMin.x + 42.0F, rowMin.y + 34.0F});
             {
-                ScopedTextStyle descriptionStyle(context.theme.fonts.sansCompact, 12.0F, FontPx::SansCompact);
+                ScopedTextStyle descriptionStyle(context.theme.fonts.sansCompact, TextPx::Caption(), FontPx::SansCompact);
                 ImGui::TextColored(Dim(), "%s", description);
             }
             ImGui::SetCursorScreenPos({rowMin.x, rowMin.y + StepH + StepGap});
@@ -546,8 +544,8 @@ namespace Horo::Editor {
                 const ImVec2 namePos = ImGui::GetCursorScreenPos();
                 const std::string templateName = GetTemplateName(index, ctx);
                 const char *name = templateName.c_str();
-                ImGui::GetWindowDrawList()->AddText(nameFont, TemplateNamePx, namePos, U32(Text()), name);
-                const ImVec2 nameSize = nameFont->CalcTextSizeA(TemplateNamePx, FLT_MAX, 0.0F, name);
+                ImGui::GetWindowDrawList()->AddText(nameFont, TextPx::Body(), namePos, U32(Text()), name);
+                const ImVec2 nameSize = nameFont->CalcTextSizeA(TextPx::Body(), FLT_MAX, 0.0F, name);
                 ImGui::Dummy({nameSize.x, nameSize.y});
             }
 
@@ -557,8 +555,8 @@ namespace Horo::Editor {
                 ImFont *descFont = ctx.theme.fonts.sansCompact ? ctx.theme.fonts.sansCompact : ImGui::GetFont();
                 const ImVec2 descPos = ImGui::GetCursorScreenPos();
                 const float wrapW = cardW - TemplatePad * 2.0F;
-                ImGui::GetWindowDrawList()->AddText(descFont, TemplateDescPx, descPos, U32(Muted()), desc, nullptr, wrapW);
-                const ImVec2 descSize = descFont->CalcTextSizeA(TemplateDescPx, FLT_MAX, wrapW, desc);
+                ImGui::GetWindowDrawList()->AddText(descFont, TextPx::Caption(), descPos, U32(Muted()), desc, nullptr, wrapW);
+                const ImVec2 descSize = descFont->CalcTextSizeA(TextPx::Caption(), FLT_MAX, wrapW, desc);
                 ImGui::Dummy({wrapW, descSize.y});
             }
         }
@@ -876,7 +874,7 @@ namespace Horo::Editor {
                 ScopedCard card("OptCard", {0.0F, 0.0F}, CardPad, CardPad, Theme::Bg2(), true);
                 const std::string optTitle = ctx.localization.Get("editor", "project_creation.settings.optional");
                 {
-                    ScopedTextStyle ts(ctx.theme.fonts.sansEmphasis, 16.0F, Theme::FontPx::SansEmphasis);
+                    ScopedTextStyle ts(ctx.theme.fonts.sansEmphasis, Theme::TextPx::Title(), Theme::FontPx::SansEmphasis);
                     ImGui::PushStyleColor(ImGuiCol_Text, Theme::Text());
                     ImGui::TextUnformatted(optTitle.c_str());
                     ImGui::PopStyleColor();
@@ -940,7 +938,7 @@ namespace Horo::Editor {
             }
 
             ImFont *font = ctx.theme.fonts.sans ? ctx.theme.fonts.sans : ImGui::GetFont();
-            constexpr float fontSize = 14.0F;
+            const float fontSize = Theme::TextPx::Label();
             const ImVec2 textSize = font->CalcTextSizeA(fontSize, FLT_MAX, 0.0F, name.data(), name.data() + name.size());
             drawList->AddText(font, fontSize, {iconX + iconW + 6.0F, centerY - textSize.y * 0.5F},
                               Theme::U32(folder ? Theme::Text() : Theme::Muted()), name.data(), name.data() + name.size());
@@ -983,14 +981,14 @@ namespace Horo::Editor {
             Ui::SectionTitle(projectLabel.c_str(), ctx.theme.fonts);
             ImGui::SetCursorPos({18.0F, 39.0F});
             {
-                ScopedTextStyle ts(ctx.theme.fonts.sans, 20.0F, Theme::FontPx::Sans);
+                ScopedTextStyle ts(ctx.theme.fonts.sans, Theme::TextPx::Heading(), Theme::FontPx::Sans);
                 ImGui::PushStyleColor(ImGuiCol_Text, Theme::Text());
                 ImGui::TextUnformatted(draft.projectName.empty() ? "—" : draft.projectName.c_str());
                 ImGui::PopStyleColor();
             }
             ImGui::SetCursorPos({18.0F, 70.0F});
             {
-                ScopedTextStyle ts(ctx.theme.fonts.sans, 14.0F, Theme::FontPx::Sans);
+                ScopedTextStyle ts(ctx.theme.fonts.sans, Theme::TextPx::Caption(), Theme::FontPx::Sans);
                 ImGui::PushStyleColor(ImGuiCol_Text, Theme::Muted());
                 ImGui::TextUnformatted(draft.projectPath.c_str());
                 ImGui::PopStyleColor();
@@ -1020,7 +1018,7 @@ namespace Horo::Editor {
                 ScopedCard card("ReviewDirectory", {0.0F, 0.0F}, CardPad, 15.0F, Theme::Bg2(), true);
                 const std::string directoryTitle = ctx.localization.Get("editor", "project_creation.identity.directory");
                 {
-                    ScopedTextStyle ts(ctx.theme.fonts.sansEmphasis, 16.0F, Theme::FontPx::SansEmphasis);
+                    ScopedTextStyle ts(ctx.theme.fonts.sansEmphasis, Theme::TextPx::Title(), Theme::FontPx::SansEmphasis);
                     ImGui::PushStyleColor(ImGuiCol_Text, Theme::Text());
                     ImGui::TextUnformatted(directoryTitle.c_str());
                     ImGui::PopStyleColor();
@@ -1050,7 +1048,7 @@ namespace Horo::Editor {
 
             ImGui::SetCursorPos({38.0F, 18.0F});
             {
-                ScopedTextStyle ts(ctx.theme.fonts.sansCompact, 13.0F, Theme::FontPx::SansCompact);
+                ScopedTextStyle ts(ctx.theme.fonts.sansCompact, Theme::TextPx::Caption(), Theme::FontPx::SansCompact);
                 ImGui::PushStyleColor(ImGuiCol_Text, Theme::Muted());
                 const int templateIdx = FindTemplateIndex(controller.Draft().templateId);
                 const std::string templateName = GetTemplateName(templateIdx, ctx);

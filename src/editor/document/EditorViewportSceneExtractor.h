@@ -50,14 +50,19 @@ namespace Horo::Editor {
             return m_snapshot.runtimeSceneId;
         }
 
-        /** @brief Returns the handoff generation changed by every snapshot replacement or clear. */
-        [[nodiscard]] std::uint64_t Generation() const noexcept {
-            return m_generation;
+        /**
+         * @brief Returns the generation changed when mesh-resource identities change.
+         *
+         * Camera, instance, and light updates preserve this generation because they do not require
+         * resource preparation before the latest snapshot can be rendered.
+         */
+        [[nodiscard]] std::uint64_t MeshResourceGeneration() const noexcept {
+            return m_meshResourceGeneration;
         }
 
     private:
         EditorViewportSceneSnapshot m_snapshot{};
-        std::uint64_t m_generation{};
+        std::uint64_t m_meshResourceGeneration{};
     };
 
     /** @brief Resolved object and parent world matrices used by editor manipulation tools. */

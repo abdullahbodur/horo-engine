@@ -9,6 +9,12 @@
 #include <vector>
 
 namespace Horo::Editor {
+    /** @brief Asset Browser layout selected by the grid/list switch. */
+    enum class AssetBrowserViewMode : std::uint8_t {
+        Grid,
+        List,
+    };
+
     /** @brief Cross-frame presentation state for one Content Browser panel. */
     struct AssetBrowserInteractionState {
         std::optional<ContentBrowserEntry> popupEntry;
@@ -17,6 +23,7 @@ namespace Horo::Editor {
         std::string assetTypeFilter;
         ContentBrowserSortField sortField{ContentBrowserSortField::Name};
         ContentBrowserSortDirection sortDirection{ContentBrowserSortDirection::Ascending};
+        AssetBrowserViewMode viewMode{AssetBrowserViewMode::Grid};
         std::array<char, 256> renameBuffer{};
         std::array<char, 256> createFolderBuffer{};
         bool openAssetInfo{false};

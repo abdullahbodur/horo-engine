@@ -17,15 +17,31 @@
 namespace Horo::Editor::Ui {
     namespace {
         namespace InspectorTypography {
-            constexpr float Label = 13.0F;
-            constexpr float Field = 13.0F;
-            constexpr float Axis = 12.5F;
-            constexpr float ObjectTitle = 12.0F;
-            constexpr float ObjectMeta = 12.5F;
+            [[nodiscard]] float Label() {
+                return Theme::TextPx::Label();
+            }
+
+            [[nodiscard]] float Field() {
+                return Theme::TextPx::Body();
+            }
+
+            [[nodiscard]] float Axis() {
+                return Theme::TextPx::Label();
+            }
+
+            [[nodiscard]] float ObjectTitle() {
+                return Theme::TextPx::Title();
+            }
+
+            [[nodiscard]] float ObjectMeta() {
+                return Theme::TextPx::Caption();
+            }
         }  // namespace InspectorTypography
 
         namespace CardTypography {
-            constexpr float Title = 11.5F;
+            [[nodiscard]] float Title() {
+                return Theme::TextPx::CardTitle();
+            }
         }  // namespace CardTypography
 
         struct ResolvedPrimitiveStyle {
@@ -107,7 +123,7 @@ namespace Horo::Editor::Ui {
         };
 
         /** @brief Resolves editable-title geometry from the current content region and theme scale. */
-        [[nodiscard]] EditableTitleLayout ResolveEditableTitleLayout(const EditableTitleProps &props) {
+        [[nodiscard]] EditableTitleLayout ResolveEditableTitleLayout(const EditableTitleProps &props, const Theme::Fonts &fonts) {
             const ImVec2 position = ImGui::GetCursorScreenPos();
             const float width = ImGui::GetContentRegionAvail().x;
             const float uiScale = Theme::GetActiveTokens().sizes.uiScale;
@@ -115,8 +131,10 @@ namespace Horo::Editor::Ui {
             const float iconSize = 22.0F * uiScale;
             const float controlX = position.x + iconSize + 7.0F * uiScale;
             const float controlWidth = std::max(1.0F, position.x + width - props.trailingWidth - 6.0F * uiScale - controlX);
-            const float titleFontSize = InspectorTypography::ObjectTitle * uiScale;
-            const float effectiveFontHeight = titleFontSize * Theme::Scale(titleFontSize, Theme::FontPx::SansEmphasis);
+            const float titleFontSize = InspectorTypography::ObjectTitle();
+            const float effectiveFontHeight = fonts.sansEmphasis != nullptr
+                                                  ? fonts.sansEmphasis->FontSize * Theme::Scale(titleFontSize, Theme::FontPx::SansEmphasis)
+                                                  : titleFontSize;
             const float controlHeight = 30.0F * uiScale;
             return {
                 .position = position,
@@ -142,7 +160,7 @@ namespace Horo::Editor::Ui {
             PushControlColors(Theme::InspectorTitleFieldSurface(), Theme::InspectorBorder(), Theme::Text());
             if (props.error)
                 PushErrorControlColors();
-            const float titleFontSize = InspectorTypography::ObjectTitle * Theme::GetActiveTokens().sizes.uiScale;
+            const float titleFontSize = InspectorTypography::ObjectTitle();
             bool submitted = false;
             {
                 Theme::ScopedTextStyle textStyle(fonts.sansEmphasis, titleFontSize, Theme::FontPx::SansEmphasis);
@@ -168,19 +186,21 @@ namespace Horo::Editor::Ui {
         struct PropertyRowLayout {
             ImVec2 position;
             float width{0.0F};
-            float height{31.0F};
+            float height{0.0F};
             float controlX{0.0F};
+            float controlY{0.0F};
             float controlWidth{0.0F};
         };
 
         [[nodiscard]] PropertyRowLayout BeginPropertyRow(const char *label, const Theme::Fonts &fonts) {
             const ImVec2 position = ImGui::GetCursorScreenPos();
             const float width = ImGui::GetContentRegionAvail().x;
-            const float scale = Theme::GetActiveTokens().sizes.uiScale;
-            const float height = ScaledLayoutValue(31.0F);
+            const auto &tokens = Theme::GetActiveTokens();
+            const float controlHeight = ScaledLayoutValue(28.0F);
+            const float height = controlHeight + tokens.spacing.propertyRowGap;
             const float horizontalPadding = ScaledLayoutValue(8.0F);
             const float minimumControlWidth = ScaledLayoutValue(90.0F);
-            const float labelFontSize = InspectorTypography::Label * scale;
+            const float labelFontSize = InspectorTypography::Label();
             const float labelWidth = std::min(ScaledLayoutValue(68.0F),
                                               std::max(ScaledLayoutValue(56.0F), width - horizontalPadding * 2.0F - minimumControlWidth));
 
@@ -197,6 +217,7 @@ namespace Horo::Editor::Ui {
                 .width = width,
                 .height = height,
                 .controlX = controlX,
+                .controlY = position.y + tokens.spacing.propertyRowGap * 0.5F,
                 .controlWidth = std::max(1.0F, width - horizontalPadding * 2.0F - labelWidth),
             };
         }
@@ -283,7 +304,7 @@ namespace Horo::Editor::Ui {
         void DrawContextMenuRowPresentation(const ContextMenuRow &row, const ContextMenuRowPresentation &presentation) {
             ImDrawList *drawList = ImGui::GetWindowDrawList();
             const float scale = Theme::GetActiveTokens().sizes.uiScale;
-            const float fontSize = 14.0F * scale;
+            const float fontSize = Theme::TextPx::Label();
             if (presentation.highlighted)
                 drawList->AddRectFilled(row.minimum, row.maximum, Theme::U32(Theme::Hover()), ScaledLayoutValue(3.0F));
 
@@ -356,6 +377,50 @@ namespace Horo::Editor::Ui {
 
     float ScaledLayoutValue(const float value) noexcept {
         return value * Theme::GetActiveTokens().sizes.uiScale;
+    }
+
+    /** @copydoc ScopedTooltip::ScopedTooltip */
+    ScopedTooltip::ScopedTooltip(const Theme::Fonts *fonts) {
+        const auto &tokens = Theme::GetActiveTokens();
+        ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding,
+                            {DesignSystem::SpacingFor(tokens, SpacingSize::Medium), DesignSystem::SpacingFor(tokens, SpacingSize::Small)});
+        ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, tokens.radii.card);
+        ImGui::PushStyleVar(ImGuiStyleVar_PopupBorderSize, std::max(1.0F, tokens.sizes.uiScale));
+        ImGui::PushStyleColor(ImGuiCol_PopupBg, Theme::TooltipSurface());
+        ImGui::PushStyleColor(ImGuiCol_Border, Theme::TooltipBorder());
+        ImGui::PushStyleColor(ImGuiCol_Text, Theme::Text());
+        ImGui::BeginTooltip();
+
+        if (fonts != nullptr) {
+            if (fonts->sansCompact != nullptr) {
+                font_ = fonts->sansCompact;
+                fontScale_ = Theme::Scale(Theme::TextPx::Label(), Theme::FontPx::SansCompact);
+            } else if (fonts->sans != nullptr) {
+                font_ = fonts->sans;
+                fontScale_ = Theme::Scale(Theme::TextPx::Label(), Theme::FontPx::Sans);
+            }
+        }
+        Theme::PushFont(font_);
+        ImGui::SetWindowFontScale(fontScale_);
+    }
+
+    /** @copydoc ScopedTooltip::~ScopedTooltip */
+    ScopedTooltip::~ScopedTooltip() {
+        ImGui::SetWindowFontScale(1.0F);
+        Theme::PopFont(font_);
+        ImGui::EndTooltip();
+        ImGui::PopStyleColor(3);
+        ImGui::PopStyleVar(3);
+    }
+
+    /** @copydoc ShowTooltip */
+    void ShowTooltip(const char *text, const Theme::Fonts *fonts) {
+        if (text == nullptr || text[0] == '\0')
+            return;
+        ScopedTooltip tooltip(fonts);
+        ImGui::PushTextWrapPos(ImGui::GetCursorPosX() + ScaledLayoutValue(320.0F));
+        ImGui::TextUnformatted(text);
+        ImGui::PopTextWrapPos();
     }
 
     // ── Button ───────────────────────────────────────────────────────────
@@ -589,7 +654,7 @@ namespace Horo::Editor::Ui {
         }
 
         if (hovered && props.tooltip != nullptr && props.tooltip[0] != '\0')
-            ImGui::SetTooltip("%s", props.tooltip);
+            ShowTooltip(props.tooltip);
         ImGui::PopID();
         return props.enabled && clicked;
     }
@@ -597,7 +662,7 @@ namespace Horo::Editor::Ui {
     // ── SectionTitle ─────────────────────────────────────────────────────
 
     void SectionTitle(const char *upperCaseLabel, const Theme::Fonts &fonts) {
-        Theme::ScopedTextStyle ts(fonts.sansCompact, 14.0F * Theme::GetActiveTokens().sizes.uiScale, Theme::FontPx::SansCompact);
+        Theme::ScopedTextStyle ts(fonts.sansCompact, Theme::TextPx::Title(), Theme::FontPx::SansCompact);
         ImGui::PushStyleColor(ImGuiCol_Text, Theme::Text());
         ImGui::TextUnformatted(upperCaseLabel);
         ImGui::PopStyleColor();
@@ -606,7 +671,7 @@ namespace Horo::Editor::Ui {
     // ── FieldLabel ───────────────────────────────────────────────────────
 
     void FieldLabel(const char *upperCaseLabel, const Theme::Fonts &fonts) {
-        Theme::ScopedTextStyle ts(fonts.sansCompact, 14.0F * Theme::GetActiveTokens().sizes.uiScale, Theme::FontPx::SansCompact);
+        Theme::ScopedTextStyle ts(fonts.sansCompact, Theme::TextPx::Label(), Theme::FontPx::SansCompact);
         ImGui::PushStyleColor(ImGuiCol_Text, Theme::Dim());
         ImGui::TextUnformatted(upperCaseLabel);
         ImGui::PopStyleColor();
@@ -615,7 +680,7 @@ namespace Horo::Editor::Ui {
     // ── Hint ─────────────────────────────────────────────────────────────
 
     void Hint(const char *text, const Theme::Fonts &fonts) {
-        Theme::ScopedTextStyle ts(fonts.sansCompact, 14.0F * Theme::GetActiveTokens().sizes.uiScale, Theme::FontPx::SansCompact);
+        Theme::ScopedTextStyle ts(fonts.sansCompact, Theme::TextPx::Caption(), Theme::FontPx::SansCompact);
         ImGui::PushStyleColor(ImGuiCol_Text, Theme::Dim());
         ImGui::PushTextWrapPos(ImGui::GetCursorPosX() + ImGui::GetContentRegionAvail().x);
         ImGui::TextWrapped("%s", text);
@@ -626,7 +691,7 @@ namespace Horo::Editor::Ui {
     // ── ErrorText ────────────────────────────────────────────────────────
 
     void ErrorText(const char *text, const Theme::Fonts &fonts) {
-        Theme::ScopedTextStyle ts(fonts.sansCompact, 14.0F * Theme::GetActiveTokens().sizes.uiScale, Theme::FontPx::SansCompact);
+        Theme::ScopedTextStyle ts(fonts.sansCompact, Theme::TextPx::Caption(), Theme::FontPx::SansCompact);
         ImGui::PushStyleColor(ImGuiCol_Text, Theme::Err());
         ImGui::PushTextWrapPos(ImGui::GetCursorPosX() + ImGui::GetContentRegionAvail().x);
         ImGui::TextWrapped("%s", text);
@@ -685,7 +750,7 @@ namespace Horo::Editor::Ui {
             const float horizontalPadding = props.size == Medium ? 12.0F : 9.0F;
             const float verticalPadding = props.size == Medium ? 9.0F : 4.0F;
             constexpr float indicatorWidth = 12.0F;
-            Theme::ScopedTextStyle textStyle(fonts.sansCompact, props.size == Medium ? 12.0F : 10.5F, Theme::FontPx::SansCompact);
+            Theme::ScopedTextStyle textStyle(fonts.sansCompact, Theme::TextPx::Caption(), Theme::FontPx::SansCompact);
             const ImVec2 textSize = ImGui::CalcTextSize(props.label);
             return {
                 textSize.x + horizontalPadding * 2.0F + (props.leadingIndicator ? indicatorWidth : 0.0F),
@@ -706,7 +771,7 @@ namespace Horo::Editor::Ui {
         constexpr float radius = 4.0F;
         constexpr float inlineGap = 6.0F;
         const ImVec4 color = BadgeToneColor(props.tone);
-        Theme::ScopedTextStyle textStyle(fonts.sansCompact, props.size == BadgeSize::Medium ? 12.0F : 10.5F, Theme::FontPx::SansCompact);
+        Theme::ScopedTextStyle textStyle(fonts.sansCompact, Theme::TextPx::Caption(), Theme::FontPx::SansCompact);
         const ImVec2 textSize = ImGui::CalcTextSize(props.label);
         const ImVec2 badgeMin = ImGui::GetCursorScreenPos();
         const ImVec2 badgeSize{
@@ -758,7 +823,7 @@ namespace Horo::Editor::Ui {
 
     /** @copydoc LabeledSeparator */
     void LabeledSeparator(const char *label, const Theme::Fonts &fonts) {
-        Theme::ScopedTextStyle ts(fonts.sansCompact, 14.0F * Theme::GetActiveTokens().sizes.uiScale, Theme::FontPx::SansCompact);
+        Theme::ScopedTextStyle ts(fonts.sansCompact, Theme::TextPx::Label(), Theme::FontPx::SansCompact);
         const ImVec2 textSize = ImGui::CalcTextSize(label);
         ImGui::PushStyleColor(ImGuiCol_Text, Theme::Dim());
         ImGui::TextUnformatted(label);
@@ -781,7 +846,7 @@ namespace Horo::Editor::Ui {
             ImGui::Dummy({0.0F, ScaledLayoutValue(18.0F)});
         }
 
-        Theme::ScopedTextStyle ts(fonts.sansCompact, 14.0F * Theme::GetActiveTokens().sizes.uiScale, Theme::FontPx::SansCompact);
+        Theme::ScopedTextStyle ts(fonts.sansCompact, Theme::TextPx::Label(), Theme::FontPx::SansCompact);
         ImGui::PushStyleColor(ImGuiCol_Text, Theme::Dim());
         ImGui::TextUnformatted(label);
         ImGui::PopStyleColor();
@@ -812,8 +877,7 @@ namespace Horo::Editor::Ui {
         auto *drawList = ImGui::GetWindowDrawList();
         if (rowHovered || isSelected)
             drawList->AddRectFilled(rowMin, {rowMin.x + rowW, rowMin.y + rowH}, Theme::U32(Theme::Hover()));
-        const float fontScale = Theme::GetActiveTokens().sizes.uiScale;
-        const float rowFontSize = 14.0F * fontScale;
+        const float rowFontSize = Theme::TextPx::Label();
         ImVec4 rowTextColor = Theme::Dim();
         if (isEnabled)
             rowTextColor = isSelected ? Theme::Text() : Theme::Muted();
@@ -823,7 +887,7 @@ namespace Horo::Editor::Ui {
         if (!isEnabled && rowHovered && source.disabledTooltip) {
             const char *const tooltip = source.disabledTooltip(index);
             if (tooltip != nullptr && tooltip[0] != '\0') {
-                ImGui::SetTooltip("%s", tooltip);
+                ShowTooltip(tooltip, &fonts);
             }
         }
         ImGui::PopID();
@@ -861,7 +925,9 @@ namespace Horo::Editor::Ui {
         const bool popupOpen = ImGui::IsPopupOpen(popupId.c_str());
 
         auto *dl = ImGui::GetWindowDrawList();
-        dl->AddRectFilled(fieldPos, {fieldPos.x + fieldW, fieldPos.y + fieldH}, Theme::U32(fieldHovered ? Theme::Hover() : Theme::Bg3()),
+        const ImVec4 controlSurface =
+            options.surface == ComboControlSurface::BottomDockToolbar ? Theme::BottomDockControlSurface() : Theme::Bg3();
+        dl->AddRectFilled(fieldPos, {fieldPos.x + fieldW, fieldPos.y + fieldH}, Theme::U32(fieldHovered ? Theme::Hover() : controlSurface),
                           Theme::GetActiveTokens().radii.control);
         const ImVec4 borderColor = options.error ? Theme::Err() : Theme::Border();
         const ImVec4 popupBorderColor = popupOpen ? Theme::Accent() : borderColor;
@@ -933,12 +999,13 @@ namespace Horo::Editor::Ui {
             fonts.sansCompact != nullptr ? fonts.sansCompact->FontSize * metrics.fontSize / Theme::FontPx::SansCompact : metrics.fontSize;
         const ImVec2 framePadding = DefaultFramePadding(metrics, renderedTextHeight);
         const float leftPadding = framePadding.x + options.prefixIconWidth * tokens.sizes.uiScale;
+        const ImVec4 surface = options.surface == InputTextSurface::BottomDockToolbar ? Theme::BottomDockControlSurface() : Theme::Bg3();
         ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2{leftPadding, framePadding.y});
         ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, Theme::GetActiveTokens().radii.control);
         ImGui::PushStyleVar(ImGuiStyleVar_FrameBorderSize, 1.0F);
-        ImGui::PushStyleColor(ImGuiCol_FrameBg, options.error ? Theme::ErrSoft() : Theme::Bg3());
+        ImGui::PushStyleColor(ImGuiCol_FrameBg, options.error ? Theme::ErrSoft() : surface);
         ImGui::PushStyleColor(ImGuiCol_FrameBgHovered, options.error ? Theme::ErrSoft() : Theme::Hover());
-        ImGui::PushStyleColor(ImGuiCol_FrameBgActive, options.error ? Theme::ErrSoft() : Theme::Hover());
+        ImGui::PushStyleColor(ImGuiCol_FrameBgActive, options.error ? Theme::ErrSoft() : surface);
         ImGui::PushStyleColor(ImGuiCol_Border, options.error ? Theme::Err() : Theme::Border());
         ImGui::PushStyleColor(ImGuiCol_Text, Theme::Text());
 
@@ -1129,7 +1196,7 @@ namespace Horo::Editor::Ui {
         ImGui::PushItemWidth(-1.0F);
         bool validChange = false;
         {
-            Theme::ScopedTextStyle ts(fonts.sansCompact, 14.0F * Theme::GetActiveTokens().sizes.uiScale, Theme::FontPx::SansCompact);
+            Theme::ScopedTextStyle ts(fonts.sansCompact, Theme::TextPx::Label(), Theme::FontPx::SansCompact);
             if (ImGui::InputText("hex", buffer, bufferSize) && ParseHexColor(buffer, current)) {
                 storage->SetInt(lastValidKey, static_cast<int>(pack(current)));
                 validChange = true;
@@ -1158,7 +1225,7 @@ namespace Horo::Editor::Ui {
         PushControlStyle();
         ImGui::PushItemWidth(-1.0F);
         {
-            Theme::ScopedTextStyle ts(fonts.sansCompact, 14.0F * Theme::GetActiveTokens().sizes.uiScale, Theme::FontPx::SansCompact);
+            Theme::ScopedTextStyle ts(fonts.sansCompact, Theme::TextPx::Body(), Theme::FontPx::SansCompact);
             ImGui::InputInt(id, value, 1, 4);
         }
         ImGui::PopItemWidth();
@@ -1171,7 +1238,7 @@ namespace Horo::Editor::Ui {
         PushControlStyle();
         ImGui::PushItemWidth(-1.0F);
         {
-            Theme::ScopedTextStyle ts(fonts.sansCompact, 14.0F * Theme::GetActiveTokens().sizes.uiScale, Theme::FontPx::SansCompact);
+            Theme::ScopedTextStyle ts(fonts.sansCompact, Theme::TextPx::Body(), Theme::FontPx::SansCompact);
             ImGui::InputFloat(id, value, 0.1F, 1.0F, "%.1f");
         }
         ImGui::PopItemWidth();
@@ -1235,7 +1302,7 @@ namespace Horo::Editor::Ui {
                 break;
         }
         {
-            Theme::ScopedTextStyle ts(fonts.sansCompact, 14.0F * Theme::GetActiveTokens().sizes.uiScale, Theme::FontPx::SansCompact);
+            Theme::ScopedTextStyle ts(fonts.sansCompact, Theme::TextPx::Body(), Theme::FontPx::SansCompact);
             const ImVec2 textSize = ImGui::CalcTextSize(text.c_str());
             ImGui::SetCursorPosY(ImGui::GetCursorPosY() + (HitH - textSize.y) * 0.5F);
             ImGui::PushStyleColor(ImGuiCol_Text, Theme::Text());
@@ -1275,7 +1342,7 @@ namespace Horo::Editor::Ui {
 
         if (showLabel) {
             ImGui::SameLine(0.0F, 10.0F);
-            Theme::ScopedTextStyle ts(fonts.sansCompact, 14.0F * Theme::GetActiveTokens().sizes.uiScale, Theme::FontPx::SansCompact);
+            Theme::ScopedTextStyle ts(fonts.sansCompact, Theme::TextPx::Label(), Theme::FontPx::SansCompact);
             ImGui::PushStyleColor(ImGuiCol_Text, Theme::Muted());
             ImGui::TextUnformatted(*value ? "Enabled" : "Disabled");
             ImGui::PopStyleColor();
@@ -1344,7 +1411,7 @@ namespace Horo::Editor::Ui {
 
         bool clicked = false;
         {
-            Theme::ScopedTextStyle ts(fonts.sansCompact, 14.0F * Theme::GetActiveTokens().sizes.uiScale, Theme::FontPx::SansCompact);
+            Theme::ScopedTextStyle ts(fonts.sansCompact, Theme::TextPx::Label(), Theme::FontPx::SansCompact);
             clicked = ImGui::Checkbox(label, value);
         }
 
@@ -1359,14 +1426,14 @@ namespace Horo::Editor::Ui {
         const float cursorY = ImGui::GetCursorPosY();
         ImGui::SetCursorPosY(cursorY + 4.0F);
         {
-            Theme::ScopedTextStyle ts(fonts.sansCompact, 14.0F * Theme::GetActiveTokens().sizes.uiScale, Theme::FontPx::SansCompact);
+            Theme::ScopedTextStyle ts(fonts.sansCompact, Theme::TextPx::Caption(), Theme::FontPx::SansCompact);
             ImGui::PushStyleColor(ImGuiCol_Text, Theme::Dim());
             ImGui::TextUnformatted(version);
             ImGui::PopStyleColor();
         }
         ImGui::SetCursorPosY(ImGui::GetCursorPosY() - 1.0F);
         {
-            Theme::ScopedTextStyle ts(fonts.sansCompact, 14.0F * Theme::GetActiveTokens().sizes.uiScale, Theme::FontPx::SansCompact);
+            Theme::ScopedTextStyle ts(fonts.sansCompact, Theme::TextPx::Caption(), Theme::FontPx::SansCompact);
             ImGui::PushStyleColor(ImGuiCol_Text, Theme::Dim());
             ImGui::PushTextWrapPos(ImGui::GetCursorPosX() + Theme::Layout::ControlW - 52.0F);
             ImGui::TextWrapped("%s", description);
@@ -1393,8 +1460,7 @@ namespace Horo::Editor::Ui {
             if (i > 0) {
                 ImGui::SameLine(0.0F, 4.0F);
                 {
-                    Theme::ScopedTextStyle ts(fonts.sansCompact, 14.0F * Theme::GetActiveTokens().sizes.uiScale,
-                                              Theme::FontPx::SansCompact);
+                    Theme::ScopedTextStyle ts(fonts.sansCompact, Theme::TextPx::Caption(), Theme::FontPx::SansCompact);
                     ImGui::PushStyleColor(ImGuiCol_Text, Theme::Dim());
                     ImGui::TextUnformatted("+");
                     ImGui::PopStyleColor();
@@ -1408,7 +1474,7 @@ namespace Horo::Editor::Ui {
             ImGui::PushStyleColor(ImGuiCol_ButtonActive, Theme::Bg3());
             ImGui::PushStyleColor(ImGuiCol_Text, Theme::Text());
             {
-                Theme::ScopedTextStyle ts(fonts.sansCompact, 14.0F * Theme::GetActiveTokens().sizes.uiScale, Theme::FontPx::SansCompact);
+                Theme::ScopedTextStyle ts(fonts.sansCompact, Theme::TextPx::Caption(), Theme::FontPx::SansCompact);
                 ImGui::Button(keys[i], ImVec2{0.0F, 24.0F});
             }
             ImGui::PopStyleColor(4);
@@ -1470,14 +1536,16 @@ namespace Horo::Editor::Ui {
         using namespace Theme;
         if (listening) {
             const ImVec2 textSize = ImGui::CalcTextSize(text.listening);
-            drawList->AddText(fonts.sansCompact, 11.0F, {cursor.x + (size.x - textSize.x) * 0.5F, cursor.y + (size.y - textSize.y) * 0.5F},
-                              U32(Accent()), text.listening);
+            drawList->AddText(fonts.sansCompact, TextPx::Caption(),
+                              {cursor.x + (size.x - textSize.x) * 0.5F, cursor.y + (size.y - textSize.y) * 0.5F}, U32(Accent()),
+                              text.listening);
             return;
         }
         if (keysLabel == nullptr || keysLabel[0] == '\0') {
             const ImVec2 textSize = ImGui::CalcTextSize(text.placeholder);
-            drawList->AddText(fonts.sansCompact, 11.0F, {cursor.x + (size.x - textSize.x) * 0.5F, cursor.y + (size.y - textSize.y) * 0.5F},
-                              U32(Dim()), text.placeholder);
+            drawList->AddText(fonts.sansCompact, TextPx::Caption(),
+                              {cursor.x + (size.x - textSize.x) * 0.5F, cursor.y + (size.y - textSize.y) * 0.5F}, U32(Dim()),
+                              text.placeholder);
             return;
         }
 
@@ -1507,10 +1575,10 @@ namespace Horo::Editor::Ui {
             const ImVec2 chipMax{x + textSize.x + 10.0F, y + 18.0F};
             drawList->AddRectFilled(chipMin, chipMax, U32(Bg3()), 3.0F);
             drawList->AddRect(chipMin, chipMax, U32(BorderStrong()), 3.0F, 0, 1.0F);
-            drawList->AddText(fonts.sansCompact, 10.5F, {x + 5.0F, y + 2.0F}, U32(Text()), part.c_str());
+            drawList->AddText(fonts.sansCompact, TextPx::Caption(), {x + 5.0F, y + 2.0F}, U32(Text()), part.c_str());
             x += textSize.x + 10.0F;
             if (index + 1 < parts.size()) {
-                drawList->AddText(fonts.sansCompact, 10.0F, {x + 2.0F, y + 2.0F}, U32(Dim()), "+");
+                drawList->AddText(fonts.sansCompact, TextPx::Caption(), {x + 2.0F, y + 2.0F}, U32(Dim()), "+");
                 x += 12.0F;
             }
         }
@@ -1579,7 +1647,7 @@ namespace Horo::Editor::Ui {
 
         bool clicked = false;
         {
-            Theme::ScopedTextStyle ts(fonts.sansCompact, 14.0F * Theme::GetActiveTokens().sizes.uiScale, Theme::FontPx::SansCompact);
+            Theme::ScopedTextStyle ts(fonts.sansCompact, Theme::TextPx::Label(), Theme::FontPx::SansCompact);
             clicked = ImGui::Button(label, ImVec2{82.0F, 32.0F});
         }
         const ImVec2 min = ImGui::GetItemRectMin();
@@ -1714,7 +1782,8 @@ namespace Horo::Editor::Ui {
 
     // ── Dock UI ───────────────────────────────────────────────────────────
 
-    int DrawDockTabs(const std::span<const char *const> tabs, int activeTab, const Theme::Fonts &fonts, const float height) {
+    int DrawDockTabs(const std::span<const char *const> tabs, int activeTab, const Theme::Fonts &fonts, const float height,
+                     const DockTabStyle style) {
         ImDrawList *dl = ImGui::GetWindowDrawList();
         const ImVec2 pos = ImGui::GetCursorScreenPos();
         const float w = ImGui::GetContentRegionAvail().x;
@@ -1724,7 +1793,9 @@ namespace Horo::Editor::Ui {
         // Background (--bg-darkest)
         dl->AddRectFilled(pos, ImVec2(pos.x + w, pos.y + tabH), Theme::U32(Theme::Bg0()));
         // Bottom border (--border)
-        dl->AddLine(ImVec2(pos.x, pos.y + tabH - 1.0f), ImVec2(pos.x + w, pos.y + tabH - 1.0f), Theme::U32(Theme::Border()), 1.0f);
+        const bool globalDockStyle = style == DockTabStyle::GlobalDock;
+        dl->AddLine(ImVec2(pos.x, pos.y + tabH - 1.0f), ImVec2(pos.x + w, pos.y + tabH - 1.0f),
+                    Theme::U32(globalDockStyle ? Theme::BorderStrong() : Theme::Border()), 1.0f);
 
         int clickedTab = -1;
 
@@ -1734,7 +1805,7 @@ namespace Horo::Editor::Ui {
         for (size_t i = 0; i < tabs.size(); ++i) {
             const bool isActive = (static_cast<int>(i) == activeTab);
 
-            const float tabFontSize = 14.0F * Theme::GetActiveTokens().sizes.uiScale;
+            const float tabFontSize = Theme::TextPx::Label();
             const ImVec2 textSize = fonts.sans->CalcTextSizeA(tabFontSize, FLT_MAX, 0.0F, tabs[i]);
             auto buttonSize = ImVec2(textSize.x + 26.0f, tabH);  // padding 13px * 2
 
@@ -1744,11 +1815,11 @@ namespace Horo::Editor::Ui {
             }
 
             const bool hovered = ImGui::IsItemHovered();
-            ImVec4 textColor = Theme::Muted();
+            ImVec4 textColor = globalDockStyle ? Theme::Dim() : Theme::Muted();
             if (isActive)
                 textColor = Theme::Text();
             else if (hovered)
-                textColor = Theme::Dim();  // hover color
+                textColor = globalDockStyle ? Theme::Muted() : Theme::Dim();
 
             // Draw text
             const float textY = p.y + (tabH - tabFontSize) * 0.5F;
@@ -1775,7 +1846,7 @@ namespace Horo::Editor::Ui {
         const float tabHeight = 36.0F * scale;
         const float dockPadding = 10.0F * scale;
         const float horizontalPadding = 10.0F * scale;
-        const float fontSize = 12.0F * scale;
+        const float fontSize = Theme::TextPx::Label();
         const float underlineHeight = std::max(1.0F, 2.0F * scale);
         const ImVec2 origin = ImGui::GetCursorScreenPos();
         const float width = ImGui::GetContentRegionAvail().x;
@@ -1829,17 +1900,18 @@ namespace Horo::Editor::Ui {
         // border-bottom
         dl->AddLine(ImVec2(pos.x, pos.y + h - 1.0f), ImVec2(pos.x + w, pos.y + h - 1.0f), Theme::U32(Theme::Border()), 1.0f);
 
-        dl->AddText(fonts.sans, fonts.sans->FontSize, ImVec2(pos.x + 14.0f, pos.y + 10.0f), Theme::U32(Theme::Text()), title);
+        const float titleFontSize = Theme::TextPx::Title();
+        dl->AddText(fonts.sans, titleFontSize, ImVec2(pos.x + 14.0f, pos.y + (h - titleFontSize) * 0.5F), Theme::U32(Theme::Text()), title);
 
         // Badge
-        ImVec2 badgeSize = ImGui::CalcTextSize(badgeText);
+        const float badgeFontSize = Theme::TextPx::Caption();
+        ImVec2 badgeSize = fonts.sansCompact->CalcTextSizeA(badgeFontSize, FLT_MAX, 0.0F, badgeText);
         badgeSize.x += 12.0f;  // padding 6px
         badgeSize.y += 6.0f;   // padding 3px
 
         const auto badgePos = ImVec2(pos.x + w - 14.0f - badgeSize.x, pos.y + 10.0f);
         dl->AddRectFilled(badgePos, ImVec2(badgePos.x + badgeSize.x, badgePos.y + badgeSize.y), ImGui::GetColorU32(badgeBg), 4.0f);
-        dl->AddText(fonts.sansCompact, fonts.sansCompact->FontSize, ImVec2(badgePos.x + 6.0f, badgePos.y + 3.0f),
-                    ImGui::GetColorU32(badgeFg), badgeText);
+        dl->AddText(fonts.sansCompact, badgeFontSize, ImVec2(badgePos.x + 6.0f, badgePos.y + 3.0f), ImGui::GetColorU32(badgeFg), badgeText);
 
         ImGui::SetCursorScreenPos(ImVec2(pos.x, pos.y + h));
     }
@@ -1850,10 +1922,10 @@ namespace Horo::Editor::Ui {
         if (maximumBytes == 0)
             return {};
 
-        const EditableTitleLayout layout = ResolveEditableTitleLayout(props);
+        const EditableTitleLayout layout = ResolveEditableTitleLayout(props, fonts);
         DrawEditorIcon(ImGui::GetWindowDrawList(), props.leadingIcon,
                        {layout.position.x, layout.position.y + (layout.height - layout.iconSize) * 0.5F},
-                       {layout.iconSize, layout.iconSize}, Theme::U32(Theme::Accent()));
+                       {layout.iconSize, layout.iconSize}, Theme::U32(Theme::Accent()), fonts.icon);
 
         value.resize(std::min(value.size(), maximumBytes));
         value.resize(maximumBytes, '\0');
@@ -1931,7 +2003,7 @@ namespace Horo::Editor::Ui {
             DrawEditorIcon(&drawList, action.icon, {x + 4.0F, titlePosition.y + 9.0F}, {16.0F, 16.0F}, Theme::U32(resolvedColor),
                            fonts.icon);
             if (hovered && action.title != nullptr && action.title[0] != '\0')
-                ImGui::SetTooltip("%s", action.title);
+                ShowTooltip(action.title, &fonts);
             ImGui::EndDisabled();
             return {.pressed = pressed};
         }
@@ -1979,7 +2051,7 @@ namespace Horo::Editor::Ui {
         }
         ImGui::PopID();
 
-        const float headerFontSize = CardTypography::Title * Theme::GetActiveTokens().sizes.uiScale;
+        const float headerFontSize = CardTypography::Title();
         ImFont *titleFont = props.fonts.sansEmphasis != nullptr ? props.fonts.sansEmphasis : ImGui::GetFont();
         dl->AddText(titleFont, headerFontSize, ImVec2(pos.x + 28.0F, pos.y + (h - headerFontSize) * 0.5F), Theme::U32(Theme::Text()),
                     props.title);
@@ -2033,9 +2105,8 @@ namespace Horo::Editor::Ui {
         borderLight.w = 0.5f;
         dl->AddLine(ImVec2(pos.x, pos.y + h - 1.0f), ImVec2(pos.x + w, pos.y + h - 1.0f), ImGui::GetColorU32(borderLight), 1.0f);
 
-        const float scale = Theme::GetActiveTokens().sizes.uiScale;
-        const float labelFontSize = InspectorTypography::Label * scale;
-        const float fieldFontSize = InspectorTypography::Field * scale;
+        const float labelFontSize = InspectorTypography::Label();
+        const float fieldFontSize = InspectorTypography::Field();
         dl->AddText(fonts.sans, labelFontSize, ImVec2(pos.x + 14.0f, pos.y + (h - labelFontSize) * 0.5F), Theme::U32(Theme::Muted()),
                     label);
 
@@ -2102,7 +2173,7 @@ namespace Horo::Editor::Ui {
         PushMenuDropdownWindowStyle();
         bool open = false;
         {
-            Theme::ScopedTextStyle textStyle(fonts.sans, 14.0F * Theme::GetActiveTokens().sizes.uiScale, Theme::FontPx::Sans);
+            Theme::ScopedTextStyle textStyle(fonts.sans, Theme::TextPx::Label(), Theme::FontPx::Sans);
             open = ImGui::BeginMenu(label);
         }
         if (open)
@@ -2181,7 +2252,7 @@ namespace Horo::Editor::Ui {
     bool DrawComboPropRow(const char *label, const char *id, int &value, const std::span<const char *const> entries,
                           const Theme::Fonts &fonts) {
         const PropertyRowLayout layout = BeginPropertyRow(label, fonts);
-        ImGui::SetCursorScreenPos({layout.controlX, layout.position.y + 3.0F});
+        ImGui::SetCursorScreenPos({layout.controlX, layout.controlY});
         ImGui::PushItemWidth(layout.controlWidth);
         const bool changed = ComboControl(id, &value, entries.data(), static_cast<int>(entries.size()), fonts,
                                           ComboControlOptions{.height = 27.0F, .componentSize = ComponentSize::Medium});
@@ -2194,7 +2265,7 @@ namespace Horo::Editor::Ui {
     PropertyEditResult DrawFloatPropRow(const char *label, const char *id, float &value, const Theme::Fonts &fonts,
                                         const FloatPropertyOptions options) {
         const PropertyRowLayout layout = BeginPropertyRow(label, fonts);
-        ImGui::SetCursorScreenPos({layout.controlX, layout.position.y + 3.0F});
+        ImGui::SetCursorScreenPos({layout.controlX, layout.controlY});
         ImGui::PushID(id);
         ImGui::PushItemWidth(layout.controlWidth);
         PushInspectorControlStyle();
@@ -2202,7 +2273,7 @@ namespace Horo::Editor::Ui {
             PushErrorControlColors();
         PropertyEditResult result;
         {
-            Theme::ScopedTextStyle ts(fonts.sans, InspectorTypography::Field * Theme::GetActiveTokens().sizes.uiScale, Theme::FontPx::Sans);
+            Theme::ScopedTextStyle ts(fonts.sans, InspectorTypography::Field(), Theme::FontPx::Sans);
             result.changed = ImGui::DragFloat("##value", &value, options.speed, options.minimum, options.maximum, options.format);
             result.committed = ImGui::IsItemDeactivatedAfterEdit();
         }
@@ -2219,7 +2290,7 @@ namespace Horo::Editor::Ui {
     PropertyEditResult DrawColor3PropRow(const char *label, const char *id, std::array<float, 3> &value, const Theme::Fonts &fonts,
                                          const bool error) {
         const PropertyRowLayout layout = BeginPropertyRow(label, fonts);
-        ImGui::SetCursorScreenPos({layout.controlX, layout.position.y + 3.0F});
+        ImGui::SetCursorScreenPos({layout.controlX, layout.controlY});
         ImGui::PushID(id);
         ImGui::PushItemWidth(layout.controlWidth);
         PushInspectorControlStyle();
@@ -2227,7 +2298,7 @@ namespace Horo::Editor::Ui {
             PushErrorControlColors();
         PropertyEditResult result;
         {
-            Theme::ScopedTextStyle ts(fonts.sans, InspectorTypography::Field * Theme::GetActiveTokens().sizes.uiScale, Theme::FontPx::Sans);
+            Theme::ScopedTextStyle ts(fonts.sans, InspectorTypography::Field(), Theme::FontPx::Sans);
             constexpr ImGuiColorEditFlags flags = ImGuiColorEditFlags_NoLabel | ImGuiColorEditFlags_Float | ImGuiColorEditFlags_DisplayRGB |
                                                   ImGuiColorEditFlags_PickerHueWheel;
             result.changed = ImGui::ColorEdit3("##value", value.data(), flags);
@@ -2246,14 +2317,13 @@ namespace Horo::Editor::Ui {
     Float3PropertyEditResult DrawFloat3PropRow(const char *label, const char *id, std::array<float, 3> &value, const Theme::Fonts &fonts,
                                                const float speed, const std::array<bool, 3> &mixed) {
         const PropertyRowLayout layout = BeginPropertyRow(label, fonts);
-        ImGui::SetCursorScreenPos({layout.controlX, layout.position.y + 3.0F});
+        ImGui::SetCursorScreenPos({layout.controlX, layout.controlY});
         ImGui::PushID(id);
         PushInspectorControlStyle();
         Float3PropertyEditResult result;
         {
-            const float scale = Theme::GetActiveTokens().sizes.uiScale;
-            const float valueFontSize = InspectorTypography::Field * scale;
-            const float axisFontSize = InspectorTypography::Axis * scale;
+            const float valueFontSize = InspectorTypography::Field();
+            const float axisFontSize = InspectorTypography::Axis();
             Theme::ScopedTextStyle ts(fonts.sans, valueFontSize, Theme::FontPx::Sans);
             constexpr std::array<const char *, 3> axisLabels{"X", "Y", "Z"};
             const std::array axisColors{Theme::Err(), Theme::Ok(), ImVec4{0.30F, 0.65F, 1.0F, 1.0F}};

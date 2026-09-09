@@ -40,7 +40,7 @@ namespace Horo::Editor {
 
         // Header
         {
-            Theme::ScopedTextStyle tsTitle(ctx.theme.fonts.sansEmphasis, 18.0f, Theme::FontPx::SansEmphasis);
+            Theme::ScopedTextStyle tsTitle(ctx.theme.fonts.sansEmphasis, Theme::TextPx::Title(), Theme::FontPx::SansEmphasis);
             const std::string openingFmt = ctx.localization.Get("editor", "project_loading.title.opening");
             std::string titleText = openingFmt + " '" + state.projectName + "'";
             ImGui::TextUnformatted(titleText.c_str());
@@ -50,7 +50,7 @@ namespace Horo::Editor {
 
         // Status Text & Percentage
         {
-            Theme::ScopedTextStyle tsStatus(ctx.theme.fonts.sans, 13.0f, Theme::FontPx::Sans);
+            Theme::ScopedTextStyle tsStatus(ctx.theme.fonts.sans, Theme::TextPx::Body(), Theme::FontPx::Sans);
             ImGui::PushStyleColor(ImGuiCol_Text, Theme::Muted());
             ImGui::TextUnformatted(state.statusText.c_str());
             ImGui::PopStyleColor();

@@ -22,7 +22,9 @@ namespace Horo::Editor {
             All,
             Ok,
             Failed,
-            Cached
+            Cached,
+            Errors,
+            Warning,
         };
 
         /** @brief Theme-independent semantic color role for a projected build status. */
@@ -75,10 +77,11 @@ namespace Horo::Editor {
         BuildOutputSnapshot m_snapshot;
         std::uint64_t m_revision{};
         std::array<char, 160> m_search{};
-        std::array<bool, 4> m_columnVisible{true, true, true, true};
         std::vector<std::size_t> m_filteredIndices;
         bool m_filterDirty{true};
         bool m_initialFollowTail{true};
+        int m_targetSelection{};
+        int m_configurationSelection{};
 
         StatusFilter m_statusFilter{StatusFilter::All};
     };

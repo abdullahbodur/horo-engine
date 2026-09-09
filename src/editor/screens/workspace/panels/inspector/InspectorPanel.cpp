@@ -17,7 +17,7 @@ namespace Horo::Editor {
     namespace {
         constexpr float DegreesToRadians = std::numbers::pi_v<float> / 180.0F;
 
-        /** @brief Maps an authored object kind to its typed Inspector header icon. */
+        /** @brief Maps each typed scene-object kind to the shared editor icon registry. */
         [[nodiscard]] Ui::UiIcon KindIcon(const SceneObjectKind kind) noexcept {
             using enum SceneObjectKind;
             switch (kind) {
@@ -499,7 +499,7 @@ namespace Horo::Editor {
         const std::string label =
             std::format("{} {}", selectedObjectCount, context.localization.Get("editor", "workspace.inspector.objects_selected"));
         {
-            Theme::ScopedTextStyle textStyle(context.theme.fonts.sansEmphasis, 16.0F, Theme::FontPx::SansEmphasis);
+            Theme::ScopedTextStyle textStyle(context.theme.fonts.sansEmphasis, Theme::TextPx::Title(), Theme::FontPx::SansEmphasis);
             ImGui::PushStyleColor(ImGuiCol_Text, Theme::Text());
             ImGui::TextUnformatted(label.c_str());
             ImGui::PopStyleColor();
@@ -525,7 +525,7 @@ namespace Horo::Editor {
             const float checkboxSize = 14.0F * uiScale;
             const float checkboxGap = 4.0F * uiScale;
             const float optionsWidth = 30.0F * uiScale;
-            const float staticFontSize = 11.0F * uiScale;
+            const float staticFontSize = Theme::TextPx::Label();
             const float staticTextWidth = fonts.sansCompact->CalcTextSizeA(staticFontSize, 1000.0F, 0.0F, staticLabel).x;
             return {.uiScale = uiScale,
                     .rowHeight = 38.0F * uiScale,
@@ -581,7 +581,7 @@ namespace Horo::Editor {
             Ui::DrawEditorIcon(drawList, Ui::UiIcon::MoreVertical, {position.x + iconInset, position.y + iconInset}, {iconSize, iconSize},
                                Theme::U32(hovered ? Theme::Text() : Theme::Muted()), context.theme.fonts.icon);
             if (hovered)
-                ImGui::SetTooltip("%s", tooltip);
+                Ui::ShowTooltip(tooltip, &context.theme.fonts);
             if (pressed)
                 ImGui::OpenPopup("##menu");
             if (Ui::BeginMenuPopup("##menu")) {

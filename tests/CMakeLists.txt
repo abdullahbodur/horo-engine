@@ -271,6 +271,7 @@ horo_register_catch_test(HoroNavigationApiTests LABELS "unit;navigation;headless
 
 add_executable(HoroWorldStreamingTests
         unit/runtime/world_streaming/CookedWorldIndexManifestTests.cpp
+        unit/runtime/world_streaming/FallbackStreamingProviderTests.cpp
         unit/runtime/world_streaming/StreamingBudgetModelTests.cpp
         unit/runtime/world_streaming/StreamingCellOperationTests.cpp
         unit/runtime/world_streaming/StreamingSchedulerAdmissionTests.cpp
@@ -530,6 +531,16 @@ add_executable(HoroProjectCompatibilityTests
 )
 target_compile_features(HoroProjectCompatibilityTests PRIVATE cxx_std_20)
 target_link_libraries(HoroProjectCompatibilityTests PRIVATE HoroEngine::Application)
+add_executable(HoroReleaseVersionTests
+        unit/application/ReleaseVersionTests.cpp
+)
+target_compile_features(HoroReleaseVersionTests PRIVATE cxx_std_20)
+target_link_libraries(HoroReleaseVersionTests PRIVATE HoroEngine::Application)
+add_executable(HoroDistributionModelTests
+        unit/application/DistributionModelTests.cpp
+)
+target_compile_features(HoroDistributionModelTests PRIVATE cxx_std_20)
+target_link_libraries(HoroDistributionModelTests PRIVATE HoroEngine::Application)
 add_executable(HoroProjectMigrationTests
         unit/application/ProjectMigrationTests.cpp
 )
@@ -1345,6 +1356,8 @@ set(HORO_CATCH_TEST_TARGETS
         HoroRendererAvailabilityTests
         HoroProjectMetadataTests
         HoroProjectCompatibilityTests
+        HoroReleaseVersionTests
+        HoroDistributionModelTests
         HoroProjectMigrationTests
         HoroProjectMigrationTransactionTests
         HoroProjectOpenServiceTests

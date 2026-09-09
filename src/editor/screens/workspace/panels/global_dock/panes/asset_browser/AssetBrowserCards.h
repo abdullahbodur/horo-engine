@@ -20,9 +20,15 @@ namespace Horo::Editor {
     struct AssetBrowserCardDrawContext {
         ImDrawList *drawList;
         ImFont *font;
+        ImFont *iconFont;
         float fontSize;
         const ImVec2 &cardMin;
         float cardWidth;
+        float cardHeight;
+        float previewWidth;
+        float previewHeight;
+        std::string_view secondaryText;
+        bool listView;
         bool hovered;
         bool selected;
         bool dimmed;

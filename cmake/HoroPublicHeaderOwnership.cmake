@@ -54,6 +54,9 @@ horo_configure_target_header_boundary(HoroApplication PUBLIC_HEADERS
     Horo/Application/ProjectMigration.h
     Horo/Application/ProjectMigrationCatalog.h
     Horo/Application/ProjectVersion.h
+    Horo/Release/DistributionModel.h
+    Horo/Release/ReleaseErrors.h
+    Horo/Release/ReleaseVersion.h
 )
 horo_configure_target_header_boundary(HoroPackages PUBLIC_HEADERS
     Horo/Packages/PackagePath.h
@@ -228,6 +231,7 @@ horo_configure_target_header_boundary(HoroNavigationNull PUBLIC_HEADERS
 )
 horo_configure_target_header_boundary(HoroWorldStreaming PUBLIC_HEADERS
     Horo/WorldStreaming/CookedWorldIndexManifest.h
+    Horo/WorldStreaming/FallbackStreamingProvider.h
     Horo/WorldStreaming/StreamingBudgetModel.h
     Horo/WorldStreaming/StreamingCellOperation.h
     Horo/WorldStreaming/StreamingSchedulerAdmission.h
@@ -352,6 +356,7 @@ horo_configure_target_header_boundary(HoroGui PUBLIC_HEADERS
     Horo/Editor/GuiScreen.h
     Horo/Editor/GuiScreenHost.h
     Horo/Editor/IWorkspacePanel.h
+    Horo/Editor/IGlobalDockPane.h
     Horo/Editor/ScreenRegistry.h
     Horo/Editor/SettingsModal.h
     Horo/Editor/SettingsModalDraft.h

@@ -42,6 +42,22 @@ a release is wrong, prefer a new corrective tag over mutating already-published
 artifacts unless the maintainer is deliberately repairing an unpublished or
 failed release attempt.
 
+### Semantic Version Authority
+
+Release candidates use the full bounded SemVer identity, including build
+metadata. Build metadata participates in exact candidate identity but is ignored
+for precedence. Engine and game product versions are distinct types and must not
+be interchanged.
+
+Before release work begins, boundary adapters read the requested version, tag,
+manifest, release notes, source revision, and—only for an engine product—the
+persistent project-contract version. A side-effect-free authority validator
+requires those claims to agree exactly. The persistent contract deliberately
+projects only the SemVer core and prerelease because durable project metadata
+does not carry release build metadata. Reading Git, manifests, or release notes
+and mutating those sources remain adapter responsibilities; validation never
+performs I/O or changes ambient state.
+
 ## Product Release Profiles
 
 A release profile defines what kind of product is being produced. Horo supports

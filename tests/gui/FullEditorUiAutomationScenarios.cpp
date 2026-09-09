@@ -105,7 +105,7 @@ namespace {
                 if (dock.Window == nullptr)
                     dock = ui.WindowInfo("//##DockBottomRight", ImGuiTestOpFlags_NoError);
                 IM_CHECK(dock.Window != nullptr);
-                ui.MouseMoveToPos({dock.RectClipped.GetCenter().x, dock.RectClipped.Max.y - 8.0F});
+                ui.MouseMoveToPos({dock.RectClipped.Max.x - 20.0F, dock.RectClipped.GetCenter().y});
                 ui.MouseClick(ImGuiMouseButton_Right);
                 ui.ItemClick(runtime == GameplayRuntimeKind::Lua ? "//**/###content_browser_create_lua_behavior"
                                                                  : "//**/###content_browser_create_native_behavior");

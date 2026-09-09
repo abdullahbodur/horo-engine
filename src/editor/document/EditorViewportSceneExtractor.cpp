@@ -241,14 +241,20 @@ namespace Horo::Editor {
 
     /** @copydoc EditorViewportSceneState::Replace */
     void EditorViewportSceneState::Replace(EditorViewportSceneSnapshot snapshot) {
+        const bool meshResourcesChanged =
+            !std::ranges::equal(m_snapshot.meshResources, snapshot.meshResources, std::ranges::equal_to{},
+                                &EditorViewportMeshResourceView::handle, &EditorViewportMeshResourceView::handle);
         m_snapshot = std::move(snapshot);
-        ++m_generation;
+        if (meshResourcesChanged)
+            ++m_meshResourceGeneration;
     }
 
     /** @copydoc EditorViewportSceneState::Clear */
     void EditorViewportSceneState::Clear() noexcept {
+        const bool hadMeshResources = !m_snapshot.meshResources.empty();
         m_snapshot = {};
-        ++m_generation;
+        if (hadMeshResources)
+            ++m_meshResourceGeneration;
     }
 
     /** @copydoc EditorViewportSceneState::View */

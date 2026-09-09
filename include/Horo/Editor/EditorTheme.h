@@ -166,6 +166,76 @@ namespace Horo::Editor::Theme {
         return Mix(BorderStrong(), Accent(), 0.03F);
     }
 
+    /** @brief Returns the elevated, opaque surface shared by editor tooltips. */
+    [[nodiscard]] inline ImVec4 TooltipSurface() {
+        return Mix(Bg3(), Bg0(), 0.20F);
+    }
+
+    /** @brief Returns the subtly accent-tinted border shared by editor tooltips. */
+    [[nodiscard]] inline ImVec4 TooltipBorder() {
+        return Mix(BorderStrong(), Accent(), 0.12F);
+    }
+
+    /** @brief Shared elevated toolbar surface used by every bottom-dock tab. */
+    [[nodiscard]] inline ImVec4 BottomDockToolbarSurface() {
+        return Mix(Bg1(), Bg2(), 0.35F);
+    }
+
+    /** @brief Shared content surface directly below a bottom-dock toolbar. */
+    [[nodiscard]] inline ImVec4 BottomDockContentSurface() {
+        return Bg1();
+    }
+
+    /** @brief Shared field and action surface inside bottom-dock toolbars. */
+    [[nodiscard]] inline ImVec4 BottomDockControlSurface() {
+        return Mix(Bg2(), Bg3(), 0.20F);
+    }
+
+    /** @brief Shared elevated card surface used by bottom-dock metric summaries. */
+    [[nodiscard]] inline ImVec4 BottomDockMetricSurface() {
+        return Mix(Bg1(), Bg2(), 0.45F);
+    }
+
+    [[nodiscard]] inline ImVec4 ConsoleFooterSurface() {
+        return Mix(Bg1(), Bg0(), 0.28F);
+    }
+
+    [[nodiscard]] inline ImVec4 ConsoleRowBorder() {
+        return Mix(Border(), Bg0(), 0.48F);
+    }
+
+    [[nodiscard]] inline ImVec4 ConsoleInfo() {
+        return Mix(Accent(), Text(), 0.10F);
+    }
+
+    [[nodiscard]] inline ImVec4 ConsoleWarning() {
+        return Mix(Warn(), Text(), 0.08F);
+    }
+
+    [[nodiscard]] inline ImVec4 ConsoleError() {
+        return Mix(Err(), Text(), 0.08F);
+    }
+
+    [[nodiscard]] inline ImVec4 ConsoleErrorSurface() {
+        ImVec4 color = Mix(Bg0(), Err(), 0.17F);
+        color.w = 1.0F;
+        return color;
+    }
+
+    [[nodiscard]] inline ImVec4 ConsoleErrorBorder() {
+        ImVec4 color = Mix(Border(), Err(), 0.45F);
+        color.w = 0.65F;
+        return color;
+    }
+
+    [[nodiscard]] inline ImVec4 ConsoleSourceText() {
+        return Mix(Text(), Muted(), 0.28F);
+    }
+
+    [[nodiscard]] inline ImVec4 ConsoleMessageText() {
+        return Mix(Text(), Muted(), 0.12F);
+    }
+
     [[nodiscard]] inline ImU32 U32(const ImVec4 &c) {
         return ImGui::GetColorU32(c);
     }
@@ -186,6 +256,44 @@ namespace Horo::Editor::Theme {
         constexpr float SansEmphasis = DesignSystem::DefaultDesignTokens().typography.sansEmphasisBase;
         constexpr float Icon = 16.0f; /**< Pixel size for Material Symbols icon font. */
     }  // namespace FontPx
+
+    /** @brief Theme-resolved semantic visible-text sizes. */
+    namespace TextPx {
+        /** @brief Returns the supporting metadata and secondary-text size. @return Theme-resolved logical pixels. */
+        [[nodiscard]] inline float Caption() {
+            return DesignSystem::TypographyFor(GetActiveTokens(), DesignSystem::TypographyRole::Caption);
+        }
+
+        /** @brief Returns the controls, tabs, tree rows, badges, and field-label size. @return Theme-resolved logical pixels. */
+        [[nodiscard]] inline float Label() {
+            return DesignSystem::TypographyFor(GetActiveTokens(), DesignSystem::TypographyRole::Label);
+        }
+
+        /** @brief Returns the standard paragraph and primary-content size. @return Theme-resolved logical pixels. */
+        [[nodiscard]] inline float Body() {
+            return DesignSystem::TypographyFor(GetActiveTokens(), DesignSystem::TypographyRole::Body);
+        }
+
+        /** @brief Returns the compact card and component-section title size. @return Theme-resolved logical pixels. */
+        [[nodiscard]] inline float CardTitle() {
+            return DesignSystem::TypographyFor(GetActiveTokens(), DesignSystem::TypographyRole::CardTitle);
+        }
+
+        /** @brief Returns the panel and modal-title size. @return Theme-resolved logical pixels. */
+        [[nodiscard]] inline float Title() {
+            return DesignSystem::TypographyFor(GetActiveTokens(), DesignSystem::TypographyRole::Title);
+        }
+
+        /** @brief Returns the section-heading size. @return Theme-resolved logical pixels. */
+        [[nodiscard]] inline float Heading() {
+            return DesignSystem::TypographyFor(GetActiveTokens(), DesignSystem::TypographyRole::Heading);
+        }
+
+        /** @brief Returns the top-level screen-heading size. @return Theme-resolved logical pixels. */
+        [[nodiscard]] inline float Display() {
+            return DesignSystem::TypographyFor(GetActiveTokens(), DesignSystem::TypographyRole::Display);
+        }
+    }  // namespace TextPx
 
     [[nodiscard]] constexpr float Scale(float targetPx, float basePx) {
         return targetPx / basePx;

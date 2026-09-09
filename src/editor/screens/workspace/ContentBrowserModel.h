@@ -77,6 +77,7 @@ namespace Horo::Editor {
         bool moduleChanged{false};              /**< Active module identity/version differs from metadata. */
         std::string absoluteMetadataPath;       /**< Existing absolute identity-sidecar path, when available. */
         std::uintmax_t byteSize{};              /**< Source payload size; zero for directories or unavailable values. */
+        std::size_t containedItemCount{};       /**< Direct non-sidecar children for directory cards. */
         std::size_t dependencyCount{};          /**< Direct dependencies recorded by this asset's import metadata. */
         bool registered{false};                 /**< Whether the authoritative Asset Registry owns this asset. */
         Assets::AssetPreviewImage previewImage; /**< Optional module-produced RGBA8 card preview. */

@@ -27,7 +27,7 @@ namespace Horo::Editor {
         int themeIndex = 0;
         std::string customThemePath = "~/.horo/themes/my-theme.json";
         int uiScale = 100;
-        std::string editorFontSize = "15";
+        std::string editorFontSize = "14";
         std::string accentHex = "#04A5FC";
         int pendingThemeIndex = -1;
     };

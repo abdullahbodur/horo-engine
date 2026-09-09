@@ -146,6 +146,42 @@ future architecture update.
 
 ## UI Text
 
+### Semantic typography scale
+
+Visible editor text uses semantic theme roles rather than feature-local pixel
+sizes. The packaged scale is:
+
+| Role | Default | Use |
+| --- | ---: | --- |
+| `caption` | 14 px | metadata, hints, secondary and supporting text |
+| `label` | 14 px | controls, tabs, tree rows, badges and field labels |
+| `body` | 16 px | paragraphs and primary content |
+| `cardTitle` | 16 px | compact card and component-section titles |
+| `title` | 18 px | panel and modal titles |
+| `heading` | 22 px | section headings comparable to H2 |
+| `display` | 28 px | top-level screen headings comparable to H1 |
+
+Feature code obtains these sizes through `Theme::TextPx` and selects the font
+family or emphasis separately. It must not introduce raw visible font sizes.
+Theme overrides may customize the scale, but normalization preserves a 14 px
+minimum and the ordering `body <= cardTitle <= title <= heading <= display`. Component-size
+tokens may change padding and interaction geometry without making visible text
+smaller than the active `caption` role.
+
+Bottom-dock tabs share the semantic `BottomDockToolbarSurface`,
+`BottomDockContentSurface`, and `BottomDockControlSurface` theme roles. The
+toolbar is intentionally elevated above the content surface; individual tabs
+must not replace this hierarchy with feature-local toolbar colors.
+
+Every bottom-dock pane uses the shared `GlobalDockPaneLayout` metrics and region
+partitioning. A pane may omit its top toolbar or footer and may request a left
+rail, but it does not redefine the canonical toolbar, control, table, spacing,
+or footer dimensions. `GlobalDockPanel` owns registered panes through
+`IGlobalDockPane`; built-in and internal module-provided panes use the same
+stable identity, localization-key, attach/detach, and draw contract. Pane
+registration is completed before panel attachment so service lifetimes remain
+explicit and the frame-hot draw path performs no ownership mutation.
+
 User-facing component text uses `UiText` rather than raw visible strings:
 
 ```cpp
@@ -280,6 +316,11 @@ badges, menu items, and other controls:
 available horizontal space and token-backed padding overrides. Component size
 remains the primary geometry contract: `XS`, `Small`, `Medium`, `Large`, and
 `XL` resolve font size, padding, minimum height, and icon size together.
+
+Tooltips use the shared `Ui::ShowTooltip` or `Ui::ScopedTooltip` primitives.
+Their surface, border, radius, padding, typography, wrapping width, and display
+scale resolve from the active design tokens; feature code must not call raw
+ImGui tooltip APIs or define local tooltip chrome.
 
 The base values are theme data rather than component implementation literals.
 Custom themes discovered under `~/.horo/themes/` may override them with:
@@ -421,6 +462,10 @@ any explicit conversion creates reviewed runtime values rather than a live link.
 
 All visual values are referenced through typed design tokens. Components do not
 hardcode colors, font sizes, spacing, radii, or standard dimensions.
+
+Inspector property rows obtain their vertical control separation from the
+theme's `propertyRowGap` spacing token. Feature panels must not collapse or
+override that gap with local cursor offsets.
 
 ```cpp
 struct TypographyTokens {
