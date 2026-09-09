@@ -26,8 +26,10 @@ namespace Horo::Audio {
 
         [[nodiscard]] bool HasDuplicateBinding(const std::span<const AudioMediaFormatBinding> bindings) noexcept {
             for (std::size_t candidate = 0; candidate < bindings.size(); ++candidate) {
-                if (std::ranges::find(bindings.first(candidate), bindings[candidate]) != bindings.begin() + candidate)
-                    return true;
+                for (std::size_t prior = 0; prior < candidate; ++prior) {
+                    if (bindings[prior] == bindings[candidate])
+                        return true;
+                }
             }
             return false;
         }
