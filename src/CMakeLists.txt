@@ -313,6 +313,7 @@ add_library(HoroAudioApi STATIC
         audio/api/AudioDeviceNegotiation.cpp
         audio/api/AudioDeviceTiming.cpp
         audio/api/AudioFormat.cpp
+        audio/api/AudioMediaFormatRegistry.cpp
         audio/api/AudioPlanarBlock.cpp
         audio/api/AudioErrors.cpp
         audio/api/AudioResamplerPlan.cpp
