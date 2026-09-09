@@ -220,9 +220,9 @@ namespace Horo::Physics {
             if (joined.HasValue())
                 return joined;
             group.RequestCancel();
-            const Result<void> drained = group.Join({.waitPolicy = WaitPolicy::OwnerThreadBlockAllowed,
-                                                     .timeout = Duration::FromNanoseconds(std::numeric_limits<std::int64_t>::max())});
-            if (drained.HasError() && SameErrorCode(joined.ErrorValue(), drained.ErrorValue()))
+            if (const Result<void> drained = group.Join({.waitPolicy = WaitPolicy::OwnerThreadBlockAllowed,
+                                                         .timeout = Duration::FromNanoseconds(std::numeric_limits<std::int64_t>::max())});
+                drained.HasError() && SameErrorCode(joined.ErrorValue(), drained.ErrorValue()))
                 return joined;
             return Result<void>::Failure(MakeError(PhysicsErrors::SolverDeadlineExceeded));
         }
@@ -240,9 +240,9 @@ namespace Horo::Physics {
 
         /** @brief Checks sequence and exact fixed delta before a tick begins. */
         [[nodiscard]] Result<void> ValidateTickInput(const auto &impl, const PhysicsFixedTickInput &input) {
-            const auto configuredNanoseconds =
-                static_cast<std::int64_t>(std::llround(impl.settings.Values().world.fixedDeltaSeconds * 1'000'000'000.0));
-            if (input.simulationTick == 0 || input.simulationTick != impl.published.completedTick + 1 ||
+            if (const auto configuredNanoseconds =
+                    static_cast<std::int64_t>(std::llround(impl.settings.Values().world.fixedDeltaSeconds * 1'000'000'000.0));
+                input.simulationTick == 0 || input.simulationTick != impl.published.completedTick + 1 ||
                 input.fixedDelta.ToNanoseconds() != configuredNanoseconds)
                 return Result<void>::Failure(MakeError(PhysicsErrors::DescriptorInvalid,
                                                        "Physics requires the next one-based tick and the world's exact fixed delta."));

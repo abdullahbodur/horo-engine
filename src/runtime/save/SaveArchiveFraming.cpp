@@ -60,8 +60,8 @@ namespace Horo::Runtime {
             for (const SaveChunkDirectoryEntry &entry : directory.entries) {
                 const bool layoutValid = HasValidEntryLayout(entry, expectedOffset, directory.payloadByteLength, limits);
                 const bool orderValid = previousRecord == nullptr || *previousRecord < entry.record;
-                const SaveParticipantId *owner = FindManifestOwner(manifest, entry.record);
-                if (!layoutValid || !orderValid || owner == nullptr || *owner != entry.owner)
+                if (const SaveParticipantId *owner = FindManifestOwner(manifest, entry.record);
+                    !layoutValid || !orderValid || owner == nullptr || *owner != entry.owner)
                     return false;
                 expectedOffset += entry.storedByteLength;
                 previousRecord = &entry.record;
