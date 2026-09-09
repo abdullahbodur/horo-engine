@@ -20,8 +20,7 @@ namespace Horo::WorldStreaming::WorldStreamingErrors {
     }  // namespace
 
     const ErrorCodeDescriptor RuntimeCompositionInvalid =
-        Describe("world_streaming.runtime_composition.invalid", ErrorSeverity::Error,
-                 "A World Streaming runtime composition is malformed.",
+        Describe("world_streaming.runtime_composition.invalid", ErrorSeverity::Error, "A World Streaming runtime composition is malformed.",
                  "Provide one explicit planner, asset provider and Scene runtime plus bounded feature adapters and a valid scheduler.",
                  true);
     const ErrorCodeDescriptor RuntimeCompositionIdentityConflict =
