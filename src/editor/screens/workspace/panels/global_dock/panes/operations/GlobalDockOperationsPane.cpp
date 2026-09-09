@@ -232,22 +232,22 @@ namespace Horo::Editor {
         using enum StateFilter;
         const Theme::Fonts &fonts = context.theme.fonts;
         const GlobalDockPaneMetrics metrics = ResolveGlobalDockPaneMetrics();
-        const GlobalDockToolbarChipProps filters[]{
-            {.id = "OperationsAll",
-             .label = context.localization.Get("editor", "workspace.global_dock.operations.filter.all"),
-             .active = m_stateFilter == All},
-            {.id = "OperationsRunning",
-             .label = context.localization.Get("editor", "workspace.global_dock.operations.filter.running"),
-             .count = counts.running,
-             .tone = GlobalDockTone::Accent,
-             .active = m_stateFilter == Running},
-            {.id = "OperationsFailed",
-             .label = context.localization.Get("editor", "workspace.global_dock.operations.filter.failed"),
-             .count = counts.failed,
-             .tone = GlobalDockTone::Error,
-             .active = m_stateFilter == Failed},
+        const std::array<GlobalDockToolbarChipProps, 3> filters{
+            GlobalDockToolbarChipProps{.id = "OperationsAll",
+                                       .label = context.localization.Get("editor", "workspace.global_dock.operations.filter.all"),
+                                       .active = m_stateFilter == All},
+            GlobalDockToolbarChipProps{.id = "OperationsRunning",
+                                       .label = context.localization.Get("editor", "workspace.global_dock.operations.filter.running"),
+                                       .count = counts.running,
+                                       .tone = GlobalDockTone::Accent,
+                                       .active = m_stateFilter == Running},
+            GlobalDockToolbarChipProps{.id = "OperationsFailed",
+                                       .label = context.localization.Get("editor", "workspace.global_dock.operations.filter.failed"),
+                                       .count = counts.failed,
+                                       .tone = GlobalDockTone::Error,
+                                       .active = m_stateFilter == Failed},
         };
-        const StateFilter states[]{All, Running, Failed};
+        const std::array states{All, Running, Failed};
         float nextX = x;
         for (std::size_t index = 0; index < std::size(filters); ++index) {
             const float width = MeasureGlobalDockToolbarChip(filters[index], fonts);
