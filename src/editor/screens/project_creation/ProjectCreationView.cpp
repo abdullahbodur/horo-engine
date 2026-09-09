@@ -152,17 +152,18 @@ namespace Horo::Editor {
         }
 
         [[nodiscard]] bool HasIdentityBlockingDiagnostic(const ProjectCreationValidation &validation) {
+            using enum ProjectCreationDiagnosticCode;
             for (const ProjectCreationDiagnostic &diagnostic : validation.diagnostics) {
                 switch (diagnostic.code) {
-                    case ProjectCreationDiagnosticCode::ProjectNameRequired:
-                    case ProjectCreationDiagnosticCode::ProjectNameContainsPathSeparator:
-                    case ProjectCreationDiagnosticCode::ProjectPathRequired:
-                    case ProjectCreationDiagnosticCode::ProjectPathOccupied:
-                    case ProjectCreationDiagnosticCode::ProjectPathNotDirectory:
-                    case ProjectCreationDiagnosticCode::ProjectPathInaccessible:
-                    case ProjectCreationDiagnosticCode::ProjectParentNotWritable:
+                    case ProjectNameRequired:
+                    case ProjectNameContainsPathSeparator:
+                    case ProjectPathRequired:
+                    case ProjectPathOccupied:
+                    case ProjectPathNotDirectory:
+                    case ProjectPathInaccessible:
+                    case ProjectParentNotWritable:
                         return true;
-                    case ProjectCreationDiagnosticCode::RendererBackendUnavailable:
+                    case RendererBackendUnavailable:
                         break;
                 }
             }
@@ -170,17 +171,18 @@ namespace Horo::Editor {
         }
 
         [[nodiscard]] const ProjectCreationDiagnostic *FirstIdentityBlockingDiagnostic(const ProjectCreationValidation &validation) {
+            using enum ProjectCreationDiagnosticCode;
             for (const ProjectCreationDiagnostic &diagnostic : validation.diagnostics) {
                 switch (diagnostic.code) {
-                    case ProjectCreationDiagnosticCode::ProjectNameRequired:
-                    case ProjectCreationDiagnosticCode::ProjectNameContainsPathSeparator:
-                    case ProjectCreationDiagnosticCode::ProjectPathRequired:
-                    case ProjectCreationDiagnosticCode::ProjectPathOccupied:
-                    case ProjectCreationDiagnosticCode::ProjectPathNotDirectory:
-                    case ProjectCreationDiagnosticCode::ProjectPathInaccessible:
-                    case ProjectCreationDiagnosticCode::ProjectParentNotWritable:
+                    case ProjectNameRequired:
+                    case ProjectNameContainsPathSeparator:
+                    case ProjectPathRequired:
+                    case ProjectPathOccupied:
+                    case ProjectPathNotDirectory:
+                    case ProjectPathInaccessible:
+                    case ProjectParentNotWritable:
                         return &diagnostic;
-                    case ProjectCreationDiagnosticCode::RendererBackendUnavailable:
+                    case RendererBackendUnavailable:
                         break;
                 }
             }

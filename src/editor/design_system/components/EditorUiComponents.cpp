@@ -245,6 +245,17 @@ namespace Horo::Editor::Ui {
             bool hovered{false};
         };
 
+        /** @brief Visual content rendered over one custom context-menu row. */
+        struct ContextMenuRowPresentation {
+            const char *label;
+            const char *shortcut;
+            const Theme::Fonts &fonts;
+            ImVec4 textColor;
+            bool highlighted;
+            bool submenu;
+            std::string_view iconToken;
+        };
+
         [[nodiscard]] ContextMenuRow DrawContextMenuRow(const char *id, const bool selected, const bool keepPopupOpen = false,
                                                         const bool enabled = true) {
             constexpr float rowHeight = 30.0F;
@@ -266,32 +277,32 @@ namespace Horo::Editor::Ui {
             };
         }
 
-        void DrawContextMenuRowPresentation(const ContextMenuRow &row, const char *label, const char *shortcut, const Theme::Fonts &fonts,
-                                            const ImVec4 textColor, const bool highlighted, const bool submenu,
-                                            const std::string_view iconToken = {}) {
+        void DrawContextMenuRowPresentation(const ContextMenuRow &row, const ContextMenuRowPresentation &presentation) {
             ImDrawList *drawList = ImGui::GetWindowDrawList();
             const float scale = Theme::GetActiveTokens().sizes.uiScale;
             const float fontSize = 14.0F * scale;
-            if (highlighted)
+            if (presentation.highlighted)
                 drawList->AddRectFilled(row.minimum, row.maximum, Theme::U32(Theme::Hover()), ScaledLayoutValue(3.0F));
 
-            const char *labelEnd = std::strstr(label, "###");
+            const char *labelEnd = std::strstr(presentation.label, "###");
             const float textY = row.minimum.y + (row.maximum.y - row.minimum.y - fontSize) * 0.5F;
             float labelX = row.minimum.x + ScaledLayoutValue(10.0F);
-            if (const std::optional<UiIcon> icon = UiIconRegistry::Resolve(iconToken); icon.has_value()) {
+            if (const std::optional<UiIcon> icon = UiIconRegistry::Resolve(presentation.iconToken); icon.has_value()) {
                 constexpr float iconSize = 16.0F;
                 DrawEditorIcon(drawList, *icon,
                                {labelX, row.minimum.y + (row.maximum.y - row.minimum.y - ScaledLayoutValue(iconSize)) * 0.5F},
-                               {ScaledLayoutValue(iconSize), ScaledLayoutValue(iconSize)}, Theme::U32(textColor), fonts.icon);
+                               {ScaledLayoutValue(iconSize), ScaledLayoutValue(iconSize)}, Theme::U32(presentation.textColor),
+                               presentation.fonts.icon);
                 labelX += ScaledLayoutValue(23.0F);
             }
-            drawList->AddText(fonts.sans, fontSize, {labelX, textY}, Theme::U32(textColor), label, labelEnd);
-            if (shortcut != nullptr && shortcut[0] != '\0') {
-                const ImVec2 shortcutSize = fonts.sans->CalcTextSizeA(fontSize, FLT_MAX, 0.0F, shortcut);
-                drawList->AddText(fonts.sans, fontSize, {row.maximum.x - ScaledLayoutValue(10.0F) - shortcutSize.x, textY},
-                                  Theme::U32(Theme::Dim()), shortcut);
+            drawList->AddText(presentation.fonts.sans, fontSize, {labelX, textY}, Theme::U32(presentation.textColor), presentation.label,
+                              labelEnd);
+            if (presentation.shortcut != nullptr && presentation.shortcut[0] != '\0') {
+                const ImVec2 shortcutSize = presentation.fonts.sans->CalcTextSizeA(fontSize, FLT_MAX, 0.0F, presentation.shortcut);
+                drawList->AddText(presentation.fonts.sans, fontSize, {row.maximum.x - ScaledLayoutValue(10.0F) - shortcutSize.x, textY},
+                                  Theme::U32(Theme::Dim()), presentation.shortcut);
             }
-            if (submenu) {
+            if (presentation.submenu) {
                 const float arrowX = row.maximum.x - ScaledLayoutValue(10.0F);
                 const float arrowY = (row.minimum.y + row.maximum.y) * 0.5F;
                 drawList->AddTriangleFilled({arrowX - 3.0F * scale, arrowY - 4.0F * scale}, {arrowX - 3.0F * scale, arrowY + 4.0F * scale},
@@ -1791,7 +1802,11 @@ namespace Horo::Editor::Ui {
             ImGui::PopID();
 
             const bool hovered = ImGui::IsItemHovered();
-            const ImVec4 textColor = active ? Theme::Text() : hovered ? Theme::Dim() : Theme::Muted();
+            ImVec4 textColor = Theme::Muted();
+            if (active)
+                textColor = Theme::Text();
+            else if (hovered)
+                textColor = Theme::Dim();
             drawList.AddText(font, fontSize, {tabX + horizontalPadding, origin.y + (tabHeight - textSize.y) * 0.5F}, Theme::U32(textColor),
                              tabs[index]);
             if (active) {
@@ -1881,10 +1896,10 @@ namespace Horo::Editor::Ui {
                 if (menuItem.separatorBefore)
                     ContextMenuSeparator();
                 ImGui::PushID(menuItem.id);
-                const bool selected = ContextMenuItem(menuItem.label, nullptr, fonts,
-                                                      menuItem.destructive ? ContextMenuItemTone::Danger : ContextMenuItemTone::Normal,
-                                                      UiIconRegistry::Token(menuItem.icon), menuItem.enabled);
-                if (selected && menuItem.onInvoke)
+                if (const bool selected = ContextMenuItem(menuItem.label, nullptr, fonts,
+                                                          menuItem.destructive ? ContextMenuItemTone::Danger : ContextMenuItemTone::Normal,
+                                                          UiIconRegistry::Token(menuItem.icon), menuItem.enabled);
+                    selected && menuItem.onInvoke)
                     menuItem.onInvoke();
                 ImGui::PopID();
             }
@@ -1909,7 +1924,9 @@ namespace Horo::Editor::Ui {
             if (hovered)
                 drawList.AddRectFilled({x, titlePosition.y + 5.0F}, {x + toolSize, titlePosition.y + 5.0F + toolSize},
                                        Theme::U32(Theme::Hover()), 3.0F);
-            ImVec4 resolvedColor = hovered ? Theme::Text() : action.active ? Theme::Accent() : Theme::Muted();
+            ImVec4 resolvedColor = action.active ? Theme::Accent() : Theme::Muted();
+            if (hovered)
+                resolvedColor = Theme::Text();
             if (!action.enabled)
                 resolvedColor.w *= 0.45F;
             DrawEditorIcon(&drawList, action.icon, {x + 4.0F, titlePosition.y + 9.0F}, {16.0F, 16.0F}, Theme::U32(resolvedColor),
@@ -2109,11 +2126,14 @@ namespace Horo::Editor::Ui {
         const char *stableId = std::strstr(label, "###");
         if (stableId == nullptr)
             ImGui::PushID(label);
-        const ContextMenuRow row = DrawContextMenuRow(stableId != nullptr ? stableId : "##item", false, false, enabled);
+        const char *rowId = stableId != nullptr ? stableId : "##item";
+        const ContextMenuRow row = DrawContextMenuRow(rowId, false, false, enabled);
         if (stableId == nullptr)
             ImGui::PopID();
-        const ImVec4 textColor = !enabled ? Theme::Dim() : tone == ContextMenuItemTone::Danger ? Theme::Err() : Theme::Text();
-        DrawContextMenuRowPresentation(row, label, shortcut, fonts, textColor, row.hovered && enabled, false, iconToken);
+        ImVec4 textColor = tone == ContextMenuItemTone::Danger ? Theme::Err() : Theme::Text();
+        if (!enabled)
+            textColor = Theme::Dim();
+        DrawContextMenuRowPresentation(row, {label, shortcut, fonts, textColor, row.hovered && enabled, false, iconToken});
         return enabled && row.activated;
     }
 
@@ -2127,7 +2147,7 @@ namespace Horo::Editor::Ui {
         const ContextMenuRow row = DrawContextMenuRow(stableId != nullptr ? stableId : "##submenu", wasOpen, true);
         if (stableId == nullptr)
             ImGui::PopID();
-        DrawContextMenuRowPresentation(row, label, nullptr, fonts, Theme::Text(), row.hovered || wasOpen, true, iconToken);
+        DrawContextMenuRowPresentation(row, {label, nullptr, fonts, Theme::Text(), row.hovered || wasOpen, true, iconToken});
         if (row.hovered || row.activated)
             ImGui::OpenPopup(popupId.c_str());
 

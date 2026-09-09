@@ -49,6 +49,41 @@ namespace Horo::Editor {
             return false;
         }
 
+        [[nodiscard]] bool IsActivityItemActive(const std::string &panelId, const EditorWorkspaceViewModel &viewModel) {
+            return panelId == viewModel.activeLeftPanelId || panelId == viewModel.activeRightPanelId ||
+                   panelId == viewModel.activeLeftTopPanelId || panelId == viewModel.activeLeftBottomPanelId ||
+                   panelId == viewModel.activeRightTopPanelId || panelId == viewModel.activeRightBottomPanelId ||
+                   panelId == viewModel.activeBottomLeftPanelId || panelId == viewModel.activeBottomRightPanelId ||
+                   panelId == viewModel.activeBottomPanelId || panelId == viewModel.activeDocumentPanelId;
+        }
+
+        [[nodiscard]] bool IsActiveInBottomSplit(const std::string &panelId, const EditorWorkspaceViewModel &viewModel) {
+            return viewModel.bottomDockMode == BottomDockMode::Split &&
+                   (panelId == viewModel.activeBottomLeftPanelId || panelId == viewModel.activeBottomRightPanelId);
+        }
+
+        [[nodiscard]] bool IsActiveInSideSplit(const std::string &panelId, const EditorWorkspaceViewModel &viewModel) {
+            return (viewModel.leftDockMode == SideDockMode::Split &&
+                    (panelId == viewModel.activeLeftTopPanelId || panelId == viewModel.activeLeftBottomPanelId)) ||
+                   (viewModel.rightDockMode == SideDockMode::Split &&
+                    (panelId == viewModel.activeRightTopPanelId || panelId == viewModel.activeRightBottomPanelId));
+        }
+
+        [[nodiscard]] int ActivityBarAreaIndex(const WorkspaceDockArea area) {
+            using enum WorkspaceDockArea;
+            switch (area) {
+                case Left:
+                    return 0;
+                case Right:
+                    return 1;
+                case Bottom:
+                    return 2;
+                case Document:
+                    return 3;
+            }
+            return 3;
+        }
+
         void DrawAllocationTarget(const AllocationTarget &target, const EditorWorkspaceViewModel &viewModel,
                                   EditorWorkspaceViewCommandData &outCommand, const bool panelDragEligible) {
             if (target.hitSize.x <= 0.0F || target.hitSize.y <= 0.0F) {
@@ -1057,8 +1092,8 @@ namespace Horo::Editor {
         // Preserve panel rearrangement without adding visible host chrome. The
         // panel-owned top tab/title region doubles as the drag initiation area.
         const float dragRegionHeight = 28.0F * Theme::GetActiveTokens().sizes.uiScale;
-        const bool pointerInDragRegion = ImGui::IsMouseHoveringRect(pos, ImVec2(pos.x + size.x, pos.y + dragRegionHeight), false);
-        if (!m_splitterInteraction.OwnsPrimaryPointer() && pointerInDragRegion && ImGui::IsMouseDragging(ImGuiMouseButton_Left) &&
+        if (const bool pointerInDragRegion = ImGui::IsMouseHoveringRect(pos, ImVec2(pos.x + size.x, pos.y + dragRegionHeight), false);
+            !m_splitterInteraction.OwnsPrimaryPointer() && pointerInDragRegion && ImGui::IsMouseDragging(ImGuiMouseButton_Left) &&
             ImGui::BeginDragDropSource(ImGuiDragDropFlags_SourceExtern)) {
             if (EnsurePanelDragCapture()) {
                 ImGui::SetDragDropPayload("HORO_WORKSPACE_PANEL", activePanelId.data(), activePanelId.size());
@@ -1238,9 +1273,9 @@ namespace Horo::Editor {
         const float usableHeight = (std::max)(0.0F, size.y - contentMin.y - activityBarBottomPadding);
         const ActivityBarGeometry geometry{cellX, contentY, cellWidth, cellHeight, cellGap, drawList};
         const float cellStride = cellHeight + cellGap;
-        const auto groupExtent = [cellHeight, cellStride, draggingActivityItem](const ActivityBarGroup &group) {
+        const auto groupExtent = [cellStride, draggingActivityItem](const ActivityBarGroup &group) {
             const std::size_t slotCount = group.items.size() + (draggingActivityItem ? 1U : 0U);
-            return slotCount == 0U ? 0.0F : cellHeight + static_cast<float>(slotCount - 1U) * cellStride;
+            return slotCount == 0U ? 0.0F : static_cast<float>(slotCount) * cellStride - cellGap;
         };
 
         float topGroupY = 0.0F;
@@ -1309,33 +1344,16 @@ namespace Horo::Editor {
             panelArea = placement->second;
         }
 
-        const bool isActive = panelId == viewModel.activeLeftPanelId || panelId == viewModel.activeRightPanelId ||
-                              panelId == viewModel.activeLeftTopPanelId || panelId == viewModel.activeLeftBottomPanelId ||
-                              panelId == viewModel.activeRightTopPanelId || panelId == viewModel.activeRightBottomPanelId ||
-                              panelId == viewModel.activeBottomLeftPanelId || panelId == viewModel.activeBottomRightPanelId ||
-                              panelId == viewModel.activeBottomPanelId || panelId == viewModel.activeDocumentPanelId;
-        const bool activeInBottomSplit = viewModel.bottomDockMode == BottomDockMode::Split &&
-                                         (panelId == viewModel.activeBottomLeftPanelId || panelId == viewModel.activeBottomRightPanelId);
-        const bool activeInSideSplit = (viewModel.leftDockMode == SideDockMode::Split &&
-                                        (panelId == viewModel.activeLeftTopPanelId || panelId == viewModel.activeLeftBottomPanelId)) ||
-                                       (viewModel.rightDockMode == SideDockMode::Split &&
-                                        (panelId == viewModel.activeRightTopPanelId || panelId == viewModel.activeRightBottomPanelId));
+        const bool isActive = IsActivityItemActive(panelId, viewModel);
+        const bool activeInBottomSplit = IsActiveInBottomSplit(panelId, viewModel);
+        const bool activeInSideSplit = IsActiveInSideSplit(panelId, viewModel);
         const ImVec2 itemMin(geometry.cellX, geometry.contentY + y);
         const ImVec2 itemMax(geometry.cellX + geometry.cellWidth, geometry.contentY + y + geometry.cellHeight);
         ImGui::SetCursorScreenPos(itemMin);
         ImGui::PushID(panelId.c_str());
         if (ImGui::InvisibleButton("##ActivityItem", ImVec2(geometry.cellWidth, geometry.cellHeight))) {
-            using enum WorkspaceDockArea;
-            int areaIndex = 3;
-            if (panelArea == Left) {
-                areaIndex = 0;
-            } else if (panelArea == Right) {
-                areaIndex = 1;
-            } else if (panelArea == Bottom) {
-                areaIndex = 2;
-            }
             outCommand.command = EditorWorkspaceViewCommand::ChangeActivePanel;
-            outCommand.targetIndex = areaIndex;
+            outCommand.targetIndex = ActivityBarAreaIndex(panelArea);
             outCommand.stringPayload = isActive && !activeInBottomSplit && !activeInSideSplit ? std::string{} : panelId;
         }
         if (options.allowDragSources && ImGui::BeginDragDropSource(ImGuiDragDropFlags_SourceAllowNullID)) {

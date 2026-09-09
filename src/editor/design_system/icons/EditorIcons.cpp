@@ -353,16 +353,17 @@ namespace Horo::Editor::Ui {
         }
 
         [[nodiscard]] constexpr ImWchar MaterialSymbolGlyph(const UiIcon icon) noexcept {
+            using enum UiIcon;
             switch (icon) {
-                case UiIcon::Reset:
+                case Reset:
                     return 0xF053;  // restart_alt
-                case UiIcon::Check:
+                case Check:
                     return 0xE834;  // check_box
-                case UiIcon::CheckboxUnchecked:
+                case CheckboxUnchecked:
                     return 0xE835;  // check_box_outline_blank
-                case UiIcon::Settings:
+                case Settings:
                     return 0xE8B8;  // settings
-                case UiIcon::MoreVertical:
+                case MoreVertical:
                     return 0xE5D4;  // more_vert
                 default:
                     return 0;

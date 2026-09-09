@@ -229,6 +229,51 @@ namespace Horo::Editor {
             return fieldCommitted;
         }
 
+        /** @brief Result of drawing one attached behavior card. */
+        struct BehaviorCardResult {
+            Gameplay::BehaviorComponent edited;
+            bool committed{false};
+            bool removeRequested{false};
+        };
+
+        /** @brief Draws one behavior card and reports the requested mutation. */
+        [[nodiscard]] BehaviorCardResult DrawBehaviorCard(const Gameplay::BehaviorComponent &attached,
+                                                          const Gameplay::BehaviorDescriptor *descriptor,
+                                                          const std::span<const char *const, 2> enabledEntries,
+                                                          const EditorGuiContext &context) {
+            const bool missing = descriptor == nullptr;
+            const std::string sectionText =
+                missing ? context.localization.Get("editor", "workspace.inspector.behavior_missing") + " — " + attached.typeId.Value()
+                        : descriptor->displayName;
+            BehaviorCardResult result{.edited = attached};
+            Ui::Card card(Ui::CardProps{.id = "##BehaviorCard"});
+            const ComponentTitleBarResult header =
+                DrawComponentTitleBar(card, sectionText.c_str(),
+                                      {.enabled = result.edited.enabled, .canReset = false, .canToggleEnabled = true, .canRemove = true},
+                                      context);
+            result.removeRequested = header.removeRequested;
+            if (header.toggleEnabledRequested) {
+                result.edited.enabled = !result.edited.enabled;
+                result.committed = true;
+            }
+            if (!card.BeginBody())
+                return result;
+
+            ImGui::BeginDisabled(!result.edited.enabled);
+            if (int enabled = result.edited.enabled ? 1 : 0;
+                Ui::DrawComboPropRow(context.localization.Get("editor", "workspace.inspector.behavior_enabled").c_str(), "enabled", enabled,
+                                     enabledEntries, context.theme.fonts)) {
+                result.edited.enabled = enabled != 0;
+                result.committed = true;
+            }
+            if (!missing) {
+                for (Gameplay::BehaviorField &field : result.edited.fields)
+                    result.committed |= DrawBehaviorField(field, enabledEntries, context);
+            }
+            ImGui::EndDisabled();
+            return result;
+        }
+
     }  // namespace
 
     void InspectorPanel::OnAttach(PanelContext &ctx) {
@@ -426,52 +471,23 @@ namespace Horo::Editor {
             context.localization.Get("editor", "workspace.value.on").c_str(),
         };
         for (const Gameplay::BehaviorComponent &attached : object.components.behaviors) {
-            const auto descriptor = std::ranges::find(viewModel.availableBehaviors, attached.typeId, &Gameplay::BehaviorDescriptor::typeId);
-            const bool missing = descriptor == viewModel.availableBehaviors.end();
-            const std::string sectionText =
-                missing ? context.localization.Get("editor", "workspace.inspector.behavior_missing") + " — " + attached.typeId.Value()
-                        : descriptor->displayName;
+            const auto descriptorIt =
+                std::ranges::find(viewModel.availableBehaviors, attached.typeId, &Gameplay::BehaviorDescriptor::typeId);
+            const Gameplay::BehaviorDescriptor *descriptor = descriptorIt == viewModel.availableBehaviors.end() ? nullptr : &*descriptorIt;
             ImGui::PushID(static_cast<int>(attached.instanceId.value));
-            Gameplay::BehaviorComponent edited = attached;
-            bool committed = false;
-            bool removeRequested = false;
-            {
-                Ui::Card card(Ui::CardProps{.id = "##BehaviorCard"});
-                const ComponentTitleBarResult header =
-                    DrawComponentTitleBar(card, sectionText.c_str(),
-                                          {.enabled = edited.enabled, .canReset = false, .canToggleEnabled = true, .canRemove = true},
-                                          context);
-                removeRequested = header.removeRequested;
-                if (header.toggleEnabledRequested) {
-                    edited.enabled = !edited.enabled;
-                    committed = true;
-                }
-                if (card.BeginBody()) {
-                    ImGui::BeginDisabled(!edited.enabled);
-                    if (int enabled = edited.enabled ? 1 : 0;
-                        Ui::DrawComboPropRow(context.localization.Get("editor", "workspace.inspector.behavior_enabled").c_str(), "enabled",
-                                             enabled, enabledEntries, context.theme.fonts)) {
-                        edited.enabled = enabled != 0;
-                        committed = true;
-                    }
-                    if (!missing) {
-                        for (Gameplay::BehaviorField &field : edited.fields)
-                            committed |= DrawBehaviorField(field, enabledEntries, context);
-                    }
-                    ImGui::EndDisabled();
-                }
-            }
-            if (removeRequested && command.command == EditorWorkspaceViewCommand::None) {
-                command.command = EditorWorkspaceViewCommand::RemoveBehaviorFromObject;
+            BehaviorCardResult result = DrawBehaviorCard(attached, descriptor, enabledEntries, context);
+            using enum EditorWorkspaceViewCommand;
+            if (result.removeRequested && command.command == None) {
+                command.command = RemoveBehaviorFromObject;
                 command.objectPayload = object.id;
                 command.behaviorInstancePayload = attached.instanceId;
                 ImGui::PopID();
                 continue;
             }
-            if (committed && command.command == EditorWorkspaceViewCommand::None) {
-                command.command = EditorWorkspaceViewCommand::UpdateBehaviorOnObject;
+            if (result.committed && command.command == None) {
+                command.command = UpdateBehaviorOnObject;
                 command.objectPayload = object.id;
-                command.behaviorPayload = std::move(edited);
+                command.behaviorPayload = std::move(result.edited);
             }
             ImGui::PopID();
         }
@@ -568,17 +584,18 @@ namespace Horo::Editor {
             if (pressed)
                 ImGui::OpenPopup("##menu");
             if (Ui::BeginMenuPopup("##menu")) {
-                const bool canMutate = !object.effectivelyLocked && command.command == EditorWorkspaceViewCommand::None;
+                using enum EditorWorkspaceViewCommand;
+                const bool canMutate = !object.effectivelyLocked && command.command == None;
                 if (Ui::ContextMenuItem(context.localization.Get("editor", "workspace.hierarchy.duplicate").c_str(), nullptr,
                                         context.theme.fonts, Ui::ContextMenuItemTone::Normal,
                                         Ui::UiIconRegistry::Token(Ui::UiIcon::Duplicate), canMutate)) {
-                    command.command = EditorWorkspaceViewCommand::DuplicateObject;
+                    command.command = DuplicateObject;
                     command.objectPayload = object.id;
                 }
                 if (Ui::ContextMenuItem(context.localization.Get("editor", "workspace.hierarchy.delete").c_str(), nullptr,
                                         context.theme.fonts, Ui::ContextMenuItemTone::Danger, Ui::UiIconRegistry::Token(Ui::UiIcon::Delete),
                                         canMutate)) {
-                    command.command = EditorWorkspaceViewCommand::DeleteObject;
+                    command.command = DeleteObject;
                     command.objectPayload = object.id;
                 }
                 Ui::EndMenuPopup();
