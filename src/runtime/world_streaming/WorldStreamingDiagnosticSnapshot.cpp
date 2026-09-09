@@ -57,12 +57,71 @@ namespace Horo::WorldStreaming {
                                             queue.state == StreamingSchedulerAdmissionState::Accepting;
             const bool drainingMismatch = input.lifecycle == WorldStreamingRuntimeCompositionState::Draining &&
                                           queue.state == StreamingSchedulerAdmissionState::Accepting;
-            const bool closedMismatch = input.lifecycle == WorldStreamingRuntimeCompositionState::Closed &&
-                                        (queue.state != StreamingSchedulerAdmissionState::Closed || queue.reservedOperations != 0 ||
-                                         queue.reservedCapacityUnits != 0);
-            if (activeMismatch || cancellingMismatch || drainingMismatch || closedMismatch)
+            if (const bool closedMismatch = input.lifecycle == WorldStreamingRuntimeCompositionState::Closed &&
+                                            (queue.state != StreamingSchedulerAdmissionState::Closed || queue.reservedOperations != 0 ||
+                                             queue.reservedCapacityUnits != 0);
+                activeMismatch || cancellingMismatch || drainingMismatch || closedMismatch)
                 return Internal::Failure<void>(WorldStreamingErrors::DiagnosticProjectionInvalid);
             return Result<void>::Success();
+        }
+
+        /** @brief Validates captured sources against the mounted authority. */
+        Result<void> ValidateSources(const std::span<const StreamingSourceDesiredState> sources, const StreamingRuntimeOwnerToken &owner) {
+            for (const auto &source : sources) {
+                const auto &descriptor = source.Source();
+                if (!descriptor.IsValid())
+                    return Internal::Failure<void>(WorldStreamingErrors::DiagnosticProjectionInvalid);
+                if (descriptor.owner.partition != owner.partition || descriptor.owner.epoch != owner.epoch)
+                    return Internal::Failure<void>(WorldStreamingErrors::DiagnosticProjectionStale);
+            }
+            return Result<void>::Success();
+        }
+
+        /** @brief Validates captured cell records against the mounted authority. */
+        Result<void> ValidateCells(const std::span<const StreamingCellStateRecord> cells, const StreamingRuntimeOwnerToken &owner) {
+            for (const auto &cell : cells) {
+                if (!cell.IsValid())
+                    return Internal::Failure<void>(WorldStreamingErrors::DiagnosticProjectionUnsupported);
+                if (!MatchesOwner(cell.operation.fence, owner))
+                    return Internal::Failure<void>(WorldStreamingErrors::DiagnosticProjectionStale);
+            }
+            return Result<void>::Success();
+        }
+
+        /** @brief Validates failure records and their captured-cell correlation. */
+        Result<void> ValidateFailures(const std::span<const StreamingDiagnosticFailureRecord> failures,
+                                      const std::span<const StreamingCellStateRecord> cells, const StreamingRuntimeOwnerToken &owner) {
+            for (const auto &failure : failures) {
+                if (!failure.operation.IsValid())
+                    return Internal::Failure<void>(WorldStreamingErrors::DiagnosticProjectionInvalid);
+                if (!IsFailureReason(failure.reason))
+                    return Internal::Failure<void>(WorldStreamingErrors::DiagnosticProjectionUnsupported);
+                if (!MatchesOwner(failure.operation.fence, owner))
+                    return Internal::Failure<void>(WorldStreamingErrors::DiagnosticProjectionStale);
+                const auto matchingCell = std::ranges::find_if(cells, [&failure](const StreamingCellStateRecord &cell) {
+                    return cell.operation == failure.operation;
+                });
+                if (matchingCell == cells.end())
+                    return Internal::Failure<void>(WorldStreamingErrors::DiagnosticProjectionStale);
+            }
+            return Result<void>::Success();
+        }
+
+        /** @brief Checks canonicalized records for competing identities. */
+        bool HasIdentityConflict(const std::vector<StreamingSourceDesiredState> &sources,
+                                 const std::vector<StreamingCellStateRecord> &cells,
+                                 const std::vector<StreamingDiagnosticFailureRecord> &failures) {
+            return std::ranges::adjacent_find(sources,
+                                              [](const auto &left, const auto &right) {
+                return left.Source().id == right.Source().id;
+            }) != sources.end() ||
+                   std::ranges::adjacent_find(cells,
+                                              [](const auto &left, const auto &right) {
+                return left.operation.fence == right.operation.fence;
+            }) != cells.end() ||
+                   std::ranges::adjacent_find(failures, [](const auto &left, const auto &right) {
+                return left.operation == right.operation;
+            }) != failures.end();
         }
     }  // namespace
 
@@ -86,32 +145,12 @@ namespace Horo::WorldStreaming {
         if (sources.size() > input.limits.sources || cells.size() > input.limits.cells || failures.size() > input.limits.failures)
             return Internal::Failure<WorldStreamingDiagnosticSnapshot>(WorldStreamingErrors::DiagnosticProjectionCapacityExceeded);
 
-        for (const auto &source : sources) {
-            const auto &descriptor = source.Source();
-            if (!descriptor.IsValid())
-                return Internal::Failure<WorldStreamingDiagnosticSnapshot>(WorldStreamingErrors::DiagnosticProjectionInvalid);
-            if (descriptor.owner.partition != input.owner.partition || descriptor.owner.epoch != input.owner.epoch)
-                return Internal::Failure<WorldStreamingDiagnosticSnapshot>(WorldStreamingErrors::DiagnosticProjectionStale);
-        }
-        for (const auto &cell : cells) {
-            if (!cell.IsValid())
-                return Internal::Failure<WorldStreamingDiagnosticSnapshot>(WorldStreamingErrors::DiagnosticProjectionUnsupported);
-            if (!MatchesOwner(cell.operation.fence, input.owner))
-                return Internal::Failure<WorldStreamingDiagnosticSnapshot>(WorldStreamingErrors::DiagnosticProjectionStale);
-        }
-        for (const auto &failure : failures) {
-            if (!failure.operation.IsValid())
-                return Internal::Failure<WorldStreamingDiagnosticSnapshot>(WorldStreamingErrors::DiagnosticProjectionInvalid);
-            if (!IsFailureReason(failure.reason))
-                return Internal::Failure<WorldStreamingDiagnosticSnapshot>(WorldStreamingErrors::DiagnosticProjectionUnsupported);
-            if (!MatchesOwner(failure.operation.fence, input.owner))
-                return Internal::Failure<WorldStreamingDiagnosticSnapshot>(WorldStreamingErrors::DiagnosticProjectionStale);
-            const auto matchingCell = std::find_if(cells.begin(), cells.end(), [&failure](const StreamingCellStateRecord &cell) {
-                return cell.operation == failure.operation;
-            });
-            if (matchingCell == cells.end())
-                return Internal::Failure<WorldStreamingDiagnosticSnapshot>(WorldStreamingErrors::DiagnosticProjectionStale);
-        }
+        if (const auto validSources = ValidateSources(sources, input.owner); validSources.HasError())
+            return Result<WorldStreamingDiagnosticSnapshot>::Failure(validSources.ErrorValue());
+        if (const auto validCells = ValidateCells(cells, input.owner); validCells.HasError())
+            return Result<WorldStreamingDiagnosticSnapshot>::Failure(validCells.ErrorValue());
+        if (const auto validFailures = ValidateFailures(failures, cells, input.owner); validFailures.HasError())
+            return Result<WorldStreamingDiagnosticSnapshot>::Failure(validFailures.ErrorValue());
 
         try {
             std::vector<StreamingSourceDesiredState> ownedSources(sources.begin(), sources.end());
@@ -129,17 +168,7 @@ namespace Horo::WorldStreaming {
                 return OperationLess(left.operation, right.operation);
             });
 
-            if (std::adjacent_find(ownedSources.begin(), ownedSources.end(),
-                                   [](const auto &left, const auto &right) {
-                return left.Source().id == right.Source().id;
-            }) != ownedSources.end() ||
-                std::adjacent_find(ownedCells.begin(), ownedCells.end(),
-                                   [](const auto &left, const auto &right) {
-                return left.operation.fence == right.operation.fence;
-            }) != ownedCells.end() ||
-                std::adjacent_find(ownedFailures.begin(), ownedFailures.end(), [](const auto &left, const auto &right) {
-                return left.operation == right.operation;
-            }) != ownedFailures.end())
+            if (HasIdentityConflict(ownedSources, ownedCells, ownedFailures))
                 return Internal::Failure<WorldStreamingDiagnosticSnapshot>(WorldStreamingErrors::DiagnosticProjectionIdentityConflict);
 
             return Result<WorldStreamingDiagnosticSnapshot>::Success(
