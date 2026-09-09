@@ -11,7 +11,7 @@ permissions:
 
 concurrency:
   group: sonar-${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   sonar:
@@ -24,6 +24,7 @@ jobs:
       CCACHE_DIR: ${{ github.workspace }}/.sonar/ccache
       CCACHE_COMPRESS: 'true'
       CCACHE_MAXSIZE: 2G
+      CACHE_SCOPE: ${{ github.event_name == 'pull_request' && format('pr-{0}', github.event.pull_request.number) || github.ref_name }}
       FETCHCONTENT_BASE_DIR: ${{ github.workspace }}/.cmake/fetchcontent
       SONAR_USER_HOME: ${{ github.workspace }}/.sonar/user-home
 
@@ -58,9 +59,10 @@ jobs:
         with:
           path: |
             ${{ github.workspace }}/.sonar/ccache
-          key: sonar-v1-gcc-${{ runner.os }}-${{ runner.arch }}-${{ github.ref }}-${{ github.sha }}
+          key: sonar-v2-gcc-${{ runner.os }}-${{ runner.arch }}-${{ env.CACHE_SCOPE }}-${{ github.run_id }}-${{ github.run_attempt }}
           restore-keys: |
-            sonar-v1-gcc-${{ runner.os }}-${{ runner.arch }}-${{ github.ref }}-
+            sonar-v2-gcc-${{ runner.os }}-${{ runner.arch }}-${{ env.CACHE_SCOPE }}-
+            sonar-v2-gcc-${{ runner.os }}-${{ runner.arch }}-main-
             sonar-v1-gcc-${{ runner.os }}-${{ runner.arch }}-refs/heads/main-
 
       - name: Restore Sonar caches
@@ -71,10 +73,21 @@ jobs:
             .sonar/cfamily-cache
             ${{ github.workspace }}/.sonar/user-home/cache
             ${{ github.workspace }}/.sonar/user-home/sonar-scanner-7.2.0.5079-linux-x64
-          key: sonar-v1-analysis-${{ runner.os }}-${{ runner.arch }}-${{ github.ref }}-${{ github.sha }}
+          key: sonar-v2-analysis-${{ runner.os }}-${{ runner.arch }}-${{ env.CACHE_SCOPE }}-${{ github.run_id }}-${{ github.run_attempt }}
           restore-keys: |
-            sonar-v1-analysis-${{ runner.os }}-${{ runner.arch }}-${{ github.ref }}-
+            sonar-v2-analysis-${{ runner.os }}-${{ runner.arch }}-${{ env.CACHE_SCOPE }}-
+            sonar-v2-analysis-${{ runner.os }}-${{ runner.arch }}-main-
             sonar-v1-analysis-${{ runner.os }}-${{ runner.arch }}-refs/heads/main-
+
+      - name: Report cache restores
+        env:
+          COMPILER_CACHE_KEY: ${{ steps.compiler.outputs.cache-matched-key }}
+          DEPENDENCY_CACHE_KEY: ${{ steps.deps.outputs.cache-matched-key }}
+          SONAR_CACHE_KEY: ${{ steps.sonar_cache.outputs.cache-matched-key }}
+        run: |
+          echo "FetchContent cache: ${DEPENDENCY_CACHE_KEY:-cold start}"
+          echo "Compiler cache: ${COMPILER_CACHE_KEY:-cold start}"
+          echo "Sonar cache: ${SONAR_CACHE_KEY:-cold start}"
 
       - name: Install Linux dependencies
         id: install
