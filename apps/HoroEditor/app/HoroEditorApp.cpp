@@ -822,10 +822,10 @@ namespace Horo::Editor {
                 p_->engineEvents.DispatchQueued();
                 SDL_Event event;
                 while (SDL_PollEvent(&event)) {
-                    const bool smoothWheel = event.type == SDL_EVENT_MOUSE_WHEEL &&
-                                             event.wheel.windowID == SDL_GetWindowID(p_->presentation.window) &&
-                                             (SDL_GetModState() & SDL_KMOD_CTRL) == 0;
-                    if (smoothWheel) {
+                    if (const bool smoothWheel = event.type == SDL_EVENT_MOUSE_WHEEL &&
+                                                 event.wheel.windowID == SDL_GetWindowID(p_->presentation.window) &&
+                                                 (SDL_GetModState() & SDL_KMOD_CTRL) == 0;
+                        smoothWheel) {
                         scrollSource_ = event.wheel.which == SDL_TOUCH_MOUSEID ? ImGuiMouseSource_TouchScreen : ImGuiMouseSource_Mouse;
                         scrollSmoother_.Queue(-event.wheel.x, event.wheel.y);
                     } else {
@@ -866,8 +866,7 @@ namespace Horo::Editor {
                         frame_.reset();
                         return guiBegun;
                     }
-                    const EditorScrollDelta scrollDelta = scrollSmoother_.Consume(ImGui::GetIO().DeltaTime);
-                    if (!scrollDelta.IsEmpty()) {
+                    if (const EditorScrollDelta scrollDelta = scrollSmoother_.Consume(ImGui::GetIO().DeltaTime); !scrollDelta.IsEmpty()) {
                         ImGui::GetIO().AddMouseSourceEvent(scrollSource_);
                         ImGui::GetIO().AddMouseWheelEvent(scrollDelta.horizontal, scrollDelta.vertical);
                     }
