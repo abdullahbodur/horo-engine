@@ -47,6 +47,16 @@ namespace Horo::Editor {
     /** @brief Draws the canonical elevated toolbar surface and bottom divider. */
     void DrawGlobalDockToolbarSurface(ImVec2 origin, float width, float height);
 
+    /** @brief Performs the canonical case-insensitive text match used by searchable dock panes. */
+    [[nodiscard]] bool GlobalDockContainsCaseInsensitive(std::string_view value, std::string_view query);
+
+    /** @brief Measures one bottom-dock text run with the provided or fallback font. */
+    [[nodiscard]] float MeasureGlobalDockTextWidth(ImFont *font, float size, std::string_view text);
+
+    /** @brief Draws the canonical bottom-dock search field and returns the next horizontal position. */
+    [[nodiscard]] float DrawGlobalDockSearchControl(ImVec2 origin, float width, std::string_view id, std::span<char> buffer,
+                                                    std::string_view hint, const Theme::Fonts &fonts);
+
     /** @brief Draws the darker table-header surface below a bottom-dock toolbar. */
     void DrawGlobalDockTableHeaderSurface(ImVec2 origin, float width, float height);
 
@@ -65,6 +75,10 @@ namespace Horo::Editor {
 
     /** @brief Draws the canonical footer surface and top divider. */
     void DrawGlobalDockFooterSurface(ImVec2 origin, float width, float height);
+
+    /** @brief Draws canonical left-aligned footer segments and one right-aligned status. */
+    void DrawGlobalDockStatusFooter(ImVec2 origin, float width, std::span<const std::string_view> segments, std::string_view status,
+                                    const Theme::Fonts &fonts);
 
     /** @brief Measures a toolbar chip using the active typography and layout tokens. */
     [[nodiscard]] float MeasureGlobalDockToolbarChip(const GlobalDockToolbarChipProps &props, const Theme::Fonts &fonts);

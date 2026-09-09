@@ -9,7 +9,6 @@
 
 #include <algorithm>
 #include <array>
-#include <cfloat>
 #include <string>
 
 namespace Horo::Editor {
@@ -33,11 +32,6 @@ namespace Horo::Editor {
             PerformanceRow{"workspace.global_dock.performance.subsystem.audio", "0.18 ms", "0.31 ms",
                            "workspace.global_dock.performance.notes.audio"},
         };
-
-        [[nodiscard]] float TextWidth(ImFont *font, const float size, const std::string &text) {
-            ImFont *resolved = font != nullptr ? font : ImGui::GetFont();
-            return resolved->CalcTextSizeA(size, FLT_MAX, 0.0F, text.c_str()).x;
-        }
 
         void DrawMetricGridSurface(const ImVec2 origin, const float width, const float height, const float scale) {
             ImDrawList *drawList = ImGui::GetWindowDrawList();
@@ -95,17 +89,8 @@ namespace Horo::Editor {
         const float searchWidth = std::max(180.0F * scale, regions.toolbarWidth - metrics.toolbarPaddingX * 2.0F - fixedWidth);
         float x = regions.toolbarOrigin.x + metrics.toolbarPaddingX;
 
-        ImGui::SetCursorScreenPos({x, controlY});
         const std::string &searchHint = localized("workspace.global_dock.performance.search");
-        static_cast<void>(Ui::InputTextControl("##PerformanceSearch", m_search.data(), m_search.size(), fonts,
-                                               {.width = searchWidth / scale,
-                                                .hint = searchHint.c_str(),
-                                                .prefixIconWidth = 20.0F,
-                                                .componentSize = Ui::ComponentSize::Small,
-                                                .surface = Ui::InputTextSurface::BottomDockToolbar}));
-        Ui::DrawEditorIcon(ImGui::GetWindowDrawList(), Ui::UiIcon::Search, {x + 8.0F * scale, controlY + 8.0F * scale},
-                           {14.0F * scale, 14.0F * scale}, Theme::U32(Theme::Dim()), fonts.icon);
-        x += searchWidth + metrics.toolbarGap;
+        x = DrawGlobalDockSearchControl({x, controlY}, searchWidth, "##PerformanceSearch", m_search, searchHint, fonts);
 
         DrawToolbarSelectors(x, controlY, context);
         DrawGlobalDockToolbarSeparator(x, controlY);
@@ -278,14 +263,14 @@ namespace Horo::Editor {
         drawList->AddText(fonts.sansCompact, Theme::TextPx::Caption(), {origin.x + metrics.contentPadding, footerY},
                           Theme::U32(Theme::Muted()), sampling.c_str());
         drawList->AddText(fonts.sansCompact, Theme::TextPx::Caption(),
-                          {origin.x + metrics.contentPadding + TextWidth(fonts.sansCompact, Theme::TextPx::Caption(), sampling) +
-                               10.0F * scale,
+                          {origin.x + metrics.contentPadding +
+                               MeasureGlobalDockTextWidth(fonts.sansCompact, Theme::TextPx::Caption(), sampling) + 10.0F * scale,
                            footerY},
                           Theme::U32(Theme::Muted()), misses.c_str());
         const std::string &captureAvailable = localized("workspace.global_dock.performance.footer.capture_available");
         drawList->AddText(fonts.sansCompact, Theme::TextPx::Caption(),
                           {origin.x + width - metrics.contentPadding -
-                               TextWidth(fonts.sansCompact, Theme::TextPx::Caption(), captureAvailable),
+                               MeasureGlobalDockTextWidth(fonts.sansCompact, Theme::TextPx::Caption(), captureAvailable),
                            footerY},
                           Theme::U32(Theme::Muted()), captureAvailable.c_str());
     }

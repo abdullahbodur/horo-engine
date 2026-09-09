@@ -9,8 +9,6 @@
 
 #include <algorithm>
 #include <array>
-#include <cctype>
-#include <cfloat>
 #include <string>
 #include <string_view>
 #include <utility>
@@ -35,18 +33,6 @@ namespace Horo::Editor {
                        "workspace.global_dock.network.queue.asset"},
         };
 
-        [[nodiscard]] bool ContainsCaseInsensitive(const std::string_view value, const std::string_view query) {
-            if (query.empty())
-                return true;
-            return std::ranges::search(value, query, [](const char lhs, const char rhs) {
-                return std::tolower(static_cast<unsigned char>(lhs)) == std::tolower(static_cast<unsigned char>(rhs));
-            }).begin() != value.end();
-        }
-
-        [[nodiscard]] float TextWidth(ImFont *font, const float size, const std::string &text) {
-            ImFont *resolved = font != nullptr ? font : ImGui::GetFont();
-            return resolved->CalcTextSizeA(size, FLT_MAX, 0.0F, text.c_str()).x;
-        }
     }  // namespace
 
     struct GlobalDockNetworkPane::TableLayout {
@@ -85,17 +71,8 @@ namespace Horo::Editor {
         const float searchWidth = std::max(180.0F * scale, regions.toolbarWidth - metrics.toolbarPaddingX * 2.0F - fixedWidth);
         float x = regions.toolbarOrigin.x + metrics.toolbarPaddingX;
 
-        ImGui::SetCursorScreenPos({x, controlY});
         const std::string &searchHint = localized("workspace.global_dock.network.search");
-        static_cast<void>(Ui::InputTextControl("##NetworkSearch", m_search.data(), m_search.size(), fonts,
-                                               {.width = searchWidth / scale,
-                                                .hint = searchHint.c_str(),
-                                                .prefixIconWidth = 20.0F,
-                                                .componentSize = Ui::ComponentSize::Small,
-                                                .surface = Ui::InputTextSurface::BottomDockToolbar}));
-        Ui::DrawEditorIcon(ImGui::GetWindowDrawList(), Ui::UiIcon::Search, {x + 8.0F * scale, controlY + 8.0F * scale},
-                           {14.0F * scale, 14.0F * scale}, Theme::U32(Theme::Dim()), fonts.icon);
-        x += searchWidth + metrics.toolbarGap;
+        x = DrawGlobalDockSearchControl({x, controlY}, searchWidth, "##NetworkSearch", m_search, searchHint, fonts);
         DrawToolbarActions(x, controlY, context);
     }
 
@@ -242,9 +219,9 @@ namespace Horo::Editor {
         const NetworkRow &row = Rows[index];
         const std::string &state = context.localization.Get("editor", row.stateKey);
         const std::string &queue = context.localization.Get("editor", row.queueKey);
-        if (const std::string_view search{m_search.data()}; !ContainsCaseInsensitive(row.connection, search) &&
-                                                            !ContainsCaseInsensitive(state, search) &&
-                                                            !ContainsCaseInsensitive(queue, search))
+        if (const std::string_view search{m_search.data()}; !GlobalDockContainsCaseInsensitive(row.connection, search) &&
+                                                            !GlobalDockContainsCaseInsensitive(state, search) &&
+                                                            !GlobalDockContainsCaseInsensitive(queue, search))
             return;
         const GlobalDockPaneMetrics metrics = ResolveGlobalDockPaneMetrics();
         const float scale = std::max(Theme::GetActiveTokens().sizes.uiScale, 0.01F);
@@ -269,28 +246,10 @@ namespace Horo::Editor {
     }
 
     void GlobalDockNetworkPane::DrawFooter(const ImVec2 &origin, const float width, const EditorGuiContext &context) const {
-        const Theme::Fonts &fonts = context.theme.fonts;
-        const float scale = std::max(Theme::GetActiveTokens().sizes.uiScale, 0.01F);
-        const GlobalDockPaneMetrics metrics = ResolveGlobalDockPaneMetrics();
-        const auto localized = [&](const char *key) -> const std::string & {
-            return context.localization.Get("editor", key);
-        };
-        ImDrawList *drawList = ImGui::GetWindowDrawList();
-        DrawGlobalDockFooterSurface(origin, width, metrics.footerHeight);
-        const float footerY = origin.y + (metrics.footerHeight - Theme::TextPx::Caption()) * 0.5F;
-        const std::array<const char *, 3> footerKeys{"workspace.global_dock.network.footer.peer",
-                                                     "workspace.global_dock.network.footer.objects",
-                                                     "workspace.global_dock.network.footer.tick"};
-        float footerX = origin.x + metrics.contentPadding;
-        for (const char *key : footerKeys) {
-            const std::string &text = localized(key);
-            drawList->AddText(fonts.sansCompact, Theme::TextPx::Caption(), {footerX, footerY}, Theme::U32(Theme::Muted()), text.c_str());
-            footerX += TextWidth(fonts.sansCompact, Theme::TextPx::Caption(), text) + 10.0F * scale;
-        }
-        const std::string &tracing = localized("workspace.global_dock.network.footer.tracing");
-        drawList->AddText(fonts.sansCompact, Theme::TextPx::Caption(),
-                          {origin.x + width - metrics.contentPadding - TextWidth(fonts.sansCompact, Theme::TextPx::Caption(), tracing),
-                           footerY},
-                          Theme::U32(Theme::Muted()), tracing.c_str());
+        const std::array<std::string_view, 3> segments{context.localization.Get("editor", "workspace.global_dock.network.footer.peer"),
+                                                       context.localization.Get("editor", "workspace.global_dock.network.footer.objects"),
+                                                       context.localization.Get("editor", "workspace.global_dock.network.footer.tick")};
+        DrawGlobalDockStatusFooter(origin, width, segments,
+                                   context.localization.Get("editor", "workspace.global_dock.network.footer.tracing"), context.theme.fonts);
     }
 }  // namespace Horo::Editor

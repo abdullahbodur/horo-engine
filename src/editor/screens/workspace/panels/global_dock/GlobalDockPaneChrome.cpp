@@ -1,10 +1,13 @@
 #include "editor/screens/workspace/panels/global_dock/GlobalDockPaneChrome.h"
 
+#include "Horo/Editor/EditorUiComponents.h"
 #include "editor/screens/workspace/panels/global_dock/GlobalDockPaneLayout.h"
 
 #include <algorithm>
+#include <cctype>
 #include <cfloat>
 #include <cmath>
+#include <ranges>
 #include <string>
 
 namespace Horo::Editor {
@@ -82,6 +85,35 @@ namespace Horo::Editor {
         ImDrawList *drawList = ImGui::GetWindowDrawList();
         drawList->AddRectFilled(origin, {origin.x + width, origin.y + height}, Theme::U32(Theme::BottomDockToolbarSurface()));
         drawList->AddLine({origin.x, origin.y + height - 1.0F}, {origin.x + width, origin.y + height - 1.0F}, Theme::U32(Theme::Border()));
+    }
+
+    bool GlobalDockContainsCaseInsensitive(const std::string_view value, const std::string_view query) {
+        if (query.empty())
+            return true;
+        return std::ranges::search(value, query, [](const char lhs, const char rhs) {
+            return std::tolower(static_cast<unsigned char>(lhs)) == std::tolower(static_cast<unsigned char>(rhs));
+        }).begin() != value.end();
+    }
+
+    float MeasureGlobalDockTextWidth(ImFont *font, const float size, const std::string_view text) {
+        return TextWidth(font, size, text);
+    }
+
+    float DrawGlobalDockSearchControl(const ImVec2 origin, const float width, const std::string_view id, const std::span<char> buffer,
+                                      const std::string_view hint, const Theme::Fonts &fonts) {
+        const float scale = std::max(Theme::GetActiveTokens().sizes.uiScale, 0.01F);
+        ImGui::SetCursorScreenPos(origin);
+        const std::string controlId{id};
+        const std::string hintText{hint};
+        static_cast<void>(Ui::InputTextControl(controlId.c_str(), buffer.data(), buffer.size(), fonts,
+                                               {.width = width / scale,
+                                                .hint = hintText.c_str(),
+                                                .prefixIconWidth = 20.0F,
+                                                .componentSize = Ui::ComponentSize::Small,
+                                                .surface = Ui::InputTextSurface::BottomDockToolbar}));
+        Ui::DrawEditorIcon(ImGui::GetWindowDrawList(), Ui::UiIcon::Search, {origin.x + 8.0F * scale, origin.y + 8.0F * scale},
+                           {14.0F * scale, 14.0F * scale}, Theme::U32(Theme::Dim()), fonts.icon);
+        return origin.x + width + ResolveGlobalDockPaneMetrics().toolbarGap;
     }
 
     void DrawGlobalDockTableHeaderSurface(const ImVec2 origin, const float width, const float height) {
@@ -195,6 +227,25 @@ namespace Horo::Editor {
         ImDrawList *drawList = ImGui::GetWindowDrawList();
         drawList->AddRectFilled(origin, {origin.x + width, origin.y + height}, Theme::U32(Theme::BottomDockToolbarSurface()));
         drawList->AddLine(origin, {origin.x + width, origin.y}, Theme::U32(Theme::Border()));
+    }
+
+    void DrawGlobalDockStatusFooter(const ImVec2 origin, const float width, const std::span<const std::string_view> segments,
+                                    const std::string_view status, const Theme::Fonts &fonts) {
+        const float scale = std::max(Theme::GetActiveTokens().sizes.uiScale, 0.01F);
+        const GlobalDockPaneMetrics metrics = ResolveGlobalDockPaneMetrics();
+        const float footerY = origin.y + (metrics.footerHeight - Theme::TextPx::Caption()) * 0.5F;
+        ImDrawList *drawList = ImGui::GetWindowDrawList();
+        DrawGlobalDockFooterSurface(origin, width, metrics.footerHeight);
+        float footerX = origin.x + metrics.contentPadding;
+        for (const std::string_view segment : segments) {
+            drawList->AddText(fonts.sansCompact, Theme::TextPx::Caption(), {footerX, footerY}, Theme::U32(Theme::Muted()), segment.data(),
+                              segment.data() + segment.size());
+            footerX += MeasureGlobalDockTextWidth(fonts.sansCompact, Theme::TextPx::Caption(), segment) + 10.0F * scale;
+        }
+        const float statusX =
+            origin.x + width - metrics.contentPadding - MeasureGlobalDockTextWidth(fonts.sansCompact, Theme::TextPx::Caption(), status);
+        drawList->AddText(fonts.sansCompact, Theme::TextPx::Caption(), {statusX, footerY}, Theme::U32(Theme::Muted()), status.data(),
+                          status.data() + status.size());
     }
 
     float MeasureGlobalDockToolbarChip(const GlobalDockToolbarChipProps &props, const Theme::Fonts &fonts) {

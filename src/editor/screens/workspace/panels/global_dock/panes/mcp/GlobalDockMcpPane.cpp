@@ -9,8 +9,6 @@
 
 #include <algorithm>
 #include <array>
-#include <cctype>
-#include <cfloat>
 #include <string>
 #include <string_view>
 
@@ -41,14 +39,6 @@ namespace Horo::Editor {
             AuditRow{"12:07:51", "scene.move", Permission::Mutation, "workspace.global_dock.mcp.request.scene_move", Status::Approval},
             AuditRow{"12:07:39", "build.trigger", Permission::Mutation, "workspace.global_dock.mcp.request.build_trigger", Status::Denied},
         };
-
-        [[nodiscard]] bool ContainsCaseInsensitive(const std::string_view value, const std::string_view query) {
-            if (query.empty())
-                return true;
-            return std::ranges::search(value, query, [](const char lhs, const char rhs) {
-                return std::tolower(static_cast<unsigned char>(lhs)) == std::tolower(static_cast<unsigned char>(rhs));
-            }).begin() != value.end();
-        }
 
         [[nodiscard]] const char *PermissionKey(const Permission permission) noexcept {
             return permission == Permission::Read ? "workspace.global_dock.mcp.permission.read"
@@ -82,15 +72,10 @@ namespace Horo::Editor {
             return Neutral;
         }
 
-        [[nodiscard]] float TextWidth(ImFont *font, const float size, const std::string &text) {
-            ImFont *resolved = font != nullptr ? font : ImGui::GetFont();
-            return resolved->CalcTextSizeA(size, FLT_MAX, 0.0F, text.c_str()).x;
-        }
-
         [[nodiscard]] bool MatchesAuditSearch(const AuditRow &row, const std::string_view permission, const std::string_view request,
                                               const std::string_view status, const std::string_view search) {
-            return ContainsCaseInsensitive(row.tool, search) || ContainsCaseInsensitive(permission, search) ||
-                   ContainsCaseInsensitive(request, search) || ContainsCaseInsensitive(status, search);
+            return GlobalDockContainsCaseInsensitive(row.tool, search) || GlobalDockContainsCaseInsensitive(permission, search) ||
+                   GlobalDockContainsCaseInsensitive(request, search) || GlobalDockContainsCaseInsensitive(status, search);
         }
 
         [[nodiscard]] bool MatchesAuditFilter(const AuditRow &row, const bool all, const bool mutations, const bool errors) noexcept {
@@ -132,17 +117,8 @@ namespace Horo::Editor {
         const float searchWidth = std::max(180.0F * scale, regions.toolbarWidth - metrics.toolbarPaddingX * 2.0F - fixedWidth);
         float x = regions.toolbarOrigin.x + metrics.toolbarPaddingX;
 
-        ImGui::SetCursorScreenPos({x, controlY});
         const std::string &searchHint = localized("workspace.global_dock.mcp.search");
-        static_cast<void>(Ui::InputTextControl("##McpSearch", m_search.data(), m_search.size(), fonts,
-                                               {.width = searchWidth / scale,
-                                                .hint = searchHint.c_str(),
-                                                .prefixIconWidth = 20.0F,
-                                                .componentSize = Ui::ComponentSize::Small,
-                                                .surface = Ui::InputTextSurface::BottomDockToolbar}));
-        Ui::DrawEditorIcon(ImGui::GetWindowDrawList(), Ui::UiIcon::Search, {x + 8.0F * scale, controlY + 8.0F * scale},
-                           {14.0F * scale, 14.0F * scale}, Theme::U32(Theme::Dim()), fonts.icon);
-        x += searchWidth + metrics.toolbarGap;
+        x = DrawGlobalDockSearchControl({x, controlY}, searchWidth, "##McpSearch", m_search, searchHint, fonts);
         DrawFilterActions(x, controlY, context);
         DrawGlobalDockToolbarSeparator(x, controlY);
         x += metrics.toolbarGap + scale;
@@ -329,7 +305,8 @@ namespace Horo::Editor {
                           "horo.mcp.bridge@0.4.0");
         const std::string &audit = localized("workspace.global_dock.mcp.footer.audit");
         drawList->AddText(fonts.sansCompact, Theme::TextPx::Caption(),
-                          {origin.x + width - metrics.contentPadding - TextWidth(fonts.sansCompact, Theme::TextPx::Caption(), audit),
+                          {origin.x + width - metrics.contentPadding -
+                               MeasureGlobalDockTextWidth(fonts.sansCompact, Theme::TextPx::Caption(), audit),
                            footerY},
                           Theme::U32(Theme::Muted()), audit.c_str());
     }
