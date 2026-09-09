@@ -50,6 +50,60 @@ namespace Horo::Audio::AudioErrors {
         .retryable = false,
         .userActionable = true,
     };
+    const ErrorCodeDescriptor FormatRegistryInvalid{
+        .domain = AudioDomain,
+        .code = ErrorCode{"audio.format_registry.invalid"},
+        .defaultSeverity = ErrorSeverity::Error,
+        .summary = "The audio format registry metadata is invalid.",
+        .remediationHint = "Provide bounded container, codec and representation metadata with valid identities.",
+        .retryable = false,
+        .userActionable = true,
+    };
+    const ErrorCodeDescriptor FormatRegistryCapacityExceeded{
+        .domain = AudioDomain,
+        .code = ErrorCode{"audio.format_registry.capacity_exceeded"},
+        .defaultSeverity = ErrorSeverity::Error,
+        .summary = "The audio format registry exceeds its admitted capacity.",
+        .remediationHint = "Reduce contributed metadata or explicitly admit larger bounded registry limits.",
+        .retryable = false,
+        .userActionable = true,
+    };
+    const ErrorCodeDescriptor FormatRegistryConflict{
+        .domain = AudioDomain,
+        .code = ErrorCode{"audio.format_registry.conflict"},
+        .defaultSeverity = ErrorSeverity::Error,
+        .summary = "The audio format registry contains conflicting identities or duplicate tuples.",
+        .remediationHint = "Contribute each container, codec and exact representation tuple once.",
+        .retryable = false,
+        .userActionable = true,
+    };
+    const ErrorCodeDescriptor FormatContainerUnknown{
+        .domain = AudioDomain,
+        .code = ErrorCode{"audio.format.container_unknown"},
+        .defaultSeverity = ErrorSeverity::Error,
+        .summary = "The audio container identity is unknown.",
+        .remediationHint = "Detect and register a supported container before resolving its codec.",
+        .retryable = false,
+        .userActionable = true,
+    };
+    const ErrorCodeDescriptor FormatCodecUnknown{
+        .domain = AudioDomain,
+        .code = ErrorCode{"audio.format.codec_unknown"},
+        .defaultSeverity = ErrorSeverity::Error,
+        .summary = "The audio codec identity is unknown.",
+        .remediationHint = "Validate and register the codec independently of container detection.",
+        .retryable = false,
+        .userActionable = true,
+    };
+    const ErrorCodeDescriptor FormatCombinationUnsupported{
+        .domain = AudioDomain,
+        .code = ErrorCode{"audio.format.combination_unsupported"},
+        .defaultSeverity = ErrorSeverity::Error,
+        .summary = "The exact audio container, codec and representation combination is unsupported.",
+        .remediationHint = "Select an exact tuple declared by the active audio format registry.",
+        .retryable = false,
+        .userActionable = true,
+    };
     const ErrorCodeDescriptor CommandBufferInvalid{
         .domain = AudioDomain,
         .code = ErrorCode{"audio.command_buffer.invalid"},

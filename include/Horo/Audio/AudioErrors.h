@@ -13,6 +13,12 @@ namespace Horo::Audio::AudioErrors {
     extern const ErrorCodeDescriptor AssetSchemaInvalid;
     extern const ErrorCodeDescriptor AssetSchemaVersionUnsupported;
     extern const ErrorCodeDescriptor AssetSchemaLimitExceeded;
+    extern const ErrorCodeDescriptor FormatRegistryInvalid;
+    extern const ErrorCodeDescriptor FormatRegistryCapacityExceeded;
+    extern const ErrorCodeDescriptor FormatRegistryConflict;
+    extern const ErrorCodeDescriptor FormatContainerUnknown;
+    extern const ErrorCodeDescriptor FormatCodecUnknown;
+    extern const ErrorCodeDescriptor FormatCombinationUnsupported;
     extern const ErrorCodeDescriptor CommandBufferInvalid;
     extern const ErrorCodeDescriptor MemoryInvalid;
     extern const ErrorCodeDescriptor MemoryBudgetExceeded;

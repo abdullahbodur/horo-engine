@@ -166,6 +166,7 @@ add_executable(HoroAudioApiTests
         unit/runtime/audio/AudioDeviceNegotiationTests.cpp
         unit/runtime/audio/AudioDeviceTimingTests.cpp
         unit/runtime/audio/AudioFormatTests.cpp
+        unit/runtime/audio/AudioMediaFormatRegistryTests.cpp
         unit/runtime/audio/AudioIdentityTests.cpp
         unit/runtime/audio/AudioResamplerPlanTests.cpp
         unit/runtime/audio/AudioPlanarBlockTests.cpp

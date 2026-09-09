@@ -549,6 +549,14 @@ valid only for the current invocation, enforces admitted total/read/seek budgets
 uses caller-provided bounded destination storage, rejects overflow and out-of-range
 reads, and never implies that the complete source is resident or contiguous.
 
+`AudioMediaFormatRegistry` is the inert metadata boundary beneath that future
+decoder registry. Container and codec identities are independent, PCM carries an
+explicit `AudioPcmFormat`, and resolution admits only an exact registered tuple.
+Consequently, detecting WAVE or Ogg never claims that an embedded codec is valid.
+The snapshot copies bounded contribution metadata and contains no probing logic,
+decoder callbacks, source extensions, registration side effects, or selection
+policy.
+
 ## Audio Components
 
 ### AudioSourceComponent
