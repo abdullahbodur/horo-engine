@@ -34,6 +34,9 @@ namespace Horo::Runtime::Ui {
                 &UiErrors::StructuralCommandInvalid,
                 &UiErrors::StructuralCommandConflict,
                 &UiErrors::ElementTreeLifecycleUnavailable,
+                &UiErrors::RenderSnapshotInvalid,
+                &UiErrors::RenderCommandInvalid,
+                &UiErrors::RenderResourceReferenceInvalid,
                 &UiErrors::DiagnosticInvalid,
                 &UiErrors::DiagnosticUnsupported,
             };
