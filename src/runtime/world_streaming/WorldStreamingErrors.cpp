@@ -19,6 +19,34 @@ namespace Horo::WorldStreaming::WorldStreamingErrors {
         }
     }  // namespace
 
+    const ErrorCodeDescriptor CellStateInvalid =
+        Describe("world_streaming.cell_state.invalid", ErrorSeverity::Error,
+                 "A World Streaming cell-state ledger, owner, fence, or record is malformed.",
+                 "Use the exact valid partition owner, operation handle and bounded ledger configuration.", true);
+    const ErrorCodeDescriptor CellStateUnresolved =
+        Describe("world_streaming.cell_state.unresolved", ErrorSeverity::Info,
+                 "No residency record exists for the exact mounted cell attempt.",
+                 "Resolve the manifest cell and admit a fenced load operation before querying runtime residency.", false);
+    const ErrorCodeDescriptor CellStateStale =
+        Describe("world_streaming.cell_state.stale", ErrorSeverity::Warning,
+                 "A cell-state request names foreign ownership or a stale attempt generation.",
+                 "Route the canonical operation to its exact partition authority and retained generation.", false);
+    const ErrorCodeDescriptor CellStateUnsupported =
+        Describe("world_streaming.cell_state.unsupported", ErrorSeverity::Error,
+                 "A cell operation phase or outcome cannot be projected onto canonical residency.",
+                 "Use a canonical admitted operation snapshot and keep provider barriers separate from residency.", true);
+    const ErrorCodeDescriptor CellStateTransitionInvalid =
+        Describe("world_streaming.cell_state.transition_invalid", ErrorSeverity::Error,
+                 "A projected cell residency transition is illegal from the current state.",
+                 "Follow the fenced Unloaded, Loading, Resident, Active, Evicting and Failed lifecycle.", false);
+    const ErrorCodeDescriptor CellStateCapacityExceeded =
+        Describe("world_streaming.cell_state.capacity_exceeded", ErrorSeverity::Warning,
+                 "The cell-state ledger cannot retain another current or retiring attempt.",
+                 "Finish exact retirement acknowledgement or explicitly admit a larger bounded ledger before mounting.", false);
+    const ErrorCodeDescriptor CellStateLifecycleUnavailable =
+        Describe("world_streaming.cell_state.lifecycle_unavailable", ErrorSeverity::Warning,
+                 "The cell-state ledger no longer accepts loading or publication.",
+                 "During shutdown, reconcile only retirement and cleanup-complete terminal snapshots.", false);
     const ErrorCodeDescriptor RuntimeCompositionInvalid =
         Describe("world_streaming.runtime_composition.invalid", ErrorSeverity::Error, "A World Streaming runtime composition is malformed.",
                  "Provide one explicit planner, asset provider and Scene runtime plus bounded feature adapters and a valid scheduler.",

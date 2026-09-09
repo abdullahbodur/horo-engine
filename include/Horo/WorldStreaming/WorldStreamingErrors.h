@@ -8,6 +8,20 @@
 #include "Horo/Foundation/ErrorCode.h"
 
 namespace Horo::WorldStreaming::WorldStreamingErrors {
+    /** @brief A cell-state ledger, owner, fence, or record is malformed. */
+    extern const ErrorCodeDescriptor CellStateInvalid;
+    /** @brief No tracked residency record exists for the exact mounted cell attempt. */
+    extern const ErrorCodeDescriptor CellStateUnresolved;
+    /** @brief A cell-state request names a foreign owner, epoch, cell, or non-successor generation. */
+    extern const ErrorCodeDescriptor CellStateStale;
+    /** @brief A canonical operation phase/outcome cannot be projected by this residency contract version. */
+    extern const ErrorCodeDescriptor CellStateUnsupported;
+    /** @brief A projected residency transition is illegal from the current canonical state. */
+    extern const ErrorCodeDescriptor CellStateTransitionInvalid;
+    /** @brief A fresh or overlapping cell attempt cannot fit the ledger's mandatory tracked-attempt ceiling. */
+    extern const ErrorCodeDescriptor CellStateCapacityExceeded;
+    /** @brief A draining or closed cell-state ledger rejects new loading or publication. */
+    extern const ErrorCodeDescriptor CellStateLifecycleUnavailable;
     /** @brief A runtime composition omits or malforms its explicit owner, scheduler, core service, or adapter facts. */
     extern const ErrorCodeDescriptor RuntimeCompositionInvalid;
     /** @brief Runtime composition service identities are duplicated. */
