@@ -4,11 +4,14 @@
  * @brief Owned, bounded audio command values and preparation-time validation contracts.
  */
 
+#include "Horo/Audio/AudioClock.h"
 #include "Horo/Audio/AudioMemory.h"
 
 #include <variant>
 
 namespace Horo::Audio {
+    inline constexpr std::uint32_t MaximumScheduledAudioCommands = 16;
+
     /** @brief Exact callback generation and scene context resolved by the control owner, never by callback ECS lookup. */
     struct AudioCommandScope {
         AudioRuntimeId owner;
@@ -56,10 +59,35 @@ namespace Horo::Audio {
     /** @brief Ordered runtime reset barrier; only the control owner stages it and establishes the next epoch. */
     struct AudioResetCommand {};
 
+    /** @brief Callback application boundary for a prepared scheduled batch. */
+    enum class AudioCommandTargetKind : std::uint8_t {
+        NextBufferBoundary,
+        ExactSampleFrame
+    };
+
+    /** @brief Resolved callback target; exact samples name the current clock and discontinuity generations. */
+    struct AudioCommandTarget final {
+        AudioCommandTargetKind kind{AudioCommandTargetKind::NextBufferBoundary};
+        std::uint64_t sampleFrame{};
+        std::uint64_t clockGeneration{};
+        std::uint64_t discontinuityRevision{};
+    };
+
+    /**
+     * @brief One callback-visible reference to a complete retained batch prepared by control.
+     * The referenced fixed batch is one FIFO record and therefore cannot be partially published.
+     */
+    struct AudioScheduledBatchCommand final {
+        AudioMemoryHandle storage;
+        AudioCommandTarget target;
+        std::uint32_t commandCount{};
+        bool containsCriticalCommand{};
+    };
+
     /** @brief Allocation-free tagged payload; clock-mapped scheduled batches are a separate timing contract. */
-    using AudioCommandPayload =
-        std::variant<AudioCreateVoiceCommand, AudioStartVoiceCommand, AudioStopVoiceCommand, AudioSetParameterCommand,
-                     AudioSwapGraphCommand, AudioReleaseResourceCommand, AudioSceneUnloadCommand, AudioResetCommand>;
+    using AudioCommandPayload = std::variant<AudioCreateVoiceCommand, AudioStartVoiceCommand, AudioStopVoiceCommand,
+                                             AudioSetParameterCommand, AudioSwapGraphCommand, AudioReleaseResourceCommand,
+                                             AudioSceneUnloadCommand, AudioResetCommand, AudioScheduledBatchCommand>;
 
     /** @brief Owned next-buffer-boundary intent; copying retains IDs, not resource lifetime or producer references. */
     struct AudioCommand {

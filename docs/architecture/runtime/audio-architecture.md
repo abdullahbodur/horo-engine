@@ -1131,11 +1131,26 @@ across documented lifecycle boundaries such as scene unload or device reset.
 
 The additive `HoroEngine::AudioCommands` contract owns `Audio/AudioCommands.h`
 and depends on AudioMemory for generation-scoped prepared storage identities.
-Its current typed value surface represents next-buffer-boundary create/start/stop,
-parameter, graph-publication, logical-release, scene-unload and reset intents.
-It does not implement clock mapping or scheduled batches, voice
-execution or lifecycle commits. Those implementations must consume this contract
-rather than inventing string opcodes or callback-side asset/ECS lookups.
+Its typed value surface represents next-buffer-boundary create/start/stop,
+parameter, graph-publication, logical-release, scene-unload and reset intents,
+plus retained scheduled-batch references. `Audio/AudioClock.h` maps a bounded
+producer-clock correlation to one exact sample frame using checked integer
+arithmetic. Runtime, sample-clock, producer-clock and discontinuity generations
+must all match; paused, stale, out-of-window and overflow mappings are explicit
+rejections. The mapping never reads wall time or derives callback cadence from a
+presentation or simulation frame.
+
+`Audio/ScheduledAudioCommandBatch.h` prepares at most sixteen normalized commands
+with one complete scope and one target. A next-buffer target carries no sample
+identity; an exact-sample target carries nonzero clock and discontinuity
+generations. Control retains the complete fixed batch in admitted CommandStorage
+and publishes one `AudioScheduledBatchCommand` reference through the existing
+FIFO. The callback therefore observes the batch as one indivisible record and
+applies its children in declared array order at the named boundary. Nested batches,
+mixed scopes, ambiguous targets and incomplete storage fail before publication.
+These contracts do not execute voices or commit lifecycle state. Implementations
+must consume them rather than inventing string opcodes or callback-side asset/ECS
+lookups.
 
 All scene-bound intents carry exact runtime/epoch/context identities. Global
 audio uses an explicitly host-owned context; a reset instead has an entirely
@@ -1248,6 +1263,14 @@ Commands in the same `ScheduledCommandBatch` with the same timestamp are applied
 atomically at the same buffer boundary. Timeline systems and animation-event
 systems use this to start multiple voices in sync without adding a separate
 real-time API.
+
+The concrete AUD-001.7 contract resolves producer timestamps on control through
+an immutable `AudioClockCorrelationSnapshot`. Correlations have an inclusive
+validity interval and exact runtime, sample-clock, producer-clock and discontinuity
+generations. Conversion truncates sub-frame fractions toward the correlation
+anchor; it never rounds work into a later boundary. A paused correlation cannot
+schedule even its anchor timestamp. Resume, reset, seek or replacement must publish
+a new generation/revision before scheduling resumes.
 
 For footsteps, [ADR-091](../../adr/091-footstep-and-locomotion-event-ownership.md)
 requires an application-owned post-commit adapter to join the Animation occurrence

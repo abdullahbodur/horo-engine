@@ -75,6 +75,17 @@ namespace Horo::Audio {
             bool operator()(const AudioResetCommand &) const noexcept {
                 return true;
             }
+
+            /** @brief Validate one retained atomic-batch reference without resolving callback-visible storage. */
+            bool operator()(const AudioScheduledBatchCommand &command) const noexcept {
+                using enum AudioCommandTargetKind;
+                const bool bufferTarget = command.target.kind == NextBufferBoundary && command.target.sampleFrame == 0 &&
+                                          command.target.clockGeneration == 0 && command.target.discontinuityRevision == 0;
+                const bool sampleTarget = command.target.kind == ExactSampleFrame && command.target.clockGeneration != 0 &&
+                                          command.target.discontinuityRevision != 0;
+                return Storage(command.storage) && command.commandCount != 0 && command.commandCount <= MaximumScheduledAudioCommands &&
+                       (bufferTarget || sampleTarget);
+            }
         };
     }  // namespace
 
@@ -101,7 +112,9 @@ namespace Horo::Audio {
         const bool critical = std::holds_alternative<AudioStopVoiceCommand>(command.payload) ||
                               std::holds_alternative<AudioReleaseResourceCommand>(command.payload) ||
                               std::holds_alternative<AudioSceneUnloadCommand>(command.payload) ||
-                              std::holds_alternative<AudioResetCommand>(command.payload);
+                              std::holds_alternative<AudioResetCommand>(command.payload) ||
+                              (std::holds_alternative<AudioScheduledBatchCommand>(command.payload) &&
+                               std::get<AudioScheduledBatchCommand>(command.payload).containsCriticalCommand);
         return critical ? AudioCommandClass::Critical : AudioCommandClass::Ordinary;
     }
 
