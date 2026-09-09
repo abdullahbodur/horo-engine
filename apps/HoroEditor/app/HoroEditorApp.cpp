@@ -167,12 +167,53 @@ namespace Horo::Editor {
             std::uintptr_t logo{0};
         };
 
+        /** @brief Resolves packaged assets relative to the executable or application bundle. */
+        [[nodiscard]] const std::filesystem::path &EditorAssetRoot() {
+            static const std::filesystem::path root = [] {
+                if (const char *basePath = SDL_GetBasePath(); basePath != nullptr && basePath[0] != '\0') {
+                    return (std::filesystem::path{basePath} / HORO_EDITOR_PACKAGED_ASSET_ROOT_RELATIVE).lexically_normal();
+                }
+                return std::filesystem::path{};
+            }();
+            return root;
+        }
+
+        /** @brief Resolves one editor asset below the active asset root. */
         [[nodiscard]] std::string AssetPath(const char *rel) {
-            return std::string{HORO_EDITOR_ASSET_ROOT} + "/" + rel;
+            return (EditorAssetRoot() / rel).string();
+        }
+
+        /** @brief Applies the shared Horo logo through SDL on window systems that support runtime icons. */
+        void ApplyEditorWindowIcon(SDL_Window &window) {
+            const std::string path = AssetPath("launcher/logo.png");
+            int width = 0;
+            int height = 0;
+            int channels = 0;
+            const std::unique_ptr<stbi_uc, decltype(&stbi_image_free)> pixels{stbi_load(path.c_str(), &width, &height, &channels, 4),
+                                                                              &stbi_image_free};
+            if (pixels == nullptr) {
+                LOG_WARN("platform.assets", "Window icon not found at '%s'.", path.c_str());
+                return;
+            }
+            if (width <= 0 || height <= 0) {
+                LOG_WARN("platform.assets", "Window icon at '%s' has invalid dimensions.", path.c_str());
+                return;
+            }
+
+            const std::unique_ptr<SDL_Surface, decltype(&SDL_DestroySurface)> icon{SDL_CreateSurfaceFrom(width, height,
+                                                                                                         SDL_PIXELFORMAT_RGBA32,
+                                                                                                         pixels.get(), width * 4),
+                                                                                   &SDL_DestroySurface};
+            if (icon == nullptr) {
+                LOG_WARN("platform.sdl", "Unable to create the Horo Editor window icon: %s", SDL_GetError());
+                return;
+            }
+            if (!SDL_SetWindowIcon(&window, icon.get()))
+                LOG_WARN("platform.sdl", "Unable to apply the Horo Editor window icon: %s", SDL_GetError());
         }
 
         [[nodiscard]] bool LoadEditorCatalogResources(LocalizationService &localization) {
-            const std::filesystem::path root = std::filesystem::path{HORO_EDITOR_ASSET_ROOT} / "localization" / "editor";
+            const std::filesystem::path root = EditorAssetRoot() / "localization" / "editor";
             bool loadedAny = false;
             std::error_code error;
             if (!std::filesystem::exists(root, error))
@@ -497,6 +538,8 @@ namespace Horo::Editor {
                     return false;
             }
 
+            if (!SDL_SetAppMetadata("Horo Editor", HORO_ENGINE_VERSION_STRING, HORO_EDITOR_APP_ID))
+                LOG_WARN("platform.sdl", "Unable to set Horo Editor application metadata: %s", SDL_GetError());
             if (!SDL_Init(SDL_INIT_VIDEO | SDL_INIT_GAMEPAD)) {
                 const char *err = SDL_GetError();
                 LOG_CRITICAL("platform.sdl", "SDL_Init failed: %s", err);
@@ -521,6 +564,7 @@ namespace Horo::Editor {
                 SDL_Quit();
                 return false;
             }
+            ApplyEditorWindowIcon(*window);
 
             return true;
         }
