@@ -9,6 +9,12 @@
 
 namespace Horo::Audio {
     namespace {
+        void RequireError(const Result<void> &result, const ErrorCodeDescriptor &descriptor) {
+            REQUIRE(result.HasError());
+            CHECK(result.ErrorValue().domain.Value() == descriptor.domain.Value());
+            CHECK(result.ErrorValue().code.Value() == descriptor.code.Value());
+        }
+
         AudioClipId Clip(const std::uint8_t marker) {
             std::array<std::uint8_t, 16> bytes{};
             bytes.back() = marker;
@@ -48,10 +54,6 @@ namespace Horo::Audio {
             return {CurrentAudioAssetSchemaVersion, selection, {{Clip(1), weight}, {Clip(2), weight}}, {-1.0F, 1.0F}, {-3.0F, 0.0F}, 0};
         }
 
-        void RequireError(const Result<void> &result, const ErrorCodeDescriptor &descriptor) {
-            REQUIRE(result.HasError());
-            CHECK(result.ErrorValue().code.Value() == descriptor.code.Value());
-        }
     }  // namespace
 
     TEST_CASE("Audio clip and stream schemas preserve valid bounded semantic metadata", "[unit][audio][asset-schema]") {

@@ -93,11 +93,12 @@ namespace Horo::Audio {
         }
 
         [[nodiscard]] bool IsKnownSelection(const AudioVariationSelection selection) noexcept {
+            using enum AudioVariationSelection;
             switch (selection) {
-                case AudioVariationSelection::Random:
-                case AudioVariationSelection::RoundRobin:
-                case AudioVariationSelection::Shuffle:
-                case AudioVariationSelection::WeightedRandom:
+                case Random:
+                case RoundRobin:
+                case Shuffle:
+                case WeightedRandom:
                     return true;
             }
             return false;
