@@ -72,6 +72,11 @@ namespace {
         REQUIRE_FALSE((controller.Draft().includeStarterContent));
         REQUIRE((controller.Draft().defaultScene.empty()));
 
+        controller.SetTemplateId("custom");
+        REQUIRE((controller.Draft().includeStarterContent));
+        REQUIRE((controller.Draft().defaultScene == "assets/scenes/main.horo"));
+
+        controller.SetTemplateId("empty");
         controller.SetTemplateId("package-based");
         REQUIRE((controller.Draft().includeStarterContent));
         REQUIRE((controller.Draft().defaultScene == "assets/scenes/main.horo"));
