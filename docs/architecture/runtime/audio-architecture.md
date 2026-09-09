@@ -485,6 +485,15 @@ before the clip enters the audio callback. Variation containers are small assets
 that live next to `AudioClip` assets and are authored through the same import
 pipeline.
 
+The M2 schema baseline represents resident clips, streamed media and deterministic
+variation containers as versioned, bounded Audio-owned values in `HoroAudioApi`.
+Validation is side-effect free and rejects invalid semantic formats, sample-frame
+ranges, duplicate local identities, unordered seek anchors, non-finite loudness or
+variation values and unsupported schema versions before cook publication. This
+baseline contains no source path, cache key, native format, decoder pointer or live
+audio handle; import, codec selection, cooking and runtime streaming remain separate
+responsibilities.
+
 ### Loudness And Metering Metadata
 
 Cooked audio assets carry loudness metadata for mixing, normalization, and
