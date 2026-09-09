@@ -316,6 +316,20 @@ enum class StreamingCellState : uint8_t {
 };
 ```
 
+`StreamingCellStateLedger` is the bounded concrete authority for these six facts.
+It reconciles only scheduler-owned canonical `StreamingCellOperation` snapshots;
+Queued work, provider `Prepared`, operation `Activating`/`Retiring`, unresolved
+lookup and stale fencing do not become additional residency enum values. An admitted
+Load creates `Loading`; successful Load and Activate terminals publish `Resident`
+and `Active`; accepted interruption first publishes `Evicting`, and only its exact
+retirement-acknowledged terminal may publish `Unloaded` or `Failed`.
+
+The ledger retains bounded terminal tombstones to prevent a retired generation from
+being replayed. A fresh greater generation may reuse a terminal cell slot, or coexist
+with an older `Evicting` generation when capacity was admitted; old completions can
+therefore reclaim their own attempt without mutating the newer one. Shutdown closes
+new loading and publication while exact retirement snapshots continue to drain.
+
 ```mermaid
 stateDiagram-v2
     Unloaded --> Loading: Cost and queue admission
