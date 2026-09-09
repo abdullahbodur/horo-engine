@@ -101,6 +101,8 @@ namespace Horo::Runtime::Ui {
         TEST_CASE("Retained UI tree owns deterministic authored child and preorder order", "[runtime_ui][tree]") {
             const auto tree = Tree();
             REQUIRE(tree.Size() == 4);
+            REQUIRE(tree.SourceDocument() == Stable<UiDocumentId>(20));
+            REQUIRE(tree.SourceDocumentRevision() == DocumentRevision());
             REQUIRE(tree.Root().Value().id == Stable<UiElementId>(1));
             REQUIRE(PreorderIds(tree) ==
                     std::vector{Stable<UiElementId>(1), Stable<UiElementId>(2), Stable<UiElementId>(4), Stable<UiElementId>(3)});
