@@ -156,7 +156,8 @@ namespace {
                                          .primitiveMesh = PrimitiveMeshDescriptor::Defaults(Runtime::PrimitiveMeshType::Box),
                                          .components =
                                              SceneObjectComponentSet{
-                                                 .camera = Runtime::CameraComponent{.nearPlane = 0.25F, .farPlane = 500.0F},
+                                                 .camera =
+                                                     Runtime::CameraComponent{.nearPlane = 0.25F, .farPlane = 500.0F, .enabled = false},
                                                  .light = Runtime::LightComponent{.kind = Runtime::LightKind::Point, .intensity = 3.0F},
                                                  .triggerVolume = Runtime::TriggerVolumeComponent{Runtime::ColliderShapeType::Sphere},
                                                  .audioSource = Runtime::AudioSourceComponent{.gain = 0.75F, .spatial = false},

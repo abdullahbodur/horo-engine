@@ -16,7 +16,7 @@ namespace Horo::Editor {
     constexpr float kMenuBarH = 28.0F;
     constexpr float kToolbarH = 38.0F;
     constexpr float kRecoveryBarH = 40.0F;
-    constexpr float kActivityBarW = 36.0F;
+    constexpr float kActivityBarW = 42.0F;
     constexpr float kMinimumDocumentW = 120.0F;
     constexpr float kMinimumMainH = 100.0F;
 
@@ -47,6 +47,55 @@ namespace Horo::Editor {
                     return slot.rail == ActivityBarRail::DocumentTop && slot.groupIndex == 0;
             }
             return false;
+        }
+
+        [[nodiscard]] bool IsActivityItemActive(const std::string_view panelId, const EditorWorkspaceViewModel &viewModel) {
+            return panelId == viewModel.activeLeftPanelId || panelId == viewModel.activeRightPanelId ||
+                   panelId == viewModel.activeLeftTopPanelId || panelId == viewModel.activeLeftBottomPanelId ||
+                   panelId == viewModel.activeRightTopPanelId || panelId == viewModel.activeRightBottomPanelId ||
+                   panelId == viewModel.activeBottomLeftPanelId || panelId == viewModel.activeBottomRightPanelId ||
+                   panelId == viewModel.activeBottomPanelId || panelId == viewModel.activeDocumentPanelId;
+        }
+
+        [[nodiscard]] bool IsActiveInBottomSplit(const std::string_view panelId, const EditorWorkspaceViewModel &viewModel) {
+            return viewModel.bottomDockMode == BottomDockMode::Split &&
+                   (panelId == viewModel.activeBottomLeftPanelId || panelId == viewModel.activeBottomRightPanelId);
+        }
+
+        [[nodiscard]] bool IsActiveInSideSplit(const std::string_view panelId, const EditorWorkspaceViewModel &viewModel) {
+            return (viewModel.leftDockMode == SideDockMode::Split &&
+                    (panelId == viewModel.activeLeftTopPanelId || panelId == viewModel.activeLeftBottomPanelId)) ||
+                   (viewModel.rightDockMode == SideDockMode::Split &&
+                    (panelId == viewModel.activeRightTopPanelId || panelId == viewModel.activeRightBottomPanelId));
+        }
+
+        [[nodiscard]] int ActivityBarAreaIndex(const WorkspaceDockArea area) {
+            using enum WorkspaceDockArea;
+            switch (area) {
+                case Left:
+                    return 0;
+                case Right:
+                    return 1;
+                case Bottom:
+                    return 2;
+                case Document:
+                    return 3;
+            }
+            return 3;
+        }
+
+        /** @brief Begins an opaque border-backed workspace surface with shared window styling. */
+        void BeginWorkspaceSurface(const char *id, const ImVec2 position, const ImVec2 size, const ImVec2 padding,
+                                   const ImGuiWindowFlags flags) {
+            ImGui::SetNextWindowPos(position);
+            ImGui::SetNextWindowSize(size);
+            ImGui::SetNextWindowBgAlpha(1.0F);
+            ImGui::PushStyleColor(ImGuiCol_WindowBg, Theme::Bg1());
+            ImGui::PushStyleColor(ImGuiCol_Border, Theme::Border());
+            ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 0.0F);
+            ImGui::PushStyleVar(ImGuiStyleVar_WindowBorderSize, 1.0F);
+            ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, padding);
+            ImGui::Begin(id, nullptr, flags);
         }
 
         void DrawAllocationTarget(const AllocationTarget &target, const EditorWorkspaceViewModel &viewModel,
@@ -327,6 +376,17 @@ namespace Horo::Editor {
         return m_panelDragCapture.IsActive() && m_inputRouter.IsContextActive(m_panelDragContext);
     }
 
+    /** @copydoc EditorWorkspaceView::DrawActivityPanelDragSource */
+    void EditorWorkspaceView::DrawActivityPanelDragSource(const std::string &panelId, const std::shared_ptr<IWorkspacePanel> &panel) {
+        if (!ImGui::BeginDragDropSource(ImGuiDragDropFlags_SourceAllowNullID))
+            return;
+        if (EnsurePanelDragCapture()) {
+            ImGui::SetDragDropPayload("HORO_ACTIVITY_BAR_PANEL", panelId.c_str(), panelId.size() + 1);
+            ImGui::TextUnformatted(panel->GetDisplayName().c_str());
+        }
+        ImGui::EndDragDropSource();
+    }
+
     void EditorWorkspaceView::OnInputCaptureCancelled(Input::CaptureCancellationReason) noexcept {
         m_panelDragCapture.Release();
         m_panelDragContext.Reset();
@@ -460,22 +520,23 @@ namespace Horo::Editor {
                                       EditorWorkspaceViewCommandData &outCommand, const EditorGuiContext &context) {
             for (const EditorMenuItem &item : parent.children) {
                 if (item.kind == EditorMenuItemKind::Separator) {
-                    ImGui::Separator();
+                    Ui::ContextMenuSeparator();
                     continue;
                 }
 
                 const std::string &label = context.localization.Get("editor", item.labelKey);
                 if (item.kind == EditorMenuItemKind::Submenu) {
-                    if (ImGui::BeginMenu(label.c_str())) {
+                    if (Ui::BeginContextSubmenu(label.c_str(), context.theme.fonts, item.iconToken)) {
                         DrawFallbackMenuChildren(item, viewModel, outCommand, context);
-                        ImGui::EndMenu();
+                        Ui::EndContextSubmenu();
                     }
                     continue;
                 }
 
                 const bool enabled = IsFallbackMenuItemEnabled(item, viewModel);
                 if (const char *shortcut = item.shortcut.empty() ? nullptr : item.shortcut.data();
-                    ImGui::MenuItem(label.c_str(), shortcut, false, enabled)) {
+                    Ui::ContextMenuItem(label.c_str(), shortcut, context.theme.fonts, Ui::ContextMenuItemTone::Normal, item.iconToken,
+                                        enabled)) {
                     outCommand.menuInvocation = EditorMenuInvocation{item.action, item.primitive};
                 }
             }
@@ -514,9 +575,9 @@ namespace Horo::Editor {
 
             for (const EditorMenuItem &menu : GetEditorMenuModel().menus) {
                 const std::string &label = m_context.localization.Get("editor", menu.labelKey);
-                if (ImGui::BeginMenu(label.c_str())) {
+                if (Ui::BeginMenuDropdown(label.c_str(), m_context.theme.fonts)) {
                     DrawFallbackMenuChildren(menu, viewModel, outCommand, m_context);
-                    ImGui::EndMenu();
+                    Ui::EndMenuDropdown();
                 }
             }
 
@@ -647,18 +708,9 @@ namespace Horo::Editor {
 
     void EditorWorkspaceView::DrawToolbar(const ImVec2 &pos, const ImVec2 &size, const EditorWorkspaceViewModel &viewModel,
                                           EditorWorkspaceViewCommandData &outCommand) {
-        ImGui::SetNextWindowPos(pos);
-        ImGui::SetNextWindowSize(size);
-        ImGui::SetNextWindowBgAlpha(1.0F);
-        ImGui::PushStyleColor(ImGuiCol_WindowBg, Theme::Bg1());
-        ImGui::PushStyleColor(ImGuiCol_Border, Theme::Border());
-        ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 0.0F);
-        ImGui::PushStyleVar(ImGuiStyleVar_WindowBorderSize, 1.0F);
-        ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(10.0F, 0.0F));
-
-        ImGui::Begin("##Toolbar", nullptr,
-                     ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoScrollbar |
-                         ImGuiWindowFlags_NoSavedSettings);
+        BeginWorkspaceSurface("##Toolbar", pos, size, {10.0F, 0.0F},
+                              ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove |
+                                  ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoSavedSettings);
 
         ImDrawList *dl = ImGui::GetWindowDrawList();
 
@@ -818,13 +870,8 @@ namespace Horo::Editor {
             outCommand.targetIndex = static_cast<int>(WorkspaceDockArea::Document);
             outCommand.stringPayload = panelId;
         }
-        if (!m_splitterInteraction.OwnsPrimaryPointer() && ImGui::BeginDragDropSource(ImGuiDragDropFlags_SourceAllowNullID)) {
-            if (EnsurePanelDragCapture()) {
-                ImGui::SetDragDropPayload("HORO_ACTIVITY_BAR_PANEL", panelId.c_str(), panelId.size() + 1);
-                ImGui::TextUnformatted(panel->GetDisplayName().c_str());
-            }
-            ImGui::EndDragDropSource();
-        }
+        if (!m_splitterInteraction.OwnsPrimaryPointer())
+            DrawActivityPanelDragSource(panelId, panel);
         const bool active = panelId == viewModel.activeDocumentPanelId;
         const ImVec2 itemMin(tabX, tabY);
         const ImVec2 itemMax(tabX + tabWidth, tabY + tabHeight);
@@ -994,17 +1041,9 @@ namespace Horo::Editor {
 
         const auto &panels = m_panelRegistry.GetAllPanels();
 
-        ImGui::SetNextWindowPos(pos);
-        ImGui::SetNextWindowSize(size);
-        ImGui::SetNextWindowBgAlpha(1.0F);
-        ImGui::PushStyleColor(ImGuiCol_WindowBg, Theme::Bg1());
-        ImGui::PushStyleColor(ImGuiCol_Border, Theme::Border());
-        ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 0.0F);
-        ImGui::PushStyleVar(ImGuiStyleVar_WindowBorderSize, 1.0F);
-        ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0.0F, 0.0F));
-
-        ImGui::Begin(windowId, nullptr,
-                     ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoSavedSettings);
+        BeginWorkspaceSurface(windowId, pos, size, {0.0F, 0.0F},
+                              ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove |
+                                  ImGuiWindowFlags_NoSavedSettings);
 
         std::shared_ptr<IWorkspacePanel> activePanel = nullptr;
         for (const auto &p : panels) {
@@ -1021,32 +1060,12 @@ namespace Horo::Editor {
             return;
         }
 
-        constexpr float paneChromeHeight = 28.0F;
-        ImDrawList *paneDrawList = ImGui::GetWindowDrawList();
-        paneDrawList->AddRectFilled(pos, ImVec2(pos.x + size.x, pos.y + paneChromeHeight), Theme::U32(Theme::Bg0()));
-        paneDrawList->AddLine(ImVec2(pos.x, pos.y + paneChromeHeight - 1.0F), ImVec2(pos.x + size.x, pos.y + paneChromeHeight - 1.0F),
-                              Theme::U32(Theme::Border()), 1.0F);
-
         const char *targetNodeId = "workspace.document";
         if (area == WorkspaceDockArea::Left) {
             targetNodeId = "workspace.left";
         } else if (area == WorkspaceDockArea::Right) {
             targetNodeId = "workspace.right";
         }
-        ImGui::SetCursorPos(ImVec2(0.0F, 0.0F));
-        if (m_splitterInteraction.OwnsPrimaryPointer()) {
-            ImGui::Dummy(ImVec2(size.x, paneChromeHeight));
-        } else {
-            ImGui::InvisibleButton("##WorkspacePanelDragHandle", ImVec2(size.x, paneChromeHeight));
-            if (ImGui::BeginDragDropSource(ImGuiDragDropFlags_SourceAllowNullID)) {
-                if (EnsurePanelDragCapture()) {
-                    ImGui::SetDragDropPayload("HORO_WORKSPACE_PANEL", activePanelId.data(), activePanelId.size());
-                    ImGui::TextUnformatted(activePanelId.data(), activePanelId.data() + activePanelId.size());
-                }
-                ImGui::EndDragDropSource();
-            }
-        }
-
         if (const ImGuiPayload *dragPayload = ImGui::GetDragDropPayload();
             dragPayload != nullptr && dragPayload->IsDataType("HORO_WORKSPACE_PANEL")) {
             constexpr float edgeFraction = 0.22F;
@@ -1064,14 +1083,27 @@ namespace Horo::Editor {
                                     ImVec2(size.x - edgeW * 2.0F, size.y - edgeH * 2.0F), TabCenter, outCommand);
         }
 
-        // Render the active panel content inside a child view.
-        // The panel itself is responsible for drawing its own tabs.
-        ImGui::SetCursorPos(ImVec2(0.0F, paneChromeHeight));
+        // The panel owns its visible title/tab surface. A separate host chrome bar
+        // would duplicate that surface and waste vertical space in every dock.
+        ImGui::SetCursorPos(ImVec2(0.0F, 0.0F));
         ImGui::PushStyleColor(ImGuiCol_ChildBg, Theme::Bg1());
-        ImGui::BeginChild("##DockContent", ImVec2(0.0F, size.y - paneChromeHeight), false, ImGuiWindowFlags_NoSavedSettings);
+        ImGui::BeginChild("##DockContent", ImVec2(0.0F, size.y), false, ImGuiWindowFlags_NoSavedSettings);
         activePanel->DrawPanel(ImGui::GetWindowPos(), ImGui::GetWindowSize(), viewModel, outCommand, m_context);
         ImGui::EndChild();
         ImGui::PopStyleColor();
+
+        // Preserve panel rearrangement without adding visible host chrome. The
+        // panel-owned top tab/title region doubles as the drag initiation area.
+        const float dragRegionHeight = 28.0F * Theme::GetActiveTokens().sizes.uiScale;
+        if (const bool pointerInDragRegion = ImGui::IsMouseHoveringRect(pos, ImVec2(pos.x + size.x, pos.y + dragRegionHeight), false);
+            !m_splitterInteraction.OwnsPrimaryPointer() && pointerInDragRegion && ImGui::IsMouseDragging(ImGuiMouseButton_Left) &&
+            ImGui::BeginDragDropSource(ImGuiDragDropFlags_SourceExtern)) {
+            if (EnsurePanelDragCapture()) {
+                ImGui::SetDragDropPayload("HORO_WORKSPACE_PANEL", activePanelId.data(), activePanelId.size());
+                ImGui::TextUnformatted(activePanelId.data(), activePanelId.data() + activePanelId.size());
+            }
+            ImGui::EndDragDropSource();
+        }
 
         ImGui::End();
         ImGui::PopStyleVar(3);
@@ -1164,13 +1196,6 @@ namespace Horo::Editor {
 
     void EditorWorkspaceView::DrawActivityBarGroup(const ActivityBarGroupParams &params, const EditorWorkspaceViewModel &viewModel,
                                                    EditorWorkspaceViewCommandData &outCommand) {
-        if (params.groupIndex > 0) {
-            params.geometry.drawList->AddLine(ImVec2(params.geometry.cellX + 6.0F, params.geometry.contentY + params.groupTop),
-                                              ImVec2(params.geometry.cellX + params.geometry.cellSize - 6.0F,
-                                                     params.geometry.contentY + params.groupTop),
-                                              Theme::U32(Theme::Border()), 1.0F);
-        }
-
         ImGui::PushClipRect(ImVec2(params.pos.x, params.geometry.contentY + params.groupTop),
                             ImVec2(params.pos.x + params.size.x, params.geometry.contentY + params.groupBottom), true);
 
@@ -1198,7 +1223,7 @@ namespace Horo::Editor {
         for (std::size_t itemIndex = 0; itemIndex < params.group.items.size(); ++itemIndex) {
             if (DrawActivityDropSlot(ActivityBarSlot{rail, params.groupIndex, itemIndex}, currentY, params.draggingActivityItem,
                                      params.geometry, outCommand)) {
-                currentY += params.geometry.cellSize;
+                currentY += params.geometry.cellHeight + params.geometry.cellGap;
             }
 
             const std::string &panelId = params.group.items[itemIndex];
@@ -1219,44 +1244,41 @@ namespace Horo::Editor {
     void EditorWorkspaceView::DrawActivityBar(const ImVec2 &pos, const ImVec2 &size, const WorkspacePanelRegistry &,
                                               const EditorWorkspaceViewModel &viewModel, EditorWorkspaceViewCommandData &outCommand,
                                               const ActivityBarOptions options) {
-        ImGui::SetNextWindowPos(pos);
-        ImGui::SetNextWindowSize(size);
-        ImGui::SetNextWindowBgAlpha(1.0F);
-        ImGui::PushStyleColor(ImGuiCol_WindowBg, Theme::Bg0());
-        ImGui::PushStyleColor(ImGuiCol_Border, Theme::Border());
-        ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 0.0F);
-        ImGui::PushStyleVar(ImGuiStyleVar_WindowBorderSize, 1.0F);
-        ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0.0F, 8.0F));
-
         const char *windowId = options.indicatorOnRight ? "##ActivityRight" : "##ActivityLeft";
-        ImGui::Begin(windowId, nullptr,
-                     ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoScrollbar |
-                         ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoNavInputs | ImGuiWindowFlags_NoNavFocus);
+        BeginWorkspaceSurface(windowId, pos, size, {0.0F, 6.0F},
+                              ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove |
+                                  ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoNavInputs |
+                                  ImGuiWindowFlags_NoNavFocus);
 
         ImDrawList *drawList = ImGui::GetWindowDrawList();
         const ImVec2 windowPos = ImGui::GetWindowPos();
         const ImVec2 contentMin = ImGui::GetWindowContentRegionMin();
         constexpr float activityBarBorder = 1.0F;
-        constexpr float cellInset = 1.0F;
-        constexpr float preferredCellSize = 32.0F;
+        constexpr float cellHeight = 30.0F;
+        constexpr float cellGap = 2.0F;
         const float outerWidth = (std::max)(0.0F, size.x);
-        const float availableCellSize = (std::max)(0.0F, outerWidth - 2.0F * (activityBarBorder + cellInset));
-        const float cellSize = (std::min)(preferredCellSize, availableCellSize);
-        const float cellX = pos.x + (outerWidth - cellSize) * 0.5F;
+        const float cellX = pos.x + activityBarBorder;
+        const float cellWidth = (std::max)(0.0F, outerWidth - 2.0F * activityBarBorder);
         const float contentY = windowPos.y + contentMin.y;
         const auto &groups =
             viewModel.activityBarLayout.Groups(options.area == WorkspaceDockArea::Right ? ActivityBarRail::Right : ActivityBarRail::Left);
         const bool draggingActivityItem = ImGui::GetDragDropPayload() != nullptr;
 
-        constexpr float activityBarBottomPadding = 8.0F;
+        constexpr float activityBarBottomPadding = 6.0F;
         const float usableHeight = (std::max)(0.0F, size.y - contentMin.y - activityBarBottomPadding);
-        const float groupHeight = groups.empty() ? 0.0F : usableHeight / static_cast<float>(groups.size());
+        const ActivityBarGeometry geometry{cellX, contentY, cellWidth, cellHeight, cellGap, drawList};
+        const float cellStride = cellHeight + cellGap;
+        const auto groupExtent = [cellStride, draggingActivityItem](const ActivityBarGroup &group) {
+            const std::size_t slotCount = group.items.size() + (draggingActivityItem ? 1U : 0U);
+            return slotCount == 0U ? 0.0F : static_cast<float>(slotCount) * cellStride - cellGap;
+        };
 
-        const ActivityBarGeometry geometry{cellX, contentY, cellSize, drawList};
-
+        float topGroupY = 0.0F;
         for (std::size_t groupIndex = 0; groupIndex < groups.size(); ++groupIndex) {
-            const float groupTop = static_cast<float>(groupIndex) * groupHeight;
-            const float groupBottom = groupTop + groupHeight;
+            const float extent = groupExtent(groups[groupIndex]);
+            const bool bottomAnchored = groupIndex + 1U == groups.size();
+            const float groupTop = bottomAnchored ? (std::max)(topGroupY, usableHeight - extent) : topGroupY;
+            const float groupBottom = (std::min)(usableHeight, groupTop + extent);
             DrawActivityBarGroup(ActivityBarGroupParams{.groupIndex = groupIndex,
                                                         .group = groups[groupIndex],
                                                         .groupTop = groupTop,
@@ -1267,6 +1289,9 @@ namespace Horo::Editor {
                                                         .options = options,
                                                         .draggingActivityItem = draggingActivityItem},
                                  viewModel, outCommand);
+            if (!bottomAnchored) {
+                topGroupY = groupBottom + (extent > 0.0F ? cellGap : 0.0F);
+            }
         }
 
         ImGui::End();
@@ -1282,7 +1307,7 @@ namespace Horo::Editor {
 
         ImGui::SetCursorScreenPos(ImVec2(geometry.cellX, geometry.contentY + y));
         ImGui::PushID(static_cast<int>(slot.groupIndex * 1000 + slot.itemIndex));
-        ImGui::InvisibleButton("##ActivityInsertSlot", ImVec2(geometry.cellSize, geometry.cellSize));
+        ImGui::InvisibleButton("##ActivityInsertSlot", ImVec2(geometry.cellWidth, geometry.cellHeight));
         const bool hovered = ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenBlockedByActiveItem);
         const ImVec2 targetMin = ImGui::GetItemRectMin();
         const ImVec2 targetMax = ImGui::GetItemRectMax();
@@ -1314,48 +1339,35 @@ namespace Horo::Editor {
             panelArea = placement->second;
         }
 
-        const bool isActive = panelId == viewModel.activeLeftPanelId || panelId == viewModel.activeRightPanelId ||
-                              panelId == viewModel.activeLeftTopPanelId || panelId == viewModel.activeLeftBottomPanelId ||
-                              panelId == viewModel.activeRightTopPanelId || panelId == viewModel.activeRightBottomPanelId ||
-                              panelId == viewModel.activeBottomLeftPanelId || panelId == viewModel.activeBottomRightPanelId ||
-                              panelId == viewModel.activeBottomPanelId || panelId == viewModel.activeDocumentPanelId;
-        const bool activeInBottomSplit = viewModel.bottomDockMode == BottomDockMode::Split &&
-                                         (panelId == viewModel.activeBottomLeftPanelId || panelId == viewModel.activeBottomRightPanelId);
-        const bool activeInSideSplit = (viewModel.leftDockMode == SideDockMode::Split &&
-                                        (panelId == viewModel.activeLeftTopPanelId || panelId == viewModel.activeLeftBottomPanelId)) ||
-                                       (viewModel.rightDockMode == SideDockMode::Split &&
-                                        (panelId == viewModel.activeRightTopPanelId || panelId == viewModel.activeRightBottomPanelId));
+        const bool isActive = IsActivityItemActive(panelId, viewModel);
+        const bool activeInBottomSplit = IsActiveInBottomSplit(panelId, viewModel);
+        const bool activeInSideSplit = IsActiveInSideSplit(panelId, viewModel);
         const ImVec2 itemMin(geometry.cellX, geometry.contentY + y);
-        const ImVec2 itemMax(geometry.cellX + geometry.cellSize, geometry.contentY + y + geometry.cellSize);
+        const ImVec2 itemMax(geometry.cellX + geometry.cellWidth, geometry.contentY + y + geometry.cellHeight);
         ImGui::SetCursorScreenPos(itemMin);
         ImGui::PushID(panelId.c_str());
-        if (ImGui::InvisibleButton("##ActivityItem", ImVec2(geometry.cellSize, geometry.cellSize))) {
-            using enum WorkspaceDockArea;
-            int areaIndex = 3;
-            if (panelArea == Left) {
-                areaIndex = 0;
-            } else if (panelArea == Right) {
-                areaIndex = 1;
-            } else if (panelArea == Bottom) {
-                areaIndex = 2;
-            }
+        if (ImGui::InvisibleButton("##ActivityItem", ImVec2(geometry.cellWidth, geometry.cellHeight))) {
             outCommand.command = EditorWorkspaceViewCommand::ChangeActivePanel;
-            outCommand.targetIndex = areaIndex;
+            outCommand.targetIndex = ActivityBarAreaIndex(panelArea);
             outCommand.stringPayload = isActive && !activeInBottomSplit && !activeInSideSplit ? std::string{} : panelId;
         }
-        if (options.allowDragSources && ImGui::BeginDragDropSource(ImGuiDragDropFlags_SourceAllowNullID)) {
-            if (EnsurePanelDragCapture()) {
-                ImGui::SetDragDropPayload("HORO_ACTIVITY_BAR_PANEL", panelId.c_str(), panelId.size() + 1);
-                ImGui::TextUnformatted(panel->GetDisplayName().c_str());
-            }
-            ImGui::EndDragDropSource();
-        }
+        if (options.allowDragSources)
+            DrawActivityPanelDragSource(panelId, panel);
+        const bool hovered = ImGui::IsItemHovered();
         ImGui::PopID();
 
-        geometry.drawList->AddRect(ImVec2(itemMin.x + 0.5F, itemMin.y + 0.5F), ImVec2(itemMax.x - 0.5F, itemMax.y - 0.5F),
-                                   Theme::U32(Theme::Border()), 0.0F, 0, 1.0F);
-        const ImU32 iconColor = isActive ? Theme::U32(Theme::Text()) : Theme::U32(Theme::Dim());
-        panel->DrawIcon(geometry.drawList, itemMin, ImVec2(geometry.cellSize, geometry.cellSize), iconColor);
-        return y + geometry.cellSize;
+        if (isActive || hovered) {
+            geometry.drawList->AddRectFilled(itemMin, itemMax, Theme::U32(isActive ? Theme::AccentSoft() : Theme::Hover()));
+        }
+        if (isActive) {
+            constexpr float indicatorWidth = 2.0F;
+            constexpr float indicatorInset = 3.0F;
+            const float indicatorX = options.indicatorOnRight ? itemMax.x - indicatorWidth : itemMin.x;
+            geometry.drawList->AddRectFilled(ImVec2(indicatorX, itemMin.y + indicatorInset),
+                                             ImVec2(indicatorX + indicatorWidth, itemMax.y - indicatorInset), Theme::U32(Theme::Accent()));
+        }
+        const ImU32 iconColor = isActive || hovered ? Theme::U32(Theme::Text()) : Theme::U32(Theme::Muted());
+        panel->DrawIcon(geometry.drawList, itemMin, ImVec2(geometry.cellWidth, geometry.cellHeight), iconColor);
+        return y + geometry.cellHeight + geometry.cellGap;
     }
 }  // namespace Horo::Editor

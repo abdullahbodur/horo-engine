@@ -47,19 +47,18 @@ namespace Horo::Editor {
                                                                         const float uiScale, const float actionsWidth = 0.0F) noexcept {
         const float scale = std::clamp(uiScale, 0.75F, 2.0F);
         const float width = std::max(1.0F, availableWidth);
-        const float rightPadding = 6.0F * scale;
-        const float indent = (2.0F + static_cast<float>(depth) * 12.0F) * scale;
+        const float rightPadding = 7.0F * scale;
+        const float indent = (7.0F + static_cast<float>(depth) * 18.0F) * scale;
         // Every row reserves the same chevron column so type icons and labels do
         // not shift when a node gains or loses children. Leaf rows leave it blank.
-        const float chevronWidth = 12.0F * scale;
-        const float iconWidth = 22.0F * scale;
-        // The 16 px icon is left-aligned inside its 22 px slot, leaving 6 px of
-        // intrinsic trailing space before this final 1 px label separation.
-        const float iconGap = 1.0F * scale;
+        const float chevronWidth = 13.0F * scale;
+        const float chevronIconGap = 6.0F * scale;
+        const float iconWidth = 16.0F * scale;
+        const float iconLabelGap = 6.0F * scale;
         const float clampedActionsWidth = std::clamp(actionsWidth, 0.0F, width);
 
         HierarchyRowLayout layout;
-        layout.height = 32.0F * scale;
+        layout.height = 30.0F * scale;
         layout.row = {0.0F, width};
         const float actionsMaximum = std::max(0.0F, width - rightPadding);
         layout.actions = {std::max(0.0F, actionsMaximum - clampedActionsWidth), actionsMaximum};
@@ -68,9 +67,9 @@ namespace Horo::Editor {
         layout.lockAction = {layout.visibilityAction.maximum, layout.actions.maximum};
         layout.chevron.minimum = std::min(indent, layout.actions.minimum);
         layout.chevron.maximum = std::min(layout.chevron.minimum + chevronWidth, layout.actions.minimum);
-        layout.typeIcon.minimum = layout.chevron.maximum;
+        layout.typeIcon.minimum = std::min(layout.chevron.maximum + chevronIconGap, layout.actions.minimum);
         layout.typeIcon.maximum = std::min(layout.typeIcon.minimum + iconWidth, layout.actions.minimum);
-        layout.label.minimum = std::min(layout.typeIcon.maximum + iconGap, layout.actions.minimum);
+        layout.label.minimum = std::min(layout.typeIcon.maximum + iconLabelGap, layout.actions.minimum);
         layout.label.maximum = layout.actions.minimum;
         return layout;
     }

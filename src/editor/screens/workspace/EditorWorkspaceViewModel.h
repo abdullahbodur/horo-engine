@@ -295,8 +295,8 @@ namespace Horo::Editor {
         BottomDockMode bottomDockMode = BottomDockMode::Full;
         std::string activeDocumentPanelId = "horo.viewport";
 
-        float leftPanelWidth = 230.0F;
-        float rightPanelWidth = 260.0F;
+        float leftPanelWidth = 268.0F;
+        float rightPanelWidth = 300.0F;
         float bottomPanelHeight = 238.0F;
 
         std::unordered_map<PanelId, WorkspaceDockArea, TransparentStringHash, std::equal_to<>> panelDockAreas;

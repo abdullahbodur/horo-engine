@@ -56,6 +56,7 @@ namespace Horo::Editor {
         bool changed{false};
         bool committed{false};
         bool cancelRequested{false};
+        bool resetRequested{false};
         InspectorTransformAxisMask changedAxes;
     };
 

@@ -25,9 +25,10 @@ namespace {
     }
 
     RenderTargetHandle PrepareViewportTarget(EditorViewportRendererMetal &viewport, RenderFrontend &frontend,
-                                             const EditorViewportSceneView &scene) {
+                                             const EditorViewportSceneView &scene, const EditorViewportExtent extent) {
         const RenderSceneView renderScene{ToRenderCamera(scene.camera), scene.meshResources, scene.instances, scene.lights};
         for (std::size_t attempt = 0; attempt < 4; ++attempt) {
+            viewport.RequestExtent(extent);
             auto prepared = viewport.PrepareResources(frontend, renderScene);
             Check(prepared.HasValue());
             Check(frontend.ProcessResourceRequests().HasValue());
@@ -51,31 +52,36 @@ namespace {
         const RenderSceneView renderScene{ToRenderCamera(replacementScene.camera), replacementScene.meshResources,
                                           replacementScene.instances, replacementScene.lights};
 
-        viewport.RequestExtent(resizedExtent);
-        auto pending = viewport.PrepareResources(frontend, renderScene);
-        Check(pending.HasValue() && pending.Value() == activeTarget);
-        Check(viewport.IsReady() && viewport.TextureView().textureId == activeTexture.textureId);
-        Check(viewport.RequestedExtent() == activeExtent);
-
-        auto begun = frontend.BeginFrame(FrameDescriptor{.frameNumber = 2, .outputExtent = {256, 256}});
-        Check(begun.HasValue());
-        RenderFrameScope frame = std::move(begun).Value();
-        const std::array passes{RenderPassDescriptor{
-            .id = RenderPassId{1},
-            .kind = RenderPassKind::Graphics,
-            .staticMesh = StaticMeshPassDescriptor{.target = activeTarget, .extent = {128, 128}, .scene = renderScene},
-        }};
-        Check(frame.Execute(passes).HasValue());
-        Check(frame.Present().HasValue());
-
         RenderTargetHandle resizedTarget;
-        for (std::size_t attempt = 0; attempt < 4 && !resizedTarget.IsValid(); ++attempt) {
-            viewport.RequestExtent(resizedExtent);
+        RenderTargetHandle currentTarget = activeTarget;
+        viewport.RequestExtent(resizedExtent);
+        for (std::size_t attempt = 0; attempt < 6 && !resizedTarget.IsValid(); ++attempt) {
             auto prepared = viewport.PrepareResources(frontend, renderScene);
-            Check(prepared.HasValue());
+            Check(prepared.HasValue() && prepared.Value().has_value());
+            currentTarget = *prepared.Value();
             Check(frontend.ProcessResourceRequests().HasValue());
-            if (prepared.Value().has_value() && *prepared.Value() != activeTarget)
-                resizedTarget = *prepared.Value();
+
+            // Match the application frame order: prepare the preceding request,
+            // then let the panel publish this frame's request before pass execution.
+            viewport.RequestExtent(resizedExtent);
+            const EditorViewportExtent passExtent = viewport.RequestedExtent();
+            Check(passExtent.IsValid());
+
+            auto begun = frontend.BeginFrame(FrameDescriptor{.frameNumber = 2 + attempt, .outputExtent = {256, 256}});
+            Check(begun.HasValue());
+            RenderFrameScope frame = std::move(begun).Value();
+            const std::array passes{RenderPassDescriptor{
+                .id = RenderPassId{1},
+                .kind = RenderPassKind::Graphics,
+                .staticMesh = StaticMeshPassDescriptor{.target = currentTarget,
+                                                       .extent = {passExtent.width, passExtent.height},
+                                                       .scene = renderScene},
+            }};
+            Check(frame.Execute(passes).HasValue());
+            Check(frame.Present().HasValue());
+
+            if (currentTarget != activeTarget)
+                resizedTarget = currentTarget;
         }
         Check(resizedTarget.IsValid());
         Check(viewport.RequestedExtent() == resizedExtent);
@@ -145,8 +151,7 @@ TEST_CASE("Editor Viewport Metal Smoke", "[integration][renderer][gpu]") {
                                                 .instances = viewportInstances,
                                                 .lights = lights};
     Check(frontend->AttachStaticMeshPassExecutor(viewport).HasValue());
-    viewport.RequestExtent(EditorViewportExtent{128, 128});
-    const RenderTargetHandle viewportTarget = PrepareViewportTarget(viewport, *frontend, viewportScene);
+    const RenderTargetHandle viewportTarget = PrepareViewportTarget(viewport, *frontend, viewportScene, {128, 128});
     Check(frontend->Resize(FramebufferExtent{256, 256}).HasValue());
     auto begun = frontend->BeginFrame(FrameDescriptor{.frameNumber = 1, .outputExtent = {256, 256}});
     Check(begun.HasValue());

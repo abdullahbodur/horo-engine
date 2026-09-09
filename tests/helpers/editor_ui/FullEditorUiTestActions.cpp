@@ -13,9 +13,11 @@ namespace Horo::Tests::FullEditorActions {
         pipeline.Step("Create a Box from the hierarchy root menu", [](ImGuiTestContext &ui) {
             ui.ItemClick("**/##HierarchyRootDrop", ImGuiMouseButton_Right);
             ui.SetRef("//$FOCUSED");
-            ui.MenuClick("###hierarchy_create_root/"
-                         "###hierarchy_create_workspace.create.group.objects_3d/"
-                         "###hierarchy_create_primitive.mesh.box");
+            ui.ItemClick("###hierarchy_create_root");
+            ui.Yield();
+            ui.ItemClick("//**/###hierarchy_create_workspace.create.group.objects_3d");
+            ui.Yield();
+            ui.ItemClick("//**/###hierarchy_create_primitive.mesh.box");
         });
         pipeline.Step("Observe the created object across the workspace", [](ImGuiTestContext &ui) {
             IM_CHECK(ui.ItemInfo("//**/##hierarchy_object_row").ID != 0);
@@ -26,13 +28,13 @@ namespace Horo::Tests::FullEditorActions {
         pipeline.Step("Duplicate the authored hierarchy object", [](ImGuiTestContext &ui) {
             ui.ItemClick("//**/##hierarchy_object_row", ImGuiMouseButton_Right);
             ui.SetRef("//$FOCUSED");
-            ui.MenuClick("Duplicate");
+            ui.ItemClick("###hierarchy_action_duplicate");
             ui.Yield();
         });
         pipeline.Step("Rename a hierarchy object", [](ImGuiTestContext &ui) {
             ui.ItemClick("//**/##hierarchy_object_row", ImGuiMouseButton_Right);
             ui.SetRef("//$FOCUSED");
-            ui.MenuClick("Rename");
+            ui.ItemClick("###hierarchy_action_rename");
             ui.Yield();
             ui.ItemInputValue("//**/##Rename", "RenamedBox");
             ui.KeyPress(ImGuiKey_Enter);
@@ -41,7 +43,7 @@ namespace Horo::Tests::FullEditorActions {
         pipeline.Step("Delete a hierarchy object", [](ImGuiTestContext &ui) {
             ui.ItemClick("//**/##hierarchy_object_row", ImGuiMouseButton_Right);
             ui.SetRef("//$FOCUSED");
-            ui.MenuClick("Delete");
+            ui.ItemClick("###hierarchy_action_delete");
             ui.Yield();
         });
     }
@@ -56,7 +58,8 @@ namespace Horo::Tests::FullEditorActions {
             }
             IM_CHECK(ui.ItemExists("//**/###InspectorAddComponent"));
             constexpr const char *componentItems[]{"//**/###inspector_component_camera", "//**/###inspector_component_light",
-                                                   "//**/Trigger Volume", "//**/Audio Source"};
+                                                   "//**/###inspector_component_trigger_volume",
+                                                   "//**/###inspector_component_audio_source"};
             for (const char *const item : componentItems) {
                 ui.ItemClick("//**/###InspectorAddComponent");
                 ui.Yield();
@@ -139,6 +142,16 @@ namespace Horo::Tests::FullEditorActions {
             });
         }
 
+        /** @brief Waits for the asset card and opens one of its context actions. */
+        void OpenAssetCardAction(ImGuiTestContext &ui, const char *actionPath) {
+            for (int frame = 0; frame < 30 && !ui.ItemExists("//**/##AssetCard"); ++frame)
+                ui.Yield();
+            IM_CHECK(ui.ItemExists("//**/##AssetCard"));
+            ui.ItemClick("//**/##AssetCard", ImGuiMouseButton_Right);
+            ui.ItemClick(actionPath);
+            ui.Yield();
+        }
+
         void AddContentBrowserStep(UiScenarioPipe &pipeline) {
             pipeline.Step("Create and navigate an Asset Browser folder", [](ImGuiTestContext &ui) {
                 if (!ui.ItemExists("//**/Assets")) {
@@ -162,34 +175,22 @@ namespace Horo::Tests::FullEditorActions {
 
                 ui.MouseMoveToPos({dock.RectClipped.GetCenter().x, dock.RectClipped.Max.y - 8.0F});
                 ui.MouseClick(ImGuiMouseButton_Right);
-                ui.ItemClick("//**/Create Folder");
+                ui.ItemClick("//**/###content_browser_action_create_folder");
                 ui.Yield();
                 ui.ItemInputValue("//**/##ContentBrowserCreateFolderInput", "CoverageFolder");
                 ui.ItemClick("//**/Create Folder");
                 ui.Yield();
 
-                for (int frame = 0; frame < 30 && !ui.ItemExists("//**/##AssetCard"); ++frame)
-                    ui.Yield();
-                IM_CHECK(ui.ItemExists("//**/##AssetCard"));
-                ui.ItemClick("//**/##AssetCard", ImGuiMouseButton_Right);
-                ui.ItemClick("//**/Asset Info");
-                ui.Yield();
+                OpenAssetCardAction(ui, "//**/###content_browser_action_asset_info");
                 ui.KeyPress(ImGuiKey_Escape);
                 ui.Yield();
 
-                ui.ItemClick("//**/##AssetCard", ImGuiMouseButton_Right);
-                ui.ItemClick("//**/Rename");
-                ui.Yield();
+                OpenAssetCardAction(ui, "//**/###content_browser_action_rename");
                 ui.ItemInputValue("//**/##ContentBrowserRenameInput", "RenamedCoverageFolder");
                 ui.ItemClick("//**/Cancel");
                 ui.Yield();
 
-                for (int frame = 0; frame < 30 && !ui.ItemExists("//**/##AssetCard"); ++frame)
-                    ui.Yield();
-                IM_CHECK(ui.ItemExists("//**/##AssetCard"));
-                ui.ItemClick("//**/##AssetCard", ImGuiMouseButton_Right);
-                ui.ItemClick("//**/Delete");
-                ui.Yield();
+                OpenAssetCardAction(ui, "//**/###content_browser_action_delete");
                 ui.ItemClick("//**/Cancel");
             });
         }

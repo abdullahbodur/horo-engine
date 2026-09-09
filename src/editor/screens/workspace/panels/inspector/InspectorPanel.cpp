@@ -17,24 +17,24 @@ namespace Horo::Editor {
     namespace {
         constexpr float DegreesToRadians = std::numbers::pi_v<float> / 180.0F;
 
-        /** @brief Maps the typed authored object kind to its localized Inspector label. */
-        [[nodiscard]] const char *KindLocalizationKey(const SceneObjectKind kind) noexcept {
+        /** @brief Maps an authored object kind to its typed Inspector header icon. */
+        [[nodiscard]] Ui::UiIcon KindIcon(const SceneObjectKind kind) noexcept {
             using enum SceneObjectKind;
             switch (kind) {
                 case Mesh:
-                    return "workspace.inspector.kind.mesh";
-                case GameObject:
-                    return "workspace.inspector.kind.empty";
+                    return Ui::UiIcon::HierarchyMesh;
                 case Camera:
-                    return "workspace.inspector.kind.camera";
+                    return Ui::UiIcon::Camera;
                 case Light:
-                    return "workspace.inspector.kind.light";
+                    return Ui::UiIcon::Light;
                 case TriggerVolume:
-                    return "workspace.inspector.kind.trigger_volume";
+                    return Ui::UiIcon::TriggerVolume;
                 case AudioSource:
-                    return "workspace.inspector.kind.audio_source";
+                    return Ui::UiIcon::AudioSource;
+                case GameObject:
+                    return Ui::UiIcon::HierarchyGeneric;
             }
-            return "workspace.inspector.kind.empty";
+            return Ui::UiIcon::HierarchyGeneric;
         }
 
         /** @brief Reports whether the Inspector's degree-based perspective draft is valid. */
@@ -48,6 +48,111 @@ namespace Horo::Editor {
                 return nullptr;
             const auto selected = std::ranges::find(viewModel.objects, *viewModel.primarySelection, &SceneObject::id);
             return selected == viewModel.objects.end() ? nullptr : std::to_address(selected);
+        }
+
+        /** @brief Inspector-owned meaning attached to the generic card-title action surface. */
+        struct ComponentTitleBarResult {
+            bool resetRequested{false};
+            bool toggleEnabledRequested{false};
+            bool removeRequested{false};
+        };
+
+        /** @brief Component capabilities projected onto generic card actions for one frame. */
+        struct ComponentTitleBarOptions {
+            bool enabled{true};
+            bool canReset{true};
+            bool canToggleEnabled{true};
+            bool canRemove{true};
+        };
+
+        /** @brief Localized labels consumed while composing one component title bar. */
+        struct ComponentTitleBarLabels {
+            const char *reset;
+            const char *enable;
+            const char *disable;
+            const char *settings;
+            const char *remove;
+        };
+
+        /** @brief Resolves the localized component-action labels for the current frame. */
+        [[nodiscard]] ComponentTitleBarLabels ResolveComponentTitleBarLabels(const EditorGuiContext &context) {
+            return {
+                .reset = context.localization.Get("editor", "workspace.inspector.component.reset").c_str(),
+                .enable = context.localization.Get("editor", "workspace.inspector.component.enable").c_str(),
+                .disable = context.localization.Get("editor", "workspace.inspector.component.disable").c_str(),
+                .settings = context.localization.Get("editor", "workspace.inspector.component.settings").c_str(),
+                .remove = context.localization.Get("editor", "workspace.inspector.remove_component").c_str(),
+            };
+        }
+
+        /** @brief Populates the enabled component actions exposed through the settings menu. */
+        [[nodiscard]] std::size_t PopulateComponentMenuItems(const ComponentTitleBarOptions options, const ComponentTitleBarLabels &labels,
+                                                             ComponentTitleBarResult &result, std::array<Ui::CardMenuAction, 3> &items) {
+            std::size_t count = 0;
+            if (options.canReset)
+                items[count++] = {.id = "reset", .label = labels.reset, .icon = Ui::UiIcon::Reset, .onInvoke = [&result] {
+                    result.resetRequested = true;
+                }};
+            if (options.canToggleEnabled)
+                items[count++] = {.id = "toggle_enabled",
+                                  .label = options.enabled ? labels.disable : labels.enable,
+                                  .icon = options.enabled ? Ui::UiIcon::Check : Ui::UiIcon::CheckboxUnchecked,
+                                  .onInvoke = [&result] {
+                    result.toggleEnabledRequested = true;
+                }};
+            if (options.canRemove)
+                items[count++] = {.id = "remove",
+                                  .label = labels.remove,
+                                  .icon = Ui::UiIcon::Delete,
+                                  .destructive = true,
+                                  .separatorBefore = count > 0,
+                                  .onInvoke = [&result] {
+                    result.removeRequested = true;
+                }};
+            return count;
+        }
+
+        /** @brief Binds Inspector semantics and localized copy to a generic card title bar. */
+        [[nodiscard]] ComponentTitleBarResult DrawComponentTitleBar(Ui::Card &card, const char *title,
+                                                                    const ComponentTitleBarOptions options,
+                                                                    const EditorGuiContext &context) {
+            ComponentTitleBarResult result;
+            const ComponentTitleBarLabels labels = ResolveComponentTitleBarLabels(context);
+            std::array<Ui::CardMenuAction, 3> menuItems;
+            const std::size_t menuItemCount = PopulateComponentMenuItems(options, labels, result, menuItems);
+            const std::span<const Ui::CardMenuAction> menu{menuItems.data(), menuItemCount};
+            const std::array actions{
+                Ui::CardTitleBarAction{
+                    .id = "reset",
+                    .icon = Ui::UiIcon::Reset,
+                    .title = labels.reset,
+                    .enabled = options.canReset,
+                    .onInvoke =
+                        [&result] {
+                result.resetRequested = true;
+            },
+                },
+                Ui::CardTitleBarAction{
+                    .id = "enabled",
+                    .icon = options.enabled ? Ui::UiIcon::Check : Ui::UiIcon::CheckboxUnchecked,
+                    .title = options.enabled ? labels.disable : labels.enable,
+                    .enabled = options.canToggleEnabled,
+                    .active = options.enabled,
+                    .onInvoke =
+                        [&result] {
+                result.toggleEnabledRequested = true;
+            },
+                },
+                Ui::CardTitleBarAction{
+                    .id = "settings",
+                    .icon = Ui::UiIcon::Settings,
+                    .title = labels.settings,
+                    .enabled = !menu.empty(),
+                    .menuItems = menu,
+                },
+            };
+            card.DrawTitleBar({.id = "title_bar", .title = title, .fonts = context.theme.fonts, .actions = actions});
+            return result;
         }
 
         /** @brief Draws one localized Inspector validation message with consistent spacing. */
@@ -123,6 +228,52 @@ namespace Horo::Editor {
             ImGui::PopID();
             return fieldCommitted;
         }
+
+        /** @brief Result of drawing one attached behavior card. */
+        struct BehaviorCardResult {
+            Gameplay::BehaviorComponent edited;
+            bool committed{false};
+            bool removeRequested{false};
+        };
+
+        /** @brief Draws one behavior card and reports the requested mutation. */
+        [[nodiscard]] BehaviorCardResult DrawBehaviorCard(const Gameplay::BehaviorComponent &attached,
+                                                          const Gameplay::BehaviorDescriptor *descriptor,
+                                                          const std::span<const char *const, 2> enabledEntries,
+                                                          const EditorGuiContext &context) {
+            const bool missing = descriptor == nullptr;
+            const std::string sectionText =
+                missing ? context.localization.Get("editor", "workspace.inspector.behavior_missing") + " — " + attached.typeId.Value()
+                        : descriptor->displayName;
+            BehaviorCardResult result{.edited = attached};
+            Ui::Card card(Ui::CardProps{.id = "##BehaviorCard"});
+            const ComponentTitleBarResult header =
+                DrawComponentTitleBar(card, sectionText.c_str(),
+                                      {.enabled = result.edited.enabled, .canReset = false, .canToggleEnabled = true, .canRemove = true},
+                                      context);
+            result.removeRequested = header.removeRequested;
+            if (header.toggleEnabledRequested) {
+                result.edited.enabled = !result.edited.enabled;
+                result.committed = true;
+            }
+            if (!card.BeginBody())
+                return result;
+
+            ImGui::BeginDisabled(!result.edited.enabled);
+            if (int enabled = result.edited.enabled ? 1 : 0;
+                Ui::DrawComboPropRow(context.localization.Get("editor", "workspace.inspector.behavior_enabled").c_str(), "enabled", enabled,
+                                     enabledEntries, context.theme.fonts)) {
+                result.edited.enabled = enabled != 0;
+                result.committed = true;
+            }
+            if (!missing) {
+                for (Gameplay::BehaviorField &field : result.edited.fields)
+                    result.committed |= DrawBehaviorField(field, enabledEntries, context);
+            }
+            ImGui::EndDisabled();
+            return result;
+        }
+
     }  // namespace
 
     void InspectorPanel::OnAttach(PanelContext &ctx) {
@@ -146,12 +297,23 @@ namespace Horo::Editor {
 
     void InspectorPanel::DrawPanel([[maybe_unused]] const ImVec2 &pos, const ImVec2 &size, const EditorWorkspaceViewModel &vm,
                                    EditorWorkspaceViewCommandData &cmd, const EditorGuiContext &ctx) {
-        const std::array tabNames{ctx.localization.Get("editor", "workspace.panel.inspector").c_str()};
-        Ui::DrawDockTabs(tabNames, 0, ctx.theme.fonts);
+        const float tabHeight = 36.0F * Theme::GetActiveTokens().sizes.uiScale;
+        const std::array tabNames{
+            ctx.localization.Get("editor", "workspace.panel.inspector").c_str(),
+            ctx.localization.Get("editor", "workspace.panel.scene").c_str(),
+        };
+        m_activeTab = Ui::DrawSideDockTabs(tabNames, m_activeTab, ctx.theme.fonts);
 
-        ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0.0F, 0.0F));
-        constexpr float footerHeight = 48.0F;
-        ImGui::BeginChild("##Content", ImVec2(size.x, size.y - 28.0F - footerHeight), false, ImGuiWindowFlags_NoSavedSettings);
+        ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(8.0F, 8.0F));
+        ImGui::BeginChild("##Content", ImVec2(size.x, size.y - tabHeight), ImGuiChildFlags_AlwaysUseWindowPadding,
+                          ImGuiWindowFlags_NoSavedSettings);
+
+        if (m_activeTab != 0) {
+            Ui::Hint(ctx.localization.Get("editor", "workspace.inspector.scene_unavailable").c_str(), ctx.theme.fonts);
+            ImGui::EndChild();
+            ImGui::PopStyleVar();
+            return;
+        }
 
         std::array<SceneObjectId, 1> fallbackSelection{};
         std::span<const SceneObjectId> selectedObjects = vm.selectedObjects;
@@ -159,16 +321,17 @@ namespace Horo::Editor {
             fallbackSelection.front() = *vm.primarySelection;
             selectedObjects = fallbackSelection;
         }
-        if (!selectedObjects.empty() && FindSelectedObject(vm) != nullptr)
+        if (!selectedObjects.empty() && FindSelectedObject(vm) != nullptr) {
             DrawSelection(vm, selectedObjects, cmd, ctx);
-        else
+            if (selectedObjects.size() == 1) {
+                if (const auto *selected = FindSelectedObject(vm); selected != nullptr)
+                    DrawAddComponent(*selected, vm, cmd, ctx);
+            }
+        } else {
             DrawEmptyState(cmd, ctx);
+        }
 
         ImGui::EndChild();
-        if (selectedObjects.size() == 1) {
-            if (const auto *selected = FindSelectedObject(vm); selected != nullptr)
-                DrawAddComponent(*selected, vm, cmd, ctx);
-        }
         ImGui::PopStyleVar();
     }
 
@@ -181,7 +344,7 @@ namespace Horo::Editor {
             return;
 
         if (m_editSession.Draft().selectedObjectCount == 1) {
-            const InspectorNameEdit nameEdit = DrawObjectTitleWidgets(*primaryObject, context);
+            const InspectorNameEdit nameEdit = DrawObjectTitleWidgets(*primaryObject, command, context);
             ApplyNameEdit(nameEdit, *primaryObject, command);
             DrawValidationMessageIfInvalid(IsValidSceneObjectName(m_editSession.Draft().name),
                                            context.localization.Get("editor", "workspace.inspector.name_invalid"), context.theme.fonts,
@@ -232,14 +395,19 @@ namespace Horo::Editor {
 
     void InspectorPanel::DrawAddComponent(const SceneObject &object, const EditorWorkspaceViewModel &viewModel,
                                           EditorWorkspaceViewCommandData &command, const EditorGuiContext &context) const {
-        ImGui::SetCursorPosX(14.0F);
-        if (const std::string addComponentLabel =
-                context.localization.Get("editor", "workspace.inspector.add_component") + "###InspectorAddComponent";
-            Ui::Button({.label = addComponentLabel.c_str(),
-                        .variant = Ui::ButtonVariant::Secondary,
-                        .font = context.theme.fonts.sans,
-                        .componentSize = Ui::ComponentSize::Medium,
-                        .style = {.width = Ui::StyleWidth::FillAvailable}})) {
+        const std::string addComponentLabel =
+            "+  " + context.localization.Get("editor", "workspace.inspector.add_component") + "###InspectorAddComponent";
+        ImGui::PushStyleColor(ImGuiCol_Border, Theme::Accent());
+        ImGui::PushStyleVar(ImGuiStyleVar_FrameBorderSize, 1.0F);
+        const bool addComponentPressed = Ui::Button({.label = addComponentLabel.c_str(),
+                                                     .size = {0.0F, 34.0F},
+                                                     .variant = Ui::ButtonVariant::Secondary,
+                                                     .font = context.theme.fonts.sans,
+                                                     .componentSize = Ui::ComponentSize::Small,
+                                                     .style = {.width = Ui::StyleWidth::FillAvailable}});
+        ImGui::PopStyleVar();
+        ImGui::PopStyleColor();
+        if (addComponentPressed) {
             ImGui::OpenPopup("AddComponentPopup");
         }
 
@@ -262,15 +430,19 @@ namespace Horo::Editor {
                 command.componentTypePayload = ComponentType::Light;
             }
             if (!object.components.triggerVolume.has_value() &&
-                Ui::ContextMenuItem(context.localization.Get("editor", "workspace.inspector.kind.trigger_volume").c_str(), nullptr,
-                                    context.theme.fonts)) {
+                Ui::ContextMenuItem((context.localization.Get("editor", "workspace.inspector.kind.trigger_volume") +
+                                     "###inspector_component_trigger_volume")
+                                        .c_str(),
+                                    nullptr, context.theme.fonts)) {
                 command.command = EditorWorkspaceViewCommand::AddComponentToObject;
                 command.objectPayload = object.id;
                 command.componentTypePayload = ComponentType::TriggerVolume;
             }
             if (!object.components.audioSource.has_value() &&
-                Ui::ContextMenuItem(context.localization.Get("editor", "workspace.inspector.kind.audio_source").c_str(), nullptr,
-                                    context.theme.fonts)) {
+                Ui::ContextMenuItem((context.localization.Get("editor", "workspace.inspector.kind.audio_source") +
+                                     "###inspector_component_audio_source")
+                                        .c_str(),
+                                    nullptr, context.theme.fonts)) {
                 command.command = EditorWorkspaceViewCommand::AddComponentToObject;
                 command.objectPayload = object.id;
                 command.componentTypePayload = ComponentType::AudioSource;
@@ -299,39 +471,24 @@ namespace Horo::Editor {
             context.localization.Get("editor", "workspace.value.on").c_str(),
         };
         for (const Gameplay::BehaviorComponent &attached : object.components.behaviors) {
-            const auto descriptor = std::ranges::find(viewModel.availableBehaviors, attached.typeId, &Gameplay::BehaviorDescriptor::typeId);
-            const bool missing = descriptor == viewModel.availableBehaviors.end();
-            const std::string sectionText =
-                missing ? context.localization.Get("editor", "workspace.inspector.behavior_missing") + " — " + attached.typeId.Value()
-                        : descriptor->displayName;
-            const std::string sectionLabel = sectionText + "###inspector_attached_behavior_" + attached.typeId.Value();
+            const auto descriptorIt =
+                std::ranges::find(viewModel.availableBehaviors, attached.typeId, &Gameplay::BehaviorDescriptor::typeId);
+            const Gameplay::BehaviorDescriptor *descriptor =
+                descriptorIt == viewModel.availableBehaviors.end() ? nullptr : std::to_address(descriptorIt);
             ImGui::PushID(static_cast<int>(attached.instanceId.value));
-            if (Ui::DrawPropSection(sectionLabel.c_str(), context.theme.fonts, true) &&
-                command.command == EditorWorkspaceViewCommand::None) {
-                command.command = EditorWorkspaceViewCommand::RemoveBehaviorFromObject;
+            BehaviorCardResult result = DrawBehaviorCard(attached, descriptor, enabledEntries, context);
+            using enum EditorWorkspaceViewCommand;
+            if (result.removeRequested && command.command == None) {
+                command.command = RemoveBehaviorFromObject;
                 command.objectPayload = object.id;
                 command.behaviorInstancePayload = attached.instanceId;
                 ImGui::PopID();
                 continue;
             }
-
-            Gameplay::BehaviorComponent edited = attached;
-            bool committed = false;
-            if (int enabled = edited.enabled ? 1 : 0;
-                Ui::DrawComboPropRow(context.localization.Get("editor", "workspace.inspector.behavior_enabled").c_str(), "enabled", enabled,
-                                     enabledEntries, context.theme.fonts)) {
-                edited.enabled = enabled != 0;
-                committed = true;
-            }
-            if (!missing) {
-                for (Gameplay::BehaviorField &field : edited.fields) {
-                    committed |= DrawBehaviorField(field, enabledEntries, context);
-                }
-            }
-            if (committed && command.command == EditorWorkspaceViewCommand::None) {
-                command.command = EditorWorkspaceViewCommand::UpdateBehaviorOnObject;
+            if (result.committed && command.command == None) {
+                command.command = UpdateBehaviorOnObject;
                 command.objectPayload = object.id;
-                command.behaviorPayload = std::move(edited);
+                command.behaviorPayload = std::move(result.edited);
             }
             ImGui::PopID();
         }
@@ -350,15 +507,120 @@ namespace Horo::Editor {
         ImGui::SetCursorPosY(ImGui::GetCursorPosY() + 10.0F);
     }
 
-    InspectorNameEdit InspectorPanel::DrawObjectTitleWidgets(const SceneObject &object, const EditorGuiContext &context) {
+    namespace {
+        /** @brief Geometry shared by the editable object title and its trailing controls. */
+        struct ObjectTitleLayout {
+            float uiScale;
+            float rowHeight;
+            float checkboxSize;
+            float checkboxGap;
+            float optionsWidth;
+            float staticFontSize;
+            float trailingWidth;
+        };
+
+        /** @brief Resolves object-title geometry from localized text and the active UI scale. */
+        [[nodiscard]] ObjectTitleLayout ResolveObjectTitleLayout(const char *staticLabel, const Theme::Fonts &fonts) {
+            const float uiScale = Theme::GetActiveTokens().sizes.uiScale;
+            const float checkboxSize = 14.0F * uiScale;
+            const float checkboxGap = 4.0F * uiScale;
+            const float optionsWidth = 30.0F * uiScale;
+            const float staticFontSize = 11.0F * uiScale;
+            const float staticTextWidth = fonts.sansCompact->CalcTextSizeA(staticFontSize, 1000.0F, 0.0F, staticLabel).x;
+            return {.uiScale = uiScale,
+                    .rowHeight = 38.0F * uiScale,
+                    .checkboxSize = checkboxSize,
+                    .checkboxGap = checkboxGap,
+                    .optionsWidth = optionsWidth,
+                    .staticFontSize = staticFontSize,
+                    .trailingWidth = checkboxSize + checkboxGap + staticTextWidth + 6.0F * uiScale + optionsWidth};
+        }
+
+        /** @brief Draws the read-only static-object indicator beside the object title. */
+        void DrawStaticObjectIndicator(const char *label, const Theme::Fonts &fonts, const ObjectTitleLayout &layout,
+                                       const ImVec2 rowOrigin, const float rowWidth) {
+            ImGui::SetCursorScreenPos(
+                {rowOrigin.x + rowWidth - layout.trailingWidth, rowOrigin.y + (layout.rowHeight - layout.checkboxSize) * 0.5F});
+            bool isStatic = true;
+            ImGui::PushStyleVar(ImGuiStyleVar_DisabledAlpha, 1.0F);
+            ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, {1.5F, 1.5F});
+            ImGui::PushStyleVar(ImGuiStyleVar_ItemInnerSpacing, {layout.checkboxGap, 0.0F});
+            ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, Theme::GetActiveTokens().radii.control);
+            ImGui::PushStyleVar(ImGuiStyleVar_FrameBorderSize, 1.0F);
+            ImGui::PushStyleColor(ImGuiCol_FrameBg, Theme::Bg3());
+            ImGui::PushStyleColor(ImGuiCol_FrameBgHovered, Theme::Hover());
+            ImGui::PushStyleColor(ImGuiCol_FrameBgActive, Theme::Hover());
+            ImGui::PushStyleColor(ImGuiCol_Border, Theme::Border());
+            ImGui::PushStyleColor(ImGuiCol_CheckMark, Theme::Accent());
+            ImGui::PushStyleColor(ImGuiCol_Text, Theme::Muted());
+            ImGui::BeginDisabled();
+            {
+                Theme::ScopedTextStyle textStyle(fonts.sansCompact, layout.staticFontSize, Theme::FontPx::SansCompact);
+                static_cast<void>(ImGui::Checkbox(label, &isStatic));
+            }
+            ImGui::EndDisabled();
+            ImGui::PopStyleColor(6);
+            ImGui::PopStyleVar(5);
+        }
+
+        /** @brief Draws the object options trigger and dispatches its contextual commands. */
+        void DrawObjectOptions(const SceneObject &object, EditorWorkspaceViewCommandData &command, const EditorGuiContext &context,
+                               const ObjectTitleLayout &layout, const ImVec2 rowOrigin, const float rowWidth, const char *tooltip) {
+            const ImVec2 position{rowOrigin.x + rowWidth - layout.optionsWidth,
+                                  rowOrigin.y + (layout.rowHeight - layout.optionsWidth) * 0.5F};
+            ImGui::SetCursorScreenPos(position);
+            ImGui::PushID("object_options");
+            const bool pressed = ImGui::InvisibleButton("##button", {layout.optionsWidth, layout.optionsWidth});
+            const bool hovered = ImGui::IsItemHovered();
+            ImDrawList *drawList = ImGui::GetWindowDrawList();
+            if (hovered)
+                drawList->AddRectFilled(position, {position.x + layout.optionsWidth, position.y + layout.optionsWidth},
+                                        Theme::U32(Theme::Hover()), 4.0F);
+            const float iconInset = 6.0F * layout.uiScale;
+            const float iconSize = 18.0F * layout.uiScale;
+            Ui::DrawEditorIcon(drawList, Ui::UiIcon::MoreVertical, {position.x + iconInset, position.y + iconInset}, {iconSize, iconSize},
+                               Theme::U32(hovered ? Theme::Text() : Theme::Muted()), context.theme.fonts.icon);
+            if (hovered)
+                ImGui::SetTooltip("%s", tooltip);
+            if (pressed)
+                ImGui::OpenPopup("##menu");
+            if (Ui::BeginMenuPopup("##menu")) {
+                using enum EditorWorkspaceViewCommand;
+                const bool canMutate = !object.effectivelyLocked && command.command == None;
+                if (Ui::ContextMenuItem(context.localization.Get("editor", "workspace.hierarchy.duplicate").c_str(), nullptr,
+                                        context.theme.fonts, Ui::ContextMenuItemTone::Normal,
+                                        Ui::UiIconRegistry::Token(Ui::UiIcon::Duplicate), canMutate)) {
+                    command.command = DuplicateObject;
+                    command.objectPayload = object.id;
+                }
+                if (Ui::ContextMenuItem(context.localization.Get("editor", "workspace.hierarchy.delete").c_str(), nullptr,
+                                        context.theme.fonts, Ui::ContextMenuItemTone::Danger, Ui::UiIconRegistry::Token(Ui::UiIcon::Delete),
+                                        canMutate)) {
+                    command.command = DeleteObject;
+                    command.objectPayload = object.id;
+                }
+                Ui::EndMenuPopup();
+            }
+            ImGui::PopID();
+        }
+    }  // namespace
+
+    InspectorNameEdit InspectorPanel::DrawObjectTitleWidgets(const SceneObject &object, EditorWorkspaceViewCommandData &command,
+                                                             const EditorGuiContext &context) {
         InspectorObjectDraft &draft = m_editSession.Draft();
-        constexpr auto badgeBackground = ImVec4(95.0F / 255.0F, 184.0F / 255.0F, 138.0F / 255.0F, 0.15F);
-        const std::string &objectKind = context.localization.Get("editor", KindLocalizationKey(object.kind));
+        const std::string &staticLabel = context.localization.Get("editor", "workspace.inspector.static");
+        const std::string &optionsLabel = context.localization.Get("editor", "workspace.inspector.object_options");
+        const ObjectTitleLayout layout = ResolveObjectTitleLayout(staticLabel.c_str(), context.theme.fonts);
+        const ImVec2 rowOrigin = ImGui::GetCursorScreenPos();
+        const float rowWidth = ImGui::GetContentRegionAvail().x;
         const bool nameWasValid = IsValidSceneObjectName(draft.name);
         const Ui::TextEditResult edit =
-            Ui::DrawEditableObjTitle("object_name", draft.name, MaximumSceneObjectNameBytes,
-                                     Ui::EditableObjectTitleBadge{objectKind.c_str(), badgeBackground, Theme::Ok()}, context.theme.fonts,
-                                     !nameWasValid);
+            Ui::DrawEditableTitle("object_name", draft.name, MaximumSceneObjectNameBytes, context.theme.fonts,
+                                  {.leadingIcon = KindIcon(object.kind), .trailingWidth = layout.trailingWidth, .error = !nameWasValid});
+        const ImVec2 rowEnd = ImGui::GetCursorScreenPos();
+        DrawStaticObjectIndicator(staticLabel.c_str(), context.theme.fonts, layout, rowOrigin, rowWidth);
+        DrawObjectOptions(object, command, context, layout, rowOrigin, rowWidth, optionsLabel.c_str());
+        ImGui::SetCursorScreenPos({rowEnd.x, rowEnd.y + 5.0F * layout.uiScale});
 
         if (edit.active && !m_nameInputContext.IsActive() && m_inputRouter != nullptr) {
             m_nameInputContext = m_inputRouter->PushContext(Input::InputContextId{"editor.inspector.object_name"},
@@ -374,21 +636,29 @@ namespace Horo::Editor {
 
     InspectorTransformEdit InspectorPanel::DrawTransformWidgets(const EditorGuiContext &context) {
         InspectorObjectDraft &draft = m_editSession.Draft();
-        Ui::DrawPropSection(context.localization.Get("editor", "workspace.inspector.transform").c_str(), context.theme.fonts);
-        const Ui::Float3PropertyEditResult position =
-            Ui::DrawFloat3PropRow(context.localization.Get("editor", "workspace.inspector.position").c_str(), "position", draft.position,
-                                  context.theme.fonts, 0.05F, draft.mixed.position);
-        const Ui::Float3PropertyEditResult rotation =
-            Ui::DrawFloat3PropRow(context.localization.Get("editor", "workspace.inspector.rotation").c_str(), "rotation",
-                                  draft.rotationDegrees, context.theme.fonts, 0.25F, draft.mixed.rotation);
-        const Ui::Float3PropertyEditResult scale =
-            Ui::DrawFloat3PropRow(context.localization.Get("editor", "workspace.inspector.scale").c_str(), "scale", draft.scale,
-                                  context.theme.fonts, 0.05F, draft.mixed.scale);
+        Ui::Float3PropertyEditResult position;
+        Ui::Float3PropertyEditResult rotation;
+        Ui::Float3PropertyEditResult scale;
+        ComponentTitleBarResult header;
+        {
+            Ui::Card card(Ui::CardProps{.id = "##TransformCard"});
+            header = DrawComponentTitleBar(card, context.localization.Get("editor", "workspace.inspector.transform").c_str(),
+                                           {.enabled = true, .canReset = true, .canToggleEnabled = false, .canRemove = false}, context);
+            if (card.BeginBody()) {
+                position = Ui::DrawFloat3PropRow(context.localization.Get("editor", "workspace.inspector.position").c_str(), "position",
+                                                 draft.position, context.theme.fonts, 0.05F, draft.mixed.position);
+                rotation = Ui::DrawFloat3PropRow(context.localization.Get("editor", "workspace.inspector.rotation").c_str(), "rotation",
+                                                 draft.rotationDegrees, context.theme.fonts, 0.25F, draft.mixed.rotation);
+                scale = Ui::DrawFloat3PropRow(context.localization.Get("editor", "workspace.inspector.scale").c_str(), "scale", draft.scale,
+                                              context.theme.fonts, 0.05F, draft.mixed.scale);
+            }
+        }
 
         return {
             .changed = position.changed || rotation.changed || scale.changed,
             .committed = position.committed || rotation.committed || scale.committed,
             .cancelRequested = m_editSession.HasTransformPreview() && ImGui::IsKeyPressed(ImGuiKey_Escape, false),
+            .resetRequested = header.resetRequested,
             .changedAxes =
                 {
                     .position = position.changedAxes,
@@ -403,8 +673,21 @@ namespace Horo::Editor {
         if (!draft.camera.has_value())
             return {};
 
-        const bool removeRequested =
-            Ui::DrawPropSection(context.localization.Get("editor", "workspace.inspector.camera").c_str(), context.theme.fonts, true);
+        Ui::Card card(Ui::CardProps{.id = "##CameraCard"});
+        const ComponentTitleBarResult header =
+            DrawComponentTitleBar(card, context.localization.Get("editor", "workspace.inspector.camera").c_str(),
+                                  {.enabled = draft.camera->enabled}, context);
+        if (header.resetRequested) {
+            const bool enabled = draft.camera->enabled;
+            draft.camera = Runtime::CameraComponent{};
+            draft.camera->enabled = enabled;
+            draft.cameraFieldOfViewDegrees = 60.0F;
+        }
+        if (header.toggleEnabledRequested)
+            draft.camera->enabled = !draft.camera->enabled;
+        if (!card.BeginBody())
+            return {.committed = header.resetRequested || header.toggleEnabledRequested, .removeRequested = header.removeRequested};
+        ImGui::BeginDisabled(!draft.camera->enabled);
 
         const std::array<const char *, 2> projectionEntries{
             context.localization.Get("editor", "workspace.inspector.camera_projection_perspective").c_str(),
@@ -452,7 +735,10 @@ namespace Horo::Editor {
                                  draft.camera->farPlane, context.theme.fonts,
                                  Ui::FloatPropertyOptions{.speed = 1.0F, .error = !farPlaneValid});
         committed = committed || farPlane.committed;
-        return {.committed = committed, .removeRequested = removeRequested};
+        committed = committed || header.resetRequested || header.toggleEnabledRequested;
+        ImGui::EndDisabled();
+        card.Finish();
+        return {.committed = committed, .removeRequested = header.removeRequested};
     }
 
     InspectorLightEdit InspectorPanel::DrawLightWidgets(const EditorGuiContext &context) {
@@ -460,8 +746,22 @@ namespace Horo::Editor {
         if (!draft.light.has_value())
             return {};
 
-        const bool removeRequested =
-            Ui::DrawPropSection(context.localization.Get("editor", "workspace.inspector.light").c_str(), context.theme.fonts, true);
+        Ui::Card card(Ui::CardProps{.id = "##LightCard"});
+        const ComponentTitleBarResult header =
+            DrawComponentTitleBar(card, context.localization.Get("editor", "workspace.inspector.light").c_str(),
+                                  {.enabled = draft.light->enabled}, context);
+        if (header.resetRequested) {
+            const bool enabled = draft.light->enabled;
+            draft.light = Runtime::LightComponent{};
+            draft.light->enabled = enabled;
+            draft.lightInnerConeDegrees = 20.0F;
+            draft.lightOuterConeDegrees = 45.0F;
+        }
+        if (header.toggleEnabledRequested)
+            draft.light->enabled = !draft.light->enabled;
+        if (!card.BeginBody())
+            return {.committed = header.resetRequested || header.toggleEnabledRequested, .removeRequested = header.removeRequested};
+        ImGui::BeginDisabled(!draft.light->enabled);
 
         const std::array<const char *, 3> kindEntries{
             context.localization.Get("editor", "workspace.inspector.light_kind_directional").c_str(),
@@ -491,7 +791,8 @@ namespace Horo::Editor {
                                  Ui::FloatPropertyOptions{.speed = 0.05F, .error = !intensityValid});
 
         bool changed = kindChanged || colorEdit.changed || intensity.changed;
-        bool committed = kindChanged || colorEdit.committed || intensity.committed;
+        bool committed =
+            kindChanged || colorEdit.committed || intensity.committed || header.resetRequested || header.toggleEnabledRequested;
         if (draft.light->kind != Runtime::LightKind::Directional) {
             const bool rangeValid = std::isfinite(draft.light->range) && draft.light->range >= 0.0F;
             const Ui::PropertyEditResult range =
@@ -524,11 +825,13 @@ namespace Horo::Editor {
             changed = changed || inner.changed || outer.changed;
             committed = committed || inner.committed || outer.committed;
         }
+        ImGui::EndDisabled();
+        card.Finish();
         return {
             .changed = changed,
             .committed = committed,
             .cancelRequested = m_editSession.HasLightPreview() && ImGui::IsKeyPressed(ImGuiKey_Escape, false),
-            .removeRequested = removeRequested,
+            .removeRequested = header.removeRequested,
         };
     }
 
@@ -569,8 +872,20 @@ namespace Horo::Editor {
         if (!draft.triggerVolume.has_value())
             return {};
 
-        const bool removeRequested = Ui::DrawPropSection(context.localization.Get("editor", "workspace.inspector.trigger_volume").c_str(),
-                                                         context.theme.fonts, true);
+        Ui::Card card(Ui::CardProps{.id = "##TriggerVolumeCard"});
+        const ComponentTitleBarResult header =
+            DrawComponentTitleBar(card, context.localization.Get("editor", "workspace.inspector.trigger_volume").c_str(),
+                                  {.enabled = draft.triggerVolume->enabled}, context);
+        if (header.resetRequested) {
+            const bool enabled = draft.triggerVolume->enabled;
+            draft.triggerVolume = Runtime::TriggerVolumeComponent{};
+            draft.triggerVolume->enabled = enabled;
+        }
+        if (header.toggleEnabledRequested)
+            draft.triggerVolume->enabled = !draft.triggerVolume->enabled;
+        if (!card.BeginBody())
+            return {.committed = header.resetRequested || header.toggleEnabledRequested, .removeRequested = header.removeRequested};
+        ImGui::BeginDisabled(!draft.triggerVolume->enabled);
 
         const std::array<const char *, 4> shapeEntries{
             context.localization.Get("editor", "workspace.inspector.trigger_volume_shape_box").c_str(),
@@ -585,7 +900,10 @@ namespace Horo::Editor {
         if (shapeChanged)
             draft.triggerVolume->shape = static_cast<Runtime::ColliderShapeType>(shape);
 
-        return {.committed = shapeChanged, .removeRequested = removeRequested};
+        ImGui::EndDisabled();
+        card.Finish();
+        return {.committed = shapeChanged || header.resetRequested || header.toggleEnabledRequested,
+                .removeRequested = header.removeRequested};
     }
 
     InspectorAudioSourceEdit InspectorPanel::DrawAudioSourceWidgets(const EditorGuiContext &context) {
@@ -593,8 +911,20 @@ namespace Horo::Editor {
         if (!draft.audioSource.has_value())
             return {};
 
-        const bool removeRequested =
-            Ui::DrawPropSection(context.localization.Get("editor", "workspace.inspector.audio_source").c_str(), context.theme.fonts, true);
+        Ui::Card card(Ui::CardProps{.id = "##AudioSourceCard"});
+        const ComponentTitleBarResult header =
+            DrawComponentTitleBar(card, context.localization.Get("editor", "workspace.inspector.audio_source").c_str(),
+                                  {.enabled = draft.audioSource->enabled}, context);
+        if (header.resetRequested) {
+            const bool enabled = draft.audioSource->enabled;
+            draft.audioSource = Runtime::AudioSourceComponent{};
+            draft.audioSource->enabled = enabled;
+        }
+        if (header.toggleEnabledRequested)
+            draft.audioSource->enabled = !draft.audioSource->enabled;
+        if (!card.BeginBody())
+            return {.committed = header.resetRequested || header.toggleEnabledRequested, .removeRequested = header.removeRequested};
+        ImGui::BeginDisabled(!draft.audioSource->enabled);
 
         const std::array<const char *, 2> kindEntries{
             context.localization.Get("editor", "workspace.inspector.audio_source_kind_native_clip").c_str(),
@@ -624,8 +954,11 @@ namespace Horo::Editor {
         if (spatialChanged)
             draft.audioSource->spatial = spatialInt != 0;
 
-        const bool committed = kindChanged || gainEdit.committed || spatialChanged;
-        return {.committed = committed, .removeRequested = removeRequested};
+        const bool committed =
+            kindChanged || gainEdit.committed || spatialChanged || header.resetRequested || header.toggleEnabledRequested;
+        ImGui::EndDisabled();
+        card.Finish();
+        return {.committed = committed, .removeRequested = header.removeRequested};
     }
 
     void InspectorPanel::ApplyTriggerVolumeEdit(const InspectorTriggerVolumeEdit &edit, const SceneObject &object,

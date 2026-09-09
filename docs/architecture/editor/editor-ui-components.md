@@ -53,6 +53,7 @@ All components live in `Horo::Editor::Ui`.
 | Component | Signature | Description |
 |---|---|---|
 | `DrawDockTabs` | `int DrawDockTabs(tabs, activeTab, fonts)` | Draws the tab bar for a dock and returns clicked index |
+| `DrawSideDockTabs` | `int DrawSideDockTabs(tabs, activeTab, fonts)` | Draws the compact 36px left/right workspace dock tabs |
 | `DrawObjTitle` | `void DrawObjTitle(title, badgeText, badgeBg, badgeFg, fonts)` | Inspector object title header |
 | `DrawPropSection` | `void DrawPropSection(label, fonts)` | Inspector property section header |
 | `DrawPropRow` | `void DrawPropRow(label, value, fonts)` | Inspector property key-value row |

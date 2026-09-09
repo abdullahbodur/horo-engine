@@ -52,6 +52,9 @@
     "project_creation.review.compatibility": {
       "text": "Proje uyumluluğu"
     },
+    "project_creation.review.project": {
+      "text": "PROJE"
+    },
     "project_creation.review.project_id_generated": {
       "text": "projectId oluşturulacak"
     },
@@ -798,6 +801,7 @@
     "status.overflow.hidden": {"text": "durum öğesi gizlendi"},
     "workspace.panel.hierarchy": {"text": "Hiyerarşi"},
     "workspace.panel.inspector": {"text": "Denetçi"},
+    "workspace.panel.scene": {"text": "Sahne"},
     "workspace.panel.viewport": {"text": "Görünüm"},
     "workspace.panel.game": {"text": "Oyun"},
     "workspace.game.idle": {"text": "Oyunu başlatmak için Oynat'a basın."},
@@ -806,6 +810,13 @@
     "workspace.play.step": {"text": "Adım"},
     "workspace.play.stop": {"text": "Durdur"},
     "workspace.inspector.behavior_enabled": {"text": "Etkin"},
+    "workspace.inspector.component.reset": {"text": "Bileşeni Sıfırla"},
+    "workspace.inspector.component.enable": {"text": "Bileşeni Etkinleştir"},
+    "workspace.inspector.component.disable": {"text": "Bileşeni Devre Dışı Bırak"},
+"workspace.inspector.component.settings": {"text": "Bileşen Ayarları"},
+"workspace.inspector.static": {"text": "Statik"},
+"workspace.inspector.object_options": {"text": "Nesne seçenekleri"},
+    "workspace.inspector.scene_unavailable": {"text": "Sahne ayarları henüz kullanılamıyor."},
     "workspace.inspector.behavior_missing": {"text": "Eksik Behavior"},
     "workspace.content_browser.action.create_lua_behavior": {"text": "Lua Behavior Oluştur"},
     "workspace.content_browser.action.create_native_behavior": {"text": "Native C++ Behavior Oluştur"},
@@ -877,6 +888,13 @@
     "workspace.hierarchy.type.audio": {"text": "Ses"},
     "workspace.hierarchy.empty": {"text": "Sahne boş"},
     "workspace.hierarchy.search": {"text": "Nesnelerde ara..."},
+    "workspace.hierarchy.toolbar.create": {"text": "Nesne oluştur"},
+    "workspace.hierarchy.toolbar.filter": {"text": "Hiyerarşi filtresine odaklan"},
+    "workspace.hierarchy.toolbar.sort": {"text": "Hiyerarşiyi sırala"},
+    "workspace.hierarchy.toolbar.options": {"text": "Hiyerarşi seçenekleri"},
+    "workspace.hierarchy.drop_to_root": {"text": "Sahne köküne bırak"},
+    "workspace.hierarchy.footer.objects": {"text": "{count} nesne"},
+    "workspace.hierarchy.footer.label": {"text": "Sahne hiyerarşisi"},
     "workspace.hierarchy.no_matches": {"text": "Eşleşen nesne yok"},
     "workspace.hierarchy.rename": {"text": "Yeniden Adlandır"},
     "workspace.hierarchy.duplicate": {"text": "Çoğalt"},

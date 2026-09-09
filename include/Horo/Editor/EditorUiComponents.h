@@ -624,7 +624,16 @@ namespace Horo::Editor::Ui {
 
     // ── Dock UI ───────────────────────────────────────────────────────────
 
-    int DrawDockTabs(std::span<const char *const> tabs, int activeTab, const Theme::Fonts &fonts);
+    int DrawDockTabs(std::span<const char *const> tabs, int activeTab, const Theme::Fonts &fonts, float height = 26.0F);
+
+    /**
+     * @brief Draws the compact 36-pixel tab strip used by left and right workspace docks.
+     * @param tabs Localized visible tab labels in display order.
+     * @param activeTab Zero-based active tab index.
+     * @param fonts Editor font handles valid for this component call.
+     * @return The activated tab index, or @p activeTab when no tab was pressed.
+     */
+    int DrawSideDockTabs(std::span<const char *const> tabs, int activeTab, const Theme::Fonts &fonts);
 
     void DrawObjTitle(const char *title, const char *badgeText, ImVec4 badgeBg, ImVec4 badgeFg, const Theme::Fonts &fonts);
 
@@ -636,27 +645,89 @@ namespace Horo::Editor::Ui {
         bool active{false};    /**< The text widget owns keyboard focus after this frame. */
     };
 
-    /** @brief Presentation of the type badge shown beside an editable object title. */
-    struct EditableObjectTitleBadge {
-        const char *text{""};
-        ImVec4 background{};
-        ImVec4 foreground{};
+    /** @brief Layout and presentation for an editable title with caller-owned trailing content. */
+    struct EditableTitleProps {
+        UiIcon leadingIcon{UiIcon::Generic}; /**< Semantic icon drawn before the title field. */
+        float trailingWidth{0.0F};           /**< Width reserved for trailing controls drawn by the caller. */
+        bool error{false};                   /**< Whether to render the title field in its validation-error state. */
     };
 
     /**
-     * @brief Draws an editable object title with a right-aligned type badge.
+     * @brief Draws an editable title field with a semantic leading icon.
      * @param id Stable UI identity scoped by the caller.
      * @param value Mutable caller-owned title draft.
      * @param maximumBytes Maximum UTF-8 content bytes, excluding the null terminator.
-     * @param badge Type badge text and semantic colors.
      * @param fonts Editor typography handles.
-     * @param error Whether to render the title field in its validation-error state.
+     * @param props Leading icon, trailing reservation and validation presentation.
      * @return Per-frame text interaction state.
      */
-    [[nodiscard]] TextEditResult DrawEditableObjTitle(const char *id, std::string &value, size_t maximumBytes,
-                                                      const EditableObjectTitleBadge &badge, const Theme::Fonts &fonts, bool error = false);
+    [[nodiscard]] TextEditResult DrawEditableTitle(const char *id, std::string &value, size_t maximumBytes, const Theme::Fonts &fonts,
+                                                   const EditableTitleProps &props = {});
 
-    bool DrawPropSection(const char *label, const Theme::Fonts &fonts, bool removable = false);
+    /** @brief One localized action rendered inside a card action menu. */
+    struct CardMenuAction {
+        const char *id{""};             /**< Stable ImGui identity. */
+        const char *label{""};          /**< Caller-localized visible label. */
+        UiIcon icon{UiIcon::None};      /**< Optional semantic icon. */
+        bool enabled{true};             /**< Whether the action accepts input. */
+        bool destructive{false};        /**< Whether to use the destructive text treatment. */
+        bool separatorBefore{false};    /**< Whether a separator precedes this action. */
+        std::function<void()> onInvoke; /**< Frame-local callback invoked on activation. */
+    };
+
+    /** @brief One icon action rendered at the trailing edge of a card title bar. */
+    struct CardTitleBarAction {
+        const char *id{""};                        /**< Stable ImGui identity. */
+        UiIcon icon{UiIcon::None};                 /**< Semantic action icon. */
+        const char *title{""};                     /**< Caller-localized tooltip text. */
+        bool enabled{true};                        /**< Whether the action accepts input. */
+        bool active{false};                        /**< Whether to use the active accent treatment. */
+        std::function<void()> onInvoke;            /**< Direct action callback when no menu is supplied. */
+        std::span<const CardMenuAction> menuItems; /**< Optional popup actions owned by the caller for this frame. */
+    };
+
+    /** @brief Presentation and actions for a generic card title bar. */
+    struct CardTitleBarProps {
+        const char *id{""};                          /**< Stable title-bar identity scoped by the card. */
+        const char *title{""};                       /**< Caller-localized visible title. */
+        const Theme::Fonts &fonts;                   /**< Editor font handles valid for this component call. */
+        std::span<const CardTitleBarAction> actions; /**< Ordered trailing actions. */
+    };
+
+    /** @brief Construction properties for a generic panel card. */
+    struct CardProps {
+        const char *id{""};         /**< Stable card identity scoped by the caller. */
+        bool defaultExpanded{true}; /**< Disclosure state used before this card has stored UI state. */
+    };
+
+    /** @brief RAII panel card with an optional action-bearing title bar and auto-height body. */
+    class Card final {
+    public:
+        /** @brief Begins an auto-height card. @param props Stable card construction properties. */
+        explicit Card(const CardProps &props);
+        /** @brief Ends the card when its scope exits. */
+        ~Card();
+
+        Card(const Card &) = delete;
+        Card &operator=(const Card &) = delete;
+        Card(Card &&) = delete;
+        Card &operator=(Card &&) = delete;
+
+        /** @brief Draws the card title bar and invokes activated frame-local actions. */
+        void DrawTitleBar(const CardTitleBarProps &props);
+        /** @brief Begins the padded card body when expanded. @return True when callers should render body content. */
+        [[nodiscard]] bool BeginBody();
+        /** @brief Ends the card once; later calls are ignored. */
+        void Finish();
+
+    private:
+        bool open_{true};
+        bool bodyOpen_{false};
+        bool expanded_{true};
+        ImGuiStorage *stateStorage_{nullptr};
+        ImGuiID expandedStateId_{};
+    };
+
     void DrawPropRow(const char *label, const char *value, const Theme::Fonts &fonts);
 
     /** @brief Semantic text tone for shared context-menu actions. */
@@ -685,15 +756,29 @@ namespace Horo::Editor::Ui {
     void EndMenuPopup();
 
     /**
+     * @brief Opens a menu-bar dropdown using the shared workspace popup surface.
+     * @param label Localized menu-bar label and stable ImGui identity.
+     * @param fonts Editor typography handles.
+     * @return True while the dropdown is open; pair with @ref EndMenuDropdown.
+     */
+    [[nodiscard]] bool BeginMenuDropdown(const char *label, const Theme::Fonts &fonts);
+
+    /** @brief Ends a menu-bar dropdown opened by @ref BeginMenuDropdown. */
+    void EndMenuDropdown();
+
+    /**
      * @brief Draws one shared context-menu action row.
      * @param label Localized action label.
      * @param shortcut Optional platform shortcut label.
      * @param fonts Editor typography handles.
      * @param tone Semantic action tone.
+     * @param iconToken Optional semantic icon token.
+     * @param enabled Whether the action accepts input.
      * @return True when the action was activated.
      */
     [[nodiscard]] bool ContextMenuItem(const char *label, const char *shortcut, const Theme::Fonts &fonts,
-                                       ContextMenuItemTone tone = ContextMenuItemTone::Normal, std::string_view iconToken = {});
+                                       ContextMenuItemTone tone = ContextMenuItemTone::Normal, std::string_view iconToken = {},
+                                       bool enabled = true);
 
     /** @brief Opens one shared nested context-menu category row. */
     [[nodiscard]] bool BeginContextSubmenu(const char *label, const Theme::Fonts &fonts, std::string_view iconToken = {});

@@ -1,0 +1,13 @@
+[Desktop Entry]
+Type=Application
+Version=1.0
+Name=Horo Editor
+GenericName=Game Engine Editor
+Comment=Create and edit projects with Horo Engine
+Exec=@CMAKE_INSTALL_FULL_BINDIR@/HoroEditor
+Icon=@HORO_EDITOR_APP_ID@
+Terminal=false
+Categories=Development;IDE;
+Keywords=game;engine;editor;
+StartupNotify=true
+StartupWMClass=@HORO_EDITOR_APP_ID@

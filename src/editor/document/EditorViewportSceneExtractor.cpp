@@ -242,11 +242,13 @@ namespace Horo::Editor {
     /** @copydoc EditorViewportSceneState::Replace */
     void EditorViewportSceneState::Replace(EditorViewportSceneSnapshot snapshot) {
         m_snapshot = std::move(snapshot);
+        ++m_generation;
     }
 
     /** @copydoc EditorViewportSceneState::Clear */
     void EditorViewportSceneState::Clear() noexcept {
         m_snapshot = {};
+        ++m_generation;
     }
 
     /** @copydoc EditorViewportSceneState::View */
