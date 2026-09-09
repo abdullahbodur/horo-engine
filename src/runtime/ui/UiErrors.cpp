@@ -125,6 +125,50 @@ namespace Horo::Runtime::Ui::UiErrors {
                                                    "Submit the transition only from its declared owner-thread lifecycle state.",
                                                    false,
                                                    false};
+    /** @copydoc ElementTreeInvalid */
+    const ErrorCodeDescriptor ElementTreeInvalid{UiDomain,
+                                                 ErrorCode{"runtime_ui.element_tree.invalid"},
+                                                 ErrorSeverity::Error,
+                                                 "The retained Runtime UI element tree is invalid.",
+                                                 "Provide one connected acyclic root tree within the declared depth and element bounds.",
+                                                 false,
+                                                 true};
+    /** @copydoc ElementTreeIdentityConflict */
+    const ErrorCodeDescriptor ElementTreeIdentityConflict{UiDomain,
+                                                          ErrorCode{"runtime_ui.element_tree.identity_conflict"},
+                                                          ErrorSeverity::Error,
+                                                          "The retained Runtime UI element tree repeats a stable identity.",
+                                                          "Assign one unique authored identity to every element in the tree.",
+                                                          false,
+                                                          true};
+    /** @copydoc StructuralCommandInvalid */
+    const ErrorCodeDescriptor
+        StructuralCommandInvalid{UiDomain,
+                                 ErrorCode{"runtime_ui.structural_command.invalid"},
+                                 ErrorSeverity::Error,
+                                 "The Runtime UI structural command is invalid.",
+                                 "Use current handles, an owner safe point, and a child position valid after detachment.",
+                                 false,
+                                 false};
+    /** @copydoc StructuralCommandConflict */
+    const ErrorCodeDescriptor
+        StructuralCommandConflict{UiDomain,
+                                  ErrorCode{"runtime_ui.structural_command.conflict"},
+                                  ErrorSeverity::Error,
+                                  "The Runtime UI structural command conflicts with retained-tree invariants.",
+                                  "Keep the root fixed and avoid self-parenting, descendant parenting, and competing topology changes.",
+                                  false,
+                                  false};
+    /** @copydoc ElementTreeLifecycleUnavailable */
+    const ErrorCodeDescriptor
+        ElementTreeLifecycleUnavailable{UiDomain,
+                                        ErrorCode{"runtime_ui.element_tree.lifecycle_unavailable"},
+                                        ErrorSeverity::Error,
+                                        "The retained Runtime UI element tree is unavailable in its current lifecycle state.",
+                                        "Stop structural admission before retirement and query contents only until bounded shutdown "
+                                        "completes.",
+                                        false,
+                                        false};
     /** @copydoc DiagnosticInvalid */
     const ErrorCodeDescriptor
         DiagnosticInvalid{UiDomain,
