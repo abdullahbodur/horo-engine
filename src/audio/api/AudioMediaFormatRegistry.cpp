@@ -136,10 +136,10 @@ namespace Horo::Audio {
         const AudioCodecDescriptor *codec = FindDescriptor<AudioCodecDescriptor>(codecs_, requested.codec);
         if (!codec)
             return Result<AudioMediaFormatBinding>::Failure(MakeError(AudioErrors::FormatCodecUnknown));
-        const bool validRepresentation = codec->payloadKind == AudioCodecPayloadKind::Pcm
-                                             ? requested.pcm.has_value() && ValidateAudioPcmFormat(*requested.pcm)
-                                             : !requested.pcm.has_value();
-        if (!validRepresentation)
+        if (const bool validRepresentation = codec->payloadKind == AudioCodecPayloadKind::Pcm
+                                                 ? requested.pcm.has_value() && ValidateAudioPcmFormat(*requested.pcm)
+                                                 : !requested.pcm.has_value();
+            !validRepresentation)
             return Result<AudioMediaFormatBinding>::Failure(MakeError(AudioErrors::FormatRegistryInvalid));
 
         const auto found = std::ranges::find(bindings_, requested);
