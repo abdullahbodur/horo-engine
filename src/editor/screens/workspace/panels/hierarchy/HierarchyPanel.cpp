@@ -23,7 +23,6 @@ namespace Horo::Editor {
         constexpr float kFooterHeight = 28.0F;
         constexpr float kOuterPadding = 6.0F;
         constexpr float kRowActionsWidth = 48.0F;
-        constexpr float kHierarchyFontSize = 11.5F;
 
         /** @brief Glyph identities used by the hierarchy-local action strip. */
         enum class ToolbarGlyph : std::uint8_t {
@@ -78,7 +77,7 @@ namespace Horo::Editor {
                              Theme::U32(Theme::Border()));
 
             ImFont *font = fonts.sans != nullptr ? fonts.sans : ImGui::GetFont();
-            const float fontSize = 12.0F * uiScale;
+            const float fontSize = Theme::TextPx::Label();
             const ImVec2 textSize = font->CalcTextSizeA(fontSize, 100000.0F, 0.0F, label);
             const float dockPadding = 10.0F * uiScale;
             const float horizontalPadding = 10.0F * uiScale;
@@ -144,7 +143,7 @@ namespace Horo::Editor {
             }
             DrawToolbarGlyph(drawList, glyph, minimum, Theme::U32(hovered ? Theme::Text() : Theme::Muted()), uiScale);
             if (hovered)
-                ImGui::SetTooltip("%s", tooltip);
+                Ui::ShowTooltip(tooltip);
             return ImGui::IsItemClicked(ImGuiMouseButton_Left);
         }
 
@@ -189,34 +188,40 @@ namespace Horo::Editor {
         }
 
         struct HierarchyIconPresentation {
-            Ui::UiIcon icon{Ui::UiIcon::HierarchyGeneric};
+            Ui::UiIcon icon{Ui::UiIcon::Package};
             const char *tooltipKey{nullptr};
             ImVec4 color{};
         };
 
+        /** @brief Builds the temporary Material-symbol presentation shared by scene objects. */
+        [[nodiscard]] HierarchyIconPresentation SceneObjectIconPresentation(const char *tooltipKey) {
+            return {.icon = Ui::UiIcon::Package, .tooltipKey = tooltipKey, .color = Theme::Muted()};
+        }
+
         [[nodiscard]] HierarchyIconPresentation GetIconPresentation(const HierarchyNodeType type) {
+            using enum HierarchyNodeType;
             switch (type) {
-                case HierarchyNodeType::Mesh:
-                    return {Ui::UiIcon::HierarchyMesh, "workspace.hierarchy.type.mesh", Theme::Muted()};
-                case HierarchyNodeType::Empty:
-                case HierarchyNodeType::Collection:
-                    return {Ui::UiIcon::HierarchyGeneric, "workspace.hierarchy.type.empty", Theme::Muted()};
-                case HierarchyNodeType::Light:
-                    return {Ui::UiIcon::Light, "workspace.hierarchy.type.light", Theme::Muted()};
-                case HierarchyNodeType::PointLight:
-                    return {Ui::UiIcon::PointLight, "workspace.hierarchy.type.light_point", Theme::Muted()};
-                case HierarchyNodeType::DirectionalLight:
-                    return {Ui::UiIcon::DirectionalLight, "workspace.hierarchy.type.light_directional", Theme::Muted()};
-                case HierarchyNodeType::SpotLight:
-                    return {Ui::UiIcon::SpotLight, "workspace.hierarchy.type.light_spot", Theme::Muted()};
-                case HierarchyNodeType::Camera:
-                    return {Ui::UiIcon::Camera, "workspace.hierarchy.type.camera", Theme::Muted()};
-                case HierarchyNodeType::TriggerVolume:
-                    return {Ui::UiIcon::TriggerVolume, "workspace.hierarchy.type.volume", Theme::Muted()};
-                case HierarchyNodeType::AudioSource:
-                    return {Ui::UiIcon::AudioSource, "workspace.hierarchy.type.audio", Theme::Muted()};
+                case Mesh:
+                    return SceneObjectIconPresentation("workspace.hierarchy.type.mesh");
+                case Empty:
+                case Collection:
+                    return SceneObjectIconPresentation("workspace.hierarchy.type.empty");
+                case Light:
+                    return SceneObjectIconPresentation("workspace.hierarchy.type.light");
+                case PointLight:
+                    return SceneObjectIconPresentation("workspace.hierarchy.type.light_point");
+                case DirectionalLight:
+                    return SceneObjectIconPresentation("workspace.hierarchy.type.light_directional");
+                case SpotLight:
+                    return SceneObjectIconPresentation("workspace.hierarchy.type.light_spot");
+                case Camera:
+                    return SceneObjectIconPresentation("workspace.hierarchy.type.camera");
+                case TriggerVolume:
+                    return SceneObjectIconPresentation("workspace.hierarchy.type.volume");
+                case AudioSource:
+                    return SceneObjectIconPresentation("workspace.hierarchy.type.audio");
             }
-            return {Ui::UiIcon::HierarchyGeneric, "workspace.hierarchy.type.empty", Theme::Muted()};
+            return SceneObjectIconPresentation("workspace.hierarchy.type.empty");
         }
 
         [[nodiscard]] ImFont *ResolveFont(ImFont *preferred) {
@@ -429,7 +434,7 @@ namespace Horo::Editor {
 
         ImGui::SetCursorPos(ImVec2(0.0F, toolbarHeight));
         ImGui::SetNextItemWidth(std::max(1.0F, panelWidth));
-        const float verticalPadding = std::max(0.0F, (searchRegionHeight - kHierarchyFontSize * uiScale) * 0.5F);
+        const float verticalPadding = std::max(0.0F, (searchRegionHeight - Theme::TextPx::Label()) * 0.5F);
         ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(18.0F * uiScale, verticalPadding));
         ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 0.0F);
         ImGui::PushStyleVar(ImGuiStyleVar_FrameBorderSize, 1.0F);
@@ -440,7 +445,7 @@ namespace Horo::Editor {
         ImGui::PushStyleColor(ImGuiCol_Text, Theme::Text());
         bool searchActive = false;
         {
-            Theme::ScopedTextStyle searchFont(context.theme.fonts.sans, kHierarchyFontSize * uiScale, Theme::FontPx::Sans);
+            Theme::ScopedTextStyle searchFont(context.theme.fonts.sans, Theme::TextPx::Label(), Theme::FontPx::Sans);
             if (requestSearchFocus_) {
                 ImGui::SetKeyboardFocusHere();
                 requestSearchFocus_ = false;
@@ -537,7 +542,7 @@ namespace Horo::Editor {
                 tooltip = "workspace.hierarchy.hidden_by_parent";
             else if (frame.node.locallyVisible)
                 tooltip = "workspace.hierarchy.hide";
-            ImGui::SetTooltip("%s", context.localization.Get("editor", tooltip).c_str());
+            Ui::ShowTooltip(context.localization.Get("editor", tooltip).c_str(), &context.theme.fonts);
         }
 
         ImGui::SetCursorScreenPos(frame.geometry.lockMin);
@@ -550,7 +555,7 @@ namespace Horo::Editor {
                 tooltip = "workspace.hierarchy.locked_by_parent";
             else if (frame.node.locallyLocked)
                 tooltip = "workspace.hierarchy.unlock";
-            ImGui::SetTooltip("%s", context.localization.Get("editor", tooltip).c_str());
+            Ui::ShowTooltip(context.localization.Get("editor", tooltip).c_str(), &context.theme.fonts);
         }
         ImGui::SetCursorScreenPos(frame.geometry.nextRowCursor);
         return controls;
@@ -592,9 +597,9 @@ namespace Horo::Editor {
         if (frame.node.effectivelyLocked)
             typeColor.w *= 0.65F;
         Ui::DrawEditorIcon(&frame.drawList, icon.icon, {frame.geometry.typeIconMin.x, centerY - iconSize * 0.5F}, {iconSize, iconSize},
-                           Theme::U32(typeColor));
+                           Theme::U32(typeColor), context.theme.fonts.icon);
         if (icon.tooltipKey != nullptr && ImGui::IsMouseHoveringRect(frame.geometry.typeIconMin, frame.geometry.typeIconMax))
-            ImGui::SetTooltip("%s", context.localization.Get("editor", icon.tooltipKey).c_str());
+            Ui::ShowTooltip(context.localization.Get("editor", icon.tooltipKey).c_str(), &context.theme.fonts);
     }
 
     void HierarchyPanel::DrawRowActionIcon(const RowFrame &frame, const float iconSize, const RowActionIcon &action) {
@@ -693,7 +698,7 @@ namespace Horo::Editor {
                                                            .color = Theme::U32(labelColor),
                                                            .text = frame.node.name});
                 truncated && ImGui::IsMouseHoveringRect(frame.geometry.labelMin, frame.geometry.labelMax))
-                ImGui::SetTooltip("%s", frame.node.name.c_str());
+                Ui::ShowTooltip(frame.node.name.c_str());
             return;
         }
 
@@ -706,8 +711,12 @@ namespace Horo::Editor {
             ImGui::SetKeyboardFocusHere();
             requestRenameFocus_ = false;
         }
-        const bool submittedByWidget = ImGui::InputText("##Rename", renameBuffer_.data(), renameBuffer_.size(),
-                                                        ImGuiInputTextFlags_EnterReturnsTrue | ImGuiInputTextFlags_AutoSelectAll);
+        bool submittedByWidget = false;
+        {
+            Theme::ScopedTextStyle renameFont(&frame.nameFont, frame.nameFontSize, Theme::FontPx::Sans);
+            submittedByWidget = ImGui::InputText("##Rename", renameBuffer_.data(), renameBuffer_.size(),
+                                                 ImGuiInputTextFlags_EnterReturnsTrue | ImGuiInputTextFlags_AutoSelectAll);
+        }
         const bool submitted =
             submittedByWidget && inputRouter_ != nullptr && inputRouter_->ConsumeKey(focusedWidgetContext_, Input::Key::Enter);
         const bool cancelled = inputRouter_ != nullptr && inputRouter_->ConsumeKey(focusedWidgetContext_, Input::Key::Escape);
@@ -726,7 +735,7 @@ namespace Horo::Editor {
                                   const EditorGuiContext &context) {
         bool pendingDelete = false;
         ImDrawList &drawList = *ImGui::GetWindowDrawList();
-        const float nameFontSize = kHierarchyFontSize * uiScale;
+        const float nameFontSize = Theme::TextPx::Label();
         const bool workspaceEligible =
             inputRouter_ != nullptr && workspaceInputContext_ != nullptr && inputRouter_->IsContextActive(*workspaceInputContext_);
 
@@ -862,7 +871,7 @@ namespace Horo::Editor {
             DrawDashedRect(*drawList, zoneMin, zoneMax, Theme::U32(Theme::BorderStrong()), uiScale);
             ImFont *font = ResolveFont(ctx.theme.fonts.sans);
             const std::string &label = ctx.localization.Get("editor", "workspace.hierarchy.drop_to_root");
-            const float fontSize = 11.0F * uiScale;
+            const float fontSize = Theme::TextPx::Caption();
             const ImVec2 labelSize = font->CalcTextSizeA(fontSize, 100000.0F, 0.0F, label.c_str());
             drawList->AddText(font, fontSize,
                               {zoneMin.x + (zoneMax.x - zoneMin.x - labelSize.x) * 0.5F,
@@ -887,7 +896,7 @@ namespace Horo::Editor {
         footerDrawList.AddRectFilled(footerMin, {footerMin.x + size.x, footerMin.y + kFooterHeight * uiScale}, Theme::U32(Theme::Bg0()));
         footerDrawList.AddLine(footerMin, {footerMin.x + size.x, footerMin.y}, Theme::U32(Theme::Border()));
         ImFont *footerFont = ResolveFont(ctx.theme.fonts.sans);
-        const float footerFontSize = 10.5F * uiScale;
+        const float footerFontSize = Theme::TextPx::Caption();
         const std::string objectCount =
             FormatObjectCount(ctx.localization.Get("editor", "workspace.hierarchy.footer.objects"), vm.objects.size());
         const std::string &footerLabel = ctx.localization.Get("editor", "workspace.hierarchy.footer.label");

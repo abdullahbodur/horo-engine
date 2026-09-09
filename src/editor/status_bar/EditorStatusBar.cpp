@@ -2,6 +2,7 @@
 
 #include "Horo/Editor/EditorGuiContext.h"
 #include "Horo/Editor/EditorTheme.h"
+#include "Horo/Editor/EditorUiComponents.h"
 #include "Horo/Editor/Localization/ILocalizationService.h"
 
 #include <algorithm>
@@ -16,7 +17,6 @@ namespace Horo::Editor {
         constexpr float kInnerPadding = 7.0F;
         constexpr float kIconDiameter = 6.0F;
         constexpr float kOverflowWidth = 28.0F;
-        constexpr float kTextFontSize = 13.0F;
         constexpr std::size_t kMaxVisibleItems = 12;
 
         [[nodiscard]] ImVec4 ToneColor(const EditorStatusItemTone tone) {
@@ -133,7 +133,7 @@ namespace Horo::Editor {
         drawList->PopClipRect();
 
         if (hovered && (MeasureItem(item) >= item.descriptor.maxWidth || item.descriptor.interactive)) {
-            ImGui::BeginTooltip();
+            Ui::ScopedTooltip tooltip(&context_.theme.fonts);
             if (!label.empty()) {
                 ImGui::TextUnformatted(label.c_str());
             }
@@ -141,7 +141,6 @@ namespace Horo::Editor {
                 ImGui::SameLine(0.0F, 6.0F);
                 ImGui::TextUnformatted(item.content.value.c_str());
             }
-            ImGui::EndTooltip();
         }
         return clicked;
     }
@@ -165,7 +164,7 @@ namespace Horo::Editor {
 
         std::optional<EditorStatusItemInvokedEvent> invocation;
         {
-            Theme::ScopedTextStyle textStyle(context_.theme.fonts.sansCompact, kTextFontSize, Theme::FontPx::SansCompact);
+            Theme::ScopedTextStyle textStyle(context_.theme.fonts.sansCompact, Theme::TextPx::Caption(), Theme::FontPx::SansCompact);
             registry_.CollectVisibleItems(context, visibleItems_);
             measuredItems_.clear();
             for (const EditorStatusItem *item : visibleItems_) {
@@ -209,11 +208,10 @@ namespace Horo::Editor {
                 ImGui::TextDisabled("%s", overflowLabel.c_str());
 
                 if (ImGui::IsItemHovered()) {
-                    ImGui::BeginTooltip();
+                    Ui::ScopedTooltip tooltip(&context_.theme.fonts);
                     ImGui::Text("%zu", layout_.hiddenCount);
                     ImGui::SameLine(0.0F, 4.0F);
                     ImGui::TextUnformatted(context_.localization.Get("editor", "status.overflow.hidden").c_str());
-                    ImGui::EndTooltip();
                 }
             }
         }

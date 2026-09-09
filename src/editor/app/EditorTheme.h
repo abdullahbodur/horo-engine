@@ -108,7 +108,7 @@ namespace Horo::Editor::Theme {
 
     namespace FontPx {
         constexpr float Sans = 15.0F;
-        constexpr float SansCompact = 13.0F;
+        constexpr float SansCompact = 14.0F;
         constexpr float SansEmphasis = 15.0F;
     }  // namespace FontPx
 
@@ -160,7 +160,7 @@ namespace Horo::Editor::Theme {
 
     // Shortcut: pushes `font` and scales it to the target HTML pixel size,
     // then automatically restores both at scope exit.
-    //   Example: ScopedTextStyle ts(f.sansCompact, /*targetPx=*/11.0f, Theme::FontPx::SansCompact);
+    //   Example: ScopedTextStyle ts(f.sansCompact, /*targetPx=*/14.0f, Theme::FontPx::SansCompact);
     struct ScopedTextStyle {
         ScopedFont font;
         ScopedFontScale scale;

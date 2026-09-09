@@ -1,21 +1,14 @@
 #pragma once
 
 #include "Horo/Editor/EditorGuiContext.h"
+#include "Horo/Editor/IGlobalDockPane.h"
 #include "Horo/Editor/IWorkspacePanel.h"
-#include "editor/screens/workspace/panels/global_dock/panes/asset_browser/AssetBrowserPane.h"
-#include "editor/screens/workspace/panels/global_dock/panes/audio/GlobalDockAudioPane.h"
-#include "editor/screens/workspace/panels/global_dock/panes/build_output/GlobalDockBuildOutputPane.h"
-#include "editor/screens/workspace/panels/global_dock/panes/console/GlobalDockConsolePane.h"
-#include "editor/screens/workspace/panels/global_dock/panes/localization/GlobalDockLocalizationPane.h"
-#include "editor/screens/workspace/panels/global_dock/panes/mcp/GlobalDockMcpPane.h"
-#include "editor/screens/workspace/panels/global_dock/panes/network/GlobalDockNetworkPane.h"
-#include "editor/screens/workspace/panels/global_dock/panes/operations/GlobalDockOperationsPane.h"
-#include "editor/screens/workspace/panels/global_dock/panes/performance/GlobalDockPerformancePane.h"
-#include "editor/screens/workspace/panels/global_dock/panes/physics/GlobalDockPhysicsPane.h"
 
 #include <array>
 #include <cstdint>
+#include <memory>
 #include <string>
+#include <string_view>
 #include <vector>
 
 namespace Horo::Editor {
@@ -30,24 +23,22 @@ namespace Horo::Editor {
         Physics,
         Audio,
         Network,
-        Localization,
     };
 
     inline constexpr std::array kDefaultGlobalDockTabs{
-        GlobalDockTab::Assets,  GlobalDockTab::Console,      GlobalDockTab::BuildOutput, GlobalDockTab::Operations,
-        GlobalDockTab::Mcp,     GlobalDockTab::Performance,  GlobalDockTab::Physics,     GlobalDockTab::Audio,
-        GlobalDockTab::Network, GlobalDockTab::Localization,
+        GlobalDockTab::Assets,      GlobalDockTab::Console, GlobalDockTab::BuildOutput, GlobalDockTab::Operations, GlobalDockTab::Mcp,
+        GlobalDockTab::Performance, GlobalDockTab::Physics, GlobalDockTab::Audio,       GlobalDockTab::Network,
     };
 
     /** @brief Returns the stable default global-dock tab order. */
-    [[nodiscard]] constexpr const std::array<GlobalDockTab, 10> &DefaultGlobalDockTabs() noexcept {
+    [[nodiscard]] constexpr const auto &DefaultGlobalDockTabs() noexcept {
         return kDefaultGlobalDockTabs;
     }
 
     class GlobalDockPanel final : public IWorkspacePanel {
     public:
         /** @brief Creates the global dock with an optional restored active tab. */
-        explicit GlobalDockPanel(GlobalDockTab activeTab = GlobalDockTab::Assets) noexcept : activeTab_(activeTab) {}
+        explicit GlobalDockPanel(GlobalDockTab activeTab = GlobalDockTab::Assets);
 
         [[nodiscard]] std::string GetId() const override {
             return "horo.global_dock";
@@ -79,17 +70,34 @@ namespace Horo::Editor {
             return activeTab_;
         }
 
+        /** @brief Returns the stable identity of the selected built-in or module-provided pane. */
+        [[nodiscard]] std::string_view ActivePaneId() const noexcept {
+            return activePaneId_;
+        }
+
+        /**
+         * @brief Registers one pane before the panel is attached.
+         * @param pane Owned pane implementation with a non-empty, unique identity.
+         * @return True when the pane was accepted.
+         */
+        [[nodiscard]] bool RegisterPane(std::unique_ptr<IGlobalDockPane> pane);
+
+        /** @brief Selects a registered pane by stable identity. */
+        [[nodiscard]] bool ActivatePane(std::string_view paneId);
+
     private:
+        struct RegisteredPane {
+            std::unique_ptr<IGlobalDockPane> pane;
+            GlobalDockTab builtInTab;
+            bool builtIn{false};
+        };
+
+        template <typename Adapter> void RegisterBuiltInPane(GlobalDockTab tab);
+        void RegisterBuiltInPanes();
+
         GlobalDockTab activeTab_{GlobalDockTab::Assets};
-        [[no_unique_address]] AssetBrowserPane assetsPane_;
-        [[no_unique_address]] GlobalDockConsolePane consolePane_;
-        [[no_unique_address]] GlobalDockBuildOutputPane buildOutputPane_;
-        [[no_unique_address]] GlobalDockOperationsPane operationsPane_;
-        [[no_unique_address]] GlobalDockMcpPane mcpPane_;
-        [[no_unique_address]] GlobalDockPerformancePane performancePane_;
-        [[no_unique_address]] GlobalDockPhysicsPane physicsPane_;
-        [[no_unique_address]] GlobalDockAudioPane audioPane_;
-        [[no_unique_address]] GlobalDockNetworkPane networkPane_;
-        [[no_unique_address]] GlobalDockLocalizationPane localizationPane_;
+        std::string activePaneId_;
+        std::vector<RegisteredPane> panes_;
+        bool attached_{false};
     };
 }  // namespace Horo::Editor

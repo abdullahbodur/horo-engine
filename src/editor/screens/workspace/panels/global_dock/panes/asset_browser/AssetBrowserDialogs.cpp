@@ -41,7 +41,7 @@ namespace Horo::Editor {
         }
 
         void DrawModalHeading(const std::string &title, const EditorGuiContext &context) {
-            Theme::ScopedTextStyle textStyle(context.theme.fonts.sansEmphasis, 19.0F, Theme::FontPx::SansEmphasis);
+            Theme::ScopedTextStyle textStyle(context.theme.fonts.sansEmphasis, Theme::TextPx::Heading(), Theme::FontPx::SansEmphasis);
             ImGui::TextColored(Theme::Text(), "%s", title.c_str());
             ImGui::Dummy({0.0F, 2.0F});
             ImGui::Separator();
@@ -52,7 +52,7 @@ namespace Horo::Editor {
             constexpr float closeSize = 22.0F;
             const float headerY = ImGui::GetCursorPosY();
             {
-                Theme::ScopedTextStyle textStyle(context.theme.fonts.sansEmphasis, 19.0F, Theme::FontPx::SansEmphasis);
+                Theme::ScopedTextStyle textStyle(context.theme.fonts.sansEmphasis, Theme::TextPx::Heading(), Theme::FontPx::SansEmphasis);
                 ImGui::TextColored(Theme::Text(), "%s", title.c_str());
             }
             ImGui::SameLine(ImGui::GetWindowContentRegionMax().x - closeSize);
@@ -76,12 +76,12 @@ namespace Horo::Editor {
             ImGui::TableNextRow();
             ImGui::TableSetColumnIndex(0);
             {
-                Theme::ScopedTextStyle textStyle(context.theme.fonts.sans, 14.0F, Theme::FontPx::Sans);
+                Theme::ScopedTextStyle textStyle(context.theme.fonts.sans, Theme::TextPx::Label(), Theme::FontPx::Sans);
                 ImGui::TextColored(Theme::Muted(), "%s", label);
             }
             ImGui::TableSetColumnIndex(1);
             {
-                Theme::ScopedTextStyle textStyle(context.theme.fonts.sansCompact, 14.0F, Theme::FontPx::SansCompact);
+                Theme::ScopedTextStyle textStyle(context.theme.fonts.sansCompact, Theme::TextPx::Body(), Theme::FontPx::SansCompact);
                 ImGui::PushStyleColor(ImGuiCol_Text, Theme::Text());
                 ImGui::PushTextWrapPos(0.0F);
                 ImGui::TextWrapped("%s", value);

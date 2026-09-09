@@ -82,7 +82,7 @@ namespace Horo::Editor {
 
         void DrawNavGroup(const char *label, const EditorGuiContext &ctx) {
             ImGui::Dummy({0.0F, 5.0F});
-            ScopedTextStyle ts(ctx.theme.fonts.sansEmphasis, 12.0F, FontPx::SansEmphasis);
+            ScopedTextStyle ts(ctx.theme.fonts.sansEmphasis, TextPx::Label(), FontPx::SansEmphasis);
             ImGui::PushStyleColor(ImGuiCol_Text, Dim());
             ImGui::SetCursorPosX(ImGui::GetCursorPosX() + 10.0F);
             ImGui::TextUnformatted(label);
@@ -116,14 +116,14 @@ namespace Horo::Editor {
 
             ImGui::SetCursorScreenPos({pos.x + 12.0F, pos.y + 10.0F});
             {
-                ScopedTextStyle ts(ctx.theme.fonts.sansEmphasis, 14.0F, FontPx::SansEmphasis);
+                ScopedTextStyle ts(ctx.theme.fonts.sansEmphasis, TextPx::Label(), FontPx::SansEmphasis);
                 ImGui::PushStyleColor(ImGuiCol_Text, active ? Accent() : Muted());
                 ImGui::TextUnformatted(item.icon);
                 ImGui::PopStyleColor();
             }
             ImGui::SameLine(0.0F, 10.0F);
             {
-                ScopedTextStyle ts(ctx.theme.fonts.sans, 15.0F, FontPx::Sans);
+                ScopedTextStyle ts(ctx.theme.fonts.sans, TextPx::Body(), FontPx::Sans);
                 ImGui::PushStyleColor(ImGuiCol_Text, active ? Text() : Muted());
                 ImGui::TextUnformatted(item.label);
                 ImGui::PopStyleColor();
@@ -437,7 +437,7 @@ namespace Horo::Editor {
                 ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4{Accent().x, Accent().y, Accent().z, 0.22F});
                 ImGui::PushStyleColor(ImGuiCol_Text, active ? Text() : Muted());
                 {
-                    ScopedTextStyle ts(ctx.theme.fonts.sans, 14.5F, FontPx::Sans);
+                    ScopedTextStyle ts(ctx.theme.fonts.sans, TextPx::Label(), FontPx::Sans);
                     if (ImGui::Button(kSectionTabs[i], {tabW, tabH}))
                         st.pluginSectionTab = i;
                 }
@@ -480,14 +480,14 @@ namespace Horo::Editor {
             const float startY = ImGui::GetCursorScreenPos().y;
 
             {
-                ScopedTextStyle ts(ctx.theme.fonts.sans, 14.0F, FontPx::Sans);
+                ScopedTextStyle ts(ctx.theme.fonts.sans, TextPx::Label(), FontPx::Sans);
                 ImGui::PushStyleColor(ImGuiCol_Text, Text());
                 ImGui::TextUnformatted(label);
                 ImGui::PopStyleColor();
             }
 
             if (description != nullptr && description[0] != '\0') {
-                ScopedTextStyle ts(ctx.theme.fonts.sans, 12.0F, FontPx::Sans);
+                ScopedTextStyle ts(ctx.theme.fonts.sans, TextPx::Caption(), FontPx::Sans);
                 ImGui::PushStyleColor(ImGuiCol_Text, Muted());
                 ImGui::PushTextWrapPos(ImGui::GetCursorPosX() + rowW);
                 ImGui::TextWrapped("%s", description);
@@ -510,7 +510,7 @@ namespace Horo::Editor {
         void DrawToggleState(const char *id, bool *value, const EditorGuiContext &ctx) {
             (void)ToggleControl(id, value, ctx.theme.fonts, false);
             ImGui::SameLine(0.0F, 8.0F);
-            ScopedTextStyle ts(ctx.theme.fonts.sans, 12.5F, FontPx::Sans);
+            ScopedTextStyle ts(ctx.theme.fonts.sans, TextPx::Caption(), FontPx::Sans);
             ImGui::PushStyleColor(ImGuiCol_Text, *value ? Text() : Muted());
             const std::string enabledText = ctx.localization.Get("editor", "settings.plugins.status.enabled");
             const std::string disabledText = ctx.localization.Get("editor", "settings.plugins.status.disabled");
@@ -536,7 +536,7 @@ namespace Horo::Editor {
 
                 ImGui::SetCursorScreenPos({p.x + 13.0F, p.y + 19.0F});
                 {
-                    ScopedTextStyle ts(ctx.theme.fonts.sansEmphasis, 14.0F, FontPx::SansEmphasis);
+                    ScopedTextStyle ts(ctx.theme.fonts.sansEmphasis, TextPx::Label(), FontPx::SansEmphasis);
                     ImGui::PushStyleColor(ImGuiCol_Text, BadgeToneColor(perm.badgeTone));
                     ImGui::TextUnformatted(perm.icon);
                     ImGui::PopStyleColor();
@@ -544,7 +544,7 @@ namespace Horo::Editor {
 
                 ImGui::SetCursorScreenPos({p.x + 40.0F, p.y + 11.0F});
                 {
-                    ScopedTextStyle ts(ctx.theme.fonts.sans, 12.5F, FontPx::Sans);
+                    ScopedTextStyle ts(ctx.theme.fonts.sans, TextPx::Caption(), FontPx::Sans);
                     ImGui::PushStyleColor(ImGuiCol_Text, Text());
                     ImGui::TextUnformatted(perm.title);
                     ImGui::PopStyleColor();
@@ -552,7 +552,7 @@ namespace Horo::Editor {
 
                 ImGui::SetCursorScreenPos({p.x + 40.0F, p.y + 32.0F});
                 {
-                    ScopedTextStyle ts(ctx.theme.fonts.sans, 11.5F, FontPx::Sans);
+                    ScopedTextStyle ts(ctx.theme.fonts.sans, TextPx::Caption(), FontPx::Sans);
                     ImGui::PushStyleColor(ImGuiCol_Text, Muted());
                     ImGui::PushTextWrapPos(ImGui::GetCursorPosX() + cardW - badgeW - 68.0F);
                     ImGui::TextWrapped("%s", perm.desc);
@@ -584,7 +584,7 @@ namespace Horo::Editor {
 
                 ImGui::SetCursorScreenPos({p.x + 12.0F, p.y + 10.0F});
                 {
-                    ScopedTextStyle ts(ctx.theme.fonts.sansEmphasis, 9.5F, FontPx::SansEmphasis);
+                    ScopedTextStyle ts(ctx.theme.fonts.sansEmphasis, TextPx::Label(), FontPx::SansEmphasis);
                     ImGui::PushStyleColor(ImGuiCol_Text, Dim());
                     ImGui::TextUnformatted(m.label);
                     ImGui::PopStyleColor();
@@ -592,7 +592,7 @@ namespace Horo::Editor {
 
                 ImGui::SetCursorScreenPos({p.x + 12.0F, p.y + 28.0F});
                 {
-                    ScopedTextStyle ts(ctx.theme.fonts.sansEmphasis, 15.0F, FontPx::SansEmphasis);
+                    ScopedTextStyle ts(ctx.theme.fonts.sansEmphasis, TextPx::Body(), FontPx::SansEmphasis);
                     ImGui::PushStyleColor(ImGuiCol_Text, m.valueColour);
                     ImGui::TextUnformatted(m.value);
                     ImGui::PopStyleColor();
@@ -600,7 +600,7 @@ namespace Horo::Editor {
 
                 if (m.hint != nullptr && m.hint[0] != '\0') {
                     ImGui::SetCursorScreenPos({p.x + 12.0F, p.y + 49.0F});
-                    ScopedTextStyle ts(ctx.theme.fonts.sans, 9.8F, FontPx::Sans);
+                    ScopedTextStyle ts(ctx.theme.fonts.sans, TextPx::Caption(), FontPx::Sans);
                     ImGui::PushStyleColor(ImGuiCol_Text, Dim());
                     ImGui::TextUnformatted(m.hint);
                     ImGui::PopStyleColor();
@@ -621,7 +621,7 @@ namespace Horo::Editor {
                 dl->AddRectFilled(p, {p.x + rowW, p.y + rowH}, U32(i % 2 == 0 ? Bg3() : Bg2()), Layout::Radius);
 
                 ImGui::SetCursorScreenPos({p.x + 10.0F, p.y + 7.0F});
-                ScopedTextStyle ts(ctx.theme.fonts.sansCompact, 10.5F, FontPx::SansCompact);
+                ScopedTextStyle ts(ctx.theme.fonts.sansCompact, TextPx::Caption(), FontPx::SansCompact);
                 ImGui::PushStyleColor(ImGuiCol_Text, Muted());
                 ImGui::TextUnformatted(items[i]);
                 ImGui::PopStyleColor();
@@ -637,7 +637,7 @@ namespace Horo::Editor {
             FieldLabel("MANIFEST", ctx.theme.fonts);
             if (path != nullptr && path[0] != '\0') {
                 ImGui::SameLine(0.0F, 8.0F);
-                ScopedTextStyle ts(ctx.theme.fonts.sansCompact, 10.0F, FontPx::SansCompact);
+                ScopedTextStyle ts(ctx.theme.fonts.sansCompact, TextPx::Caption(), FontPx::SansCompact);
                 ImGui::PushStyleColor(ImGuiCol_Text, Dim());
                 ImGui::TextUnformatted(path);
                 ImGui::PopStyleColor();
@@ -654,7 +654,7 @@ namespace Horo::Editor {
             ImGui::BeginChild("manifest-code", {0.0F, 168.0F}, true,
                               ImGuiWindowFlags_AlwaysUseWindowPadding | ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse);
             {
-                ScopedTextStyle ts(ctx.theme.fonts.sansCompact, 11.0F, FontPx::SansCompact);
+                ScopedTextStyle ts(ctx.theme.fonts.sansCompact, TextPx::Caption(), FontPx::SansCompact);
                 ImGui::PushStyleColor(ImGuiCol_Text, Muted());
                 ImGui::TextUnformatted(manifest);
                 ImGui::PopStyleColor();
@@ -756,7 +756,7 @@ namespace Horo::Editor {
 
                 ImGui::SetCursorScreenPos({innerX, cardPos.y + 9.0F});
                 {
-                    ScopedTextStyle ts(ctx.theme.fonts.sans, 14.0F, FontPx::Sans);
+                    ScopedTextStyle ts(ctx.theme.fonts.sans, TextPx::Label(), FontPx::Sans);
                     ImGui::PushStyleColor(ImGuiCol_Text, Text());
                     ImGui::TextUnformatted(p.name);
                     ImGui::PopStyleColor();
@@ -767,7 +767,7 @@ namespace Horo::Editor {
 
                 ImGui::SetCursorScreenPos({innerX, cardPos.y + 33.0F});
                 {
-                    ScopedTextStyle ts(ctx.theme.fonts.sans, 11.8F, FontPx::Sans);
+                    ScopedTextStyle ts(ctx.theme.fonts.sans, TextPx::Caption(), FontPx::Sans);
                     ImGui::PushStyleColor(ImGuiCol_Text, Muted());
                     ImGui::PushTextWrapPos(ImGui::GetCursorPosX() + cardW - (innerX - cardPos.x) - 56.0F);
                     ImGui::TextWrapped("%s", p.desc);
@@ -779,7 +779,7 @@ namespace Horo::Editor {
                 Badge({.label = p.version, .tone = BadgeTone::Accent}, ctx.theme.fonts);
                 Badge({.label = p.statusLabel, .tone = p.statusTone}, ctx.theme.fonts);
                 {
-                    ScopedTextStyle ts(ctx.theme.fonts.sansCompact, 10.5F, FontPx::SansCompact);
+                    ScopedTextStyle ts(ctx.theme.fonts.sansCompact, TextPx::Caption(), FontPx::SansCompact);
                     ImGui::PushStyleColor(ImGuiCol_Text, Dim());
                     ImGui::TextUnformatted(p.category);
                     ImGui::PopStyleColor();
@@ -839,7 +839,7 @@ namespace Horo::Editor {
 
             ImGui::SetCursorScreenPos({p.x + 34.0F, p.y + 12.0F});
             {
-                ScopedTextStyle ts(ctx.theme.fonts.sansCompact, 14.5F, FontPx::SansCompact);
+                ScopedTextStyle ts(ctx.theme.fonts.sansCompact, TextPx::Label(), FontPx::SansCompact);
                 ImGui::PushStyleColor(ImGuiCol_Text, Text());
                 ImGui::TextUnformatted(hdr.name);
                 ImGui::PopStyleColor();
@@ -847,7 +847,7 @@ namespace Horo::Editor {
 
             ImGui::SetCursorScreenPos({p.x + 20.0F, p.y + 40.0F});
             {
-                ScopedTextStyle ts(ctx.theme.fonts.sans, 12.0F, FontPx::Sans);
+                ScopedTextStyle ts(ctx.theme.fonts.sans, TextPx::Caption(), FontPx::Sans);
                 ImGui::PushStyleColor(ImGuiCol_Text, Muted());
                 ImGui::PushTextWrapPos(ImGui::GetCursorPosX() + headerW - 44.0F);
                 ImGui::TextWrapped("%s", hdr.desc);
@@ -859,7 +859,7 @@ namespace Horo::Editor {
             Badge({.label = hdr.scopeBadge, .tone = BadgeTone::Accent}, ctx.theme.fonts);
             Badge({.label = hdr.signedBadge, .tone = hdr.signedTone}, ctx.theme.fonts);
             {
-                ScopedTextStyle ts(ctx.theme.fonts.sansCompact, 10.5F, FontPx::SansCompact);
+                ScopedTextStyle ts(ctx.theme.fonts.sansCompact, TextPx::Caption(), FontPx::SansCompact);
                 ImGui::PushStyleColor(ImGuiCol_Text, Dim());
                 ImGui::TextUnformatted(hdr.restartBadge);
                 ImGui::PopStyleColor();
@@ -908,7 +908,7 @@ namespace Horo::Editor {
                 ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4{Accent().x, Accent().y, Accent().z, 0.16F});
                 ImGui::PushStyleColor(ImGuiCol_Text, active ? Accent() : Muted());
                 {
-                    ScopedTextStyle ts(ctx.theme.fonts.sans, 13.5F, FontPx::Sans);
+                    ScopedTextStyle ts(ctx.theme.fonts.sans, TextPx::Caption(), FontPx::Sans);
                     if (ImGui::Button(kDetailTabs[i], {tabW, tabH}))
                         activeTab = i;
                 }
@@ -1245,7 +1245,7 @@ namespace Horo::Editor {
                 ImGui::SetCursorPosY(ImGui::GetCursorPosY() + 10.0F);
             }
 
-            ScopedTextStyle heading(ctx.theme.fonts.sansEmphasis, 16.0F, FontPx::SansEmphasis);
+            ScopedTextStyle heading(ctx.theme.fonts.sansEmphasis, TextPx::Title(), FontPx::SansEmphasis);
             ImGui::PushStyleColor(ImGuiCol_Text, Text());
             ImGui::TextUnformatted(label);
             ImGui::PopStyleColor();
@@ -1258,13 +1258,13 @@ namespace Horo::Editor {
             const ImVec2 itemSpacing = ImGui::GetStyle().ItemSpacing;
             ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2{itemSpacing.x, 3.0F});
             {
-                ScopedTextStyle title(ctx.theme.fonts.sans, 15.0F, FontPx::Sans);
+                ScopedTextStyle title(ctx.theme.fonts.sans, TextPx::Body(), FontPx::Sans);
                 ImGui::PushStyleColor(ImGuiCol_Text, Text());
                 ImGui::TextUnformatted(label);
                 ImGui::PopStyleColor();
             }
             if (value != nullptr && value[0] != '\0') {
-                ScopedTextStyle detail(ctx.theme.fonts.sans, 13.5F, FontPx::Sans);
+                ScopedTextStyle detail(ctx.theme.fonts.sans, TextPx::Caption(), FontPx::Sans);
                 ImGui::PushStyleColor(ImGuiCol_Text, Muted());
                 ImGui::PushTextWrapPos(ImGui::GetCursorPosX() + availableWidth);
                 ImGui::TextWrapped("%s", value);
@@ -1277,7 +1277,7 @@ namespace Horo::Editor {
 
         /** @brief Draws a standalone value inside the current extension detail section. */
         void DrawExtensionDetailValue(const char *value, const EditorGuiContext &ctx) {
-            ScopedTextStyle detail(ctx.theme.fonts.sans, 13.5F, FontPx::Sans);
+            ScopedTextStyle detail(ctx.theme.fonts.sans, TextPx::Caption(), FontPx::Sans);
             ImGui::PushStyleColor(ImGuiCol_Text, Muted());
             ImGui::TextWrapped("%s", value);
             ImGui::PopStyleColor();
@@ -1358,13 +1358,13 @@ namespace Horo::Editor {
                 ctx.localization.Get("editor", entry.enabled ? "settings.plugins.status.enabled" : "settings.plugins.status.disabled");
             float toggleLabelWidth = 0.0F;
             {
-                ScopedTextStyle toggleText(ctx.theme.fonts.sans, 12.5F, FontPx::Sans);
+                ScopedTextStyle toggleText(ctx.theme.fonts.sans, TextPx::Label(), FontPx::Sans);
                 toggleLabelWidth = ImGui::CalcTextSize(toggleLabel.c_str()).x;
             }
             const float toggleClusterWidth = 36.0F + 8.0F + toggleLabelWidth;
             ImGui::SetCursorScreenPos({cardMin.x + 34.0F, cardMin.y + 13.0F});
             {
-                ScopedTextStyle title(ctx.theme.fonts.sansEmphasis, 14.5F, FontPx::SansEmphasis);
+                ScopedTextStyle title(ctx.theme.fonts.sansEmphasis, TextPx::Title(), FontPx::SansEmphasis);
                 ImGui::PushClipRect({cardMin.x + 34.0F, cardMin.y}, {cardMax.x - toggleClusterWidth - 28.0F, cardMin.y + 42.0F}, true);
                 ImGui::TextUnformatted(entry.displayName.c_str());
                 ImGui::PopClipRect();
@@ -1401,7 +1401,7 @@ namespace Horo::Editor {
             }
             ImGui::SameLine(0.0F, 8.0F);
             {
-                ScopedTextStyle toggleText(ctx.theme.fonts.sans, 12.5F, FontPx::Sans);
+                ScopedTextStyle toggleText(ctx.theme.fonts.sans, TextPx::Label(), FontPx::Sans);
                 ImGui::PushStyleColor(ImGuiCol_Text, enabled ? Text() : Muted());
                 ImGui::TextUnformatted(
                     ctx.localization.Get("editor", enabled ? "settings.plugins.status.enabled" : "settings.plugins.status.disabled")
@@ -1431,7 +1431,7 @@ namespace Horo::Editor {
             ImGui::PushStyleColor(ImGuiCol_ChildBg, Bg2());
             ImGui::BeginChild("ExtensionListPane", {listWidth, paneHeight}, true, ImGuiWindowFlags_AlwaysUseWindowPadding);
             {
-                ScopedTextStyle heading(ctx.theme.fonts.sansEmphasis, 11.5F, FontPx::SansEmphasis);
+                ScopedTextStyle heading(ctx.theme.fonts.sansEmphasis, TextPx::Label(), FontPx::SansEmphasis);
                 ImGui::PushStyleColor(ImGuiCol_Text, Dim());
                 ImGui::TextUnformatted(ctx.localization.Get("editor", "settings.extensions.installed_heading").c_str());
                 ImGui::PopStyleColor();
@@ -1552,7 +1552,7 @@ namespace Horo::Editor {
 
                 ImGui::SetCursorScreenPos({cardMin.x + 16.0F, cardMin.y + 13.0F});
                 {
-                    ScopedTextStyle title(ctx.theme.fonts.sansEmphasis, 15.0F, FontPx::SansEmphasis);
+                    ScopedTextStyle title(ctx.theme.fonts.sansEmphasis, TextPx::Title(), FontPx::SansEmphasis);
                     ImGui::TextUnformatted(entry.displayName.c_str());
                 }
                 ImGui::SameLine(0.0F, 8.0F);
@@ -1646,14 +1646,14 @@ namespace Horo::Editor {
             const float centeredActionY = (ImGui::GetWindowHeight() - actionH) * 0.5F;
             ImGui::SetCursorPos({footerPaddingX, (ImGui::GetWindowHeight() - ImGui::GetTextLineHeight()) * 0.5F});
             if (st.dirty) {
-                ScopedTextStyle badge(ctx.theme.fonts.sansCompact, 10.5F, FontPx::SansCompact);
+                ScopedTextStyle badge(ctx.theme.fonts.sansCompact, TextPx::Caption(), FontPx::SansCompact);
                 ImGui::PushStyleColor(ImGuiCol_Text, Warn());
                 ImGui::TextUnformatted("unsaved");
                 ImGui::PopStyleColor();
                 ImGui::SameLine(0.0F, 8.0F);
             }
             {
-                ScopedTextStyle hint(ctx.theme.fonts.sansCompact, 11.5F, FontPx::SansCompact);
+                ScopedTextStyle hint(ctx.theme.fonts.sansCompact, TextPx::Caption(), FontPx::SansCompact);
                 const bool hasFeedback = !st.modalFeedback.empty();
                 ImVec4 textColor = Dim();
                 if (hasFeedback) {
@@ -1737,7 +1737,7 @@ namespace Horo::Editor {
                     .footerHeight = Layout::FooterH,
                     .logo = logo,
                     .showBrandMark = true,
-                    .titleFontSize = 13.0F,
+                    .titleFontSize = TextPx::Title(),
                 },
                 ctx.theme.fonts);
             ModalSplitPane(

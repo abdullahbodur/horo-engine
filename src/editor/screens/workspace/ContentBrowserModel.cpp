@@ -389,6 +389,25 @@ namespace Horo::Editor {
                 entry.meshPreviewPoints = ReadMeshPreview(absoluteEntry);
             return entry;
         }
+
+        [[nodiscard]] std::size_t CountVisibleDirectoryChildren(const std::filesystem::path &directory) {
+            std::size_t count = 0;
+            std::error_code error;
+            for (std::filesystem::directory_iterator iterator{directory, std::filesystem::directory_options::skip_permission_denied, error},
+                 end;
+                 !error && iterator != end; iterator.increment(error)) {
+                const std::filesystem::directory_entry &entry = *iterator;
+                const std::filesystem::file_status status = entry.symlink_status(error);
+                if (error)
+                    break;
+                if (std::filesystem::is_symlink(status))
+                    continue;
+                if (std::filesystem::is_directory(status) || (std::filesystem::is_regular_file(status) && !IsHiddenSidecar(entry.path()))) {
+                    ++count;
+                }
+            }
+            return count;
+        }
     }  // namespace
 
     /** @copydoc IsContentBrowserDirectoryTargetAllowed */
@@ -463,6 +482,7 @@ namespace Horo::Editor {
                     .kind = ContentBrowserEntryKind::Directory,
                     .absolutePath = absoluteEntry.string(),
                     .displayName = absoluteEntry.filename().string(),
+                    .containedItemCount = CountVisibleDirectoryChildren(absoluteEntry),
                 });
             } else if (std::filesystem::is_regular_file(status)) {
                 if (IsHiddenSidecar(absoluteEntry)) {

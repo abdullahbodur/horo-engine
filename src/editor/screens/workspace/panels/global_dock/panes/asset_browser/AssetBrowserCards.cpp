@@ -1,8 +1,10 @@
 #include "editor/screens/workspace/panels/global_dock/panes/asset_browser/AssetBrowserCards.h"
 
+#include "Horo/Editor/EditorIcons.h"
 #include "Horo/Editor/EditorTheme.h"
 #include "editor/renderer/EditorGuiRenderer.h"
 #include "editor/screens/workspace/EditorWorkspaceViewModel.h"
+#include "editor/screens/workspace/panels/global_dock/panes/asset_browser/AssetBrowserPaneLayout.h"
 
 #include <algorithm>
 #include <array>
@@ -12,116 +14,59 @@
 
 namespace Horo::Editor {
     namespace {
-        constexpr float CardFooterHeight = 20.0F;
-        constexpr float CardRadius = 3.0F;
-
-        enum class AssetGlyph {
-            None,
-            Folder,
-            Mesh,
-            Image,
-            Audio,
-            Generic,
-            Prefab,
-        };
+        constexpr float CardRadius = 6.0F;
 
         struct AssetCardPresentation {
             std::string_view name;
             ImU32 gradientStart;
             ImU32 gradientMid;
             ImU32 gradientEnd;
-            AssetGlyph glyph;
+            Ui::UiIcon icon;
         };
+
+        [[nodiscard]] AssetCardPresentation TintedPresentation(const std::string_view name, const ImVec4 tint, const float amount,
+                                                               const Ui::UiIcon icon) {
+            return {
+                name,
+                Theme::U32(Theme::Mix(Theme::Bg1(), tint, amount * 0.55F)),
+                Theme::U32(Theme::Mix(Theme::Bg1(), tint, amount * 0.78F)),
+                Theme::U32(Theme::Mix(Theme::Bg1(), tint, amount)),
+                icon,
+            };
+        }
 
         [[nodiscard]] AssetCardPresentation PresentEntry(const ContentBrowserEntry &entry) {
             if (entry.kind == ContentBrowserEntryKind::Directory) {
-                return {entry.displayName, IM_COL32(24, 31, 39, 255), IM_COL32(30, 39, 50, 255), IM_COL32(35, 46, 60, 255),
-                        AssetGlyph::Folder};
+                if (entry.displayName == "materials") {
+                    return TintedPresentation(entry.displayName, Theme::Accent(), 0.10F, Ui::UiIcon::Folder);
+                }
+                if (entry.displayName == "models") {
+                    return TintedPresentation(entry.displayName, Theme::Accent(), 0.16F, Ui::UiIcon::Folder);
+                }
+                if (entry.displayName == "scenes") {
+                    return TintedPresentation(entry.displayName, Theme::Ok(), 0.12F, Ui::UiIcon::Folder);
+                }
+                if (entry.displayName == "shaders") {
+                    return TintedPresentation(entry.displayName, Theme::Muted(), 0.09F, Ui::UiIcon::Folder);
+                }
+                if (entry.displayName == "textures") {
+                    return TintedPresentation(entry.displayName, Theme::Warn(), 0.11F, Ui::UiIcon::Folder);
+                }
+                return TintedPresentation(entry.displayName, Theme::Accent(), 0.08F, Ui::UiIcon::Folder);
             }
             if (entry.previewFallback == Assets::AssetPreviewFallback::Image) {
-                return {entry.displayName, IM_COL32(26, 21, 32, 255), IM_COL32(30, 23, 38, 255), IM_COL32(34, 25, 44, 255),
-                        AssetGlyph::Image};
+                return TintedPresentation(entry.displayName, Theme::Err(), 0.09F, Ui::UiIcon::Image);
             }
             if (entry.previewFallback == Assets::AssetPreviewFallback::Audio) {
-                return {entry.displayName, IM_COL32(28, 26, 18, 255), IM_COL32(33, 31, 22, 255), IM_COL32(38, 35, 26, 255),
-                        AssetGlyph::Audio};
+                return TintedPresentation(entry.displayName, Theme::Warn(), 0.10F, Ui::UiIcon::AudioFile);
             }
             if (entry.assetType.find("prefab") != std::string::npos) {
-                return {entry.displayName, IM_COL32(14, 24, 32, 255), IM_COL32(18, 28, 40, 255), IM_COL32(21, 32, 48, 255),
-                        AssetGlyph::Prefab};
+                return TintedPresentation(entry.displayName, Theme::Accent(), 0.09F, Ui::UiIcon::HierarchyGeneric);
             }
             if (entry.previewFallback == Assets::AssetPreviewFallback::Mesh) {
-                return {entry.displayName, IM_COL32(19, 32, 26, 255), IM_COL32(22, 37, 29, 255), IM_COL32(25, 42, 32, 255),
-                        AssetGlyph::Mesh};
+                return TintedPresentation(entry.displayName, Theme::Ok(), 0.11F, Ui::UiIcon::HierarchyMesh);
             }
-            return {entry.displayName, IM_COL32(24, 32, 42, 255), IM_COL32(27, 36, 48, 255), IM_COL32(29, 40, 54, 255),
-                    AssetGlyph::Generic};
-        }
-
-        void DrawGlyph(ImDrawList *drawList, const AssetGlyph glyph, const ImVec2 center) {
-            const ImU32 color = Theme::U32(Theme::Text());
-            if (glyph == AssetGlyph::Folder) {
-                constexpr float width = 17.0F;
-                constexpr float height = 12.0F;
-                const ImVec2 folderMin{center.x - width * 0.5F, center.y - height * 0.35F};
-                const ImVec2 folderMax{folderMin.x + width, folderMin.y + height};
-                drawList->AddRect(folderMin, folderMax, color, 2.0F, ImDrawFlags_RoundCornersAll, 1.5F);
-                drawList->AddLine({folderMin.x + 1.5F, folderMin.y}, {folderMin.x + 6.0F, folderMin.y - 3.5F}, color, 1.5F);
-                drawList->AddLine({folderMin.x + 6.0F, folderMin.y - 3.5F}, {folderMin.x + 10.0F, folderMin.y - 3.5F}, color, 1.5F);
-                drawList->AddLine({folderMin.x + 10.0F, folderMin.y - 3.5F}, {folderMin.x + 12.0F, folderMin.y}, color, 1.5F);
-            } else if (glyph == AssetGlyph::Mesh) {
-                const std::array front{
-                    ImVec2{center.x - 6.0F, center.y - 4.0F},
-                    ImVec2{center.x + 2.0F, center.y - 4.0F},
-                    ImVec2{center.x + 2.0F, center.y + 4.0F},
-                    ImVec2{center.x - 6.0F, center.y + 4.0F},
-                };
-                const std::array back{
-                    ImVec2{center.x - 2.0F, center.y - 7.0F},
-                    ImVec2{center.x + 6.0F, center.y - 7.0F},
-                    ImVec2{center.x + 6.0F, center.y + 1.0F},
-                    ImVec2{center.x - 2.0F, center.y + 1.0F},
-                };
-                drawList->AddPolyline(front.data(), front.size(), color, ImDrawFlags_Closed, 1.25F);
-                drawList->AddPolyline(back.data(), back.size(), color, ImDrawFlags_Closed, 1.25F);
-                for (std::size_t index = 0; index < front.size(); ++index)
-                    drawList->AddLine(front[index], back[index], color, 1.25F);
-            } else if (glyph == AssetGlyph::Image) {
-                const ImVec2 minimum{center.x - 8.0F, center.y - 7.0F};
-                const ImVec2 maximum{center.x + 8.0F, center.y + 7.0F};
-                drawList->AddRect(minimum, maximum, color, 2.0F, ImDrawFlags_RoundCornersAll, 1.3F);
-                drawList->AddCircleFilled({center.x + 3.5F, center.y - 2.5F}, 1.7F, color, 10);
-                const std::array points{
-                    ImVec2{minimum.x + 2.0F, maximum.y - 2.0F}, ImVec2{center.x - 2.0F, center.y},
-                    ImVec2{center.x + 1.0F, center.y + 3.0F},   ImVec2{center.x + 5.0F, center.y - 0.5F},
-                    ImVec2{maximum.x - 2.0F, maximum.y - 2.0F},
-                };
-                drawList->AddPolyline(points.data(), points.size(), color, 0, 1.2F);
-            } else if (glyph == AssetGlyph::Audio) {
-                constexpr std::array heights{4.0F, 8.0F, 12.0F, 7.0F, 10.0F, 5.0F};
-                for (std::size_t index = 0; index < heights.size(); ++index) {
-                    const float x = center.x - 7.5F + static_cast<float>(index) * 3.0F;
-                    drawList->AddLine({x, center.y - heights[index] * 0.5F}, {x, center.y + heights[index] * 0.5F}, color, 1.5F);
-                }
-            } else if (glyph == AssetGlyph::Generic) {
-                const ImVec2 minimum{center.x - 6.0F, center.y - 8.0F};
-                const ImVec2 maximum{center.x + 6.0F, center.y + 8.0F};
-                drawList->AddRect(minimum, maximum, color, 1.5F, ImDrawFlags_RoundCornersAll, 1.3F);
-                drawList->AddLine({center.x + 1.0F, minimum.y}, {maximum.x, center.y - 3.0F}, color, 1.2F);
-                drawList->AddLine({maximum.x, center.y - 3.0F}, {center.x + 1.0F, center.y - 3.0F}, color, 1.2F);
-            } else if (glyph == AssetGlyph::Prefab) {
-                constexpr float halfWidth = 5.2F;
-                constexpr float radius = 6.0F;
-                const std::array points{
-                    ImVec2{center.x, center.y - radius},
-                    ImVec2{center.x + halfWidth, center.y - radius * 0.5F},
-                    ImVec2{center.x + halfWidth, center.y + radius * 0.5F},
-                    ImVec2{center.x, center.y + radius},
-                    ImVec2{center.x - halfWidth, center.y + radius * 0.5F},
-                    ImVec2{center.x - halfWidth, center.y - radius * 0.5F},
-                };
-                drawList->AddPolyline(points.data(), points.size(), color, ImDrawFlags_Closed, 1.5F);
-            }
+            return TintedPresentation(entry.displayName, Theme::Accent(), 0.09F, Ui::UiIcon::Description);
         }
 
         void DrawMeshPreview(ImDrawList *drawList, const ContentBrowserEntry &entry, const ImVec2 previewMin, const ImVec2 previewMax) {
@@ -152,7 +97,9 @@ namespace Horo::Editor {
             for (const ImVec2 point : projected) {
                 const ImVec2 screen{center.x + (point.x - (minX + maxX) * 0.5F) * scale,
                                     center.y + (point.y - (minY + maxY) * 0.5F) * scale};
-                drawList->AddCircleFilled({screen.x + 1.0F, screen.y + 1.0F}, 1.35F, IM_COL32(0, 0, 0, 70), 6);
+                ImVec4 shadow = Theme::Shadow();
+                shadow.w = 0.27F;
+                drawList->AddCircleFilled({screen.x + 1.0F, screen.y + 1.0F}, 1.35F, Theme::U32(shadow), 6);
                 drawList->AddCircleFilled(screen, 1.05F, Theme::U32(Theme::Text()), 6);
             }
             drawList->PopClipRect();
@@ -233,38 +180,58 @@ namespace Horo::Editor {
 
     /** @copydoc AssetBrowserCardRenderer::Draw */
     void AssetBrowserCardRenderer::Draw(const AssetBrowserCardDrawContext &drawContext, const ContentBrowserEntry &entry) {
-        const auto &[drawList, font, fontSize, cardMin, cardWidth, hovered, selected, dimmed] = drawContext;
+        const auto &[drawList, font, iconFont, fontSize, cardMin, cardWidth, cardHeight, previewWidth, previewHeight, secondaryText,
+                     listView, hovered, selected, dimmed] = drawContext;
         const AssetCardPresentation asset = PresentEntry(entry);
-        const ImVec2 cardMax{cardMin.x + cardWidth, cardMin.y + cardWidth + CardFooterHeight};
-        const ImVec2 thumbMax{cardMax.x, cardMin.y + cardWidth};
-        drawList->AddRectFilled(cardMin, cardMax, Theme::U32(Theme::Bg3()), CardRadius);
-        drawList->AddRectFilled(cardMin, thumbMax, asset.gradientStart, CardRadius, ImDrawFlags_RoundCornersTop);
+        const ImVec2 cardMax{cardMin.x + cardWidth, cardMin.y + cardHeight};
+        const ImVec2 thumbMax{cardMin.x + previewWidth, cardMin.y + previewHeight};
+        drawList->AddRectFilled(cardMin, cardMax, Theme::U32(Theme::CardSurface()), CardRadius);
+        drawList->AddRectFilled(cardMin, thumbMax, asset.gradientStart, CardRadius,
+                                listView ? ImDrawFlags_RoundCornersLeft : ImDrawFlags_RoundCornersTop);
         drawList->AddRectFilledMultiColor({cardMin.x + 1.0F, cardMin.y + 1.0F}, {thumbMax.x - 1.0F, thumbMax.y}, asset.gradientStart,
                                           asset.gradientMid, asset.gradientMid, asset.gradientEnd);
         if (const std::uintptr_t previewTexture = ResolvePreview(entry); previewTexture != 0)
             drawList->AddImage(previewTexture, {cardMin.x + 3.0F, cardMin.y + 3.0F}, {thumbMax.x - 3.0F, thumbMax.y - 3.0F});
         else if (entry.assetType == "core.mesh" && !entry.meshPreviewPoints.empty())
             DrawMeshPreview(drawList, entry, cardMin, thumbMax);
-        else
-            DrawGlyph(drawList, asset.glyph, {cardMin.x + cardWidth * 0.5F, cardMin.y + cardWidth * 0.5F});
-        if (hovered)
-            drawList->AddRectFilled(cardMin, thumbMax, IM_COL32(255, 255, 255, 10), CardRadius, ImDrawFlags_RoundCornersTop);
+        else {
+            const float iconSize = entry.kind == ContentBrowserEntryKind::Directory ? 34.0F : 20.0F;
+            const ImU32 iconColor = Theme::U32(entry.kind == ContentBrowserEntryKind::Directory ? Theme::Muted() : Theme::Text());
+            Ui::DrawEditorIcon(drawList, asset.icon,
+                               {cardMin.x + (previewWidth - iconSize) * 0.5F, cardMin.y + (previewHeight - iconSize) * 0.5F},
+                               {iconSize, iconSize}, iconColor, iconFont);
+        }
+        if (hovered) {
+            ImVec4 hoverOverlay = Theme::Text();
+            hoverOverlay.w = 0.04F;
+            drawList->AddRectFilled(cardMin, thumbMax, Theme::U32(hoverOverlay), CardRadius,
+                                    listView ? ImDrawFlags_RoundCornersLeft : ImDrawFlags_RoundCornersTop);
+        }
         if (dimmed) {
-            drawList->AddRectFilled(cardMin, cardMax, IM_COL32(6, 10, 14, 118), CardRadius);
+            ImVec4 dimOverlay = Theme::Bg0();
+            dimOverlay.w = 0.46F;
+            drawList->AddRectFilled(cardMin, cardMax, Theme::U32(dimOverlay), CardRadius);
             drawList->AddRect({cardMin.x + 2.0F, cardMin.y + 2.0F}, {cardMax.x - 2.0F, cardMax.y - 2.0F}, Theme::U32(Theme::Accent()),
                               CardRadius, ImDrawFlags_RoundCornersAll, 1.0F);
         }
-        drawList->AddLine({cardMin.x, thumbMax.y}, thumbMax, Theme::U32(Theme::Border()), 1.0F);
-        ImVec4 outlineColor = Theme::Border();
+        if (listView)
+            drawList->AddLine({thumbMax.x, cardMin.y}, {thumbMax.x, cardMax.y}, Theme::U32(Theme::CardBorder()), 1.0F);
+        else
+            drawList->AddLine({cardMin.x, thumbMax.y}, thumbMax, Theme::U32(Theme::CardBorder()), 1.0F);
+        ImU32 outlineColor = Theme::U32(Theme::CardBorder());
         if (selected)
-            outlineColor = Theme::Accent();
+            outlineColor = Theme::U32(Theme::Accent());
         else if (hovered)
-            outlineColor = Theme::BorderStrong();
-        drawList->AddRect(cardMin, cardMax, Theme::U32(outlineColor), CardRadius, ImDrawFlags_RoundCornersAll, selected ? 1.5F : 1.0F);
+            outlineColor = Theme::U32(Theme::BorderStrong());
+        drawList->AddRect(cardMin, cardMax, outlineColor, CardRadius, ImDrawFlags_RoundCornersAll, selected ? 1.5F : 1.0F);
         const std::string name{asset.name};
-        const ImVec2 textSize = font->CalcTextSizeA(fontSize, cardWidth - 8.0F, 0.0F, name.c_str());
-        const ImVec2 textPos{cardMin.x + (cardWidth - textSize.x) * 0.5F, thumbMax.y + (CardFooterHeight - fontSize) * 0.5F - 1.0F};
-        const ImVec4 clipRect{cardMin.x + 4.0F, thumbMax.y, cardMax.x - 4.0F, cardMax.y};
-        drawList->AddText(font, fontSize, textPos, Theme::U32(Theme::Muted()), name.c_str(), nullptr, 0.0F, &clipRect);
+        const float metaX = listView ? thumbMax.x + 12.0F : cardMin.x + 8.0F;
+        const float metaY = listView ? cardMin.y + 7.0F : thumbMax.y + 6.0F;
+        const ImVec4 clipRect{metaX, cardMin.y, cardMax.x - 26.0F, cardMax.y};
+        drawList->AddText(font, fontSize, {metaX, metaY}, Theme::U32(Theme::Text()), name.c_str(), nullptr, 0.0F, &clipRect);
+        drawList->AddText(font, AssetBrowserLayout::SecondaryFontSize(), {metaX, metaY + fontSize + 2.0F}, Theme::U32(Theme::Dim()),
+                          secondaryText.data(), secondaryText.data() + secondaryText.size(), 0.0F, &clipRect);
+        Ui::DrawEditorIcon(drawList, Ui::UiIcon::MoreVertical, {cardMax.x - 17.0F, cardMin.y + 6.0F}, {16.0F, 16.0F},
+                           Theme::U32(Theme::Dim()), iconFont);
     }
 }  // namespace Horo::Editor

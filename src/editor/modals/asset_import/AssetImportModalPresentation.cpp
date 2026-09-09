@@ -491,11 +491,12 @@ namespace Horo::Editor {
             sidebarDrawList->AddRectFilled(zonePos, {zonePos.x + zoneW, zonePos.y + zoneH}, U32(zoneHovered ? Bg2() : Bg1()), 4.0f);
             DrawDashedRect(sidebarDrawList, zonePos, {zonePos.x + zoneW, zonePos.y + zoneH}, U32(zoneHovered ? Accent() : Border()));
 
-            PushFont(fonts.sansEmphasis);
-            const char *dropTitle = "Drop files here";
-            const float dropTitleW = ImGui::CalcTextSize(dropTitle).x;
-            sidebarDrawList->AddText({zonePos.x + (zoneW - dropTitleW) * 0.5f, zonePos.y + 31.0f}, U32(Text()), dropTitle);
-            PopFont(fonts.sansEmphasis);
+            {
+                ScopedTextStyle titleStyle(fonts.sansEmphasis, TextPx::Title(), FontPx::SansEmphasis);
+                const char *dropTitle = "Drop files here";
+                const float dropTitleW = ImGui::CalcTextSize(dropTitle).x;
+                sidebarDrawList->AddText({zonePos.x + (zoneW - dropTitleW) * 0.5f, zonePos.y + 31.0f}, U32(Text()), dropTitle);
+            }
             PushFont(fonts.sansCompact);
             const char *dropSubtitle = "or click to browse";
             const float dropSubtitleW = ImGui::CalcTextSize(dropSubtitle).x;
@@ -1028,7 +1029,7 @@ namespace Horo::Editor {
                 .viewportPadding = ImportLayout::ViewportPad,
                 .headerHeight = ImportLayout::HeaderH,
                 .footerHeight = ImportLayout::FooterH,
-                .titleFontSize = 16.0F,
+                .titleFontSize = Theme::TextPx::Title(),
             },
             fonts);
         if (modalShell.CloseRequested())

@@ -6,17 +6,10 @@
 #include <Horo/Editor/Localization/ILocalizationService.h>
 #include <algorithm>
 #include <cfloat>
+#include <cmath>
 
 namespace Horo::Editor {
     namespace {
-        constexpr float kProjectNameFontSize = 14.0F;
-        constexpr float kProjectPathFontSize = 14.0F;
-        constexpr float kProjectMetaFontSize = 13.0F;
-        constexpr float kNewsTagFontSize = 13.0F;
-        constexpr float kNewsTitleFontSize = 15.0F;
-        constexpr float kNewsBodyFontSize = 14.0F;
-        constexpr float kSectionLabelFontSize = 14.0F;
-
         [[nodiscard]] const char *CompatibilityLabelKey(const RecentProjectCompatibilityProjection &projection) {
             if (projection.inspectionState == RecentProjectInspectionState::Refreshing)
                 return "welcome.project.compatibility.refreshing";
@@ -72,8 +65,8 @@ namespace Horo::Editor {
 
                 ImFont *const nameFont = ctx.theme.fonts.sans ? ctx.theme.fonts.sans : ImGui::GetFont();
                 ImFont *const compactFont = ctx.theme.fonts.sansCompact ? ctx.theme.fonts.sansCompact : ImGui::GetFont();
-                const float metaWidth = std::max(compactFont->CalcTextSizeA(kProjectMetaFontSize, FLT_MAX, 0.0F, versionText.c_str()).x,
-                                                 compactFont->CalcTextSizeA(kProjectMetaFontSize, FLT_MAX, 0.0F, statusText.c_str()).x);
+                const float metaWidth = std::max(compactFont->CalcTextSizeA(TextPx::Caption(), FLT_MAX, 0.0F, versionText.c_str()).x,
+                                                 compactFont->CalcTextSizeA(TextPx::Caption(), FLT_MAX, 0.0F, statusText.c_str()).x);
                 const float contentMaxX = contentMin.x + contentWidth;
                 const float visibleMetaWidth = std::min(metaWidth, contentWidth * 0.38F);
                 const float metaMinX = contentMaxX - visibleMetaWidth;
@@ -83,41 +76,62 @@ namespace Horo::Editor {
                 const ImVec4 detailsClip{detailsMinX, contentMin.y, detailsMaxX, contentMin.y + contentHeight};
                 const ImVec4 metaClip{metaMinX, contentMin.y, contentMaxX, contentMin.y + contentHeight};
 
-                drawList->AddText(nameFont, kProjectNameFontSize, {detailsMinX, contentMin.y}, U32(Text()), project.name.c_str(), nullptr,
-                                  0.0F, &detailsClip);
-                drawList->AddText(compactFont, kProjectPathFontSize, {detailsMinX, contentMin.y + 21.0F}, U32(Muted()),
+                drawList->AddText(nameFont, TextPx::Label(), {detailsMinX, contentMin.y}, U32(Text()), project.name.c_str(), nullptr, 0.0F,
+                                  &detailsClip);
+                drawList->AddText(compactFont, TextPx::Caption(), {detailsMinX, contentMin.y + 21.0F}, U32(Muted()),
                                   project.rootPath.c_str(), nullptr, 0.0F, &detailsClip);
 
                 const float metaY = contentMin.y + (versionText.empty() ? 11.0F : 0.0F);
                 if (!versionText.empty()) {
-                    drawList->AddText(compactFont, kProjectMetaFontSize, {metaMinX, metaY}, U32(Muted()), versionText.c_str(), nullptr,
-                                      0.0F, &metaClip);
+                    drawList->AddText(compactFont, TextPx::Caption(), {metaMinX, metaY}, U32(Muted()), versionText.c_str(), nullptr, 0.0F,
+                                      &metaClip);
                 }
-                drawList->AddText(compactFont, kProjectMetaFontSize, {metaMinX, metaY + (versionText.empty() ? 0.0F : 21.0F)}, U32(Muted()),
+                drawList->AddText(compactFont, TextPx::Caption(), {metaMinX, metaY + (versionText.empty() ? 0.0F : 21.0F)}, U32(Muted()),
                                   statusText.c_str(), nullptr, 0.0F, &metaClip);
             }
             ImGui::PopID();
             return clicked;
         }
 
+        [[nodiscard]] float NewsCardHeight(const char *tag, const char *title, const char *description, const float width,
+                                           const EditorGuiContext &ctx) {
+            const float padding = Ui::ScaledLayoutValue(14.0F);
+            const ImGuiStyle &style = ImGui::GetStyle();
+            const float contentWidth = std::max(1.0F, width - (padding + style.ChildBorderSize) * 2.0F);
+            const float itemSpacing = style.ItemSpacing.y;
+            const float detailGap = Ui::ScaledLayoutValue(2.0F);
+            ImFont *const compactFont = ctx.theme.fonts.sansCompact ? ctx.theme.fonts.sansCompact : ImGui::GetFont();
+            ImFont *const sansFont = ctx.theme.fonts.sans ? ctx.theme.fonts.sans : ImGui::GetFont();
+
+            const float tagHeight = compactFont->CalcTextSizeA(Theme::TextPx::Label(), FLT_MAX, 0.0F, tag).y;
+            const float titleHeight = sansFont->CalcTextSizeA(Theme::TextPx::Title(), FLT_MAX, 0.0F, title).y;
+            const float descriptionHeight = sansFont->CalcTextSizeA(Theme::TextPx::Body(), FLT_MAX, contentWidth, description).y;
+
+            // Match the exact sequence drawn below: three text items and one
+            // explicit spacer, including the child border on both edges.
+            const float contentHeight = tagHeight + titleHeight + descriptionHeight + detailGap + itemSpacing * 3.0F;
+            return std::ceil((padding + style.ChildBorderSize) * 2.0F + contentHeight);
+        }
+
         void DrawNewsCard(const char *tag, const char *title, const char *description, const ImVec2 size, const EditorGuiContext &ctx) {
             using namespace Theme;
 
-            Ui::ScopedCard card(title, size, 14.0F, 14.0F, ImVec4{0.0F, 0.0F, 0.0F, 0.0F});
+            const float padding = Ui::ScaledLayoutValue(14.0F);
+            Ui::ScopedCard card(title, size, padding, padding, ImVec4{0.0F, 0.0F, 0.0F, 0.0F});
             {
-                ScopedTextStyle textStyle(ctx.theme.fonts.sansCompact, kNewsTagFontSize, FontPx::SansCompact);
+                ScopedTextStyle textStyle(ctx.theme.fonts.sansCompact, TextPx::Label(), FontPx::SansCompact);
                 ImGui::PushStyleColor(ImGuiCol_Text, Accent());
                 ImGui::TextUnformatted(tag);
                 ImGui::PopStyleColor();
             }
             {
-                ScopedTextStyle textStyle(ctx.theme.fonts.sans, kNewsTitleFontSize, FontPx::Sans);
+                ScopedTextStyle textStyle(ctx.theme.fonts.sans, TextPx::Title(), FontPx::Sans);
                 ImGui::TextUnformatted(title);
             }
-            ImGui::Dummy({0.0F, 2.0F});
+            ImGui::Dummy({0.0F, Ui::ScaledLayoutValue(2.0F)});
             {
-                ScopedTextStyle textStyle(ctx.theme.fonts.sans, kNewsBodyFontSize, FontPx::Sans);
-                ImGui::PushTextWrapPos(ImGui::GetCursorPosX() + size.x - 28.0F);
+                ScopedTextStyle textStyle(ctx.theme.fonts.sans, TextPx::Body(), FontPx::Sans);
+                ImGui::PushTextWrapPos(ImGui::GetCursorPosX() + ImGui::GetContentRegionAvail().x);
                 ImGui::TextDisabled("%s", description);
                 ImGui::PopTextWrapPos();
             }
@@ -172,7 +186,7 @@ namespace Horo::Editor {
         {
             ImFont *titleFont = ctx.theme.fonts.sansEmphasis ? ctx.theme.fonts.sansEmphasis : ImGui::GetFont();
             const ImVec2 titlePos = ImGui::GetCursorScreenPos();
-            constexpr float titlePx = 24.0F;
+            const float titlePx = TextPx::Display();
             constexpr float titleSpacing = 2.0F;
             const char *title = "HORO";
             auto *dl = ImGui::GetWindowDrawList();
@@ -190,7 +204,7 @@ namespace Horo::Editor {
         {
             ImFont *subtitleFont = ctx.theme.fonts.sans ? ctx.theme.fonts.sans : ImGui::GetFont();
             const ImVec2 subtitlePos = ImGui::GetCursorScreenPos();
-            constexpr float subtitlePx = 12.0F;
+            const float subtitlePx = TextPx::Caption();
             const std::string subtitleText = ctx.localization.Get("editor", "welcome.subtitle");
             const char *subtitle = subtitleText.c_str();
             ImGui::GetWindowDrawList()->AddText(subtitleFont, subtitlePx, subtitlePos, U32(Muted()), subtitle);
@@ -226,7 +240,7 @@ namespace Horo::Editor {
                           ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse | ImGuiWindowFlags_AlwaysUseWindowPadding);
 
         {
-            ScopedTextStyle textStyle(ctx.theme.fonts.sansEmphasis, kSectionLabelFontSize, FontPx::SansEmphasis);
+            ScopedTextStyle textStyle(ctx.theme.fonts.sansEmphasis, TextPx::Label(), FontPx::SansEmphasis);
             const std::string recentProjects = ctx.localization.Get("editor", "welcome.recent_projects");
             ImGui::TextDisabled("%s", recentProjects.c_str());
             ImGui::SameLine(ImGui::GetWindowWidth() - 92.0F);
@@ -247,18 +261,29 @@ namespace Horo::Editor {
         ImGui::Dummy({0.0F, 28.0F});
 
         {
-            ScopedTextStyle textStyle(ctx.theme.fonts.sansEmphasis, kSectionLabelFontSize, FontPx::SansEmphasis);
+            ScopedTextStyle textStyle(ctx.theme.fonts.sansEmphasis, TextPx::Label(), FontPx::SansEmphasis);
             const std::string whatsNewStr = ctx.localization.Get("editor", "welcome.whats_new");
             ImGui::TextDisabled("%s", whatsNewStr.c_str());
         }
         ImGui::Dummy({0.0F, 14.0F});
 
-        const float newsWidth = (ImGui::GetContentRegionAvail().x - 12.0F) * 0.5F;
-        for (int i = 0; i < static_cast<int>(viewModel.whatsNew.size()); ++i) {
-            const auto &entry = viewModel.whatsNew[static_cast<std::size_t>(i)];
-            DrawNewsCard(entry.tag, entry.title, entry.body, {newsWidth, 104.0F}, ctx);
-            if (i == 0) {
-                ImGui::SameLine(0.0F, 12.0F);
+        const float newsGap = Ui::ScaledLayoutValue(12.0F);
+        const float newsWidth = (ImGui::GetContentRegionAvail().x - newsGap) * 0.5F;
+        for (std::size_t rowStart = 0; rowStart < viewModel.whatsNew.size(); rowStart += 2) {
+            float rowHeight = 0.0F;
+            const std::size_t rowEnd = std::min(rowStart + 2, viewModel.whatsNew.size());
+            for (std::size_t i = rowStart; i < rowEnd; ++i) {
+                const auto &entry = viewModel.whatsNew[i];
+                rowHeight = std::max(rowHeight, NewsCardHeight(entry.tag, entry.title, entry.body, newsWidth, ctx));
+            }
+
+            for (std::size_t i = rowStart; i < rowEnd; ++i) {
+                if (i > rowStart)
+                    ImGui::SameLine(0.0F, newsGap);
+                const auto &entry = viewModel.whatsNew[i];
+                ImGui::PushID(static_cast<int>(i));
+                DrawNewsCard(entry.tag, entry.title, entry.body, {newsWidth, rowHeight}, ctx);
+                ImGui::PopID();
             }
         }
 

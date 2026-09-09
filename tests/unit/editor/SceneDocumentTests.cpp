@@ -22,17 +22,41 @@ namespace {
         return std::fabs(lhs - rhs) < 0.0001F;
     }
 
-    TEST_CASE("Viewport Scene State Advances Its Handoff Generation", "[unit][editor]") {
+    TEST_CASE("Viewport Scene State Advances Its Mesh Resource Generation Only For Resource Changes", "[unit][editor]") {
         using namespace Horo::Editor;
 
         EditorViewportSceneState state;
-        REQUIRE((state.Generation() == 0));
+        REQUIRE((state.MeshResourceGeneration() == 0));
 
         state.Replace({});
-        REQUIRE((state.Generation() == 1));
+        REQUIRE((state.MeshResourceGeneration() == 0));
+
+        EditorViewportSceneSnapshot cameraOnlySnapshot;
+        cameraOnlySnapshot.camera.position = {1.0F, 2.0F, 3.0F};
+        state.Replace(std::move(cameraOnlySnapshot));
+        REQUIRE((state.MeshResourceGeneration() == 0));
+
+        EditorViewportSceneSnapshot meshSnapshot;
+        meshSnapshot.meshResources.push_back({.handle = Horo::Render::RenderMeshSourceHandle{Horo::Render::MeshResourceId{1}, 1},
+                                              .vertices = {},
+                                              .indices = {},
+                                              .localBounds = {}});
+        state.Replace(meshSnapshot);
+        REQUIRE((state.MeshResourceGeneration() == 1));
+
+        meshSnapshot.camera.position = {4.0F, 5.0F, 6.0F};
+        state.Replace(meshSnapshot);
+        REQUIRE((state.MeshResourceGeneration() == 1));
+
+        meshSnapshot.meshResources.front().handle.generation = 2;
+        state.Replace(std::move(meshSnapshot));
+        REQUIRE((state.MeshResourceGeneration() == 2));
 
         state.Clear();
-        REQUIRE((state.Generation() == 2));
+        REQUIRE((state.MeshResourceGeneration() == 3));
+
+        state.Clear();
+        REQUIRE((state.MeshResourceGeneration() == 3));
     }
 
     TEST_CASE("Disabled core components remain authored but are omitted from runtime conversion", "[unit][editor]") {

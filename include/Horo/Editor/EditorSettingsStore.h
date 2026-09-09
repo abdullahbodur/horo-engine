@@ -63,7 +63,7 @@ namespace Horo::Editor {
         EditorThemePreset themePreset = EditorThemePreset::HoroDark;
         std::string accentColorHex = "#04A5FC";
         int uiScalePercent = 100;
-        int codeFontSizePx = 13;
+        int codeFontSizePx = 14;
         std::string uiFontFamily = "Inter";           /**< Preferred system sans family; bundled Inter remains fallback. */
         std::string codeFontFamily = "IBM Plex Mono"; /**< Preferred system monospace family; bundled font remains fallback. */
 

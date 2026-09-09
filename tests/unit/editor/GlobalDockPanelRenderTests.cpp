@@ -1,14 +1,20 @@
 #include "ContentBrowserModel.h"
+#include "Horo/Editor/DefaultWorkspacePanels.h"
 #include "Horo/Editor/EditorDataBus.h"
 #include "Horo/Editor/EditorSettingsService.h"
 #include "Horo/Editor/EditorTheme.h"
 #include "Horo/Editor/Localization/ILocalizationService.h"
+#include "Horo/Editor/WorkspacePanelRegistry.h"
 #include "Horo/Foundation/BuildOutputStore.h"
 #include "Horo/Foundation/DataBus.h"
+#include "Horo/Foundation/Logging/StructuredLogStore.h"
 #include "Horo/Foundation/OperationStore.h"
 #include "editor/screens/workspace/EditorWorkspaceViewModel.h"
+#include "editor/screens/workspace/panels/global_dock/GlobalDockPaneLayout.h"
 #include "editor/screens/workspace/panels/global_dock/GlobalDockPanel.h"
 #include "editor/screens/workspace/panels/global_dock/panes/asset_browser/AssetBrowserPaneLayout.h"
+#include "editor/screens/workspace/panels/global_dock/panes/build_output/GlobalDockBuildOutputPane.h"
+#include "editor/screens/workspace/panels/global_dock/panes/operations/GlobalDockOperationsPane.h"
 #include "runtime/assets/importer/builtin/obj_mesh/ObjMeshImporter.h"
 
 #include <array>
@@ -20,12 +26,26 @@
 #include <filesystem>
 #include <fstream>
 #include <imgui.h>
+#include <memory>
 #include <string>
 #include <string_view>
 #include <unordered_map>
 #include <vector>
 
 namespace {
+    class TestGlobalDockPane final : public Horo::Editor::IGlobalDockPane {
+    public:
+        [[nodiscard]] std::string_view Id() const noexcept override {
+            return "test.global_dock.custom";
+        }
+
+        [[nodiscard]] std::string_view LabelKey() const noexcept override {
+            return "workspace.global_dock.tab.custom";
+        }
+
+        void Draw(const Horo::Editor::GlobalDockPaneDrawContext &) override {}
+    };
+
     class TestLocalization final : public Horo::Editor::ILocalizationService {
     public:
         [[nodiscard]] const std::string &Get(const std::string_view, const std::string_view localKey) const override {
@@ -58,31 +78,74 @@ namespace {
 
     TEST_CASE("Content browser grid metrics respond to available width", "[unit][editor][gui]") {
         using Horo::Editor::ComputeAssetBrowserGridMetrics;
-        using Horo::Editor::kGlobalDockMinimumFontSize;
 
-        static_assert(kGlobalDockMinimumFontSize == Horo::Editor::Theme::FontPx::SansCompact);
+        REQUIRE(Horo::Editor::GlobalDockLabelFontSize() == Horo::Editor::Theme::TextPx::Label());
+        REQUIRE(Horo::Editor::AssetBrowserLayout::SecondaryFontSize() == Horo::Editor::Theme::TextPx::Caption());
 
         const auto wide = ComputeAssetBrowserGridMetrics(580.0F);
-        REQUIRE((wide.columns == 8));
-        REQUIRE((std::abs(wide.cardWidth - 67.25F) < 0.001F));
+        REQUIRE((wide.columns == 3));
+        REQUIRE((std::abs(wide.cardWidth - 152.0F) < 0.001F));
 
         const auto narrow = ComputeAssetBrowserGridMetrics(240.0F);
-        REQUIRE((narrow.columns == 3));
-        REQUIRE((std::abs(narrow.cardWidth - 76.0F) < 0.001F));
+        REQUIRE((narrow.columns == 1));
+        REQUIRE((std::abs(narrow.cardWidth - 152.0F) < 0.001F));
     }
 
     TEST_CASE("Global dock exposes the default tabs", "[unit][editor][gui]") {
         using namespace Horo::Editor;
 
         const std::array expected{
-            GlobalDockTab::Assets,  GlobalDockTab::Console,      GlobalDockTab::BuildOutput, GlobalDockTab::Operations,
-            GlobalDockTab::Mcp,     GlobalDockTab::Performance,  GlobalDockTab::Physics,     GlobalDockTab::Audio,
-            GlobalDockTab::Network, GlobalDockTab::Localization,
+            GlobalDockTab::Assets,      GlobalDockTab::Console, GlobalDockTab::BuildOutput, GlobalDockTab::Operations, GlobalDockTab::Mcp,
+            GlobalDockTab::Performance, GlobalDockTab::Physics, GlobalDockTab::Audio,       GlobalDockTab::Network,
         };
         REQUIRE((DefaultGlobalDockTabs() == expected));
 
         GlobalDockPanel panel;
         REQUIRE((panel.ActiveTab() == GlobalDockTab::Assets));
+        REQUIRE((panel.ActivePaneId() == "horo.global_dock.assets"));
+        REQUIRE(panel.RegisterPane(std::make_unique<TestGlobalDockPane>()));
+        REQUIRE_FALSE(panel.RegisterPane(std::make_unique<TestGlobalDockPane>()));
+        REQUIRE(panel.ActivatePane("test.global_dock.custom"));
+        REQUIRE((panel.ActivePaneId() == "test.global_dock.custom"));
+        REQUIRE_FALSE(panel.ActivatePane("test.global_dock.missing"));
+    }
+
+    TEST_CASE("Global dock layout partitions optional regions without overlap", "[unit][editor][gui]") {
+        using namespace Horo::Editor;
+
+        const GlobalDockPaneRegions regions =
+            ResolveGlobalDockPaneRegions({10.0F, 20.0F}, 800.0F, 300.0F, {.hasToolbar = true, .hasFooter = true, .leftRailWidth = 42.0F});
+        const GlobalDockPaneMetrics metrics = ResolveGlobalDockPaneMetrics();
+        REQUIRE((regions.contentOrigin.x == 52.0F));
+        REQUIRE((regions.contentOrigin.y == 20.0F + metrics.toolbarHeight));
+        REQUIRE((regions.contentWidth == 758.0F));
+        REQUIRE((regions.contentHeight == 300.0F - metrics.toolbarHeight - metrics.footerHeight));
+        REQUIRE((regions.footerOrigin.y == 20.0F + 300.0F - metrics.footerHeight));
+        REQUIRE((regions.leftRailHeight == regions.contentHeight));
+    }
+
+    TEST_CASE("Default workspace composes module-provided global dock panes", "[unit][editor][gui]") {
+        using namespace Horo::Editor;
+
+        int factoryCalls = 0;
+        const std::array<GlobalDockPaneFactory, 1> factories{
+            [&factoryCalls] {
+            ++factoryCalls;
+            return std::make_unique<TestGlobalDockPane>();
+        },
+        };
+        WorkspacePanelRegistry registry;
+        RegisterDefaultWorkspacePanels(registry, factories);
+        REQUIRE((factoryCalls == 1));
+
+        const auto &panels = registry.GetAllPanels();
+        const auto globalDock = std::ranges::find_if(panels, [](const std::shared_ptr<IWorkspacePanel> &panel) {
+            return panel->GetId() == "horo.global_dock";
+        });
+        REQUIRE((globalDock != panels.end()));
+        auto concreteDock = std::dynamic_pointer_cast<GlobalDockPanel>(*globalDock);
+        REQUIRE(concreteDock);
+        REQUIRE(concreteDock->ActivatePane("test.global_dock.custom"));
     }
 
     TEST_CASE("Build output status presentation maps every typed result and severity", "[unit][editor][gui]") {
@@ -180,6 +243,10 @@ namespace {
                  std::vector<std::size_t>{0, 8}));
         REQUIRE((GlobalDockBuildOutputPane::ProjectRecords(buildRecords, GlobalDockBuildOutputPane::StatusFilter::Failed, {}) ==
                  std::vector<std::size_t>{1, 4, 5, 6, 7}));
+        REQUIRE((GlobalDockBuildOutputPane::ProjectRecords(buildRecords, GlobalDockBuildOutputPane::StatusFilter::Errors, {}) ==
+                 std::vector<std::size_t>{1, 4, 5, 7}));
+        REQUIRE((GlobalDockBuildOutputPane::ProjectRecords(buildRecords, GlobalDockBuildOutputPane::StatusFilter::Warning, {}) ==
+                 std::vector<std::size_t>{3, 6}));
         REQUIRE((GlobalDockBuildOutputPane::ProjectRecords(buildRecords, GlobalDockBuildOutputPane::StatusFilter::All, "OK") ==
                  std::vector<std::size_t>{0}));
         REQUIRE((GlobalDockBuildOutputPane::ProjectRecords(buildRecords, GlobalDockBuildOutputPane::StatusFilter::All, "ERROR") ==
@@ -243,6 +310,7 @@ namespace {
         REQUIRE((root.entries[0].kind == ContentBrowserEntryKind::Directory));
         REQUIRE((root.entries[0].displayName == "Props"));
         REQUIRE((std::filesystem::path{root.entries[0].absolutePath}.is_absolute()));
+        REQUIRE((root.entries[0].containedItemCount == 1));
         REQUIRE((root.entries[1].kind == ContentBrowserEntryKind::Asset));
         REQUIRE((root.entries[1].displayName == "root"));
         REQUIRE((root.entries[1].assetType == "core.mesh"));

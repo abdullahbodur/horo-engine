@@ -43,7 +43,7 @@ namespace Horo::Editor {
                                     .minimumHeight = 260.0F,
                                     .footerHeight = Theme::Layout::FooterH,
                                     .showClose = true,
-                                    .titleFontSize = 14.0F},
+                                    .titleFontSize = Theme::TextPx::Title()},
                                    context_.theme.fonts);
 
         bool confirm = false;
