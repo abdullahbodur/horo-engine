@@ -184,6 +184,23 @@ OperationStore. Providers and manager workers do not create independent stores.
 
 ## Provider Composition And Asynchronous Contract
 
+`FallbackStreamingProvider` is the bounded pre-manager composition contract for
+small projects, tests and headless hosts. It is not an implementation or alternate
+spelling of `IFeatureStreamingProvider`, and it performs no asset I/O, staging,
+residency transition or Scene publication. `SingleCell` exposes exactly one
+manifest-issued cell as desired manager input; `Null` exposes no cells. Neither
+mode reports that a cell is Loaded, Resident or Active.
+
+The fallback owner is fenced by one exact partition/epoch token and a monotonic
+configuration revision. Replacement validates the complete candidate before
+publication, requires the same owner lifetime and a strictly newer revision, and
+may explicitly switch between `SingleCell` and `Null`. Invalid, unsupported, stale
+or over-capacity candidates leave the previous snapshot unchanged. Cancellation
+immediately closes desired-cell exposure, and terminal shutdown is idempotent;
+neither operation fabricates cleanup acknowledgement for later provider or Scene
+resources. A different mounted epoch receives a new fallback owner rather than
+in-place token reuse.
+
 The canonical adapter is **IFeatureStreamingProvider**, already used by ADR-023
 and ADR-016. The earlier proposed IStreamingFeatureProvider callback-only spelling
 is replaced by this one contract, not a second provider hierarchy. Notifications
