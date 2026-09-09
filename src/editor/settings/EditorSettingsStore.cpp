@@ -404,6 +404,7 @@ namespace Horo::Editor {
             const auto boundedFloat = [](const float value, const float minValue, const float maxValue) {
                 return std::isfinite(value) ? std::clamp(value, minValue, maxValue) : minValue;
             };
+            const int autoSaveIntervalMinutes = bounded(s.autoSaveIntervalMinutes, 0, 30);
             const int uiScalePercent = bounded(s.uiScalePercent, 75, 200);
             const int codeFontSizePx = bounded(s.codeFontSizePx, 14, 24);
             const int orbitSensitivity = bounded(s.orbitSensitivity, 10, 300);
@@ -419,7 +420,7 @@ namespace Horo::Editor {
             out << "{\n";
             out << "  \"editor\": {\n";
             out << R"(    "startupBehavior": ")" << ToString(s.startupBehavior) << "\",\n";
-            out << R"(    "autoSaveIntervalMinutes": )" << s.autoSaveIntervalMinutes << ",\n";
+            out << R"(    "autoSaveIntervalMinutes": )" << autoSaveIntervalMinutes << ",\n";
             out << R"(    "confirmExitWithUnsavedChanges": )" << boolStr(s.confirmExitWithUnsavedChanges) << ",\n";
             out << R"(    "restoreWorkspaceLayout": )" << boolStr(s.restoreWorkspaceLayout) << ",\n";
             out << R"(    "defaultSceneOnProjectOpen": ")" << EscapeJsonString(s.defaultSceneOnProjectOpen) << "\",\n";
