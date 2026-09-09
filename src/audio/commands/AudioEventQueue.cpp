@@ -21,16 +21,22 @@ namespace Horo::Audio {
             return scope.owner.IsValid() && scope.epoch != 0 && scope.scene.IsValid() && scope.scene.owner == scope.owner;
         }
 
+        /** @brief Checks immutable owner and epoch dimensions before allocation. */
+        bool ValidDescriptorIdentity(const AudioEventQueueDescriptor &descriptor) noexcept {
+            return descriptor.owner.IsValid() && descriptor.storageIdentity.IsValid() && descriptor.commandEpoch != 0 &&
+                   descriptor.clockDomain != 0 && MatchesAudioDeviceEpoch(descriptor.callbackEpoch, descriptor.callbackEpoch) &&
+                   descriptor.callbackEpoch.device.owner == descriptor.owner;
+        }
+
+        /** @brief Checks immutable queue-capacity dimensions before allocation. */
+        bool ValidDescriptorCapacity(const AudioEventQueueDescriptor &descriptor) noexcept {
+            return descriptor.slots >= 2 && descriptor.slots <= MaximumAudioEventSlots && std::has_single_bit(descriptor.slots) &&
+                   descriptor.criticalSlots > 0 && descriptor.criticalSlots < descriptor.slots;
+        }
+
         /** @brief Checks all immutable queue dimensions before allocation. */
         bool ValidDescriptor(const AudioEventQueueDescriptor &descriptor) noexcept {
-            const bool identityValid = descriptor.owner.IsValid() && descriptor.storageIdentity.IsValid() && descriptor.commandEpoch != 0 &&
-                                       descriptor.clockDomain != 0;
-            const bool epochValid = MatchesAudioDeviceEpoch(descriptor.callbackEpoch, descriptor.callbackEpoch) &&
-                                    descriptor.callbackEpoch.device.owner == descriptor.owner;
-            const bool capacityValid = descriptor.slots >= 2 && descriptor.slots <= MaximumAudioEventSlots &&
-                                       std::has_single_bit(descriptor.slots) && descriptor.criticalSlots > 0 &&
-                                       descriptor.criticalSlots < descriptor.slots;
-            return identityValid && epochValid && capacityValid;
+            return ValidDescriptorIdentity(descriptor) && ValidDescriptorCapacity(descriptor);
         }
 
         /** @brief Projects admitted raw EventStorage into initialized queue records. */
@@ -50,10 +56,9 @@ namespace Horo::Audio {
 
         /** @brief Validates exact correlation between a terminal value and its exclusive publication right. */
         bool ValidTerminal(const AudioCompletionToken &token, const AudioTerminalEvent &event) noexcept {
-            return std::visit([&token](const auto &value) {
+            return std::visit([&token]<typename Value>(const Value &value) {
                 if (value.scope != token.Scope() || value.acceptedSequence != token.AcceptedSequence())
                     return false;
-                using Value = std::decay_t<decltype(value)>;
                 if constexpr (std::is_same_v<Value, AudioVoiceTerminalEvent>)
                     return value.voice.IsValid() && value.voice.owner == value.scope.owner && ValidReason(value.reason);
                 else
@@ -63,9 +68,9 @@ namespace Horo::Audio {
 
         /** @brief Increments one single-producer observable counter without wrap. */
         void Increment(std::atomic<std::uint32_t> &counter) noexcept {
-            const auto value = counter.load(std::memory_order_relaxed);
+            const auto value = counter.load();
             if (value != std::numeric_limits<std::uint32_t>::max())
-                counter.store(value + 1, std::memory_order_relaxed);
+                counter.store(value + 1);
         }
     }  // namespace
 
@@ -136,15 +141,14 @@ namespace Horo::Audio {
         /** @brief Publishes one already validated fixed-size value when its reservation class has capacity. */
         AudioEventPublishStatus Publish(const AudioControlEvent &event, const bool critical) noexcept {
             using enum AudioEventPublishStatus;
-            if (closed.load(std::memory_order_relaxed))
+            if (closed.load())
                 return Closed;
-            const auto producer = write.load(std::memory_order_relaxed);
-            const auto consumer = read.load(std::memory_order_acquire);
-            const auto limit = critical ? descriptor.slots : descriptor.slots - descriptor.criticalSlots;
-            if (producer - consumer >= limit)
+            const auto producer = write.load();
+            const auto consumer = read.load();
+            if (const auto limit = critical ? descriptor.slots : descriptor.slots - descriptor.criticalSlots; producer - consumer >= limit)
                 return critical ? CriticalRetry : TelemetryDropped;
             records[producer & (descriptor.slots - 1)].event = event;
-            write.store(producer + 1, std::memory_order_release);
+            write.store(producer + 1);
             return Published;
         }
     };
@@ -236,34 +240,33 @@ namespace Horo::Audio {
     bool AudioEventQueue::TryConsume(AudioControlEventRecord &record) noexcept {
         if (!state_)
             return false;
-        const auto consumer = state_->read.load(std::memory_order_relaxed);
-        if (consumer == state_->write.load(std::memory_order_acquire))
+        const auto consumer = state_->read.load();
+        if (consumer == state_->write.load())
             return false;
         record = state_->records[consumer & (state_->descriptor.slots - 1)];
-        state_->read.store(consumer + 1, std::memory_order_release);
+        state_->read.store(consumer + 1);
         return true;
     }
 
     /** @copydoc AudioEventQueue::Close */
     void AudioEventQueue::Close() noexcept {
         if (state_)
-            state_->closed.store(true, std::memory_order_release);
+            state_->closed.store(true);
     }
 
     /** @copydoc AudioEventQueue::Stats */
     AudioEventQueueStats AudioEventQueue::Stats() const noexcept {
         if (!state_)
             return {};
-        return {.terminalEvents = state_->terminalEvents.load(std::memory_order_acquire),
-                .deviceEvents = state_->deviceEvents.load(std::memory_order_acquire),
-                .droppedTelemetry = state_->droppedTelemetry.load(std::memory_order_acquire),
-                .criticalRetries = state_->criticalRetries.load(std::memory_order_acquire),
-                .duplicateTerminals = state_->duplicateTerminals.load(std::memory_order_acquire)};
+        return {.terminalEvents = state_->terminalEvents.load(),
+                .deviceEvents = state_->deviceEvents.load(),
+                .droppedTelemetry = state_->droppedTelemetry.load(),
+                .criticalRetries = state_->criticalRetries.load(),
+                .duplicateTerminals = state_->duplicateTerminals.load()};
     }
 
     /** @copydoc AudioEventQueue::IsDrained */
     bool AudioEventQueue::IsDrained() const noexcept {
-        return !state_ || (state_->closed.load(std::memory_order_acquire) &&
-                           state_->read.load(std::memory_order_relaxed) == state_->write.load(std::memory_order_acquire));
+        return !state_ || (state_->closed.load() && state_->read.load() == state_->write.load());
     }
 }  // namespace Horo::Audio
