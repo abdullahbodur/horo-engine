@@ -67,12 +67,19 @@ namespace Horo::Tests::FullEditorActions {
                 ui.Yield();
             }
 
+            ui.MouseMove("//**/###InspectorAddComponent");
+            ui.MouseWheelY(100.0F);
+            ui.Yield();
+
             const auto selectComboOption = [&ui](const char *combo, const int option) {
                 ui.ItemClick(combo);
                 ui.ItemClick(("//**/###combo_option_" + std::to_string(option)).c_str());
                 ui.Yield();
             };
             selectComboOption("//**/###camera_projection", 1);
+            ui.MouseMove("//**/###camera_projection");
+            ui.MouseWheelY(-2.0F);
+            ui.Yield();
             selectComboOption("//**/###light_kind", 2);
         });
     }
@@ -114,7 +121,7 @@ namespace Horo::Tests::FullEditorActions {
                     ui.ItemClick("//**/horo.global_dock/##ActivityItem");
                     ui.Yield();
                 }
-                constexpr const char *tabs[]{"Console", "Build", "Ops", "MCP", "Perf", "Physics", "Audio", "Net", "L10n", "Assets"};
+                constexpr const char *tabs[]{"Console", "Build", "Ops", "MCP", "Perf", "Physics", "Audio", "Net", "Assets"};
                 for (const char *const tab : tabs) {
                     ui.ItemClick(("//**/" + std::string{tab}).c_str());
                     ui.Yield();
@@ -173,7 +180,7 @@ namespace Horo::Tests::FullEditorActions {
                 ui.ItemClick((dockScope + "/**/Assets").c_str());
                 ui.Yield();
 
-                ui.MouseMoveToPos({dock.RectClipped.GetCenter().x, dock.RectClipped.Max.y - 8.0F});
+                ui.MouseMoveToPos({dock.RectClipped.Max.x - 20.0F, dock.RectClipped.GetCenter().y});
                 ui.MouseClick(ImGuiMouseButton_Right);
                 ui.ItemClick("//**/###content_browser_action_create_folder");
                 ui.Yield();
