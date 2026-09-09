@@ -102,7 +102,11 @@ namespace Horo::Audio::Backend {
         [[nodiscard]] Result<void> ValidateRequest(const Request &request) const;
         [[nodiscard]] Result<void> ValidateOpenRequest(const Open &request) const;
         [[nodiscard]] Result<void> ValidateLifecycleRequest(const Request &request) const;
+        [[nodiscard]] Result<void> ValidateStartRequest(const Start &request) const;
+        [[nodiscard]] Result<void> ValidateQuiesceRequest(const Quiesce &request) const;
+        [[nodiscard]] Result<void> ValidateStopRequest(const Stop &request) const;
         [[nodiscard]] Result<void> Apply(const Request &request);
+        void ApplyOpen(const Open &request, OperationId operation);
         [[nodiscard]] Result<void> PushEvent(const Event &event) noexcept;
         [[nodiscard]] RenderPhase CurrentRenderPhase() const noexcept;
         [[nodiscard]] Result<void> ValidateRenderResult(const RenderResult &result) noexcept;

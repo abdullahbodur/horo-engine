@@ -87,20 +87,29 @@ namespace Horo::Audio::Backend {
                                                                                     : Failure(AudioErrors::DeviceUnavailable);
     }
 
+    Result<void> NullAudioBackend::ValidateStartRequest(const Start &request) const {
+        return state_ == NullAudioBackendState::Opened && request.epoch == epoch_ && request.render.process != nullptr
+                   ? Result<void>::Success()
+                   : Failure(AudioErrors::RuntimeInactive);
+    }
+
+    Result<void> NullAudioBackend::ValidateQuiesceRequest(const Quiesce &request) const {
+        return state_ == NullAudioBackendState::Rendering && request.epoch == epoch_ ? Result<void>::Success()
+                                                                                     : Failure(AudioErrors::RuntimeInactive);
+    }
+
+    Result<void> NullAudioBackend::ValidateStopRequest(const Stop &request) const {
+        return state_ == NullAudioBackendState::Quiesced && request.epoch == epoch_ ? Result<void>::Success()
+                                                                                    : Failure(AudioErrors::RuntimeInactive);
+    }
+
     Result<void> NullAudioBackend::ValidateLifecycleRequest(const Request &request) const {
-        if (const auto *start = std::get_if<Start>(&request)) {
-            return state_ == NullAudioBackendState::Opened && start->epoch == epoch_ && start->render.process != nullptr
-                       ? Result<void>::Success()
-                       : Failure(AudioErrors::RuntimeInactive);
-        }
-        if (const auto *quiesce = std::get_if<Quiesce>(&request)) {
-            return state_ == NullAudioBackendState::Rendering && quiesce->epoch == epoch_ ? Result<void>::Success()
-                                                                                          : Failure(AudioErrors::RuntimeInactive);
-        }
-        if (const auto *stop = std::get_if<Stop>(&request)) {
-            return state_ == NullAudioBackendState::Quiesced && stop->epoch == epoch_ ? Result<void>::Success()
-                                                                                      : Failure(AudioErrors::RuntimeInactive);
-        }
+        if (const auto *start = std::get_if<Start>(&request))
+            return ValidateStartRequest(*start);
+        if (const auto *quiesce = std::get_if<Quiesce>(&request))
+            return ValidateQuiesceRequest(*quiesce);
+        if (const auto *stop = std::get_if<Stop>(&request))
+            return ValidateStopRequest(*stop);
         return state_ == NullAudioBackendState::Opened || state_ == NullAudioBackendState::Stopped ? Result<void>::Success()
                                                                                                    : Failure(AudioErrors::RuntimeInactive);
     }
@@ -135,6 +144,36 @@ namespace Horo::Audio::Backend {
         }
     }
 
+    void NullAudioBackend::ApplyOpen(const Open &request, const OperationId operation) {
+        epoch_ = request.plannedEpoch;
+        format_ = request.format.preferred;
+        callbackFrames_ = request.format.period.preferredFrames;
+        const auto channels = format_.layout.orderedChannels.size();
+        planeStrideSamples_ = (static_cast<std::size_t>(callbackFrames_) + 15U) & ~std::size_t{15U};
+        samples_.assign(channels * planeStrideSamples_ + 15U, 0.0F);
+        planes_.resize(channels);
+        const auto baseAddress = reinterpret_cast<std::uintptr_t>(samples_.data());
+        const auto alignedAddress = (baseAddress + 63U) & ~std::uintptr_t{63U};
+        auto *const alignedBase = reinterpret_cast<AudioSample *>(alignedAddress);
+        for (std::size_t channel = 0; channel < channels; ++channel)
+            planes_[channel] = alignedBase + channel * planeStrideSamples_;
+        AudioNegotiatedDeviceFormat negotiated{.device = device_,
+                                               .discoveryRevision = 1,
+                                               .formatRevision = epoch_.formatRevision,
+                                               .effective = format_,
+                                               .nativeSignal = format_,
+                                               .nativePcm = {.packing = AudioPcmPacking::Planar},
+                                               .callbackFrames = callbackFrames_};
+        negotiated.nativeChannelForHoro.resize(channels);
+        std::iota(negotiated.nativeChannelForHoro.begin(), negotiated.nativeChannelForHoro.end(), std::uint8_t{0});
+        const AudioDeviceTimingReport timing{.epoch = epoch_,
+                                             .capturedAt = {config_.clockDomain, clockNanoseconds_},
+                                             .hardwareLatency = UnsupportedDuration(),
+                                             .endToEndLatency = UnsupportedDuration()};
+        state_ = NullAudioBackendState::Opened;
+        completion_ = Completion{operation, Opened{std::move(negotiated), timing, AccessMode::Shared}};
+    }
+
     Result<void> NullAudioBackend::Apply(const Request &request) {
         const auto operation = *pendingOperation_;
         if (std::holds_alternative<Probe>(request)) {
@@ -146,33 +185,7 @@ namespace Horo::Audio::Backend {
                                                                     .devices = {{device_, "Null Audio", AudioDeviceClass::Headless}},
                                                                     .defaults = {device_, device_, device_}}};
         } else if (const auto *open = std::get_if<Open>(&request)) {
-            epoch_ = open->plannedEpoch;
-            format_ = open->format.preferred;
-            callbackFrames_ = open->format.period.preferredFrames;
-            const auto channels = format_.layout.orderedChannels.size();
-            planeStrideSamples_ = (static_cast<std::size_t>(callbackFrames_) + 15U) & ~std::size_t{15U};
-            samples_.assign(channels * planeStrideSamples_ + 15U, 0.0F);
-            planes_.resize(channels);
-            const auto baseAddress = reinterpret_cast<std::uintptr_t>(samples_.data());
-            const auto alignedAddress = (baseAddress + 63U) & ~std::uintptr_t{63U};
-            auto *const alignedBase = reinterpret_cast<AudioSample *>(alignedAddress);
-            for (std::size_t channel = 0; channel < channels; ++channel)
-                planes_[channel] = alignedBase + channel * planeStrideSamples_;
-            AudioNegotiatedDeviceFormat negotiated{.device = device_,
-                                                   .discoveryRevision = 1,
-                                                   .formatRevision = epoch_.formatRevision,
-                                                   .effective = format_,
-                                                   .nativeSignal = format_,
-                                                   .nativePcm = {.packing = AudioPcmPacking::Planar},
-                                                   .callbackFrames = callbackFrames_};
-            negotiated.nativeChannelForHoro.resize(channels);
-            std::iota(negotiated.nativeChannelForHoro.begin(), negotiated.nativeChannelForHoro.end(), std::uint8_t{0});
-            const AudioDeviceTimingReport timing{.epoch = epoch_,
-                                                 .capturedAt = {config_.clockDomain, clockNanoseconds_},
-                                                 .hardwareLatency = UnsupportedDuration(),
-                                                 .endToEndLatency = UnsupportedDuration()};
-            state_ = NullAudioBackendState::Opened;
-            completion_ = Completion{operation, Opened{std::move(negotiated), timing, AccessMode::Shared}};
+            ApplyOpen(*open, operation);
         } else if (const auto *start = std::get_if<Start>(&request)) {
             render_ = start->render;
             state_ = NullAudioBackendState::Priming;
