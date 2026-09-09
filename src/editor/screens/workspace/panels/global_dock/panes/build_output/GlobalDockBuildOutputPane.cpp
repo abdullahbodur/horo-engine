@@ -208,8 +208,8 @@ namespace Horo::Editor {
         const float scale = std::max(Theme::GetActiveTokens().sizes.uiScale, 0.01F);
         const GlobalDockPaneMetrics metrics = ResolveGlobalDockPaneMetrics();
         const float availableHeight = std::max(1.0F, ImGui::GetWindowPos().y + ImGui::GetWindowHeight() - contentOrigin.y);
-        const GlobalDockPaneRegions regions = ResolveGlobalDockPaneRegions(contentOrigin, contentWidth, availableHeight,
-                                                                           {.hasToolbar = true, .hasFooter = true});
+        const GlobalDockPaneRegions regions =
+            ResolveGlobalDockPaneRegions(contentOrigin, contentWidth, availableHeight, {.hasToolbar = true, .hasFooter = true});
 
         std::size_t errorCount = 0U;
         std::size_t warningCount = 0U;
@@ -245,17 +245,16 @@ namespace Horo::Editor {
         const float warningWidth = MeasureGlobalDockToolbarChip(warningProps, fonts);
         const float targetWidth = 108.0F * scale;
         const float configurationWidth = 132.0F * scale;
-        const auto rebuildProps = GlobalDockToolbarChipProps{.id = "BuildRebuild",
-                                                              .label = context.localization.Get(
-                                                                  "editor", "workspace.global_dock.build_output.rebuild"),
-                                                              .tone = GlobalDockTone::Accent,
-                                                              .active = true,
-                                                              .icon = Ui::UiIcon::Reset};
+        const auto rebuildProps =
+            GlobalDockToolbarChipProps{.id = "BuildRebuild",
+                                       .label = context.localization.Get("editor", "workspace.global_dock.build_output.rebuild"),
+                                       .tone = GlobalDockTone::Accent,
+                                       .active = true,
+                                       .icon = Ui::UiIcon::Reset};
         const float rebuildWidth = MeasureGlobalDockToolbarChip(rebuildProps, fonts);
         const float fixedWidth = allWidth + errorWidth + warningWidth + targetWidth + configurationWidth + rebuildWidth +
                                  metrics.toolbarGap * 7.0F + 1.0F * scale;
-        const float searchWidth = std::max(180.0F * scale,
-                                           regions.toolbarWidth - metrics.toolbarPaddingX * 2.0F - fixedWidth);
+        const float searchWidth = std::max(180.0F * scale, regions.toolbarWidth - metrics.toolbarPaddingX * 2.0F - fixedWidth);
         float x = regions.toolbarOrigin.x + metrics.toolbarPaddingX;
         ImGui::SetCursorScreenPos({x, controlY});
         const std::string &searchHint = context.localization.Get("editor", "workspace.global_dock.build_output.search");
@@ -347,7 +346,8 @@ namespace Horo::Editor {
         const bool wasAtBottom = ImGui::GetScrollY() >= std::max(0.0F, ImGui::GetScrollMaxY() - 2.0F);
         for (std::size_t visibleIndex = 0; visibleIndex < m_filteredIndices.size(); ++visibleIndex) {
             const BuildOutputRecord &record = m_snapshot.records[m_filteredIndices[visibleIndex]];
-            const ImVec2 rowMin{rowsOrigin.x, rowsOrigin.y + static_cast<float>(visibleIndex) * metrics.tableRowHeight - ImGui::GetScrollY()};
+            const ImVec2 rowMin{rowsOrigin.x,
+                                rowsOrigin.y + static_cast<float>(visibleIndex) * metrics.tableRowHeight - ImGui::GetScrollY()};
             ImGui::SetCursorScreenPos(rowMin);
             ImGui::PushID(static_cast<int>(visibleIndex));
             const bool activated = ImGui::InvisibleButton("##diagnostic", {regions.contentWidth, metrics.tableRowHeight});
@@ -357,8 +357,7 @@ namespace Horo::Editor {
                 rowsDrawList->AddRectFilled(rowMin, {rowMin.x + regions.contentWidth, rowMin.y + metrics.tableRowHeight},
                                             Theme::U32(Theme::Hover()));
             rowsDrawList->AddLine({rowMin.x, rowMin.y + metrics.tableRowHeight - 1.0F},
-                                  {rowMin.x + regions.contentWidth, rowMin.y + metrics.tableRowHeight - 1.0F},
-                                  Theme::U32(Theme::Border()));
+                                  {rowMin.x + regions.contentWidth, rowMin.y + metrics.tableRowHeight - 1.0F}, Theme::U32(Theme::Border()));
             const float textY = rowMin.y + (metrics.tableRowHeight - Theme::TextPx::Label()) * 0.5F;
             const std::string level = context.localization.Get("editor", StatusLocalizationKey(record));
             const std::string line = LineLabel(record);
@@ -388,20 +387,18 @@ namespace Horo::Editor {
 
         DrawGlobalDockFooterSurface(regions.footerOrigin, regions.footerWidth, metrics.footerHeight);
         const float footerY = regions.footerOrigin.y + (metrics.footerHeight - Theme::TextPx::Caption()) * 0.5F;
-        const std::string summary = std::format("{} {}   {} {}   {} {}", m_snapshot.records.size(),
-                                                context.localization.Get("editor", "workspace.global_dock.build_output.footer.diagnostics"),
-                                                errorCount,
-                                                context.localization.Get("editor", "workspace.global_dock.build_output.footer.errors"),
-                                                warningCount,
-                                                context.localization.Get("editor", "workspace.global_dock.build_output.footer.warnings"));
-        drawList->AddText(fonts.sansCompact, Theme::TextPx::Caption(),
-                          {regions.footerOrigin.x + metrics.contentPadding, footerY}, Theme::U32(Theme::Muted()), summary.c_str());
+        const std::string summary =
+            std::format("{} {}   {} {}   {} {}", m_snapshot.records.size(),
+                        context.localization.Get("editor", "workspace.global_dock.build_output.footer.diagnostics"), errorCount,
+                        context.localization.Get("editor", "workspace.global_dock.build_output.footer.errors"), warningCount,
+                        context.localization.Get("editor", "workspace.global_dock.build_output.footer.warnings"));
+        drawList->AddText(fonts.sansCompact, Theme::TextPx::Caption(), {regions.footerOrigin.x + metrics.contentPadding, footerY},
+                          Theme::U32(Theme::Muted()), summary.c_str());
         if (!m_snapshot.records.empty()) {
             const BuildOutputRecord &last = m_snapshot.records.back();
-            const std::string lastBuild = std::format("{} {} · {}", context.localization.Get(
-                                                          "editor", "workspace.global_dock.build_output.footer.last_build"),
-                                                      FormatTimeOfDay(last.timestampUtc),
-                                                      context.localization.Get("editor", StatusLocalizationKey(last)));
+            const std::string lastBuild =
+                std::format("{} {} · {}", context.localization.Get("editor", "workspace.global_dock.build_output.footer.last_build"),
+                            FormatTimeOfDay(last.timestampUtc), context.localization.Get("editor", StatusLocalizationKey(last)));
             const float textWidth = (fonts.sansCompact != nullptr ? fonts.sansCompact : ImGui::GetFont())
                                         ->CalcTextSizeA(Theme::TextPx::Caption(), FLT_MAX, 0.0F, lastBuild.c_str())
                                         .x;

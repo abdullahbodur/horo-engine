@@ -57,6 +57,49 @@ namespace {
         io.AddMouseButtonEvent(ImGuiMouseButton_Left, false);
         RenderImGuiFrame(drawFrame);
     }
+
+    struct TooltipStyleSnapshot {
+        ImVec2 originalPadding;
+        ImVec2 tooltipPadding;
+        ImVec2 restoredPadding;
+        float originalRounding;
+        float originalBorderSize;
+        float tooltipRounding;
+        float tooltipBorderSize;
+        float restoredRounding;
+        float restoredBorderSize;
+        ImVec4 tooltipSurface;
+        ImVec4 tooltipBorder;
+    };
+
+    [[nodiscard]] TooltipStyleSnapshot CaptureTooltipStyle() {
+        using namespace Horo::Editor;
+        ImGuiTestContext imgui{{320.0F, 180.0F}};
+        ImGuiStyle &style = ImGui::GetStyle();
+        style.WindowPadding = {1.0F, 2.0F};
+        style.WindowRounding = 1.0F;
+        style.PopupBorderSize = 0.0F;
+        TooltipStyleSnapshot snapshot{.originalPadding = style.WindowPadding,
+                                      .originalRounding = style.WindowRounding,
+                                      .originalBorderSize = style.PopupBorderSize};
+        RenderImGuiFrame([&] {
+            ImGui::Begin("TooltipStyleTest");
+            {
+                Ui::ScopedTooltip tooltip(&imgui.fonts);
+                snapshot.tooltipPadding = style.WindowPadding;
+                snapshot.tooltipRounding = style.WindowRounding;
+                snapshot.tooltipBorderSize = style.PopupBorderSize;
+                snapshot.tooltipSurface = style.Colors[ImGuiCol_PopupBg];
+                snapshot.tooltipBorder = style.Colors[ImGuiCol_Border];
+                ImGui::TextUnformatted("Dependencies");
+            }
+            snapshot.restoredPadding = style.WindowPadding;
+            snapshot.restoredRounding = style.WindowRounding;
+            snapshot.restoredBorderSize = style.PopupBorderSize;
+            ImGui::End();
+        });
+        return snapshot;
+    }
 }  // namespace
 
 namespace Horo::Editor {
@@ -134,65 +177,18 @@ TEST_CASE("Editor icon registry resolves canonical and catalog tokens", "[unit][
 
 TEST_CASE("Shared tooltip applies theme chrome and restores caller style", "[unit][editor][gui][design-system]") {
     using namespace Horo::Editor;
-    using namespace Horo::Editor::Ui;
-
-    IMGUI_CHECKVERSION();
-    ImGui::CreateContext();
-    ImGuiIO &io = ImGui::GetIO();
-    io.DisplaySize = {320.0F, 180.0F};
-    io.DeltaTime = 1.0F / 60.0F;
-    io.Fonts->AddFontDefault();
-    static_cast<void>(io.Fonts->Build());
-    ImFont *defaultFont = io.Fonts->Fonts.front();
-    const Theme::Fonts fonts{
-        .sans = defaultFont,
-        .sansCompact = defaultFont,
-        .sansEmphasis = defaultFont,
-        .icon = defaultFont,
-    };
-
-    ImGuiStyle &style = ImGui::GetStyle();
-    style.WindowPadding = {1.0F, 2.0F};
-    style.WindowRounding = 1.0F;
-    style.PopupBorderSize = 0.0F;
-    const ImVec2 originalPadding = style.WindowPadding;
-    const float originalRounding = style.WindowRounding;
-    const float originalBorderSize = style.PopupBorderSize;
-    ImVec2 tooltipPadding{};
-    float tooltipRounding = 0.0F;
-    float tooltipBorderSize = 0.0F;
-    ImVec4 tooltipSurface{};
-    ImVec4 tooltipBorder{};
-
-    ImGui::NewFrame();
-    ImGui::Begin("TooltipStyleTest");
-    {
-        ScopedTooltip tooltip(&fonts);
-        tooltipPadding = style.WindowPadding;
-        tooltipRounding = style.WindowRounding;
-        tooltipBorderSize = style.PopupBorderSize;
-        tooltipSurface = style.Colors[ImGuiCol_PopupBg];
-        tooltipBorder = style.Colors[ImGuiCol_Border];
-        ImGui::TextUnformatted("Dependencies");
-    }
-    const ImVec2 restoredPadding = style.WindowPadding;
-    const float restoredRounding = style.WindowRounding;
-    const float restoredBorderSize = style.PopupBorderSize;
-    ImGui::End();
-    ImGui::Render();
-    ImGui::DestroyContext();
-
+    const TooltipStyleSnapshot snapshot = CaptureTooltipStyle();
     const auto &tokens = Theme::GetActiveTokens();
-    REQUIRE(tooltipPadding.x == Catch::Approx(DesignSystem::SpacingFor(tokens, SpacingSize::Medium)));
-    REQUIRE(tooltipPadding.y == Catch::Approx(DesignSystem::SpacingFor(tokens, SpacingSize::Small)));
-    REQUIRE(tooltipRounding == Catch::Approx(tokens.radii.card));
-    REQUIRE(tooltipBorderSize >= 1.0F);
-    REQUIRE(tooltipSurface.x == Catch::Approx(Theme::TooltipSurface().x));
-    REQUIRE(tooltipBorder.z == Catch::Approx(Theme::TooltipBorder().z));
-    REQUIRE(restoredPadding.x == Catch::Approx(originalPadding.x));
-    REQUIRE(restoredPadding.y == Catch::Approx(originalPadding.y));
-    REQUIRE(restoredRounding == Catch::Approx(originalRounding));
-    REQUIRE(restoredBorderSize == Catch::Approx(originalBorderSize));
+    REQUIRE(snapshot.tooltipPadding.x == Catch::Approx(DesignSystem::SpacingFor(tokens, DesignSystem::SpacingSize::Medium)));
+    REQUIRE(snapshot.tooltipPadding.y == Catch::Approx(DesignSystem::SpacingFor(tokens, DesignSystem::SpacingSize::Small)));
+    REQUIRE(snapshot.tooltipRounding == Catch::Approx(tokens.radii.card));
+    REQUIRE(snapshot.tooltipBorderSize >= 1.0F);
+    REQUIRE(snapshot.tooltipSurface.x == Catch::Approx(Theme::TooltipSurface().x));
+    REQUIRE(snapshot.tooltipBorder.z == Catch::Approx(Theme::TooltipBorder().z));
+    REQUIRE(snapshot.restoredPadding.x == Catch::Approx(snapshot.originalPadding.x));
+    REQUIRE(snapshot.restoredPadding.y == Catch::Approx(snapshot.originalPadding.y));
+    REQUIRE(snapshot.restoredRounding == Catch::Approx(snapshot.originalRounding));
+    REQUIRE(snapshot.restoredBorderSize == Catch::Approx(snapshot.originalBorderSize));
 }
 
 TEST_CASE("Generic card title actions invoke caller-owned callbacks", "[unit][editor][gui][design-system]") {

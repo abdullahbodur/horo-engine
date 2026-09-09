@@ -13,6 +13,16 @@ namespace Horo::Editor {
         void Draw(const ImVec2 &contentOrigin, float contentWidth, const EditorGuiContext &context);
 
     private:
+        struct TableLayout;
+
+        void DrawToolbar(const ImVec2 &origin, float width, const EditorGuiContext &context);
+        [[nodiscard]] float MeasureToolbarActions(const EditorGuiContext &context) const;
+        void DrawFilterActions(float &x, float y, const EditorGuiContext &context);
+        void DrawSessionActions(float x, float y, const EditorGuiContext &context);
+        void DrawTable(const ImVec2 &origin, float width, float height, const EditorGuiContext &context);
+        void DrawAuditRow(std::size_t index, float width, const TableLayout &layout, const EditorGuiContext &context);
+        void DrawFooter(const ImVec2 &origin, float width, const EditorGuiContext &context) const;
+
         enum class Filter : unsigned char {
             All,
             Mutations,

@@ -44,7 +44,26 @@ namespace Horo::Editor {
         }
     }  // namespace
 
+    struct GlobalDockAudioPane::TableLayout {
+        float bus;
+        float gain;
+        float level;
+        float voices;
+        float controls;
+    };
+
     void GlobalDockAudioPane::Draw(const ImVec2 &contentOrigin, const float contentWidth, const EditorGuiContext &context) {
+        const float availableHeight = std::max(1.0F, ImGui::GetWindowPos().y + ImGui::GetWindowHeight() - contentOrigin.y);
+        const GlobalDockPaneRegions regions =
+            ResolveGlobalDockPaneRegions(contentOrigin, contentWidth, availableHeight, {.hasToolbar = true, .hasFooter = true});
+        DrawToolbar(regions.toolbarOrigin, regions.toolbarWidth, context);
+        const float metricHeight = DrawMetrics(regions.contentOrigin, regions.contentWidth, context);
+        DrawBusTable({regions.contentOrigin.x, regions.contentOrigin.y + metricHeight}, regions.contentWidth,
+                     std::max(1.0F, regions.contentHeight - metricHeight), context);
+        DrawFooter(regions.footerOrigin, regions.footerWidth, context);
+    }
+
+    void GlobalDockAudioPane::DrawToolbar(const ImVec2 &contentOrigin, const float contentWidth, const EditorGuiContext &context) {
         const Theme::Fonts &fonts = context.theme.fonts;
         const float scale = std::max(Theme::GetActiveTokens().sizes.uiScale, 0.01F);
         const GlobalDockPaneMetrics metrics = ResolveGlobalDockPaneMetrics();
@@ -57,30 +76,8 @@ namespace Horo::Editor {
 
         DrawGlobalDockToolbarSurface(regions.toolbarOrigin, regions.toolbarWidth, metrics.toolbarHeight);
         const float controlY = regions.toolbarOrigin.y + (metrics.toolbarHeight - metrics.controlHeight) * 0.5F;
-        const GlobalDockToolbarChipProps meters{.id = "AudioMeters",
-                                                .label = localized("workspace.global_dock.audio.meters"),
-                                                .active = m_viewSelection == 0};
-        const GlobalDockToolbarChipProps voices{.id = "AudioVoices",
-                                                .label = localized("workspace.global_dock.audio.voices"),
-                                                .active = m_viewSelection == 1};
-        const GlobalDockToolbarChipProps pause{.id = "AudioPause",
-                                               .label = localized(m_paused ? "workspace.global_dock.audio.resume"
-                                                                           : "workspace.global_dock.audio.pause"),
-                                               .active = m_paused,
-                                               .icon = m_paused ? Ui::UiIcon::Play : Ui::UiIcon::Pause};
-        const GlobalDockToolbarChipProps muteAll{.id = "AudioMuteAll",
-                                                 .label = localized(m_allMuted ? "workspace.global_dock.audio.unmute_all"
-                                                                               : "workspace.global_dock.audio.mute_all"),
-                                                 .tone = GlobalDockTone::Error,
-                                                 .active = m_allMuted,
-                                                 .toneLabel = true,
-                                                 .icon = Ui::UiIcon::VolumeOff};
-        const float metersWidth = MeasureGlobalDockToolbarChip(meters, fonts);
-        const float voicesWidth = MeasureGlobalDockToolbarChip(voices, fonts);
-        const float pauseWidth = MeasureGlobalDockToolbarChip(pause, fonts);
-        const float muteWidth = MeasureGlobalDockToolbarChip(muteAll, fonts);
         const float deviceWidth = 138.0F * scale;
-        const float fixedWidth = deviceWidth + metersWidth + voicesWidth + pauseWidth + muteWidth + metrics.toolbarGap * 6.0F + scale;
+        const float fixedWidth = deviceWidth + MeasureToolbarActions(context);
         const float searchWidth = std::max(180.0F * scale, regions.toolbarWidth - metrics.toolbarPaddingX * 2.0F - fixedWidth);
         float x = regions.toolbarOrigin.x + metrics.toolbarPaddingX;
 
@@ -106,40 +103,79 @@ namespace Horo::Editor {
                                             .componentSize = Ui::ComponentSize::Small,
                                             .surface = Ui::ComboControlSurface::BottomDockToolbar}));
         x += deviceWidth + metrics.toolbarGap;
-        if (DrawGlobalDockToolbarChip({x, controlY}, metersWidth, meters, fonts))
+        DrawToolbarActions(x, controlY, context);
+    }
+
+    float GlobalDockAudioPane::MeasureToolbarActions(const EditorGuiContext &context) const {
+        const auto &fonts = context.theme.fonts;
+        const auto localized = [&](const char *key) -> const std::string & {
+            return context.localization.Get("editor", key);
+        };
+        const GlobalDockToolbarChipProps meters{.id = "AudioMeters", .label = localized("workspace.global_dock.audio.meters")};
+        const GlobalDockToolbarChipProps voices{.id = "AudioVoices", .label = localized("workspace.global_dock.audio.voices")};
+        const GlobalDockToolbarChipProps pause{.id = "AudioPause",
+                                               .label = localized(m_paused ? "workspace.global_dock.audio.resume"
+                                                                           : "workspace.global_dock.audio.pause"),
+                                               .icon = m_paused ? Ui::UiIcon::Play : Ui::UiIcon::Pause};
+        const GlobalDockToolbarChipProps mute{.id = "AudioMuteAll",
+                                              .label = localized(m_allMuted ? "workspace.global_dock.audio.unmute_all"
+                                                                            : "workspace.global_dock.audio.mute_all"),
+                                              .icon = Ui::UiIcon::VolumeOff};
+        const GlobalDockPaneMetrics metrics = ResolveGlobalDockPaneMetrics();
+        return MeasureGlobalDockToolbarChip(meters, fonts) + MeasureGlobalDockToolbarChip(voices, fonts) +
+               MeasureGlobalDockToolbarChip(pause, fonts) + MeasureGlobalDockToolbarChip(mute, fonts) + metrics.toolbarGap * 5.0F +
+               Theme::GetActiveTokens().sizes.uiScale;
+    }
+
+    void GlobalDockAudioPane::DrawToolbarActions(float x, const float y, const EditorGuiContext &context) {
+        const auto &fonts = context.theme.fonts;
+        const auto localized = [&](const char *key) -> const std::string & {
+            return context.localization.Get("editor", key);
+        };
+        const GlobalDockToolbarChipProps meters{.id = "AudioMeters",
+                                                .label = localized("workspace.global_dock.audio.meters"),
+                                                .active = m_viewSelection == 0};
+        const GlobalDockToolbarChipProps voices{.id = "AudioVoices",
+                                                .label = localized("workspace.global_dock.audio.voices"),
+                                                .active = m_viewSelection == 1};
+        const GlobalDockToolbarChipProps pause{.id = "AudioPause",
+                                               .label = localized(m_paused ? "workspace.global_dock.audio.resume"
+                                                                           : "workspace.global_dock.audio.pause"),
+                                               .active = m_paused,
+                                               .icon = m_paused ? Ui::UiIcon::Play : Ui::UiIcon::Pause};
+        const GlobalDockToolbarChipProps muteAll{.id = "AudioMuteAll",
+                                                 .label = localized(m_allMuted ? "workspace.global_dock.audio.unmute_all"
+                                                                               : "workspace.global_dock.audio.mute_all"),
+                                                 .tone = GlobalDockTone::Error,
+                                                 .active = m_allMuted,
+                                                 .toneLabel = true,
+                                                 .icon = Ui::UiIcon::VolumeOff};
+        const GlobalDockPaneMetrics metrics = ResolveGlobalDockPaneMetrics();
+        const float metersWidth = MeasureGlobalDockToolbarChip(meters, fonts);
+        const float voicesWidth = MeasureGlobalDockToolbarChip(voices, fonts);
+        const float pauseWidth = MeasureGlobalDockToolbarChip(pause, fonts);
+        const float muteWidth = MeasureGlobalDockToolbarChip(muteAll, fonts);
+        if (DrawGlobalDockToolbarChip({x, y}, metersWidth, meters, fonts))
             m_viewSelection = 0;
         x += metersWidth + metrics.toolbarGap;
-        if (DrawGlobalDockToolbarChip({x, controlY}, voicesWidth, voices, fonts))
+        if (DrawGlobalDockToolbarChip({x, y}, voicesWidth, voices, fonts))
             m_viewSelection = 1;
         x += voicesWidth + metrics.toolbarGap;
-        DrawGlobalDockToolbarSeparator(x, controlY);
-        x += metrics.toolbarGap + scale;
-        if (DrawGlobalDockToolbarChip({x, controlY}, pauseWidth, pause, fonts))
+        DrawGlobalDockToolbarSeparator(x, y);
+        x += metrics.toolbarGap + Theme::GetActiveTokens().sizes.uiScale;
+        if (DrawGlobalDockToolbarChip({x, y}, pauseWidth, pause, fonts))
             m_paused = !m_paused;
         x += pauseWidth + metrics.toolbarGap;
-        if (DrawGlobalDockToolbarChip({x, controlY}, muteWidth, muteAll, fonts)) {
+        if (DrawGlobalDockToolbarChip({x, y}, muteWidth, muteAll, fonts)) {
             m_allMuted = !m_allMuted;
             m_muted.fill(m_allMuted);
         }
+    }
 
-        const bool narrow = regions.contentWidth < 900.0F * scale;
-        const int columns = narrow ? 2 : 4;
-        const int metricRows = narrow ? 2 : 1;
-        const float gridPadding = 10.0F * scale;
-        const float cardGap = 8.0F * scale;
-        const float cardHeight = 64.0F * scale;
-        const float gridHeight =
-            gridPadding * 2.0F + cardHeight * static_cast<float>(metricRows) + cardGap * static_cast<float>(metricRows - 1);
-        const float cardWidth =
-            std::max(120.0F * scale,
-                     (regions.contentWidth - gridPadding * 2.0F - cardGap * static_cast<float>(columns - 1)) / static_cast<float>(columns));
-        ImDrawList *drawList = ImGui::GetWindowDrawList();
-        drawList->AddRectFilled(regions.contentOrigin,
-                                {regions.contentOrigin.x + regions.contentWidth, regions.contentOrigin.y + gridHeight},
-                                Theme::U32(Theme::BottomDockContentSurface()));
-        drawList->AddLine({regions.contentOrigin.x, regions.contentOrigin.y + gridHeight - scale},
-                          {regions.contentOrigin.x + regions.contentWidth, regions.contentOrigin.y + gridHeight - scale},
-                          Theme::U32(Theme::Border()));
+    float GlobalDockAudioPane::DrawMetrics(const ImVec2 &origin, const float width, const EditorGuiContext &context) const {
+        const auto localized = [&](const char *key) -> const std::string & {
+            return context.localization.Get("editor", key);
+        };
         const std::array<GlobalDockMetricCardProps, 4> cards{
             GlobalDockMetricCardProps{.label = localized("workspace.global_dock.audio.metric.master_peak"), .value = "−3.2 dB"},
             GlobalDockMetricCardProps{.label = localized("workspace.global_dock.audio.metric.voices"), .value = "12 / 64"},
@@ -150,78 +186,98 @@ namespace Horo::Editor {
                                       .value = "0",
                                       .valueTone = GlobalDockTone::Positive},
         };
-        for (std::size_t index = 0; index < cards.size(); ++index) {
-            const int column = static_cast<int>(index) % columns;
-            const int metricRow = static_cast<int>(index) / columns;
-            DrawGlobalDockMetricCard({regions.contentOrigin.x + gridPadding + static_cast<float>(column) * (cardWidth + cardGap),
-                                      regions.contentOrigin.y + gridPadding + static_cast<float>(metricRow) * (cardHeight + cardGap)},
-                                     {cardWidth, cardHeight}, cards[index], fonts);
-        }
+        return DrawGlobalDockMetricGrid(origin, width, cards, context.theme.fonts);
+    }
 
-        const ImVec2 headerMin{regions.contentOrigin.x, regions.contentOrigin.y + gridHeight};
-        DrawGlobalDockTableHeaderSurface(headerMin, regions.contentWidth, metrics.tableHeaderHeight);
-        const float busX = headerMin.x + metrics.contentPadding;
-        const float gainX = busX + 110.0F * scale + metrics.columnGap;
-        const float levelX = gainX + 70.0F * scale + metrics.columnGap;
-        const float controlsX = headerMin.x + regions.contentWidth - metrics.contentPadding - 108.0F * scale;
-        const float voicesX = controlsX - metrics.columnGap - 90.0F * scale;
+    void GlobalDockAudioPane::DrawBusTable(const ImVec2 &origin, const float width, const float height, const EditorGuiContext &context) {
+        const Theme::Fonts &fonts = context.theme.fonts;
+        const float scale = std::max(Theme::GetActiveTokens().sizes.uiScale, 0.01F);
+        const GlobalDockPaneMetrics metrics = ResolveGlobalDockPaneMetrics();
+        const auto localized = [&](const char *key) -> const std::string & {
+            return context.localization.Get("editor", key);
+        };
+        ImDrawList *drawList = ImGui::GetWindowDrawList();
+        const ImVec2 headerMin = origin;
+        DrawGlobalDockTableHeaderSurface(headerMin, width, metrics.tableHeaderHeight);
+        const TableLayout layout{.bus = headerMin.x + metrics.contentPadding,
+                                 .gain = headerMin.x + metrics.contentPadding + 110.0F * scale + metrics.columnGap,
+                                 .level = headerMin.x + metrics.contentPadding + 180.0F * scale + metrics.columnGap * 2.0F,
+                                 .voices = headerMin.x + width - metrics.contentPadding - 198.0F * scale - metrics.columnGap,
+                                 .controls = headerMin.x + width - metrics.contentPadding - 108.0F * scale};
         const float headerY = headerMin.y + (metrics.tableHeaderHeight - Theme::TextPx::Caption()) * 0.5F;
         const auto headerText = [&](const float textX, const char *key) {
             drawList->AddText(fonts.sansCompact, Theme::TextPx::Caption(), {textX, headerY}, Theme::U32(Theme::Muted()),
                               localized(key).c_str());
         };
-        headerText(busX, "workspace.global_dock.audio.column.bus");
-        headerText(gainX, "workspace.global_dock.audio.column.gain");
-        headerText(levelX, "workspace.global_dock.audio.column.level");
-        headerText(voicesX, "workspace.global_dock.audio.column.voices");
-        headerText(controlsX, "workspace.global_dock.audio.column.controls");
+        headerText(layout.bus, "workspace.global_dock.audio.column.bus");
+        headerText(layout.gain, "workspace.global_dock.audio.column.gain");
+        headerText(layout.level, "workspace.global_dock.audio.column.level");
+        headerText(layout.voices, "workspace.global_dock.audio.column.voices");
+        headerText(layout.controls, "workspace.global_dock.audio.column.controls");
 
         const ImVec2 rowsOrigin{headerMin.x, headerMin.y + metrics.tableHeaderHeight};
-        const float rowsHeight = std::max(1.0F, regions.contentHeight - gridHeight - metrics.tableHeaderHeight);
+        const float rowsHeight = std::max(1.0F, height - metrics.tableHeaderHeight);
         ImGui::SetCursorScreenPos(rowsOrigin);
         ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, {0.0F, 0.0F});
         ImGui::PushStyleColor(ImGuiCol_ChildBg, Theme::BottomDockContentSurface());
-        ImGui::BeginChild("##AudioRows", {regions.contentWidth, rowsHeight}, false,
+        ImGui::BeginChild("##AudioRows", {width, rowsHeight}, false,
                           ImGuiWindowFlags_AlwaysVerticalScrollbar | ImGuiWindowFlags_NoSavedSettings);
-        for (std::size_t index = 0; index < Rows.size(); ++index) {
-            const AudioRow &row = Rows[index];
-            const std::string &bus = localized(row.busKey);
-            if (!ContainsCaseInsensitive(bus, std::string_view{m_search.data()}))
-                continue;
-            ImGui::PushID(static_cast<int>(index));
-            const ImVec2 rowMin = ImGui::GetCursorScreenPos();
-            ImGui::InvisibleButton("##audio-row", {regions.contentWidth, metrics.tableRowHeight});
-            DrawGlobalDockTableRowSurface(rowMin, regions.contentWidth, metrics.tableRowHeight, ImGui::IsItemHovered());
-            ImDrawList *rowsDrawList = ImGui::GetWindowDrawList();
-            const float textY = rowMin.y + (metrics.tableRowHeight - Theme::TextPx::Label()) * 0.5F;
-            DrawGlobalDockClippedText(*rowsDrawList, fonts.sansCompact, Theme::TextPx::Label(), {busX, textY},
-                                      {gainX - metrics.columnGap, rowMin.y + metrics.tableRowHeight}, Theme::Text(), bus);
-            DrawGlobalDockClippedText(*rowsDrawList, fonts.sansCompact, Theme::TextPx::Label(), {gainX, textY},
-                                      {levelX - metrics.columnGap, rowMin.y + metrics.tableRowHeight}, Theme::Text(), row.gain);
-            DrawGlobalDockMeter({levelX, rowMin.y + (metrics.tableRowHeight - 6.0F * scale) * 0.5F},
-                                std::max(1.0F, voicesX - metrics.columnGap - levelX), m_muted[index] ? 0.0F : row.level);
-            DrawGlobalDockClippedText(*rowsDrawList, fonts.sansCompact, Theme::TextPx::Label(), {voicesX, textY},
-                                      {controlsX - metrics.columnGap, rowMin.y + metrics.tableRowHeight}, Theme::Text(), row.voices);
-            const GlobalDockToolbarChipProps mute{.id = "AudioMute", .label = "M", .active = m_muted[index]};
-            const GlobalDockToolbarChipProps solo{.id = "AudioSolo", .label = "S", .active = m_solo[index]};
-            const float buttonWidth = 30.0F * scale;
-            const float buttonY = rowMin.y + (metrics.tableRowHeight - metrics.controlHeight) * 0.5F;
-            if (DrawGlobalDockToolbarChip({controlsX, buttonY}, buttonWidth, mute, fonts))
-                m_muted[index] = !m_muted[index];
-            if (DrawGlobalDockToolbarChip({controlsX + buttonWidth + 4.0F * scale, buttonY}, buttonWidth, solo, fonts))
-                m_solo[index] = !m_solo[index];
-            ImGui::PopID();
-        }
+        for (std::size_t index = 0; index < Rows.size(); ++index)
+            DrawBusRow(index, width, layout, context);
         ImGui::EndChild();
         ImGui::PopStyleColor();
         ImGui::PopStyleVar();
+    }
 
-        DrawGlobalDockFooterSurface(regions.footerOrigin, regions.footerWidth, metrics.footerHeight);
-        const float footerY = regions.footerOrigin.y + (metrics.footerHeight - Theme::TextPx::Caption()) * 0.5F;
+    void GlobalDockAudioPane::DrawBusRow(const std::size_t index, const float width, const TableLayout &layout,
+                                         const EditorGuiContext &context) {
+        const AudioRow &row = Rows[index];
+        const std::string &bus = context.localization.Get("editor", row.busKey);
+        if (!ContainsCaseInsensitive(bus, std::string_view{m_search.data()}))
+            return;
+        const Theme::Fonts &fonts = context.theme.fonts;
+        const float scale = std::max(Theme::GetActiveTokens().sizes.uiScale, 0.01F);
+        const GlobalDockPaneMetrics metrics = ResolveGlobalDockPaneMetrics();
+        ImGui::PushID(static_cast<int>(index));
+        const ImVec2 rowMin = ImGui::GetCursorScreenPos();
+        ImGui::InvisibleButton("##audio-row", {width, metrics.tableRowHeight});
+        DrawGlobalDockTableRowSurface(rowMin, width, metrics.tableRowHeight, ImGui::IsItemHovered());
+        ImDrawList *drawList = ImGui::GetWindowDrawList();
+        const float textY = rowMin.y + (metrics.tableRowHeight - Theme::TextPx::Label()) * 0.5F;
+        const float rowBottom = rowMin.y + metrics.tableRowHeight;
+        DrawGlobalDockClippedText(*drawList, fonts.sansCompact, Theme::TextPx::Label(), {layout.bus, textY},
+                                  {layout.gain - metrics.columnGap, rowBottom}, Theme::Text(), bus);
+        DrawGlobalDockClippedText(*drawList, fonts.sansCompact, Theme::TextPx::Label(), {layout.gain, textY},
+                                  {layout.level - metrics.columnGap, rowBottom}, Theme::Text(), row.gain);
+        DrawGlobalDockMeter({layout.level, rowMin.y + (metrics.tableRowHeight - 6.0F * scale) * 0.5F},
+                            std::max(1.0F, layout.voices - metrics.columnGap - layout.level), m_muted[index] ? 0.0F : row.level);
+        DrawGlobalDockClippedText(*drawList, fonts.sansCompact, Theme::TextPx::Label(), {layout.voices, textY},
+                                  {layout.controls - metrics.columnGap, rowBottom}, Theme::Text(), row.voices);
+        const GlobalDockToolbarChipProps mute{.id = "AudioMute", .label = "M", .active = m_muted[index]};
+        const GlobalDockToolbarChipProps solo{.id = "AudioSolo", .label = "S", .active = m_solo[index]};
+        const float buttonWidth = 30.0F * scale;
+        const float buttonY = rowMin.y + (metrics.tableRowHeight - metrics.controlHeight) * 0.5F;
+        if (DrawGlobalDockToolbarChip({layout.controls, buttonY}, buttonWidth, mute, fonts))
+            m_muted[index] = !m_muted[index];
+        if (DrawGlobalDockToolbarChip({layout.controls + buttonWidth + 4.0F * scale, buttonY}, buttonWidth, solo, fonts))
+            m_solo[index] = !m_solo[index];
+        ImGui::PopID();
+    }
+
+    void GlobalDockAudioPane::DrawFooter(const ImVec2 &origin, const float width, const EditorGuiContext &context) const {
+        const Theme::Fonts &fonts = context.theme.fonts;
+        const float scale = std::max(Theme::GetActiveTokens().sizes.uiScale, 0.01F);
+        const GlobalDockPaneMetrics metrics = ResolveGlobalDockPaneMetrics();
+        const auto localized = [&](const char *key) -> const std::string & {
+            return context.localization.Get("editor", key);
+        };
+        ImDrawList *drawList = ImGui::GetWindowDrawList();
+        DrawGlobalDockFooterSurface(origin, width, metrics.footerHeight);
+        const float footerY = origin.y + (metrics.footerHeight - Theme::TextPx::Caption()) * 0.5F;
         const std::array<const char *, 3> footerKeys{"workspace.global_dock.audio.footer.format",
                                                      "workspace.global_dock.audio.footer.latency",
                                                      "workspace.global_dock.audio.footer.queue"};
-        float footerX = regions.footerOrigin.x + metrics.contentPadding;
+        float footerX = origin.x + metrics.contentPadding;
         for (const char *key : footerKeys) {
             const std::string &text = localized(key);
             drawList->AddText(fonts.sansCompact, Theme::TextPx::Caption(), {footerX, footerY}, Theme::U32(Theme::Muted()), text.c_str());
@@ -229,8 +285,7 @@ namespace Horo::Editor {
         }
         const std::string &healthy = localized("workspace.global_dock.audio.footer.healthy");
         drawList->AddText(fonts.sansCompact, Theme::TextPx::Caption(),
-                          {regions.footerOrigin.x + regions.footerWidth - metrics.contentPadding -
-                               TextWidth(fonts.sansCompact, Theme::TextPx::Caption(), healthy),
+                          {origin.x + width - metrics.contentPadding - TextWidth(fonts.sansCompact, Theme::TextPx::Caption(), healthy),
                            footerY},
                           Theme::U32(Theme::Muted()), healthy.c_str());
     }

@@ -25,6 +25,8 @@ namespace Horo::Editor {
         void Draw(const ImVec2 &contentOrigin, float contentWidth, const EditorGuiContext &context);
 
     private:
+        struct ToolbarLayout;
+
         enum class LevelFilter : std::uint8_t {
             All,
             Info,
@@ -33,10 +35,20 @@ namespace Horo::Editor {
         };
 
         void DrawToolbar(const ImVec2 &minimum, float width, const EditorGuiContext &context);
+        [[nodiscard]] ToolbarLayout ResolveToolbarLayout(float width, const EditorGuiContext &context) const;
+        void DrawToolbarSearch(float &x, float y, const ToolbarLayout &layout, const EditorGuiContext &context);
+        void DrawToolbarFilters(float &x, float y, const ToolbarLayout &layout, const EditorGuiContext &context);
+        void DrawToolbarSource(float &x, float y, const ToolbarLayout &layout, const EditorGuiContext &context);
+        void DrawToolbarActions(float x, float y, const ToolbarLayout &layout, const EditorGuiContext &context);
         void DrawTableHeader(const ImVec2 &minimum, float width, const EditorGuiContext &context) const;
         void DrawLogRows(float width, float height, const EditorGuiContext &context);
+        void DrawEmptyLogState(float height, const EditorGuiContext &context) const;
+        void DrawLogRow(const ImVec2 &origin, float width, float height, const Log::StructuredLogRecord &record,
+                        const EditorGuiContext &context);
         void DrawFooter(const ImVec2 &minimum, float width, const EditorGuiContext &context) const;
         [[nodiscard]] bool RefreshSnapshot();
+        [[nodiscard]] bool MatchesSearch(const Log::StructuredLogRecord &record, const std::string &source) const;
+        [[nodiscard]] bool MatchesLevel(const Log::StructuredLogRecord &record) const noexcept;
         void RebuildFilter();
 
         const Log::IStructuredLogQuery *m_logQuery{nullptr};

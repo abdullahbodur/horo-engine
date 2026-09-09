@@ -38,9 +38,34 @@ namespace Horo::Editor {
             ImFont *resolved = font != nullptr ? font : ImGui::GetFont();
             return resolved->CalcTextSizeA(size, FLT_MAX, 0.0F, text.c_str()).x;
         }
+
+        void DrawMetricGridSurface(const ImVec2 origin, const float width, const float height, const float scale) {
+            ImDrawList *drawList = ImGui::GetWindowDrawList();
+            drawList->AddRectFilled(origin, {origin.x + width, origin.y + height}, Theme::U32(Theme::BottomDockContentSurface()));
+            drawList->AddLine({origin.x, origin.y + height - scale}, {origin.x + width, origin.y + height - scale},
+                              Theme::U32(Theme::Border()));
+        }
     }  // namespace
 
+    struct GlobalDockPerformancePane::TableLayout {
+        float subsystem;
+        float p50;
+        float p95;
+        float notes;
+    };
+
     void GlobalDockPerformancePane::Draw(const ImVec2 &contentOrigin, const float contentWidth, const EditorGuiContext &context) {
+        const float availableHeight = std::max(1.0F, ImGui::GetWindowPos().y + ImGui::GetWindowHeight() - contentOrigin.y);
+        const GlobalDockPaneRegions regions =
+            ResolveGlobalDockPaneRegions(contentOrigin, contentWidth, availableHeight, {.hasToolbar = true, .hasFooter = true});
+        DrawToolbar(regions.toolbarOrigin, regions.toolbarWidth, context);
+        const float metricHeight = DrawMetrics(regions.contentOrigin, regions.contentWidth, context);
+        DrawTable({regions.contentOrigin.x, regions.contentOrigin.y + metricHeight}, regions.contentWidth,
+                  std::max(1.0F, regions.contentHeight - metricHeight), context);
+        DrawFooter(regions.footerOrigin, regions.footerWidth, context);
+    }
+
+    void GlobalDockPerformancePane::DrawToolbar(const ImVec2 &contentOrigin, const float contentWidth, const EditorGuiContext &context) {
         const Theme::Fonts &fonts = context.theme.fonts;
         const float scale = std::max(Theme::GetActiveTokens().sizes.uiScale, 0.01F);
         const GlobalDockPaneMetrics metrics = ResolveGlobalDockPaneMetrics();
@@ -82,57 +107,67 @@ namespace Horo::Editor {
                            {14.0F * scale, 14.0F * scale}, Theme::U32(Theme::Dim()), fonts.icon);
         x += searchWidth + metrics.toolbarGap;
 
-        const std::array<std::string, 3> windowLabels{localized("workspace.global_dock.performance.window.ten_seconds"),
-                                                      localized("workspace.global_dock.performance.window.minute"),
-                                                      localized("workspace.global_dock.performance.window.five_minutes")};
-        const std::array<const char *, 3> windowItems{windowLabels[0].c_str(), windowLabels[1].c_str(), windowLabels[2].c_str()};
-        ImGui::SetCursorScreenPos({x, controlY});
-        ImGui::SetNextItemWidth(windowWidth);
-        static_cast<void>(Ui::ComboControl("PerformanceWindow", &m_windowSelection, windowItems.data(),
-                                           static_cast<int>(windowItems.size()), fonts,
-                                           {.height = GlobalDockLayout::ControlHeight,
-                                            .componentSize = Ui::ComponentSize::Small,
-                                            .surface = Ui::ComboControlSurface::BottomDockToolbar}));
-        x += windowWidth + metrics.toolbarGap;
-
-        const std::array<std::string, 4> subsystemLabels{localized("workspace.global_dock.performance.subsystem.all"),
-                                                         localized("workspace.global_dock.performance.subsystem.renderer"),
-                                                         localized("workspace.global_dock.performance.subsystem.physics"),
-                                                         localized("workspace.global_dock.performance.subsystem.audio")};
-        const std::array<const char *, 4> subsystemItems{subsystemLabels[0].c_str(), subsystemLabels[1].c_str(), subsystemLabels[2].c_str(),
-                                                         subsystemLabels[3].c_str()};
-        ImGui::SetCursorScreenPos({x, controlY});
-        ImGui::SetNextItemWidth(subsystemWidth);
-        static_cast<void>(Ui::ComboControl("PerformanceSubsystem", &m_subsystemSelection, subsystemItems.data(),
-                                           static_cast<int>(subsystemItems.size()), fonts,
-                                           {.height = GlobalDockLayout::ControlHeight,
-                                            .componentSize = Ui::ComponentSize::Small,
-                                            .surface = Ui::ComboControlSurface::BottomDockToolbar}));
-        x += subsystemWidth + metrics.toolbarGap;
+        DrawToolbarSelectors(x, controlY, context);
         DrawGlobalDockToolbarSeparator(x, controlY);
         x += metrics.toolbarGap + scale;
         if (DrawGlobalDockToolbarChip({x, controlY}, liveWidth, live, fonts))
             m_live = !m_live;
         x += liveWidth + metrics.toolbarGap;
         static_cast<void>(DrawGlobalDockToolbarChip({x, controlY}, captureWidth, capture, fonts));
+    }
 
-        const bool narrow = regions.contentWidth < 900.0F * scale;
+    void GlobalDockPerformancePane::DrawToolbarSelectors(float &x, const float y, const EditorGuiContext &context) {
+        const std::array<std::string, 3> windowLabels{context.localization.Get("editor",
+                                                                               "workspace.global_dock.performance.window.ten_seconds"),
+                                                      context.localization.Get("editor", "workspace.global_dock.performance.window.minute"),
+                                                      context.localization.Get("editor",
+                                                                               "workspace.global_dock.performance.window.five_minutes")};
+        const std::array<const char *, 3> windowItems{windowLabels[0].c_str(), windowLabels[1].c_str(), windowLabels[2].c_str()};
+        const float windowWidth = 148.0F * Theme::GetActiveTokens().sizes.uiScale;
+        ImGui::SetCursorScreenPos({x, y});
+        ImGui::SetNextItemWidth(windowWidth);
+        static_cast<void>(Ui::ComboControl("PerformanceWindow", &m_windowSelection, windowItems.data(),
+                                           static_cast<int>(windowItems.size()), context.theme.fonts,
+                                           {.height = GlobalDockLayout::ControlHeight,
+                                            .componentSize = Ui::ComponentSize::Small,
+                                            .surface = Ui::ComboControlSurface::BottomDockToolbar}));
+        x += windowWidth + ResolveGlobalDockPaneMetrics().toolbarGap;
+        const std::array<std::string, 4>
+            subsystemLabels{context.localization.Get("editor", "workspace.global_dock.performance.subsystem.all"),
+                            context.localization.Get("editor", "workspace.global_dock.performance.subsystem.renderer"),
+                            context.localization.Get("editor", "workspace.global_dock.performance.subsystem.physics"),
+                            context.localization.Get("editor", "workspace.global_dock.performance.subsystem.audio")};
+        const std::array<const char *, 4> subsystemItems{subsystemLabels[0].c_str(), subsystemLabels[1].c_str(), subsystemLabels[2].c_str(),
+                                                         subsystemLabels[3].c_str()};
+        const float subsystemWidth = 142.0F * Theme::GetActiveTokens().sizes.uiScale;
+        ImGui::SetCursorScreenPos({x, y});
+        ImGui::SetNextItemWidth(subsystemWidth);
+        static_cast<void>(Ui::ComboControl("PerformanceSubsystem", &m_subsystemSelection, subsystemItems.data(),
+                                           static_cast<int>(subsystemItems.size()), context.theme.fonts,
+                                           {.height = GlobalDockLayout::ControlHeight,
+                                            .componentSize = Ui::ComponentSize::Small,
+                                            .surface = Ui::ComboControlSurface::BottomDockToolbar}));
+        x += subsystemWidth + ResolveGlobalDockPaneMetrics().toolbarGap;
+    }
+
+    float GlobalDockPerformancePane::DrawMetrics(const ImVec2 &contentOrigin, const float contentWidth,
+                                                 const EditorGuiContext &context) const {
+        const Theme::Fonts &fonts = context.theme.fonts;
+        const float scale = std::max(Theme::GetActiveTokens().sizes.uiScale, 0.01F);
+        const auto localized = [&](const char *key) -> const std::string & {
+            return context.localization.Get("editor", key);
+        };
+
+        const bool narrow = contentWidth < 900.0F * scale;
         const int columns = narrow ? 2 : 4;
         const float gridPadding = 10.0F * scale;
         const float cardGap = 8.0F * scale;
         const float cardHeight = 106.0F * scale;
         const int rows = narrow ? 2 : 1;
         const float gridHeight = gridPadding * 2.0F + cardHeight * static_cast<float>(rows) + cardGap * static_cast<float>(rows - 1);
-        const float cardWidth =
-            std::max(120.0F * scale,
-                     (regions.contentWidth - gridPadding * 2.0F - cardGap * static_cast<float>(columns - 1)) / static_cast<float>(columns));
-        ImDrawList *drawList = ImGui::GetWindowDrawList();
-        drawList->AddRectFilled(regions.contentOrigin,
-                                {regions.contentOrigin.x + regions.contentWidth, regions.contentOrigin.y + gridHeight},
-                                Theme::U32(Theme::BottomDockContentSurface()));
-        drawList->AddLine({regions.contentOrigin.x, regions.contentOrigin.y + gridHeight - scale},
-                          {regions.contentOrigin.x + regions.contentWidth, regions.contentOrigin.y + gridHeight - scale},
-                          Theme::U32(Theme::Border()));
+        const float cardWidth = std::max(120.0F * scale, (contentWidth - gridPadding * 2.0F - cardGap * static_cast<float>(columns - 1)) /
+                                                             static_cast<float>(columns));
+        DrawMetricGridSurface(contentOrigin, contentWidth, gridHeight, scale);
         const std::array<GlobalDockMetricCardProps, 4> cards{
             GlobalDockMetricCardProps{.label = localized("workspace.global_dock.performance.metric.frame_time"),
                                       .value = "16.7 ms",
@@ -156,74 +191,100 @@ namespace Horo::Editor {
         for (std::size_t index = 0; index < cards.size(); ++index) {
             const int column = static_cast<int>(index) % columns;
             const int row = static_cast<int>(index) / columns;
-            DrawGlobalDockMetricCard({regions.contentOrigin.x + gridPadding + static_cast<float>(column) * (cardWidth + cardGap),
-                                      regions.contentOrigin.y + gridPadding + static_cast<float>(row) * (cardHeight + cardGap)},
+            DrawGlobalDockMetricCard({contentOrigin.x + gridPadding + static_cast<float>(column) * (cardWidth + cardGap),
+                                      contentOrigin.y + gridPadding + static_cast<float>(row) * (cardHeight + cardGap)},
                                      {cardWidth, cardHeight}, cards[index], fonts);
         }
+        return gridHeight;
+    }
 
-        const ImVec2 headerMin{regions.contentOrigin.x, regions.contentOrigin.y + gridHeight};
-        DrawGlobalDockTableHeaderSurface(headerMin, regions.contentWidth, metrics.tableHeaderHeight);
-        const float subsystemX = headerMin.x + metrics.contentPadding;
-        const float p50X = subsystemX + 68.0F * scale + metrics.columnGap;
-        const float p95X = p50X + 74.0F * scale + metrics.columnGap;
-        const float notesX = p95X + 96.0F * scale + metrics.columnGap;
+    void GlobalDockPerformancePane::DrawTable(const ImVec2 &origin, const float width, const float height,
+                                              const EditorGuiContext &context) {
+        const Theme::Fonts &fonts = context.theme.fonts;
+        const float scale = std::max(Theme::GetActiveTokens().sizes.uiScale, 0.01F);
+        const GlobalDockPaneMetrics metrics = ResolveGlobalDockPaneMetrics();
+        const auto localized = [&](const char *key) -> const std::string & {
+            return context.localization.Get("editor", key);
+        };
+        ImDrawList *drawList = ImGui::GetWindowDrawList();
+        const ImVec2 headerMin = origin;
+        DrawGlobalDockTableHeaderSurface(headerMin, width, metrics.tableHeaderHeight);
+        const TableLayout layout{.subsystem = headerMin.x + metrics.contentPadding,
+                                 .p50 = headerMin.x + metrics.contentPadding + 68.0F * scale + metrics.columnGap,
+                                 .p95 = headerMin.x + metrics.contentPadding + 142.0F * scale + metrics.columnGap * 2.0F,
+                                 .notes = headerMin.x + metrics.contentPadding + 238.0F * scale + metrics.columnGap * 3.0F};
         const float headerY = headerMin.y + (metrics.tableHeaderHeight - Theme::TextPx::Caption()) * 0.5F;
         const auto headerText = [&](const float textX, const char *key) {
             drawList->AddText(fonts.sansCompact, Theme::TextPx::Caption(), {textX, headerY}, Theme::U32(Theme::Muted()),
                               localized(key).c_str());
         };
-        headerText(subsystemX, "workspace.global_dock.performance.column.subsystem");
-        headerText(p50X, "workspace.global_dock.performance.column.p50");
-        headerText(p95X, "workspace.global_dock.performance.column.p95");
-        headerText(notesX, "workspace.global_dock.performance.column.notes");
+        headerText(layout.subsystem, "workspace.global_dock.performance.column.subsystem");
+        headerText(layout.p50, "workspace.global_dock.performance.column.p50");
+        headerText(layout.p95, "workspace.global_dock.performance.column.p95");
+        headerText(layout.notes, "workspace.global_dock.performance.column.notes");
 
         const ImVec2 rowsOrigin{headerMin.x, headerMin.y + metrics.tableHeaderHeight};
-        const float rowsHeight = std::max(1.0F, regions.contentHeight - gridHeight - metrics.tableHeaderHeight);
+        const float rowsHeight = std::max(1.0F, height - metrics.tableHeaderHeight);
         ImGui::SetCursorScreenPos(rowsOrigin);
         ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, {0.0F, 0.0F});
         ImGui::PushStyleColor(ImGuiCol_ChildBg, Theme::BottomDockContentSurface());
-        ImGui::BeginChild("##PerformanceRows", {regions.contentWidth, rowsHeight}, false,
+        ImGui::BeginChild("##PerformanceRows", {width, rowsHeight}, false,
                           ImGuiWindowFlags_AlwaysVerticalScrollbar | ImGuiWindowFlags_NoSavedSettings);
-        for (std::size_t index = 0; index < Rows.size(); ++index) {
-            if (m_subsystemSelection != 0 && static_cast<std::size_t>(m_subsystemSelection - 1) != index)
-                continue;
-            const PerformanceRow &row = Rows[index];
-            ImGui::PushID(static_cast<int>(index));
-            const ImVec2 rowMin = ImGui::GetCursorScreenPos();
-            ImGui::InvisibleButton("##performance-row", {regions.contentWidth, metrics.tableRowHeight});
-            DrawGlobalDockTableRowSurface(rowMin, regions.contentWidth, metrics.tableRowHeight, ImGui::IsItemHovered());
-            ImDrawList *rowsDrawList = ImGui::GetWindowDrawList();
-            const float textY = rowMin.y + (metrics.tableRowHeight - Theme::TextPx::Label()) * 0.5F;
-            DrawGlobalDockClippedText(*rowsDrawList, fonts.sansCompact, Theme::TextPx::Label(), {subsystemX, textY},
-                                      {p50X - metrics.columnGap, rowMin.y + metrics.tableRowHeight}, Theme::Text(),
-                                      localized(row.subsystemKey));
-            DrawGlobalDockClippedText(*rowsDrawList, fonts.sansCompact, Theme::TextPx::Label(), {p50X, textY},
-                                      {p95X - metrics.columnGap, rowMin.y + metrics.tableRowHeight}, Theme::Text(), row.p50);
-            DrawGlobalDockClippedText(*rowsDrawList, fonts.sansCompact, Theme::TextPx::Label(), {p95X, textY},
-                                      {notesX - metrics.columnGap, rowMin.y + metrics.tableRowHeight}, Theme::Text(), row.p95);
-            DrawGlobalDockClippedText(*rowsDrawList, fonts.sansCompact, Theme::TextPx::Label(), {notesX, textY},
-                                      {rowMin.x + regions.contentWidth - metrics.contentPadding, rowMin.y + metrics.tableRowHeight},
-                                      Theme::Text(), localized(row.notesKey));
-            ImGui::PopID();
-        }
+        for (std::size_t index = 0; index < Rows.size(); ++index)
+            DrawRow(index, width, layout, context);
         ImGui::EndChild();
         ImGui::PopStyleColor();
         ImGui::PopStyleVar();
+    }
 
-        DrawGlobalDockFooterSurface(regions.footerOrigin, regions.footerWidth, metrics.footerHeight);
-        const float footerY = regions.footerOrigin.y + (metrics.footerHeight - Theme::TextPx::Caption()) * 0.5F;
+    void GlobalDockPerformancePane::DrawRow(const std::size_t index, const float width, const TableLayout &layout,
+                                            const EditorGuiContext &context) const {
+        if (m_subsystemSelection != 0 && static_cast<std::size_t>(m_subsystemSelection - 1) != index)
+            return;
+        const PerformanceRow &row = Rows[index];
+        const GlobalDockPaneMetrics metrics = ResolveGlobalDockPaneMetrics();
+        ImGui::PushID(static_cast<int>(index));
+        const ImVec2 origin = ImGui::GetCursorScreenPos();
+        ImGui::InvisibleButton("##performance-row", {width, metrics.tableRowHeight});
+        DrawGlobalDockTableRowSurface(origin, width, metrics.tableRowHeight, ImGui::IsItemHovered());
+        ImDrawList *drawList = ImGui::GetWindowDrawList();
+        const float textY = origin.y + (metrics.tableRowHeight - Theme::TextPx::Label()) * 0.5F;
+        const float bottom = origin.y + metrics.tableRowHeight;
+        DrawGlobalDockClippedText(*drawList, context.theme.fonts.sansCompact, Theme::TextPx::Label(), {layout.subsystem, textY},
+                                  {layout.p50 - metrics.columnGap, bottom}, Theme::Text(),
+                                  context.localization.Get("editor", row.subsystemKey));
+        DrawGlobalDockClippedText(*drawList, context.theme.fonts.sansCompact, Theme::TextPx::Label(), {layout.p50, textY},
+                                  {layout.p95 - metrics.columnGap, bottom}, Theme::Text(), row.p50);
+        DrawGlobalDockClippedText(*drawList, context.theme.fonts.sansCompact, Theme::TextPx::Label(), {layout.p95, textY},
+                                  {layout.notes - metrics.columnGap, bottom}, Theme::Text(), row.p95);
+        DrawGlobalDockClippedText(*drawList, context.theme.fonts.sansCompact, Theme::TextPx::Label(), {layout.notes, textY},
+                                  {origin.x + width - metrics.contentPadding, bottom}, Theme::Text(),
+                                  context.localization.Get("editor", row.notesKey));
+        ImGui::PopID();
+    }
+
+    void GlobalDockPerformancePane::DrawFooter(const ImVec2 &origin, const float width, const EditorGuiContext &context) const {
+        const Theme::Fonts &fonts = context.theme.fonts;
+        const float scale = std::max(Theme::GetActiveTokens().sizes.uiScale, 0.01F);
+        const GlobalDockPaneMetrics metrics = ResolveGlobalDockPaneMetrics();
+        const auto localized = [&](const char *key) -> const std::string & {
+            return context.localization.Get("editor", key);
+        };
+        ImDrawList *drawList = ImGui::GetWindowDrawList();
+        DrawGlobalDockFooterSurface(origin, width, metrics.footerHeight);
+        const float footerY = origin.y + (metrics.footerHeight - Theme::TextPx::Caption()) * 0.5F;
         const std::string &sampling = localized("workspace.global_dock.performance.footer.sampling");
         const std::string &misses = localized("workspace.global_dock.performance.footer.misses");
-        drawList->AddText(fonts.sansCompact, Theme::TextPx::Caption(), {regions.footerOrigin.x + metrics.contentPadding, footerY},
+        drawList->AddText(fonts.sansCompact, Theme::TextPx::Caption(), {origin.x + metrics.contentPadding, footerY},
                           Theme::U32(Theme::Muted()), sampling.c_str());
         drawList->AddText(fonts.sansCompact, Theme::TextPx::Caption(),
-                          {regions.footerOrigin.x + metrics.contentPadding +
-                               TextWidth(fonts.sansCompact, Theme::TextPx::Caption(), sampling) + 10.0F * scale,
+                          {origin.x + metrics.contentPadding + TextWidth(fonts.sansCompact, Theme::TextPx::Caption(), sampling) +
+                               10.0F * scale,
                            footerY},
                           Theme::U32(Theme::Muted()), misses.c_str());
         const std::string &captureAvailable = localized("workspace.global_dock.performance.footer.capture_available");
         drawList->AddText(fonts.sansCompact, Theme::TextPx::Caption(),
-                          {regions.footerOrigin.x + regions.footerWidth - metrics.contentPadding -
+                          {origin.x + width - metrics.contentPadding -
                                TextWidth(fonts.sansCompact, Theme::TextPx::Caption(), captureAvailable),
                            footerY},
                           Theme::U32(Theme::Muted()), captureAvailable.c_str());

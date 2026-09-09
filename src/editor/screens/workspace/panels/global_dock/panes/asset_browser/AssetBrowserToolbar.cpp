@@ -30,6 +30,53 @@ namespace Horo::Editor {
             return preferred != nullptr ? preferred : ImGui::GetFont();
         }
 
+        struct ToolbarLayout {
+            float scale;
+            float gap;
+            float control;
+            float typeWidth;
+            float sortWidth;
+            float viewWidth;
+            float importWidth;
+            bool compact;
+            bool narrow;
+        };
+
+        [[nodiscard]] ToolbarLayout ResolveToolbarLayout(const float availableWidth) noexcept {
+            const float scale = Scale();
+            const float safeWidth = std::max(1.0F, availableWidth);
+            const bool compact = safeWidth < 640.0F * scale;
+            const bool narrow = safeWidth < 900.0F * scale;
+            return {.scale = scale,
+                    .gap = AssetBrowserLayout::ToolbarGap * scale,
+                    .control = AssetBrowserLayout::ToolbarControlHeight * scale,
+                    .typeWidth = (narrow ? 94.0F : 106.0F) * scale,
+                    .sortWidth = (narrow ? 104.0F : 154.0F) * scale,
+                    .viewWidth = 66.0F * scale,
+                    .importWidth = (compact ? 34.0F : 84.0F) * scale,
+                    .compact = compact,
+                    .narrow = narrow};
+        }
+
+        [[nodiscard]] ImVec4 ToolbarIconColor(const bool enabled, const bool hovered) noexcept {
+            ImVec4 color = enabled ? (hovered ? Theme::Text() : Theme::Muted()) : Theme::Muted();
+            if (!enabled)
+                color.w *= 0.35F;
+            return color;
+        }
+
+        [[nodiscard]] AssetBrowserViewMode ViewModeForIndex(const int index) noexcept {
+            return index == 0 ? AssetBrowserViewMode::Grid : AssetBrowserViewMode::List;
+        }
+
+        [[nodiscard]] Ui::UiIcon ViewIconForIndex(const int index) noexcept {
+            return index == 0 ? Ui::UiIcon::GridView : Ui::UiIcon::ViewList;
+        }
+
+        [[nodiscard]] const char *ViewLabelKey(const int index) noexcept {
+            return index == 0 ? "workspace.content_browser.view.grid" : "workspace.content_browser.view.list";
+        }
+
         [[nodiscard]] bool DrawToolbarButton(const ImVec2 position, const char *id, const Ui::UiIcon icon, const bool enabled,
                                              const char *tooltip, ImFont *iconFont) {
             const float scale = Scale();
@@ -46,9 +93,7 @@ namespace Horo::Editor {
             const ImVec2 maximum{position.x + size, position.y + size};
             drawList->AddRectFilled(position, maximum, Theme::U32(hovered || active ? Theme::Hover() : ControlSurface()), 4.0F * scale);
             drawList->AddRect(position, maximum, Theme::U32(hovered ? Theme::BorderStrong() : Theme::Border()), 4.0F * scale);
-            ImVec4 iconColor = enabled ? (hovered ? Theme::Text() : Theme::Muted()) : Theme::Muted();
-            if (!enabled)
-                iconColor.w *= 0.35F;
+            const ImVec4 iconColor = ToolbarIconColor(enabled, hovered);
             const float iconSize = 16.0F * scale;
             Ui::DrawEditorIcon(drawList, icon, {position.x + (size - iconSize) * 0.5F, position.y + (size - iconSize) * 0.5F},
                                {iconSize, iconSize}, Theme::U32(iconColor), iconFont);
@@ -142,37 +187,35 @@ namespace Horo::Editor {
             }
         }
 
+        void DrawViewOption(const ImVec2 position, const int index, AssetBrowserInteractionState &state, const EditorGuiContext &context) {
+            const float scale = Scale();
+            ImGui::SetCursorScreenPos(position);
+            ImGui::PushID(index);
+            if (ImGui::InvisibleButton("##view", {32.0F * scale, 28.0F * scale}))
+                state.viewMode = ViewModeForIndex(index);
+            const bool active = state.viewMode == ViewModeForIndex(index);
+            const bool hovered = ImGui::IsItemHovered();
+            ImDrawList *drawList = ImGui::GetWindowDrawList();
+            if (active || hovered)
+                drawList->AddRectFilled(position, {position.x + 32.0F * scale, position.y + 28.0F * scale},
+                                        Theme::U32(active ? Theme::Hover() : Theme::AccentSoft()));
+            const float iconSize = 16.0F * scale;
+            Ui::DrawEditorIcon(drawList, ViewIconForIndex(index),
+                               {position.x + (32.0F * scale - iconSize) * 0.5F, position.y + (28.0F * scale - iconSize) * 0.5F},
+                               {iconSize, iconSize}, Theme::U32(active || hovered ? Theme::Text() : Theme::Dim()),
+                               context.theme.fonts.icon);
+            if (hovered)
+                Ui::ShowTooltip(context.localization.Get("editor", ViewLabelKey(index)).c_str(), &context.theme.fonts);
+            ImGui::PopID();
+        }
+
         void DrawViewSwitch(const ImVec2 position, AssetBrowserInteractionState &state, const EditorGuiContext &context) {
             const float scale = Scale();
             const ImVec2 size{66.0F * scale, AssetBrowserLayout::ToolbarControlHeight * scale};
             ImDrawList *drawList = ImGui::GetWindowDrawList();
             drawList->AddRectFilled(position, {position.x + size.x, position.y + size.y}, Theme::U32(ControlSurface()), 4.0F * scale);
-            for (int index = 0; index < 2; ++index) {
-                const ImVec2 buttonMin{position.x + (1.0F + 32.0F * static_cast<float>(index)) * scale, position.y + 1.0F * scale};
-                ImGui::SetCursorScreenPos(buttonMin);
-                ImGui::PushID(index);
-                if (ImGui::InvisibleButton("##view", {32.0F * scale, 28.0F * scale}))
-                    state.viewMode = index == 0 ? AssetBrowserViewMode::Grid : AssetBrowserViewMode::List;
-                const bool active = (index == 0) == (state.viewMode == AssetBrowserViewMode::Grid);
-                const bool hovered = ImGui::IsItemHovered();
-                if (active || hovered) {
-                    drawList->AddRectFilled(buttonMin, {buttonMin.x + 32.0F * scale, buttonMin.y + 28.0F * scale},
-                                            Theme::U32(active ? Theme::Hover() : Theme::AccentSoft()));
-                }
-                const ImU32 color = Theme::U32(active || hovered ? Theme::Text() : Theme::Dim());
-                const float iconSize = 16.0F * scale;
-                Ui::DrawEditorIcon(drawList, index == 0 ? Ui::UiIcon::GridView : Ui::UiIcon::ViewList,
-                                   {buttonMin.x + (32.0F * scale - iconSize) * 0.5F, buttonMin.y + (28.0F * scale - iconSize) * 0.5F},
-                                   {iconSize, iconSize}, color, context.theme.fonts.icon);
-                if (hovered) {
-                    Ui::ShowTooltip(context.localization
-                                        .Get("editor",
-                                             index == 0 ? "workspace.content_browser.view.grid" : "workspace.content_browser.view.list")
-                                        .c_str(),
-                                    &context.theme.fonts);
-                }
-                ImGui::PopID();
-            }
+            DrawViewOption({position.x + scale, position.y + scale}, 0, state, context);
+            DrawViewOption({position.x + 33.0F * scale, position.y + scale}, 1, state, context);
             drawList->AddLine({position.x + 33.0F * scale, position.y}, {position.x + 33.0F * scale, position.y + size.y},
                               Theme::U32(Theme::Border()));
             drawList->AddRect(position, {position.x + size.x, position.y + size.y}, Theme::U32(Theme::Border()), 4.0F * scale);
@@ -203,123 +246,122 @@ namespace Horo::Editor {
             }
             return clicked;
         }
+
+        [[nodiscard]] float DrawNavigation(const ImVec2 position, const EditorWorkspaceViewModel &viewModel,
+                                           EditorWorkspaceViewCommandData &command, const EditorGuiContext &context,
+                                           const ToolbarLayout &layout) {
+            float x = position.x;
+            const auto button = [&](const char *id, const Ui::UiIcon icon, const bool enabled, const char *key,
+                                    const EditorWorkspaceViewCommand action) {
+                const std::string &tooltip = context.localization.Get("editor", key);
+                if (DrawToolbarButton({x, position.y}, id, icon, enabled, tooltip.c_str(), context.theme.fonts.icon))
+                    command = AssetBrowserInteractionSession::Navigate(action);
+                x += layout.control + layout.gap;
+            };
+            button("ContentBrowserBack", Ui::UiIcon::ArrowBack, viewModel.contentBrowserCanNavigateBack,
+                   "workspace.content_browser.navigation.back", EditorWorkspaceViewCommand::NavigateContentBrowserBack);
+            button("ContentBrowserForward", Ui::UiIcon::ArrowForward, viewModel.contentBrowserCanNavigateForward,
+                   "workspace.content_browser.navigation.forward", EditorWorkspaceViewCommand::NavigateContentBrowserForward);
+            button("ContentBrowserUp", Ui::UiIcon::ArrowUpward,
+                   viewModel.contentBrowser.absoluteCurrentPath != viewModel.contentBrowser.absoluteRootPath,
+                   "workspace.content_browser.navigation.up", EditorWorkspaceViewCommand::NavigateContentBrowserUp);
+            if (layout.narrow)
+                return x;
+            ImGui::GetWindowDrawList()->AddLine({x, position.y + 5.0F * layout.scale}, {x, position.y + 25.0F * layout.scale},
+                                                Theme::U32(Theme::Border()));
+            x += layout.scale + layout.gap;
+            return x +
+                   DrawBreadcrumb({x, position.y}, viewModel.contentBrowser, command, ResolveFont(context.theme.fonts.sansCompact),
+                                  220.0F * layout.scale) +
+                   layout.gap;
+        }
+
+        [[nodiscard]] std::vector<std::string> BuildTypeLabels(const EditorWorkspaceViewModel &viewModel, const EditorGuiContext &context) {
+            std::vector<std::string> labels{context.localization.Get("editor", "workspace.content_browser.filter.all_types")};
+            for (const ContentBrowserEntry &entry : viewModel.contentBrowser.entries) {
+                if (entry.kind == ContentBrowserEntryKind::Asset && !entry.assetType.empty() &&
+                    std::ranges::find(labels, entry.assetType) == labels.end())
+                    labels.push_back(entry.assetType);
+            }
+            std::ranges::sort(labels.begin() + 1, labels.end());
+            return labels;
+        }
+
+        void DrawTypeFilter(const ImVec2 position, const float width, const EditorWorkspaceViewModel &viewModel,
+                            AssetBrowserInteractionState &state, const EditorGuiContext &context) {
+            std::vector<std::string> labels = BuildTypeLabels(viewModel, context);
+            int selectedIndex = 0;
+            if (!state.assetTypeFilter.empty()) {
+                const auto selected = std::ranges::find(labels, state.assetTypeFilter);
+                if (selected == labels.end())
+                    state.assetTypeFilter.clear();
+                else
+                    selectedIndex = static_cast<int>(std::distance(labels.begin(), selected));
+            }
+            std::vector<const char *> items;
+            items.reserve(labels.size());
+            for (const std::string &label : labels)
+                items.push_back(label.c_str());
+            ImGui::SetCursorScreenPos(position);
+            ImGui::SetNextItemWidth(width);
+            if (Ui::ComboControl("ContentBrowserTypeFilter", &selectedIndex, items.data(), static_cast<int>(items.size()),
+                                 context.theme.fonts,
+                                 {.height = AssetBrowserLayout::ToolbarControlHeight,
+                                  .componentSize = Ui::ComponentSize::Medium,
+                                  .surface = Ui::ComboControlSurface::BottomDockToolbar}))
+                state.assetTypeFilter = selectedIndex == 0 ? std::string{} : labels[static_cast<std::size_t>(selectedIndex)];
+        }
+
+        void DrawSortField(const ImVec2 position, const float width, AssetBrowserInteractionState &state, const EditorGuiContext &context) {
+            const std::array labels{context.localization.Get("editor", "workspace.content_browser.sort.name"),
+                                    context.localization.Get("editor", "workspace.content_browser.sort.type")};
+            const std::array items{labels[0].c_str(), labels[1].c_str()};
+            int selectedIndex = state.sortField == ContentBrowserSortField::Name ? 0 : 1;
+            ImGui::SetCursorScreenPos(position);
+            ImGui::SetNextItemWidth(width);
+            if (Ui::ComboControl("ContentBrowserSort", &selectedIndex, items.data(), static_cast<int>(items.size()), context.theme.fonts,
+                                 {.height = AssetBrowserLayout::ToolbarControlHeight,
+                                  .componentSize = Ui::ComponentSize::Medium,
+                                  .surface = Ui::ComboControlSurface::BottomDockToolbar}))
+                state.sortField = selectedIndex == 0 ? ContentBrowserSortField::Name : ContentBrowserSortField::Type;
+        }
+
+        void DrawTrailingActions(const ImVec2 position, const EditorWorkspaceViewModel &viewModel, EditorWorkspaceViewCommandData &command,
+                                 AssetBrowserInteractionState &state, const EditorGuiContext &context, const ToolbarLayout &layout) {
+            float x = position.x;
+            if (!layout.compact) {
+                DrawTypeFilter({x, position.y}, layout.typeWidth, viewModel, state, context);
+                x += layout.typeWidth + layout.gap;
+                DrawSortField({x, position.y}, layout.sortWidth, state, context);
+                x += layout.sortWidth + layout.gap;
+                DrawViewSwitch({x, position.y}, state, context);
+                x += layout.viewWidth + layout.gap;
+            }
+            if (DrawImportButton({x, position.y}, layout.compact, context))
+                command = AssetBrowserInteractionSession::ImportHere(viewModel.contentBrowser.absoluteCurrentPath);
+            x += layout.importWidth + layout.gap;
+            const std::string &tooltip = context.localization.Get("editor", "workspace.content_browser.action.create_folder");
+            if (!DrawToolbarButton({x, position.y}, "ContentBrowserNewFolder", Ui::UiIcon::CreateNewFolder, true, tooltip.c_str(),
+                                   context.theme.fonts.icon))
+                return;
+            state.createFolderBuffer.fill('\0');
+            state.openCreateFolder = true;
+        }
     }  // namespace
 
     /** @copydoc DrawAssetBrowserToolbar */
     void DrawAssetBrowserToolbar(const ImVec2 &position, const float availableWidth, const EditorWorkspaceViewModel &viewModel,
                                  EditorWorkspaceViewCommandData &command, AssetBrowserInteractionState &state,
                                  const EditorGuiContext &context) {
-        const float scale = Scale();
-        const float gap = AssetBrowserLayout::ToolbarGap * scale;
-        const float control = AssetBrowserLayout::ToolbarControlHeight * scale;
+        const ToolbarLayout layout = ResolveToolbarLayout(availableWidth);
         const float safeWidth = std::max(1.0F, availableWidth);
-        const bool compact = safeWidth < 640.0F * scale;
-        const bool narrow = safeWidth < 900.0F * scale;
-        float x = position.x;
-
-        const std::string &back = context.localization.Get("editor", "workspace.content_browser.navigation.back");
-        const std::string &forward = context.localization.Get("editor", "workspace.content_browser.navigation.forward");
-        const std::string &up = context.localization.Get("editor", "workspace.content_browser.navigation.up");
-        if (DrawToolbarButton({x, position.y}, "ContentBrowserBack", Ui::UiIcon::ArrowBack, viewModel.contentBrowserCanNavigateBack,
-                              back.c_str(), context.theme.fonts.icon)) {
-            command = AssetBrowserInteractionSession::Navigate(EditorWorkspaceViewCommand::NavigateContentBrowserBack);
-        }
-        x += control + gap;
-        if (DrawToolbarButton({x, position.y}, "ContentBrowserForward", Ui::UiIcon::ArrowForward,
-                              viewModel.contentBrowserCanNavigateForward, forward.c_str(), context.theme.fonts.icon)) {
-            command = AssetBrowserInteractionSession::Navigate(EditorWorkspaceViewCommand::NavigateContentBrowserForward);
-        }
-        x += control + gap;
-        if (DrawToolbarButton({x, position.y}, "ContentBrowserUp", Ui::UiIcon::ArrowUpward,
-                              viewModel.contentBrowser.absoluteCurrentPath != viewModel.contentBrowser.absoluteRootPath, up.c_str(),
-                              context.theme.fonts.icon)) {
-            command = AssetBrowserInteractionSession::Navigate(EditorWorkspaceViewCommand::NavigateContentBrowserUp);
-        }
-        x += control;
-
-        if (!narrow) {
-            x += gap;
-            ImGui::GetWindowDrawList()->AddLine({x, position.y + 5.0F * scale}, {x, position.y + 25.0F * scale},
-                                                Theme::U32(Theme::Border()));
-            x += 1.0F * scale + gap;
-            const float breadcrumbWidth = DrawBreadcrumb({x, position.y}, viewModel.contentBrowser, command,
-                                                         ResolveFont(context.theme.fonts.sansCompact), 220.0F * scale);
-            x += breadcrumbWidth + gap;
-        } else {
-            x += gap;
-        }
-
-        const float typeWidth = (narrow ? 94.0F : 106.0F) * scale;
-        const float sortWidth = (narrow ? 104.0F : 154.0F) * scale;
-        const float viewWidth = 66.0F * scale;
-        const float importWidth = (compact ? 34.0F : 84.0F) * scale;
-        const float fixedWidth =
-            compact ? importWidth + gap + control : typeWidth + gap + sortWidth + gap + viewWidth + gap + importWidth + gap + control;
+        const float x = DrawNavigation(position, viewModel, command, context, layout);
+        const float fixedWidth = layout.compact ? layout.importWidth + layout.gap + layout.control
+                                                : layout.typeWidth + layout.gap + layout.sortWidth + layout.gap + layout.viewWidth +
+                                                      layout.gap + layout.importWidth + layout.gap + layout.control;
         const float rightEdge = position.x + safeWidth;
         const float fixedX = rightEdge - fixedWidth;
-        DrawSearch({x, position.y}, std::max(60.0F * scale, fixedX - x - gap), state, context, !narrow);
-
-        float fixedCursor = fixedX;
-        if (!compact) {
-            std::vector<std::string> typeLabels{context.localization.Get("editor", "workspace.content_browser.filter.all_types")};
-            for (const ContentBrowserEntry &entry : viewModel.contentBrowser.entries) {
-                if (entry.kind == ContentBrowserEntryKind::Asset && !entry.assetType.empty() &&
-                    std::ranges::find(typeLabels, entry.assetType) == typeLabels.end()) {
-                    typeLabels.push_back(entry.assetType);
-                }
-            }
-            std::ranges::sort(typeLabels.begin() + 1, typeLabels.end());
-            int typeIndex = 0;
-            if (!state.assetTypeFilter.empty()) {
-                const auto selected = std::ranges::find(typeLabels, state.assetTypeFilter);
-                if (selected == typeLabels.end())
-                    state.assetTypeFilter.clear();
-                else
-                    typeIndex = static_cast<int>(std::distance(typeLabels.begin(), selected));
-            }
-            std::vector<const char *> typeItems;
-            typeItems.reserve(typeLabels.size());
-            for (const std::string &label : typeLabels)
-                typeItems.push_back(label.c_str());
-            ImGui::SetCursorScreenPos({fixedCursor, position.y});
-            ImGui::SetNextItemWidth(typeWidth);
-            if (Ui::ComboControl("ContentBrowserTypeFilter", &typeIndex, typeItems.data(), static_cast<int>(typeItems.size()),
-                                 context.theme.fonts,
-                                 Ui::ComboControlOptions{.height = AssetBrowserLayout::ToolbarControlHeight,
-                                                         .componentSize = Ui::ComponentSize::Medium,
-                                                         .surface = Ui::ComboControlSurface::BottomDockToolbar})) {
-                state.assetTypeFilter = typeIndex == 0 ? std::string{} : typeLabels[static_cast<std::size_t>(typeIndex)];
-            }
-            fixedCursor += typeWidth + gap;
-
-            const std::array sortLabels{
-                context.localization.Get("editor", "workspace.content_browser.sort.name"),
-                context.localization.Get("editor", "workspace.content_browser.sort.type"),
-            };
-            const std::array sortItems{sortLabels[0].c_str(), sortLabels[1].c_str()};
-            int sortIndex = state.sortField == ContentBrowserSortField::Name ? 0 : 1;
-            ImGui::SetCursorScreenPos({fixedCursor, position.y});
-            ImGui::SetNextItemWidth(sortWidth);
-            if (Ui::ComboControl("ContentBrowserSort", &sortIndex, sortItems.data(), static_cast<int>(sortItems.size()),
-                                 context.theme.fonts,
-                                 Ui::ComboControlOptions{.height = AssetBrowserLayout::ToolbarControlHeight,
-                                                         .componentSize = Ui::ComponentSize::Medium,
-                                                         .surface = Ui::ComboControlSurface::BottomDockToolbar})) {
-                state.sortField = sortIndex == 0 ? ContentBrowserSortField::Name : ContentBrowserSortField::Type;
-            }
-            fixedCursor += sortWidth + gap;
-            DrawViewSwitch({fixedCursor, position.y}, state, context);
-            fixedCursor += viewWidth + gap;
-        }
-
-        if (DrawImportButton({fixedCursor, position.y}, compact, context))
-            command = AssetBrowserInteractionSession::ImportHere(viewModel.contentBrowser.absoluteCurrentPath);
-        fixedCursor += importWidth + gap;
-        const std::string &newFolder = context.localization.Get("editor", "workspace.content_browser.action.create_folder");
-        if (DrawToolbarButton({fixedCursor, position.y}, "ContentBrowserNewFolder", Ui::UiIcon::CreateNewFolder, true, newFolder.c_str(),
-                              context.theme.fonts.icon)) {
-            state.createFolderBuffer.fill('\0');
-            state.openCreateFolder = true;
-        }
+        DrawSearch({x, position.y}, std::max(60.0F * layout.scale, fixedX - x - layout.gap), state, context, !layout.narrow);
+        DrawTrailingActions({fixedX, position.y}, viewModel, command, state, context, layout);
     }
 }  // namespace Horo::Editor

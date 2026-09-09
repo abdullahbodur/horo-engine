@@ -56,6 +56,10 @@ namespace Horo::Editor {
     /** @brief Draws one canonical bottom-dock metric card, including an optional sparkline. */
     void DrawGlobalDockMetricCard(ImVec2 origin, ImVec2 size, const GlobalDockMetricCardProps &props, const Theme::Fonts &fonts);
 
+    /** @brief Draws a responsive grid of canonical metric cards and returns its height. */
+    [[nodiscard]] float DrawGlobalDockMetricGrid(ImVec2 origin, float width, std::span<const GlobalDockMetricCardProps> cards,
+                                                 const Theme::Fonts &fonts);
+
     /** @brief Draws a canonical value meter used by audio and network panes. */
     void DrawGlobalDockMeter(ImVec2 origin, float width, float progress);
 

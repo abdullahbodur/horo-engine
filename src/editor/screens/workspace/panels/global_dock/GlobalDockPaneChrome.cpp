@@ -17,6 +17,48 @@ namespace Horo::Editor {
                 return 0.0F;
             return ResolveFont(font)->CalcTextSizeA(size, FLT_MAX, 0.0F, text.data(), text.data() + text.size()).x;
         }
+
+        [[nodiscard]] ImVec4 ToolbarChipLabelColor(const GlobalDockToolbarChipProps &props) noexcept {
+            if (props.disabled)
+                return Theme::Dim();
+            if (props.toneLabel)
+                return GlobalDockToneColor(props.tone);
+            return props.active ? Theme::Text() : Theme::Muted();
+        }
+
+        void DrawToolbarChipOutline(ImDrawList &drawList, const ImVec2 origin, const ImVec2 maximum,
+                                    const GlobalDockToolbarChipProps &props, const float scale) {
+            drawList.AddRect(origin, maximum, Theme::U32(props.active ? Theme::Accent() : Theme::Border()),
+                             Theme::GetActiveTokens().radii.control);
+            if (!props.active)
+                return;
+            const float inset = std::max(1.0F, scale);
+            drawList.AddRect({origin.x + inset, origin.y + inset}, {maximum.x - inset, maximum.y - inset}, Theme::U32(Theme::AccentSoft()),
+                             std::max(0.0F, Theme::GetActiveTokens().radii.control - inset));
+        }
+
+        [[nodiscard]] float DrawToolbarChipIcon(ImDrawList &drawList, const ImVec2 origin, const GlobalDockToolbarChipProps &props,
+                                                const Theme::Fonts &fonts, const GlobalDockPaneMetrics &metrics, const float scale) {
+            float x = origin.x + metrics.toolbarGap;
+            if (props.icon == Ui::UiIcon::None)
+                return x;
+            const float iconSize = 14.0F * scale;
+            Ui::DrawEditorIcon(&drawList, props.icon, {x, origin.y + (metrics.controlHeight - iconSize) * 0.5F}, {iconSize, iconSize},
+                               Theme::U32(GlobalDockToneColor(props.tone)), fonts.icon);
+            return x + iconSize + metrics.toolbarGap;
+        }
+
+        void DrawToolbarChipCount(ImDrawList &drawList, ImFont *font, const ImVec2 origin, const ImVec2 maximum,
+                                  const GlobalDockToolbarChipProps &props, const GlobalDockPaneMetrics &metrics) {
+            if (!props.count.has_value())
+                return;
+            const std::string count = std::to_string(*props.count);
+            const float countSize = Theme::TextPx::Caption();
+            const float countWidth = TextWidth(font, countSize, count);
+            drawList.AddText(font, countSize,
+                             {maximum.x - metrics.toolbarGap - countWidth, origin.y + (metrics.controlHeight - countSize) * 0.5F},
+                             Theme::U32(GlobalDockToneColor(props.tone)), count.c_str());
+        }
     }  // namespace
 
     ImVec4 GlobalDockToneColor(const GlobalDockTone tone) noexcept {
@@ -103,6 +145,34 @@ namespace Horo::Editor {
         }
     }
 
+    float DrawGlobalDockMetricGrid(const ImVec2 origin, const float width, const std::span<const GlobalDockMetricCardProps> cards,
+                                   const Theme::Fonts &fonts) {
+        if (cards.empty())
+            return 0.0F;
+        const float scale = std::max(Theme::GetActiveTokens().sizes.uiScale, 0.01F);
+        const bool narrow = width < 900.0F * scale;
+        const int columns = narrow ? 2 : 4;
+        const int rows = static_cast<int>((cards.size() + static_cast<std::size_t>(columns) - 1U) / static_cast<std::size_t>(columns));
+        const float padding = 10.0F * scale;
+        const float gap = 8.0F * scale;
+        const float cardHeight = 64.0F * scale;
+        const float height = padding * 2.0F + cardHeight * static_cast<float>(rows) + gap * static_cast<float>(rows - 1);
+        const float cardWidth =
+            std::max(120.0F * scale, (width - padding * 2.0F - gap * static_cast<float>(columns - 1)) / static_cast<float>(columns));
+        ImDrawList *drawList = ImGui::GetWindowDrawList();
+        drawList->AddRectFilled(origin, {origin.x + width, origin.y + height}, Theme::U32(Theme::BottomDockContentSurface()));
+        drawList->AddLine({origin.x, origin.y + height - scale}, {origin.x + width, origin.y + height - scale},
+                          Theme::U32(Theme::Border()));
+        for (std::size_t index = 0; index < cards.size(); ++index) {
+            const int column = static_cast<int>(index) % columns;
+            const int row = static_cast<int>(index) / columns;
+            DrawGlobalDockMetricCard({origin.x + padding + static_cast<float>(column) * (cardWidth + gap),
+                                      origin.y + padding + static_cast<float>(row) * (cardHeight + gap)},
+                                     {cardWidth, cardHeight}, cards[index], fonts);
+        }
+        return height;
+    }
+
     void DrawGlobalDockMeter(const ImVec2 origin, const float width, const float progress) {
         const float scale = Theme::GetActiveTokens().sizes.uiScale;
         const float height = 6.0F * scale;
@@ -149,37 +219,15 @@ namespace Horo::Editor {
         const ImVec2 maximum{origin.x + width, origin.y + metrics.controlHeight};
         drawList->AddRectFilled(origin, maximum, Theme::U32(hovered ? Theme::Hover() : Theme::BottomDockControlSurface()),
                                 Theme::GetActiveTokens().radii.control);
-        drawList->AddRect(origin, maximum, Theme::U32(props.active ? Theme::Accent() : Theme::Border()),
-                          Theme::GetActiveTokens().radii.control);
-        if (props.active) {
-            const float inset = std::max(1.0F, scale);
-            drawList->AddRect({origin.x + inset, origin.y + inset}, {maximum.x - inset, maximum.y - inset}, Theme::U32(Theme::AccentSoft()),
-                              std::max(0.0F, Theme::GetActiveTokens().radii.control - inset));
-        }
+        DrawToolbarChipOutline(*drawList, origin, maximum, props, scale);
 
-        float x = origin.x + metrics.toolbarGap;
-        if (props.icon != Ui::UiIcon::None) {
-            const float iconSize = 14.0F * scale;
-            Ui::DrawEditorIcon(drawList, props.icon, {x, origin.y + (metrics.controlHeight - iconSize) * 0.5F}, {iconSize, iconSize},
-                               Theme::U32(GlobalDockToneColor(props.tone)), fonts.icon);
-            x += iconSize + metrics.toolbarGap;
-        }
+        const float x = DrawToolbarChipIcon(*drawList, origin, props, fonts, metrics, scale);
         ImFont *font = ResolveFont(fonts.sansCompact);
         const float labelSize = Theme::TextPx::Label();
-        const ImVec4 labelColor = props.disabled    ? Theme::Dim()
-                                  : props.toneLabel ? GlobalDockToneColor(props.tone)
-                                  : props.active    ? Theme::Text()
-                                                    : Theme::Muted();
+        const ImVec4 labelColor = ToolbarChipLabelColor(props);
         drawList->AddText(font, labelSize, {x, origin.y + (metrics.controlHeight - labelSize) * 0.5F}, Theme::U32(labelColor),
                           props.label.data(), props.label.data() + props.label.size());
-        if (props.count.has_value()) {
-            const std::string count = std::to_string(*props.count);
-            const float countSize = Theme::TextPx::Caption();
-            const float countWidth = TextWidth(font, countSize, count);
-            drawList->AddText(font, countSize,
-                              {maximum.x - metrics.toolbarGap - countWidth, origin.y + (metrics.controlHeight - countSize) * 0.5F},
-                              Theme::U32(GlobalDockToneColor(props.tone)), count.c_str());
-        }
+        DrawToolbarChipCount(*drawList, font, origin, maximum, props, metrics);
         return pressed;
     }
 

@@ -119,7 +119,8 @@ namespace Horo::Editor {
             if (operation.startedAt == std::chrono::steady_clock::time_point{})
                 return "—";
             const auto end = operation.finishedAt.value_or(std::chrono::steady_clock::now());
-            const auto elapsed = std::max(std::chrono::seconds{0}, std::chrono::duration_cast<std::chrono::seconds>(end - operation.startedAt));
+            const auto elapsed =
+                std::max(std::chrono::seconds{0}, std::chrono::duration_cast<std::chrono::seconds>(end - operation.startedAt));
             const long long totalSeconds = elapsed.count();
             return std::format("{:02}:{:02}", totalSeconds / 60, totalSeconds % 60);
         }
@@ -176,8 +177,8 @@ namespace Horo::Editor {
         const float scale = std::max(Theme::GetActiveTokens().sizes.uiScale, 0.01F);
         const GlobalDockPaneMetrics metrics = ResolveGlobalDockPaneMetrics();
         const float availableHeight = std::max(1.0F, ImGui::GetWindowPos().y + ImGui::GetWindowHeight() - contentOrigin.y);
-        const GlobalDockPaneRegions regions = ResolveGlobalDockPaneRegions(contentOrigin, contentWidth, availableHeight,
-                                                                           {.hasToolbar = true, .hasFooter = true});
+        const GlobalDockPaneRegions regions =
+            ResolveGlobalDockPaneRegions(contentOrigin, contentWidth, availableHeight, {.hasToolbar = true, .hasFooter = true});
 
         std::size_t runningCount = 0U;
         std::size_t queuedCount = 0U;
@@ -193,24 +194,24 @@ namespace Horo::Editor {
         const GlobalDockToolbarChipProps all{.id = "OperationsAll",
                                              .label = context.localization.Get("editor", "workspace.global_dock.operations.filter.all"),
                                              .active = m_stateFilter == StateFilter::All};
-        const GlobalDockToolbarChipProps running{
-            .id = "OperationsRunning",
-            .label = context.localization.Get("editor", "workspace.global_dock.operations.filter.running"),
-            .count = runningCount,
-            .tone = GlobalDockTone::Accent,
-            .active = m_stateFilter == StateFilter::Running};
-        const GlobalDockToolbarChipProps failed{
-            .id = "OperationsFailed",
-            .label = context.localization.Get("editor", "workspace.global_dock.operations.filter.failed"),
-            .count = failedCount,
-            .tone = GlobalDockTone::Error,
-            .active = m_stateFilter == StateFilter::Failed};
-        const GlobalDockToolbarChipProps cancelAll{
-            .id = "OperationsCancelAll",
-            .label = context.localization.Get("editor", "workspace.global_dock.operations.cancel_all"),
-            .tone = GlobalDockTone::Error,
-            .toneLabel = true,
-            .icon = Ui::UiIcon::Delete};
+        const GlobalDockToolbarChipProps running{.id = "OperationsRunning",
+                                                 .label =
+                                                     context.localization.Get("editor", "workspace.global_dock.operations.filter.running"),
+                                                 .count = runningCount,
+                                                 .tone = GlobalDockTone::Accent,
+                                                 .active = m_stateFilter == StateFilter::Running};
+        const GlobalDockToolbarChipProps failed{.id = "OperationsFailed",
+                                                .label =
+                                                    context.localization.Get("editor", "workspace.global_dock.operations.filter.failed"),
+                                                .count = failedCount,
+                                                .tone = GlobalDockTone::Error,
+                                                .active = m_stateFilter == StateFilter::Failed};
+        const GlobalDockToolbarChipProps cancelAll{.id = "OperationsCancelAll",
+                                                   .label =
+                                                       context.localization.Get("editor", "workspace.global_dock.operations.cancel_all"),
+                                                   .tone = GlobalDockTone::Error,
+                                                   .toneLabel = true,
+                                                   .icon = Ui::UiIcon::Delete};
         const float allWidth = MeasureGlobalDockToolbarChip(all, fonts);
         const float runningWidth = MeasureGlobalDockToolbarChip(running, fonts);
         const float failedWidth = MeasureGlobalDockToolbarChip(failed, fonts);
@@ -329,8 +330,8 @@ namespace Horo::Editor {
                                                       StatusTone(operation.state), fonts));
             const float progressRight = elapsedX - metrics.columnGap;
             const std::string progressLabel = !operation.message.empty() ? operation.message
-                                              : !operation.phase.empty()  ? operation.phase
-                                                                          : FormatProgress(operation.progress);
+                                              : !operation.phase.empty() ? operation.phase
+                                                                         : FormatProgress(operation.progress);
             DrawGlobalDockClippedText(*rowsDrawList, fonts.sansCompact, Theme::TextPx::Caption(), {progressX, textY},
                                       {progressRight, rowMin.y + metrics.tableRowHeight}, Theme::Muted(), progressLabel);
             if (operation.progress.has_value())
@@ -343,9 +344,9 @@ namespace Horo::Editor {
             const bool showDetails = operation.state == OperationState::Failed;
             if (canCancel || showDetails) {
                 const GlobalDockToolbarChipProps action{.id = "OperationAction",
-                                                         .label = context.localization.Get("editor", ActionKey(operation)),
-                                                         .tone = canCancel ? GlobalDockTone::Error : GlobalDockTone::Neutral,
-                                                         .toneLabel = canCancel};
+                                                        .label = context.localization.Get("editor", ActionKey(operation)),
+                                                        .tone = canCancel ? GlobalDockTone::Error : GlobalDockTone::Neutral,
+                                                        .toneLabel = canCancel};
                 if (DrawGlobalDockToolbarChip({actionX, rowMin.y + (metrics.tableRowHeight - metrics.controlHeight) * 0.5F}, actionWidth,
                                               action, fonts) &&
                     canCancel && m_operationControl != nullptr) {
@@ -363,14 +364,13 @@ namespace Horo::Editor {
 
         DrawGlobalDockFooterSurface(regions.footerOrigin, regions.footerWidth, metrics.footerHeight);
         const float footerY = regions.footerOrigin.y + (metrics.footerHeight - Theme::TextPx::Caption()) * 0.5F;
-        const std::string summary = std::format("{} {}   {} {}   {} {}", runningCount,
-                                                context.localization.Get("editor", "workspace.global_dock.operations.footer.running"),
-                                                queuedCount,
-                                                context.localization.Get("editor", "workspace.global_dock.operations.footer.queued"),
-                                                failedCount,
-                                                context.localization.Get("editor", "workspace.global_dock.operations.footer.failed"));
-        drawList->AddText(fonts.sansCompact, Theme::TextPx::Caption(),
-                          {regions.footerOrigin.x + metrics.contentPadding, footerY}, Theme::U32(Theme::Muted()), summary.c_str());
+        const std::string summary =
+            std::format("{} {}   {} {}   {} {}", runningCount,
+                        context.localization.Get("editor", "workspace.global_dock.operations.footer.running"), queuedCount,
+                        context.localization.Get("editor", "workspace.global_dock.operations.footer.queued"), failedCount,
+                        context.localization.Get("editor", "workspace.global_dock.operations.footer.failed"));
+        drawList->AddText(fonts.sansCompact, Theme::TextPx::Caption(), {regions.footerOrigin.x + metrics.contentPadding, footerY},
+                          Theme::U32(Theme::Muted()), summary.c_str());
         const std::string &bounded = context.localization.Get("editor", "workspace.global_dock.operations.footer.bounded");
         const float boundedWidth = (fonts.sansCompact != nullptr ? fonts.sansCompact : ImGui::GetFont())
                                        ->CalcTextSizeA(Theme::TextPx::Caption(), FLT_MAX, 0.0F, bounded.c_str())

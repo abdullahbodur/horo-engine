@@ -19,11 +19,11 @@ namespace Horo::Editor {
 
     /** @brief Frame-local, non-owning inputs supplied to one global-dock pane. */
     struct GlobalDockPaneDrawContext {
-        ImVec2 contentOrigin;                         /**< Upper-left pane content origin in screen coordinates. */
-        float contentWidth;                          /**< Width available to the pane. */
-        const EditorWorkspaceViewModel &viewModel;   /**< Immutable workspace projection for this frame. */
-        EditorWorkspaceViewCommandData &command;     /**< Command output owned by the workspace view. */
-        const EditorGuiContext &gui;                 /**< Theme, localization, settings, and event capabilities. */
+        ImVec2 contentOrigin;                      /**< Upper-left pane content origin in screen coordinates. */
+        float contentWidth;                        /**< Width available to the pane. */
+        const EditorWorkspaceViewModel &viewModel; /**< Immutable workspace projection for this frame. */
+        EditorWorkspaceViewCommandData &command;   /**< Command output owned by the workspace view. */
+        const EditorGuiContext &gui;               /**< Theme, localization, settings, and event capabilities. */
     };
 
     /** @brief Owned extension point implemented by built-in and module-provided global-dock panes. */

@@ -18,7 +18,6 @@ namespace Horo::Editor {
      * @param registry Target workspace-panel registry.
      * @param globalDockPaneFactories Composition-time factories for optional global-dock tabs.
      */
-    void RegisterDefaultWorkspacePanels(WorkspacePanelRegistry &registry,
-                                        std::span<const GlobalDockPaneFactory> globalDockPaneFactories);
+    void RegisterDefaultWorkspacePanels(WorkspacePanelRegistry &registry, std::span<const GlobalDockPaneFactory> globalDockPaneFactories);
 
 }  // namespace Horo::Editor

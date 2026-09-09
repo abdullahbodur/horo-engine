@@ -1,20 +1,20 @@
 #include "ContentBrowserModel.h"
-#include "Horo/Editor/EditorDataBus.h"
 #include "Horo/Editor/DefaultWorkspacePanels.h"
+#include "Horo/Editor/EditorDataBus.h"
 #include "Horo/Editor/EditorSettingsService.h"
 #include "Horo/Editor/EditorTheme.h"
 #include "Horo/Editor/Localization/ILocalizationService.h"
 #include "Horo/Editor/WorkspacePanelRegistry.h"
 #include "Horo/Foundation/BuildOutputStore.h"
 #include "Horo/Foundation/DataBus.h"
-#include "Horo/Foundation/OperationStore.h"
 #include "Horo/Foundation/Logging/StructuredLogStore.h"
+#include "Horo/Foundation/OperationStore.h"
 #include "editor/screens/workspace/EditorWorkspaceViewModel.h"
-#include "editor/screens/workspace/panels/global_dock/GlobalDockPanel.h"
 #include "editor/screens/workspace/panels/global_dock/GlobalDockPaneLayout.h"
+#include "editor/screens/workspace/panels/global_dock/GlobalDockPanel.h"
+#include "editor/screens/workspace/panels/global_dock/panes/asset_browser/AssetBrowserPaneLayout.h"
 #include "editor/screens/workspace/panels/global_dock/panes/build_output/GlobalDockBuildOutputPane.h"
 #include "editor/screens/workspace/panels/global_dock/panes/operations/GlobalDockOperationsPane.h"
-#include "editor/screens/workspace/panels/global_dock/panes/asset_browser/AssetBrowserPaneLayout.h"
 #include "runtime/assets/importer/builtin/obj_mesh/ObjMeshImporter.h"
 
 #include <array>
@@ -113,10 +113,8 @@ namespace {
     TEST_CASE("Global dock layout partitions optional regions without overlap", "[unit][editor][gui]") {
         using namespace Horo::Editor;
 
-        const GlobalDockPaneRegions regions = ResolveGlobalDockPaneRegions({10.0F, 20.0F}, 800.0F, 300.0F,
-                                                                           {.hasToolbar = true,
-                                                                            .hasFooter = true,
-                                                                            .leftRailWidth = 42.0F});
+        const GlobalDockPaneRegions regions =
+            ResolveGlobalDockPaneRegions({10.0F, 20.0F}, 800.0F, 300.0F, {.hasToolbar = true, .hasFooter = true, .leftRailWidth = 42.0F});
         const GlobalDockPaneMetrics metrics = ResolveGlobalDockPaneMetrics();
         REQUIRE((regions.contentOrigin.x == 52.0F));
         REQUIRE((regions.contentOrigin.y == 20.0F + metrics.toolbarHeight));
@@ -132,9 +130,9 @@ namespace {
         int factoryCalls = 0;
         const std::array<GlobalDockPaneFactory, 1> factories{
             [&factoryCalls] {
-                ++factoryCalls;
-                return std::make_unique<TestGlobalDockPane>();
-            },
+            ++factoryCalls;
+            return std::make_unique<TestGlobalDockPane>();
+        },
         };
         WorkspacePanelRegistry registry;
         RegisterDefaultWorkspacePanels(registry, factories);
