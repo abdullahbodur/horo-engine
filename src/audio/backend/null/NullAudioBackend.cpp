@@ -5,6 +5,7 @@
 #include <algorithm>
 #include <cmath>
 #include <limits>
+#include <memory>
 #include <new>
 #include <numeric>
 #include <ranges>
@@ -150,11 +151,13 @@ namespace Horo::Audio::Backend {
         callbackFrames_ = request.format.period.preferredFrames;
         const auto channels = format_.layout.orderedChannels.size();
         planeStrideSamples_ = (static_cast<std::size_t>(callbackFrames_) + 15U) & ~std::size_t{15U};
-        samples_.assign(channels * planeStrideSamples_ + 15U, 0.0F);
+        constexpr std::size_t PlaneAlignment = 64;
+        samples_.assign(channels * planeStrideSamples_ + PlaneAlignment / sizeof(AudioSample), 0.0F);
         planes_.resize(channels);
-        const auto baseAddress = reinterpret_cast<std::uintptr_t>(samples_.data());
-        const auto alignedAddress = (baseAddress + 63U) & ~std::uintptr_t{63U};
-        auto *const alignedBase = reinterpret_cast<AudioSample *>(alignedAddress);
+        void *storage = samples_.data();
+        std::size_t storageBytes = samples_.size() * sizeof(AudioSample);
+        auto *const alignedBase = static_cast<AudioSample *>(
+            std::align(PlaneAlignment, channels * planeStrideSamples_ * sizeof(AudioSample), storage, storageBytes));
         for (std::size_t channel = 0; channel < channels; ++channel)
             planes_[channel] = alignedBase + channel * planeStrideSamples_;
         AudioNegotiatedDeviceFormat negotiated{.device = device_,
@@ -280,8 +283,8 @@ namespace Horo::Audio::Backend {
     }
 
     AudioClockCorrelationSnapshot NullAudioBackend::ClockSnapshot() const noexcept {
-        const bool running = state_ == NullAudioBackendState::Priming || state_ == NullAudioBackendState::Rendering ||
-                             state_ == NullAudioBackendState::Quiescing;
+        using enum NullAudioBackendState;
+        const bool running = state_ == Priming || state_ == Rendering || state_ == Quiescing;
         return {.clock = {.owner = config_.owner,
                           .epoch = epoch_.callbackEpoch,
                           .generation = config_.clockGeneration,
@@ -298,20 +301,22 @@ namespace Horo::Audio::Backend {
     }
 
     RenderPhase NullAudioBackend::CurrentRenderPhase() const noexcept {
-        if (state_ == NullAudioBackendState::Priming)
+        using enum NullAudioBackendState;
+        if (state_ == Priming)
             return RenderPhase::Priming;
-        if (state_ == NullAudioBackendState::Quiescing)
+        if (state_ == Quiescing)
             return RenderPhase::Quiescing;
         return RenderPhase::Rendering;
     }
 
     Result<void> NullAudioBackend::ValidateRenderResult(const RenderResult &result) noexcept {
-        const bool finite = std::ranges::all_of(planes_, [this](const AudioSample *plane) {
+        if (const bool finite = std::ranges::all_of(planes_,
+                                                    [this](const AudioSample *plane) {
             return std::all_of(plane, plane + callbackFrames_, [](const AudioSample sample) {
                 return std::isfinite(sample);
             });
         });
-        if (!finite || result.disposition == RenderDisposition::Fault) {
+            !finite || result.disposition == RenderDisposition::Fault) {
             const auto code = finite ? result.fault : AudioCallbackFaultCode::NonFiniteOutput;
             static_cast<void>(
                 PushEvent({config_.owner,
@@ -336,17 +341,18 @@ namespace Horo::Audio::Backend {
     }
 
     Result<void> NullAudioBackend::PublishCallbackTransition(const AudioMonotonicTimestamp &completedAt) noexcept {
-        if (state_ == NullAudioBackendState::Priming && !ready_) {
+        using enum NullAudioBackendState;
+        if (state_ == Priming && !ready_) {
             ready_ = true;
             return PushEvent(
                 {config_.owner, AudioCallbackEvent{epoch_, sampleFrame_, {config_.clockDomain, clockNanoseconds_}, AudioCallbackReady{}}});
         }
-        if (state_ != NullAudioBackendState::Quiescing)
+        if (state_ != Quiescing)
             return Result<void>::Success();
         if (const auto pushed = PushEvent({config_.owner, AudioCallbackEvent{epoch_, sampleFrame_, completedAt, AudioCallbackQuiesced{}}});
             pushed.HasError())
             return pushed;
-        state_ = NullAudioBackendState::Quiesced;
+        state_ = Quiesced;
         completion_ = Completion{*pendingOperation_, Horo::Audio::Backend::Quiesced{epoch_}};
         pendingOperation_.reset();
         pendingRequest_.reset();

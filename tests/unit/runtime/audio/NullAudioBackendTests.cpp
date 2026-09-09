@@ -2,6 +2,7 @@
 
 #include <array>
 #include <catch2/catch_test_macros.hpp>
+#include <memory>
 
 namespace Horo::Audio::Backend {
     namespace {
@@ -33,6 +34,7 @@ namespace Horo::Audio::Backend {
             std::array<std::uint64_t, 16> times{};
             AudioProcessingFormat expected;
             std::size_t count{};
+            bool planesAligned{true};
         };
 
         RenderTrace Trace() {
@@ -49,9 +51,13 @@ namespace Horo::Audio::Backend {
             trace.frames[trace.count] = invocation.sampleFrame;
             trace.times[trace.count] = invocation.startedAt.nanoseconds;
             ++trace.count;
-            for (auto *plane : invocation.output.planes)
+            for (auto *plane : invocation.output.planes) {
+                void *storage = plane;
+                std::size_t space = 64;
+                trace.planesAligned = trace.planesAligned && std::align(64, 1, storage, space) == plane;
                 for (std::uint32_t frame = 0; frame < invocation.output.validFrames; ++frame)
                     plane[frame] = 0.25F;
+            }
             using enum RenderPhase;
             using enum RenderDisposition;
             if (invocation.phase == Priming)
@@ -139,6 +145,8 @@ namespace Horo::Audio::Backend {
             REQUIRE(firstTrace.frames == secondTrace.frames);
             REQUIRE(firstTrace.times == secondTrace.times);
             REQUIRE(firstTrace.count == 4);
+            REQUIRE(firstTrace.planesAligned);
+            REQUIRE(secondTrace.planesAligned);
             REQUIRE(firstTrace.frames[0] == 0);
             REQUIRE(firstTrace.frames[1] == 128);
             REQUIRE(firstTrace.times[1] == 2'666'666);
