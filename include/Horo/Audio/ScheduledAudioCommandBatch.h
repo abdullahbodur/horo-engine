@@ -45,6 +45,6 @@ namespace Horo::Audio {
      * @return Ok or a typed batch/storage failure. The callback applies every child in array order at target.
      */
     [[nodiscard]] ScheduledAudioCommandBatchStatus MakeScheduledAudioBatchCommand(const ScheduledAudioCommandBatch &batch,
-                                                                                  AudioMemoryHandle storage,
+                                                                                  const AudioMemoryHandle &storage,
                                                                                   AudioCommand &command) noexcept;
 }  // namespace Horo::Audio

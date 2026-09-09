@@ -51,7 +51,7 @@ namespace Horo::Audio {
 
     /** @copydoc MakeScheduledAudioBatchCommand */
     ScheduledAudioCommandBatchStatus MakeScheduledAudioBatchCommand(const ScheduledAudioCommandBatch &batch,
-                                                                    const AudioMemoryHandle storage, AudioCommand &command) noexcept {
+                                                                    const AudioMemoryHandle &storage, AudioCommand &command) noexcept {
         using enum ScheduledAudioCommandBatchStatus;
         ScheduledAudioCommandBatch normalized;
         if (const auto status = NormalizeScheduledAudioCommandBatch(batch, normalized); status != Ok) {
