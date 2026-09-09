@@ -241,14 +241,15 @@ namespace Horo::Editor {
 
     void InspectorPanel::DrawPanel([[maybe_unused]] const ImVec2 &pos, const ImVec2 &size, const EditorWorkspaceViewModel &vm,
                                    EditorWorkspaceViewCommandData &cmd, const EditorGuiContext &ctx) {
+        const float tabHeight = 36.0F * Theme::GetActiveTokens().sizes.uiScale;
         const std::array tabNames{
             ctx.localization.Get("editor", "workspace.panel.inspector").c_str(),
             ctx.localization.Get("editor", "workspace.panel.scene").c_str(),
         };
-        m_activeTab = Ui::DrawDockTabs(tabNames, m_activeTab, ctx.theme.fonts, 36.0F);
+        m_activeTab = Ui::DrawSideDockTabs(tabNames, m_activeTab, ctx.theme.fonts);
 
         ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(8.0F, 8.0F));
-        ImGui::BeginChild("##Content", ImVec2(size.x, size.y - 36.0F), ImGuiChildFlags_AlwaysUseWindowPadding,
+        ImGui::BeginChild("##Content", ImVec2(size.x, size.y - tabHeight), ImGuiChildFlags_AlwaysUseWindowPadding,
                           ImGuiWindowFlags_NoSavedSettings);
 
         if (m_activeTab != 0) {
@@ -485,6 +486,7 @@ namespace Horo::Editor {
         const float checkboxGap = 4.0F * uiScale;
         const float controlGap = 6.0F * uiScale;
         const float optionsWidth = 30.0F * uiScale;
+        const float additionalBottomMargin = 5.0F * uiScale;
         const float staticFontSize = 11.0F * uiScale;
         const float staticTextWidth = context.theme.fonts.sansCompact->CalcTextSizeA(staticFontSize, 1000.0F, 0.0F, staticLabel.c_str()).x;
         const float staticWidth = checkboxSize + checkboxGap + staticTextWidth;
@@ -502,15 +504,22 @@ namespace Horo::Editor {
         ImGui::PushStyleVar(ImGuiStyleVar_DisabledAlpha, 1.0F);
         ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, {1.5F, 1.5F});
         ImGui::PushStyleVar(ImGuiStyleVar_ItemInnerSpacing, {checkboxGap, 0.0F});
+        ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, Theme::GetActiveTokens().radii.control);
+        ImGui::PushStyleVar(ImGuiStyleVar_FrameBorderSize, 1.0F);
+        ImGui::PushStyleColor(ImGuiCol_FrameBg, Theme::Bg3());
+        ImGui::PushStyleColor(ImGuiCol_FrameBgHovered, Theme::Hover());
+        ImGui::PushStyleColor(ImGuiCol_FrameBgActive, Theme::Hover());
+        ImGui::PushStyleColor(ImGuiCol_Border, Theme::Border());
         ImGui::PushStyleColor(ImGuiCol_CheckMark, Theme::Accent());
+        ImGui::PushStyleColor(ImGuiCol_Text, Theme::Muted());
         ImGui::BeginDisabled();
         {
             Theme::ScopedTextStyle textStyle(context.theme.fonts.sansCompact, staticFontSize, Theme::FontPx::SansCompact);
             static_cast<void>(ImGui::Checkbox(staticLabel.c_str(), &isStatic));
         }
         ImGui::EndDisabled();
-        ImGui::PopStyleColor();
-        ImGui::PopStyleVar(3);
+        ImGui::PopStyleColor(6);
+        ImGui::PopStyleVar(5);
 
         const ImVec2 optionsPosition{rowOrigin.x + rowWidth - optionsWidth, rowOrigin.y + (rowHeight - optionsWidth) * 0.5F};
         ImGui::SetCursorScreenPos(optionsPosition);
@@ -545,7 +554,7 @@ namespace Horo::Editor {
             Ui::EndMenuPopup();
         }
         ImGui::PopID();
-        ImGui::SetCursorScreenPos(rowEnd);
+        ImGui::SetCursorScreenPos({rowEnd.x, rowEnd.y + additionalBottomMargin});
 
         if (edit.active && !m_nameInputContext.IsActive() && m_inputRouter != nullptr) {
             m_nameInputContext = m_inputRouter->PushContext(Input::InputContextId{"editor.inspector.object_name"},

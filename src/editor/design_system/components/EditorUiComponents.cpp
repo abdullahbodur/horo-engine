@@ -20,12 +20,12 @@ namespace Horo::Editor::Ui {
             constexpr float Label = 13.0F;
             constexpr float Field = 13.0F;
             constexpr float Axis = 12.5F;
-            constexpr float ObjectTitle = 14.0F;
+            constexpr float ObjectTitle = 12.0F;
             constexpr float ObjectMeta = 12.5F;
         }  // namespace InspectorTypography
 
         namespace CardTypography {
-            constexpr float Title = 13.5F;
+            constexpr float Title = 11.5F;
         }  // namespace CardTypography
 
         struct ResolvedPrimitiveStyle {
@@ -1670,6 +1670,53 @@ namespace Horo::Editor::Ui {
         ImGui::PopStyleVar();
         ImGui::SetCursorScreenPos(ImVec2(pos.x, pos.y + tabH));
 
+        return clickedTab != -1 ? clickedTab : activeTab;
+    }
+
+    /** @copydoc DrawSideDockTabs */
+    int DrawSideDockTabs(const std::span<const char *const> tabs, int activeTab, const Theme::Fonts &fonts) {
+        const float scale = Theme::GetActiveTokens().sizes.uiScale;
+        const float tabHeight = 36.0F * scale;
+        const float dockPadding = 10.0F * scale;
+        const float horizontalPadding = 10.0F * scale;
+        const float fontSize = 12.0F * scale;
+        const float underlineHeight = std::max(1.0F, 2.0F * scale);
+        const ImVec2 origin = ImGui::GetCursorScreenPos();
+        const float width = ImGui::GetContentRegionAvail().x;
+        ImDrawList &drawList = *ImGui::GetWindowDrawList();
+
+        drawList.AddRectFilled(origin, {origin.x + width, origin.y + tabHeight}, Theme::U32(Theme::Bg0()));
+        drawList.AddLine({origin.x, origin.y + tabHeight - scale}, {origin.x + width, origin.y + tabHeight - scale},
+                         Theme::U32(Theme::Border()), std::max(1.0F, scale));
+
+        int clickedTab = -1;
+        float tabX = origin.x + dockPadding;
+        ImFont *font = fonts.sans != nullptr ? fonts.sans : ImGui::GetFont();
+        for (std::size_t index = 0; index < tabs.size(); ++index) {
+            const bool active = static_cast<int>(index) == activeTab;
+            const ImVec2 textSize = font->CalcTextSizeA(fontSize, FLT_MAX, 0.0F, tabs[index]);
+            const float tabWidth = textSize.x + horizontalPadding * 2.0F;
+            const ImVec2 tabPosition{tabX, origin.y};
+
+            ImGui::SetCursorScreenPos(tabPosition);
+            ImGui::PushID(static_cast<int>(index));
+            if (ImGui::InvisibleButton("##side_dock_tab", {tabWidth, tabHeight}))
+                clickedTab = static_cast<int>(index);
+            ImGui::PopID();
+
+            const bool hovered = ImGui::IsItemHovered();
+            const ImVec4 textColor = active ? Theme::Text() : hovered ? Theme::Dim() : Theme::Muted();
+            drawList.AddText(font, fontSize, {tabX + horizontalPadding, origin.y + (tabHeight - textSize.y) * 0.5F}, Theme::U32(textColor),
+                             tabs[index]);
+            if (active) {
+                drawList.AddRectFilled({tabX, origin.y + tabHeight - underlineHeight}, {tabX + tabWidth, origin.y + tabHeight},
+                                       Theme::U32(Theme::Accent()));
+            }
+            tabX += tabWidth;
+            ImGui::SameLine(0.0F, 0.0F);
+        }
+
+        ImGui::SetCursorScreenPos({origin.x, origin.y + tabHeight});
         return clickedTab != -1 ? clickedTab : activeTab;
     }
 

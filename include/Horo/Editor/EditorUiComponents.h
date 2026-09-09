@@ -626,6 +626,15 @@ namespace Horo::Editor::Ui {
 
     int DrawDockTabs(std::span<const char *const> tabs, int activeTab, const Theme::Fonts &fonts, float height = 26.0F);
 
+    /**
+     * @brief Draws the compact 36-pixel tab strip used by left and right workspace docks.
+     * @param tabs Localized visible tab labels in display order.
+     * @param activeTab Zero-based active tab index.
+     * @param fonts Editor font handles valid for this component call.
+     * @return The activated tab index, or @p activeTab when no tab was pressed.
+     */
+    int DrawSideDockTabs(std::span<const char *const> tabs, int activeTab, const Theme::Fonts &fonts);
+
     void DrawObjTitle(const char *title, const char *badgeText, ImVec4 badgeBg, ImVec4 badgeFg, const Theme::Fonts &fonts);
 
     /** @brief Interaction result returned by a shared editable text surface. */

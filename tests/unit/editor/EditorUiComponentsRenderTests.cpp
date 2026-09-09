@@ -215,6 +215,64 @@ TEST_CASE("Generic card disclosure persists and suppresses collapsed body conten
     ImGui::DestroyContext();
 }
 
+TEST_CASE("Side dock tabs preserve reference padding height and interaction", "[unit][editor][gui][design-system]") {
+    using namespace Horo::Editor;
+    using namespace Horo::Editor::Ui;
+
+    Theme::SetUiScalePercent(100);
+    IMGUI_CHECKVERSION();
+    ImGui::CreateContext();
+    ImGuiIO &io = ImGui::GetIO();
+    io.DisplaySize = {400.0F, 200.0F};
+    io.DeltaTime = 1.0F / 60.0F;
+    io.Fonts->AddFontDefault();
+    static_cast<void>(io.Fonts->Build());
+    ImFont *defaultFont = io.Fonts->Fonts.front();
+    const Theme::Fonts fonts{
+        .sans = defaultFont,
+        .sansCompact = defaultFont,
+        .sansEmphasis = defaultFont,
+        .icon = defaultFont,
+    };
+    const std::array<const char *, 2> tabs{"Inspector", "Scene"};
+
+    int activeTab = 0;
+    float startY = 0.0F;
+    float endY = 0.0F;
+    ImVec2 sceneTabCenter{};
+    const auto drawFrame = [&] {
+        ImGui::SetNextWindowPos({0.0F, 0.0F});
+        ImGui::SetNextWindowSize({300.0F, 160.0F});
+        ImGui::Begin("SideDockTabsTest", nullptr, ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoSavedSettings);
+        startY = ImGui::GetCursorScreenPos().y;
+        activeTab = DrawSideDockTabs(tabs, activeTab, fonts);
+        endY = ImGui::GetCursorScreenPos().y;
+        const float inspectorWidth = defaultFont->CalcTextSizeA(12.0F, 100000.0F, 0.0F, tabs.front()).x + 20.0F;
+        const float sceneWidth = defaultFont->CalcTextSizeA(12.0F, 100000.0F, 0.0F, tabs.back()).x + 20.0F;
+        sceneTabCenter = {ImGui::GetWindowPos().x + ImGui::GetStyle().WindowPadding.x + 10.0F + inspectorWidth + sceneWidth * 0.5F,
+                          startY + 18.0F};
+        ImGui::End();
+    };
+
+    ImGui::NewFrame();
+    drawFrame();
+    ImGui::Render();
+    REQUIRE(endY - startY == Catch::Approx(36.0F));
+
+    io.AddMousePosEvent(sceneTabCenter.x, sceneTabCenter.y);
+    io.AddMouseButtonEvent(ImGuiMouseButton_Left, true);
+    ImGui::NewFrame();
+    drawFrame();
+    ImGui::Render();
+    io.AddMouseButtonEvent(ImGuiMouseButton_Left, false);
+    ImGui::NewFrame();
+    drawFrame();
+    ImGui::Render();
+    REQUIRE(activeTab == 1);
+
+    ImGui::DestroyContext();
+}
+
 TEST_CASE("Workspace popup rows keep the design-system menu geometry", "[unit][editor][gui][design-system]") {
     using namespace Horo::Editor;
     using namespace Horo::Editor::Ui;
