@@ -86,15 +86,8 @@ namespace Horo::WorldStreaming {
             return std::ranges::find(AllowedEdges, Edge{current, projected}) != AllowedEdges.end();
         }
 
-        /** @brief Finds an exact attempt fence in mutable storage. */
-        [[nodiscard]] auto FindExact(std::vector<StreamingCellStateRecord> &records, const StreamingFence &fence) {
-            return std::ranges::find_if(records, [&fence](const StreamingCellStateRecord &record) {
-                return record.operation.fence == fence;
-            });
-        }
-
-        /** @brief Finds an exact attempt fence in immutable storage. */
-        [[nodiscard]] auto FindExact(const std::vector<StreamingCellStateRecord> &records, const StreamingFence &fence) {
+        /** @brief Finds an exact attempt fence while preserving the storage's const qualification. */
+        template <typename Records> [[nodiscard]] auto FindExact(Records &records, const StreamingFence &fence) {
             return std::ranges::find_if(records, [&fence](const StreamingCellStateRecord &record) {
                 return record.operation.fence == fence;
             });
