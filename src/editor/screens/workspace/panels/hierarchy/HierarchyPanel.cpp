@@ -199,25 +199,26 @@ namespace Horo::Editor {
         }
 
         [[nodiscard]] HierarchyIconPresentation GetIconPresentation(const HierarchyNodeType type) {
+            using enum HierarchyNodeType;
             switch (type) {
-                case HierarchyNodeType::Mesh:
+                case Mesh:
                     return SceneObjectIconPresentation("workspace.hierarchy.type.mesh");
-                case HierarchyNodeType::Empty:
-                case HierarchyNodeType::Collection:
+                case Empty:
+                case Collection:
                     return SceneObjectIconPresentation("workspace.hierarchy.type.empty");
-                case HierarchyNodeType::Light:
+                case Light:
                     return SceneObjectIconPresentation("workspace.hierarchy.type.light");
-                case HierarchyNodeType::PointLight:
+                case PointLight:
                     return SceneObjectIconPresentation("workspace.hierarchy.type.light_point");
-                case HierarchyNodeType::DirectionalLight:
+                case DirectionalLight:
                     return SceneObjectIconPresentation("workspace.hierarchy.type.light_directional");
-                case HierarchyNodeType::SpotLight:
+                case SpotLight:
                     return SceneObjectIconPresentation("workspace.hierarchy.type.light_spot");
-                case HierarchyNodeType::Camera:
+                case Camera:
                     return SceneObjectIconPresentation("workspace.hierarchy.type.camera");
-                case HierarchyNodeType::TriggerVolume:
+                case TriggerVolume:
                     return SceneObjectIconPresentation("workspace.hierarchy.type.volume");
-                case HierarchyNodeType::AudioSource:
+                case AudioSource:
                     return SceneObjectIconPresentation("workspace.hierarchy.type.audio");
             }
             return SceneObjectIconPresentation("workspace.hierarchy.type.empty");

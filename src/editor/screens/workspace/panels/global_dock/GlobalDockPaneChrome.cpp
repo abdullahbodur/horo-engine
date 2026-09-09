@@ -4,6 +4,7 @@
 
 #include <algorithm>
 #include <cfloat>
+#include <cmath>
 #include <string>
 
 namespace Horo::Editor {
@@ -132,8 +133,11 @@ namespace Horo::Editor {
         if (props.budget.has_value()) {
             const float budgetY = chartBottom - std::clamp(*props.budget, 0.0F, 1.0F) * chartHeight;
             const ImU32 budgetColor = Theme::U32(GlobalDockToneColor(GlobalDockTone::Warning));
-            for (float dashX = origin.x + padding; dashX < maximum.x - padding; dashX += 6.0F * scale)
+            const auto dashCount = static_cast<std::size_t>(std::ceil(chartWidth / (6.0F * scale)));
+            for (std::size_t dash = 0; dash < dashCount; ++dash) {
+                const float dashX = origin.x + padding + static_cast<float>(dash) * 6.0F * scale;
                 drawList->AddLine({dashX, budgetY}, {std::min(dashX + 3.0F * scale, maximum.x - padding), budgetY}, budgetColor);
+            }
         }
         for (std::size_t index = 1; index < props.samples.size(); ++index) {
             const float x0 =
@@ -152,7 +156,7 @@ namespace Horo::Editor {
         const float scale = std::max(Theme::GetActiveTokens().sizes.uiScale, 0.01F);
         const bool narrow = width < 900.0F * scale;
         const int columns = narrow ? 2 : 4;
-        const int rows = static_cast<int>((cards.size() + static_cast<std::size_t>(columns) - 1U) / static_cast<std::size_t>(columns));
+        const auto rows = static_cast<int>((cards.size() + static_cast<std::size_t>(columns) - 1U) / static_cast<std::size_t>(columns));
         const float padding = 10.0F * scale;
         const float gap = 8.0F * scale;
         const float cardHeight = 64.0F * scale;

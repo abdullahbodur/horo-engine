@@ -364,7 +364,7 @@ namespace Horo::Editor {
             }
             x += buttonWidth + l.gap;
         };
-        const auto label = [&](const char *key) -> const char * {
+        const auto label = [&](const char *key) {
             return toolbar.narrow ? nullptr : context.localization.Get("editor", key).c_str();
         };
         filter(toolbar.all, LevelFilter::All,
@@ -408,7 +408,7 @@ namespace Horo::Editor {
     void GlobalDockConsolePane::DrawToolbarActions(float x, const float y, const ToolbarLayout &toolbar, const EditorGuiContext &context) {
         const Layout l = GetLayout();
         const auto &fonts = context.theme.fonts;
-        const auto label = [&](const char *key) -> const char * {
+        const auto label = [&](const char *key) {
             return toolbar.narrow ? nullptr : context.localization.Get("editor", key).c_str();
         };
         if (ToolbarButton({x, y}, {toolbar.collapse, l.control},

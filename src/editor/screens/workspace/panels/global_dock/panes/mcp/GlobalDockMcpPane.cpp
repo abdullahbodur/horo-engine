@@ -45,9 +45,9 @@ namespace Horo::Editor {
         [[nodiscard]] bool ContainsCaseInsensitive(const std::string_view value, const std::string_view query) {
             if (query.empty())
                 return true;
-            return std::search(value.begin(), value.end(), query.begin(), query.end(), [](const char lhs, const char rhs) {
+            return std::ranges::search(value, query, [](const char lhs, const char rhs) {
                 return std::tolower(static_cast<unsigned char>(lhs)) == std::tolower(static_cast<unsigned char>(rhs));
-            }) != value.end();
+            }).begin() != value.end();
         }
 
         [[nodiscard]] const char *PermissionKey(const Permission permission) noexcept {
@@ -56,27 +56,30 @@ namespace Horo::Editor {
         }
 
         [[nodiscard]] const char *StatusKey(const Status status) noexcept {
+            using enum Status;
             switch (status) {
-                case Status::Done:
+                case Done:
                     return "workspace.global_dock.mcp.status.done";
-                case Status::Approval:
+                case Approval:
                     return "workspace.global_dock.mcp.status.approval";
-                case Status::Denied:
+                case Denied:
                     return "workspace.global_dock.mcp.status.denied";
             }
             return "workspace.global_dock.mcp.status.denied";
         }
 
         [[nodiscard]] GlobalDockTone StatusTone(const Status status) noexcept {
+            using enum GlobalDockTone;
+            using enum Status;
             switch (status) {
-                case Status::Done:
-                    return GlobalDockTone::Positive;
-                case Status::Approval:
-                    return GlobalDockTone::Warning;
-                case Status::Denied:
-                    return GlobalDockTone::Error;
+                case Done:
+                    return Positive;
+                case Approval:
+                    return Warning;
+                case Denied:
+                    return Error;
             }
-            return GlobalDockTone::Neutral;
+            return Neutral;
         }
 
         [[nodiscard]] float TextWidth(ImFont *font, const float size, const std::string &text) {
@@ -167,34 +170,35 @@ namespace Horo::Editor {
     }
 
     void GlobalDockMcpPane::DrawFilterActions(float &x, const float y, const EditorGuiContext &context) {
+        using enum Filter;
         const auto &fonts = context.theme.fonts;
         const auto &localization = context.localization;
         const GlobalDockToolbarChipProps all{.id = "McpAll",
                                              .label = localization.Get("editor", "workspace.global_dock.mcp.filter.all"),
                                              .count = 18U,
-                                             .active = m_filter == Filter::All};
+                                             .active = m_filter == All};
         const GlobalDockToolbarChipProps mutations{.id = "McpMutations",
                                                    .label = localization.Get("editor", "workspace.global_dock.mcp.filter.mutations"),
                                                    .count = 3U,
                                                    .tone = GlobalDockTone::Warning,
-                                                   .active = m_filter == Filter::Mutations};
+                                                   .active = m_filter == Mutations};
         const GlobalDockToolbarChipProps errors{.id = "McpErrors",
                                                 .label = localization.Get("editor", "workspace.global_dock.mcp.filter.errors"),
                                                 .count = 1U,
                                                 .tone = GlobalDockTone::Error,
-                                                .active = m_filter == Filter::Errors};
+                                                .active = m_filter == Errors};
         const GlobalDockPaneMetrics metrics = ResolveGlobalDockPaneMetrics();
         const float allWidth = MeasureGlobalDockToolbarChip(all, fonts);
         const float mutationWidth = MeasureGlobalDockToolbarChip(mutations, fonts);
         const float errorWidth = MeasureGlobalDockToolbarChip(errors, fonts);
         if (DrawGlobalDockToolbarChip({x, y}, allWidth, all, fonts))
-            m_filter = Filter::All;
+            m_filter = All;
         x += allWidth + metrics.toolbarGap;
         if (DrawGlobalDockToolbarChip({x, y}, mutationWidth, mutations, fonts))
-            m_filter = Filter::Mutations;
+            m_filter = Mutations;
         x += mutationWidth + metrics.toolbarGap;
         if (DrawGlobalDockToolbarChip({x, y}, errorWidth, errors, fonts))
-            m_filter = Filter::Errors;
+            m_filter = Errors;
         x += errorWidth + metrics.toolbarGap;
     }
 
@@ -275,13 +279,12 @@ namespace Horo::Editor {
                                          const EditorGuiContext &context) {
         const AuditRow &row = AuditRows[index];
         const std::string permission = context.localization.Get("editor", PermissionKey(row.permission));
-        const std::string request = context.localization.Get("editor", row.requestKey.data());
+        const std::string request = context.localization.Get("editor", row.requestKey);
         const std::string status = context.localization.Get("editor", StatusKey(row.status));
         const std::string_view search{m_search.data()};
         const bool filterMatches =
             MatchesAuditFilter(row, m_filter == Filter::All, m_filter == Filter::Mutations, m_filter == Filter::Errors);
-        const bool searchMatches = MatchesAuditSearch(row, permission, request, status, search);
-        if (!filterMatches || !searchMatches)
+        if (const bool searchMatches = MatchesAuditSearch(row, permission, request, status, search); !filterMatches || !searchMatches)
             return;
         const GlobalDockPaneMetrics metrics = ResolveGlobalDockPaneMetrics();
         const float scale = std::max(Theme::GetActiveTokens().sizes.uiScale, 0.01F);

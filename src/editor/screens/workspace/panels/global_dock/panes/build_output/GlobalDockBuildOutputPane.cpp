@@ -257,8 +257,8 @@ namespace Horo::Editor {
         const float searchWidth = std::max(180.0F * scale, regions.toolbarWidth - metrics.toolbarPaddingX * 2.0F - fixedWidth);
         float x = regions.toolbarOrigin.x + metrics.toolbarPaddingX;
         ImGui::SetCursorScreenPos({x, controlY});
-        const std::string &searchHint = context.localization.Get("editor", "workspace.global_dock.build_output.search");
-        if (Ui::InputTextControl("##BuildOutputSearch", m_search.data(), m_search.size(), fonts,
+        if (const std::string &searchHint = context.localization.Get("editor", "workspace.global_dock.build_output.search");
+            Ui::InputTextControl("##BuildOutputSearch", m_search.data(), m_search.size(), fonts,
                                  {.width = searchWidth / scale,
                                   .hint = searchHint.c_str(),
                                   .prefixIconWidth = 20.0F,

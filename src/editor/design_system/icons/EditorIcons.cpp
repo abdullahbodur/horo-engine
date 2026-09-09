@@ -379,7 +379,7 @@ namespace Horo::Editor::Ui {
             return index < kIconDescriptors.size() ? std::optional{index} : std::nullopt;
         }
 
-        [[nodiscard]] constexpr ImWchar MaterialSymbolGlyph(const UiIcon icon) noexcept {
+        [[nodiscard]] constexpr ImWchar CoreMaterialSymbolGlyph(const UiIcon icon) noexcept {
             using enum UiIcon;
             switch (icon) {
                 case Info:
@@ -428,6 +428,15 @@ namespace Horo::Editor::Ui {
                     return 0xE97A;  // account_tree
                 case UiIcon::Tag:
                     return 0xE892;  // label
+                default:
+                    return 0;
+            }
+        }
+
+        [[nodiscard]] constexpr ImWchar MaterialSymbolGlyph(const UiIcon icon) noexcept {
+            if (const ImWchar coreGlyph = CoreMaterialSymbolGlyph(icon); coreGlyph != 0)
+                return coreGlyph;
+            switch (icon) {
                 case UiIcon::Folder:
                     return 0xE2C7;  // folder
                 case UiIcon::Image:

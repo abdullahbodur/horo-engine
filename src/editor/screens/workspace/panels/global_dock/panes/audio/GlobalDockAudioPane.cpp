@@ -33,9 +33,9 @@ namespace Horo::Editor {
         [[nodiscard]] bool ContainsCaseInsensitive(const std::string_view value, const std::string_view query) {
             if (query.empty())
                 return true;
-            return std::search(value.begin(), value.end(), query.begin(), query.end(), [](const char lhs, const char rhs) {
+            return std::ranges::search(value, query, [](const char lhs, const char rhs) {
                 return std::tolower(static_cast<unsigned char>(lhs)) == std::tolower(static_cast<unsigned char>(rhs));
-            }) != value.end();
+            }).begin() != value.end();
         }
 
         [[nodiscard]] float TextWidth(ImFont *font, const float size, const std::string &text) {

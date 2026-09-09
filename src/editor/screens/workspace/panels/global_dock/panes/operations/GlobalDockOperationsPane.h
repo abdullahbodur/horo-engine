@@ -3,6 +3,8 @@
 #include "Horo/Editor/EditorGuiContext.h"
 #include "Horo/Editor/EditorUiComponents.h"
 #include "Horo/Foundation/OperationStore.h"
+#include "editor/screens/workspace/panels/global_dock/GlobalDockPaneChrome.h"
+#include "editor/screens/workspace/panels/global_dock/GlobalDockPaneLayout.h"
 
 #include <array>
 #include <cstdint>
@@ -35,7 +37,26 @@ namespace Horo::Editor {
             Failed,
         };
 
+        struct OperationCounts {
+            std::size_t running{};
+            std::size_t queued{};
+            std::size_t failed{};
+        };
+
+        struct TableLayout;
+
         [[nodiscard]] bool RefreshSnapshot();
+        [[nodiscard]] OperationCounts CountStates() const noexcept;
+        [[nodiscard]] float MeasureToolbarFixedWidth(const OperationCounts &counts, const EditorGuiContext &context) const;
+        [[nodiscard]] float DrawStateFilterChips(float x, float y, const OperationCounts &counts, const EditorGuiContext &context);
+        void DrawKindAndCancelActions(float x, float y, const EditorGuiContext &context);
+        void DrawToolbar(const GlobalDockPaneRegions &regions, const OperationCounts &counts, const EditorGuiContext &context);
+        void DrawTable(const GlobalDockPaneRegions &regions, bool snapshotChanged, const EditorGuiContext &context);
+        void DrawOperationRow(const OperationRecord &operation, std::size_t visibleIndex, float width, const TableLayout &layout,
+                              const EditorGuiContext &context);
+        void DrawOperationAction(const OperationRecord &operation, ImVec2 rowMinimum, const TableLayout &layout,
+                                 const EditorGuiContext &context);
+        void DrawFooter(const GlobalDockPaneRegions &regions, const OperationCounts &counts, const EditorGuiContext &context) const;
         void RebuildFilter();
 
         const IOperationQuery *m_operationQuery{nullptr};

@@ -22,6 +22,7 @@
 #include <cstdint>
 #include <cstring>
 #include <filesystem>
+#include <format>
 #include <ranges>
 #include <string>
 
@@ -105,13 +106,13 @@ namespace Horo::Editor {
         }
 
         void DrawAssetLocationRail(const ImVec2 minimum, const float height, const EditorGuiContext &context) {
+            using enum Ui::UiIcon;
             ImDrawList *drawList = ImGui::GetWindowDrawList();
             const float width = AssetBrowserLayout::LocationRailWidth;
             drawList->AddRectFilled(minimum, {minimum.x + width, minimum.y + height}, Theme::U32(Theme::Bg1()));
             drawList->AddLine({minimum.x + width - 1.0F, minimum.y}, {minimum.x + width - 1.0F, minimum.y + height},
                               Theme::U32(Theme::Border()));
-            const std::array icons{Ui::UiIcon::Favorite, Ui::UiIcon::History,     Ui::UiIcon::Storage,
-                                   Ui::UiIcon::Package,  Ui::UiIcon::AccountTree, Ui::UiIcon::Tag};
+            const std::array icons{Favorite, History, Storage, Package, AccountTree, Tag};
             const std::array keys{"workspace.content_browser.location.favorites",    "workspace.content_browser.location.recent",
                                   "workspace.content_browser.location.sources",      "workspace.content_browser.location.packages",
                                   "workspace.content_browser.location.dependencies", "workspace.content_browser.location.tags"};
@@ -145,7 +146,7 @@ namespace Horo::Editor {
                 const std::string &unit =
                     localization.Get("editor", entry.containedItemCount == 1 ? "workspace.content_browser.count.item"
                                                                              : "workspace.content_browser.count.items");
-                return std::to_string(entry.containedItemCount) + " " + unit;
+                return std::format("{} {}", entry.containedItemCount, unit);
             }
             return entry.assetType;
         }
@@ -156,31 +157,144 @@ namespace Horo::Editor {
             const ImVec2 maximum{minimum.x + width, minimum.y + AssetBrowserLayout::FooterHeight};
             drawList->AddRectFilled(minimum, maximum, Theme::U32(Theme::Mix(Theme::Bg0(), Theme::Bg1(), 0.55F)));
             drawList->AddLine(minimum, {maximum.x, minimum.y}, Theme::U32(Theme::Border()));
-            const std::size_t directoryCount =
+            const auto directoryCount =
                 static_cast<std::size_t>(std::ranges::count_if(directory.entries, [](const ContentBrowserEntry &entry) {
                 return entry.kind == ContentBrowserEntryKind::Directory;
             }));
             const bool onlyDirectories = visibleCount == directoryCount && visibleCount == directory.entries.size();
-            const std::string &unit =
-                localization.Get("editor", onlyDirectories ? (visibleCount == 1 ? "workspace.content_browser.count.folder"
-                                                                                : "workspace.content_browser.count.folders")
-                                                           : (visibleCount == 1 ? "workspace.content_browser.count.item"
-                                                                                : "workspace.content_browser.count.items"));
-            const std::string count = std::to_string(visibleCount) + " " + unit;
+            const char *unitKey;
+            if (onlyDirectories)
+                unitKey = visibleCount == 1 ? "workspace.content_browser.count.folder" : "workspace.content_browser.count.folders";
+            else
+                unitKey = visibleCount == 1 ? "workspace.content_browser.count.item" : "workspace.content_browser.count.items";
+            const std::string &unit = localization.Get("editor", unitKey);
+            const std::string count = std::format("{} {}", visibleCount, unit);
             drawList->AddText(font, AssetBrowserLayout::SecondaryFontSize(), {minimum.x + 16.0F, minimum.y + 7.0F},
                               Theme::U32(Theme::Dim()), count.c_str());
 
-            const char *statusKey = directory.loadState == ContentBrowserLoadState::Loading ? "workspace.content_browser.loading"
-                                    : directory.loadState == ContentBrowserLoadState::Error ? "workspace.content_browser.unavailable"
-                                                                                            : "workspace.content_browser.ready";
+            const char *statusKey = "workspace.content_browser.ready";
+            if (directory.loadState == ContentBrowserLoadState::Loading)
+                statusKey = "workspace.content_browser.loading";
+            else if (directory.loadState == ContentBrowserLoadState::Error)
+                statusKey = "workspace.content_browser.unavailable";
             const std::string &status = localization.Get("editor", statusKey);
-            const ImVec2 statusSize = font->CalcTextSizeA(AssetBrowserLayout::SecondaryFontSize(), FLT_MAX, 0.0F, status.c_str());
+            const auto statusSize = font->CalcTextSizeA(AssetBrowserLayout::SecondaryFontSize(), FLT_MAX, 0.0F, status.c_str());
             const float dotX = maximum.x - 16.0F;
             drawList->AddText(font, AssetBrowserLayout::SecondaryFontSize(), {dotX - 7.0F - statusSize.x, minimum.y + 7.0F},
                               Theme::U32(Theme::Dim()), status.c_str());
             if (directory.loadState == ContentBrowserLoadState::Ready) {
                 drawList->AddCircleFilled({dotX, minimum.y + 14.0F}, 4.0F, Theme::U32(Theme::Ok()), 16);
             }
+        }
+
+        [[nodiscard]] const char *EmptyGridMessageKey(const ContentBrowserDirectory &directory) noexcept {
+            if (directory.loadState == ContentBrowserLoadState::Loading)
+                return "workspace.content_browser.loading";
+            if (directory.loadState == ContentBrowserLoadState::Error)
+                return "workspace.content_browser.unavailable";
+            return directory.entries.empty() ? "workspace.content_browser.empty" : "workspace.content_browser.no_results";
+        }
+
+        void DrawEmptyAssetGrid(const ImVec2 gridOrigin, const float gridWidth, const float gridY, const ContentBrowserDirectory &directory,
+                                const ILocalizationService &localization, ImFont *font, ImDrawList &drawList) {
+            const ImVec4 color = directory.loadState == ContentBrowserLoadState::Error ? Theme::Err() : Theme::Dim();
+            drawList.AddText(font, HeaderFontSize(), {gridOrigin.x, gridY}, Theme::U32(color),
+                             localization.Get("editor", EmptyGridMessageKey(directory)).c_str());
+            ImGui::SetCursorScreenPos({gridOrigin.x, gridY + PreviewRowHeight});
+            ImGui::Dummy({gridWidth, 1.0F});
+        }
+
+        struct AssetEntryGridContext {
+            ImVec2 origin;
+            float width;
+            float y;
+            const std::vector<std::size_t> &visibleEntries;
+            const ContentBrowserDirectory &directory;
+            const EditorWorkspaceViewModel &viewModel;
+            EditorWorkspaceViewCommandData &command;
+            const EditorGuiContext &gui;
+            AssetBrowserInteractionSession &interactionSession;
+            AssetBrowserCardRenderer &cardRenderer;
+            ImDrawList &drawList;
+            ImFont *font;
+        };
+
+        struct AssetEntryGridMetrics {
+            std::size_t columns;
+            float cardWidth;
+            float cardHeight;
+            float previewWidth;
+            float previewHeight;
+            float gap;
+        };
+
+        [[nodiscard]] AssetEntryGridMetrics ResolveAssetEntryGridMetrics(const float width, const bool listView) noexcept {
+            const AssetBrowserGridMetrics grid = ComputeAssetBrowserGridMetrics(width);
+            if (listView) {
+                return {.columns = 1U,
+                        .cardWidth = std::min(720.0F, std::max(260.0F, width)),
+                        .cardHeight = 48.0F,
+                        .previewWidth = 54.0F,
+                        .previewHeight = 47.0F,
+                        .gap = 5.0F};
+            }
+            return {.columns = grid.columns,
+                    .cardWidth = grid.cardWidth,
+                    .cardHeight = AssetBrowserLayout::CardHeight,
+                    .previewWidth = grid.cardWidth,
+                    .previewHeight = AssetBrowserLayout::CardPreviewHeight,
+                    .gap = AssetBrowserLayout::GridGap};
+        }
+
+        void DrawAssetEntry(const AssetEntryGridContext &context, const AssetEntryGridMetrics &metrics, const bool listView,
+                            const std::size_t index) {
+            const ContentBrowserEntry &entry = context.directory.entries[context.visibleEntries[index]];
+            const std::size_t row = index / metrics.columns;
+            const std::size_t column = index % metrics.columns;
+            const ImVec2 interactionMin{context.origin.x + static_cast<float>(column) * (metrics.cardWidth + metrics.gap),
+                                        context.y + static_cast<float>(row) * (metrics.cardHeight + metrics.gap)};
+            ImGui::PushID(static_cast<int>(index));
+            ImGui::SetCursorScreenPos(interactionMin);
+            if (ImGui::InvisibleButton("##AssetCard", {metrics.cardWidth, metrics.cardHeight}))
+                context.interactionSession.Select(entry.absolutePath);
+            const bool hovered = ImGui::IsItemHovered();
+            const bool cut = context.viewModel.contentBrowserClipboard.mode == ContentBrowserClipboardMode::Move &&
+                             context.viewModel.contentBrowserClipboard.absoluteSourcePath == entry.absolutePath;
+            const std::optional<std::string> draggedAssetPath = AbsoluteAssetPathFromPayload(ImGui::GetDragDropPayload());
+            const bool dragging = draggedAssetPath.has_value() && *draggedAssetPath == entry.absolutePath;
+            context.cardRenderer.Draw({.drawList = &context.drawList,
+                                       .font = context.font,
+                                       .iconFont = context.gui.theme.fonts.icon,
+                                       .fontSize = CardFontSize(),
+                                       .cardMin = {interactionMin.x, interactionMin.y - (hovered ? 1.0F : 0.0F)},
+                                       .cardWidth = metrics.cardWidth,
+                                       .cardHeight = metrics.cardHeight,
+                                       .previewWidth = metrics.previewWidth,
+                                       .previewHeight = metrics.previewHeight,
+                                       .secondaryText = EntrySecondaryText(entry, context.gui.localization),
+                                       .listView = listView,
+                                       .hovered = hovered,
+                                       .selected = context.interactionSession.State().selectedAbsolutePath == entry.absolutePath,
+                                       .dimmed = cut || dragging},
+                                      entry);
+            if (entry.kind == ContentBrowserEntryKind::Directory && hovered && ImGui::IsMouseDoubleClicked(ImGuiMouseButton_Left))
+                context.command = AssetBrowserInteractionSession::Navigate(entry.absolutePath);
+            HandleAssetDragDropSource(entry, context.gui.localization);
+            HandleDirectoryDragDropTarget(entry, interactionMin, metrics.cardWidth, metrics.cardHeight, &context.drawList, context.command);
+            DrawAssetBrowserEntryActions(entry, context.viewModel, context.interactionSession, context.command, context.gui);
+            ImGui::PopID();
+        }
+
+        void DrawAssetEntries(const AssetEntryGridContext &context) {
+            const bool listView = context.interactionSession.State().viewMode == AssetBrowserViewMode::List;
+            const AssetEntryGridMetrics metrics = ResolveAssetEntryGridMetrics(context.width, listView);
+            for (std::size_t index = 0; index < context.visibleEntries.size(); ++index)
+                DrawAssetEntry(context, metrics, listView, index);
+            const std::size_t rowCount = (context.visibleEntries.size() + metrics.columns - 1U) / metrics.columns;
+            const float gridHeight = static_cast<float>(rowCount) * metrics.cardHeight + static_cast<float>(rowCount - 1U) * metrics.gap;
+            ImGui::SetCursorScreenPos({context.origin.x, context.y + gridHeight + AssetBrowserLayout::GridPaddingBottom});
+            ImGui::Dummy({context.width, 1.0F});
+            HandleAssetBrowserShortcuts(context.visibleEntries, context.viewModel, context.interactionSession, context.command);
         }
     }  // namespace
 
@@ -249,74 +363,21 @@ namespace Horo::Editor {
             gridY += PreviewRowHeight + 4.0F;
         }
 
-        bool drawEntries = directory.loadState == ContentBrowserLoadState::Ready && !visibleEntries.empty();
-        if (!drawEntries) {
-            const char *messageKey = directory.loadState == ContentBrowserLoadState::Loading ? "workspace.content_browser.loading"
-                                     : directory.loadState == ContentBrowserLoadState::Error ? "workspace.content_browser.unavailable"
-                                     : directory.entries.empty()                             ? "workspace.content_browser.empty"
-                                                                                             : "workspace.content_browser.no_results";
-            gridDrawList->AddText(font, HeaderFontSize(), {gridOrigin.x, gridY},
-                                  Theme::U32(directory.loadState == ContentBrowserLoadState::Error ? Theme::Err() : Theme::Dim()),
-                                  localization.Get("editor", messageKey).c_str());
-            ImGui::SetCursorScreenPos({gridOrigin.x, gridY + PreviewRowHeight});
-            ImGui::Dummy({gridWidth, 1.0F});
+        if (const bool drawEntries = directory.loadState == ContentBrowserLoadState::Ready && !visibleEntries.empty(); !drawEntries) {
+            DrawEmptyAssetGrid(gridOrigin, gridWidth, gridY, directory, localization, font, *gridDrawList);
         } else {
-            const bool listView = state.viewMode == AssetBrowserViewMode::List;
-            const AssetBrowserGridMetrics metrics = ComputeAssetBrowserGridMetrics(gridWidth);
-            const std::size_t columns = listView ? 1U : metrics.columns;
-            const float cardWidth = listView ? std::min(720.0F, std::max(260.0F, gridWidth)) : metrics.cardWidth;
-            const float cardHeight = listView ? 48.0F : AssetBrowserLayout::CardHeight;
-            const float previewWidth = listView ? 54.0F : cardWidth;
-            const float previewHeight = listView ? 47.0F : AssetBrowserLayout::CardPreviewHeight;
-            const float gap = listView ? 5.0F : AssetBrowserLayout::GridGap;
-            for (std::size_t index = 0; index < visibleEntries.size(); ++index) {
-                const ContentBrowserEntry &entry = directory.entries[visibleEntries[index]];
-                const std::size_t row = index / columns;
-                const std::size_t column = index % columns;
-                const ImVec2 interactionMin{gridOrigin.x + static_cast<float>(column) * (cardWidth + gap),
-                                            gridY + static_cast<float>(row) * (cardHeight + gap)};
-
-                ImGui::PushID(static_cast<int>(index));
-                ImGui::SetCursorScreenPos(interactionMin);
-                if (ImGui::InvisibleButton("##AssetCard", {cardWidth, cardHeight}))
-                    interactionSession.Select(entry.absolutePath);
-                const bool cardHovered = ImGui::IsItemHovered();
-                const bool selected = selectedAssetPath == entry.absolutePath;
-                const bool cut = viewModel.contentBrowserClipboard.mode == ContentBrowserClipboardMode::Move &&
-                                 viewModel.contentBrowserClipboard.absoluteSourcePath == entry.absolutePath;
-                const std::optional<std::string> draggedAssetPath = AbsoluteAssetPathFromPayload(ImGui::GetDragDropPayload());
-                const bool dragging = draggedAssetPath.has_value() && *draggedAssetPath == entry.absolutePath;
-                const ImVec2 drawMin{interactionMin.x, interactionMin.y - (cardHovered ? 1.0F : 0.0F)};
-                const std::string secondaryText = EntrySecondaryText(entry, localization);
-                cardRenderer.Draw({.drawList = gridDrawList,
-                                   .font = font,
-                                   .iconFont = context.theme.fonts.icon,
-                                   .fontSize = CardFontSize(),
-                                   .cardMin = drawMin,
-                                   .cardWidth = cardWidth,
-                                   .cardHeight = cardHeight,
-                                   .previewWidth = previewWidth,
-                                   .previewHeight = previewHeight,
-                                   .secondaryText = secondaryText,
-                                   .listView = listView,
-                                   .hovered = cardHovered,
-                                   .selected = selected,
-                                   .dimmed = cut || dragging},
-                                  entry);
-                if (entry.kind == ContentBrowserEntryKind::Directory && cardHovered && ImGui::IsMouseDoubleClicked(ImGuiMouseButton_Left)) {
-                    command = AssetBrowserInteractionSession::Navigate(entry.absolutePath);
-                }
-                HandleAssetDragDropSource(entry, localization);
-                HandleDirectoryDragDropTarget(entry, interactionMin, cardWidth, cardHeight, gridDrawList, command);
-                DrawAssetBrowserEntryActions(entry, viewModel, interactionSession, command, context);
-                ImGui::PopID();
-            }
-
-            const std::size_t rowCount = (visibleEntries.size() + columns - 1U) / columns;
-            const float gridHeight = static_cast<float>(rowCount) * cardHeight + static_cast<float>(rowCount - 1U) * gap;
-            ImGui::SetCursorScreenPos({gridOrigin.x, gridY + gridHeight + AssetBrowserLayout::GridPaddingBottom});
-            ImGui::Dummy({gridWidth, 1.0F});
-            HandleAssetBrowserShortcuts(visibleEntries, viewModel, interactionSession, command);
+            DrawAssetEntries({.origin = gridOrigin,
+                              .width = gridWidth,
+                              .y = gridY,
+                              .visibleEntries = visibleEntries,
+                              .directory = directory,
+                              .viewModel = viewModel,
+                              .command = command,
+                              .gui = context,
+                              .interactionSession = interactionSession,
+                              .cardRenderer = cardRenderer,
+                              .drawList = *gridDrawList,
+                              .font = font});
         }
         DrawAssetBrowserBackgroundActions(viewModel, interactionSession, command, context);
         ImGui::EndChild();

@@ -199,15 +199,16 @@ namespace Horo::Editor {
     }
 
     void GlobalDockPanel::RegisterBuiltInPanes() {
-        RegisterBuiltInPane<AssetPaneAdapter>(GlobalDockTab::Assets);
-        RegisterBuiltInPane<ConsolePaneAdapter>(GlobalDockTab::Console);
-        RegisterBuiltInPane<BuildOutputPaneAdapter>(GlobalDockTab::BuildOutput);
-        RegisterBuiltInPane<OperationsPaneAdapter>(GlobalDockTab::Operations);
-        RegisterBuiltInPane<PaneAdapter<GlobalDockMcpPane>>(GlobalDockTab::Mcp);
-        RegisterBuiltInPane<PaneAdapter<GlobalDockPerformancePane>>(GlobalDockTab::Performance);
-        RegisterBuiltInPane<PaneAdapter<GlobalDockPhysicsPane>>(GlobalDockTab::Physics);
-        RegisterBuiltInPane<PaneAdapter<GlobalDockAudioPane>>(GlobalDockTab::Audio);
-        RegisterBuiltInPane<PaneAdapter<GlobalDockNetworkPane>>(GlobalDockTab::Network);
+        using enum GlobalDockTab;
+        RegisterBuiltInPane<AssetPaneAdapter>(Assets);
+        RegisterBuiltInPane<ConsolePaneAdapter>(Console);
+        RegisterBuiltInPane<BuildOutputPaneAdapter>(BuildOutput);
+        RegisterBuiltInPane<OperationsPaneAdapter>(Operations);
+        RegisterBuiltInPane<PaneAdapter<GlobalDockMcpPane>>(Mcp);
+        RegisterBuiltInPane<PaneAdapter<GlobalDockPerformancePane>>(Performance);
+        RegisterBuiltInPane<PaneAdapter<GlobalDockPhysicsPane>>(Physics);
+        RegisterBuiltInPane<PaneAdapter<GlobalDockAudioPane>>(Audio);
+        RegisterBuiltInPane<PaneAdapter<GlobalDockNetworkPane>>(Network);
     }
 
     /** @copydoc GlobalDockPanel::DrawIcon */
@@ -247,7 +248,7 @@ namespace Horo::Editor {
         const float contentWidth = std::max(1.0F, ImGui::GetContentRegionAvail().x);
 
         if (!panes_.empty()) {
-            const std::size_t selectedIndex = static_cast<std::size_t>(std::clamp(activeIndex, 0, static_cast<int>(panes_.size() - 1U)));
+            const auto selectedIndex = static_cast<std::size_t>(std::clamp(activeIndex, 0, static_cast<int>(panes_.size() - 1U)));
             panes_[selectedIndex].pane->Draw(
                 {.contentOrigin = contentOrigin, .contentWidth = contentWidth, .viewModel = viewModel, .command = command, .gui = context});
         }

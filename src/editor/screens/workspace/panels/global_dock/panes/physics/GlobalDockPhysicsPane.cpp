@@ -40,9 +40,9 @@ namespace Horo::Editor {
         [[nodiscard]] bool ContainsCaseInsensitive(const std::string_view value, const std::string_view query) {
             if (query.empty())
                 return true;
-            return std::search(value.begin(), value.end(), query.begin(), query.end(), [](const char lhs, const char rhs) {
+            return std::ranges::search(value, query, [](const char lhs, const char rhs) {
                 return std::tolower(static_cast<unsigned char>(lhs)) == std::tolower(static_cast<unsigned char>(rhs));
-            }) != value.end();
+            }).begin() != value.end();
         }
 
         [[nodiscard]] float TextWidth(ImFont *font, const float size, const std::string &text) {
@@ -200,7 +200,8 @@ namespace Horo::Editor {
         return DrawGlobalDockMetricGrid(origin, width, cards, context.theme.fonts);
     }
 
-    void GlobalDockPhysicsPane::DrawTable(const ImVec2 &origin, const float width, const float height, const EditorGuiContext &context) {
+    void GlobalDockPhysicsPane::DrawTable(const ImVec2 &origin, const float width, const float height,
+                                          const EditorGuiContext &context) const {
         const Theme::Fonts &fonts = context.theme.fonts;
         const float scale = std::max(Theme::GetActiveTokens().sizes.uiScale, 0.01F);
         const GlobalDockPaneMetrics metrics = ResolveGlobalDockPaneMetrics();
@@ -247,8 +248,8 @@ namespace Horo::Editor {
         const std::string &shape = context.localization.Get("editor", row.shapeKey);
         const std::string &layer = context.localization.Get("editor", row.layerKey);
         const std::string &timing = context.localization.Get("editor", row.timingKey);
-        const std::string_view search{m_search.data()};
-        if (!ContainsCaseInsensitive(row.body, search) && !ContainsCaseInsensitive(state, search) &&
+        if (const std::string_view search{m_search.data()};
+            !ContainsCaseInsensitive(row.body, search) && !ContainsCaseInsensitive(state, search) &&
             !ContainsCaseInsensitive(shape, search) && !ContainsCaseInsensitive(layer, search))
             return;
         const GlobalDockPaneMetrics metrics = ResolveGlobalDockPaneMetrics();

@@ -19,21 +19,22 @@
 namespace Horo::Editor {
     namespace {
         [[nodiscard]] GlobalDockTone StatusTone(const OperationState state) noexcept {
+            using enum GlobalDockTone;
             using enum OperationState;
             switch (state) {
                 case Running:
                 case Succeeded:
-                    return GlobalDockTone::Positive;
+                    return Positive;
                 case Waiting:
                 case Cancelling:
                 case Cancelled:
-                    return GlobalDockTone::Warning;
+                    return Warning;
                 case Failed:
-                    return GlobalDockTone::Error;
+                    return Error;
                 case Queued:
-                    return GlobalDockTone::Neutral;
+                    return Neutral;
             }
-            return GlobalDockTone::Neutral;
+            return Neutral;
         }
 
         [[nodiscard]] const char *TechnicalStatusText(const OperationState state) noexcept {
@@ -115,6 +116,14 @@ namespace Horo::Editor {
             return std::format("{}%", static_cast<int>(std::clamp(*progress, 0.0F, 1.0F) * 100.0F + 0.5F));
         }
 
+        [[nodiscard]] std::string OperationProgressLabel(const OperationRecord &operation) {
+            if (!operation.message.empty())
+                return operation.message;
+            if (!operation.phase.empty())
+                return operation.phase;
+            return FormatProgress(operation.progress);
+        }
+
         [[nodiscard]] std::string FormatElapsed(const OperationRecord &operation) {
             if (operation.startedAt == std::chrono::steady_clock::time_point{})
                 return "—";
@@ -126,7 +135,8 @@ namespace Horo::Editor {
         }
 
         [[nodiscard]] bool IsRunningState(const OperationState state) noexcept {
-            return state == OperationState::Running || state == OperationState::Waiting || state == OperationState::Cancelling;
+            using enum OperationState;
+            return state == Running || state == Waiting || state == Cancelling;
         }
 
         [[nodiscard]] bool CanCancel(const OperationRecord &operation) noexcept {
@@ -167,91 +177,102 @@ namespace Horo::Editor {
         m_filteredIndices.clear();
     }
 
-    /** @copydoc GlobalDockOperationsPane::Draw */
-    void GlobalDockOperationsPane::Draw(const ImVec2 &contentOrigin, const float contentWidth, const EditorGuiContext &context) {
-        const bool snapshotChanged = RefreshSnapshot();
-        if (m_filterDirty)
-            RebuildFilter();
+    struct GlobalDockOperationsPane::TableLayout {
+        float operation;
+        float state;
+        float progress;
+        float elapsed;
+        float action;
+        float actionWidth;
+    };
 
+    GlobalDockOperationsPane::OperationCounts GlobalDockOperationsPane::CountStates() const noexcept {
+        OperationCounts counts;
+        for (const OperationRecord &operation : m_snapshot.operations) {
+            counts.running += IsRunningState(operation.state) ? 1U : 0U;
+            counts.queued += operation.state == OperationState::Queued ? 1U : 0U;
+            counts.failed += operation.state == OperationState::Failed ? 1U : 0U;
+        }
+        return counts;
+    }
+
+    float GlobalDockOperationsPane::MeasureToolbarFixedWidth(const OperationCounts &counts, const EditorGuiContext &context) const {
+        using enum StateFilter;
         const Theme::Fonts &fonts = context.theme.fonts;
         const float scale = std::max(Theme::GetActiveTokens().sizes.uiScale, 0.01F);
         const GlobalDockPaneMetrics metrics = ResolveGlobalDockPaneMetrics();
-        const float availableHeight = std::max(1.0F, ImGui::GetWindowPos().y + ImGui::GetWindowHeight() - contentOrigin.y);
-        const GlobalDockPaneRegions regions =
-            ResolveGlobalDockPaneRegions(contentOrigin, contentWidth, availableHeight, {.hasToolbar = true, .hasFooter = true});
-
-        std::size_t runningCount = 0U;
-        std::size_t queuedCount = 0U;
-        std::size_t failedCount = 0U;
-        for (const OperationRecord &operation : m_snapshot.operations) {
-            runningCount += IsRunningState(operation.state) ? 1U : 0U;
-            queuedCount += operation.state == OperationState::Queued ? 1U : 0U;
-            failedCount += operation.state == OperationState::Failed ? 1U : 0U;
-        }
-
-        DrawGlobalDockToolbarSurface(regions.toolbarOrigin, regions.toolbarWidth, metrics.toolbarHeight);
-        const float controlY = regions.toolbarOrigin.y + (metrics.toolbarHeight - metrics.controlHeight) * 0.5F;
         const GlobalDockToolbarChipProps all{.id = "OperationsAll",
                                              .label = context.localization.Get("editor", "workspace.global_dock.operations.filter.all"),
-                                             .active = m_stateFilter == StateFilter::All};
+                                             .active = m_stateFilter == All};
         const GlobalDockToolbarChipProps running{.id = "OperationsRunning",
                                                  .label =
                                                      context.localization.Get("editor", "workspace.global_dock.operations.filter.running"),
-                                                 .count = runningCount,
+                                                 .count = counts.running,
                                                  .tone = GlobalDockTone::Accent,
-                                                 .active = m_stateFilter == StateFilter::Running};
+                                                 .active = m_stateFilter == Running};
         const GlobalDockToolbarChipProps failed{.id = "OperationsFailed",
                                                 .label =
                                                     context.localization.Get("editor", "workspace.global_dock.operations.filter.failed"),
-                                                .count = failedCount,
+                                                .count = counts.failed,
                                                 .tone = GlobalDockTone::Error,
-                                                .active = m_stateFilter == StateFilter::Failed};
+                                                .active = m_stateFilter == Failed};
         const GlobalDockToolbarChipProps cancelAll{.id = "OperationsCancelAll",
                                                    .label =
                                                        context.localization.Get("editor", "workspace.global_dock.operations.cancel_all"),
                                                    .tone = GlobalDockTone::Error,
                                                    .toneLabel = true,
                                                    .icon = Ui::UiIcon::Delete};
-        const float allWidth = MeasureGlobalDockToolbarChip(all, fonts);
-        const float runningWidth = MeasureGlobalDockToolbarChip(running, fonts);
-        const float failedWidth = MeasureGlobalDockToolbarChip(failed, fonts);
-        const float cancelAllWidth = MeasureGlobalDockToolbarChip(cancelAll, fonts);
+        return MeasureGlobalDockToolbarChip(all, fonts) + MeasureGlobalDockToolbarChip(running, fonts) +
+               MeasureGlobalDockToolbarChip(failed, fonts) + 112.0F * scale + MeasureGlobalDockToolbarChip(cancelAll, fonts) +
+               metrics.toolbarGap * 6.0F + scale;
+    }
+
+    float GlobalDockOperationsPane::DrawStateFilterChips(const float x, const float y, const OperationCounts &counts,
+                                                         const EditorGuiContext &context) {
+        using enum StateFilter;
+        const Theme::Fonts &fonts = context.theme.fonts;
+        const GlobalDockPaneMetrics metrics = ResolveGlobalDockPaneMetrics();
+        const GlobalDockToolbarChipProps filters[]{
+            {.id = "OperationsAll",
+             .label = context.localization.Get("editor", "workspace.global_dock.operations.filter.all"),
+             .active = m_stateFilter == All},
+            {.id = "OperationsRunning",
+             .label = context.localization.Get("editor", "workspace.global_dock.operations.filter.running"),
+             .count = counts.running,
+             .tone = GlobalDockTone::Accent,
+             .active = m_stateFilter == Running},
+            {.id = "OperationsFailed",
+             .label = context.localization.Get("editor", "workspace.global_dock.operations.filter.failed"),
+             .count = counts.failed,
+             .tone = GlobalDockTone::Error,
+             .active = m_stateFilter == Failed},
+        };
+        const StateFilter states[]{All, Running, Failed};
+        float nextX = x;
+        for (std::size_t index = 0; index < std::size(filters); ++index) {
+            const float width = MeasureGlobalDockToolbarChip(filters[index], fonts);
+            if (DrawGlobalDockToolbarChip({nextX, y}, width, filters[index], fonts)) {
+                m_stateFilter = states[index];
+                m_filterDirty = true;
+            }
+            nextX += width + metrics.toolbarGap;
+        }
+        DrawGlobalDockToolbarSeparator(nextX, y);
+        return nextX + metrics.toolbarGap + std::max(Theme::GetActiveTokens().sizes.uiScale, 0.01F);
+    }
+
+    void GlobalDockOperationsPane::DrawKindAndCancelActions(const float x, const float y, const EditorGuiContext &context) {
+        const Theme::Fonts &fonts = context.theme.fonts;
+        const float scale = std::max(Theme::GetActiveTokens().sizes.uiScale, 0.01F);
+        const GlobalDockPaneMetrics metrics = ResolveGlobalDockPaneMetrics();
         const float typeWidth = 112.0F * scale;
-        const float fixedWidth = allWidth + runningWidth + failedWidth + typeWidth + cancelAllWidth + metrics.toolbarGap * 6.0F + scale;
-        const float searchWidth = std::max(180.0F * scale, regions.toolbarWidth - metrics.toolbarPaddingX * 2.0F - fixedWidth);
-        float x = regions.toolbarOrigin.x + metrics.toolbarPaddingX;
-
-        ImGui::SetCursorScreenPos({x, controlY});
-        const std::string &searchHint = context.localization.Get("editor", "workspace.global_dock.operations.search");
-        if (Ui::InputTextControl("##OperationsSearch", m_search.data(), m_search.size(), fonts,
-                                 {.width = searchWidth / scale,
-                                  .hint = searchHint.c_str(),
-                                  .prefixIconWidth = 20.0F,
-                                  .componentSize = Ui::ComponentSize::Small,
-                                  .surface = Ui::InputTextSurface::BottomDockToolbar})) {
-            m_filterDirty = true;
-        }
-        Ui::DrawEditorIcon(ImGui::GetWindowDrawList(), Ui::UiIcon::Search, {x + 8.0F * scale, controlY + 8.0F * scale},
-                           {14.0F * scale, 14.0F * scale}, Theme::U32(Theme::Dim()), fonts.icon);
-        x += searchWidth + metrics.toolbarGap;
-        if (DrawGlobalDockToolbarChip({x, controlY}, allWidth, all, fonts)) {
-            m_stateFilter = StateFilter::All;
-            m_filterDirty = true;
-        }
-        x += allWidth + metrics.toolbarGap;
-        if (DrawGlobalDockToolbarChip({x, controlY}, runningWidth, running, fonts)) {
-            m_stateFilter = StateFilter::Running;
-            m_filterDirty = true;
-        }
-        x += runningWidth + metrics.toolbarGap;
-        if (DrawGlobalDockToolbarChip({x, controlY}, failedWidth, failed, fonts)) {
-            m_stateFilter = StateFilter::Failed;
-            m_filterDirty = true;
-        }
-        x += failedWidth + metrics.toolbarGap;
-        DrawGlobalDockToolbarSeparator(x, controlY);
-        x += metrics.toolbarGap + scale;
-
+        const GlobalDockToolbarChipProps cancelAll{.id = "OperationsCancelAll",
+                                                   .label =
+                                                       context.localization.Get("editor", "workspace.global_dock.operations.cancel_all"),
+                                                   .tone = GlobalDockTone::Error,
+                                                   .toneLabel = true,
+                                                   .icon = Ui::UiIcon::Delete};
+        const float cancelAllWidth = MeasureGlobalDockToolbarChip(cancelAll, fonts);
         const std::array<std::string, 7> kindText{
             context.localization.Get("editor", "workspace.global_dock.operations.filter.all_types"),
             context.localization.Get("editor", "workspace.global_dock.operations.kind.build"),
@@ -263,42 +284,76 @@ namespace Horo::Editor {
         };
         const std::array<const char *, 7> kindItems{kindText[0].c_str(), kindText[1].c_str(), kindText[2].c_str(), kindText[3].c_str(),
                                                     kindText[4].c_str(), kindText[5].c_str(), kindText[6].c_str()};
-        ImGui::SetCursorScreenPos({x, controlY});
+        ImGui::SetCursorScreenPos({x, y});
         ImGui::SetNextItemWidth(typeWidth);
         if (Ui::ComboControl("OperationsType", &m_kindSelection, kindItems.data(), static_cast<int>(kindItems.size()), fonts,
                              {.height = GlobalDockLayout::ControlHeight,
                               .componentSize = Ui::ComponentSize::Small,
-                              .surface = Ui::ComboControlSurface::BottomDockToolbar})) {
+                              .surface = Ui::ComboControlSurface::BottomDockToolbar}))
             m_filterDirty = true;
-        }
-        x += typeWidth + metrics.toolbarGap;
-        if (DrawGlobalDockToolbarChip({x, controlY}, cancelAllWidth, cancelAll, fonts) && m_operationControl != nullptr) {
+        const float cancelX = x + typeWidth + metrics.toolbarGap;
+        if (DrawGlobalDockToolbarChip({cancelX, y}, cancelAllWidth, cancelAll, fonts) && m_operationControl != nullptr) {
             for (const OperationRecord &operation : m_snapshot.operations) {
                 if (CanCancel(operation))
                     static_cast<void>(m_operationControl->RequestCancel(operation.id));
             }
         }
+    }
 
+    void GlobalDockOperationsPane::DrawToolbar(const GlobalDockPaneRegions &regions, const OperationCounts &counts,
+                                               const EditorGuiContext &context) {
+        const Theme::Fonts &fonts = context.theme.fonts;
+        const float scale = std::max(Theme::GetActiveTokens().sizes.uiScale, 0.01F);
+        const GlobalDockPaneMetrics metrics = ResolveGlobalDockPaneMetrics();
+        DrawGlobalDockToolbarSurface(regions.toolbarOrigin, regions.toolbarWidth, metrics.toolbarHeight);
+        const float controlY = regions.toolbarOrigin.y + (metrics.toolbarHeight - metrics.controlHeight) * 0.5F;
+        const float searchWidth =
+            std::max(180.0F * scale, regions.toolbarWidth - metrics.toolbarPaddingX * 2.0F - MeasureToolbarFixedWidth(counts, context));
+        const float searchX = regions.toolbarOrigin.x + metrics.toolbarPaddingX;
+
+        ImGui::SetCursorScreenPos({searchX, controlY});
+        if (const std::string &searchHint = context.localization.Get("editor", "workspace.global_dock.operations.search");
+            Ui::InputTextControl("##OperationsSearch", m_search.data(), m_search.size(), fonts,
+                                 {.width = searchWidth / scale,
+                                  .hint = searchHint.c_str(),
+                                  .prefixIconWidth = 20.0F,
+                                  .componentSize = Ui::ComponentSize::Small,
+                                  .surface = Ui::InputTextSurface::BottomDockToolbar})) {
+            m_filterDirty = true;
+        }
+        Ui::DrawEditorIcon(ImGui::GetWindowDrawList(), Ui::UiIcon::Search, {searchX + 8.0F * scale, controlY + 8.0F * scale},
+                           {14.0F * scale, 14.0F * scale}, Theme::U32(Theme::Dim()), fonts.icon);
+        const float actionsX = DrawStateFilterChips(searchX + searchWidth + metrics.toolbarGap, controlY, counts, context);
+        DrawKindAndCancelActions(actionsX, controlY, context);
+    }
+
+    void GlobalDockOperationsPane::DrawTable(const GlobalDockPaneRegions &regions, const bool snapshotChanged,
+                                             const EditorGuiContext &context) {
+        const Theme::Fonts &fonts = context.theme.fonts;
+        const float scale = std::max(Theme::GetActiveTokens().sizes.uiScale, 0.01F);
+        const GlobalDockPaneMetrics metrics = ResolveGlobalDockPaneMetrics();
         ImDrawList *drawList = ImGui::GetWindowDrawList();
         const ImVec2 headerMin = regions.contentOrigin;
         DrawGlobalDockTableHeaderSurface(headerMin, regions.contentWidth, metrics.tableHeaderHeight);
-        const float operationX = headerMin.x + metrics.contentPadding;
-        const float stateX = operationX + 120.0F * scale + metrics.columnGap;
-        const float progressX = stateX + 100.0F * scale + metrics.columnGap;
         const float actionWidth = 72.0F * scale;
         const float elapsedWidth = 70.0F * scale;
         const float actionX = headerMin.x + regions.contentWidth - metrics.contentPadding - actionWidth;
-        const float elapsedX = actionX - metrics.columnGap - elapsedWidth;
+        const TableLayout layout{.operation = headerMin.x + metrics.contentPadding,
+                                 .state = headerMin.x + metrics.contentPadding + 120.0F * scale + metrics.columnGap,
+                                 .progress = headerMin.x + metrics.contentPadding + 220.0F * scale + metrics.columnGap * 2.0F,
+                                 .elapsed = actionX - metrics.columnGap - elapsedWidth,
+                                 .action = actionX,
+                                 .actionWidth = actionWidth};
         const float headerY = headerMin.y + (metrics.tableHeaderHeight - Theme::TextPx::Caption()) * 0.5F;
         const auto headerText = [&](const float textX, const char *key) {
             drawList->AddText(fonts.sansCompact, Theme::TextPx::Caption(), {textX, headerY}, Theme::U32(Theme::Muted()),
                               context.localization.Get("editor", key).c_str());
         };
-        headerText(operationX, "workspace.global_dock.operations.column.operation");
-        headerText(stateX, "workspace.global_dock.operations.column.status");
-        headerText(progressX, "workspace.global_dock.operations.column.progress");
-        headerText(elapsedX, "workspace.global_dock.operations.column.elapsed");
-        headerText(actionX, "workspace.global_dock.operations.column.action");
+        headerText(layout.operation, "workspace.global_dock.operations.column.operation");
+        headerText(layout.state, "workspace.global_dock.operations.column.status");
+        headerText(layout.progress, "workspace.global_dock.operations.column.progress");
+        headerText(layout.elapsed, "workspace.global_dock.operations.column.elapsed");
+        headerText(layout.action, "workspace.global_dock.operations.column.action");
 
         const ImVec2 rowsOrigin{regions.contentOrigin.x, regions.contentOrigin.y + metrics.tableHeaderHeight};
         const float rowsHeight = std::max(1.0F, regions.contentHeight - metrics.tableHeaderHeight);
@@ -307,67 +362,79 @@ namespace Horo::Editor {
         ImGui::PushStyleColor(ImGuiCol_ChildBg, Theme::BottomDockContentSurface());
         ImGui::BeginChild("##OperationsRows", {regions.contentWidth, rowsHeight}, false,
                           ImGuiWindowFlags_AlwaysVerticalScrollbar | ImGuiWindowFlags_NoSavedSettings);
-        ImDrawList *rowsDrawList = ImGui::GetWindowDrawList();
         const bool wasAtBottom = ImGui::GetScrollY() >= std::max(0.0F, ImGui::GetScrollMaxY() - 2.0F);
-        for (std::size_t visibleIndex = 0; visibleIndex < m_filteredIndices.size(); ++visibleIndex) {
-            const OperationRecord &operation = m_snapshot.operations[m_filteredIndices[visibleIndex]];
-            const ImVec2 rowMin = ImGui::GetCursorScreenPos();
-            ImGui::PushID(static_cast<int>(visibleIndex));
-            ImGui::InvisibleButton("##operation", {regions.contentWidth, metrics.tableRowHeight});
-            const bool hovered = ImGui::IsItemHovered();
-            if (hovered)
-                rowsDrawList->AddRectFilled(rowMin, {rowMin.x + regions.contentWidth, rowMin.y + metrics.tableRowHeight},
-                                            Theme::U32(Theme::Hover()));
-            rowsDrawList->AddLine({rowMin.x, rowMin.y + metrics.tableRowHeight - scale},
-                                  {rowMin.x + regions.contentWidth, rowMin.y + metrics.tableRowHeight - scale},
-                                  Theme::U32(Theme::Border()));
-            const float textY = rowMin.y + (metrics.tableRowHeight - Theme::TextPx::Label()) * 0.5F;
-            const std::string title = OperationTitle(operation, context);
-            DrawGlobalDockClippedText(*rowsDrawList, fonts.sansCompact, Theme::TextPx::Label(), {operationX, textY},
-                                      {stateX - metrics.columnGap, rowMin.y + metrics.tableRowHeight}, Theme::Text(), title);
-            const std::string stateLabel = context.localization.Get("editor", StatusLocalizationKey(operation.state));
-            static_cast<void>(DrawGlobalDockStatePill({stateX, rowMin.y + (metrics.tableRowHeight - 22.0F * scale) * 0.5F}, stateLabel,
-                                                      StatusTone(operation.state), fonts));
-            const float progressRight = elapsedX - metrics.columnGap;
-            const std::string progressLabel = !operation.message.empty() ? operation.message
-                                              : !operation.phase.empty() ? operation.phase
-                                                                         : FormatProgress(operation.progress);
-            DrawGlobalDockClippedText(*rowsDrawList, fonts.sansCompact, Theme::TextPx::Caption(), {progressX, textY},
-                                      {progressRight, rowMin.y + metrics.tableRowHeight}, Theme::Muted(), progressLabel);
-            if (operation.progress.has_value())
-                DrawGlobalDockProgressBar({progressX, rowMin.y + metrics.tableRowHeight - 8.0F * scale},
-                                          std::max(1.0F, progressRight - progressX), *operation.progress);
-            const std::string elapsed = FormatElapsed(operation);
-            DrawGlobalDockClippedText(*rowsDrawList, fonts.sansCompact, Theme::TextPx::Label(), {elapsedX, textY},
-                                      {actionX - metrics.columnGap, rowMin.y + metrics.tableRowHeight}, Theme::Text(), elapsed);
-            const bool canCancel = CanCancel(operation);
-            const bool showDetails = operation.state == OperationState::Failed;
-            if (canCancel || showDetails) {
-                const GlobalDockToolbarChipProps action{.id = "OperationAction",
-                                                        .label = context.localization.Get("editor", ActionKey(operation)),
-                                                        .tone = canCancel ? GlobalDockTone::Error : GlobalDockTone::Neutral,
-                                                        .toneLabel = canCancel};
-                if (DrawGlobalDockToolbarChip({actionX, rowMin.y + (metrics.tableRowHeight - metrics.controlHeight) * 0.5F}, actionWidth,
-                                              action, fonts) &&
-                    canCancel && m_operationControl != nullptr) {
-                    static_cast<void>(m_operationControl->RequestCancel(operation.id));
-                }
-            }
-            ImGui::PopID();
-        }
+        for (std::size_t visibleIndex = 0; visibleIndex < m_filteredIndices.size(); ++visibleIndex)
+            DrawOperationRow(m_snapshot.operations[m_filteredIndices[visibleIndex]], visibleIndex, regions.contentWidth, layout, context);
         if (snapshotChanged && (wasAtBottom || m_initialFollowTail))
             ImGui::SetScrollHereY(1.0F);
         m_initialFollowTail = false;
         ImGui::EndChild();
         ImGui::PopStyleColor();
         ImGui::PopStyleVar();
+    }
 
+    void GlobalDockOperationsPane::DrawOperationRow(const OperationRecord &operation, const std::size_t visibleIndex, const float width,
+                                                    const TableLayout &layout, const EditorGuiContext &context) {
+        const Theme::Fonts &fonts = context.theme.fonts;
+        const float scale = std::max(Theme::GetActiveTokens().sizes.uiScale, 0.01F);
+        const GlobalDockPaneMetrics metrics = ResolveGlobalDockPaneMetrics();
+        ImDrawList *drawList = ImGui::GetWindowDrawList();
+        const ImVec2 rowMin = ImGui::GetCursorScreenPos();
+        ImGui::PushID(static_cast<int>(visibleIndex));
+        ImGui::InvisibleButton("##operation", {width, metrics.tableRowHeight});
+        if (const bool hovered = ImGui::IsItemHovered(); hovered)
+            drawList->AddRectFilled(rowMin, {rowMin.x + width, rowMin.y + metrics.tableRowHeight}, Theme::U32(Theme::Hover()));
+        drawList->AddLine({rowMin.x, rowMin.y + metrics.tableRowHeight - scale},
+                          {rowMin.x + width, rowMin.y + metrics.tableRowHeight - scale}, Theme::U32(Theme::Border()));
+        const float textY = rowMin.y + (metrics.tableRowHeight - Theme::TextPx::Label()) * 0.5F;
+        DrawGlobalDockClippedText(*drawList, fonts.sansCompact, Theme::TextPx::Label(), {layout.operation, textY},
+                                  {layout.state - metrics.columnGap, rowMin.y + metrics.tableRowHeight}, Theme::Text(),
+                                  OperationTitle(operation, context));
+        const std::string stateLabel = context.localization.Get("editor", StatusLocalizationKey(operation.state));
+        static_cast<void>(DrawGlobalDockStatePill({layout.state, rowMin.y + (metrics.tableRowHeight - 22.0F * scale) * 0.5F}, stateLabel,
+                                                  StatusTone(operation.state), fonts));
+        const float progressRight = layout.elapsed - metrics.columnGap;
+        const std::string progressLabel = OperationProgressLabel(operation);
+        DrawGlobalDockClippedText(*drawList, fonts.sansCompact, Theme::TextPx::Caption(), {layout.progress, textY},
+                                  {progressRight, rowMin.y + metrics.tableRowHeight}, Theme::Muted(), progressLabel);
+        if (operation.progress.has_value())
+            DrawGlobalDockProgressBar({layout.progress, rowMin.y + metrics.tableRowHeight - 8.0F * scale},
+                                      std::max(1.0F, progressRight - layout.progress), *operation.progress);
+        DrawGlobalDockClippedText(*drawList, fonts.sansCompact, Theme::TextPx::Label(), {layout.elapsed, textY},
+                                  {layout.action - metrics.columnGap, rowMin.y + metrics.tableRowHeight}, Theme::Text(),
+                                  FormatElapsed(operation));
+        DrawOperationAction(operation, rowMin, layout, context);
+        ImGui::PopID();
+    }
+
+    void GlobalDockOperationsPane::DrawOperationAction(const OperationRecord &operation, const ImVec2 rowMinimum, const TableLayout &layout,
+                                                       const EditorGuiContext &context) {
+        const Theme::Fonts &fonts = context.theme.fonts;
+        const GlobalDockPaneMetrics metrics = ResolveGlobalDockPaneMetrics();
+        const bool canCancel = CanCancel(operation);
+        if (const bool showDetails = operation.state == OperationState::Failed; canCancel || showDetails) {
+            const GlobalDockToolbarChipProps action{.id = "OperationAction",
+                                                    .label = context.localization.Get("editor", ActionKey(operation)),
+                                                    .tone = canCancel ? GlobalDockTone::Error : GlobalDockTone::Neutral,
+                                                    .toneLabel = canCancel};
+            if (DrawGlobalDockToolbarChip({layout.action, rowMinimum.y + (metrics.tableRowHeight - metrics.controlHeight) * 0.5F},
+                                          layout.actionWidth, action, fonts) &&
+                canCancel && m_operationControl != nullptr)
+                static_cast<void>(m_operationControl->RequestCancel(operation.id));
+        }
+    }
+
+    void GlobalDockOperationsPane::DrawFooter(const GlobalDockPaneRegions &regions, const OperationCounts &counts,
+                                              const EditorGuiContext &context) const {
+        const Theme::Fonts &fonts = context.theme.fonts;
+        const GlobalDockPaneMetrics metrics = ResolveGlobalDockPaneMetrics();
+        ImDrawList *drawList = ImGui::GetWindowDrawList();
         DrawGlobalDockFooterSurface(regions.footerOrigin, regions.footerWidth, metrics.footerHeight);
         const float footerY = regions.footerOrigin.y + (metrics.footerHeight - Theme::TextPx::Caption()) * 0.5F;
         const std::string summary =
-            std::format("{} {}   {} {}   {} {}", runningCount,
-                        context.localization.Get("editor", "workspace.global_dock.operations.footer.running"), queuedCount,
-                        context.localization.Get("editor", "workspace.global_dock.operations.footer.queued"), failedCount,
+            std::format("{} {}   {} {}   {} {}", counts.running,
+                        context.localization.Get("editor", "workspace.global_dock.operations.footer.running"), counts.queued,
+                        context.localization.Get("editor", "workspace.global_dock.operations.footer.queued"), counts.failed,
                         context.localization.Get("editor", "workspace.global_dock.operations.footer.failed"));
         drawList->AddText(fonts.sansCompact, Theme::TextPx::Caption(), {regions.footerOrigin.x + metrics.contentPadding, footerY},
                           Theme::U32(Theme::Muted()), summary.c_str());
@@ -378,6 +445,20 @@ namespace Horo::Editor {
         drawList->AddText(fonts.sansCompact, Theme::TextPx::Caption(),
                           {regions.footerOrigin.x + regions.footerWidth - metrics.contentPadding - boundedWidth, footerY},
                           Theme::U32(Theme::Muted()), bounded.c_str());
+    }
+
+    /** @copydoc GlobalDockOperationsPane::Draw */
+    void GlobalDockOperationsPane::Draw(const ImVec2 &contentOrigin, const float contentWidth, const EditorGuiContext &context) {
+        const bool snapshotChanged = RefreshSnapshot();
+        if (m_filterDirty)
+            RebuildFilter();
+        const float availableHeight = std::max(1.0F, ImGui::GetWindowPos().y + ImGui::GetWindowHeight() - contentOrigin.y);
+        const GlobalDockPaneRegions regions =
+            ResolveGlobalDockPaneRegions(contentOrigin, contentWidth, availableHeight, {.hasToolbar = true, .hasFooter = true});
+        const OperationCounts counts = CountStates();
+        DrawToolbar(regions, counts, context);
+        DrawTable(regions, snapshotChanged, context);
+        DrawFooter(regions, counts, context);
     }
 
     bool GlobalDockOperationsPane::RefreshSnapshot() {

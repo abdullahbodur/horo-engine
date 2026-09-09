@@ -59,7 +59,9 @@ namespace Horo::Editor {
         }
 
         [[nodiscard]] ImVec4 ToolbarIconColor(const bool enabled, const bool hovered) noexcept {
-            ImVec4 color = enabled ? (hovered ? Theme::Text() : Theme::Muted()) : Theme::Muted();
+            ImVec4 color = Theme::Muted();
+            if (enabled && hovered)
+                color = Theme::Text();
             if (!enabled)
                 color.w *= 0.35F;
             return color;
@@ -253,8 +255,8 @@ namespace Horo::Editor {
             float x = position.x;
             const auto button = [&](const char *id, const Ui::UiIcon icon, const bool enabled, const char *key,
                                     const EditorWorkspaceViewCommand action) {
-                const std::string &tooltip = context.localization.Get("editor", key);
-                if (DrawToolbarButton({x, position.y}, id, icon, enabled, tooltip.c_str(), context.theme.fonts.icon))
+                if (const std::string &tooltip = context.localization.Get("editor", key);
+                    DrawToolbarButton({x, position.y}, id, icon, enabled, tooltip.c_str(), context.theme.fonts.icon))
                     command = AssetBrowserInteractionSession::Navigate(action);
                 x += layout.control + layout.gap;
             };
@@ -313,17 +315,18 @@ namespace Horo::Editor {
         }
 
         void DrawSortField(const ImVec2 position, const float width, AssetBrowserInteractionState &state, const EditorGuiContext &context) {
+            using enum ContentBrowserSortField;
             const std::array labels{context.localization.Get("editor", "workspace.content_browser.sort.name"),
                                     context.localization.Get("editor", "workspace.content_browser.sort.type")};
             const std::array items{labels[0].c_str(), labels[1].c_str()};
-            int selectedIndex = state.sortField == ContentBrowserSortField::Name ? 0 : 1;
+            int selectedIndex = state.sortField == Name ? 0 : 1;
             ImGui::SetCursorScreenPos(position);
             ImGui::SetNextItemWidth(width);
             if (Ui::ComboControl("ContentBrowserSort", &selectedIndex, items.data(), static_cast<int>(items.size()), context.theme.fonts,
                                  {.height = AssetBrowserLayout::ToolbarControlHeight,
                                   .componentSize = Ui::ComponentSize::Medium,
                                   .surface = Ui::ComboControlSurface::BottomDockToolbar}))
-                state.sortField = selectedIndex == 0 ? ContentBrowserSortField::Name : ContentBrowserSortField::Type;
+                state.sortField = selectedIndex == 0 ? Name : Type;
         }
 
         void DrawTrailingActions(const ImVec2 position, const EditorWorkspaceViewModel &viewModel, EditorWorkspaceViewCommandData &command,
@@ -340,8 +343,8 @@ namespace Horo::Editor {
             if (DrawImportButton({x, position.y}, layout.compact, context))
                 command = AssetBrowserInteractionSession::ImportHere(viewModel.contentBrowser.absoluteCurrentPath);
             x += layout.importWidth + layout.gap;
-            const std::string &tooltip = context.localization.Get("editor", "workspace.content_browser.action.create_folder");
-            if (!DrawToolbarButton({x, position.y}, "ContentBrowserNewFolder", Ui::UiIcon::CreateNewFolder, true, tooltip.c_str(),
+            if (const std::string &tooltip = context.localization.Get("editor", "workspace.content_browser.action.create_folder");
+                !DrawToolbarButton({x, position.y}, "ContentBrowserNewFolder", Ui::UiIcon::CreateNewFolder, true, tooltip.c_str(),
                                    context.theme.fonts.icon))
                 return;
             state.createFolderBuffer.fill('\0');

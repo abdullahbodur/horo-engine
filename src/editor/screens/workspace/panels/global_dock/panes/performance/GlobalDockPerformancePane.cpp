@@ -199,7 +199,7 @@ namespace Horo::Editor {
     }
 
     void GlobalDockPerformancePane::DrawTable(const ImVec2 &origin, const float width, const float height,
-                                              const EditorGuiContext &context) {
+                                              const EditorGuiContext &context) const {
         const Theme::Fonts &fonts = context.theme.fonts;
         const float scale = std::max(Theme::GetActiveTokens().sizes.uiScale, 0.01F);
         const GlobalDockPaneMetrics metrics = ResolveGlobalDockPaneMetrics();

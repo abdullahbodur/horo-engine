@@ -38,9 +38,9 @@ namespace Horo::Editor {
         [[nodiscard]] bool ContainsCaseInsensitive(const std::string_view value, const std::string_view query) {
             if (query.empty())
                 return true;
-            return std::search(value.begin(), value.end(), query.begin(), query.end(), [](const char lhs, const char rhs) {
+            return std::ranges::search(value, query, [](const char lhs, const char rhs) {
                 return std::tolower(static_cast<unsigned char>(lhs)) == std::tolower(static_cast<unsigned char>(rhs));
-            }) != value.end();
+            }).begin() != value.end();
         }
 
         [[nodiscard]] float TextWidth(ImFont *font, const float size, const std::string &text) {
@@ -194,7 +194,8 @@ namespace Horo::Editor {
         return DrawGlobalDockMetricGrid(origin, width, cards, context.theme.fonts);
     }
 
-    void GlobalDockNetworkPane::DrawTable(const ImVec2 &origin, const float width, const float height, const EditorGuiContext &context) {
+    void GlobalDockNetworkPane::DrawTable(const ImVec2 &origin, const float width, const float height,
+                                          const EditorGuiContext &context) const {
         const Theme::Fonts &fonts = context.theme.fonts;
         const float scale = std::max(Theme::GetActiveTokens().sizes.uiScale, 0.01F);
         const GlobalDockPaneMetrics metrics = ResolveGlobalDockPaneMetrics();
@@ -241,9 +242,9 @@ namespace Horo::Editor {
         const NetworkRow &row = Rows[index];
         const std::string &state = context.localization.Get("editor", row.stateKey);
         const std::string &queue = context.localization.Get("editor", row.queueKey);
-        const std::string_view search{m_search.data()};
-        if (!ContainsCaseInsensitive(row.connection, search) && !ContainsCaseInsensitive(state, search) &&
-            !ContainsCaseInsensitive(queue, search))
+        if (const std::string_view search{m_search.data()}; !ContainsCaseInsensitive(row.connection, search) &&
+                                                            !ContainsCaseInsensitive(state, search) &&
+                                                            !ContainsCaseInsensitive(queue, search))
             return;
         const GlobalDockPaneMetrics metrics = ResolveGlobalDockPaneMetrics();
         const float scale = std::max(Theme::GetActiveTokens().sizes.uiScale, 0.01F);

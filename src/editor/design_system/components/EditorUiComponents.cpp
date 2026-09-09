@@ -2105,7 +2105,6 @@ namespace Horo::Editor::Ui {
         borderLight.w = 0.5f;
         dl->AddLine(ImVec2(pos.x, pos.y + h - 1.0f), ImVec2(pos.x + w, pos.y + h - 1.0f), ImGui::GetColorU32(borderLight), 1.0f);
 
-        const float scale = Theme::GetActiveTokens().sizes.uiScale;
         const float labelFontSize = InspectorTypography::Label();
         const float fieldFontSize = InspectorTypography::Field();
         dl->AddText(fonts.sans, labelFontSize, ImVec2(pos.x + 14.0f, pos.y + (h - labelFontSize) * 0.5F), Theme::U32(Theme::Muted()),
@@ -2323,7 +2322,6 @@ namespace Horo::Editor::Ui {
         PushInspectorControlStyle();
         Float3PropertyEditResult result;
         {
-            const float scale = Theme::GetActiveTokens().sizes.uiScale;
             const float valueFontSize = InspectorTypography::Field();
             const float axisFontSize = InspectorTypography::Axis();
             Theme::ScopedTextStyle ts(fonts.sans, valueFontSize, Theme::FontPx::Sans);
