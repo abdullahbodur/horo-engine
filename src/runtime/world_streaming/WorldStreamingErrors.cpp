@@ -19,6 +19,28 @@ namespace Horo::WorldStreaming::WorldStreamingErrors {
         }
     }  // namespace
 
+    const ErrorCodeDescriptor RuntimeCompositionInvalid =
+        Describe("world_streaming.runtime_composition.invalid", ErrorSeverity::Error,
+                 "A World Streaming runtime composition is malformed.",
+                 "Provide one explicit planner, asset provider and Scene runtime plus bounded feature adapters and a valid scheduler.",
+                 true);
+    const ErrorCodeDescriptor RuntimeCompositionIdentityConflict =
+        Describe("world_streaming.runtime_composition.identity_conflict", ErrorSeverity::Error,
+                 "A World Streaming runtime composition repeats a service identity.",
+                 "Assign every borrowed service binding one unique stable identity.", true);
+    const ErrorCodeDescriptor RuntimeCompositionCapacityExceeded =
+        Describe("world_streaming.runtime_composition.capacity_exceeded", ErrorSeverity::Error,
+                 "World Streaming runtime service bindings exceed their configured ceiling.",
+                 "Reduce feature adapters or choose an explicitly larger supported ceiling before composition.", true);
+    const ErrorCodeDescriptor RuntimeCompositionRevisionStale =
+        Describe("world_streaming.runtime_composition.revision_stale", ErrorSeverity::Warning,
+                 "A World Streaming runtime composition command names stale ownership or revision facts.",
+                 "Capture the active owner and revision before lookup, replacement, cancellation or shutdown.", false);
+    const ErrorCodeDescriptor RuntimeCompositionLifecycleUnavailable =
+        Describe("world_streaming.runtime_composition.lifecycle_unavailable", ErrorSeverity::Warning,
+                 "The World Streaming runtime composition lifecycle cannot accept this operation.",
+                 "Finish retained scheduler work before replacement, or create a new composition after shutdown.", false);
+
     const ErrorCodeDescriptor FallbackProviderInvalid =
         Describe("world_streaming.fallback_provider.invalid", ErrorSeverity::Error,
                  "A fallback streaming provider descriptor is malformed.",

@@ -8,6 +8,16 @@
 #include "Horo/Foundation/ErrorCode.h"
 
 namespace Horo::WorldStreaming::WorldStreamingErrors {
+    /** @brief A runtime composition omits or malforms its explicit owner, scheduler, core service, or adapter facts. */
+    extern const ErrorCodeDescriptor RuntimeCompositionInvalid;
+    /** @brief Runtime composition service identities are duplicated. */
+    extern const ErrorCodeDescriptor RuntimeCompositionIdentityConflict;
+    /** @brief Runtime composition bindings exceed their mandatory feature-adapter ceiling. */
+    extern const ErrorCodeDescriptor RuntimeCompositionCapacityExceeded;
+    /** @brief A runtime composition command names a foreign owner or stale/non-successor revision. */
+    extern const ErrorCodeDescriptor RuntimeCompositionRevisionStale;
+    /** @brief Runtime composition replacement or cancellation is unavailable while draining, closed, or retaining work. */
+    extern const ErrorCodeDescriptor RuntimeCompositionLifecycleUnavailable;
     /** @brief A fallback provider descriptor has malformed ownership, revision, mode-specific or cell data. */
     extern const ErrorCodeDescriptor FallbackProviderInvalid;
     /** @brief A fallback provider mode is unknown to this contract version. */

@@ -201,6 +201,22 @@ neither operation fabricates cleanup acknowledgement for later provider or Scene
 resources. A different mounted epoch receives a new fallback owner rather than
 in-place token reuse.
 
+`WorldStreamingRuntimeComposition` is the concrete explicit host seam for one
+mounted owner lifetime. It owns exactly one bounded scheduler admission ledger and
+borrows exactly one planner, asset provider and Scene Runtime plus one or more
+feature adapters. Every binding has a stable typed identity and immutable revision;
+the composition canonicalizes the complete set and rejects missing core roles,
+duplicates, unknown roles and adapter-capacity overflow before publication. It
+performs no discovery, registration, backend selection or service construction.
+
+Replacement is a complete revisioned transaction and is rejected while scheduler
+work is retained. Cancellation closes scheduler admission without releasing or
+hiding accepted work. Shutdown keeps all borrowed bindings reachable while the
+canonical operations drain, and reports Closed only after the owned ledger has
+received terminal retirement acknowledgements and released every reservation.
+A moved-from composition is closed, so moving the unique owner cannot leave a
+second admission path for the same ledger identity.
+
 The canonical adapter is **IFeatureStreamingProvider**, already used by ADR-023
 and ADR-016. The earlier proposed IStreamingFeatureProvider callback-only spelling
 is replaced by this one contract, not a second provider hierarchy. Notifications

@@ -286,6 +286,7 @@ add_executable(HoroWorldStreamingTests
         unit/runtime/world_streaming/WorldSpatialAssignmentTests.cpp
         unit/runtime/world_streaming/WorldSpanningObjectPlanTests.cpp
         unit/runtime/world_streaming/WorldStreamingIdentityTests.cpp
+        unit/runtime/world_streaming/WorldStreamingRuntimeCompositionTests.cpp
 )
 target_compile_features(HoroWorldStreamingTests PRIVATE cxx_std_20)
 target_link_libraries(HoroWorldStreamingTests PRIVATE HoroEngine::WorldStreaming)
