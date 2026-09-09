@@ -1,10 +1,10 @@
 #include "Horo/Runtime/Render/RenderGraph.h"
 #include "Horo/Runtime/Render/RenderGraphErrors.h"
+#include "RenderGraphTestUtils.h"
 
 #include <array>
 #include <catch2/catch_test_macros.hpp>
 #include <string>
-#include <string_view>
 #include <thread>
 #include <type_traits>
 #include <utility>
@@ -12,30 +12,8 @@
 namespace {
     using namespace Horo;
     using namespace Horo::Render;
+    using namespace Horo::Render::Test;
 
-    template <typename T> void RequireError(const Result<T> &result, const std::string_view code) {
-        REQUIRE(result.HasError());
-        REQUIRE(result.ErrorValue().code.Value() == code);
-        REQUIRE_FALSE(result.ErrorValue().message.empty());
-    }
-
-    RenderGraphLimits SmallLimits() {
-        return {.maxPasses = 3, .maxResources = 2, .maxUsages = 3, .maxDependencies = 2};
-    }
-
-    RenderBufferHandle BufferHandle(const std::uint32_t slot = 1) {
-        return {{41}, slot, 1};
-    }
-
-    RenderTextureHandle TextureHandle(const std::uint32_t slot = 1) {
-        return {{42}, slot, 1};
-    }
-
-    RenderGraphBuilder RequireBuilder(const RenderGraphLimits &limits = SmallLimits()) {
-        auto created = RenderGraphBuilder::Create(limits);
-        REQUIRE(created.HasValue());
-        return std::move(created).Value();
-    }
 }  // namespace
 
 TEST_CASE("Render graph records retain backend-neutral typed identities", "[runtime][renderer][render-graph]") {
@@ -76,18 +54,22 @@ TEST_CASE("Render graph errors expose stable actionable identities", "[runtime][
         &RenderGraphErrors::AllocationFailed,
         &RenderGraphErrors::BuilderClosed,
         &RenderGraphErrors::CapacityExceeded,
+        &RenderGraphErrors::DependencyCycle,
         &RenderGraphErrors::EmptyGraph,
         &RenderGraphErrors::IncompatibleQueue,
         &RenderGraphErrors::InvalidDependency,
         &RenderGraphErrors::InvalidExport,
+        &RenderGraphErrors::InvalidGraph,
         &RenderGraphErrors::InvalidImport,
         &RenderGraphErrors::InvalidLimits,
         &RenderGraphErrors::InvalidPass,
         &RenderGraphErrors::InvalidResource,
         &RenderGraphErrors::InvalidUsage,
         &RenderGraphErrors::OwnerExhausted,
+        &RenderGraphErrors::ReadBeforeWrite,
         &RenderGraphErrors::UnsupportedDependencyKind,
         &RenderGraphErrors::UnsupportedPassKind,
+        &RenderGraphErrors::UnsupportedPassCullPolicy,
         &RenderGraphErrors::UnsupportedQueueRole,
         &RenderGraphErrors::UnsupportedResourceKind,
         &RenderGraphErrors::UnsupportedResourceClass,
@@ -112,6 +94,8 @@ TEST_CASE("Render graph storage is move-only and immutable through its views", "
     STATIC_REQUIRE_FALSE(std::is_copy_assignable_v<RenderGraph>);
     STATIC_REQUIRE(std::is_move_constructible_v<RenderGraph>);
     STATIC_REQUIRE(std::is_same_v<decltype(std::declval<const RenderGraph &>().Passes()), std::span<const RenderGraphPass>>);
+    STATIC_REQUIRE_FALSE(std::is_copy_constructible_v<RenderGraphSchedule>);
+    STATIC_REQUIRE(std::is_move_constructible_v<RenderGraphSchedule>);
 }
 
 TEST_CASE("Render graph builder owns finite storage and explicit lifecycle", "[runtime][renderer][render-graph]") {
@@ -147,6 +131,9 @@ TEST_CASE("Render graph pass authoring rejects unsupported and incompatible queu
             "render.graph.pass_kind_unsupported");
     REQUIRE(builder.AddPass(RenderPassKind::Graphics, static_cast<RenderQueueRole>(255)).ErrorValue().code.Value() ==
             "render.graph.queue_role_unsupported");
+    REQUIRE(builder.AddPass(RenderPassKind::Graphics, RenderQueueRole::Graphics, static_cast<RenderGraphPassCullPolicy>(255))
+                .ErrorValue()
+                .code.Value() == "render.graph.pass_cull_policy_unsupported");
 
     auto pass = builder.AddPass(RenderPassKind::Graphics, RenderQueueRole::Graphics);
     REQUIRE(pass.HasValue());

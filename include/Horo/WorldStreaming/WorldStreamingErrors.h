@@ -14,6 +14,36 @@ namespace Horo::WorldStreaming::WorldStreamingErrors {
     extern const ErrorCodeDescriptor SerializedIdentityInvalid;
     /** @brief A partition epoch, cell-attempt generation, runtime-source revision, or authoring-page revision cannot advance. */
     extern const ErrorCodeDescriptor GenerationExhausted;
+    /** @brief A cell operation has a malformed identity, fence, or initial representation. */
+    extern const ErrorCodeDescriptor CellOperationInvalid;
+    /** @brief A completion or command does not name the exact cell operation and fence. */
+    extern const ErrorCodeDescriptor CellOperationStale;
+    /** @brief A cell operation transition value is unknown to this contract version. */
+    extern const ErrorCodeDescriptor CellOperationUnsupported;
+    /** @brief A known cell operation transition is not legal from the current phase. */
+    extern const ErrorCodeDescriptor CellOperationTransitionInvalid;
+    /** @brief A scheduler admission ledger, request, or reservation is malformed. */
+    extern const ErrorCodeDescriptor SchedulerAdmissionInvalid;
+    /** @brief Scheduler operation count or generic capacity cannot be reserved within configured ceilings. */
+    extern const ErrorCodeDescriptor SchedulerCapacityExceeded;
+    /** @brief A scheduler operation already owns a reservation in this ledger. */
+    extern const ErrorCodeDescriptor SchedulerReservationConflict;
+    /** @brief A scheduler command does not name the exact owner-scoped reservation and operation fence. */
+    extern const ErrorCodeDescriptor SchedulerReservationStale;
+    /** @brief Scheduler admission is draining, closed, or waiting for an operation to retire. */
+    extern const ErrorCodeDescriptor SchedulerLifecycleUnavailable;
+    /** @brief A multidimensional budget vector, policy, request, or evaluation context is malformed. */
+    extern const ErrorCodeDescriptor BudgetModelInvalid;
+    /** @brief A budget vector or policy names a resource dimension unsupported by this contract version. */
+    extern const ErrorCodeDescriptor BudgetDimensionUnsupported;
+    /** @brief A budget policy or usage sample revision no longer matches current authority state. */
+    extern const ErrorCodeDescriptor BudgetRevisionStale;
+    /** @brief A budget sample has malformed window timing. */
+    extern const ErrorCodeDescriptor BudgetSampleInvalid;
+    /** @brief A budget sample belongs to an earlier completed sampling window. */
+    extern const ErrorCodeDescriptor BudgetSampleStale;
+    /** @brief Projected usage overflows or exceeds one independent hard resource limit. */
+    extern const ErrorCodeDescriptor BudgetCapacityExceeded;
     /** @brief A world-cell grid has zero/overflowing cell size, inverted bounds, or no LODs. */
     extern const ErrorCodeDescriptor QuantizationPolicyInvalid;
     /** @brief A coordinate cannot be translated relative to the grid origin without signed overflow. */

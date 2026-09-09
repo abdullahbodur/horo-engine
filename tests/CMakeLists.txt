@@ -259,6 +259,7 @@ add_executable(HoroNavigationApiTests
         unit/runtime/navigation/NavigationIdentityTests.cpp
         unit/runtime/navigation/NavigationOutcomesTests.cpp
         unit/runtime/navigation/NavigationProviderTests.cpp
+        unit/runtime/navigation/NavigationSourceGeometryTests.cpp
 )
 target_compile_features(HoroNavigationApiTests PRIVATE cxx_std_20)
 target_include_directories(HoroNavigationApiTests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/support)
@@ -267,6 +268,9 @@ horo_register_catch_test(HoroNavigationApiTests LABELS "unit;navigation;headless
 
 add_executable(HoroWorldStreamingTests
         unit/runtime/world_streaming/CookedWorldIndexManifestTests.cpp
+        unit/runtime/world_streaming/StreamingBudgetModelTests.cpp
+        unit/runtime/world_streaming/StreamingCellOperationTests.cpp
+        unit/runtime/world_streaming/StreamingSchedulerAdmissionTests.cpp
         unit/runtime/world_streaming/WorldDependencyPlanTests.cpp
         unit/runtime/world_streaming/WorldAuthoringContractTests.cpp
         unit/runtime/world_streaming/StreamingDesiredStateTests.cpp
@@ -934,15 +938,28 @@ add_executable(HoroRenderBackendRegistryTests
 )
 
 target_compile_features(HoroRenderBackendRegistryTests PRIVATE cxx_std_20)
+target_include_directories(HoroRenderBackendRegistryTests PRIVATE ${PROJECT_SOURCE_DIR}/tests/support)
 target_link_libraries(HoroRenderBackendRegistryTests
         PRIVATE
         HoroEngine::RenderNull
 )
 add_executable(HoroRenderGraphTests
         unit/runtime/renderer/RenderGraphTests.cpp
+        unit/runtime/renderer/RenderGraphValidationTests.cpp
+        unit/runtime/renderer/RenderGraphSynchronizationTests.cpp
 )
 target_compile_features(HoroRenderGraphTests PRIVATE cxx_std_20)
 target_link_libraries(HoroRenderGraphTests PRIVATE HoroEngine::RenderApi)
+add_executable(HoroRenderGraphLifetimeTests
+        unit/runtime/renderer/RenderGraphLifetimeTests.cpp
+)
+target_compile_features(HoroRenderGraphLifetimeTests PRIVATE cxx_std_20)
+target_link_libraries(HoroRenderGraphLifetimeTests PRIVATE HoroEngine::RenderApi)
+add_executable(HoroTemporalHistoryTests
+        unit/runtime/renderer/TemporalHistoryTests.cpp
+)
+target_compile_features(HoroTemporalHistoryTests PRIVATE cxx_std_20)
+target_link_libraries(HoroTemporalHistoryTests PRIVATE HoroEngine::RenderApi)
 add_executable(HoroRenderSubmissionTests
         unit/runtime/renderer/RenderSubmissionTests.cpp
 )
@@ -1008,6 +1025,12 @@ add_executable(HoroRuntimeSaveParticipantRegistryTests
 )
 target_compile_features(HoroRuntimeSaveParticipantRegistryTests PRIVATE cxx_std_20)
 target_link_libraries(HoroRuntimeSaveParticipantRegistryTests PRIVATE HoroEngine::Runtime)
+add_executable(HoroRuntimeSaveCaptureSnapshotTests
+        unit/runtime/save/SaveCaptureSnapshotTests.cpp
+        unit/runtime/save/SaveCaptureSnapshotEdgeTests.cpp
+)
+target_compile_features(HoroRuntimeSaveCaptureSnapshotTests PRIVATE cxx_std_20)
+target_link_libraries(HoroRuntimeSaveCaptureSnapshotTests PRIVATE HoroEngine::Runtime)
 add_executable(HoroRuntimeUiIdentityTests
         unit/runtime/ui/UiIdentityTests.cpp
 )
@@ -1203,6 +1226,7 @@ if (HORO_BUILD_RENDER_OPENGL)
     target_compile_features(HoroRenderOpenGLTests PRIVATE cxx_std_20)
     target_include_directories(HoroRenderOpenGLTests PRIVATE
             ${PROJECT_SOURCE_DIR}/src/runtime/renderer/modules/opengl
+            ${PROJECT_SOURCE_DIR}/tests/support
     )
     target_link_libraries(HoroRenderOpenGLTests
             PRIVATE
@@ -1246,7 +1270,10 @@ if (HORO_BUILD_RENDER_METAL)
     )
 
     target_compile_features(HoroRenderMetalTests PRIVATE cxx_std_20)
-    target_include_directories(HoroRenderMetalTests PRIVATE ${PROJECT_SOURCE_DIR}/src)
+    target_include_directories(HoroRenderMetalTests PRIVATE
+            ${PROJECT_SOURCE_DIR}/src
+            ${PROJECT_SOURCE_DIR}/tests/support
+    )
     target_link_libraries(HoroRenderMetalTests
             PRIVATE
             HoroEngine::RenderFrontend
@@ -1361,6 +1388,8 @@ set(HORO_CATCH_TEST_TARGETS
         HoroRenderBackendRegistryTests
         HoroRenderAdapterTests
         HoroRenderGraphTests
+        HoroRenderGraphLifetimeTests
+        HoroTemporalHistoryTests
         HoroRenderResourceDescriptorTests
         HoroShaderManifestTests
         HoroRenderSubmissionTests
@@ -1371,6 +1400,7 @@ set(HORO_CATCH_TEST_TARGETS
         HoroRuntimeSaveRootResolverTests
         HoroRuntimeSaveNamespaceTests
         HoroRuntimeSaveParticipantRegistryTests
+        HoroRuntimeSaveCaptureSnapshotTests
         HoroRuntimeUiIdentityTests
         HoroRuntimeUiDocumentTests
         HoroRuntimeUiDiagnosticsTests

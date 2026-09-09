@@ -134,6 +134,7 @@ add_library(HoroRuntime STATIC
         runtime/save/SaveRootResolver.cpp
         runtime/save/SaveNamespace.cpp
         runtime/save/SaveParticipantRegistry.cpp
+        runtime/save/SaveCaptureSnapshot.cpp
         runtime/save/SaveArchiveMetadata.cpp
         runtime/save/SaveCompatibility.cpp
         runtime/save/SaveArchiveFraming.cpp
@@ -426,6 +427,7 @@ add_library(HoroNavigationApi STATIC
         runtime/navigation/api/NavigationErrors.cpp
         runtime/navigation/api/NavigationIdentity.cpp
         runtime/navigation/api/NavigationOutcomes.cpp
+        runtime/navigation/api/NavigationSourceGeometry.cpp
 )
 add_library(HoroEngine::NavigationApi ALIAS HoroNavigationApi)
 target_compile_features(HoroNavigationApi PUBLIC cxx_std_20)
@@ -440,6 +442,9 @@ target_link_libraries(HoroNavigationNull PUBLIC HoroEngine::NavigationApi)
 
 add_library(HoroWorldStreaming STATIC
         runtime/world_streaming/CookedWorldIndexManifest.cpp
+        runtime/world_streaming/StreamingBudgetModel.cpp
+        runtime/world_streaming/StreamingCellOperation.cpp
+        runtime/world_streaming/StreamingSchedulerAdmission.cpp
         runtime/world_streaming/WorldDependencyPlan.cpp
         runtime/world_streaming/WorldAuthoringContract.cpp
         runtime/world_streaming/StreamingDesiredState.cpp
@@ -487,10 +492,17 @@ add_library(HoroRenderApi STATIC
         runtime/renderer/api/RenderAdapterErrors.cpp
         runtime/renderer/api/RenderGraph.cpp
         runtime/renderer/api/RenderGraphErrors.cpp
+        runtime/renderer/api/RenderGraphSynchronization.cpp
+        runtime/renderer/api/RenderGraphSynchronizationErrors.cpp
+        runtime/renderer/api/RenderGraphLifetime.cpp
+        runtime/renderer/api/RenderGraphLifetimeErrors.cpp
+        runtime/renderer/api/RenderGraphValidation.cpp
         runtime/renderer/api/RenderResourceDescriptorErrors.cpp
         runtime/renderer/api/RenderResourceDescriptors.cpp
         runtime/renderer/api/ShaderManifest.cpp
         runtime/renderer/api/ShaderManifestErrors.cpp
+        runtime/renderer/api/TemporalHistory.cpp
+        runtime/renderer/api/TemporalHistoryErrors.cpp
 )
 add_library(HoroEngine::RenderApi ALIAS HoroRenderApi)
 

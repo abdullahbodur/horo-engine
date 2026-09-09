@@ -54,4 +54,12 @@ namespace Horo::Navigation::NavigationErrors {
     extern const ErrorCodeDescriptor AgentProfileInvalid;
     /** @brief Profile deletion would leave one or more stable authored references dangling. */
     extern const ErrorCodeDescriptor AgentProfileReferenced;
+    /** @brief Navigation bake-source geometry, transform, topology, identity, or limits are malformed. */
+    extern const ErrorCodeDescriptor SourceGeometryInvalid;
+    /** @brief A geometry producer kind is outside the closed canonical source contract. */
+    extern const ErrorCodeDescriptor SourceGeometryUnsupported;
+    /** @brief Source geometry exceeds a qualified contribution, vertex, triangle, or owned-byte bound. */
+    extern const ErrorCodeDescriptor SourceGeometryCapacityExceeded;
+    /** @brief Captured source revision or digest evidence no longer matches authoritative geometry. */
+    extern const ErrorCodeDescriptor SourceGeometryStale;
 }  // namespace Horo::Navigation::NavigationErrors

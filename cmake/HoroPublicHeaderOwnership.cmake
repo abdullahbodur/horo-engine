@@ -70,6 +70,7 @@ horo_configure_target_header_boundary(HoroRuntime PUBLIC_HEADERS
     Horo/Runtime/Save/SaveRootResolver.h
     Horo/Runtime/Save/SaveNamespace.h
     Horo/Runtime/Save/SaveParticipantRegistry.h
+    Horo/Runtime/Save/SaveCaptureSnapshot.h
     Horo/Runtime/Save/SaveArchiveMetadata.h
     Horo/Runtime/Save/SaveArchiveFraming.h
     Horo/Runtime/Save/SaveSlotMetadata.h
@@ -217,12 +218,16 @@ horo_configure_target_header_boundary(HoroNavigationApi PUBLIC_HEADERS
     Horo/Navigation/NavigationErrors.h
     Horo/Navigation/NavigationIdentity.h
     Horo/Navigation/NavigationOutcomes.h
+    Horo/Navigation/NavigationSourceGeometry.h
 )
 horo_configure_target_header_boundary(HoroNavigationNull PUBLIC_HEADERS
     Horo/Navigation/Backends/NullProvider.h
 )
 horo_configure_target_header_boundary(HoroWorldStreaming PUBLIC_HEADERS
     Horo/WorldStreaming/CookedWorldIndexManifest.h
+    Horo/WorldStreaming/StreamingBudgetModel.h
+    Horo/WorldStreaming/StreamingCellOperation.h
+    Horo/WorldStreaming/StreamingSchedulerAdmission.h
     Horo/WorldStreaming/WorldDependencyPlan.h
     Horo/WorldStreaming/WorldAuthoringContract.h
     Horo/WorldStreaming/StreamingDesiredState.h
@@ -254,11 +259,17 @@ horo_configure_target_header_boundary(HoroRenderApi PUBLIC_HEADERS
     Horo/Runtime/Render/RenderBackend.h
     Horo/Runtime/Render/RenderGraph.h
     Horo/Runtime/Render/RenderGraphErrors.h
+    Horo/Runtime/Render/RenderGraphSynchronization.h
+    Horo/Runtime/Render/RenderGraphSynchronizationErrors.h
+    Horo/Runtime/Render/RenderGraphLifetime.h
+    Horo/Runtime/Render/RenderGraphLifetimeErrors.h
     Horo/Runtime/Render/RenderResourceDescriptorErrors.h
     Horo/Runtime/Render/RenderResourceDescriptors.h
     Horo/Runtime/Render/RenderSubmission.h
     Horo/Runtime/Render/ShaderManifest.h
     Horo/Runtime/Render/ShaderManifestErrors.h
+    Horo/Runtime/Render/TemporalHistory.h
+    Horo/Runtime/Render/TemporalHistoryErrors.h
     Horo/Runtime/Render/Texture.h
     Horo/Runtime/Render/RenderResource.h
     Horo/Runtime/Render/RenderScene.h

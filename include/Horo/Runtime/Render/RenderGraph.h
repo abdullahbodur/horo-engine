@@ -113,6 +113,12 @@ namespace Horo::Render {
         ExternalSynchronization,
     };
 
+    /** @brief Explicit policy controlling whether a pass may be removed when its outputs are unused. */
+    enum class RenderGraphPassCullPolicy : std::uint8_t {
+        ConservativeKeep,
+        AllowCullIfOutputsUnused,
+    };
+
     /** @brief Finite builder capacities admitted before any graph records are authored. */
     struct RenderGraphLimits {
         static constexpr std::size_t HardMaxPasses = 4'096;
@@ -140,6 +146,7 @@ namespace Horo::Render {
         RenderGraphPassRef reference;
         RenderPassKind kind{RenderPassKind::Graphics};
         RenderQueueRole queue{RenderQueueRole::Graphics};
+        RenderGraphPassCullPolicy cullPolicy{RenderGraphPassCullPolicy::ConservativeKeep};
     };
 
     /** @brief One graph-local logical resource owned by the finalized graph value. */
@@ -168,6 +175,75 @@ namespace Horo::Render {
         RenderGraphPassRef before;
         RenderGraphPassRef after;
         RenderGraphDependencyKind kind{RenderGraphDependencyKind::ExecutionOrder};
+    };
+
+    /** @brief Whether graph compilation retained or removed one authored pass. */
+    enum class RenderGraphPassDispositionKind : std::uint8_t {
+        Retained,
+        Culled,
+    };
+
+    /** @brief Stable backend-neutral provenance for one pass scheduling decision. */
+    enum class RenderGraphPassDispositionReason : std::uint8_t {
+        ConservativePolicy,
+        ExportedOutput,
+        ImportedResourceMutation,
+        ExternalSynchronization,
+        RequiredDependency,
+        RequiredResourceProducer,
+        UnusedTransientOutputs,
+        OnlyRequiredByCulledPasses,
+    };
+
+    /** @brief Typed scheduling decision retained for diagnostics and graph inspection. */
+    struct RenderGraphPassDisposition {
+        RenderGraphPassRef pass;
+        RenderGraphPassDispositionKind disposition{RenderGraphPassDispositionKind::Retained};
+        RenderGraphPassDispositionReason reason{RenderGraphPassDispositionReason::ConservativePolicy};
+    };
+
+    /**
+     * @brief Owning deterministic pass schedule produced by graph validation and conservative culling.
+     *
+     * Pass references retain the source graph owner identity but do not borrow graph storage. The
+     * schedule is backend-neutral and contains no frame, queue-instance, or native synchronization state.
+     */
+    class RenderGraphSchedule final {
+    public:
+        RenderGraphSchedule(const RenderGraphSchedule &) = delete;
+        RenderGraphSchedule &operator=(const RenderGraphSchedule &) = delete;
+        RenderGraphSchedule(RenderGraphSchedule &&other) noexcept;
+        RenderGraphSchedule &operator=(RenderGraphSchedule &&other) noexcept;
+        ~RenderGraphSchedule() = default;
+
+        /**
+         * @brief Returns the source graph owner identity.
+         * @return Non-zero identity copied from the compiled graph.
+         */
+        [[nodiscard]] RenderGraphOwnerId Owner() const noexcept;
+
+        /**
+         * @brief Returns retained passes in deterministic dependency order.
+         * @return Immutable view valid for the lifetime of this schedule.
+         */
+        [[nodiscard]] std::span<const RenderGraphPassRef> OrderedPasses() const noexcept;
+
+        /**
+         * @brief Returns typed retain/cull provenance in deterministic authoring order.
+         * @return Immutable view valid for the lifetime of this schedule.
+         */
+        [[nodiscard]] std::span<const RenderGraphPassDisposition> PassDispositions() const noexcept;
+
+    private:
+        friend Result<RenderGraphSchedule> CompileRenderGraph(const class RenderGraph &graph);
+
+        /** @brief Adopts validated schedule storage for one source graph owner. */
+        RenderGraphSchedule(RenderGraphOwnerId owner, std::vector<RenderGraphPassRef> orderedPasses,
+                            std::vector<RenderGraphPassDisposition> passDispositions) noexcept;
+
+        RenderGraphOwnerId owner_;
+        std::vector<RenderGraphPassRef> orderedPasses_;
+        std::vector<RenderGraphPassDisposition> passDispositions_;
     };
 
     /** @brief Immutable owning graph value produced by successful authoring finalization. */
@@ -237,6 +313,24 @@ namespace Horo::Render {
         std::vector<RenderGraphDependency> dependencies_;
     };
 
+    /**
+     * @brief Validates, deterministically orders, and conservatively culls one finalized graph.
+     *
+     * Compilation is synchronous, backend-neutral, and bounded by the graph's admitted limits. It
+     * rejects dependency cycles and transient reads that have no preceding write. Dependency ties
+     * are resolved by authoring order into the total schedule consumed by later hazard synthesis;
+     * resource users do not require a redundant authored dependency path. Imported resources are
+     * treated as initialized for this coarse validation stage; exact initial-state evidence remains
+     * owned by later ADR-175 state/hazard synthesis. A pass is culled only when it explicitly opts
+     * into culling and its transient outputs cannot contribute to an export, imported-resource
+     * mutation, externally synchronized pass, or another retained pass. The immutable graph may be
+     * compiled on any thread and remains unchanged.
+     *
+     * @param graph Finalized immutable graph to compile.
+     * @return Owning schedule or a typed invalid-graph, cycle, read-before-write, or allocation failure.
+     */
+    [[nodiscard]] Result<RenderGraphSchedule> CompileRenderGraph(const RenderGraph &graph);
+
     /** @brief Observable lifecycle state of a bounded render-graph builder. */
     enum class RenderGraphBuilderState : std::uint8_t {
         Open,
@@ -285,9 +379,11 @@ namespace Horo::Render {
          * @brief Adds one pass and assigns the next canonical render-pass identity.
          * @param kind Backend-neutral pass category.
          * @param queue Explicit queue role; incompatible or unknown roles fail without fallback.
+         * @param cullPolicy Conservative by default; opt-in only when unused declared outputs prove the pass removable.
          * @return Builder-scoped reference or a typed affinity, lifecycle, capacity, or support failure.
          */
-        [[nodiscard]] Result<RenderGraphPassRef> AddPass(RenderPassKind kind, RenderQueueRole queue);
+        [[nodiscard]] Result<RenderGraphPassRef> AddPass(
+            RenderPassKind kind, RenderQueueRole queue, RenderGraphPassCullPolicy cullPolicy = RenderGraphPassCullPolicy::ConservativeKeep);
 
         /**
          * @brief Adds one graph-local transient resource with no resident binding.

@@ -1390,6 +1390,24 @@ ambient registry effects. Dependency DAG validation, read-before-write validatio
 cycle detection, pass culling, lifetime compilation, barrier synthesis, and backend
 translation remain separate render-graph delivery stages.
 
+The validation stage is a synchronous, backend-neutral compile over immutable graph
+metadata and is bounded by the graph's admitted capacities. It rejects exact duplicate
+dependency records while preserving distinct dependency reasons for the same endpoints,
+cycles (including disconnected cycles), and transient reads without an ordered producer.
+Imported resources are treated as initialized only for this coarse graph stage; exact
+initial-state and generation evidence is deliberately deferred to ADR-175 state/hazard
+synthesis and is not claimed by this schedule.
+Stable topological ordering uses authoring order to break dependency ties, producing a
+total schedule even when resource users have no authored dependency path. That total
+order is the input to ADR-175 hazard synthesis: RAW, WAR, and WAW transitions are derived
+there, so authors do not duplicate resource hazards merely to make ordering deterministic.
+Culling is opt-in per pass. The default conservative policy retains the pass regardless of
+its declared writes; only a pass explicitly marked cullable may be removed when its
+transient outputs cannot affect an export, imported-resource mutation, external
+synchronization, or another retained pass. Producer and explicit predecessor closure is
+retained. The owning schedule records retained passes in dependency order and a typed
+authoring-order disposition/reason for every pass without borrowing graph storage.
+
 The graph:
 
 - validates read-before-write and cycles
@@ -1397,6 +1415,22 @@ The graph:
 - identifies transient resource lifetimes
 - provides synchronization requirements to explicit APIs
 - remains backend-neutral
+
+[ADR-175](../../adr/175-render-resource-state-and-barrier-model.md) is the
+normative resource-state and barrier policy. Graph uses carry Horo-owned access,
+operation, stage, range, layout-intent, and effective-queue state; they never
+carry native barrier values. Imported generations declare exact initial and final
+states, while transient resources begin undefined and must be written before
+read. Deterministic compilation detects RAW, WAR, and WAW hazards over checked
+texture subresources or buffer byte ranges and emits normalized transitions.
+
+Queue-role changes become ownership transfers only when ADR-173 resolves them to
+different effective queue identities. Those transfers use matched GPU-side
+release/acquire operations tied to exact queue timeline values, never normal-frame
+CPU waits. Explicit backends translate the complete normalized plan; implicit
+backends realize equivalent ordering and visibility. Unsupported or malformed
+state, range, ownership, generation, or translation evidence rejects the plan
+before execution rather than selecting a hidden fallback.
 
 Simple backends may execute the compiled plan serially. Scene systems do not
 manually order backend commands around hidden global state.

@@ -264,6 +264,19 @@ reservation or raw entity dependency.
 
 There are five normal states plus Failed, six enum values in total:
 
+Cell-operation execution is a separate, fenced transaction state and does not
+duplicate the canonical residency state below. Every operation owns a non-zero
+operation identity plus its exact `StreamingFence` and progresses through Queued,
+Admitted, Preparing, Activating, Retiring, and Terminal phases. Cancellation,
+failure, replacement, or shutdown before admission may terminate directly because
+no work or resources were accepted. Once admitted, those requests enter Retiring;
+their terminal disposition is published only after the matching operation and fence
+receive retirement acknowledgement. Stale publication remains rejected while an old
+retiring attempt can still accept its own exact acknowledgement and reclaim resources.
+The typed operation kind selects a bounded normal path: Load completes after
+preparation, Activate continues through activation, and Retire enters the same
+acknowledged retirement barrier with a successful disposition.
+
 ```cpp
 enum class StreamingCellState : uint8_t {
     Unloaded, Loading, Resident, Active, Evicting, Failed
@@ -354,6 +367,40 @@ the renderer does not acquire world-cell policy ownership.
    ownership; unused portions release only after scratch/upload copies retire.
 5. ReleaseReservation occurs on acknowledged retirement, never just on Cancel or
    a scheduled GPU free. Old partition work and caller-held leases remain charged.
+
+The scheduler admission layer implements an authority-owned, bounded ledger for
+operation count and positive generic capacity units supplied by host policy. A
+successful transaction retains an owner-scoped operation-and-fence reservation and
+advances a ledger-owned canonical operation from Queued to Admitted; every expected
+rejection leaves both unchanged. Only the ledger advances admitted work, so a stale
+caller snapshot cannot forge release. Successful operations release capacity at
+terminal completion. Cancellation, failure, replacement, and shutdown retain capacity
+through Retiring and release only after exact retirement acknowledgement. Shutdown
+closes new admission first and reaches Closed only after retained reservations drain.
+The ledger is confined to StreamingAuthorityRole and must be drained or transferred
+before its owner is destroyed. WST-003.3 defines the multidimensional CPU, I/O,
+memory, and frame-time policy that supplies these bounded admission charges.
+
+`StreamingBudgetModel` is the inert WST-003.3 policy and observation boundary.
+Every amount vector explicitly carries exactly one known value for CPU-resident,
+GPU-resident, staging, in-flight I/O, queue/scratch, retired-resource, and
+owner-work-time dimensions; omitted dimensions are invalid rather than assumed to
+be zero. Byte dimensions and owner-work nanoseconds remain independent and are never
+summed into a synthetic capacity. One immutable policy revision owns a soft target
+and positive hard limit for each dimension plus a positive monotonic sampling window.
+
+An immutable usage sample captures the exact policy revision, its own monotonic
+revision, a half-open service-time window, observation time, and a complete owned
+usage vector. Evaluation requires the authority's expected policy/sample revisions
+and a time in the same window. Stale revisions or completed windows return typed
+failures. Projected arithmetic is checked per dimension: equality with a soft target
+or hard limit is permitted, crossing a soft target returns an explicit defer decision,
+and crossing/overflowing a hard limit rejects the request without changing the sample.
+Policy replacement never edits or erases already observed usage; if a lowered limit
+is below retained usage, new admission remains rejected until real retirement is
+observed. The model owns no reservation lifecycle, clock, worker, allocation, or
+ambient registry. The authority composes a successful projection with the scheduler
+transaction, and acknowledged retirement supplies later samples.
 
 The governing invariant is that a cell cannot enter a state whose required resources
 have not been admitted. The host validates per-provider costs and rejects unsupported

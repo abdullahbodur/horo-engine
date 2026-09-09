@@ -9,7 +9,7 @@ namespace Horo::Render::RenderGraphErrors {
 
     const ErrorCodeDescriptor AllocationFailed =
         Detail::MakeErrorDescriptor(Domain, "render.graph.allocation_failed", ErrorSeverity::Error,
-                                    "Render graph capacity reservation failed.",
+                                    "Render graph storage allocation failed.",
                                     "Reduce graph limits or release other host memory before retrying.", true);
     const ErrorCodeDescriptor BuilderClosed =
         Detail::MakeErrorDescriptor(Domain, "render.graph.builder_closed", ErrorSeverity::Error, "Render graph builder is no longer open.",
@@ -18,6 +18,10 @@ namespace Horo::Render::RenderGraphErrors {
         Detail::MakeErrorDescriptor(Domain, "render.graph.capacity_exceeded", ErrorSeverity::Error,
                                     "A declared render graph capacity is exhausted.",
                                     "Finalize this graph or create a new builder with larger admitted limits.");
+    const ErrorCodeDescriptor DependencyCycle =
+        Detail::MakeErrorDescriptor(Domain, "render.graph.dependency_cycle", ErrorSeverity::Error,
+                                    "The render graph contains a directed dependency cycle.",
+                                    "Remove or redirect a dependency so every pass has an acyclic execution order.");
     const ErrorCodeDescriptor EmptyGraph = Detail::MakeErrorDescriptor(Domain, "render.graph.empty", ErrorSeverity::Error,
                                                                        "A render graph with no passes cannot be finalized.",
                                                                        "Add at least one valid pass before finalization.");
@@ -32,6 +36,10 @@ namespace Horo::Render::RenderGraphErrors {
     const ErrorCodeDescriptor InvalidExport = Detail::MakeErrorDescriptor(Domain, "render.graph.export_invalid", ErrorSeverity::Error,
                                                                           "The render graph export is duplicated or malformed.",
                                                                           "Export each valid graph-local resource at most once.");
+    const ErrorCodeDescriptor InvalidGraph =
+        Detail::MakeErrorDescriptor(Domain, "render.graph.invalid", ErrorSeverity::Error,
+                                    "The render graph is moved-from or violates its finalized structural invariants.",
+                                    "Compile only the intact finalized graph returned by its builder.");
     const ErrorCodeDescriptor InvalidImport = Detail::
         MakeErrorDescriptor(Domain, "render.graph.import_invalid", ErrorSeverity::Error,
                             "The render graph import has an invalid resident binding or lifetime class.",
@@ -54,6 +62,10 @@ namespace Horo::Render::RenderGraphErrors {
         Detail::MakeErrorDescriptor(Domain, "render.graph.owner_exhausted", ErrorSeverity::Critical,
                                     "Render graph owner identities are exhausted.",
                                     "Restart the process rather than reusing a graph owner identity.");
+    const ErrorCodeDescriptor ReadBeforeWrite =
+        Detail::MakeErrorDescriptor(Domain, "render.graph.read_before_write", ErrorSeverity::Error,
+                                    "A transient graph resource is read before any ordered pass writes it.",
+                                    "Add an ordered producer, or import resident data for later exact state validation.");
     const ErrorCodeDescriptor UnsupportedDependencyKind =
         Detail::MakeErrorDescriptor(Domain, "render.graph.dependency_kind_unsupported", ErrorSeverity::Error,
                                     "The render graph dependency kind is unsupported.",
@@ -63,6 +75,10 @@ namespace Horo::Render::RenderGraphErrors {
         Detail::MakeErrorDescriptor(Domain, "render.graph.pass_kind_unsupported", ErrorSeverity::Error,
                                     "The render pass kind is unsupported.",
                                     "Request a declared Graphics, Compute, or Copy pass without fallback.");
+    const ErrorCodeDescriptor UnsupportedPassCullPolicy =
+        Detail::MakeErrorDescriptor(Domain, "render.graph.pass_cull_policy_unsupported", ErrorSeverity::Error,
+                                    "The render pass culling policy is unsupported.",
+                                    "Use ConservativeKeep or explicitly opt into AllowCullIfOutputsUnused.");
     const ErrorCodeDescriptor UnsupportedQueueRole =
         Detail::MakeErrorDescriptor(Domain, "render.graph.queue_role_unsupported", ErrorSeverity::Error,
                                     "The render queue role is unsupported.",

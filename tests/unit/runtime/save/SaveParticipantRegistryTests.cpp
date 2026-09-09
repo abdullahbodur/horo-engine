@@ -1,5 +1,6 @@
+#include "Horo/Runtime/Save/SaveCaptureSnapshot.h"
 #include "Horo/Runtime/Save/SaveErrors.h"
-#include "Horo/Runtime/Save/SaveParticipantRegistry.h"
+#include "SaveCaptureSnapshotTestUtils.h"
 
 #include <catch2/catch_test_macros.hpp>
 #include <memory>
@@ -8,18 +9,6 @@
 
 namespace Horo::Runtime {
     namespace {
-        class TestAdapter final : public ICanonicalStateAdapter {
-        public:
-            explicit TestAdapter(std::shared_ptr<int> destructionCount) : destructionCount_(std::move(destructionCount)) {}
-
-            ~TestAdapter() override {
-                ++*destructionCount_;
-            }
-
-        private:
-            std::shared_ptr<int> destructionCount_;
-        };
-
         SaveParticipantId Participant(const std::string_view value) {
             return SaveParticipantId::Parse(value).Value();
         }
@@ -47,7 +36,7 @@ namespace Horo::Runtime {
         }
 
         std::shared_ptr<const ICanonicalStateAdapter> Adapter(const std::shared_ptr<int> &destructionCount) {
-            return std::make_shared<TestAdapter>(destructionCount);
+            return std::make_shared<CaptureTestSupport::CountingCaptureAdapter>(destructionCount);
         }
 
         /** @brief Verifies that registry admission rejects one invalid descriptor. */

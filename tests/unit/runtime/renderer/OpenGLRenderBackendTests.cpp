@@ -1,5 +1,6 @@
 #include "Horo/Runtime/Render/RenderFrontend.h"
 #include "OpenGLBackendInternal.h"
+#include "renderer/RenderBackendContractSuite.h"
 
 #include <array>
 #include <catch2/catch_test_macros.hpp>
@@ -400,5 +401,19 @@ namespace {
         Check(info.windowRequirements.presentation == RenderPresentationKind::OpenGL);
         Check(info.windowRequirements.resizable && info.windowRequirements.highPixelDensity);
         Check(info.supportsInteractivePresentation);
+    }
+
+    TEST_CASE("OpenGL backend satisfies the shared backend contract", "[unit][runtime][renderer][contract]") {
+        commandState = {};
+        PortState portState;
+        FakePresentationPort port{portState};
+        const Test::BackendContractExpectations expectations{
+            .id = RenderBackendId{"opengl"},
+            .presentsToWindow = true,
+        };
+        Test::CheckModuleInfo(GetOpenGLRenderBackendModuleInfo(), expectations, RenderPresentationKind::OpenGL);
+        Test::RunBackendContractSuite(expectations, [&port] {
+            return CreateBackend(port);
+        });
     }
 }  // namespace
