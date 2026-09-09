@@ -92,14 +92,14 @@ namespace Horo::WorldStreaming {
          * @param owner Exact current owner lifetime. @param revision Exact current configuration revision.
          * @return Success, including an idempotent repeat, or a typed stale/lifecycle error.
          */
-        [[nodiscard]] Result<void> RequestCancellation(StreamingSourceOwnerToken owner, StreamingSourceRevision revision) noexcept;
+        [[nodiscard]] Result<void> RequestCancellation(const StreamingSourceOwnerToken &owner, StreamingSourceRevision revision) noexcept;
 
         /**
          * @brief Enter terminal shutdown and expose no desired cells.
          * @param owner Exact current owner lifetime.
          * @return Success, including an idempotent repeat, or a typed stale-owner error.
          */
-        [[nodiscard]] Result<void> Shutdown(StreamingSourceOwnerToken owner) noexcept;
+        [[nodiscard]] Result<void> Shutdown(const StreamingSourceOwnerToken &owner) noexcept;
 
     private:
         /** @brief Store an already validated active descriptor without allocation. */

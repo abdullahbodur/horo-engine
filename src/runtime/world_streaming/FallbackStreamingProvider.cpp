@@ -58,7 +58,7 @@ namespace Horo::WorldStreaming {
     }
 
     /** @copydoc FallbackStreamingProvider::RequestCancellation */
-    Result<void> FallbackStreamingProvider::RequestCancellation(const StreamingSourceOwnerToken owner,
+    Result<void> FallbackStreamingProvider::RequestCancellation(const StreamingSourceOwnerToken &owner,
                                                                 const StreamingSourceRevision revision) noexcept {
         if (owner != descriptor_.owner || revision != descriptor_.revision)
             return Result<void>::Failure(MakeError(WorldStreamingErrors::FallbackProviderStale));
@@ -69,7 +69,7 @@ namespace Horo::WorldStreaming {
     }
 
     /** @copydoc FallbackStreamingProvider::Shutdown */
-    Result<void> FallbackStreamingProvider::Shutdown(const StreamingSourceOwnerToken owner) noexcept {
+    Result<void> FallbackStreamingProvider::Shutdown(const StreamingSourceOwnerToken &owner) noexcept {
         if (owner != descriptor_.owner)
             return Result<void>::Failure(MakeError(WorldStreamingErrors::FallbackProviderStale));
         state_ = FallbackStreamingProviderState::Closed;
