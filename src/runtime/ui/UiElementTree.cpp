@@ -292,7 +292,7 @@ namespace Horo::Runtime::Ui {
                 return Failure<std::uint32_t>(UiErrors::StructuralCommandConflict);
             auto &siblings = nodes[nodes[removedRoot.Value()].parentSlot - 1].children;
             std::erase(siblings, removedRoot.Value());
-            std::vector<std::uint32_t> pending{removedRoot.Value()};
+            std::vector pending{removedRoot.Value()};
             std::uint32_t removed{};
             while (!pending.empty()) {
                 const auto slot = pending.back();
@@ -334,8 +334,8 @@ namespace Horo::Runtime::Ui {
             if (element.Value() == rootSlot || IsDescendant(element.Value(), parent.Value()))
                 return Failure<std::uint32_t>(UiErrors::StructuralCommandConflict);
             const auto oldParent = nodes[element.Value()].parentSlot - 1;
-            const auto destinationSize = nodes[parent.Value()].children.size() - (oldParent == parent.Value() ? 1U : 0U);
-            if (command.childIndex > destinationSize)
+            if (const auto destinationSize = nodes[parent.Value()].children.size() - (oldParent == parent.Value() ? 1U : 0U);
+                command.childIndex > destinationSize)
                 return Failure<std::uint32_t>(UiErrors::StructuralCommandInvalid);
             std::erase(nodes[oldParent].children, element.Value());
             auto &children = nodes[parent.Value()].children;
