@@ -549,22 +549,9 @@ namespace Horo::Editor {
 
     void HierarchyPanel::DrawRowBackground(const RowFrame &frame, const bool hovered) {
         if (frame.selected) {
-            constexpr int segmentCount = 12;
-            const float segmentWidth = (frame.geometry.rowMax.x - frame.geometry.rowMin.x) / static_cast<float>(segmentCount);
             ImVec4 accent = Theme::Accent();
-            for (int segment = 0; segment < segmentCount; ++segment) {
-                const float amount = static_cast<float>(segment) / static_cast<float>(segmentCount - 1);
-                accent.w = (hovered ? 0.22F : 0.20F) + ((hovered ? 0.10F : 0.08F) - (hovered ? 0.22F : 0.20F)) * amount;
-                const ImVec2 minimum{frame.geometry.rowMin.x + segmentWidth * static_cast<float>(segment), frame.geometry.rowMin.y};
-                const ImVec2 maximum{segment == segmentCount - 1 ? frame.geometry.rowMax.x : minimum.x + segmentWidth + 1.0F,
-                                     frame.geometry.rowMax.y};
-                ImDrawFlags corners = ImDrawFlags_None;
-                if (segment == 0)
-                    corners = ImDrawFlags_RoundCornersLeft;
-                else if (segment == segmentCount - 1)
-                    corners = ImDrawFlags_RoundCornersRight;
-                frame.drawList.AddRectFilled(minimum, maximum, Theme::U32(accent), 3.0F * frame.uiScale, corners);
-            }
+            accent.w = hovered ? 0.16F : 0.14F;
+            frame.drawList.AddRectFilled(frame.geometry.rowMin, frame.geometry.rowMax, Theme::U32(accent), 3.0F * frame.uiScale);
         } else if (hovered) {
             frame.drawList.AddRectFilled(frame.geometry.rowMin, frame.geometry.rowMax, Theme::U32(Theme::Hover()), 3.0F * frame.uiScale);
         }

@@ -152,6 +152,13 @@ namespace Horo::Editor::Ui {
             ImGui::PopStyleVar(3);
         }
 
+        /** @brief Applies the shared compact width range to the next popup menu. */
+        void SetNextContextMenuSizeConstraints() {
+            constexpr float minimumWidth = 176.0F;
+            constexpr float maximumWidth = 340.0F;
+            ImGui::SetNextWindowSizeConstraints({ScaledLayoutValue(minimumWidth), 0.0F}, {ScaledLayoutValue(maximumWidth), FLT_MAX});
+        }
+
         struct ContextMenuRow {
             ImVec2 minimum;
             ImVec2 maximum;
@@ -1974,7 +1981,7 @@ namespace Horo::Editor::Ui {
 
     /** @copydoc BeginContextMenu */
     bool BeginContextMenu(const char *id) {
-        ImGui::SetNextWindowSizeConstraints({ScaledLayoutValue(224.0F), 0.0F}, {ScaledLayoutValue(340.0F), FLT_MAX});
+        SetNextContextMenuSizeConstraints();
         PushContextPopupWindowStyle();
         const bool open = ImGui::BeginPopupContextItem(id, ImGuiPopupFlags_MouseButtonRight);
         if (!open)
@@ -1984,7 +1991,7 @@ namespace Horo::Editor::Ui {
 
     /** @copydoc BeginContextWindowMenu */
     bool BeginContextWindowMenu(const char *id) {
-        ImGui::SetNextWindowSizeConstraints({ScaledLayoutValue(224.0F), 0.0F}, {ScaledLayoutValue(340.0F), FLT_MAX});
+        SetNextContextMenuSizeConstraints();
         PushContextPopupWindowStyle();
         const bool open = ImGui::BeginPopupContextWindow(id, ImGuiPopupFlags_MouseButtonRight | ImGuiPopupFlags_NoOpenOverItems);
         if (!open)
@@ -2000,7 +2007,7 @@ namespace Horo::Editor::Ui {
 
     /** @copydoc BeginMenuPopup */
     bool BeginMenuPopup(const char *id) {
-        ImGui::SetNextWindowSizeConstraints({ScaledLayoutValue(224.0F), 0.0F}, {ScaledLayoutValue(340.0F), FLT_MAX});
+        SetNextContextMenuSizeConstraints();
         PushContextPopupWindowStyle();
         const bool open = ImGui::BeginPopup(id);
         if (!open) {
@@ -2017,7 +2024,7 @@ namespace Horo::Editor::Ui {
 
     /** @copydoc BeginMenuDropdown */
     bool BeginMenuDropdown(const char *label, const Theme::Fonts &fonts) {
-        ImGui::SetNextWindowSizeConstraints({ScaledLayoutValue(224.0F), 0.0F}, {ScaledLayoutValue(340.0F), FLT_MAX});
+        SetNextContextMenuSizeConstraints();
         PushMenuDropdownWindowStyle();
         bool open = false;
         {
@@ -2061,7 +2068,7 @@ namespace Horo::Editor::Ui {
             ImGui::OpenPopup(popupId.c_str());
 
         ImGui::SetNextWindowPos({ImGui::GetWindowPos().x + ImGui::GetWindowWidth() - 1.0F, row.minimum.y - ScaledLayoutValue(4.0F)});
-        ImGui::SetNextWindowSizeConstraints({ScaledLayoutValue(224.0F), 0.0F}, {ScaledLayoutValue(340.0F), FLT_MAX});
+        SetNextContextMenuSizeConstraints();
         PushContextPopupWindowStyle();
         const bool open = ImGui::BeginPopup(popupId.c_str(), ImGuiWindowFlags_NoMove);
         if (!open)

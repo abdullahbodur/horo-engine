@@ -308,7 +308,8 @@ TEST_CASE("Workspace popup rows keep the design-system menu geometry", "[unit][e
     ImGui::Render();
 
     REQUIRE(rowHeight == Catch::Approx(30.0F));
-    REQUIRE(popupWidth >= 224.0F);
+    REQUIRE(popupWidth >= 176.0F);
+    REQUIRE(popupWidth < 224.0F);
 
     ImGui::DestroyContext();
 }
@@ -346,7 +347,8 @@ TEST_CASE("Menu-bar dropdowns reuse workspace popup rows", "[unit][editor][gui][
     ImGui::Render();
 
     REQUIRE(rowHeight == Catch::Approx(30.0F));
-    REQUIRE(popupWidth >= 224.0F);
+    REQUIRE(popupWidth >= 176.0F);
+    REQUIRE(popupWidth < 224.0F);
 
     ImGui::DestroyContext();
 }
