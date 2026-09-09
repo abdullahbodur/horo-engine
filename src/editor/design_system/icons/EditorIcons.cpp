@@ -379,89 +379,51 @@ namespace Horo::Editor::Ui {
             return index < kIconDescriptors.size() ? std::optional{index} : std::nullopt;
         }
 
-        [[nodiscard]] constexpr ImWchar CoreMaterialSymbolGlyph(const UiIcon icon) noexcept {
-            using enum UiIcon;
-            switch (icon) {
-                case Info:
-                    return 0xE88E;  // info
-                case Warning:
-                    return 0xE002;  // warning
-                case Error:
-                    return 0xE000;  // error
-                case Create:
-                    return 0xE145;  // add
-                case Delete:
-                    return 0xE872;  // delete
-                case Reset:
-                    return 0xF053;  // restart_alt
-                case Check:
-                    return 0xE834;  // check_box
-                case CheckboxUnchecked:
-                    return 0xE835;  // check_box_outline_blank
-                case Settings:
-                    return 0xE8B8;  // settings
-                case MoreVertical:
-                    return 0xE5D4;  // more_vert
-                case UiIcon::ArrowBack:
-                    return 0xE5C4;  // arrow_back
-                case UiIcon::ArrowForward:
-                    return 0xE5C8;  // arrow_forward
-                case UiIcon::ArrowUpward:
-                    return 0xE5D8;  // arrow_upward
-                case UiIcon::Search:
-                    return 0xE8B6;  // search
-                case UiIcon::GridView:
-                    return 0xE9B0;  // grid_view
-                case UiIcon::ViewList:
-                    return 0xE8EF;  // view_list
-                case UiIcon::CreateNewFolder:
-                    return 0xE2CC;  // create_new_folder
-                case UiIcon::Favorite:
-                    return 0xE838;  // star
-                case UiIcon::History:
-                    return 0xE889;  // history
-                case UiIcon::Storage:
-                    return 0xE1DB;  // storage
-                case UiIcon::Package:
-                    return 0xE1A1;  // inventory_2
-                case UiIcon::AccountTree:
-                    return 0xE97A;  // account_tree
-                case UiIcon::Tag:
-                    return 0xE892;  // label
-                default:
-                    return 0;
-            }
-        }
+        struct MaterialSymbol {
+            UiIcon icon;
+            ImWchar glyph;
+        };
+
+        constexpr std::array kMaterialSymbols{
+            MaterialSymbol{UiIcon::Info, 0xE88E},
+            MaterialSymbol{UiIcon::Warning, 0xE002},
+            MaterialSymbol{UiIcon::Error, 0xE000},
+            MaterialSymbol{UiIcon::Create, 0xE145},
+            MaterialSymbol{UiIcon::Delete, 0xE872},
+            MaterialSymbol{UiIcon::Reset, 0xF053},
+            MaterialSymbol{UiIcon::Check, 0xE834},
+            MaterialSymbol{UiIcon::CheckboxUnchecked, 0xE835},
+            MaterialSymbol{UiIcon::Settings, 0xE8B8},
+            MaterialSymbol{UiIcon::MoreVertical, 0xE5D4},
+            MaterialSymbol{UiIcon::ArrowBack, 0xE5C4},
+            MaterialSymbol{UiIcon::ArrowForward, 0xE5C8},
+            MaterialSymbol{UiIcon::ArrowUpward, 0xE5D8},
+            MaterialSymbol{UiIcon::Search, 0xE8B6},
+            MaterialSymbol{UiIcon::GridView, 0xE9B0},
+            MaterialSymbol{UiIcon::ViewList, 0xE8EF},
+            MaterialSymbol{UiIcon::CreateNewFolder, 0xE2CC},
+            MaterialSymbol{UiIcon::Favorite, 0xE838},
+            MaterialSymbol{UiIcon::History, 0xE889},
+            MaterialSymbol{UiIcon::Storage, 0xE1DB},
+            MaterialSymbol{UiIcon::Package, 0xE1A1},
+            MaterialSymbol{UiIcon::AccountTree, 0xE97A},
+            MaterialSymbol{UiIcon::Tag, 0xE892},
+            MaterialSymbol{UiIcon::Folder, 0xE2C7},
+            MaterialSymbol{UiIcon::Image, 0xE3F4},
+            MaterialSymbol{UiIcon::AudioFile, 0xEB82},
+            MaterialSymbol{UiIcon::Description, 0xE873},
+            MaterialSymbol{UiIcon::Pause, 0xE034},
+            MaterialSymbol{UiIcon::Download, 0xE2C4},
+            MaterialSymbol{UiIcon::Stop, 0xE047},
+            MaterialSymbol{UiIcon::Play, 0xE037},
+            MaterialSymbol{UiIcon::Record, 0xE061},
+            MaterialSymbol{UiIcon::VolumeOff, 0xE04F},
+            MaterialSymbol{UiIcon::ClearAll, 0xE0B8},
+        };
 
         [[nodiscard]] constexpr ImWchar MaterialSymbolGlyph(const UiIcon icon) noexcept {
-            if (const ImWchar coreGlyph = CoreMaterialSymbolGlyph(icon); coreGlyph != 0)
-                return coreGlyph;
-            switch (icon) {
-                case UiIcon::Folder:
-                    return 0xE2C7;  // folder
-                case UiIcon::Image:
-                    return 0xE3F4;  // image
-                case UiIcon::AudioFile:
-                    return 0xEB82;  // audio_file
-                case UiIcon::Description:
-                    return 0xE873;  // description
-                case UiIcon::Pause:
-                    return 0xE034;  // pause
-                case UiIcon::Download:
-                    return 0xE2C4;  // file_download
-                case UiIcon::Stop:
-                    return 0xE047;  // stop
-                case UiIcon::Play:
-                    return 0xE037;  // play_arrow
-                case UiIcon::Record:
-                    return 0xE061;  // fiber_manual_record
-                case UiIcon::VolumeOff:
-                    return 0xE04F;  // volume_off
-                case UiIcon::ClearAll:
-                    return 0xE0B8;  // clear_all
-                default:
-                    return 0;
-            }
+            const auto match = std::ranges::find(kMaterialSymbols, icon, &MaterialSymbol::icon);
+            return match == kMaterialSymbols.end() ? 0 : match->glyph;
         }
 
         [[nodiscard]] std::array<char, 4> EncodeBasicMultilingualPlaneGlyph(const ImWchar codepoint) noexcept {
