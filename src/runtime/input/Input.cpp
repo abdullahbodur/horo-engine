@@ -514,9 +514,9 @@ namespace Horo::Input {
                 return;
 
             const BindingControlKind kind = left.binding->kind;
-            const bool analog = kind == BindingControlKind::GamepadAxis || kind == BindingControlKind::RawGamepadAxis ||
-                                kind == BindingControlKind::PointerWheelX || kind == BindingControlKind::PointerWheelY;
-            if (analog) {
+            if (const bool analog = kind == BindingControlKind::GamepadAxis || kind == BindingControlKind::RawGamepadAxis ||
+                                    kind == BindingControlKind::PointerWheelX || kind == BindingControlKind::PointerWheelY;
+                analog) {
                 if (!SameAnalogAxis(*left.binding, *right.binding))
                     return;
                 report.diagnostics.emplace_back(DeviceExclusivityViolation, right.action->id,
