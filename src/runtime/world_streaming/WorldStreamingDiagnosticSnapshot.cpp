@@ -41,6 +41,23 @@ namespace Horo::WorldStreaming {
             return fence.partition == owner.partition && fence.epoch == owner.epoch;
         }
 
+        /** @brief Checks whether lifecycle and queue admission states describe one coherent safe point. */
+        bool LifecycleQueueMismatch(const WorldStreamingDiagnosticSnapshotInput &input) noexcept {
+            const auto &queue = input.queue;
+            using enum WorldStreamingRuntimeCompositionState;
+            switch (input.lifecycle) {
+                case Active:
+                    return queue.state != StreamingSchedulerAdmissionState::Accepting;
+                case Cancelling:
+                case Draining:
+                    return queue.state == StreamingSchedulerAdmissionState::Accepting;
+                case Closed:
+                    return queue.state != StreamingSchedulerAdmissionState::Closed || queue.reservedOperations != 0 ||
+                           queue.reservedCapacityUnits != 0;
+            }
+            return true;
+        }
+
         /** @brief Verifies lifecycle/queue relationships and bounded aggregate pressure. */
         Result<void> ValidateQueue(const WorldStreamingDiagnosticSnapshotInput &input) {
             const auto &queue = input.queue;
@@ -51,17 +68,24 @@ namespace Horo::WorldStreaming {
             if (queue.reservedOperations > queue.limits.concurrentOperations || queue.reservedCapacityUnits > queue.limits.capacityUnits)
                 return Internal::Failure<void>(WorldStreamingErrors::DiagnosticProjectionCapacityExceeded);
 
-            const bool activeMismatch = input.lifecycle == WorldStreamingRuntimeCompositionState::Active &&
-                                        queue.state != StreamingSchedulerAdmissionState::Accepting;
-            const bool cancellingMismatch = input.lifecycle == WorldStreamingRuntimeCompositionState::Cancelling &&
-                                            queue.state == StreamingSchedulerAdmissionState::Accepting;
-            const bool drainingMismatch = input.lifecycle == WorldStreamingRuntimeCompositionState::Draining &&
-                                          queue.state == StreamingSchedulerAdmissionState::Accepting;
-            if (const bool closedMismatch = input.lifecycle == WorldStreamingRuntimeCompositionState::Closed &&
-                                            (queue.state != StreamingSchedulerAdmissionState::Closed || queue.reservedOperations != 0 ||
-                                             queue.reservedCapacityUnits != 0);
-                activeMismatch || cancellingMismatch || drainingMismatch || closedMismatch)
+            if (LifecycleQueueMismatch(input))
                 return Internal::Failure<void>(WorldStreamingErrors::DiagnosticProjectionInvalid);
+            return Result<void>::Success();
+        }
+
+        /** @brief Validates immutable aggregate identity, policy correlation and declared capacities. */
+        Result<void> ValidateSnapshotInput(const WorldStreamingDiagnosticSnapshotInput &input, const StreamingBudgetPolicy &policy,
+                                           const StreamingBudgetSample &sample, const std::span<const StreamingSourceDesiredState> sources,
+                                           const std::span<const StreamingCellStateRecord> cells,
+                                           const std::span<const StreamingDiagnosticFailureRecord> failures) {
+            if (!input.owner.IsValid() || !input.revision.IsValid() || !input.limits.IsValid())
+                return Internal::Failure<void>(WorldStreamingErrors::DiagnosticProjectionInvalid);
+            if (const auto queue = ValidateQueue(input); queue.HasError())
+                return queue;
+            if (sample.PolicyRevision() != policy.Revision())
+                return Internal::Failure<void>(WorldStreamingErrors::DiagnosticProjectionStale);
+            if (sources.size() > input.limits.sources || cells.size() > input.limits.cells || failures.size() > input.limits.failures)
+                return Internal::Failure<void>(WorldStreamingErrors::DiagnosticProjectionCapacityExceeded);
             return Result<void>::Success();
         }
 
@@ -107,6 +131,18 @@ namespace Horo::WorldStreaming {
             return Result<void>::Success();
         }
 
+        /** @brief Validates every bounded row against the same captured authority. */
+        Result<void> ValidateRecords(const WorldStreamingDiagnosticSnapshotInput &input,
+                                     const std::span<const StreamingSourceDesiredState> sources,
+                                     const std::span<const StreamingCellStateRecord> cells,
+                                     const std::span<const StreamingDiagnosticFailureRecord> failures) {
+            if (const auto validSources = ValidateSources(sources, input.owner); validSources.HasError())
+                return validSources;
+            if (const auto validCells = ValidateCells(cells, input.owner); validCells.HasError())
+                return validCells;
+            return ValidateFailures(failures, cells, input.owner);
+        }
+
         /** @brief Checks canonicalized records for competing identities. */
         bool HasIdentityConflict(const std::vector<StreamingSourceDesiredState> &sources,
                                  const std::vector<StreamingCellStateRecord> &cells,
@@ -136,21 +172,10 @@ namespace Horo::WorldStreaming {
         const WorldStreamingDiagnosticSnapshotInput &input, const StreamingBudgetPolicy &policy, const StreamingBudgetSample &sample,
         const std::span<const StreamingSourceDesiredState> sources, const std::span<const StreamingCellStateRecord> cells,
         const std::span<const StreamingDiagnosticFailureRecord> failures) {
-        if (!input.owner.IsValid() || !input.revision.IsValid() || !input.limits.IsValid())
-            return Internal::Failure<WorldStreamingDiagnosticSnapshot>(WorldStreamingErrors::DiagnosticProjectionInvalid);
-        if (const auto queue = ValidateQueue(input); queue.HasError())
-            return Result<WorldStreamingDiagnosticSnapshot>::Failure(queue.ErrorValue());
-        if (sample.PolicyRevision() != policy.Revision())
-            return Internal::Failure<WorldStreamingDiagnosticSnapshot>(WorldStreamingErrors::DiagnosticProjectionStale);
-        if (sources.size() > input.limits.sources || cells.size() > input.limits.cells || failures.size() > input.limits.failures)
-            return Internal::Failure<WorldStreamingDiagnosticSnapshot>(WorldStreamingErrors::DiagnosticProjectionCapacityExceeded);
-
-        if (const auto validSources = ValidateSources(sources, input.owner); validSources.HasError())
-            return Result<WorldStreamingDiagnosticSnapshot>::Failure(validSources.ErrorValue());
-        if (const auto validCells = ValidateCells(cells, input.owner); validCells.HasError())
-            return Result<WorldStreamingDiagnosticSnapshot>::Failure(validCells.ErrorValue());
-        if (const auto validFailures = ValidateFailures(failures, cells, input.owner); validFailures.HasError())
-            return Result<WorldStreamingDiagnosticSnapshot>::Failure(validFailures.ErrorValue());
+        if (const auto validInput = ValidateSnapshotInput(input, policy, sample, sources, cells, failures); validInput.HasError())
+            return Result<WorldStreamingDiagnosticSnapshot>::Failure(validInput.ErrorValue());
+        if (const auto validRecords = ValidateRecords(input, sources, cells, failures); validRecords.HasError())
+            return Result<WorldStreamingDiagnosticSnapshot>::Failure(validRecords.ErrorValue());
 
         try {
             std::vector<StreamingSourceDesiredState> ownedSources(sources.begin(), sources.end());
