@@ -8,6 +8,16 @@
 #include "Horo/Foundation/ErrorCode.h"
 
 namespace Horo::WorldStreaming::WorldStreamingErrors {
+    /** @brief A World Streaming diagnostic snapshot or aggregate queue fact is malformed. */
+    extern const ErrorCodeDescriptor DiagnosticProjectionInvalid;
+    /** @brief A diagnostic row names a foreign partition epoch or mismatched budget revision. */
+    extern const ErrorCodeDescriptor DiagnosticProjectionStale;
+    /** @brief A diagnostic lifecycle, cell-state or failure value is unsupported. */
+    extern const ErrorCodeDescriptor DiagnosticProjectionUnsupported;
+    /** @brief A diagnostic snapshot repeats a stable source, cell generation or failure identity. */
+    extern const ErrorCodeDescriptor DiagnosticProjectionIdentityConflict;
+    /** @brief A diagnostic snapshot exceeds a configured or implementation-owned bound. */
+    extern const ErrorCodeDescriptor DiagnosticProjectionCapacityExceeded;
     /** @brief A cell-state ledger, owner, fence, or record is malformed. */
     extern const ErrorCodeDescriptor CellStateInvalid;
     /** @brief No tracked residency record exists for the exact mounted cell attempt. */
