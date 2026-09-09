@@ -182,6 +182,17 @@ namespace Horo::Runtime::Ui {
         UiRenderSnapshotLimits limits;             /**< Fixed transaction bounds. */
     };
 
+    /** @brief Non-owning complete projection submitted as one extraction transaction. */
+    struct UiRenderProjection final {
+        std::span<const UiDrawCommand> commands;              /**< Stable paint-order commands. */
+        std::span<const UiTextRun> textRuns;                  /**< Positioned text run table. */
+        std::span<const UiPositionedGlyph> glyphs;            /**< Positioned glyph table. */
+        std::span<const UiClip> clips;                        /**< Logical clip table. */
+        std::span<const UiMask> masks;                        /**< Logical mask table. */
+        std::span<const UiLogicalTransform> transforms;       /**< Logical transform table. */
+        std::span<const UiRenderResourceReference> resources; /**< Stable resource reference table. */
+    };
+
     /**
      * @brief Owning immutable per-view Runtime UI render projection.
      * @details The snapshot owns every array and can outlive the tree and caller inputs. Renderer may realize resources and batch
@@ -193,20 +204,11 @@ namespace Horo::Runtime::Ui {
          * @brief Validates and copies one complete ordered extraction transaction.
          * @param tree Exact active retained tree supplying identity and residency evidence.
          * @param descriptor Exact view, source revisions, output revision, and bounds.
-         * @param commands Stable paint-order commands.
-         * @param textRuns Positioned text run table referenced by text commands.
-         * @param glyphs Owned positioned glyph table referenced by text runs.
-         * @param clips Logical clip table.
-         * @param masks Logical mask table.
-         * @param transforms Logical transform table.
-         * @param resources Stable Horo resource references.
+         * @param projection Complete non-owning projection copied by the transaction.
          * @return Complete owning snapshot or a typed validation/capacity/lifecycle failure.
          */
         [[nodiscard]] static Result<UiRenderSnapshot> Extract(const UiElementTree &tree, const UiRenderSnapshotDescriptor &descriptor,
-                                                              std::span<const UiDrawCommand> commands, std::span<const UiTextRun> textRuns,
-                                                              std::span<const UiPositionedGlyph> glyphs, std::span<const UiClip> clips,
-                                                              std::span<const UiMask> masks, std::span<const UiLogicalTransform> transforms,
-                                                              std::span<const UiRenderResourceReference> resources);
+                                                              const UiRenderProjection &projection);
 
         /** @brief Returns exact extraction evidence. @return Borrowed immutable descriptor. */
         [[nodiscard]] const UiRenderSnapshotDescriptor &Descriptor() const noexcept;

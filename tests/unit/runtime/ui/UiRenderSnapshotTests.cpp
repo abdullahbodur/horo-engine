@@ -7,10 +7,18 @@
 
 namespace Horo::Runtime::Ui {
     namespace {
-        template <typename Id> Id Stable(const std::uint8_t marker) {
+        SerializedUiId StableBytes(const std::uint8_t marker) {
             SerializedUiId bytes{};
             bytes.back() = marker;
-            return Id::Create(bytes).Value();
+            return bytes;
+        }
+
+        UiDocumentId Document(const std::uint8_t marker) {
+            return UiDocumentId::Create(StableBytes(marker)).Value();
+        }
+
+        UiElementId Element(const std::uint8_t marker) {
+            return UiElementId::Create(StableBytes(marker)).Value();
         }
 
         UiOwnershipGeneration Owner(const std::uint64_t value = 17) {
@@ -46,12 +54,11 @@ namespace Horo::Runtime::Ui {
         UiElementTree Tree() {
             const UiElementTreeDescriptor descriptor{.instance = {Owner(), 1, 1},
                                                      .canvas = {Owner(), 2, 1},
-                                                     .document = Stable<UiDocumentId>(1),
+                                                     .document = Document(1),
                                                      .documentRevision = DocumentRevision(),
                                                      .treeRevision = TreeRevision(),
                                                      .limits = {4, 4, 4}};
-            const std::array elements{UiElementDescriptor{Stable<UiElementId>(2), {}},
-                                      UiElementDescriptor{Stable<UiElementId>(3), Stable<UiElementId>(2)}};
+            const std::array elements{UiElementDescriptor{Element(2), {}}, UiElementDescriptor{Element(3), Element(2)}};
             auto result = UiElementTree::Create(descriptor, elements);
             REQUIRE(result.HasValue());
             return std::move(result).Value();
@@ -94,7 +101,7 @@ namespace Horo::Runtime::Ui {
             result.glyphs = {{17, 0, {64, 64}}, {18, 1, {128, 64}}};
             result.textRuns = {{1, 0, 2, {1.0F, 1.0F, 1.0F, 1.0F}}};
             const auto root = tree.Root().Value().handle;
-            const auto child = tree.Find(Stable<UiElementId>(3)).Value();
+            const auto child = tree.Find(Element(3)).Value();
             result.commands = {{root, {{0, 0}, {640, 320}}, 0, 0, NoUiRenderIndex, 1.0F, UiSolidDraw{{0.1F, 0.2F, 0.3F, 1.0F}}},
                                {root, {{0, 0}, {640, 320}}, 0, 0, NoUiRenderIndex, 1.0F, UiBorderDraw{{1.0F, 1.0F, 1.0F, 1.0F}, 2}},
                                {child, {{64, 32}, {128, 64}}, 1, 1, 0, 0.75F, UiImageDraw{0, {1.0F, 1.0F, 1.0F, 1.0F}}},
@@ -104,8 +111,9 @@ namespace Horo::Runtime::Ui {
 
         Result<UiRenderSnapshot> Extract(const UiElementTree &tree, const UiRenderSnapshotDescriptor &descriptor,
                                          const Projection &projection) {
-            return UiRenderSnapshot::Extract(tree, descriptor, projection.commands, projection.textRuns, projection.glyphs,
-                                             projection.clips, projection.masks, projection.transforms, projection.resources);
+            return UiRenderSnapshot::Extract(tree, descriptor,
+                                             {projection.commands, projection.textRuns, projection.glyphs, projection.clips,
+                                              projection.masks, projection.transforms, projection.resources});
         }
 
         TEST_CASE("UI render extraction owns complete stable paint-order values", "[runtime_ui][render_snapshot]") {
@@ -224,7 +232,7 @@ namespace Horo::Runtime::Ui {
 
             Projection empty;
             REQUIRE(Extract(tree, Descriptor(tree), empty).HasValue());
-            REQUIRE(UiRenderSnapshot::Extract(tree, Descriptor(tree), {}, {}, {}, {}, {}, {}, {}).HasValue());
+            REQUIRE(UiRenderSnapshot::Extract(tree, Descriptor(tree), {}).HasValue());
         }
 
         static_assert(std::is_copy_constructible_v<UiRenderSnapshot>);

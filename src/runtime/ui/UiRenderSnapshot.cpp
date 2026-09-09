@@ -41,7 +41,7 @@ namespace Horo::Runtime::Ui {
                    limits.transforms <= MaximumUiRenderTransforms;
         }
 
-        Result<void> ValidateDescriptor(const UiElementTree &tree, const UiRenderSnapshotDescriptor &descriptor) {
+        Result<void> ValidateTreeDescriptor(const UiElementTree &tree, const UiRenderSnapshotDescriptor &descriptor) {
             if (tree.State() != UiElementTreeState::Active)
                 return Failure(UiErrors::ElementTreeLifecycleUnavailable);
             if (descriptor.instance != tree.Instance() || descriptor.canvas != tree.Canvas())
@@ -49,6 +49,10 @@ namespace Horo::Runtime::Ui {
             if (descriptor.document != tree.SourceDocument() || descriptor.documentRevision != tree.SourceDocumentRevision() ||
                 descriptor.treeRevision != tree.Revision())
                 return Failure(UiErrors::RevisionStale);
+            return Result<void>::Success();
+        }
+
+        Result<void> ValidateViewDescriptor(const UiRenderSnapshotDescriptor &descriptor) {
             if (!descriptor.interactionRevision.IsValid() || !descriptor.snapshotRevision.IsValid())
                 return Failure(UiErrors::RevisionInvalid);
             if (!descriptor.view.IsValid() || descriptor.view.ownership != descriptor.instance.ownership)
@@ -182,13 +186,11 @@ namespace Horo::Runtime::Ui {
 
     /** @copydoc UiRenderSnapshot::Extract */
     Result<UiRenderSnapshot> UiRenderSnapshot::Extract(const UiElementTree &tree, const UiRenderSnapshotDescriptor &descriptor,
-                                                       const std::span<const UiDrawCommand> commands,
-                                                       const std::span<const UiTextRun> textRuns,
-                                                       const std::span<const UiPositionedGlyph> glyphs, const std::span<const UiClip> clips,
-                                                       const std::span<const UiMask> masks,
-                                                       const std::span<const UiLogicalTransform> transforms,
-                                                       const std::span<const UiRenderResourceReference> resources) {
-        if (const auto validated = ValidateDescriptor(tree, descriptor); validated.HasError())
+                                                       const UiRenderProjection &projection) {
+        const auto &[commands, textRuns, glyphs, clips, masks, transforms, resources] = projection;
+        if (const auto validated = ValidateTreeDescriptor(tree, descriptor); validated.HasError())
+            return Result<UiRenderSnapshot>::Failure(validated.ErrorValue());
+        if (const auto validated = ValidateViewDescriptor(descriptor); validated.HasError())
             return Result<UiRenderSnapshot>::Failure(validated.ErrorValue());
         if (const auto bounded = ValidateCounts(descriptor, commands.size(), textRuns.size(), glyphs.size(), clips.size(), masks.size(),
                                                 transforms.size(), resources.size());
