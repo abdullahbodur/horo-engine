@@ -405,6 +405,16 @@ namespace Horo::Runtime::Ui {
         return state_ ? state_->descriptor.canvas : UiCanvasInstanceId{};
     }
 
+    /** @copydoc UiElementTree::SourceDocument */
+    UiDocumentId UiElementTree::SourceDocument() const noexcept {
+        return state_ ? state_->descriptor.document : UiDocumentId{};
+    }
+
+    /** @copydoc UiElementTree::SourceDocumentRevision */
+    UiDocumentRevision UiElementTree::SourceDocumentRevision() const noexcept {
+        return state_ ? state_->descriptor.documentRevision : UiDocumentRevision{};
+    }
+
     /** @copydoc UiElementTree::Revision */
     UiRuntimeTreeRevision UiElementTree::Revision() const noexcept {
         return state_ ? state_->descriptor.treeRevision : UiRuntimeTreeRevision{};

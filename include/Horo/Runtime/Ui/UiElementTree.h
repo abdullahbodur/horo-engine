@@ -162,6 +162,10 @@ namespace Horo::Runtime::Ui {
         [[nodiscard]] RuntimeUiInstanceId Instance() const noexcept;
         /** @brief Returns exact target canvas. @return Runtime canvas identity. */
         [[nodiscard]] UiCanvasInstanceId Canvas() const noexcept;
+        /** @brief Returns the stable source document identity. @return Authored document identity. */
+        [[nodiscard]] UiDocumentId SourceDocument() const noexcept;
+        /** @brief Returns the exact source document revision. @return Revision captured by this tree. */
+        [[nodiscard]] UiDocumentRevision SourceDocumentRevision() const noexcept;
         /** @brief Returns current published tree revision. @return Non-zero revision while owned. */
         [[nodiscard]] UiRuntimeTreeRevision Revision() const noexcept;
         /** @brief Returns resident element count. @return Bounded current count. */
