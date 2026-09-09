@@ -5,12 +5,11 @@
  */
 
 #include "Horo/Audio/AudioDeviceTiming.h"
+#include "Horo/Audio/AudioFormat.h"
 
 #include <cstdint>
 
 namespace Horo::Audio {
-    inline constexpr std::uint32_t MaximumAudioSampleRate = 768'000;
-
     /** @brief Whether producer time may advance through the current sample-clock snapshot. */
     enum class AudioSampleClockState : std::uint8_t {
         Running,
