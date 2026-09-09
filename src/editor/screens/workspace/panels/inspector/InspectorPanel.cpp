@@ -65,77 +65,88 @@ namespace Horo::Editor {
             bool canRemove{true};
         };
 
+        /** @brief Localized labels consumed while composing one component title bar. */
+        struct ComponentTitleBarLabels {
+            const char *reset;
+            const char *enable;
+            const char *disable;
+            const char *settings;
+            const char *remove;
+        };
+
+        /** @brief Resolves the localized component-action labels for the current frame. */
+        [[nodiscard]] ComponentTitleBarLabels ResolveComponentTitleBarLabels(const EditorGuiContext &context) {
+            return {
+                .reset = context.localization.Get("editor", "workspace.inspector.component.reset").c_str(),
+                .enable = context.localization.Get("editor", "workspace.inspector.component.enable").c_str(),
+                .disable = context.localization.Get("editor", "workspace.inspector.component.disable").c_str(),
+                .settings = context.localization.Get("editor", "workspace.inspector.component.settings").c_str(),
+                .remove = context.localization.Get("editor", "workspace.inspector.remove_component").c_str(),
+            };
+        }
+
+        /** @brief Populates the enabled component actions exposed through the settings menu. */
+        [[nodiscard]] std::size_t PopulateComponentMenuItems(const ComponentTitleBarOptions options, const ComponentTitleBarLabels &labels,
+                                                             ComponentTitleBarResult &result, std::array<Ui::CardMenuAction, 3> &items) {
+            std::size_t count = 0;
+            if (options.canReset)
+                items[count++] = {.id = "reset", .label = labels.reset, .icon = Ui::UiIcon::Reset, .onInvoke = [&result] {
+                    result.resetRequested = true;
+                }};
+            if (options.canToggleEnabled)
+                items[count++] = {.id = "toggle_enabled",
+                                  .label = options.enabled ? labels.disable : labels.enable,
+                                  .icon = options.enabled ? Ui::UiIcon::Check : Ui::UiIcon::CheckboxUnchecked,
+                                  .onInvoke = [&result] {
+                    result.toggleEnabledRequested = true;
+                }};
+            if (options.canRemove)
+                items[count++] = {.id = "remove",
+                                  .label = labels.remove,
+                                  .icon = Ui::UiIcon::Delete,
+                                  .destructive = true,
+                                  .separatorBefore = count > 0,
+                                  .onInvoke = [&result] {
+                    result.removeRequested = true;
+                }};
+            return count;
+        }
+
         /** @brief Binds Inspector semantics and localized copy to a generic card title bar. */
         [[nodiscard]] ComponentTitleBarResult DrawComponentTitleBar(Ui::Card &card, const char *title,
                                                                     const ComponentTitleBarOptions options,
                                                                     const EditorGuiContext &context) {
             ComponentTitleBarResult result;
-            const std::string &resetLabel = context.localization.Get("editor", "workspace.inspector.component.reset");
-            const std::string &enableLabel = context.localization.Get("editor", "workspace.inspector.component.enable");
-            const std::string &disableLabel = context.localization.Get("editor", "workspace.inspector.component.disable");
-            const std::string &settingsLabel = context.localization.Get("editor", "workspace.inspector.component.settings");
-            const std::string &removeLabel = context.localization.Get("editor", "workspace.inspector.remove_component");
-            const auto requestReset = [&result] {
-                result.resetRequested = true;
-            };
-            const auto requestToggleEnabled = [&result] {
-                result.toggleEnabledRequested = true;
-            };
-            const auto requestRemove = [&result] {
-                result.removeRequested = true;
-            };
-
+            const ComponentTitleBarLabels labels = ResolveComponentTitleBarLabels(context);
             std::array<Ui::CardMenuAction, 3> menuItems;
-            std::size_t menuItemCount = 0;
-            if (options.canReset) {
-                menuItems[menuItemCount++] = {
-                    .id = "reset",
-                    .label = resetLabel.c_str(),
-                    .icon = Ui::UiIcon::Reset,
-                    .onInvoke = requestReset,
-                };
-            }
-            if (options.canToggleEnabled) {
-                menuItems[menuItemCount++] = {
-                    .id = "toggle_enabled",
-                    .label = options.enabled ? disableLabel.c_str() : enableLabel.c_str(),
-                    .icon = options.enabled ? Ui::UiIcon::Check : Ui::UiIcon::CheckboxUnchecked,
-                    .onInvoke = requestToggleEnabled,
-                };
-            }
-            if (options.canRemove) {
-                const bool separatorBefore = menuItemCount > 0;
-                menuItems[menuItemCount++] = {
-                    .id = "remove",
-                    .label = removeLabel.c_str(),
-                    .icon = Ui::UiIcon::Delete,
-                    .destructive = true,
-                    .separatorBefore = separatorBefore,
-                    .onInvoke = requestRemove,
-                };
-            }
-
+            const std::size_t menuItemCount = PopulateComponentMenuItems(options, labels, result, menuItems);
             const std::span<const Ui::CardMenuAction> menu{menuItems.data(), menuItemCount};
             const std::array actions{
                 Ui::CardTitleBarAction{
                     .id = "reset",
                     .icon = Ui::UiIcon::Reset,
-                    .title = resetLabel.c_str(),
+                    .title = labels.reset,
                     .enabled = options.canReset,
-                    .onInvoke = requestReset,
+                    .onInvoke =
+                        [&result] {
+                result.resetRequested = true;
+            },
                 },
                 Ui::CardTitleBarAction{
                     .id = "enabled",
                     .icon = options.enabled ? Ui::UiIcon::Check : Ui::UiIcon::CheckboxUnchecked,
-                    .title = options.enabled ? disableLabel.c_str() : enableLabel.c_str(),
+                    .title = options.enabled ? labels.disable : labels.enable,
                     .enabled = options.canToggleEnabled,
                     .active = options.enabled,
-                    .onInvoke = requestToggleEnabled,
+                    .onInvoke =
+                        [&result] {
+                result.toggleEnabledRequested = true;
+            },
                 },
                 Ui::CardTitleBarAction{
                     .id = "settings",
                     .icon = Ui::UiIcon::Settings,
-                    .title = settingsLabel.c_str(),
+                    .title = labels.settings,
                     .enabled = !menu.empty(),
                     .menuItems = menu,
                 },
@@ -475,86 +486,119 @@ namespace Horo::Editor {
         ImGui::SetCursorPosY(ImGui::GetCursorPosY() + 10.0F);
     }
 
+    namespace {
+        /** @brief Geometry shared by the editable object title and its trailing controls. */
+        struct ObjectTitleLayout {
+            float uiScale;
+            float rowHeight;
+            float checkboxSize;
+            float checkboxGap;
+            float optionsWidth;
+            float staticFontSize;
+            float trailingWidth;
+        };
+
+        /** @brief Resolves object-title geometry from localized text and the active UI scale. */
+        [[nodiscard]] ObjectTitleLayout ResolveObjectTitleLayout(const char *staticLabel, const Theme::Fonts &fonts) {
+            const float uiScale = Theme::GetActiveTokens().sizes.uiScale;
+            const float checkboxSize = 14.0F * uiScale;
+            const float checkboxGap = 4.0F * uiScale;
+            const float optionsWidth = 30.0F * uiScale;
+            const float staticFontSize = 11.0F * uiScale;
+            const float staticTextWidth = fonts.sansCompact->CalcTextSizeA(staticFontSize, 1000.0F, 0.0F, staticLabel).x;
+            return {.uiScale = uiScale,
+                    .rowHeight = 38.0F * uiScale,
+                    .checkboxSize = checkboxSize,
+                    .checkboxGap = checkboxGap,
+                    .optionsWidth = optionsWidth,
+                    .staticFontSize = staticFontSize,
+                    .trailingWidth = checkboxSize + checkboxGap + staticTextWidth + 6.0F * uiScale + optionsWidth};
+        }
+
+        /** @brief Draws the read-only static-object indicator beside the object title. */
+        void DrawStaticObjectIndicator(const char *label, const Theme::Fonts &fonts, const ObjectTitleLayout &layout,
+                                       const ImVec2 rowOrigin, const float rowWidth) {
+            ImGui::SetCursorScreenPos(
+                {rowOrigin.x + rowWidth - layout.trailingWidth, rowOrigin.y + (layout.rowHeight - layout.checkboxSize) * 0.5F});
+            bool isStatic = true;
+            ImGui::PushStyleVar(ImGuiStyleVar_DisabledAlpha, 1.0F);
+            ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, {1.5F, 1.5F});
+            ImGui::PushStyleVar(ImGuiStyleVar_ItemInnerSpacing, {layout.checkboxGap, 0.0F});
+            ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, Theme::GetActiveTokens().radii.control);
+            ImGui::PushStyleVar(ImGuiStyleVar_FrameBorderSize, 1.0F);
+            ImGui::PushStyleColor(ImGuiCol_FrameBg, Theme::Bg3());
+            ImGui::PushStyleColor(ImGuiCol_FrameBgHovered, Theme::Hover());
+            ImGui::PushStyleColor(ImGuiCol_FrameBgActive, Theme::Hover());
+            ImGui::PushStyleColor(ImGuiCol_Border, Theme::Border());
+            ImGui::PushStyleColor(ImGuiCol_CheckMark, Theme::Accent());
+            ImGui::PushStyleColor(ImGuiCol_Text, Theme::Muted());
+            ImGui::BeginDisabled();
+            {
+                Theme::ScopedTextStyle textStyle(fonts.sansCompact, layout.staticFontSize, Theme::FontPx::SansCompact);
+                static_cast<void>(ImGui::Checkbox(label, &isStatic));
+            }
+            ImGui::EndDisabled();
+            ImGui::PopStyleColor(6);
+            ImGui::PopStyleVar(5);
+        }
+
+        /** @brief Draws the object options trigger and dispatches its contextual commands. */
+        void DrawObjectOptions(const SceneObject &object, EditorWorkspaceViewCommandData &command, const EditorGuiContext &context,
+                               const ObjectTitleLayout &layout, const ImVec2 rowOrigin, const float rowWidth, const char *tooltip) {
+            const ImVec2 position{rowOrigin.x + rowWidth - layout.optionsWidth,
+                                  rowOrigin.y + (layout.rowHeight - layout.optionsWidth) * 0.5F};
+            ImGui::SetCursorScreenPos(position);
+            ImGui::PushID("object_options");
+            const bool pressed = ImGui::InvisibleButton("##button", {layout.optionsWidth, layout.optionsWidth});
+            const bool hovered = ImGui::IsItemHovered();
+            ImDrawList *drawList = ImGui::GetWindowDrawList();
+            if (hovered)
+                drawList->AddRectFilled(position, {position.x + layout.optionsWidth, position.y + layout.optionsWidth},
+                                        Theme::U32(Theme::Hover()), 4.0F);
+            const float iconInset = 6.0F * layout.uiScale;
+            const float iconSize = 18.0F * layout.uiScale;
+            Ui::DrawEditorIcon(drawList, Ui::UiIcon::MoreVertical, {position.x + iconInset, position.y + iconInset}, {iconSize, iconSize},
+                               Theme::U32(hovered ? Theme::Text() : Theme::Muted()), context.theme.fonts.icon);
+            if (hovered)
+                ImGui::SetTooltip("%s", tooltip);
+            if (pressed)
+                ImGui::OpenPopup("##menu");
+            if (Ui::BeginMenuPopup("##menu")) {
+                const bool canMutate = !object.effectivelyLocked && command.command == EditorWorkspaceViewCommand::None;
+                if (Ui::ContextMenuItem(context.localization.Get("editor", "workspace.hierarchy.duplicate").c_str(), nullptr,
+                                        context.theme.fonts, Ui::ContextMenuItemTone::Normal,
+                                        Ui::UiIconRegistry::Token(Ui::UiIcon::Duplicate), canMutate)) {
+                    command.command = EditorWorkspaceViewCommand::DuplicateObject;
+                    command.objectPayload = object.id;
+                }
+                if (Ui::ContextMenuItem(context.localization.Get("editor", "workspace.hierarchy.delete").c_str(), nullptr,
+                                        context.theme.fonts, Ui::ContextMenuItemTone::Danger, Ui::UiIconRegistry::Token(Ui::UiIcon::Delete),
+                                        canMutate)) {
+                    command.command = EditorWorkspaceViewCommand::DeleteObject;
+                    command.objectPayload = object.id;
+                }
+                Ui::EndMenuPopup();
+            }
+            ImGui::PopID();
+        }
+    }  // namespace
+
     InspectorNameEdit InspectorPanel::DrawObjectTitleWidgets(const SceneObject &object, EditorWorkspaceViewCommandData &command,
                                                              const EditorGuiContext &context) {
         InspectorObjectDraft &draft = m_editSession.Draft();
         const std::string &staticLabel = context.localization.Get("editor", "workspace.inspector.static");
         const std::string &optionsLabel = context.localization.Get("editor", "workspace.inspector.object_options");
-        const float uiScale = Theme::GetActiveTokens().sizes.uiScale;
-        const float rowHeight = 38.0F * uiScale;
-        const float checkboxSize = 14.0F * uiScale;
-        const float checkboxGap = 4.0F * uiScale;
-        const float controlGap = 6.0F * uiScale;
-        const float optionsWidth = 30.0F * uiScale;
-        const float additionalBottomMargin = 5.0F * uiScale;
-        const float staticFontSize = 11.0F * uiScale;
-        const float staticTextWidth = context.theme.fonts.sansCompact->CalcTextSizeA(staticFontSize, 1000.0F, 0.0F, staticLabel.c_str()).x;
-        const float staticWidth = checkboxSize + checkboxGap + staticTextWidth;
-        const float trailingWidth = staticWidth + controlGap + optionsWidth;
+        const ObjectTitleLayout layout = ResolveObjectTitleLayout(staticLabel.c_str(), context.theme.fonts);
         const ImVec2 rowOrigin = ImGui::GetCursorScreenPos();
         const float rowWidth = ImGui::GetContentRegionAvail().x;
         const bool nameWasValid = IsValidSceneObjectName(draft.name);
         const Ui::TextEditResult edit =
             Ui::DrawEditableTitle("object_name", draft.name, MaximumSceneObjectNameBytes, context.theme.fonts,
-                                  {.leadingIcon = KindIcon(object.kind), .trailingWidth = trailingWidth, .error = !nameWasValid});
+                                  {.leadingIcon = KindIcon(object.kind), .trailingWidth = layout.trailingWidth, .error = !nameWasValid});
         const ImVec2 rowEnd = ImGui::GetCursorScreenPos();
-
-        ImGui::SetCursorScreenPos({rowOrigin.x + rowWidth - trailingWidth, rowOrigin.y + (rowHeight - checkboxSize) * 0.5F});
-        bool isStatic = true;
-        ImGui::PushStyleVar(ImGuiStyleVar_DisabledAlpha, 1.0F);
-        ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, {1.5F, 1.5F});
-        ImGui::PushStyleVar(ImGuiStyleVar_ItemInnerSpacing, {checkboxGap, 0.0F});
-        ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, Theme::GetActiveTokens().radii.control);
-        ImGui::PushStyleVar(ImGuiStyleVar_FrameBorderSize, 1.0F);
-        ImGui::PushStyleColor(ImGuiCol_FrameBg, Theme::Bg3());
-        ImGui::PushStyleColor(ImGuiCol_FrameBgHovered, Theme::Hover());
-        ImGui::PushStyleColor(ImGuiCol_FrameBgActive, Theme::Hover());
-        ImGui::PushStyleColor(ImGuiCol_Border, Theme::Border());
-        ImGui::PushStyleColor(ImGuiCol_CheckMark, Theme::Accent());
-        ImGui::PushStyleColor(ImGuiCol_Text, Theme::Muted());
-        ImGui::BeginDisabled();
-        {
-            Theme::ScopedTextStyle textStyle(context.theme.fonts.sansCompact, staticFontSize, Theme::FontPx::SansCompact);
-            static_cast<void>(ImGui::Checkbox(staticLabel.c_str(), &isStatic));
-        }
-        ImGui::EndDisabled();
-        ImGui::PopStyleColor(6);
-        ImGui::PopStyleVar(5);
-
-        const ImVec2 optionsPosition{rowOrigin.x + rowWidth - optionsWidth, rowOrigin.y + (rowHeight - optionsWidth) * 0.5F};
-        ImGui::SetCursorScreenPos(optionsPosition);
-        ImGui::PushID("object_options");
-        const bool optionsPressed = ImGui::InvisibleButton("##button", {optionsWidth, optionsWidth});
-        const bool optionsHovered = ImGui::IsItemHovered();
-        ImDrawList *drawList = ImGui::GetWindowDrawList();
-        if (optionsHovered)
-            drawList->AddRectFilled(optionsPosition, {optionsPosition.x + optionsWidth, optionsPosition.y + optionsWidth},
-                                    Theme::U32(Theme::Hover()), 4.0F);
-        const float iconInset = 6.0F * uiScale;
-        const float iconSize = 18.0F * uiScale;
-        Ui::DrawEditorIcon(drawList, Ui::UiIcon::MoreVertical, {optionsPosition.x + iconInset, optionsPosition.y + iconInset},
-                           {iconSize, iconSize}, Theme::U32(optionsHovered ? Theme::Text() : Theme::Muted()), context.theme.fonts.icon);
-        if (optionsHovered)
-            ImGui::SetTooltip("%s", optionsLabel.c_str());
-        if (optionsPressed)
-            ImGui::OpenPopup("##menu");
-        if (Ui::BeginMenuPopup("##menu")) {
-            const bool canMutate = !object.effectivelyLocked && command.command == EditorWorkspaceViewCommand::None;
-            if (Ui::ContextMenuItem(context.localization.Get("editor", "workspace.hierarchy.duplicate").c_str(), nullptr,
-                                    context.theme.fonts, Ui::ContextMenuItemTone::Normal, Ui::UiIconRegistry::Token(Ui::UiIcon::Duplicate),
-                                    canMutate)) {
-                command.command = EditorWorkspaceViewCommand::DuplicateObject;
-                command.objectPayload = object.id;
-            }
-            if (Ui::ContextMenuItem(context.localization.Get("editor", "workspace.hierarchy.delete").c_str(), nullptr, context.theme.fonts,
-                                    Ui::ContextMenuItemTone::Danger, Ui::UiIconRegistry::Token(Ui::UiIcon::Delete), canMutate)) {
-                command.command = EditorWorkspaceViewCommand::DeleteObject;
-                command.objectPayload = object.id;
-            }
-            Ui::EndMenuPopup();
-        }
-        ImGui::PopID();
-        ImGui::SetCursorScreenPos({rowEnd.x, rowEnd.y + additionalBottomMargin});
+        DrawStaticObjectIndicator(staticLabel.c_str(), context.theme.fonts, layout, rowOrigin, rowWidth);
+        DrawObjectOptions(object, command, context, layout, rowOrigin, rowWidth, optionsLabel.c_str());
+        ImGui::SetCursorScreenPos({rowEnd.x, rowEnd.y + 5.0F * layout.uiScale});
 
         if (edit.active && !m_nameInputContext.IsActive() && m_inputRouter != nullptr) {
             m_nameInputContext = m_inputRouter->PushContext(Input::InputContextId{"editor.inspector.object_name"},

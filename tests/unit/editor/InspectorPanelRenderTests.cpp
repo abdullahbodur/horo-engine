@@ -122,15 +122,15 @@ TEST_CASE("Inspector Panel Render Tests", "[unit][editor]") {
     io.AddMouseButtonEvent(ImGuiMouseButton_Left, false);
     drawFrame();
     command = {};
-    io.AddMousePosEvent(120.0F, 135.0F);
+    io.AddMousePosEvent(120.0F, 145.0F);
     drawFrame();
     io.AddMouseButtonEvent(ImGuiMouseButton_Left, true);
     drawFrame();
     command = {};
-    io.AddMousePosEvent(155.0F, 135.0F);
+    io.AddMousePosEvent(155.0F, 145.0F);
     drawFrame();
     if (command.command == EditorWorkspaceViewCommand::None) {
-        io.AddMousePosEvent(165.0F, 135.0F);
+        io.AddMousePosEvent(165.0F, 145.0F);
         drawFrame();
     }
     REQUIRE((command.command == EditorWorkspaceViewCommand::PreviewObjectTransform));

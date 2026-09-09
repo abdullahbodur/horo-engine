@@ -481,6 +481,50 @@ namespace Horo::Editor {
             ImGui::PopStyleColor();
         }
 
+        /** @brief Draws one selectable progress row in the project-creation sidebar. */
+        void DrawWizardSidebarStep(ProjectCreationViewState &state, const EditorGuiContext &context, ImDrawList &drawList, const int step,
+                                   const int highestAccessibleStep, const char *label, const char *description) {
+            using namespace Theme;
+            using namespace WizardLayout;
+
+            ImGui::PushID(step);
+            const bool active = state.step == step;
+            const bool accessible = step <= highestAccessibleStep;
+            const ImVec2 rowMin = ImGui::GetCursorScreenPos();
+            constexpr ImVec2 rowSize{SidebarW - SidebarPadX * 2.0F, StepH};
+            if (active)
+                drawList.AddRectFilled(rowMin, {rowMin.x + rowSize.x, rowMin.y + rowSize.y}, U32(AccentSoft()), Radius);
+
+            ImGui::BeginDisabled(!accessible);
+            ImGui::InvisibleButton("##step", rowSize);
+            if (accessible && ImGui::IsItemClicked())
+                state.step = step;
+            ImGui::EndDisabled();
+
+            const ImVec2 circleCenter{rowMin.x + 21.0F, rowMin.y + 22.0F};
+            drawList.AddCircleFilled(circleCenter, 11.0F, U32(active ? Accent() : Bg3()), 24);
+            drawList.AddCircle(circleCenter, 11.0F, U32(active ? Accent() : Border()), 24, 1.0F);
+            static constexpr std::array<const char *, 5> stepNumbers = {"", "1", "2", "3", "4"};
+            ImFont *numberFont = context.theme.fonts.sansCompact ? context.theme.fonts.sansCompact : ImGui::GetFont();
+            constexpr float numberFontSize = 13.0F;
+            const ImVec2 numberSize = numberFont->CalcTextSizeA(numberFontSize, FLT_MAX, 0.0F, stepNumbers[step]);
+            drawList.AddText(numberFont, numberFontSize, {circleCenter.x - numberSize.x * 0.5F, circleCenter.y - numberSize.y * 0.5F},
+                             U32(active ? DarkText() : Dim()), stepNumbers[step]);
+
+            ImGui::SetCursorScreenPos({rowMin.x + 42.0F, rowMin.y + 7.0F});
+            {
+                ScopedTextStyle labelStyle(context.theme.fonts.sans, 15.0F, FontPx::Sans);
+                ImGui::TextColored(active ? Text() : Muted(), "%s", label);
+            }
+            ImGui::SetCursorScreenPos({rowMin.x + 42.0F, rowMin.y + 34.0F});
+            {
+                ScopedTextStyle descriptionStyle(context.theme.fonts.sansCompact, 12.0F, FontPx::SansCompact);
+                ImGui::TextColored(Dim(), "%s", description);
+            }
+            ImGui::SetCursorScreenPos({rowMin.x, rowMin.y + StepH + StepGap});
+            ImGui::PopID();
+        }
+
         void DrawWizardSidebar(ProjectCreationViewState &st, const EditorGuiContext &ctx, const float sideH,
                                const int highestAccessibleStep) {
             using namespace Theme;
@@ -496,67 +540,15 @@ namespace Horo::Editor {
                                                               ctx.localization.Get("editor", "project_creation.step.identity.title"),
                                                               ctx.localization.Get("editor", "project_creation.step.settings.title"),
                                                               ctx.localization.Get("editor", "project_creation.step.review.title")};
-            const std::array<const char *, 4> kStepLabels = {stepLabelsStr[0].c_str(), stepLabelsStr[1].c_str(), stepLabelsStr[2].c_str(),
-                                                             stepLabelsStr[3].c_str()};
-
             const std::array<std::string, 4> stepDescsStr = {ctx.localization.Get("editor", "project_creation.step.template.desc"),
                                                              ctx.localization.Get("editor", "project_creation.step.identity.desc"),
                                                              ctx.localization.Get("editor", "project_creation.step.settings.desc"),
                                                              ctx.localization.Get("editor", "project_creation.step.review.desc")};
-            const std::array<const char *, 4> kStepDescs = {stepDescsStr[0].c_str(), stepDescsStr[1].c_str(), stepDescsStr[2].c_str(),
-                                                            stepDescsStr[3].c_str()};
 
             ImGui::SetCursorPos({SidebarPadX, SidebarPadY});
-
-            for (int s = 1; s <= 4; ++s) {
-                ImGui::PushID(s);
-                const bool active = (st.step == s);
-                const bool accessible = s <= highestAccessibleStep;
-                const ImVec2 rowMin = ImGui::GetCursorScreenPos();
-                constexpr ImVec2 rowSize{SidebarW - SidebarPadX * 2.0F, StepH};
-
-                if (active) {
-                    dl->AddRectFilled(rowMin, {rowMin.x + rowSize.x, rowMin.y + rowSize.y}, U32(AccentSoft()), Radius);
-                }
-
-                ImGui::BeginDisabled(!accessible);
-                ImGui::InvisibleButton("##step", rowSize);
-                if (accessible && ImGui::IsItemClicked()) {
-                    st.step = s;
-                }
-                ImGui::EndDisabled();
-
-                const ImVec2 circleCenter{rowMin.x + 10.0F + 11.0F, rowMin.y + 11.0F + 11.0F};
-                dl->AddCircleFilled(circleCenter, 11.0F, U32(active ? Accent() : Bg3()), 24);
-                dl->AddCircle(circleCenter, 11.0F, U32(active ? Accent() : Border()), 24, 1.0F);
-
-                static constexpr std::array<const char *, 5> kStepNumbers = {"", "1", "2", "3", "4"};
-                const char *number = kStepNumbers[s];
-                ImFont *numberFont = ctx.theme.fonts.sansCompact ? ctx.theme.fonts.sansCompact : ImGui::GetFont();
-                constexpr float numberFontSize = 13.0F;
-                const ImVec2 numberSize = numberFont->CalcTextSizeA(numberFontSize, FLT_MAX, 0.0F, number);
-                dl->AddText(numberFont, numberFontSize, {circleCenter.x - numberSize.x * 0.5F, circleCenter.y - numberSize.y * 0.5F},
-                            U32(active ? DarkText() : Dim()), number);
-
-                ImGui::SetCursorScreenPos({rowMin.x + 42.0F, rowMin.y + 7.0F});
-                {
-                    ScopedTextStyle ts(ctx.theme.fonts.sans, 15.0F, FontPx::Sans);
-                    ImGui::PushStyleColor(ImGuiCol_Text, active ? Text() : Muted());
-                    ImGui::TextUnformatted(kStepLabels[s - 1]);
-                    ImGui::PopStyleColor();
-                }
-
-                ImGui::SetCursorScreenPos({rowMin.x + 42.0F, rowMin.y + 34.0F});
-                {
-                    ScopedTextStyle ts(ctx.theme.fonts.sansCompact, 12.0F, FontPx::SansCompact);
-                    ImGui::PushStyleColor(ImGuiCol_Text, Dim());
-                    ImGui::TextUnformatted(kStepDescs[s - 1]);
-                    ImGui::PopStyleColor();
-                }
-
-                ImGui::SetCursorScreenPos({rowMin.x, rowMin.y + StepH + StepGap});
-                ImGui::PopID();
-            }
+            for (int step = 1; step <= 4; ++step)
+                DrawWizardSidebarStep(st, ctx, *dl, step, highestAccessibleStep, stepLabelsStr[step - 1].c_str(),
+                                      stepDescsStr[step - 1].c_str());
 
             dl->AddLine({sidePos.x + SidebarW - 1.0F, sidePos.y}, {sidePos.x + SidebarW - 1.0F, sidePos.y + sideH}, U32(Border()), 1.0F);
 

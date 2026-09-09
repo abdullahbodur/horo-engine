@@ -18,6 +18,45 @@ namespace {
     void CaptureClipboardText(ImGuiContext *, const char *text) {
         gClipboardText = text;
     }
+
+    /** @brief Owns a minimal Dear ImGui context and its shared test font roles. */
+    struct ImGuiTestContext {
+        explicit ImGuiTestContext(const ImVec2 displaySize) {
+            IMGUI_CHECKVERSION();
+            ImGui::CreateContext();
+            io = &ImGui::GetIO();
+            io->DisplaySize = displaySize;
+            io->DeltaTime = 1.0F / 60.0F;
+            io->Fonts->AddFontDefault();
+            static_cast<void>(io->Fonts->Build());
+            ImFont *defaultFont = io->Fonts->Fonts.front();
+            fonts = {.sans = defaultFont, .sansCompact = defaultFont, .sansEmphasis = defaultFont, .icon = defaultFont};
+        }
+
+        ~ImGuiTestContext() {
+            ImGui::DestroyContext();
+        }
+
+        ImGuiIO *io{nullptr};
+        Horo::Editor::Theme::Fonts fonts;
+    };
+
+    /** @brief Renders one complete Dear ImGui test frame. */
+    template <typename DrawFrame> void RenderImGuiFrame(DrawFrame &&drawFrame) {
+        ImGui::NewFrame();
+        drawFrame();
+        ImGui::Render();
+    }
+
+    /** @brief Sends a complete pointer click sequence while rendering each interaction state. */
+    template <typename DrawFrame> void ClickImGuiItem(ImGuiIO &io, const ImVec2 position, DrawFrame &&drawFrame) {
+        io.AddMousePosEvent(position.x, position.y);
+        RenderImGuiFrame(drawFrame);
+        io.AddMouseButtonEvent(ImGuiMouseButton_Left, true);
+        RenderImGuiFrame(drawFrame);
+        io.AddMouseButtonEvent(ImGuiMouseButton_Left, false);
+        RenderImGuiFrame(drawFrame);
+    }
 }  // namespace
 
 namespace Horo::Editor {
@@ -82,20 +121,7 @@ TEST_CASE("Generic card title actions invoke caller-owned callbacks", "[unit][ed
     using namespace Horo::Editor;
     using namespace Horo::Editor::Ui;
 
-    IMGUI_CHECKVERSION();
-    ImGui::CreateContext();
-    ImGuiIO &io = ImGui::GetIO();
-    io.DisplaySize = {640.0F, 480.0F};
-    io.DeltaTime = 1.0F / 60.0F;
-    io.Fonts->AddFontDefault();
-    static_cast<void>(io.Fonts->Build());
-    ImFont *defaultFont = io.Fonts->Fonts.front();
-    const Theme::Fonts fonts{
-        .sans = defaultFont,
-        .sansCompact = defaultFont,
-        .sansEmphasis = defaultFont,
-        .icon = defaultFont,
-    };
+    ImGuiTestContext imgui{{640.0F, 480.0F}};
 
     bool invoked = false;
     ImVec2 actionCenter{};
@@ -116,7 +142,7 @@ TEST_CASE("Generic card title actions invoke caller-owned callbacks", "[unit][ed
             },
                 },
             };
-            card.DrawTitleBar({.id = "title", .title = "Component", .fonts = fonts, .actions = actions});
+            card.DrawTitleBar({.id = "title", .title = "Component", .fonts = imgui.fonts, .actions = actions});
             const ImVec2 actionMinimum = ImGui::GetItemRectMin();
             const ImVec2 actionMaximum = ImGui::GetItemRectMax();
             actionCenter = {(actionMinimum.x + actionMaximum.x) * 0.5F, (actionMinimum.y + actionMaximum.y) * 0.5F};
@@ -126,47 +152,17 @@ TEST_CASE("Generic card title actions invoke caller-owned callbacks", "[unit][ed
         ImGui::End();
     };
 
-    ImGui::NewFrame();
-    drawFrame();
-    ImGui::Render();
-
-    io.AddMousePosEvent(actionCenter.x, actionCenter.y);
-    ImGui::NewFrame();
-    drawFrame();
-    ImGui::Render();
-
-    io.AddMouseButtonEvent(ImGuiMouseButton_Left, true);
-    ImGui::NewFrame();
-    drawFrame();
-    ImGui::Render();
-
-    io.AddMouseButtonEvent(ImGuiMouseButton_Left, false);
-    ImGui::NewFrame();
-    drawFrame();
-    ImGui::Render();
+    RenderImGuiFrame(drawFrame);
+    ClickImGuiItem(*imgui.io, actionCenter, drawFrame);
 
     REQUIRE(invoked);
-    ImGui::DestroyContext();
 }
 
 TEST_CASE("Generic card disclosure persists and suppresses collapsed body content", "[unit][editor][gui][design-system]") {
     using namespace Horo::Editor;
     using namespace Horo::Editor::Ui;
 
-    IMGUI_CHECKVERSION();
-    ImGui::CreateContext();
-    ImGuiIO &io = ImGui::GetIO();
-    io.DisplaySize = {400.0F, 240.0F};
-    io.DeltaTime = 1.0F / 60.0F;
-    io.Fonts->AddFontDefault();
-    static_cast<void>(io.Fonts->Build());
-    ImFont *defaultFont = io.Fonts->Fonts.front();
-    const Theme::Fonts fonts{
-        .sans = defaultFont,
-        .sansCompact = defaultFont,
-        .sansEmphasis = defaultFont,
-        .icon = defaultFont,
-    };
+    ImGuiTestContext imgui{{400.0F, 240.0F}};
 
     bool bodyVisible = false;
     ImVec2 disclosureCenter{};
@@ -177,7 +173,7 @@ TEST_CASE("Generic card disclosure persists and suppresses collapsed body conten
         ImGui::Begin("CardDisclosureTest", nullptr, ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoSavedSettings);
         {
             Card card(CardProps{.id = "##card"});
-            card.DrawTitleBar({.id = "title", .title = "Camera", .fonts = fonts});
+            card.DrawTitleBar({.id = "title", .title = "Camera", .fonts = imgui.fonts});
             const ImVec2 disclosureMinimum = ImGui::GetItemRectMin();
             const ImVec2 disclosureMaximum = ImGui::GetItemRectMax();
             disclosureCenter = {(disclosureMinimum.x + disclosureMaximum.x) * 0.5F, (disclosureMinimum.y + disclosureMaximum.y) * 0.5F};
@@ -188,31 +184,14 @@ TEST_CASE("Generic card disclosure persists and suppresses collapsed body conten
         ImGui::End();
     };
 
-    ImGui::NewFrame();
-    drawFrame();
-    ImGui::Render();
+    RenderImGuiFrame(drawFrame);
     REQUIRE(bodyVisible);
 
-    io.AddMousePosEvent(disclosureCenter.x, disclosureCenter.y);
-    ImGui::NewFrame();
-    drawFrame();
-    ImGui::Render();
-    io.AddMouseButtonEvent(ImGuiMouseButton_Left, true);
-    ImGui::NewFrame();
-    drawFrame();
-    ImGui::Render();
-    io.AddMouseButtonEvent(ImGuiMouseButton_Left, false);
-    ImGui::NewFrame();
-    drawFrame();
-    ImGui::Render();
+    ClickImGuiItem(*imgui.io, disclosureCenter, drawFrame);
     REQUIRE_FALSE(bodyVisible);
 
-    ImGui::NewFrame();
-    drawFrame();
-    ImGui::Render();
+    RenderImGuiFrame(drawFrame);
     REQUIRE_FALSE(bodyVisible);
-
-    ImGui::DestroyContext();
 }
 
 TEST_CASE("Side dock tabs preserve reference padding height and interaction", "[unit][editor][gui][design-system]") {
@@ -220,20 +199,8 @@ TEST_CASE("Side dock tabs preserve reference padding height and interaction", "[
     using namespace Horo::Editor::Ui;
 
     Theme::SetUiScalePercent(100);
-    IMGUI_CHECKVERSION();
-    ImGui::CreateContext();
-    ImGuiIO &io = ImGui::GetIO();
-    io.DisplaySize = {400.0F, 200.0F};
-    io.DeltaTime = 1.0F / 60.0F;
-    io.Fonts->AddFontDefault();
-    static_cast<void>(io.Fonts->Build());
-    ImFont *defaultFont = io.Fonts->Fonts.front();
-    const Theme::Fonts fonts{
-        .sans = defaultFont,
-        .sansCompact = defaultFont,
-        .sansEmphasis = defaultFont,
-        .icon = defaultFont,
-    };
+    ImGuiTestContext imgui{{400.0F, 200.0F}};
+    ImFont *defaultFont = imgui.fonts.sans;
     const std::array<const char *, 2> tabs{"Inspector", "Scene"};
 
     int activeTab = 0;
@@ -245,7 +212,7 @@ TEST_CASE("Side dock tabs preserve reference padding height and interaction", "[
         ImGui::SetNextWindowSize({300.0F, 160.0F});
         ImGui::Begin("SideDockTabsTest", nullptr, ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoSavedSettings);
         startY = ImGui::GetCursorScreenPos().y;
-        activeTab = DrawSideDockTabs(tabs, activeTab, fonts);
+        activeTab = DrawSideDockTabs(tabs, activeTab, imgui.fonts);
         endY = ImGui::GetCursorScreenPos().y;
         const float inspectorWidth = defaultFont->CalcTextSizeA(12.0F, 100000.0F, 0.0F, tabs.front()).x + 20.0F;
         const float sceneWidth = defaultFont->CalcTextSizeA(12.0F, 100000.0F, 0.0F, tabs.back()).x + 20.0F;
@@ -254,23 +221,11 @@ TEST_CASE("Side dock tabs preserve reference padding height and interaction", "[
         ImGui::End();
     };
 
-    ImGui::NewFrame();
-    drawFrame();
-    ImGui::Render();
+    RenderImGuiFrame(drawFrame);
     REQUIRE(endY - startY == Catch::Approx(36.0F));
 
-    io.AddMousePosEvent(sceneTabCenter.x, sceneTabCenter.y);
-    io.AddMouseButtonEvent(ImGuiMouseButton_Left, true);
-    ImGui::NewFrame();
-    drawFrame();
-    ImGui::Render();
-    io.AddMouseButtonEvent(ImGuiMouseButton_Left, false);
-    ImGui::NewFrame();
-    drawFrame();
-    ImGui::Render();
+    ClickImGuiItem(*imgui.io, sceneTabCenter, drawFrame);
     REQUIRE(activeTab == 1);
-
-    ImGui::DestroyContext();
 }
 
 TEST_CASE("Workspace popup rows keep the design-system menu geometry", "[unit][editor][gui][design-system]") {
