@@ -497,6 +497,7 @@ add_library(HoroCinematicModel STATIC
         runtime/cinematic/model/CinematicIdentity.cpp
         runtime/cinematic/model/SequenceAsset.cpp
         runtime/cinematic/model/SequenceAssetCook.cpp
+        runtime/cinematic/model/TransformTrack.cpp
 )
 add_library(HoroEngine::CinematicModel ALIAS HoroCinematicModel)
 target_compile_features(HoroCinematicModel PUBLIC cxx_std_20)

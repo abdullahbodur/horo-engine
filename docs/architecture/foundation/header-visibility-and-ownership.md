@@ -117,6 +117,17 @@ state with direct `Sample(time)` calls and choose explicit clamp, repeat, or
 ping-pong behavior for each boundary. Legacy non-finite values, duplicate times,
 and non-monotonic cubic tangents are rejected rather than normalized silently.
 
+## CIN-001.5 Migration Notes
+
+`HoroEngine::CinematicModel` owns `Horo/Cinematic/TransformTrack.h`. Consumers
+compile a `TransformEvaluationPlan` at activation from exact generation-checked
+bindings and retain the immutable scalar-key storage borrowed by its curve views.
+Frame and editor-preview evaluation share the same random-access API and caller-
+owned output storage. Root tracks require a canonical `WorldCoordinate64` anchor;
+children remain local-space, so callers must not subtract the active origin again.
+Scene replacement requires a new plan rather than carrying cached bindings across
+the scene-generation fence.
+
 ## PLS-001.2 Migration Notes
 
 `HoroEngine::PlatformServices` owns

@@ -46,4 +46,18 @@ namespace Horo::Cinematic::CinematicErrors {
     extern const ErrorCodeDescriptor CurveTangentInvalid;
     /** @brief Scalar curve input exceeds the compiled sampling capacity. */
     extern const ErrorCodeDescriptor CurveLimitExceeded;
+    /** @brief Transform-track version is not directly compatible with this evaluator. */
+    extern const ErrorCodeDescriptor TransformVersionUnsupported;
+    /** @brief Transform track or scene generation no longer matches the active binding snapshot. */
+    extern const ErrorCodeDescriptor TransformBindingStale;
+    /** @brief A required transform binding or parent is absent from the activation snapshot. */
+    extern const ErrorCodeDescriptor TransformBindingMissing;
+    /** @brief Transform binding topology contains a parent cycle. */
+    extern const ErrorCodeDescriptor TransformHierarchyCycle;
+    /** @brief Transform-track data or its binding relationship is malformed. */
+    extern const ErrorCodeDescriptor TransformMalformed;
+    /** @brief Transform evaluation exceeds a compiled input or caller output bound. */
+    extern const ErrorCodeDescriptor TransformLimitExceeded;
+    /** @brief Sampled transform channels cannot form a finite scene transform. */
+    extern const ErrorCodeDescriptor TransformSampleInvalid;
 }  // namespace Horo::Cinematic::CinematicErrors
