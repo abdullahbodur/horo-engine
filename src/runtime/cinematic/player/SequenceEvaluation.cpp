@@ -95,7 +95,7 @@ namespace Horo::Cinematic {
             return Result<std::int64_t>::Success(product + remainder);
         }
 
-        [[nodiscard]] Result<void> AddSegment(AdvanceResult &result, const TraversalSegment segment) {
+        [[nodiscard]] Result<void> AddSegment(AdvanceResult &result, const TraversalSegment &segment) {
             if (result.segmentCount >= result.segments.size())
                 return Failed<void>(SequenceEvaluationErrors::CapacityExceeded);
             result.segments[result.segmentCount++] = segment;
@@ -108,8 +108,8 @@ namespace Horo::Cinematic {
 
         [[nodiscard]] Result<void> AddSegmentAndMove(AdvanceResult &result, const SequenceTime next,
                                                      const SequenceTraversalDirection direction, const bool includeFrom) {
-            auto added = AddSegment(result, {result.cursor.position, next, result.cursor.traversal, direction, includeFrom});
-            if (added.HasError())
+            if (auto added = AddSegment(result, {result.cursor.position, next, result.cursor.traversal, direction, includeFrom});
+                added.HasError())
                 return added;
             result.cursor.position = next;
             return Result<void>::Success();
@@ -122,14 +122,12 @@ namespace Horo::Cinematic {
             const std::int64_t magnitude = forward ? remaining : -remaining;
             const auto direction = forward ? SequenceTraversalDirection::Forward : SequenceTraversalDirection::Reverse;
             if (magnitude <= distance) {
-                auto moved = AddSegmentAndMove(result, result.cursor.position + remaining, direction, includeFrom);
-                if (moved.HasError())
+                if (auto moved = AddSegmentAndMove(result, result.cursor.position + remaining, direction, includeFrom); moved.HasError())
                     return Result<bool>::Failure(moved.ErrorValue());
                 return Result<bool>::Success(true);
             }
             if (distance > 0) {
-                auto moved = AddSegmentAndMove(result, forward ? duration : 0, direction, includeFrom);
-                if (moved.HasError())
+                if (auto moved = AddSegmentAndMove(result, forward ? duration : 0, direction, includeFrom); moved.HasError())
                     return Result<bool>::Failure(moved.ErrorValue());
                 remaining += forward ? -distance : distance;
             }
@@ -157,7 +155,7 @@ namespace Horo::Cinematic {
 
         [[nodiscard]] Result<void> AdvancePingPong(AdvanceResult &result, const std::int64_t step, const SequenceTime duration,
                                                    const std::size_t maximumCrossings) {
-            std::uint64_t remaining = static_cast<std::uint64_t>(step < 0 ? -step : step);
+            auto remaining = static_cast<std::uint64_t>(step < 0 ? -step : step);
             std::int8_t direction = step < 0 ? -result.cursor.pingPongDirection : result.cursor.pingPongDirection;
             std::size_t crossings = 0;
             while (remaining != 0) {
@@ -181,6 +179,13 @@ namespace Horo::Cinematic {
                 result.cursor.pingPongDirection = static_cast<std::int8_t>(-result.cursor.pingPongDirection);
             }
             return Result<void>::Success();
+        }
+
+        [[nodiscard]] SequenceTime ClampedOnceTarget(const SequenceTime position, const std::int64_t step,
+                                                     const SequenceTime duration) noexcept {
+            if (step > 0)
+                return step > duration - position ? duration : position + step;
+            return -step > position ? 0 : position + step;
         }
 
         [[nodiscard]] Result<AdvanceResult> Advance(const SequenceFrameCursor &cursor, const SequencePlaybackRate rate,
@@ -211,8 +216,7 @@ namespace Horo::Cinematic {
             } else if (loopMode == SequenceLoopMode::PingPong) {
                 advanced = AdvancePingPong(result, step, duration, maximumCrossings);
             } else {
-                const SequenceTime target = step > 0 ? (step > duration - cursor.position ? duration : cursor.position + step)
-                                                     : (-step > cursor.position ? 0 : cursor.position + step);
+                const SequenceTime target = ClampedOnceTarget(cursor.position, step, duration);
                 advanced =
                     AddSegment(result, {cursor.position, target, cursor.traversal,
                                         step > 0 ? SequenceTraversalDirection::Forward : SequenceTraversalDirection::Reverse, false});
@@ -232,24 +236,38 @@ namespace Horo::Cinematic {
         }
 
         template <typename Key, typename Emit>
+        void EmitCrossedRange(const std::span<const Key> keys, const std::size_t begin, const std::size_t end,
+                              const TraversalSegment &segment, Emit &emit) {
+            for (std::size_t index = begin; index < end; ++index)
+                if (Crossed(keys[index], segment))
+                    emit(keys[index], segment);
+        }
+
+        template <typename Key>
+        [[nodiscard]] std::size_t EqualTimeGroupBegin(const std::span<const Key> keys, const std::size_t end) noexcept {
+            std::size_t begin = end - 1;
+            while (begin != 0 && keys[begin - 1].time == keys[end - 1].time)
+                --begin;
+            return begin;
+        }
+
+        template <typename Key, typename Emit>
+        void VisitReverseCrossings(const std::span<const Key> keys, const TraversalSegment &segment, Emit &emit) {
+            std::size_t end = keys.size();
+            while (end != 0) {
+                const std::size_t begin = EqualTimeGroupBegin(keys, end);
+                EmitCrossedRange(keys, begin, end, segment, emit);
+                end = begin;
+            }
+        }
+
+        template <typename Key, typename Emit>
         void VisitCrossed(const std::span<const Key> keys, const std::span<const TraversalSegment> segments, Emit emit) {
             for (const TraversalSegment &segment : segments) {
-                if (segment.direction == SequenceTraversalDirection::Forward) {
-                    for (const Key &key : keys)
-                        if (Crossed(key, segment))
-                            emit(key, segment);
-                    continue;
-                }
-                std::size_t end = keys.size();
-                while (end != 0) {
-                    std::size_t begin = end - 1;
-                    while (begin != 0 && keys[begin - 1].time == keys[end - 1].time)
-                        --begin;
-                    for (std::size_t index = begin; index < end; ++index)
-                        if (Crossed(keys[index], segment))
-                            emit(keys[index], segment);
-                    end = begin;
-                }
+                if (segment.direction == SequenceTraversalDirection::Reverse)
+                    VisitReverseCrossings(keys, segment, emit);
+                else
+                    EmitCrossedRange(keys, 0, keys.size(), segment, emit);
             }
         }
 
@@ -258,14 +276,15 @@ namespace Horo::Cinematic {
             std::size_t cameraCuts{};
         };
 
-        [[nodiscard]] Result<StagedOccurrenceCounts> StageOccurrences(const SequencePlayerHandle player,
+        [[nodiscard]] Result<StagedOccurrenceCounts> StageOccurrences(const SequencePlayerHandle &player,
                                                                       const std::span<const SequenceFrameEventKey> events,
                                                                       const std::span<const SequenceFrameCameraCutKey> cameraCuts,
                                                                       const std::span<const TraversalSegment> segments,
                                                                       const SequenceFrameScratch &scratch) {
             StagedOccurrenceCounts counts{};
             bool capacityExceeded = false;
-            VisitCrossed<SequenceFrameEventKey>(events, segments, [&](const auto &event, const auto &segment) {
+            VisitCrossed<SequenceFrameEventKey>(events, segments,
+                                                [&counts, &scratch, &capacityExceeded, &player](const auto &event, const auto &segment) {
                 if (segment.direction == SequenceTraversalDirection::Reverse && !event.fireInReverse)
                     return;
                 if (counts.events >= scratch.events.size()) {
@@ -274,7 +293,8 @@ namespace Horo::Cinematic {
                 }
                 scratch.events[counts.events++] = {player, event.track, event.key, event.time, segment.traversal, segment.direction};
             });
-            VisitCrossed<SequenceFrameCameraCutKey>(cameraCuts, segments, [&](const auto &cut, const auto &segment) {
+            VisitCrossed<SequenceFrameCameraCutKey>(cameraCuts, segments,
+                                                    [&counts, &scratch, &capacityExceeded, &player](const auto &cut, const auto &segment) {
                 if (counts.cameraCuts >= scratch.cameraCuts.size()) {
                     capacityExceeded = true;
                     return;
@@ -413,8 +433,7 @@ namespace Horo::Cinematic {
         if ((staged.Value().events != 0 && hooks.eventHook == nullptr) || (staged.Value().cameraCuts != 0 && hooks.cameraHook == nullptr))
             return Failed<SequenceFrameEvaluationResult>(SequenceEvaluationErrors::HookUnavailable);
 
-        auto sampled = SampleTrackValues(tracks_, advanced.Value().cursor.position, scratch.values);
-        if (sampled.HasError())
+        if (auto sampled = SampleTrackValues(tracks_, advanced.Value().cursor.position, scratch.values); sampled.HasError())
             return Result<SequenceFrameEvaluationResult>::Failure(sampled.ErrorValue());
 
         SequenceFrameCursor committed = advanced.Value().cursor;
