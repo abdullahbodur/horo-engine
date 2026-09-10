@@ -20,13 +20,15 @@ namespace Horo::PlatformServices {
             return state == PlatformStableIdState::Active || state == PlatformStableIdState::Tombstoned;
         }
 
+        [[nodiscard]] constexpr bool IsCanonicalKeyCharacter(const char character) noexcept {
+            return (character >= 'a' && character <= 'z') || (character >= '0' && character <= '9') || character == '_' ||
+                   character == '.' || character == '-';
+        }
+
         [[nodiscard]] bool IsCanonicalKey(const std::string_view key) noexcept {
             if (key.empty() || key.size() > 96 || key.front() < 'a' || key.front() > 'z')
                 return false;
-            return std::all_of(key.begin() + 1, key.end(), [](const char character) {
-                return (character >= 'a' && character <= 'z') || (character >= '0' && character <= '9') || character == '_' ||
-                       character == '.' || character == '-';
-            });
+            return std::all_of(key.begin() + 1, key.end(), IsCanonicalKeyCharacter);
         }
 
         [[nodiscard]] bool IsZero(const Sha256Digest &digest) noexcept {
@@ -74,9 +76,13 @@ namespace Horo::PlatformServices {
             PlatformStableIdState state;
         };
 
+        [[nodiscard]] bool HasValidEntryShape(const PlatformStableIdDeclaration &entry) noexcept {
+            return IsKnown(entry.kind) && IsKnown(entry.state) && IsCanonicalKey(entry.canonicalKey) &&
+                   entry.aliases.size() <= MaxAliasesPerEntry && entry.removalProvenance.size() <= MaxRemovalProvenanceBytes;
+        }
+
         [[nodiscard]] Result<void> CanonicalizeEntry(PlatformStableIdDeclaration &entry) {
-            if (!IsKnown(entry.kind) || !IsKnown(entry.state) || !IsCanonicalKey(entry.canonicalKey) ||
-                entry.aliases.size() > MaxAliasesPerEntry || entry.removalProvenance.size() > MaxRemovalProvenanceBytes)
+            if (!HasValidEntryShape(entry))
                 return Result<void>::Failure(MakeError(StableIdErrors::InvalidLedger));
             const bool activeHasRemoval = entry.state == PlatformStableIdState::Active && !entry.removalProvenance.empty();
             const bool tombstoneLacksRemoval = entry.state == PlatformStableIdState::Tombstoned && entry.removalProvenance.empty();
@@ -88,6 +94,11 @@ namespace Horo::PlatformServices {
             }))
                 return Result<void>::Failure(MakeError(StableIdErrors::InvalidKey));
             return Result<void>::Success();
+        }
+
+        [[nodiscard]] bool HasValidCandidateMetadata(const PlatformStableIdRegistryCandidate &candidate) noexcept {
+            return candidate.schemaVersion == PlatformStableIdRegistrySchemaVersion && !candidate.projectId.empty() &&
+                   candidate.projectId.size() <= MaxProjectIdBytes && candidate.salt.IsValid() && candidate.entries.size() <= MaxEntries;
         }
 
         [[nodiscard]] Result<void> ValidateNumericIds(const std::vector<PlatformStableIdDeclaration> &entries,
@@ -155,6 +166,29 @@ namespace Horo::PlatformServices {
                 AppendString(canonical, entry.removalProvenance);
             }
             return ComputeSha256(std::span<const std::byte>{canonical});
+        }
+
+        [[nodiscard]] bool IsValidProviderMapping(const PlatformStableIdRegistry &registry, const PlatformProviderId provider,
+                                                  const std::uint64_t expectedRevision,
+                                                  const PlatformProviderMappingEvidence &mapping) noexcept {
+            return mapping.provider == provider && mapping.registryFingerprint == registry.Fingerprint() && mapping.mappingRevision != 0 &&
+                   mapping.mappingRevision == expectedRevision && !IsZero(mapping.providerValueDigest) &&
+                   registry.ContainsActive(mapping.kind, mapping.id);
+        }
+
+        [[nodiscard]] bool HasDuplicates(std::vector<PlatformServiceStableIdValue> &mappedIds, std::vector<Sha256Digest> &providerValues) {
+            std::sort(mappedIds.begin(), mappedIds.end());
+            std::sort(providerValues.begin(), providerValues.end());
+            return std::adjacent_find(mappedIds.begin(), mappedIds.end()) != mappedIds.end() ||
+                   std::adjacent_find(providerValues.begin(), providerValues.end()) != providerValues.end();
+        }
+
+        [[nodiscard]] bool HasAllRequiredMappings(const PlatformStableIdRegistry &registry, const PlatformProviderMappingPolicy &policy,
+                                                  const std::vector<PlatformServiceStableIdValue> &mappedIds) {
+            return std::all_of(registry.Entries().begin(), registry.Entries().end(), [&](const auto &entry) {
+                return entry.state != PlatformStableIdState::Active || !policy.requiredKinds[KindIndex(entry.kind)] ||
+                       std::binary_search(mappedIds.begin(), mappedIds.end(), entry.storedId);
+            });
         }
     }  // namespace
 
@@ -261,8 +295,7 @@ namespace Horo::PlatformServices {
 
     /** @copydoc BuildPlatformStableIdRegistry */
     Result<PlatformStableIdRegistry> BuildPlatformStableIdRegistry(const PlatformStableIdRegistryCandidate &candidate) {
-        if (candidate.schemaVersion != PlatformStableIdRegistrySchemaVersion || candidate.projectId.empty() ||
-            candidate.projectId.size() > MaxProjectIdBytes || !candidate.salt.IsValid() || candidate.entries.size() > MaxEntries)
+        if (!HasValidCandidateMetadata(candidate))
             return Result<PlatformStableIdRegistry>::Failure(MakeError(StableIdErrors::InvalidLedger));
 
         PlatformStableIdRegistry registry;
@@ -376,23 +409,15 @@ namespace Horo::PlatformServices {
         mappedIds.reserve(mappings.size());
         providerValues.reserve(mappings.size());
         for (const auto &mapping : mappings) {
-            if (mapping.provider != provider || mapping.registryFingerprint != registry.Fingerprint() || mapping.mappingRevision == 0 ||
-                mapping.mappingRevision != expectedRevision || IsZero(mapping.providerValueDigest) ||
-                !registry.ContainsActive(mapping.kind, mapping.id))
+            if (!IsValidProviderMapping(registry, provider, expectedRevision, mapping))
                 return Result<void>::Failure(MakeError(StableIdErrors::InvalidProviderMapping));
             mappedIds.push_back(mapping.id);
             providerValues.push_back(mapping.providerValueDigest);
         }
-        std::sort(mappedIds.begin(), mappedIds.end());
-        std::sort(providerValues.begin(), providerValues.end());
-        if (std::adjacent_find(mappedIds.begin(), mappedIds.end()) != mappedIds.end() ||
-            std::adjacent_find(providerValues.begin(), providerValues.end()) != providerValues.end())
+        if (HasDuplicates(mappedIds, providerValues))
             return Result<void>::Failure(MakeError(StableIdErrors::InvalidProviderMapping));
-        for (const auto &entry : registry.Entries()) {
-            if (entry.state == PlatformStableIdState::Active && policy.requiredKinds[KindIndex(entry.kind)] &&
-                !std::binary_search(mappedIds.begin(), mappedIds.end(), entry.storedId))
-                return Result<void>::Failure(MakeError(StableIdErrors::InvalidProviderMapping));
-        }
+        if (!HasAllRequiredMappings(registry, policy, mappedIds))
+            return Result<void>::Failure(MakeError(StableIdErrors::InvalidProviderMapping));
         return Result<void>::Success();
     }
 

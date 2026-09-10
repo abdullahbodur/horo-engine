@@ -44,6 +44,33 @@ namespace Horo::PlatformServices {
             return std::move(built).Value();
         }
 
+        struct ProviderMappingFixture final {
+            PlatformStableIdRegistry registry;
+            PlatformProviderId provider{42};
+            PlatformProviderMappingPolicy policy;
+            std::vector<PlatformProviderMappingEvidence> mappings;
+        };
+
+        [[nodiscard]] ProviderMappingFixture MakeProviderMappingFixture() {
+            ProviderMappingFixture fixture{.registry = BuildRegistry()};
+            fixture.policy.requiredKinds = {true, true, false, false};
+            const auto achievement = fixture.registry.Resolve(PlatformServiceIdKind::Achievement, "campaign.first_win").Value();
+            const auto leaderboard = fixture.registry.Resolve(PlatformServiceIdKind::Leaderboard, "ranked.score").Value();
+            fixture.mappings = {{.provider = fixture.provider,
+                                 .kind = PlatformServiceIdKind::Achievement,
+                                 .id = achievement,
+                                 .providerValueDigest = OpaqueDigest(1),
+                                 .registryFingerprint = fixture.registry.Fingerprint(),
+                                 .mappingRevision = 7},
+                                {.provider = fixture.provider,
+                                 .kind = PlatformServiceIdKind::Leaderboard,
+                                 .id = leaderboard,
+                                 .providerValueDigest = OpaqueDigest(2),
+                                 .registryFingerprint = fixture.registry.Fingerprint(),
+                                 .mappingRevision = 7}};
+            return fixture;
+        }
+
         void CheckError(const auto &result, const ErrorCodeDescriptor &descriptor) {
             REQUIRE(result.HasError());
             CHECK(result.ErrorValue().code.Value() == descriptor.code.Value());
@@ -179,25 +206,13 @@ namespace Horo::PlatformServices {
     }
 
     TEST_CASE("Provider mapping evidence is opaque, generation-bound, complete, and one-to-one", "[platform-services][stable-id]") {
-        const auto registry = BuildRegistry();
-        const PlatformProviderId provider{42};
-        PlatformProviderMappingPolicy policy;
-        policy.requiredKinds = {true, true, false, false};
+        const auto fixture = MakeProviderMappingFixture();
+        const auto &registry = fixture.registry;
+        const auto provider = fixture.provider;
+        const auto &policy = fixture.policy;
+        const auto &mappings = fixture.mappings;
         const auto achievement = registry.Resolve(PlatformServiceIdKind::Achievement, "campaign.first_win").Value();
-        const auto leaderboard = registry.Resolve(PlatformServiceIdKind::Leaderboard, "ranked.score").Value();
-        std::vector<PlatformProviderMappingEvidence> mappings{{.provider = provider,
-                                                               .kind = PlatformServiceIdKind::Achievement,
-                                                               .id = achievement,
-                                                               .providerValueDigest = OpaqueDigest(1),
-                                                               .registryFingerprint = registry.Fingerprint(),
-                                                               .mappingRevision = 7},
-                                                              {.provider = provider,
-                                                               .kind = PlatformServiceIdKind::Leaderboard,
-                                                               .id = leaderboard,
-                                                               .providerValueDigest = OpaqueDigest(2),
-                                                               .registryFingerprint = registry.Fingerprint(),
-                                                               .mappingRevision = 7}};
-        CHECK(ValidatePlatformProviderMappings(registry, provider, policy, mappings).HasValue());
+        CHECK(ValidatePlatformProviderMappings(fixture.registry, fixture.provider, fixture.policy, fixture.mappings).HasValue());
 
         auto missing = mappings;
         missing.pop_back();
@@ -226,7 +241,10 @@ namespace Horo::PlatformServices {
         auto zeroEvidence = mappings;
         zeroEvidence.front().providerValueDigest = {};
         CheckError(ValidatePlatformProviderMappings(registry, provider, policy, zeroEvidence), StableIdErrors::InvalidProviderMapping);
+    }
 
+    TEST_CASE("Provider mappings reject tombstoned stable identities", "[platform-services][stable-id]") {
+        const PlatformProviderId provider{42};
         auto removed = Declaration(TestSalt(), PlatformServiceIdKind::Achievement, "campaign.removed");
         removed.state = PlatformStableIdState::Tombstoned;
         removed.removalProvenance = "removed-by-migration:PLS-003.2";
