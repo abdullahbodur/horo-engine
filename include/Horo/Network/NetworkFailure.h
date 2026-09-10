@@ -91,7 +91,7 @@ namespace Horo::Network {
         std::uint16_t observedBytes{}; /**< Saturates at MaximumPrivateBackendDetailBytes + 1. */
         bool observed{};               /**< Whether the private adapter supplied detail. */
         bool truncated{};              /**< Whether input exceeded the inspection bound. */
-        bool malformed{};              /**< Whether inspected bytes were not safe printable UTF-8. */
+        bool malformed{};              /**< Whether inspected bytes were not safe canonical UTF-8 diagnostic text. */
 
         constexpr auto operator<=>(const NetworkBackendEvidenceSummary &) const noexcept = default;
     };

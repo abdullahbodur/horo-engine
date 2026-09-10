@@ -183,6 +183,40 @@ namespace Horo::Network {
         REQUIRE(validUtf8.HasValue());
         REQUIRE_FALSE(validUtf8.Value().BackendEvidence().malformed);
 
+        const std::array allowedWhitespace{
+            std::string_view{"\t"},
+            std::string_view{"\n"},
+            std::string_view{"\r"},
+            std::string_view{"socket connect failed:\r\nretry\tlater"},
+        };
+        for (const auto detail : allowedWhitespace) {
+            const auto accepted =
+                NormalizePrivateBackendFailure(NetworkFailureLayer::Transport, NetworkFailureKind::TransportUnavailable, detail);
+            REQUIRE(accepted.HasValue());
+            REQUIRE_FALSE(accepted.Value().BackendEvidence().malformed);
+            REQUIRE(accepted.Value().ToError().message.find(detail) == std::string::npos);
+        }
+
+        const std::array rejectedControls{
+            std::string_view{"\0", 1},   std::string_view{"\x01", 1}, std::string_view{"\b", 1},
+            std::string_view{"\x1b", 1}, std::string_view{"\x7f", 1},
+        };
+        for (const auto detail : rejectedControls) {
+            const auto rejected =
+                NormalizePrivateBackendFailure(NetworkFailureLayer::Transport, NetworkFailureKind::TransportUnavailable, detail);
+            REQUIRE(rejected.HasValue());
+            REQUIRE(rejected.Value().BackendEvidence().malformed);
+        }
+
+        std::string whitespaceBoundary(MaximumPrivateBackendDetailBytes, 'x');
+        whitespaceBoundary.back() = '\n';
+        const auto acceptedBoundary =
+            NormalizePrivateBackendFailure(NetworkFailureLayer::Transport, NetworkFailureKind::TransportUnavailable, whitespaceBoundary);
+        REQUIRE(acceptedBoundary.HasValue());
+        REQUIRE_FALSE(acceptedBoundary.Value().BackendEvidence().truncated);
+        REQUIRE_FALSE(acceptedBoundary.Value().BackendEvidence().malformed);
+        REQUIRE(acceptedBoundary.Value().ToError().message.find(whitespaceBoundary) == std::string::npos);
+
         const std::array malformedUtf8{
             std::string_view{"\x80"},         std::string_view{"\xe2\x82"},         std::string_view{"\xe0\x80\x80"},
             std::string_view{"\xed\xa0\x80"}, std::string_view{"\xf4\x90\x80\x80"}, std::string_view{"\x7f"},
