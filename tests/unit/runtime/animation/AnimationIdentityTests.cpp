@@ -137,6 +137,17 @@ namespace Horo::Animation {
             &AnimationErrors::SkeletonHierarchyCycle,
             &AnimationErrors::SkeletonTransformInvalid,
             &AnimationErrors::SkeletonMetadataInvalid,
+            &AnimationErrors::SkinningVersionUnsupported,
+            &AnimationErrors::SkinningAdmissionRejected,
+            &AnimationErrors::SkinningValidationCancelled,
+            &AnimationErrors::SkinningReloadMismatch,
+            &AnimationErrors::SkinningSkeletonMismatch,
+            &AnimationErrors::SkinningBindingStale,
+            &AnimationErrors::SkinningLimitExceeded,
+            &AnimationErrors::SkinningDuplicateIdentity,
+            &AnimationErrors::SkinningJointMissing,
+            &AnimationErrors::SkinningInfluenceInvalid,
+            &AnimationErrors::SkinningLayoutInvalid,
         };
         std::set<std::string_view> codes;
         for (const ErrorCodeDescriptor *descriptor : descriptors) {

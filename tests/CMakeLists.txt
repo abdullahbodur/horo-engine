@@ -260,6 +260,7 @@ add_executable(HoroAnimationApiTests
         unit/runtime/animation/AnimationComponentTests.cpp
         unit/runtime/animation/AnimationIdentityTests.cpp
         unit/runtime/animation/SkeletonAssetTests.cpp
+        unit/runtime/animation/SkeletalMeshSkinningTests.cpp
 )
 target_compile_features(HoroAnimationApiTests PRIVATE cxx_std_20)
 target_link_libraries(HoroAnimationApiTests PRIVATE HoroEngine::AnimationApi)

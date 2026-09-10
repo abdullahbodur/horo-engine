@@ -336,6 +336,15 @@ shutdown rejects the detached candidate without replacing the last good snapshot
 No Physics, Render, RuntimeScene, editor, filesystem, parser, or native animation
 dependency is added to the public boundary.
 
+ANI-001.4 adds `Horo/Animation/SkeletalMeshSkinning.h` to the same owner. It
+publishes immutable, bounded skeletal-mesh skinning data and an explicit stable
+mesh-joint-to-skeleton-joint remap bound to one skeleton publication generation.
+Validation canonicalizes LOD, section, palette, and influence order before
+publication and rejects lifecycle, reload, version, stale-generation, range, and
+limit failures transactionally. Renderer buffers, backend handles, mutable pose
+palettes, import parsers, scene instances, and filesystem state remain outside
+the public boundary; existing AnimationApi consumers require no migration.
+
 ## Destruction Identity Boundary
 
 `HoroEngine::DestructionApi` owns `Horo/Destruction/DestructibleDescriptor.h`,
