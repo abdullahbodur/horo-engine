@@ -187,6 +187,31 @@ horopak verify
 Duplicate command paths and option names are startup errors. Help is generated
 from the typed registry.
 
+### Registry Activation Contract
+
+`HoroEngine::CliHost` exposes the public descriptor and registry contracts under
+`Horo/Cli/`. `CliCommandRegistry::Create` is the sole admission point for both
+built-in and approved contributed descriptors. The composition root supplies an
+active host, its granted capability set, the newest descriptor contract it
+understands, and explicit metadata limits. Admission is atomic and inert: a
+failure publishes no partial inventory and invokes no adapter or lifecycle code.
+
+The current compatibility rule accepts the same contract major and descriptor
+minor versions no newer than the host. Patch releases remain compatible within
+an accepted minor. The registry rejects malformed or duplicate paths and options,
+inconsistent option/output schemas, ungranted capabilities, and descriptors that
+do not name the active host. These failures retain distinct stable `horo.cli`
+error identities so composition diagnostics never depend on message text.
+
+Accepted descriptors are copied, canonicalized, and sorted by hierarchical path.
+`Commands`, `Find`, `Discover`, `DiscoverNextSegments`, and `GenerateHelp` read only that immutable
+accepted collection; there is no handwritten help or completion inventory.
+Options, enum alternatives, and capability requirements are also sorted so the
+same contribution set produces byte-identical LF-delimited help and discovery
+order on every supported platform. Parsing, dispatch, output presentation, and
+adapter execution remain later CLI tickets and are not performed by registry
+construction or discovery.
+
 ### Save Command Boundary
 
 Save commands are application adapters under

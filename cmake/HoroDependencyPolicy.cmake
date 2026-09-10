@@ -3,6 +3,7 @@ include_guard(GLOBAL)
 # This manifest is intentionally explicit: changing a first-party link edge must
 # update the architecture policy in the same review.
 horo_allow_target_dependencies(TARGET HoroFoundation)
+horo_allow_target_dependencies(TARGET HoroCliHost DEPENDENCIES HoroFoundation)
 horo_allow_target_dependencies(TARGET HoroOpenTelemetry DEPENDENCIES HoroFoundation)
 horo_allow_target_dependencies(TARGET HoroPlatform DEPENDENCIES HoroFoundation)
 horo_allow_target_dependencies(TARGET HoroPackages DEPENDENCIES HoroFoundation)
