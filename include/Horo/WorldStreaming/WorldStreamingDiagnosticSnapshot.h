@@ -147,6 +147,14 @@ namespace Horo::WorldStreaming {
         StreamingDiagnosticQueueSnapshot queue; /**< Scheduler queue pressure at the same safe point. */
     };
 
+    /** @brief One borrowed, bounded authority-safe-point row set copied atomically into a diagnostic snapshot. */
+    struct WorldStreamingDiagnosticRows final {
+        std::span<const StreamingSourceDesiredState> sources;       /**< Current source desired-state rows. */
+        std::span<const StreamingCellStateRecord> cells;            /**< Current and retiring cell-attempt rows. */
+        std::span<const StreamingDiagnosticFailureRecord> failures; /**< Typed causes correlated to @ref cells. */
+        std::span<const StreamingDiagnosticDecisionEvent> events;   /**< Structured decisions for this revision. */
+    };
+
     /**
      * @brief Owned immutable, deterministic and bounded World Streaming diagnostic snapshot.
      * @details Creation copies authority-safe-point facts only. The value performs no discovery, logging,
@@ -159,31 +167,28 @@ namespace Horo::WorldStreaming {
          * @param input Owner, revision, lifecycle, queue and mandatory capacity facts.
          * @param policy Current immutable multidimensional budget policy.
          * @param sample Current usage sample for exactly @p policy.
-         * @param sources Current immutable source desired-state rows.
-         * @param cells Current and retained retiring cell-attempt rows.
-         * @param failures Typed causes correlated to exact rows in @p cells.
+         * @param rows Current source, cell, failure and structured decision rows.
          * @return Canonically ordered snapshot, or a typed invalid, stale, unsupported, conflict or capacity failure.
          * @post Failure publishes no partial snapshot and leaves every input unchanged.
          */
-        [[nodiscard]] static Result<WorldStreamingDiagnosticSnapshot> Create(
-            const WorldStreamingDiagnosticSnapshotInput &input, const StreamingBudgetPolicy &policy, const StreamingBudgetSample &sample,
-            std::span<const StreamingSourceDesiredState> sources, std::span<const StreamingCellStateRecord> cells,
-            std::span<const StreamingDiagnosticFailureRecord> failures, std::span<const StreamingDiagnosticDecisionEvent> events = {});
+        [[nodiscard]] static Result<WorldStreamingDiagnosticSnapshot> Create(const WorldStreamingDiagnosticSnapshotInput &input,
+                                                                             const StreamingBudgetPolicy &policy,
+                                                                             const StreamingBudgetSample &sample,
+                                                                             const WorldStreamingDiagnosticRows &rows);
 
         /**
          * @brief Validates a complete successor while preserving the prior immutable snapshot on failure.
          * @param previous Currently published snapshot.
          * @param input Complete successor authority facts with a strictly newer projection revision.
          * @param policy Current immutable budget policy. @param sample Matching usage sample.
-         * @param sources Successor source rows. @param cells Successor cell rows. @param failures Successor failure rows.
-         * @param events Successor structured decision rows; ignored without allocation when instrumentation is disabled.
+         * @param rows Complete successor rows; events are ignored without allocation when instrumentation is disabled.
          * @return Complete successor, or a typed failure without modifying @p previous.
          */
-        [[nodiscard]] static Result<WorldStreamingDiagnosticSnapshot> Replace(
-            const WorldStreamingDiagnosticSnapshot &previous, const WorldStreamingDiagnosticSnapshotInput &input,
-            const StreamingBudgetPolicy &policy, const StreamingBudgetSample &sample, std::span<const StreamingSourceDesiredState> sources,
-            std::span<const StreamingCellStateRecord> cells, std::span<const StreamingDiagnosticFailureRecord> failures,
-            std::span<const StreamingDiagnosticDecisionEvent> events = {});
+        [[nodiscard]] static Result<WorldStreamingDiagnosticSnapshot> Replace(const WorldStreamingDiagnosticSnapshot &previous,
+                                                                              const WorldStreamingDiagnosticSnapshotInput &input,
+                                                                              const StreamingBudgetPolicy &policy,
+                                                                              const StreamingBudgetSample &sample,
+                                                                              const WorldStreamingDiagnosticRows &rows);
 
         /** @brief Returns the exact mounted authority lifetime. @return Immutable owner token. */
         [[nodiscard]] const StreamingRuntimeOwnerToken &Owner() const noexcept;

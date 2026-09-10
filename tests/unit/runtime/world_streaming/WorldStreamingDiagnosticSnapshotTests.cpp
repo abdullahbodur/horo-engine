@@ -91,7 +91,16 @@ namespace Horo::WorldStreaming {
                                                                 const std::span<const StreamingCellStateRecord> cells = {},
                                                                 const std::span<const StreamingDiagnosticFailureRecord> failures = {},
                                                                 const std::span<const StreamingDiagnosticDecisionEvent> events = {}) {
-            return WorldStreamingDiagnosticSnapshot::Create(input, policy, sample, sources, cells, failures, events);
+            return WorldStreamingDiagnosticSnapshot::Create(input, policy, sample, {sources, cells, failures, events});
+        }
+
+        WorldStreamingDiagnosticSnapshotInput ClosedInput() {
+            auto input = Input();
+            input.lifecycle = WorldStreamingRuntimeCompositionState::Closed;
+            input.queue.state = StreamingSchedulerAdmissionState::Closed;
+            input.queue.reservedOperations = 0;
+            input.queue.reservedCapacityUnits = 0;
+            return input;
         }
 
         StreamingDiagnosticDecisionEvent Event(const std::uint64_t id, const std::uint64_t sequence,
@@ -153,11 +162,7 @@ namespace Horo::WorldStreaming {
 
         TEST_CASE("World Streaming diagnostics preserve valid empty and closed headless snapshots",
                   "[unit][world_streaming][diagnostics][shutdown]") {
-            auto input = Input();
-            input.lifecycle = WorldStreamingRuntimeCompositionState::Closed;
-            input.queue.state = StreamingSchedulerAdmissionState::Closed;
-            input.queue.reservedOperations = 0;
-            input.queue.reservedCapacityUnits = 0;
+            auto input = ClosedInput();
             const auto policy = Policy();
             const auto result = CreateSnapshot(input, policy, Sample(policy));
             REQUIRE(result.HasValue());
@@ -423,7 +428,7 @@ namespace Horo::WorldStreaming {
             REQUIRE(originalResult.HasValue());
             const auto original = originalResult.Value();
 
-            RequireError(WorldStreamingDiagnosticSnapshot::Replace(original, input, policy, Sample(policy), {}, {}, {}, originalEvents),
+            RequireError(WorldStreamingDiagnosticSnapshot::Replace(original, input, policy, Sample(policy), {{}, {}, {}, originalEvents}),
                          WorldStreamingErrors::DiagnosticProjectionStale);
             REQUIRE(original.Revision().Value() == 1);
             REQUIRE(original.Events().size() == 1);
@@ -433,7 +438,7 @@ namespace Horo::WorldStreaming {
             successorEvent.snapshotRevision = input.revision;
             const std::array successorEvents{successorEvent};
             const auto successor =
-                WorldStreamingDiagnosticSnapshot::Replace(original, input, policy, Sample(policy), {}, {}, {}, successorEvents);
+                WorldStreamingDiagnosticSnapshot::Replace(original, input, policy, Sample(policy), {{}, {}, {}, successorEvents});
             REQUIRE(successor.HasValue());
             REQUIRE(successor.Value().Revision().Value() == 2);
             REQUIRE(original.Revision().Value() == 1);
@@ -441,17 +446,13 @@ namespace Horo::WorldStreaming {
 
         TEST_CASE("Closed World Streaming diagnostic snapshots replace idempotently without reviving admission",
                   "[unit][world_streaming][diagnostics][events][shutdown]") {
-            auto input = Input();
-            input.lifecycle = WorldStreamingRuntimeCompositionState::Closed;
-            input.queue.state = StreamingSchedulerAdmissionState::Closed;
-            input.queue.reservedOperations = 0;
-            input.queue.reservedCapacityUnits = 0;
+            auto input = ClosedInput();
             const auto policy = Policy();
             const auto first = CreateSnapshot(input, policy, Sample(policy));
             REQUIRE(first.HasValue());
 
             input.revision = IdentityFrom<WorldStreamingDiagnosticRevision>(2);
-            const auto second = WorldStreamingDiagnosticSnapshot::Replace(first.Value(), input, policy, Sample(policy), {}, {}, {});
+            const auto second = WorldStreamingDiagnosticSnapshot::Replace(first.Value(), input, policy, Sample(policy), {{}, {}, {}, {}});
             REQUIRE(second.HasValue());
             REQUIRE(second.Value().Lifecycle() == WorldStreamingRuntimeCompositionState::Closed);
             REQUIRE(second.Value().Queue().state == StreamingSchedulerAdmissionState::Closed);

@@ -202,10 +202,7 @@ namespace Horo::WorldStreaming {
 
         /** @brief Validates immutable aggregate identity, policy correlation and declared capacities. */
         Result<void> ValidateSnapshotInput(const WorldStreamingDiagnosticSnapshotInput &input, const StreamingBudgetPolicy &policy,
-                                           const StreamingBudgetSample &sample, const std::span<const StreamingSourceDesiredState> sources,
-                                           const std::span<const StreamingCellStateRecord> cells,
-                                           const std::span<const StreamingDiagnosticFailureRecord> failures,
-                                           const std::span<const StreamingDiagnosticDecisionEvent> events) {
+                                           const StreamingBudgetSample &sample, const WorldStreamingDiagnosticRows &rows) {
             if (!SnapshotIdentityIsValid(input))
                 return Internal::Failure<void>(WorldStreamingErrors::DiagnosticProjectionInvalid);
             if (!IsKnownInstrumentation(input.instrumentation))
@@ -214,7 +211,7 @@ namespace Horo::WorldStreaming {
                 return queue;
             if (sample.PolicyRevision() != policy.Revision())
                 return Internal::Failure<void>(WorldStreamingErrors::DiagnosticProjectionStale);
-            if (!RowsFitDeclaredLimits(input, sources, cells, failures, events))
+            if (!RowsFitDeclaredLimits(input, rows.sources, rows.cells, rows.failures, rows.events))
                 return Internal::Failure<void>(WorldStreamingErrors::DiagnosticProjectionCapacityExceeded);
             return Result<void>::Success();
         }
@@ -278,18 +275,14 @@ namespace Horo::WorldStreaming {
         }
 
         /** @brief Validates every bounded row against the same captured authority. */
-        Result<void> ValidateRecords(const WorldStreamingDiagnosticSnapshotInput &input,
-                                     const std::span<const StreamingSourceDesiredState> sources,
-                                     const std::span<const StreamingCellStateRecord> cells,
-                                     const std::span<const StreamingDiagnosticFailureRecord> failures,
-                                     const std::span<const StreamingDiagnosticDecisionEvent> events) {
-            if (const auto validSources = ValidateSources(sources, input.owner); validSources.HasError())
+        Result<void> ValidateRecords(const WorldStreamingDiagnosticSnapshotInput &input, const WorldStreamingDiagnosticRows &rows) {
+            if (const auto validSources = ValidateSources(rows.sources, input.owner); validSources.HasError())
                 return validSources;
-            if (const auto validCells = ValidateCells(cells, input.owner); validCells.HasError())
+            if (const auto validCells = ValidateCells(rows.cells, input.owner); validCells.HasError())
                 return validCells;
-            if (const auto validFailures = ValidateFailures(failures, cells, input.owner); validFailures.HasError())
+            if (const auto validFailures = ValidateFailures(rows.failures, rows.cells, input.owner); validFailures.HasError())
                 return validFailures;
-            return ValidateEvents(events, cells, input);
+            return ValidateEvents(rows.events, rows.cells, input);
         }
 
         /** @brief Checks canonicalized records for competing identities. */
@@ -342,22 +335,22 @@ namespace Horo::WorldStreaming {
     }
 
     /** @copydoc WorldStreamingDiagnosticSnapshot::Create */
-    Result<WorldStreamingDiagnosticSnapshot> WorldStreamingDiagnosticSnapshot::Create(
-        const WorldStreamingDiagnosticSnapshotInput &input, const StreamingBudgetPolicy &policy, const StreamingBudgetSample &sample,
-        const std::span<const StreamingSourceDesiredState> sources, const std::span<const StreamingCellStateRecord> cells,
-        const std::span<const StreamingDiagnosticFailureRecord> failures, const std::span<const StreamingDiagnosticDecisionEvent> events) {
-        if (const auto validInput = ValidateSnapshotInput(input, policy, sample, sources, cells, failures, events); validInput.HasError())
+    Result<WorldStreamingDiagnosticSnapshot> WorldStreamingDiagnosticSnapshot::Create(const WorldStreamingDiagnosticSnapshotInput &input,
+                                                                                      const StreamingBudgetPolicy &policy,
+                                                                                      const StreamingBudgetSample &sample,
+                                                                                      const WorldStreamingDiagnosticRows &rows) {
+        if (const auto validInput = ValidateSnapshotInput(input, policy, sample, rows); validInput.HasError())
             return Result<WorldStreamingDiagnosticSnapshot>::Failure(validInput.ErrorValue());
-        if (const auto validRecords = ValidateRecords(input, sources, cells, failures, events); validRecords.HasError())
+        if (const auto validRecords = ValidateRecords(input, rows); validRecords.HasError())
             return Result<WorldStreamingDiagnosticSnapshot>::Failure(validRecords.ErrorValue());
 
         try {
-            std::vector<StreamingSourceDesiredState> ownedSources(sources.begin(), sources.end());
-            std::vector<StreamingCellStateRecord> ownedCells(cells.begin(), cells.end());
-            std::vector<StreamingDiagnosticFailureRecord> ownedFailures(failures.begin(), failures.end());
+            std::vector<StreamingSourceDesiredState> ownedSources(rows.sources.begin(), rows.sources.end());
+            std::vector<StreamingCellStateRecord> ownedCells(rows.cells.begin(), rows.cells.end());
+            std::vector<StreamingDiagnosticFailureRecord> ownedFailures(rows.failures.begin(), rows.failures.end());
             std::vector<StreamingDiagnosticDecisionEvent> ownedEvents;
             if (input.instrumentation == StreamingDiagnosticInstrumentation::Enabled)
-                ownedEvents.assign(events.begin(), events.end());
+                ownedEvents.assign(rows.events.begin(), rows.events.end());
 
             std::ranges::sort(ownedSources, {}, [](const StreamingSourceDesiredState &source) {
                 return source.Source().id.Value();
@@ -388,15 +381,15 @@ namespace Horo::WorldStreaming {
     }
 
     /** @copydoc WorldStreamingDiagnosticSnapshot::Replace */
-    Result<WorldStreamingDiagnosticSnapshot> WorldStreamingDiagnosticSnapshot::Replace(
-        const WorldStreamingDiagnosticSnapshot &previous, const WorldStreamingDiagnosticSnapshotInput &input,
-        const StreamingBudgetPolicy &policy, const StreamingBudgetSample &sample,
-        const std::span<const StreamingSourceDesiredState> sources, const std::span<const StreamingCellStateRecord> cells,
-        const std::span<const StreamingDiagnosticFailureRecord> failures, const std::span<const StreamingDiagnosticDecisionEvent> events) {
+    Result<WorldStreamingDiagnosticSnapshot> WorldStreamingDiagnosticSnapshot::Replace(const WorldStreamingDiagnosticSnapshot &previous,
+                                                                                       const WorldStreamingDiagnosticSnapshotInput &input,
+                                                                                       const StreamingBudgetPolicy &policy,
+                                                                                       const StreamingBudgetSample &sample,
+                                                                                       const WorldStreamingDiagnosticRows &rows) {
         if (input.owner != previous.Owner() || input.revision.Value() <= previous.Revision().Value() ||
             input.ownerRevision.Value() < previous.OwnerRevision().Value())
             return Internal::Failure<WorldStreamingDiagnosticSnapshot>(WorldStreamingErrors::DiagnosticProjectionStale);
-        return Create(input, policy, sample, sources, cells, failures, events);
+        return Create(input, policy, sample, rows);
     }
 
     /** @copydoc WorldStreamingDiagnosticSnapshot::WorldStreamingDiagnosticSnapshot */
