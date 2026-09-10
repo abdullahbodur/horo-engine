@@ -151,6 +151,7 @@ add_executable(HoroNetworkApiTests
         unit/runtime/networking/MessageEnvelopeTests.cpp
         unit/runtime/networking/NetworkAddressTests.cpp
         unit/runtime/networking/NetworkHandleTests.cpp
+        unit/runtime/networking/NetworkFailureTests.cpp
         unit/runtime/networking/PacketQueueTests.cpp
         unit/runtime/networking/ProtocolIdentityTests.cpp
         unit/runtime/networking/ReplicationDescriptorTests.cpp
@@ -289,6 +290,7 @@ horo_register_catch_test(HoroVfxApiTests LABELS "unit;vfx;headless")
 add_executable(HoroDestructionApiTests
         support/AllocationProbe.cpp
         unit/runtime/destruction/DestructibleDescriptorTests.cpp
+        unit/runtime/destruction/DestructionCommandTests.cpp
         unit/runtime/destruction/DestructionIdentityTests.cpp
         unit/runtime/destruction/DestructionStateMachineTests.cpp
 )

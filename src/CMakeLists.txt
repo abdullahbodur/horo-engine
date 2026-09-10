@@ -201,6 +201,7 @@ add_library(HoroNetworkApi STATIC
         runtime/networking/api/MessageCodecRegistry.cpp
         runtime/networking/api/NetworkAddress.cpp
         runtime/networking/api/NetworkErrors.cpp
+        runtime/networking/api/NetworkFailure.cpp
         runtime/networking/api/NetworkObjectIdentity.cpp
         runtime/networking/api/PacketBuffer.cpp
         runtime/networking/api/PacketQueue.cpp
@@ -505,6 +506,7 @@ target_compile_features(HoroVfxApi PUBLIC cxx_std_20)
 target_link_libraries(HoroVfxApi PUBLIC HoroEngine::Foundation)
 
 add_library(HoroDestructionApi STATIC
+        runtime/destruction/api/DestructionCommand.cpp
         runtime/destruction/api/DestructionErrors.cpp
         runtime/destruction/api/DestructionIdentity.cpp
         runtime/destruction/api/DestructionStateMachine.cpp

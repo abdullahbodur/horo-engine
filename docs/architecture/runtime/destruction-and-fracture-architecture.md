@@ -208,6 +208,23 @@ Every trigger becomes an authority-, generation- and revision-checked typed comm
 Physics contacts are immutable evidence consumed after the Physics step; callbacks do
 not fracture objects directly. On a successful pre-cooked transition:
 
+`Horo/Destruction/DestructionCommand.h` owns the portable command envelope for this
+boundary. Impact, explosion, collision, direct damage and script sources retain fixed-
+size Horo-space payloads plus exact command, capability-snapshot and authority-grant
+revisions. Validation is allocation-free and rejects malformed, stale, unauthorized,
+unsupported or over-limit input before owner state or a bounded queue changes. Script
+commands require both script-origin authority and their typed damage or explicit-fracture
+capability. Script fracture lowers only to pre-cooked destruction; it does not grant
+runtime geometry generation.
+
+Every accepted operation ends in a durable typed result. `Succeeded`, `Rejected`,
+`Cancelled`, `Unsupported` and `Failed` remain separate values with a closed terminal
+reason, command identity and source/terminal revisions. Replacement, stale completion
+and shutdown produce rollback-requiring non-success results; they never promote a
+private candidate or infer disposition from diagnostic text. Consumers migrating from
+ad-hoc event structs must submit these typed commands and branch on the terminal enums,
+not backend status codes or strings.
+
 1. Destruction validates command/evidence generation and computes the exact cooked
    direct-detach plus unsupported-chunk closure and complete peak cost.
 2. Physics and Render prepare required chunk representations privately under one
