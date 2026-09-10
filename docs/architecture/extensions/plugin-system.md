@@ -585,6 +585,14 @@ module lease through their C ABI adapters. `UnloadExtension` therefore releases
 the manager lease but cannot unload executable code while an importer or preview
 snapshot can still call it.
 
+Before publication, the extension host owns the complete activation transaction.
+Failure destroys staged contribution adapters in reverse registration order and
+then unloads activated modules in reverse activation order. Cleanup continues
+after an unload callback failure; the primary activation error is preserved and
+each contained cleanup failure is appended as a diagnostic. Registry validation
+precedes ownership transfer, so a rejected batch leaves the prior candidate and
+published snapshot unchanged.
+
 ## Asset Importer Example
 
 A file-type importer is the reference extension use case. The package declares an

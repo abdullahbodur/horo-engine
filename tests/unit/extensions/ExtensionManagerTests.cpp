@@ -74,6 +74,20 @@ namespace Horo::Extensions::Tests {
         }
     };
 
+    /** @brief Creates a pre-existing catalog entry used to verify transaction isolation. */
+    [[nodiscard]] static Assets::AssetImporterContribution MakeExistingImporterContribution(const std::string_view contributionId) {
+        return {
+            .contributionId = std::string{contributionId},
+            .packageId = "existing.package",
+            .moduleId = "existing.module",
+            .moduleVersion = "1.0.0",
+            .version = "1.0.0",
+            .fileExtensions = {"existing"},
+            .assetTypes = {Assets::AssetTypeId::Parse("example.raw").Value()},
+            .strategy = std::make_shared<const ExistingImporter>(),
+        };
+    }
+
     struct ExtensionManagerTestFixture {
         fs::path tempDir;
 
@@ -365,18 +379,7 @@ namespace Horo::Extensions::Tests {
     TEST_CASE("External importer registration conflict leaves the catalog candidate unchanged", "[Extensions][Assets]") {
         using namespace Horo::Assets;
         AssetImporterCatalog catalog;
-        REQUIRE(catalog
-                    .Register(AssetImporterContribution{
-                        .contributionId = "com.horo.examples.asset-importer-basic.raw",
-                        .packageId = "existing.package",
-                        .moduleId = "existing.module",
-                        .moduleVersion = "1.0.0",
-                        .version = "1.0.0",
-                        .fileExtensions = {"existing"},
-                        .assetTypes = {AssetTypeId::Parse("example.raw").Value()},
-                        .strategy = std::make_shared<const ExistingImporter>(),
-                    })
-                    .HasValue());
+        REQUIRE(catalog.Register(MakeExistingImporterContribution("com.horo.examples.asset-importer-basic.raw")).HasValue());
 
         ExtensionManager manager{&catalog};
         auto loaded = manager.LoadExtension(fs::absolute(HORO_BASIC_EXTENSION_DIR).string());
@@ -388,6 +391,24 @@ namespace Horo::Extensions::Tests {
         const auto *retained = published.Value()->FindById("com.horo.examples.asset-importer-basic.raw");
         REQUIRE(retained != nullptr);
         REQUIRE(retained->packageId == "existing.package");
+    }
+
+    TEST_CASE("Failed activation preserves the exact published importer registry snapshot", "[Extensions][Assets]") {
+        using namespace Horo::Assets;
+        AssetImporterCatalog catalog;
+        REQUIRE(catalog.Register(MakeExistingImporterContribution("com.example.existing.raw")).HasValue());
+        auto published = catalog.Publish();
+        REQUIRE(published.HasValue());
+        const auto previous = published.Value();
+
+        ExtensionManager manager{&catalog};
+        const auto loaded = manager.LoadExtension(fs::absolute(HORO_BASIC_EXTENSION_DIR).string());
+
+        REQUIRE(loaded.HasError());
+        CHECK(manager.GetLoadedExtensionIds().empty());
+        CHECK(catalog.Snapshot() == previous);
+        CHECK(catalog.Snapshot()->FindById("com.example.existing.raw") != nullptr);
+        CHECK(catalog.Snapshot()->FindById("com.horo.examples.asset-importer-basic.raw") == nullptr);
     }
 
     TEST_CASE_METHOD(ExtensionManagerTestFixture, "A failed sibling cannot publish an earlier module contribution",

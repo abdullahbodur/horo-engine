@@ -282,21 +282,35 @@ namespace Horo::Extensions {
     }  // namespace
 
     ExtensionModuleLifetime::~ExtensionModuleLifetime() {
-        if (loaded && unload != nullptr) {
+        (void)UnloadNow();
+    }
+
+    /** @copydoc ExtensionModuleLifetime::UnloadNow */
+    bool ExtensionModuleLifetime::UnloadNow() noexcept {
+        if (!loaded)
+            return true;
+        loaded = false;
+        if (unload != nullptr && moduleApi.moduleContext != nullptr) {
             try {
                 unload(&moduleApi);
             } catch (const std::runtime_error &exception) {
                 LOG_WARN("extensions.importer", "Runtime error during module unload: %s", exception.what());
+                return false;
             } catch (const std::logic_error &exception) {
                 LOG_WARN("extensions.importer", "Logic error during module unload: %s", exception.what());
+                return false;
             } catch (const std::bad_alloc &exception) {
                 LOG_WARN("extensions.importer", "Bad alloc during module unload: %s", exception.what());
+                return false;
             } catch (const std::exception &exception) {  // NOSONAR(cpp:S1181)
                 LOG_WARN("extensions.importer", "Exception during module unload: %s", exception.what());
+                return false;
             } catch (...) {  // NOSONAR(cpp:S1181)
                 LOG_WARN("extensions.importer", "Unknown exception during module unload.");
+                return false;
             }
         }
+        return true;
     }
 
     namespace {

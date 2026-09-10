@@ -2,6 +2,7 @@
 
 #include "../capabilities/asset_pipeline_points/ExternalAssetImporter.h"
 #include "ExtensionAbiValidation.h"
+#include "ExtensionActivationTransaction.h"
 #include "Horo/Assets/AssetImporter.h"
 #include "Horo/Extensions/ExtensionAbi.h"
 #include "Horo/Extensions/ExtensionErrors.h"
@@ -138,19 +139,6 @@ namespace Horo::Extensions {
                 capabilities.resize(kMaximumHostCapabilities);
         }
 
-        void SafeUnload(HoroExtensionUnloadFunc unload, HoroExtensionModuleApi &moduleApi,  // NOSONAR(cpp:S5205)
-                        const char *context) {
-            if (unload == nullptr || moduleApi.moduleContext == nullptr)
-                return;
-            try {
-                unload(&moduleApi);
-            } catch (const std::exception &exception) {  // NOSONAR(cpp:S1181) External code is an exception containment boundary.
-                LOG_WARN("extensions", "Exception during %s unload: %s", context, exception.what());
-            } catch (...) {  // NOSONAR(cpp:S1181) External code is an exception containment boundary.
-                LOG_WARN("extensions", "Unknown exception during %s unload.", context);
-            }
-        }
-
         /** @brief Reads one bounded manifest file from an absolute package root. */
         [[nodiscard]] Result<std::string> ReadManifestContent(const fs::path &requestedRoot) {
             if (!requestedRoot.is_absolute())
@@ -242,6 +230,7 @@ namespace Horo::Extensions {
 
             auto lifetime = std::make_shared<ExtensionModuleLifetime>();
             lifetime->library = library;
+            lifetime->moduleId = manifestModule.id;
             lifetime->unload =
                 reinterpret_cast<HoroExtensionUnloadFunc>(library->GetSymbol("horo_extension_unload"));  // NOSONAR(cpp:S3630)
             AssetImporterRegistrationSession registration{
@@ -266,16 +255,21 @@ namespace Horo::Extensions {
             HoroExtensionModuleApi moduleApi{.structSize = sizeof(HoroExtensionModuleApi)};
             if (const HoroExtensionStatus status = InvokeExtensionLoad(loadFunc, hostApi, moduleApi, manifest.id);
                 status != HORO_EXTENSION_SUCCESS || registration.failed) {
-                SafeUnload(lifetime->unload, moduleApi, "rollback");
-                if (registration.failed)
-                    return Result<ActivatedModule>::Failure(std::move(registration.error));
-                return Result<ActivatedModule>::Failure(
-                    MakeError(ExtensionErrors::LoadFailed, "Extension load function returned an error."));
+                lifetime->moduleApi = moduleApi;
+                lifetime->loaded = true;
+                ExtensionActivationTransaction rollback;
+                rollback.Stage(lifetime, std::move(registration.contributions));
+                Error error = registration.failed ? std::move(registration.error)
+                                                  : MakeError(ExtensionErrors::LoadFailed, "Extension load function returned an error.");
+                return Result<ActivatedModule>::Failure(rollback.Rollback(std::move(error)));
             }
             if (!NormalizeModuleApi(moduleApi) || !MatchesDeclaredModule(moduleApi, manifestModule.id, manifestModule.version)) {
-                SafeUnload(lifetime->unload, moduleApi, "validation failure");
+                lifetime->moduleApi = moduleApi;
+                lifetime->loaded = true;
+                ExtensionActivationTransaction rollback;
+                rollback.Stage(lifetime, std::move(registration.contributions));
                 return Result<ActivatedModule>::Failure(
-                    MakeError(ExtensionErrors::InvalidManifest, "Loaded module table or identity/version is invalid."));
+                    rollback.Rollback(MakeError(ExtensionErrors::InvalidManifest, "Loaded module table or identity/version is invalid.")));
             }
             lifetime->moduleApi = moduleApi;
             lifetime->loaded = true;
@@ -291,9 +285,12 @@ namespace Horo::Extensions {
             if (importerCatalog == nullptr)
                 return Result<void>::Failure(
                     MakeError(ExtensionErrors::ContributionRejected, "The host did not provide an asset importer catalog."));
-            if (auto registered = importerCatalog->RegisterBatch(std::move(contributions)); registered.HasError()) {
-                return Result<void>::Failure(MakeError(ExtensionErrors::ContributionRejected,
+            if (auto validation = importerCatalog->ValidateBatch(contributions); validation.HasError())
+                return Result<void>::Failure(WrapError(ExtensionErrors::ContributionRejected, validation.ErrorValue(),
                                                        "The complete extension contribution batch conflicted with the host catalog."));
+            if (auto registered = importerCatalog->RegisterBatch(std::move(contributions)); registered.HasError()) {
+                return Result<void>::Failure(WrapError(ExtensionErrors::ContributionRejected, registered.ErrorValue(),
+                                                       "The complete extension contribution batch could not be committed."));
             }
             return Result<void>::Success();
         }
@@ -331,38 +328,34 @@ namespace Horo::Extensions {
             return Result<std::string>::Failure(planResult.ErrorValue());
         ExtensionModulePlan plan = std::move(planResult).Value();
 
-        std::vector<std::shared_ptr<ExtensionModuleLifetime>> lifetimes;
-        std::vector<Assets::AssetImporterContribution> contributions;
-        lifetimes.reserve(plan.moduleIds.size());
+        ExtensionActivationTransaction transaction;
         for (std::size_t moduleIndex = 0; moduleIndex < plan.moduleIds.size(); ++moduleIndex) {
             const std::string &moduleId = plan.moduleIds[moduleIndex];
             const auto manifestModule = std::ranges::find(manifest.modules, moduleId, &ExtensionModuleManifest::id);
             if (manifestModule == manifest.modules.end())
-                return Result<std::string>::Failure(
-                    MakeError(ExtensionErrors::ModuleResolutionFailed, "Resolved module is absent from the package manifest."));
+                return Result<std::string>::Failure(transaction.Rollback(
+                    MakeError(ExtensionErrors::ModuleResolutionFailed, "Resolved module is absent from the package manifest.")));
 
             auto libraryPathResult = ResolveModuleLibraryPath(manifest, plan.selectedEntries[moduleIndex]);
             if (libraryPathResult.HasError())
-                return Result<std::string>::Failure(libraryPathResult.ErrorValue());
+                return Result<std::string>::Failure(transaction.Rollback(libraryPathResult.ErrorValue()));
             auto loadResult = Platform::LoadDynamicLibrary(libraryPathResult.Value().string());
             if (loadResult.HasError())
-                return Result<std::string>::Failure(loadResult.ErrorValue());
+                return Result<std::string>::Failure(transaction.Rollback(loadResult.ErrorValue()));
             std::shared_ptr<Platform::DynamicLibrary> library{std::move(loadResult).Value()};
             auto activatedResult = ActivateModule(library, manifest, *manifestModule);
             if (activatedResult.HasError())
-                return Result<std::string>::Failure(activatedResult.ErrorValue());
+                return Result<std::string>::Failure(transaction.Rollback(activatedResult.ErrorValue()));
 
             ActivatedModule activated = std::move(activatedResult).Value();
-            lifetimes.push_back(std::move(activated.lifetime));
-            contributions.insert(contributions.end(), std::make_move_iterator(activated.contributions.begin()),
-                                 std::make_move_iterator(activated.contributions.end()));
+            transaction.Stage(std::move(activated.lifetime), std::move(activated.contributions));
         }
-        if (auto committed = CommitContributions(contributions, m_importerCatalog); committed.HasError())
-            return Result<std::string>::Failure(committed.ErrorValue());
+        if (auto committed = CommitContributions(transaction.Contributions(), m_importerCatalog); committed.HasError())
+            return Result<std::string>::Failure(transaction.Rollback(committed.ErrorValue()));
 
         auto loadedExtension = std::make_unique<LoadedExtension>();
         loadedExtension->manifest = std::move(manifest);
-        loadedExtension->lifetimes = std::move(lifetimes);
+        loadedExtension->lifetimes = transaction.ReleaseLifetimes();
         loadedExtension->moduleIds = std::move(plan.moduleIds);
         const std::string extensionId = loadedExtension->manifest.id;
         m_loadedExtensions.try_emplace(extensionId, std::move(loadedExtension));

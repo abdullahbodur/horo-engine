@@ -138,8 +138,8 @@ namespace Horo::Assets {
         return RegisterBatch(std::move(batch));
     }
 
-    /** @copydoc AssetImporterCatalog::RegisterBatch */
-    Result<void> AssetImporterCatalog::RegisterBatch(std::vector<AssetImporterContribution> entries) {
+    /** @copydoc AssetImporterCatalog::ValidateBatch */
+    Result<void> AssetImporterCatalog::ValidateBatch(const std::span<const AssetImporterContribution> entries) const {
         if (state_->sealed)
             return Result<void>::Failure(Error{CookErrors::CatalogSealed.code});
 
@@ -163,6 +163,13 @@ namespace Horo::Assets {
             }
             incomingIds.push_back(entry.contributionId);
         }
+        return Result<void>::Success();
+    }
+
+    /** @copydoc AssetImporterCatalog::RegisterBatch */
+    Result<void> AssetImporterCatalog::RegisterBatch(std::vector<AssetImporterContribution> entries) {
+        if (auto validation = ValidateBatch(entries); validation.HasError())
+            return validation;
 
         state_->entries.reserve(state_->entries.size() + entries.size());
         std::ranges::move(entries, std::back_inserter(state_->entries));
