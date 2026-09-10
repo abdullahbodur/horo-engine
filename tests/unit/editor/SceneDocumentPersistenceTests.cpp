@@ -459,6 +459,16 @@ TEST_CASE("Project Scene Loader Rejects Unknown Schema Versions", "[unit][editor
     REQUIRE((LoadProjectDefaultScene(project.Root()).HasError()));
 }
 
+TEST_CASE("Project Scene Loader Rejects Malformed Prefab Instance Records", "[unit][editor][persistence][prefab]") {
+    TemporaryProject project;
+    project.WriteMetadata();
+    project.WriteScene(R"({"schemaVersion":1,"objects":[],"prefabInstances":{}})");
+    REQUIRE((LoadProjectDefaultScene(project.Root()).HasError()));
+
+    project.WriteScene(R"({"schemaVersion":1,"objects":[],"prefabInstances":[{"instanceId":1,"sourceAsset":"not-an-id"}]})");
+    REQUIRE((LoadProjectDefaultScene(project.Root()).HasError()));
+}
+
 TEST_CASE("Scene Save Detects External Byte Changes Before Atomic Replacement", "[unit][editor][persistence][conflict]") {
     TemporaryProject project;
     project.WriteMetadata();
