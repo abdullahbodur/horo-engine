@@ -360,6 +360,13 @@ represent pointers, container positions, runtime registry handles, callbacks,
 filesystem paths, or backend-native values. Existing callers require no migration
 because this is the first published PCG API slice.
 
+`[PCG-1.3]` adds `Horo/PCG/PCGPointSchema.h` to the same Foundation-only owner.
+Consumers now use its canonical immutable schema, typed columnar point snapshots and
+exact provider-neutral tier limits instead of publishing free-form per-point maps.
+The contract uses only Foundation and Horo Scene Math values; Scene, target-owner,
+renderer, editor, platform and native backend authority remain outside HoroPCG.
+Rejected replacement candidates do not mutate or invalidate the last good snapshot.
+
 ## Animation Identity And Component Boundary
 
 `HoroEngine::AnimationApi` owns `Horo/Animation/AnimationErrors.h`,

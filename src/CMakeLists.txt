@@ -469,6 +469,7 @@ target_link_libraries(HoroAnimationApi PUBLIC HoroEngine::Foundation HoroEngine:
 add_library(HoroPCG STATIC
         runtime/pcg/api/PCGErrors.cpp
         runtime/pcg/api/PCGIdentity.cpp
+        runtime/pcg/api/PCGPointSchema.cpp
 )
 add_library(HoroEngine::PCG ALIAS HoroPCG)
 target_compile_features(HoroPCG PUBLIC cxx_std_20)

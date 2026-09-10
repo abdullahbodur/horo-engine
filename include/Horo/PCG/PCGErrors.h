@@ -18,4 +18,18 @@ namespace Horo::PCG::PCGErrors {
     extern const ErrorCodeDescriptor RevisionExhausted;
     /** @brief Canonical serialized PCG identity bytes contain a reserved value. */
     extern const ErrorCodeDescriptor SerializedIdentityInvalid;
+    /** @brief A point schema or attribute key is malformed or contains an unknown type. */
+    extern const ErrorCodeDescriptor PointSchemaInvalid;
+    /** @brief Two schema fields or storage columns use the same canonical key. */
+    extern const ErrorCodeDescriptor PointAttributeDuplicate;
+    /** @brief A storage column does not exist in the captured schema. */
+    extern const ErrorCodeDescriptor PointAttributeUnknown;
+    /** @brief A storage column has a different type than its schema field. */
+    extern const ErrorCodeDescriptor PointAttributeTypeMismatch;
+    /** @brief Point core or column data violates its finite/value/length contract. */
+    extern const ErrorCodeDescriptor PointDataInvalid;
+    /** @brief A tier point, attribute, payload, or memory ceiling was exceeded. */
+    extern const ErrorCodeDescriptor PointCapacityExceeded;
+    /** @brief Checked PCG size arithmetic overflowed or used invalid alignment. */
+    extern const ErrorCodeDescriptor PointSizeOverflow;
 }  // namespace Horo::PCG::PCGErrors

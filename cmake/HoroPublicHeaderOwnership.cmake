@@ -245,6 +245,7 @@ horo_configure_target_header_boundary(HoroAnimationApi PUBLIC_HEADERS
 horo_configure_target_header_boundary(HoroPCG PUBLIC_HEADERS
     Horo/PCG/PCGErrors.h
     Horo/PCG/PCGIdentity.h
+    Horo/PCG/PCGPointSchema.h
 )
 horo_configure_target_header_boundary(HoroVfxApi PUBLIC_HEADERS
     Horo/Vfx/VfxErrors.h
