@@ -74,13 +74,11 @@ namespace Horo::PlatformServices {
 
         explicit State(const PlatformRequestStoreConfig &requested) : config(requested) {}
 
-        PlatformRequestStoreConfig config;
-
     private:
         friend class PlatformRequestStore;
-        mutable std::mutex mutex;
 
-    public:
+        PlatformRequestStoreConfig config;
+        mutable std::mutex mutex;
         std::unordered_map<std::uint64_t, Record> records;
         std::deque<std::uint64_t> terminalOrder;
         std::deque<Delivery> deliveries;
