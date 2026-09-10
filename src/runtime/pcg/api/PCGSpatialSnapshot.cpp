@@ -11,13 +11,11 @@
 
 namespace Horo::PCG {
     struct PCGSpatialSnapshot::State final {
-        State(SpatialSnapshotId idValue, PCGSpatialProvenance provenanceValue, PCGSpatialCoordinateContract coordinatesValue,
-              Math::Aabb boundsValue, PCGSpatialCoverage coverageValue, std::vector<PCGSurfaceTriangle> surfacesValue,
-              std::vector<PCGSpatialVolume> volumesValue, std::vector<PCGSpline> splinesValue, std::vector<PCGGrid> gridsValue,
-              const std::size_t residentBytesValue)
-            : id(idValue), provenance(std::move(provenanceValue)), coordinates(std::move(coordinatesValue)), bounds(boundsValue),
-              coverage(coverageValue), surfaces(std::move(surfacesValue)), volumes(std::move(volumesValue)),
-              splines(std::move(splinesValue)), grids(std::move(gridsValue)), residentBytes(residentBytesValue) {}
+        State(PCGSpatialSnapshotCandidate candidate, const std::size_t residentBytesValue)
+            : id(candidate.snapshot), provenance(std::move(candidate.provenance)), coordinates(std::move(candidate.coordinates)),
+              bounds(candidate.bounds), coverage(candidate.coverage), surfaces(std::move(candidate.surfaces)),
+              volumes(std::move(candidate.volumes)), splines(std::move(candidate.splines)), grids(std::move(candidate.grids)),
+              residentBytes(residentBytesValue) {}
 
         SpatialSnapshotId id;
         PCGSpatialProvenance provenance;
@@ -135,6 +133,16 @@ namespace Horo::PCG {
             return count;
         }
 
+        [[nodiscard]] Result<std::size_t> AccumulateBytes(Result<std::size_t> total, const std::size_t count,
+                                                          const std::size_t elementSize) {
+            if (total.HasError())
+                return total;
+            auto bytes = CheckedPCGMultiply(count, elementSize);
+            if (bytes.HasError())
+                return bytes;
+            return CheckedPCGAdd(total.Value(), bytes.Value());
+        }
+
         [[nodiscard]] Result<std::size_t> AccountBytes(const PCGSpatialSnapshotCandidate &candidate) {
             auto surfaceBytes = CheckedPCGMultiply(candidate.surfaces.size(), sizeof(PCGSurfaceTriangle));
             if (surfaceBytes.HasError())
@@ -144,22 +152,10 @@ namespace Horo::PCG {
                 return total;
             const std::array counts{candidate.volumes.size(), candidate.splines.size(), candidate.grids.size()};
             const std::array sizes{sizeof(PCGSpatialVolume), sizeof(PCGSpline), sizeof(PCGGrid)};
-            for (std::size_t index = 0; index < counts.size(); ++index) {
-                auto bytes = CheckedPCGMultiply(counts[index], sizes[index]);
-                if (bytes.HasError())
-                    return bytes;
-                total = CheckedPCGAdd(total.Value(), bytes.Value());
-                if (total.HasError())
-                    return total;
-            }
-            for (const auto &spline : candidate.splines) {
-                const auto bytes = CheckedPCGMultiply(spline.points.size(), sizeof(PCGSplineControlPoint));
-                if (bytes.HasError())
-                    return bytes;
-                total = CheckedPCGAdd(total.Value(), bytes.Value());
-                if (total.HasError())
-                    return total;
-            }
+            for (std::size_t index = 0; index < counts.size(); ++index)
+                total = AccumulateBytes(std::move(total), counts[index], sizes[index]);
+            for (const auto &spline : candidate.splines)
+                total = AccumulateBytes(std::move(total), spline.points.size(), sizeof(PCGSplineControlPoint));
             return total;
         }
 
@@ -315,11 +311,7 @@ namespace Horo::PCG {
             auto bytes = ValidateAndCanonicalize(candidate);
             if (bytes.HasError())
                 return Result<std::shared_ptr<const PCGSpatialSnapshot>>::Failure(bytes.ErrorValue());
-            auto state =
-                std::make_shared<const PCGSpatialSnapshot::State>(candidate.snapshot, candidate.provenance, candidate.coordinates,
-                                                                  candidate.bounds, candidate.coverage, std::move(candidate.surfaces),
-                                                                  std::move(candidate.volumes), std::move(candidate.splines),
-                                                                  std::move(candidate.grids), bytes.Value());
+            auto state = std::make_shared<const PCGSpatialSnapshot::State>(std::move(candidate), bytes.Value());
             return Result<std::shared_ptr<const PCGSpatialSnapshot>>::Success(
                 std::make_shared<const PCGSpatialSnapshot>(PCGSpatialSnapshot::ConstructionKey{}, std::move(state)));
         } catch (const std::bad_alloc &) {
