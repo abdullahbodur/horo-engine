@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <cmath>
 #include <limits>
+#include <ranges>
 
 namespace Horo::Vfx {
     namespace {
@@ -73,16 +74,17 @@ namespace Horo::Vfx {
         }
 
         [[nodiscard]] std::uint32_t CategoryLimit(const VfxResourceLimits &limits, const VfxEffectCategory category) noexcept {
+            using enum VfxEffectCategory;
             switch (category) {
-                case VfxEffectCategory::Particle:
+                case Particle:
                     return limits.maximumParticles;
-                case VfxEffectCategory::Decal:
+                case Decal:
                     return limits.maximumDecals;
-                case VfxEffectCategory::Light:
+                case Light:
                     return limits.maximumLights;
-                case VfxEffectCategory::Volumetric:
+                case Volumetric:
                     return limits.maximumVolumes;
-                case VfxEffectCategory::Count:
+                case Count:
                     return 0;
             }
             return 0;
@@ -104,7 +106,7 @@ namespace Horo::Vfx {
         }
 
         [[nodiscard]] bool HasAnyCapability(const VfxCapabilityMask &required) noexcept {
-            return std::find(required.begin(), required.end(), true) != required.end();
+            return std::ranges::find(required, true) != required.end();
         }
 
         [[nodiscard]] bool ValidateRequestIdentity(const VfxResolutionRequest &request) noexcept {
@@ -154,51 +156,71 @@ namespace Horo::Vfx {
 
         [[nodiscard]] bool InsertUniqueVariantId(const std::uint32_t id, std::array<std::uint32_t, MaximumVfxFallbackVariants> &ids,
                                                  std::size_t &idCount) noexcept {
-            const auto end = ids.begin() + static_cast<std::ptrdiff_t>(idCount);
-            if (std::find(ids.begin(), end, id) != end)
+            if (const auto usedIds = std::span{ids}.first(idCount); std::ranges::find(usedIds, id) != usedIds.end())
                 return false;
             ids[idCount++] = id;
             return true;
         }
 
-        [[nodiscard]] Fit FitsLimits(const VfxCapabilities &capabilities, const VfxQualityPolicy &policy, const VfxEffectCategory category,
-                                     const ResolvedSimulationDomain domain, const std::uint32_t count, const std::uint64_t bytesPerElement,
-                                     const double workMilliseconds, std::uint64_t &memoryBytes) noexcept {
-            const auto countLimit = std::min(CategoryLimit(capabilities.Limits(), category), CategoryLimit(policy.Limits(), category));
-            if (count > countLimit || !TryMultiply(count, bytesPerElement, memoryBytes) ||
-                memoryBytes > std::min(capabilities.Limits().maximumMemoryBytes, policy.Limits().maximumMemoryBytes))
-                return Fit::Limit;
+        struct LimitRequest {
+            VfxEffectCategory category{};
+            ResolvedSimulationDomain domain{};
+            std::uint32_t count{};
+            std::uint64_t bytesPerElement{};
+            double workMilliseconds{};
+        };
 
-            if (domain == ResolvedSimulationDomain::CPU &&
-                workMilliseconds > std::min(capabilities.Limits().maximumCpuWorkMilliseconds, policy.Limits().maximumCpuWorkMilliseconds))
-                return Fit::Limit;
-            if (domain == ResolvedSimulationDomain::GPU &&
-                workMilliseconds > std::min(capabilities.Limits().maximumGpuWorkMilliseconds, policy.Limits().maximumGpuWorkMilliseconds))
-                return Fit::Limit;
-            return Fit::Accepted;
+        [[nodiscard]] Fit FitsLimits(const VfxCapabilities &capabilities, const VfxQualityPolicy &policy, const LimitRequest &request,
+                                     std::uint64_t &memoryBytes) noexcept {
+            using enum Fit;
+            using enum ResolvedSimulationDomain;
+            if (const auto countLimit =
+                    std::min(CategoryLimit(capabilities.Limits(), request.category), CategoryLimit(policy.Limits(), request.category));
+                request.count > countLimit || !TryMultiply(request.count, request.bytesPerElement, memoryBytes) ||
+                memoryBytes > std::min(capabilities.Limits().maximumMemoryBytes, policy.Limits().maximumMemoryBytes))
+                return Limit;
+
+            if (request.domain == CPU && request.workMilliseconds > std::min(capabilities.Limits().maximumCpuWorkMilliseconds,
+                                                                             policy.Limits().maximumCpuWorkMilliseconds))
+                return Limit;
+            if (request.domain == GPU && request.workMilliseconds > std::min(capabilities.Limits().maximumGpuWorkMilliseconds,
+                                                                             policy.Limits().maximumGpuWorkMilliseconds))
+                return Limit;
+            return Accepted;
         }
 
         [[nodiscard]] Fit TryPrimary(const VfxCapabilities &capabilities, const VfxQualityPolicy &policy,
                                      const VfxEffectRequirements &requirements, const ResolvedSimulationDomain domain,
                                      std::uint64_t &memoryBytes) noexcept {
+            using enum Fit;
             if (domain == ResolvedSimulationDomain::CPU) {
                 if (!requirements.hasCpuKernel)
-                    return Fit::MissingKernel;
+                    return MissingKernel;
                 if (capabilities.Support(VfxCapability::CpuSimulation) != VfxCapabilitySupport::Available)
-                    return Fit::Unsupported;
-                return FitsLimits(capabilities, policy, requirements.category, domain, requirements.requestedCount,
-                                  requirements.bytesPerElement, requirements.cpuWorkMilliseconds, memoryBytes);
+                    return Unsupported;
+                return FitsLimits(capabilities, policy,
+                                  {.category = requirements.category,
+                                   .domain = domain,
+                                   .count = requirements.requestedCount,
+                                   .bytesPerElement = requirements.bytesPerElement,
+                                   .workMilliseconds = requirements.cpuWorkMilliseconds},
+                                  memoryBytes);
             }
             if (domain == ResolvedSimulationDomain::GPU) {
                 if (!requirements.hasGpuKernel)
-                    return Fit::MissingKernel;
+                    return MissingKernel;
                 if (capabilities.Support(VfxCapability::GpuSimulation) != VfxCapabilitySupport::Available ||
                     !HasCapabilities(capabilities, requirements.requiredGpuCapabilities))
-                    return Fit::Unsupported;
-                return FitsLimits(capabilities, policy, requirements.category, domain, requirements.requestedCount,
-                                  requirements.bytesPerElement, requirements.gpuWorkMilliseconds, memoryBytes);
+                    return Unsupported;
+                return FitsLimits(capabilities, policy,
+                                  {.category = requirements.category,
+                                   .domain = domain,
+                                   .count = requirements.requestedCount,
+                                   .bytesPerElement = requirements.bytesPerElement,
+                                   .workMilliseconds = requirements.gpuWorkMilliseconds},
+                                  memoryBytes);
             }
-            return Fit::Unsupported;
+            return Unsupported;
         }
 
         [[nodiscard]] bool ValidateRequirements(const VfxResolutionRequest &request) noexcept {
@@ -223,11 +245,12 @@ namespace Horo::Vfx {
 
         [[nodiscard]] bool RequirementAllowsDomain(const VfxEffectRequirements &requirements,
                                                    const ResolvedSimulationDomain domain) noexcept {
-            if (requirements.cpuMandatory && domain != ResolvedSimulationDomain::CPU)
+            using enum ResolvedSimulationDomain;
+            if (requirements.cpuMandatory && domain != CPU)
                 return false;
-            if (requirements.preference == SimulationPreference::RequireCPU && domain != ResolvedSimulationDomain::CPU)
+            if (requirements.preference == SimulationPreference::RequireCPU && domain != CPU)
                 return false;
-            return requirements.preference != SimulationPreference::RequireGPU || domain == ResolvedSimulationDomain::GPU;
+            return requirements.preference != SimulationPreference::RequireGPU || domain == GPU;
         }
 
         [[nodiscard]] bool ClassAllowsVariant(const VfxResolutionRequest &request, const VfxFallbackVariant &variant) noexcept {
@@ -244,34 +267,45 @@ namespace Horo::Vfx {
         [[nodiscard]] Fit TryVariant(const VfxCapabilities &capabilities, const VfxQualityPolicy &policy,
                                      const VfxResolutionRequest &request, const VfxFallbackVariant &variant,
                                      std::uint64_t &memoryBytes) noexcept {
+            using enum Fit;
+            using enum ResolvedSimulationDomain;
             if (!DomainAllowedForVariant(request, variant))
-                return Fit::Unsupported;
-            if (variant.domain == ResolvedSimulationDomain::Null) {
+                return Unsupported;
+            if (variant.domain == Null) {
                 memoryBytes = 0;
-                return Fit::Accepted;
+                return Accepted;
             }
-            if (variant.domain == ResolvedSimulationDomain::CPU &&
-                capabilities.Support(VfxCapability::CpuSimulation) != VfxCapabilitySupport::Available)
-                return Fit::Unsupported;
-            if (variant.domain == ResolvedSimulationDomain::GPU &&
-                (capabilities.Support(VfxCapability::GpuSimulation) != VfxCapabilitySupport::Available ||
-                 !HasCapabilities(capabilities, variant.requiredGpuCapabilities)))
-                return Fit::Unsupported;
-            return FitsLimits(capabilities, policy, variant.category, variant.domain, variant.selectedCount, variant.bytesPerElement,
-                              variant.workMilliseconds, memoryBytes);
+            if (variant.domain == CPU && capabilities.Support(VfxCapability::CpuSimulation) != VfxCapabilitySupport::Available)
+                return Unsupported;
+            if (variant.domain == GPU && (capabilities.Support(VfxCapability::GpuSimulation) != VfxCapabilitySupport::Available ||
+                                          !HasCapabilities(capabilities, variant.requiredGpuCapabilities)))
+                return Unsupported;
+            return FitsLimits(capabilities, policy,
+                              {.category = variant.category,
+                               .domain = variant.domain,
+                               .count = variant.selectedCount,
+                               .bytesPerElement = variant.bytesPerElement,
+                               .workMilliseconds = variant.workMilliseconds},
+                              memoryBytes);
         }
 
+        struct ResolutionDetails {
+            ResolvedSimulationDomain domain{};
+            VfxDegradation degradation{};
+            std::uint32_t variantId{};
+            std::uint32_t count{};
+            std::uint64_t memoryBytes{};
+        };
+
         [[nodiscard]] Result<VfxResolution> MakeResolution(const VfxCapabilities &capabilities, const VfxQualityPolicy &policy,
-                                                           const VfxResolutionRequest &request, const ResolvedSimulationDomain domain,
-                                                           const VfxDegradation degradation, const std::uint32_t variantId,
-                                                           const std::uint32_t count, const std::uint64_t memoryBytes) {
+                                                           const VfxResolutionRequest &request, const ResolutionDetails &details) {
             return Result<VfxResolution>::Success({.requestedProfile = request.requestedProfile,
                                                    .selectedProfile = policy.Profile(),
-                                                   .domain = domain,
-                                                   .degradation = degradation,
-                                                   .selectedVariantId = variantId,
-                                                   .selectedCount = count,
-                                                   .selectedMemoryBytes = memoryBytes,
+                                                   .domain = details.domain,
+                                                   .degradation = details.degradation,
+                                                   .selectedVariantId = details.variantId,
+                                                   .selectedCount = details.count,
+                                                   .selectedMemoryBytes = details.memoryBytes,
                                                    .capabilityRevision = capabilities.Revision(),
                                                    .policyRevision = policy.Revision()});
         }
@@ -288,7 +322,7 @@ namespace Horo::Vfx {
                 present[index] = true;
                 canonical[index] = fact.support;
             }
-            return std::find(present.begin(), present.end(), false) == present.end();
+            return std::ranges::find(present, false) == present.end();
         }
 
         [[nodiscard]] bool GpuFactsAreConsistent(const std::array<VfxCapabilitySupport, VfxCapabilityCount> &canonical) noexcept {
@@ -320,32 +354,36 @@ namespace Horo::Vfx {
         }
 
         [[nodiscard]] PrimaryOrder AutomaticPrimaryOrder(const VfxQualityPolicy &policy, const VfxResolutionRequest &request) noexcept {
+            using enum ResolvedSimulationDomain;
             PrimaryOrder order{};
             const bool preferGpu = request.requirements.category == VfxEffectCategory::Particle &&
                                    request.requirements.requestedCount > policy.AutoGpuParticleThreshold();
-            AppendPrimary(order, request.hostMode, preferGpu ? ResolvedSimulationDomain::GPU : ResolvedSimulationDomain::CPU);
-            AppendPrimary(order, request.hostMode, preferGpu ? ResolvedSimulationDomain::CPU : ResolvedSimulationDomain::GPU);
+            AppendPrimary(order, request.hostMode, preferGpu ? GPU : CPU);
+            AppendPrimary(order, request.hostMode, preferGpu ? CPU : GPU);
             return order;
         }
 
         [[nodiscard]] PrimaryOrder PreferredPrimaryOrder(const VfxQualityPolicy &policy, const VfxResolutionRequest &request) noexcept {
+            using enum SimulationPreference;
+            constexpr auto CpuDomain = ResolvedSimulationDomain::CPU;
+            constexpr auto GpuDomain = ResolvedSimulationDomain::GPU;
             PrimaryOrder order{};
             switch (request.requirements.preference) {
-                case SimulationPreference::RequireCPU:
-                    AppendPrimary(order, request.hostMode, ResolvedSimulationDomain::CPU);
+                case RequireCPU:
+                    AppendPrimary(order, request.hostMode, CpuDomain);
                     break;
-                case SimulationPreference::RequireGPU:
-                    AppendPrimary(order, request.hostMode, ResolvedSimulationDomain::GPU);
+                case RequireGPU:
+                    AppendPrimary(order, request.hostMode, GpuDomain);
                     break;
-                case SimulationPreference::PreferCPU:
-                    AppendPrimary(order, request.hostMode, ResolvedSimulationDomain::CPU);
-                    AppendPrimary(order, request.hostMode, ResolvedSimulationDomain::GPU);
+                case PreferCPU:
+                    AppendPrimary(order, request.hostMode, CpuDomain);
+                    AppendPrimary(order, request.hostMode, GpuDomain);
                     break;
-                case SimulationPreference::PreferGPU:
-                    AppendPrimary(order, request.hostMode, ResolvedSimulationDomain::GPU);
-                    AppendPrimary(order, request.hostMode, ResolvedSimulationDomain::CPU);
+                case PreferGPU:
+                    AppendPrimary(order, request.hostMode, GpuDomain);
+                    AppendPrimary(order, request.hostMode, CpuDomain);
                     break;
-                case SimulationPreference::Automatic:
+                case Automatic:
                     return AutomaticPrimaryOrder(policy, request);
                 case SimulationPreference::Count:
                     break;
@@ -376,14 +414,15 @@ namespace Horo::Vfx {
 
         [[nodiscard]] PrimaryEvaluation EvaluatePrimaries(const VfxCapabilities &capabilities, const VfxQualityPolicy &policy,
                                                           const VfxResolutionRequest &request, const PrimaryOrder &order) noexcept {
+            using enum Fit;
             PrimaryEvaluation evaluation{};
             for (std::size_t index = 0; index < order.count; ++index) {
                 std::uint64_t memoryBytes{};
                 const auto fit = TryPrimary(capabilities, policy, request.requirements, order.domains[index], memoryBytes);
-                if (fit == Fit::Accepted)
+                if (fit == Accepted)
                     return {.candidate = {.domain = order.domains[index], .memoryBytes = memoryBytes, .found = true},
                             .strongestFailure = evaluation.strongestFailure};
-                if (fit == Fit::Limit || (fit == Fit::MissingKernel && evaluation.strongestFailure == Fit::Unsupported))
+                if (fit == Limit || (fit == MissingKernel && evaluation.strongestFailure == Unsupported))
                     evaluation.strongestFailure = fit;
             }
             return evaluation;
@@ -406,7 +445,7 @@ namespace Horo::Vfx {
 
         [[nodiscard]] ResolutionCandidate EvaluateFallbacks(const VfxCapabilities &capabilities, const VfxQualityPolicy &policy,
                                                             const VfxResolutionRequest &request) noexcept {
-            for (std::uint8_t rank = static_cast<std::uint8_t>(VfxDegradation::ReducedCount);
+            for (auto rank = static_cast<std::uint8_t>(VfxDegradation::ReducedCount);
                  rank < static_cast<std::uint8_t>(VfxDegradation::Count); ++rank) {
                 auto selected = FindVariantAtRank(capabilities, policy, request, rank);
                 if (selected.found)
@@ -428,7 +467,7 @@ namespace Horo::Vfx {
 
     /** @copydoc VfxCapabilities::Create */
     Result<VfxCapabilities> VfxCapabilities::Create(const VfxCapabilityRevision revision, const std::span<const VfxCapabilityFact> facts,
-                                                    const VfxResourceLimits limits) {
+                                                    const VfxResourceLimits &limits) {
         if (!revision.IsValid() || facts.size() != VfxCapabilityCount || !ValidateCapabilityLimits(limits))
             return Failure<VfxCapabilities>(VfxErrors::CapabilityDataInvalid);
 
@@ -439,8 +478,9 @@ namespace Horo::Vfx {
         return Result<VfxCapabilities>::Success(VfxCapabilities{revision, canonical, limits});
     }
 
-    VfxCapabilities::VfxCapabilities(const VfxCapabilityRevision revision, const std::array<VfxCapabilitySupport, VfxCapabilityCount> facts,
-                                     const VfxResourceLimits limits) noexcept
+    VfxCapabilities::VfxCapabilities(const VfxCapabilityRevision revision,
+                                     const std::array<VfxCapabilitySupport, VfxCapabilityCount> &facts,
+                                     const VfxResourceLimits &limits) noexcept
         : revision_(revision), facts_(facts), limits_(limits) {}
 
     /** @copydoc VfxCapabilities::Revision */
@@ -468,7 +508,7 @@ namespace Horo::Vfx {
         return Result<VfxQualityPolicy>::Success(VfxQualityPolicy{descriptor});
     }
 
-    VfxQualityPolicy::VfxQualityPolicy(const VfxQualityPolicyDescriptor descriptor) noexcept : descriptor_(descriptor) {}
+    VfxQualityPolicy::VfxQualityPolicy(const VfxQualityPolicyDescriptor &descriptor) noexcept : descriptor_(descriptor) {}
 
     /** @copydoc VfxQualityPolicy::Revision */
     VfxQualityPolicyRevision VfxQualityPolicy::Revision() const noexcept {
@@ -506,13 +546,20 @@ namespace Horo::Vfx {
 
         const auto primaryEvaluation = EvaluatePrimaries(capabilities, policy, request, BuildPrimaryOrder(policy, request));
         if (primaryEvaluation.candidate.found)
-            return MakeResolution(capabilities, policy, request, primaryEvaluation.candidate.domain, VfxDegradation::None, 0,
-                                  request.requirements.requestedCount, primaryEvaluation.candidate.memoryBytes);
+            return MakeResolution(capabilities, policy, request,
+                                  {.domain = primaryEvaluation.candidate.domain,
+                                   .degradation = VfxDegradation::None,
+                                   .variantId = 0,
+                                   .count = request.requirements.requestedCount,
+                                   .memoryBytes = primaryEvaluation.candidate.memoryBytes});
 
-        const auto fallback = EvaluateFallbacks(capabilities, policy, request);
-        if (fallback.found)
-            return MakeResolution(capabilities, policy, request, fallback.domain, fallback.variant->degradation, fallback.variant->stableId,
-                                  fallback.variant->selectedCount, fallback.memoryBytes);
+        if (const auto fallback = EvaluateFallbacks(capabilities, policy, request); fallback.found)
+            return MakeResolution(capabilities, policy, request,
+                                  {.domain = fallback.domain,
+                                   .degradation = fallback.variant->degradation,
+                                   .variantId = fallback.variant->stableId,
+                                   .count = fallback.variant->selectedCount,
+                                   .memoryBytes = fallback.memoryBytes});
         return ResolveFailure(request, primaryEvaluation.strongestFailure);
     }
 

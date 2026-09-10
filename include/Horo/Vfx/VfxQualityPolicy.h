@@ -132,7 +132,7 @@ namespace Horo::Vfx {
          * @return Immutable snapshot or CapabilityDataInvalid.
          */
         [[nodiscard]] static Result<VfxCapabilities> Create(VfxCapabilityRevision revision, std::span<const VfxCapabilityFact> facts,
-                                                            VfxResourceLimits limits);
+                                                            const VfxResourceLimits &limits);
 
         /** @brief Returns the immutable evidence revision. @return Non-zero revision. */
         [[nodiscard]] VfxCapabilityRevision Revision() const noexcept;
@@ -142,8 +142,8 @@ namespace Horo::Vfx {
         [[nodiscard]] const VfxResourceLimits &Limits() const noexcept;
 
     private:
-        VfxCapabilities(VfxCapabilityRevision revision, std::array<VfxCapabilitySupport, VfxCapabilityCount> facts,
-                        VfxResourceLimits limits) noexcept;
+        VfxCapabilities(VfxCapabilityRevision revision, const std::array<VfxCapabilitySupport, VfxCapabilityCount> &facts,
+                        const VfxResourceLimits &limits) noexcept;
 
         VfxCapabilityRevision revision_{};
         std::array<VfxCapabilitySupport, VfxCapabilityCount> facts_{};
@@ -175,7 +175,7 @@ namespace Horo::Vfx {
         [[nodiscard]] std::uint32_t AutoGpuParticleThreshold() const noexcept;
 
     private:
-        explicit VfxQualityPolicy(VfxQualityPolicyDescriptor descriptor) noexcept;
+        explicit VfxQualityPolicy(const VfxQualityPolicyDescriptor &descriptor) noexcept;
         VfxQualityPolicyDescriptor descriptor_{};
     };
 
