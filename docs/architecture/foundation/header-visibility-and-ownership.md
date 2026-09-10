@@ -191,6 +191,24 @@ Constructing or validating policy performs no discovery, registration, lifecycle
 SDK initialization or ambient-state mutation. Existing callers require no signature
 migration because this is the first published project configuration contract.
 
+## PLS-006.2 Migration Notes
+
+`HoroEngine::PlatformServices` additionally owns
+`Horo/PlatformServices/PlatformUserSession.h`. `PlatformProviderGeneration` and the
+exhaustive `PlatformServiceKind` move to this lower backend-neutral owner so the live
+subject and session snapshot can fence service calls without depending on the backend
+bundle declaration. `PlatformServiceInterfaces.h` includes the new owner and retains
+its existing request signatures.
+
+The provisional aggregate `PlatformSubjectHandle{nonce, generation}` and
+`PlatformSessionSnapshot{subject, signedIn}` are intentionally replaced. Callers obtain
+a handle only from a validated Active snapshot, branch on `PlatformSessionPhase`, and
+revalidate the handle plus `PlatformAccessPolicyRevision` before user-scoped commit.
+There is no compatibility `signedIn` boolean, public nonce accessor, serialization or
+native account value. Existing provider test fixtures must build detached candidates;
+production identity brokers supply cryptographic random nonce evidence and retain the
+provider-private authenticated binding outside this public target.
+
 ## XRA-001.2 Migration Notes
 
 `HoroEngine::XRApi` owns the four public headers under `Horo/XR/` and depends

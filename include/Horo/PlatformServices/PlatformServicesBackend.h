@@ -32,17 +32,6 @@ namespace Horo::PlatformServices {
         [[nodiscard]] constexpr auto operator<=>(const PlatformProviderId &) const noexcept = default;
     };
 
-    /** @brief Nonzero activation generation fencing provider work and callbacks. */
-    struct PlatformProviderGeneration final {
-        std::uint64_t value{};
-
-        [[nodiscard]] constexpr bool IsValid() const noexcept {
-            return value != 0;
-        }
-
-        [[nodiscard]] constexpr auto operator<=>(const PlatformProviderGeneration &) const noexcept = default;
-    };
-
     /** @brief Private binding identity meaningful only inside the selected host adapter. */
     struct PlatformServiceBindingId final {
         std::uint64_t value{};
@@ -54,16 +43,6 @@ namespace Horo::PlatformServices {
         [[nodiscard]] constexpr auto operator<=>(const PlatformServiceBindingId &) const noexcept = default;
     };
 
-    /** @brief Exhaustive service positions in the version-1 capability snapshot. */
-    enum class PlatformServiceKind : std::uint8_t {
-        Achievements,
-        LeaderboardsAndStats,
-        Cloud,
-        Presence,
-        Friends,
-        Session,
-        Count
-    };
     enum class PlatformServiceAvailability : std::uint8_t {
         Available,
         Unavailable
