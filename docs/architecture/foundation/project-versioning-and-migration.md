@@ -788,6 +788,13 @@ provider-mapping coverage, transactional publication and derived/offline invalid
 Editing the salt field, regenerating during cook or treating text aliases as numeric
 namespace compatibility is forbidden.
 
+PLS-003.2 supplies the bounded deterministic registry validator used on both sides of
+such a migration. A migration stages a complete candidate and provider-mapping set,
+validates every active and tombstoned identity plus the captured fingerprint, and only
+then allows the Project transaction owner to publish it. A failed candidate leaves the
+previous immutable registry usable; the registry API itself performs no file repair,
+salt generation, ambient registration or partial publication.
+
 Example:
 
 ```cpp

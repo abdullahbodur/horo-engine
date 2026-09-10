@@ -61,6 +61,7 @@ horo_configure_target_header_boundary(HoroPlatformServices PUBLIC_HEADERS
     Horo/PlatformServices/PlatformRequestErrors.h
     Horo/PlatformServices/PlatformServiceInterfaces.h
     Horo/PlatformServices/PlatformServicesBackend.h
+    Horo/PlatformServices/PlatformStableIdRegistry.h
 )
 
 horo_configure_target_header_boundary(HoroApplication PUBLIC_HEADERS

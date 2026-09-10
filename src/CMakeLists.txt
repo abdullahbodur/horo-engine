@@ -95,6 +95,7 @@ add_library(HoroPlatformServices STATIC
         platform_services/PlatformRequest.cpp
         platform_services/PlatformRequestErrors.cpp
         platform_services/PlatformServicesBackend.cpp
+        platform_services/PlatformStableIdRegistry.cpp
 )
 add_library(HoroEngine::PlatformServices ALIAS HoroPlatformServices)
 target_compile_features(HoroPlatformServices PUBLIC cxx_std_20)
