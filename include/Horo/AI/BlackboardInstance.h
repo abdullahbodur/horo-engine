@@ -53,7 +53,7 @@ namespace Horo::AI {
 
     class BlackboardInstance;
 
-    /** @brief Detached fixed-capacity batch fenced to one exact instance revision. */
+    /** @brief Detached bounded batch fenced to one exact instance revision. */
     class BlackboardWriteBatch final {
     public:
         BlackboardWriteBatch(const BlackboardWriteBatch &) = delete;
@@ -80,7 +80,7 @@ namespace Horo::AI {
 
         /** @brief Returns the staged prefix. @return Immutable insertion-ordered writes. */
         [[nodiscard]] std::span<const BlackboardWrite> Writes() const noexcept {
-            return {writes_.data(), writeCount_};
+            return writes_;
         }
 
     private:
@@ -90,8 +90,7 @@ namespace Horo::AI {
 
         BlackboardInstanceBinding binding_;
         std::uint64_t baseRevision_{};
-        std::array<BlackboardWrite, MaximumBlackboardWritesPerBatch> writes_{};
-        std::size_t writeCount_{};
+        std::vector<BlackboardWrite> writes_;
     };
 
     /** @brief Immutable owned observation stable across commits and expiring on generation replacement or teardown. */
@@ -115,14 +114,14 @@ namespace Horo::AI {
         friend class BlackboardInstance;
 
         BlackboardSnapshot(BlackboardInstanceBinding binding, std::shared_ptr<const BlackboardSchema> schema,
-                           std::array<std::optional<BlackboardValue>, MaximumBlackboardKeys> values, std::uint64_t revision,
+                           std::vector<std::optional<BlackboardValue>> values, std::uint64_t revision,
                            std::shared_ptr<std::atomic_bool> generationActive)
             : binding_(binding), schema_(std::move(schema)), values_(std::move(values)), revision_(revision),
               generationActive_(std::move(generationActive)) {}
 
         BlackboardInstanceBinding binding_;
         std::shared_ptr<const BlackboardSchema> schema_;
-        std::array<std::optional<BlackboardValue>, MaximumBlackboardKeys> values_{};
+        std::vector<std::optional<BlackboardValue>> values_;
         std::uint64_t revision_{};
         std::shared_ptr<std::atomic_bool> generationActive_;
     };

@@ -70,6 +70,8 @@ namespace Horo::AI {
         static_assert(std::is_same_v<decltype(std::declval<const BlackboardWriteBatch>().Writes()), std::span<const BlackboardWrite>>);
         static_assert(std::is_same_v<decltype(std::declval<const BlackboardSnapshot>().Read(BlackboardKeyId{})),
                                      Result<std::optional<BlackboardValue>>>);
+        static_assert(sizeof(Result<BlackboardWriteBatch>) <= 4096, "Bounded batch storage must not consume the Windows caller stack");
+        static_assert(sizeof(Result<BlackboardSnapshot>) <= 4096, "Immutable snapshot storage must not consume the Windows caller stack");
     }
 
     TEST_CASE("Blackboard instance rejects missing required defaults and invalid binding", "[unit][ai][blackboard-instance]") {

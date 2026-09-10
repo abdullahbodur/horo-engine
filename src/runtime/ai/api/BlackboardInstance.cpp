@@ -93,14 +93,18 @@ namespace Horo::AI {
     Result<void> BlackboardWriteBatch::Stage(BlackboardWrite write) {
         if (!write.key.IsValid())
             return Result<void>::Failure(Failure(AIErrors::BlackboardBatchInvalid));
-        if (writeCount_ >= MaximumBlackboardWritesPerBatch)
+        if (writes_.size() >= MaximumBlackboardWritesPerBatch)
             return Result<void>::Failure(Failure(AIErrors::BlackboardLimitExceeded));
         if (std::ranges::any_of(Writes(), [&write](const auto &existing) {
             return existing.key == write.key;
         }))
             return Result<void>::Failure(Failure(AIErrors::BlackboardBatchInvalid));
-        writes_[writeCount_++] = std::move(write);
-        return Result<void>::Success();
+        try {
+            writes_.push_back(std::move(write));
+            return Result<void>::Success();
+        } catch (const std::bad_alloc &) {
+            return Result<void>::Failure(Failure(AIErrors::BlackboardStorageUnavailable));
+        }
     }
 
     /** @copydoc BlackboardSnapshot::Revision */
@@ -144,10 +148,11 @@ namespace Horo::AI {
     Result<BlackboardSnapshot> BlackboardInstance::Snapshot() const {
         if (!active_)
             return Result<BlackboardSnapshot>::Failure(Failure(AIErrors::BlackboardInstanceStale));
-        std::array<std::optional<BlackboardValue>, MaximumBlackboardKeys> snapshotValues{};
-        std::ranges::copy(values_, snapshotValues.begin());
-        return Result<BlackboardSnapshot>::Success(
-            BlackboardSnapshot{binding_, schema_, std::move(snapshotValues), revision_, generationActive_});
+        try {
+            return Result<BlackboardSnapshot>::Success(BlackboardSnapshot{binding_, schema_, values_, revision_, generationActive_});
+        } catch (const std::bad_alloc &) {
+            return Result<BlackboardSnapshot>::Failure(Failure(AIErrors::BlackboardStorageUnavailable));
+        }
     }
 
     /** @copydoc BlackboardInstance::BeginWriteBatch */
@@ -161,7 +166,7 @@ namespace Horo::AI {
     Result<BlackboardCommitResult> BlackboardInstance::CommitAtBlackboardSync(BlackboardWriteBatch batch) {
         if (!active_ || batch.Binding() != binding_ || batch.BaseRevision() != revision_)
             return Result<BlackboardCommitResult>::Failure(Failure(AIErrors::BlackboardInstanceStale));
-        std::ranges::sort(std::span{batch.writes_.data(), batch.writeCount_}, {}, &BlackboardWrite::key);
+        std::ranges::sort(batch.writes_, {}, &BlackboardWrite::key);
         scratch_ = values_;
         BlackboardCommitResult result{.revision = revision_};
         for (const auto &write : batch.Writes()) {
