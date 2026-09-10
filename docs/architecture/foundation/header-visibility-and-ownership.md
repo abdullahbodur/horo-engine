@@ -107,6 +107,16 @@ application, platform, renderer, or third-party dependency. Existing error
 producers keep their textual `ErrorDomainId` and `ErrorCode` values while module
 composition migrates descriptor ownership into `ModuleDescriptor::errorDomains`.
 
+## CIN-001.4 Migration Notes
+
+`HoroEngine::CinematicModel` owns the new `Horo/Cinematic/CurveSampling.h`
+contract. Cinematic consumers must link `HoroEngine::CinematicModel`, retain the
+immutable key storage borrowed by `ScalarCurveView`, and validate once before a
+curve enters frame-hot evaluation. Callers replace accumulated forward-only curve
+state with direct `Sample(time)` calls and choose explicit clamp, repeat, or
+ping-pong behavior for each boundary. Legacy non-finite values, duplicate times,
+and non-monotonic cubic tangents are rejected rather than normalized silently.
+
 ## PLS-001.2 Migration Notes
 
 `HoroEngine::PlatformServices` owns

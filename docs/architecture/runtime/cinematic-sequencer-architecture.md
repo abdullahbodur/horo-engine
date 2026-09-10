@@ -872,6 +872,20 @@ Binary key lookup bounds sample work by active tracks and keys per track. Cubic
 segments require monotonic time tangents and a fixed iteration limit, not an
 unbounded numeric solver. Event/loop preflight enforces runtime interval limits.
 
+The CIN-001.4 scalar sampling fixture qualifies a 4,096-key cubic curve with
+4,096 random-access samples per batch over 1,000 measured Release batches. The
+reviewed local target is P99 below 750 ns per sample on Apple arm64 with AppleClang,
+without coverage or sanitizers. This cohort is diagnostic evidence for the sampling
+core rather than a portable hardware promise; CI correctness still enforces bounded
+binary lookup, twelve cubic iterations and zero steady-state allocations on every
+platform. The delivery record captures the exact machine and measured distribution.
+
+Delivery evidence recorded on 2026-09-10: Apple M3 arm64, Darwin 24.5.0,
+AppleClang 17, Release, no coverage or sanitizers; 4,096 keys, 4,096 samples per
+batch and 1,000 measured batches produced mean 101.549 ns/sample, P99
+116.923 ns/sample and maximum 140.401 ns/sample, below the 750 ns/sample P99
+target. The checksum was 225315279.136.
+
 Before each fixed or service/presentation boundary, the service drains commands up to
 the cutoff and snapshots one immutable eligible batch. Late commands join the next
 corresponding boundary. Root order is evaluation seam/domain, priority descending,

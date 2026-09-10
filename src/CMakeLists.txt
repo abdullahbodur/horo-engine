@@ -490,6 +490,7 @@ target_compile_features(HoroDestructionApi PUBLIC cxx_std_20)
 target_link_libraries(HoroDestructionApi PUBLIC HoroEngine::Foundation HoroEngine::Assets)
 
 add_library(HoroCinematicModel STATIC
+        runtime/cinematic/model/CurveSampling.cpp
         runtime/cinematic/model/CinematicErrors.cpp
         runtime/cinematic/model/CinematicIdentity.cpp
         runtime/cinematic/model/SequenceAsset.cpp
