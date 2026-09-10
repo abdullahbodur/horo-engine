@@ -44,13 +44,7 @@ namespace Horo::Extensions {
     /** @copydoc ExtensionActivationTransaction::Rollback */
     Error ExtensionActivationTransaction::Rollback(Error primary) {
         DiscardContributions();
-        while (!lifetimes_.empty()) {
-            std::shared_ptr<ExtensionModuleLifetime> lifetime = std::move(lifetimes_.back());
-            lifetimes_.pop_back();
-            if (lifetime != nullptr && !lifetime->UnloadNow())
-                AppendRollbackDiagnostic(primary, lifetime->moduleId);
-        }
-        released_ = true;
+        RollbackLifetimes(&primary);
         return primary;
     }
 
@@ -65,16 +59,24 @@ namespace Horo::Extensions {
             contributions_.pop_back();
     }
 
+    void ExtensionActivationTransaction::RollbackLifetimes(Error *const primary) noexcept {
+        while (!lifetimes_.empty()) {
+            std::shared_ptr<ExtensionModuleLifetime> lifetime = std::move(lifetimes_.back());
+            lifetimes_.pop_back();
+            if (lifetime == nullptr || lifetime->UnloadNow())
+                continue;
+            if (primary != nullptr)
+                AppendRollbackDiagnostic(*primary, lifetime->moduleId);
+            else
+                LOG_WARN("extensions", "Module unload failed during activation transaction rollback: %s", lifetime->moduleId.c_str());
+        }
+        released_ = true;
+    }
+
     void ExtensionActivationTransaction::RollbackWithoutDiagnostics() noexcept {
         if (released_)
             return;
         DiscardContributions();
-        while (!lifetimes_.empty()) {
-            std::shared_ptr<ExtensionModuleLifetime> lifetime = std::move(lifetimes_.back());
-            lifetimes_.pop_back();
-            if (lifetime != nullptr && !lifetime->UnloadNow())
-                LOG_WARN("extensions", "Module unload failed during activation transaction rollback: %s", lifetime->moduleId.c_str());
-        }
-        released_ = true;
+        RollbackLifetimes(nullptr);
     }
 }  // namespace Horo::Extensions

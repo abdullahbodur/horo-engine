@@ -47,6 +47,7 @@ namespace Horo::Extensions {
 
     private:
         void DiscardContributions() noexcept;
+        void RollbackLifetimes(Error *primary) noexcept;
         void RollbackWithoutDiagnostics() noexcept;
 
         std::vector<std::shared_ptr<ExtensionModuleLifetime>> lifetimes_;
