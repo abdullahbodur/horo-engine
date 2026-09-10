@@ -80,17 +80,27 @@ the graph as point clouds (spatial points with attributes).
 
 ### PCG Point
 
-The fundamental data unit is a spatial point with attributes:
+The fundamental data unit is a spatial point in immutable structure-of-arrays storage.
+Core transform, local bounds, density and deterministic seed are parallel columns, as
+is every schema-declared attribute. Density is finite and inclusive in `[0, 1]`;
+transforms and bounds follow the finite Horo Scene Math contract.
 
 ```cpp
-struct PCGPoint {
-    WorldTransform    transform;
-    BoundingBox       bounds;
-    float             density;          // 0-1, used for filtering
-    int32_t           seed;             // per-point deterministic seed
-    VariantMap        attributes;       // arbitrary typed attributes
+struct PCGPointCoreColumns {
+    std::vector<Math::Transform> transforms;
+    std::vector<Math::Aabb> bounds;
+    std::vector<float> densities;
+    std::vector<std::uint64_t> seeds;
 };
 ```
+
+Schema-1 attribute values are a closed vocabulary of boolean, signed/unsigned integer,
+scalar and Horo `Vec2`/`Vec3`/`Vec4` columns. Canonical lowercase ASCII namespaced keys
+are validated and sorted before schema publication. Unknown, duplicate, mismatched,
+non-finite, over-limit or unequal-length columns reject the complete detached candidate;
+there is no public `VariantMap`, per-point map, string conversion or partial repair.
+Successful replacement publishes a new immutable snapshot while existing reader leases
+retain the old snapshot until they release it.
 
 ### Node Types
 
