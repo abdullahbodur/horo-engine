@@ -1,0 +1,188 @@
+#pragma once
+
+/**
+ * @file BlackboardInstance.h
+ * @brief Generation-fenced gameplay-AI blackboard storage, snapshots, and safe-point batches.
+ */
+
+#include "Horo/AI/AIIdentity.h"
+#include "Horo/AI/BlackboardSchema.h"
+
+#include <array>
+#include <atomic>
+#include <cstdint>
+#include <memory>
+#include <optional>
+#include <span>
+#include <vector>
+
+namespace Horo::AI {
+    /** @brief Maximum writes admitted by one BlackboardSync transaction. */
+    inline constexpr std::size_t MaximumBlackboardWritesPerBatch = MaximumBlackboardKeys;
+
+    /** @brief Exact runtime, agent, schema-publication, and instance generation fence. */
+    struct BlackboardInstanceBinding final {
+        AgentHandle agent;                  /**< Owning agent in one exact SceneRuntime incarnation. */
+        BlackboardSchemaId schema;          /**< Immutable schema identity. */
+        std::uint32_t schemaVersion{};      /**< Non-zero authored schema version. */
+        std::uint64_t schemaGeneration{};   /**< Non-zero runtime schema-publication generation. */
+        std::uint32_t instanceGeneration{}; /**< Non-zero blackboard instance generation. */
+
+        /** @brief Checks reserved values. @return Whether every binding component is well formed. */
+        [[nodiscard]] bool IsValid() const noexcept;
+        [[nodiscard]] constexpr auto operator<=>(const BlackboardInstanceBinding &) const noexcept = default;
+    };
+
+    /** @brief One detached schema-keyed write owned by a batch. */
+    struct BlackboardWrite final {
+        BlackboardKeyId key;   /**< Stable typed schema key. */
+        BlackboardValue value; /**< Owned typed candidate value. */
+    };
+
+    /** @brief Immutable facts published by one safe-point commit. */
+    struct BlackboardCommitResult final {
+        std::uint64_t revision{};                                         /**< Active monotonic revision after commit. */
+        std::array<BlackboardKeyId, MaximumBlackboardKeys> changedKeys{}; /**< Key-sorted changed prefix. */
+        std::size_t changedKeyCount{};                                    /**< Active changed-key count. */
+
+        /** @brief Returns the changed-key prefix. @return Key-sorted immutable change facts. */
+        [[nodiscard]] std::span<const BlackboardKeyId> Changes() const noexcept {
+            return {changedKeys.data(), changedKeyCount};
+        }
+    };
+
+    class BlackboardInstance;
+
+    /** @brief Detached fixed-capacity batch fenced to one exact instance revision. */
+    class BlackboardWriteBatch final {
+    public:
+        BlackboardWriteBatch(const BlackboardWriteBatch &) = delete;
+        BlackboardWriteBatch &operator=(const BlackboardWriteBatch &) = delete;
+        BlackboardWriteBatch(BlackboardWriteBatch &&) noexcept = default;
+        BlackboardWriteBatch &operator=(BlackboardWriteBatch &&) noexcept = default;
+
+        /**
+         * @brief Adds one owned write without touching live storage.
+         * @param write Typed key/value candidate.
+         * @return Success or a stable duplicate, invalid-key, or capacity failure.
+         */
+        [[nodiscard]] Result<void> Stage(BlackboardWrite write);
+
+        /** @brief Returns the exact generation fence. @return Immutable binding. */
+        [[nodiscard]] const BlackboardInstanceBinding &Binding() const noexcept {
+            return binding_;
+        }
+
+        /** @brief Returns the captured active revision. @return Non-zero revision. */
+        [[nodiscard]] std::uint64_t BaseRevision() const noexcept {
+            return baseRevision_;
+        }
+
+        /** @brief Returns the staged prefix. @return Immutable insertion-ordered writes. */
+        [[nodiscard]] std::span<const BlackboardWrite> Writes() const noexcept {
+            return {writes_.data(), writeCount_};
+        }
+
+    private:
+        friend class BlackboardInstance;
+
+        BlackboardWriteBatch(BlackboardInstanceBinding binding, std::uint64_t revision) : binding_(binding), baseRevision_(revision) {}
+
+        BlackboardInstanceBinding binding_;
+        std::uint64_t baseRevision_{};
+        std::array<BlackboardWrite, MaximumBlackboardWritesPerBatch> writes_{};
+        std::size_t writeCount_{};
+    };
+
+    /** @brief Immutable owned observation stable across commits and expiring on generation replacement or teardown. */
+    class BlackboardSnapshot final {
+    public:
+        /** @brief Returns the captured revision. @return Revision or typed stale failure after generation expiry. */
+        [[nodiscard]] Result<std::uint64_t> Revision() const;
+        /**
+         * @brief Reads a typed value without exposing mutable instance storage.
+         * @param key Stable schema key.
+         * @return Owned optional value or a typed stale/unknown-key failure.
+         */
+        [[nodiscard]] Result<std::optional<BlackboardValue>> Read(BlackboardKeyId key) const;
+
+        /** @brief Returns the exact captured generation fence. @return Immutable binding. */
+        [[nodiscard]] const BlackboardInstanceBinding &Binding() const noexcept {
+            return binding_;
+        }
+
+    private:
+        friend class BlackboardInstance;
+
+        BlackboardSnapshot(BlackboardInstanceBinding binding, std::shared_ptr<const BlackboardSchema> schema,
+                           std::array<std::optional<BlackboardValue>, MaximumBlackboardKeys> values, std::uint64_t revision,
+                           std::shared_ptr<std::atomic_bool> generationActive)
+            : binding_(binding), schema_(std::move(schema)), values_(std::move(values)), revision_(revision),
+              generationActive_(std::move(generationActive)) {}
+
+        BlackboardInstanceBinding binding_;
+        std::shared_ptr<const BlackboardSchema> schema_;
+        std::array<std::optional<BlackboardValue>, MaximumBlackboardKeys> values_{};
+        std::uint64_t revision_{};
+        std::shared_ptr<std::atomic_bool> generationActive_;
+    };
+
+    /** @brief Scene-owner blackboard whose only mutation is transactional BlackboardSync publication. */
+    class BlackboardInstance final {
+    public:
+        BlackboardInstance() = delete;
+        /**
+         * @brief Allocates a default-populated instance from one immutable schema publication.
+         * @param binding Exact agent, runtime, schema, and instance generations.
+         * @param schema Immutable admitted schema.
+         * @return Owned instance or a stable validation/storage failure.
+         */
+        [[nodiscard]] static Result<std::unique_ptr<BlackboardInstance>> Create(BlackboardInstanceBinding binding,
+                                                                                std::shared_ptr<const BlackboardSchema> schema);
+        /** @brief Captures an immutable value copy for worker observation. @return Snapshot or stale failure. */
+        [[nodiscard]] Result<BlackboardSnapshot> Snapshot() const;
+        /** @brief Starts a detached fixed-capacity batch. @return Revision-fenced batch or stale failure. */
+        [[nodiscard]] Result<BlackboardWriteBatch> BeginWriteBatch() const;
+        /**
+         * @brief Validates and atomically applies a complete batch at the owner BlackboardSync safe point.
+         * @param batch Detached candidate batch.
+         * @return New revision and deterministic changes, or a stable failure with no mutation.
+         */
+        [[nodiscard]] Result<BlackboardCommitResult> CommitAtBlackboardSync(BlackboardWriteBatch batch);
+        /**
+         * @brief Transactionally migrates compatible values to a replacement schema/default layout.
+         * @param replacementBinding Strictly newer schema and instance generation fence for the same agent.
+         * @param replacementSchema Immutable replacement schema.
+         * @return Success or a stable failure that preserves the old active instance.
+         */
+        [[nodiscard]] Result<void> ReplaceAtBlackboardSync(BlackboardInstanceBinding replacementBinding,
+                                                           std::shared_ptr<const BlackboardSchema> replacementSchema);
+        /** @brief Resets every key to the active schema default. @return Revision/change facts or stable failure. */
+        [[nodiscard]] Result<BlackboardCommitResult> ResetAtBlackboardSync();
+        /** @brief Idempotently invalidates batches/snapshots and releases active storage. */
+        void TeardownAtBlackboardSync() noexcept;
+
+        /** @brief Checks lifecycle state. @return Whether the instance accepts snapshots and batches. */
+        [[nodiscard]] bool IsActive() const noexcept {
+            return active_;
+        }
+
+        BlackboardInstance(const BlackboardInstance &) = delete;
+        BlackboardInstance &operator=(const BlackboardInstance &) = delete;
+
+    private:
+        BlackboardInstance(BlackboardInstanceBinding binding, std::shared_ptr<const BlackboardSchema> schema,
+                           std::vector<std::optional<BlackboardValue>> values, std::vector<std::optional<BlackboardValue>> scratch,
+                           std::shared_ptr<std::atomic_bool> generationActive)
+            : binding_(binding), schema_(std::move(schema)), values_(std::move(values)), scratch_(std::move(scratch)),
+              generationActive_(std::move(generationActive)) {}
+
+        BlackboardInstanceBinding binding_;
+        std::shared_ptr<const BlackboardSchema> schema_;
+        std::vector<std::optional<BlackboardValue>> values_;
+        std::vector<std::optional<BlackboardValue>> scratch_;
+        std::uint64_t revision_{1};
+        std::shared_ptr<std::atomic_bool> generationActive_;
+        bool active_{true};
+    };
+}  // namespace Horo::AI

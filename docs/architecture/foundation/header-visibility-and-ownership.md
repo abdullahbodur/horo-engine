@@ -355,6 +355,22 @@ links Jolt to verify binary ABI mismatch rejection and unchanged factory/allocat
 state. The check itself never registers types or initializes a world; explicit
 activation and world teardown remain the scene lifecycle owner's responsibility.
 
+## Gameplay AI Blackboard Boundary
+
+`HoroEngine::AI` owns `Horo/AI/AIIdentity.h`, `Horo/AI/BlackboardSchema.h`, and
+`Horo/AI/BlackboardInstance.h` with a Foundation-only public dependency. The
+instance contract reuses the existing strong agent/schema/key identities and typed
+schema values. Its public storage, snapshots, write batches, generation fences,
+revisions, and diagnostics contain no RuntimeScene, editor, MCP, network, platform,
+or backend-native types. The owning Scene adapter creates and tears down instances;
+only its `BlackboardSync` safe point applies staged mutations.
+
+`BlackboardInstance.h` is registered to the existing AI target and compiled by the
+generated standalone public-header consumer. This slice introduces no production
+caller migration and no second schema/value authority. Future AI runtime composition
+must consume this contract instead of duplicating string-keyed storage or exposing
+mutable instance memory to worker tasks.
+
 ## PCG Identity Boundary
 
 HoroEngine::PCG owns Horo/PCG/PCGIdentity.h and Horo/PCG/PCGErrors.h.
