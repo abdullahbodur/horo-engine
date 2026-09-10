@@ -101,15 +101,16 @@ namespace Horo::WorldStreaming {
         Result<void> ValidateEventSemantics(const StreamingDiagnosticDecisionEvent &event) {
             if (!IsKnownCategory(event.category) || !IsKnownSeverity(event.severity))
                 return Internal::Failure<void>(WorldStreamingErrors::DiagnosticProjectionUnsupported);
+            using enum StreamingDiagnosticEventCategory;
             Result<void> category = Result<void>::Success();
             switch (event.category) {
-                case StreamingDiagnosticEventCategory::CellLifecycle:
+                case CellLifecycle:
                     category = ValidateLifecycleEvent(event);
                     break;
-                case StreamingDiagnosticEventCategory::Admission:
+                case Admission:
                     category = ValidateAdmissionEvent(event);
                     break;
-                case StreamingDiagnosticEventCategory::Rollback:
+                case Rollback:
                     category = ValidateRollbackEvent(event);
                     break;
             }
