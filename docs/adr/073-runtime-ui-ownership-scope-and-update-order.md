@@ -95,6 +95,16 @@ host-owned runtime replacement. No counter wraps, saturates into a reusable valu
 or reuses an identity still observable by a command, snapshot, render epoch, or
 lease.
 
+Element slots form one owner-wide namespace, not a tree-local namespace. Before a
+tree is created, the owning Runtime UI service monotonically reserves a disjoint
+contiguous slot range equal to that tree's declared element capacity. The range is
+tombstoned until its `UiOwnershipGeneration` ends even if tree preparation fails or
+the canvas retires. A tree maps its private indexes into that range and rejects
+handles outside it before checking the local slot generation. This preserves the
+fixed 128-bit representation while preventing two canvases in one scope from
+aliasing the same local slot and generation. Range exhaustion closes new tree
+admission with `GenerationExhausted`; ranges never wrap, hash, overlap, or reuse.
+
 Authored `UiDocumentId`/`AssetId` and stable `UiElementId` values survive cook,
 reload and runtime instantiation. They are used for diagnostics, binding, saved
 semantic state and explicit reload reconciliation, not as mutable pointer/slot
@@ -153,7 +163,11 @@ Runtime UI participates in the existing `RuntimePhase` sequence and adds no phas
    5. resolves bindings, measure/arrange, focus/navigation and hit-test state;
    6. publishes one immutable instance/layout/interaction generation.
 5. `RenderExtraction` projects active instances into immutable per-view
-   `UiRenderSnapshot` values using the published generation only.
+   `UiRenderSnapshot` values using the published generation only. Each exact view
+   owns a bounded preallocated extraction store; publication performs a bounded
+   free-slot scan and returns typed exhaustion instead of blocking, overwriting an
+   in-flight snapshot, or allocating fallback frame storage. Snapshot copies retain
+   one immutable slot until the last render lease retires.
 6. `RenderExecution` renders world-space canvases through declared world passes
    and screen-space canvases at the frontend-owned composition point.
 7. `RenderGui` remains host/editor/development GUI composition; runtime game UI

@@ -48,6 +48,16 @@ namespace Horo::Runtime::Ui::UiErrors {
     extern const ErrorCodeDescriptor StructuralCommandConflict;
     /** @brief A retained element tree is retiring, stopped, or otherwise unavailable for the request. */
     extern const ErrorCodeDescriptor ElementTreeLifecycleUnavailable;
+    /** @brief Immutable Runtime UI render snapshot evidence or table topology is malformed. */
+    extern const ErrorCodeDescriptor RenderSnapshotInvalid;
+    /** @brief A Runtime UI draw command contains invalid geometry, paint, or table references. */
+    extern const ErrorCodeDescriptor RenderCommandInvalid;
+    /** @brief A Runtime UI render resource identity, role, or revision is invalid. */
+    extern const ErrorCodeDescriptor RenderResourceReferenceInvalid;
+    /** @brief Every preallocated Runtime UI render snapshot slot is still leased by an in-flight frame. */
+    extern const ErrorCodeDescriptor RenderSnapshotStorageExhausted;
+    /** @brief A Runtime UI render extractor is closed and no longer accepts snapshots. */
+    extern const ErrorCodeDescriptor RenderSnapshotLifecycleUnavailable;
     /** @brief Runtime UI diagnostic evidence is malformed or exceeds its fixed bounds. */
     extern const ErrorCodeDescriptor DiagnosticInvalid;
     /** @brief A Runtime UI diagnostic category or source error is not part of the declared contract. */

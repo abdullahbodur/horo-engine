@@ -169,6 +169,49 @@ namespace Horo::Runtime::Ui::UiErrors {
                                         "completes.",
                                         false,
                                         false};
+    /** @copydoc RenderSnapshotInvalid */
+    const ErrorCodeDescriptor RenderSnapshotInvalid{UiDomain,
+                                                    ErrorCode{"runtime_ui.render_snapshot.invalid"},
+                                                    ErrorSeverity::Error,
+                                                    "The immutable Runtime UI render snapshot is invalid.",
+                                                    "Provide exact owner revisions and complete bounded logical projection tables.",
+                                                    false,
+                                                    false};
+    /** @copydoc RenderCommandInvalid */
+    const ErrorCodeDescriptor RenderCommandInvalid{UiDomain,
+                                                   ErrorCode{"runtime_ui.render_command.invalid"},
+                                                   ErrorSeverity::Error,
+                                                   "A Runtime UI render command is invalid.",
+                                                   "Use resident element handles, finite paint, and valid logical table references.",
+                                                   false,
+                                                   false};
+    /** @copydoc RenderResourceReferenceInvalid */
+    const ErrorCodeDescriptor
+        RenderResourceReferenceInvalid{UiDomain,
+                                       ErrorCode{"runtime_ui.render_resource_reference.invalid"},
+                                       ErrorSeverity::Error,
+                                       "A Runtime UI render resource reference is invalid.",
+                                       "Provide a stable Horo asset with the exact nonzero revision and semantic role.",
+                                       false,
+                                       true};
+    /** @copydoc RenderSnapshotStorageExhausted */
+    const ErrorCodeDescriptor
+        RenderSnapshotStorageExhausted{UiDomain,
+                                       ErrorCode{"runtime_ui.render_snapshot.storage_exhausted"},
+                                       ErrorSeverity::Error,
+                                       "Every bounded Runtime UI render snapshot slot is still leased.",
+                                       "Retire an in-flight snapshot before retrying; never overwrite or allocate fallback storage.",
+                                       true,
+                                       false};
+    /** @copydoc RenderSnapshotLifecycleUnavailable */
+    const ErrorCodeDescriptor
+        RenderSnapshotLifecycleUnavailable{UiDomain,
+                                           ErrorCode{"runtime_ui.render_snapshot.lifecycle_unavailable"},
+                                           ErrorSeverity::Error,
+                                           "The Runtime UI render extractor is closed.",
+                                           "Create a new extractor for the active view generation before publishing another snapshot.",
+                                           false,
+                                           false};
     /** @copydoc DiagnosticInvalid */
     const ErrorCodeDescriptor
         DiagnosticInvalid{UiDomain,
