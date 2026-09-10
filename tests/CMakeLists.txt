@@ -291,11 +291,14 @@ target_link_libraries(HoroDestructionApiTests PRIVATE HoroEngine::DestructionApi
 horo_register_catch_test(HoroDestructionApiTests LABELS "unit;destruction;headless")
 
 add_executable(HoroCinematicModelTests
+        support/AllocationProbe.cpp
         unit/runtime/cinematic/CurveSamplingTests.cpp
         unit/runtime/cinematic/CinematicIdentityTests.cpp
         unit/runtime/cinematic/SequenceAssetTests.cpp
+        unit/runtime/cinematic/TransformTrackTests.cpp
 )
 target_compile_features(HoroCinematicModelTests PRIVATE cxx_std_20)
+target_include_directories(HoroCinematicModelTests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
 target_link_libraries(HoroCinematicModelTests PRIVATE HoroEngine::CinematicModel)
 horo_register_catch_test(HoroCinematicModelTests LABELS "unit;cinematic;headless")
 add_executable(HoroCinematicCurveSamplingBenchmark EXCLUDE_FROM_ALL
