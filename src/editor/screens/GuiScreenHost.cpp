@@ -73,7 +73,7 @@ namespace Horo::Editor {
                     continue;
                 }
                 if (auto activated = inventory.MarkRuntimeActive(extension.packageId); activated.HasError())
-                    LOG_ERROR("editor.extensions", "Extension activation state was rejected for '{}'.", extension.packageId);
+                    LOG_ERROR("editor.extensions", "Extension activation state was rejected for '%s'.", extension.packageId.c_str());
             }
         }
 
