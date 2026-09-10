@@ -89,28 +89,35 @@ namespace Horo::PCG {
             }, values);
         }
 
+        [[nodiscard]] constexpr bool IsLowerAscii(const unsigned char byte) noexcept {
+            return byte >= 'a' && byte <= 'z';
+        }
+
+        [[nodiscard]] constexpr bool IsKeyTail(const unsigned char byte) noexcept {
+            return IsLowerAscii(byte) || (byte >= '0' && byte <= '9') || byte == '_';
+        }
+
+        [[nodiscard]] bool IsCanonicalSegment(const std::string_view segment) noexcept {
+            return !segment.empty() && IsLowerAscii(static_cast<unsigned char>(segment.front())) &&
+                   std::ranges::all_of(segment.substr(1), [](const unsigned char byte) {
+                return IsKeyTail(byte);
+            });
+        }
+
         [[nodiscard]] bool IsCanonicalKey(const std::string_view value) noexcept {
-            if (value.empty() || value.size() > MaximumAttributeKeyBytes)
+            if (value.empty() || value.size() > MaximumAttributeKeyBytes || value.find('.') == std::string_view::npos)
                 return false;
-            bool sawSeparator = false;
-            bool atSegmentStart = true;
-            for (const unsigned char byte : value) {
-                if (byte >= 0x80U)
+            std::size_t start{};
+            while (start <= value.size()) {
+                const std::size_t separator = value.find('.', start);
+                const std::size_t end = separator == std::string_view::npos ? value.size() : separator;
+                if (!IsCanonicalSegment(value.substr(start, end - start)))
                     return false;
-                if (byte == '.') {
-                    if (atSegmentStart)
-                        return false;
-                    sawSeparator = true;
-                    atSegmentStart = true;
-                    continue;
-                }
-                const bool lower = byte >= 'a' && byte <= 'z';
-                const bool digit = byte >= '0' && byte <= '9';
-                if ((atSegmentStart && !lower) || (!atSegmentStart && !lower && !digit && byte != '_'))
-                    return false;
-                atSegmentStart = false;
+                if (separator == std::string_view::npos)
+                    return true;
+                start = separator + 1;
             }
-            return sawSeparator && !atSegmentStart;
+            return false;
         }
 
         [[nodiscard]] bool ValuesAreValid(const PCGAttributeColumnValues &values) noexcept {
