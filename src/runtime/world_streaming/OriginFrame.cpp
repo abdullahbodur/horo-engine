@@ -81,7 +81,7 @@ namespace Horo::WorldStreaming {
     }
 
     /** @copydoc OriginFrame::Create */
-    Result<OriginFrame> OriginFrame::Create(const OriginFrameBinding binding, const Math::WorldCoordinate64 origin) {
+    Result<OriginFrame> OriginFrame::Create(const OriginFrameBinding binding, const Math::WorldCoordinate64 &origin) {
         if (!binding.IsValid())
             return Failure<OriginFrame>(WorldStreamingErrors::OriginFrameInvalid);
         return Result<OriginFrame>::Success(OriginFrame{binding, origin});
@@ -150,8 +150,8 @@ namespace Horo::WorldStreaming {
         if (!active_)
             return Result<void>::Failure(MakeError(WorldStreamingErrors::OriginFrameLifecycleUnavailable));
         const auto &active = activeFrame_.Binding();
-        const auto &replacement = candidate.Binding();
-        if (stagedFrame_.has_value() || replacement.identity != active.identity || NextOriginFrameRevision(active.revision).HasError() ||
+        if (const auto &replacement = candidate.Binding();
+            stagedFrame_.has_value() || replacement.identity != active.identity || NextOriginFrameRevision(active.revision).HasError() ||
             NextOriginGeneration(active.generation).HasError() || replacement.revision.Value() != active.revision.Value() + 1 ||
             replacement.generation.Value() != active.generation.Value() + 1)
             return Result<void>::Failure(MakeError(WorldStreamingErrors::OriginFrameStale));

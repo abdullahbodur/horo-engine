@@ -99,7 +99,7 @@ namespace Horo::WorldStreaming {
          * @param origin Canonical global origin; retained by value and never mutated.
          * @return Immutable frame or typed invalid-binding failure.
          */
-        [[nodiscard]] static Result<OriginFrame> Create(OriginFrameBinding binding, Math::WorldCoordinate64 origin);
+        [[nodiscard]] static Result<OriginFrame> Create(OriginFrameBinding binding, const Math::WorldCoordinate64 &origin);
 
         /** @brief Returns the exact frame fence. @return Immutable binding. */
         [[nodiscard]] constexpr const OriginFrameBinding &Binding() const noexcept {
@@ -127,7 +127,7 @@ namespace Horo::WorldStreaming {
         [[nodiscard]] constexpr auto operator<=>(const OriginFrame &) const noexcept = default;
 
     private:
-        explicit constexpr OriginFrame(OriginFrameBinding binding, Math::WorldCoordinate64 origin) noexcept
+        explicit constexpr OriginFrame(OriginFrameBinding binding, const Math::WorldCoordinate64 &origin) noexcept
             : binding_(binding), origin_(origin) {}
 
         OriginFrameBinding binding_{};
