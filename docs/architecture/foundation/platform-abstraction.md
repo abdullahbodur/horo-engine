@@ -231,6 +231,13 @@ references and short-lived secure values.
 Absence of a platform credential store is explicit. Falling back to plaintext
 persistence is forbidden.
 
+The backend-neutral credential lifecycle and secure byte owner live in
+`HoroSecurity`; Platform implementations provide only explicitly composed
+native capabilities. Cryptographic entropy uses `BCryptGenRandom` on Windows,
+`SecRandomCopyBytes` on Apple platforms, and `getrandom` on Linux. A native
+entropy error clears the destination and fails; standard-library PRNGs are not a
+recovery path.
+
 ## Dynamic Libraries
 
 If dynamic modules are supported, the platform layer owns loading and symbol

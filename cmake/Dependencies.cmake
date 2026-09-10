@@ -108,19 +108,21 @@ FetchContent_MakeAvailable(utf8proc)
 # The extension marketplace is part of every editor distribution. Build its
 # HTTPS stack from pinned sources so users do not need a separately installed
 # libcurl SDK. Prefer the native Windows trust store through Schannel; use the
-# portable Mbed TLS backend on other targets.
-if(NOT WIN32)
-    set(HORO_MBEDTLS_REVISION "5b64a9fdb979c8971561ec78221b528e3cc4e00a")
-    set(ENABLE_PROGRAMS OFF CACHE BOOL "" FORCE)
-    set(ENABLE_TESTING OFF CACHE BOOL "" FORCE)
-    FetchContent_Declare(
-        MbedTLS
-        GIT_REPOSITORY https://github.com/Mbed-TLS/mbedtls.git
-        GIT_TAG "${HORO_MBEDTLS_REVISION}"
-        GIT_SHALLOW TRUE
-    )
-    FetchContent_MakeAvailable(MbedTLS)
+# portable Mbed TLS backend on other targets. The security module also uses the
+# pinned crypto target on every platform; this is independent of curl's TLS
+# provider selection.
+set(HORO_MBEDTLS_REVISION "5b64a9fdb979c8971561ec78221b528e3cc4e00a")
+set(ENABLE_PROGRAMS OFF CACHE BOOL "" FORCE)
+set(ENABLE_TESTING OFF CACHE BOOL "" FORCE)
+FetchContent_Declare(
+    MbedTLS
+    GIT_REPOSITORY https://github.com/Mbed-TLS/mbedtls.git
+    GIT_TAG "${HORO_MBEDTLS_REVISION}"
+    GIT_SHALLOW TRUE
+)
+FetchContent_MakeAvailable(MbedTLS)
 
+if(NOT WIN32)
     # curl discovers TLS providers through find_package(), while Mbed TLS is
     # already part of this build through FetchContent. Give curl's find module
     # the populated targets instead of requiring a second system SDK.

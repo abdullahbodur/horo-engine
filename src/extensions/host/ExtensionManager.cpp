@@ -9,6 +9,7 @@
 #include "Horo/Extensions/ExtensionModuleResolution.h"
 #include "Horo/Foundation/Logging/Logger.h"
 #include "Horo/Platform/DynamicLibrary.h"
+#include "Horo/Security/SecurityErrors.h"
 
 #include <algorithm>
 #include <filesystem>
@@ -25,6 +26,7 @@ namespace Horo::Extensions {
         constexpr std::uint32_t kMaximumModuleIdentityBytes = 256;
         constexpr ExtensionManifestLimits kManifestLimits{};
         constexpr std::size_t kMaximumHostCapabilities = kManifestLimits.maximumContributions;
+        constexpr std::uintmax_t kMaximumNativeArtifactBytes = 1024ULL * 1024ULL * 1024ULL;
 
         [[nodiscard]] std::string_view View(const HoroExtensionStringView value) noexcept {
             return value.data != nullptr ? std::string_view{value.data, value.length} : std::string_view{};
@@ -295,13 +297,60 @@ namespace Horo::Extensions {
             return Result<void>::Success();
         }
 
+        /**
+         * @brief Produces evidence for the selected library and confirms the bytes are still current immediately before loading.
+         * @param gate Mandatory host-composed artifact gate.
+         * @param libraryPath Exact selected native library path.
+         * @return Verified evidence or a typed fail-closed security error.
+         */
+        [[nodiscard]] Result<Security::VerifiedArtifactEvidence> VerifyCurrentArtifact(
+            const std::shared_ptr<const Security::NativeArtifactGate> &gate, const fs::path &libraryPath) {
+            if (!gate)
+                return Result<Security::VerifiedArtifactEvidence>::Failure(
+                    MakeError(SecurityErrors::MissingEvidence, "Native extension activation has no security gate."));
+            auto evidence = gate->Verify(libraryPath);
+            if (evidence.HasError())
+                return evidence;
+            std::error_code artifactSizeError;
+            const std::uintmax_t artifactSize = fs::file_size(libraryPath, artifactSizeError);
+            if (artifactSizeError || artifactSize > kMaximumNativeArtifactBytes)
+                return Result<Security::VerifiedArtifactEvidence>::Failure(MakeError(SecurityErrors::StaleEvidence));
+            std::ifstream verifiedFile{libraryPath, std::ios::binary};
+            std::vector<char> verifiedBytes(static_cast<std::size_t>(artifactSize));
+            verifiedFile.read(verifiedBytes.data(), static_cast<std::streamsize>(verifiedBytes.size()));
+            if (!verifiedFile || static_cast<std::size_t>(verifiedFile.gcount()) != verifiedBytes.size() ||
+                verifiedFile.peek() != std::char_traits<char>::eof() ||
+                ComputeSha256(std::as_bytes(std::span{verifiedBytes})) != evidence.Value().ArtifactDigest())
+                return Result<Security::VerifiedArtifactEvidence>::Failure(MakeError(SecurityErrors::StaleEvidence));
+            return evidence;
+        }
+
+        /** @brief Publishes one fully activated extension into manager-owned lifetime storage. */
+        [[nodiscard]] std::string CommitLoadedExtension(ExtensionManifest manifest, ExtensionModulePlan plan,
+                                                        ExtensionActivationTransaction &transaction,
+                                                        TransparentStringMap<std::unique_ptr<LoadedExtension>> &loadedExtensions) {
+            auto loadedExtension = std::make_unique<LoadedExtension>();
+            loadedExtension->manifest = std::move(manifest);
+            loadedExtension->lifetimes = transaction.ReleaseLifetimes();
+            loadedExtension->moduleIds = std::move(plan.moduleIds);
+            const std::string extensionId = loadedExtension->manifest.id;
+            loadedExtensions.try_emplace(extensionId, std::move(loadedExtension));
+            return extensionId;
+        }
+
     }  // namespace
 
     /** @copydoc ExtensionManager::ExtensionManager */
     ExtensionManager::ExtensionManager(Assets::AssetImporterCatalog *importerCatalog, const ExtensionHostProfile hostProfile,
-                                       std::vector<std::string> hostCapabilities)
-        : m_importerCatalog(importerCatalog), m_hostProfile(hostProfile), m_hostCapabilities(std::move(hostCapabilities)) {
+                                       std::vector<std::string> hostCapabilities,
+                                       std::shared_ptr<const Security::NativeArtifactGate> artifactGate, NativeLibraryLoader libraryLoader)
+        : m_importerCatalog(importerCatalog), m_hostProfile(hostProfile), m_hostCapabilities(std::move(hostCapabilities)),
+          m_artifactGate(std::move(artifactGate)), m_libraryLoader(std::move(libraryLoader)) {
         CanonicalizeHostCapabilities(m_hostCapabilities);
+        if (!m_libraryLoader)
+            m_libraryLoader = [](const std::string &path) {
+                return Platform::LoadDynamicLibrary(path);
+            };
     }
 
     ExtensionManager::~ExtensionManager() {
@@ -339,7 +388,9 @@ namespace Horo::Extensions {
             auto libraryPathResult = ResolveModuleLibraryPath(manifest, plan.selectedEntries[moduleIndex]);
             if (libraryPathResult.HasError())
                 return Result<std::string>::Failure(transaction.Rollback(libraryPathResult.ErrorValue()));
-            auto loadResult = Platform::LoadDynamicLibrary(libraryPathResult.Value().string());
+            if (auto evidence = VerifyCurrentArtifact(m_artifactGate, libraryPathResult.Value()); evidence.HasError())
+                return Result<std::string>::Failure(transaction.Rollback(evidence.ErrorValue()));
+            auto loadResult = m_libraryLoader(libraryPathResult.Value().string());
             if (loadResult.HasError())
                 return Result<std::string>::Failure(transaction.Rollback(loadResult.ErrorValue()));
             std::shared_ptr<Platform::DynamicLibrary> library{std::move(loadResult).Value()};
@@ -353,13 +404,7 @@ namespace Horo::Extensions {
         if (auto committed = CommitContributions(transaction.Contributions(), m_importerCatalog); committed.HasError())
             return Result<std::string>::Failure(transaction.Rollback(committed.ErrorValue()));
 
-        auto loadedExtension = std::make_unique<LoadedExtension>();
-        loadedExtension->manifest = std::move(manifest);
-        loadedExtension->lifetimes = transaction.ReleaseLifetimes();
-        loadedExtension->moduleIds = std::move(plan.moduleIds);
-        const std::string extensionId = loadedExtension->manifest.id;
-        m_loadedExtensions.try_emplace(extensionId, std::move(loadedExtension));
-
+        const std::string extensionId = CommitLoadedExtension(std::move(manifest), std::move(plan), transaction, m_loadedExtensions);
         LOG_INFO("extensions", "Successfully loaded extension: %s", extensionId.c_str());
         return Result<std::string>::Success(extensionId);
     }

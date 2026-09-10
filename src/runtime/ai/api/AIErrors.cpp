@@ -99,9 +99,40 @@ namespace Horo::AI::AIErrors {
         .domain = AiDomain,
         .code = ErrorCode{"ai.blackboard.storage_unavailable"},
         .defaultSeverity = ErrorSeverity::Critical,
-        .summary = "Immutable gameplay-AI blackboard schema storage could not be allocated.",
-        .remediationHint = "Release memory pressure and retry schema admission before scene activation.",
+        .summary = "Immutable gameplay-AI blackboard schema or instance storage could not be allocated.",
+        .remediationHint = "Release memory pressure and retry blackboard admission before scene activation.",
         .retryable = true,
         .userActionable = false,
     };
+    const ErrorCodeDescriptor BlackboardInstanceStale{.domain = AiDomain,
+                                                      .code = ErrorCode{"ai.blackboard.instance_stale"},
+                                                      .defaultSeverity = ErrorSeverity::Warning,
+                                                      .summary = "The blackboard snapshot, batch, or instance generation is stale.",
+                                                      .remediationHint = "Capture the active instance generation and revision again.",
+                                                      .retryable = true,
+                                                      .userActionable = false};
+    const ErrorCodeDescriptor
+        BlackboardInstanceInvalid{.domain = AiDomain,
+                                  .code = ErrorCode{"ai.blackboard.instance_invalid"},
+                                  .defaultSeverity = ErrorSeverity::Error,
+                                  .summary = "The blackboard binding or required default layout is invalid.",
+                                  .remediationHint = "Use one exact runtime, agent, schema publication, and non-zero instance generation.",
+                                  .retryable = false,
+                                  .userActionable = true};
+    const ErrorCodeDescriptor BlackboardBatchInvalid{.domain = AiDomain,
+                                                     .code = ErrorCode{"ai.blackboard.batch_invalid"},
+                                                     .defaultSeverity = ErrorSeverity::Error,
+                                                     .summary = "The blackboard write batch is invalid.",
+                                                     .remediationHint =
+                                                         "Use unique writable schema keys and commit the detached batch at BlackboardSync.",
+                                                     .retryable = false,
+                                                     .userActionable = true};
+    const ErrorCodeDescriptor BlackboardRevisionExhausted{.domain = AiDomain,
+                                                          .code = ErrorCode{"ai.blackboard.revision_exhausted"},
+                                                          .defaultSeverity = ErrorSeverity::Critical,
+                                                          .summary = "The blackboard revision or instance generation is exhausted.",
+                                                          .remediationHint =
+                                                              "Retire the instance; never wrap or reuse an issued generation.",
+                                                          .retryable = false,
+                                                          .userActionable = false};
 }  // namespace Horo::AI::AIErrors

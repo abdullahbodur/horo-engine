@@ -250,6 +250,7 @@ horo_register_catch_test(HoroPhysicsTests LABELS "unit;physics;headless")
 
 add_executable(HoroAITests
         unit/runtime/ai/AIIdentityTests.cpp
+        unit/runtime/ai/BlackboardInstanceTests.cpp
         unit/runtime/ai/BlackboardSchemaTests.cpp
 )
 target_compile_features(HoroAITests PRIVATE cxx_std_20)
@@ -277,17 +278,21 @@ horo_register_catch_test(HoroPCGTests LABELS "unit;pcg;headless")
 
 add_executable(HoroVfxApiTests
         unit/runtime/vfx/VfxIdentityTests.cpp
+        unit/runtime/vfx/VfxQualityPolicyTests.cpp
 )
 target_compile_features(HoroVfxApiTests PRIVATE cxx_std_20)
 target_link_libraries(HoroVfxApiTests PRIVATE HoroEngine::VfxApi)
 horo_register_catch_test(HoroVfxApiTests LABELS "unit;vfx;headless")
 
 add_executable(HoroDestructionApiTests
+        support/AllocationProbe.cpp
         unit/runtime/destruction/DestructibleDescriptorTests.cpp
         unit/runtime/destruction/DestructionIdentityTests.cpp
+        unit/runtime/destruction/DestructionStateMachineTests.cpp
 )
 target_compile_features(HoroDestructionApiTests PRIVATE cxx_std_20)
 target_link_libraries(HoroDestructionApiTests PRIVATE HoroEngine::DestructionApi)
+target_include_directories(HoroDestructionApiTests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
 horo_register_catch_test(HoroDestructionApiTests LABELS "unit;destruction;headless")
 
 add_executable(HoroCinematicModelTests
@@ -345,6 +350,7 @@ target_link_libraries(HoroTerrainApiTests PRIVATE HoroEngine::TerrainApi)
 horo_register_catch_test(HoroTerrainApiTests LABELS "unit;terrain;headless")
 
 add_executable(HoroWorldStreamingTests
+        unit/runtime/world_streaming/OriginFrameTests.cpp
         unit/runtime/world_streaming/CookedWorldIndexManifestTests.cpp
         unit/runtime/world_streaming/FallbackStreamingProviderTests.cpp
         unit/runtime/world_streaming/StreamingBudgetModelTests.cpp
@@ -1337,6 +1343,7 @@ foreach(abi_fixture_mode RANGE 0 3)
 endforeach()
 target_include_directories(HoroExtensionManagerTests PRIVATE ${PROJECT_SOURCE_DIR}/src/extensions/host)
 target_include_directories(HoroExtensionManagerTests PRIVATE ${PROJECT_SOURCE_DIR}/src/extensions/capabilities/asset_pipeline_points)
+target_include_directories(HoroExtensionManagerTests PRIVATE ${PROJECT_SOURCE_DIR}/tests/support)
 target_compile_features(HoroExtensionManagerTests PRIVATE cxx_std_20)
 target_link_libraries(HoroExtensionManagerTests PRIVATE HoroEngine::Extensions Catch2::Catch2WithMain)
 if(TARGET HoroAssetImporterBasicExample)
@@ -1346,6 +1353,12 @@ if(TARGET HoroAssetImporterBasicExample)
     )
 endif()
 add_test(NAME HoroExtensionManagerTests COMMAND HoroExtensionManagerTests)
+
+add_executable(HoroSecurityBaselineTests unit/security/SecurityBaselineTests.cpp)
+target_compile_features(HoroSecurityBaselineTests PRIVATE cxx_std_20)
+target_link_libraries(HoroSecurityBaselineTests PRIVATE
+        HoroEngine::Security HoroEngine::Platform Catch2::Catch2WithMain MbedTLS::mbedcrypto)
+add_test(NAME HoroSecurityBaselineTests COMMAND HoroSecurityBaselineTests)
 
 if (HORO_BUILD_RENDER_OPENGL)
     add_executable(HoroRenderOpenGLTests

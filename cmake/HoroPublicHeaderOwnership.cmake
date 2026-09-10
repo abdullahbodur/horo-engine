@@ -40,6 +40,13 @@ horo_configure_target_header_boundary(HoroFoundation PUBLIC_HEADERS
     Horo/Math/WorldCoordinate64.h
 )
 
+horo_configure_target_header_boundary(HoroSecurity PUBLIC_HEADERS
+    Horo/Security/ArtifactSignature.h
+    Horo/Security/CredentialStore.h
+    Horo/Security/SecureMemory.h
+    Horo/Security/SecurityErrors.h
+)
+
 horo_configure_target_header_boundary(HoroCliHost PUBLIC_HEADERS
     Horo/Cli/CliCommandDescriptor.h
     Horo/Cli/CliCommandRegistry.h
@@ -56,6 +63,7 @@ horo_configure_target_header_boundary(HoroPlatform PUBLIC_HEADERS
     Horo/Platform/DynamicLibrary.h
     Horo/Platform/ExternalProcess.h
     Horo/Platform/PlatformErrors.h
+    Horo/Platform/SecureRandom.h
 )
 
 horo_configure_target_header_boundary(HoroPlatformServices PUBLIC_HEADERS
@@ -232,6 +240,7 @@ horo_configure_target_header_boundary(HoroPhysics PUBLIC_HEADERS
 horo_configure_target_header_boundary(HoroAI PUBLIC_HEADERS
     Horo/AI/AIErrors.h
     Horo/AI/AIIdentity.h
+    Horo/AI/BlackboardInstance.h
     Horo/AI/BlackboardSchema.h
 )
 horo_configure_target_header_boundary(HoroAnimationApi PUBLIC_HEADERS
@@ -250,11 +259,13 @@ horo_configure_target_header_boundary(HoroPCG PUBLIC_HEADERS
 horo_configure_target_header_boundary(HoroVfxApi PUBLIC_HEADERS
     Horo/Vfx/VfxErrors.h
     Horo/Vfx/VfxIdentity.h
+    Horo/Vfx/VfxQualityPolicy.h
 )
 horo_configure_target_header_boundary(HoroDestructionApi PUBLIC_HEADERS
     Horo/Destruction/DestructibleDescriptor.h
     Horo/Destruction/DestructionErrors.h
     Horo/Destruction/DestructionIdentity.h
+    Horo/Destruction/DestructionStateMachine.h
 )
 horo_configure_target_header_boundary(HoroCinematicModel PUBLIC_HEADERS
     Horo/Cinematic/CurveSampling.h
@@ -291,6 +302,7 @@ horo_configure_target_header_boundary(HoroNavigationNull PUBLIC_HEADERS
     Horo/Navigation/Backends/NullProvider.h
 )
 horo_configure_target_header_boundary(HoroWorldStreaming PUBLIC_HEADERS
+    Horo/WorldStreaming/OriginFrame.h
     Horo/WorldStreaming/CookedWorldIndexManifest.h
     Horo/WorldStreaming/FallbackStreamingProvider.h
     Horo/WorldStreaming/StreamingBudgetModel.h

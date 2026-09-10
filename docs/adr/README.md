@@ -13,7 +13,7 @@ to the replacement.
 | ID                                    | Title                                | Status   | Date       |
 |---------------------------------------|--------------------------------------|----------|------------|
 | [001](001-native-ci-builds.md)        | Host-Agnostic Local Release Pipeline | Accepted | 2026-05-30 |
-| [002](002-credential-handling.md)     | Credential Handling                  | Accepted | 2026-05-25 |
+| [002](002-credential-handling.md)     | Credential Handling                  | Superseded | 2026-05-25 |
 | [003](003-artifact-identity.md)       | Artifact Identity                    | Accepted | 2026-05-25 |
 | [004](004-cli-core-gui-boundary.md)   | CLI, Core, and GUI Boundary          | Accepted | 2026-05-25 |
 | [005](005-submodule-compatibility.md) | Submodule Compatibility Constraints  | Accepted | 2026-05-25 |
@@ -189,6 +189,7 @@ to the replacement.
 | [175](175-render-resource-state-and-barrier-model.md) | Render Resource State and Barrier Model | Proposed | 2026-09-08 |
 | [176](176-runtime-ui-element-and-control-taxonomy.md) | Runtime UI Element and Control Taxonomy | Accepted | 2026-09-07 |
 | [177](177-mcp-application-capability-and-host-boundary.md) | MCP Application Capability and Host Boundary | Accepted | 2026-09-10 |
+| [178](178-application-security-primitive-and-signature-baseline.md) | Application Security Primitive And Signature Baseline | Accepted | 2026-09-10 |
 
 ## Conventions
 

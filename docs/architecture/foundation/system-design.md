@@ -301,6 +301,7 @@ src/
 ```text
 HoroEngine::Foundation
 HoroEngine::CliHost
+HoroEngine::Security
 HoroEngine::Platform
 HoroEngine::Runtime
 HoroEngine::Assets
@@ -473,7 +474,9 @@ and cannot reinterpret string maps or make parsing mutate ambient package state.
 Arrows point from the dependent target to the target that defines the contract:
 
 ```text
-platform -----------------------------------------------> foundation
+security ----------------------------------------------> foundation
+
+platform -----------------------------------------------> security + foundation
 
 runtime -----------------------------------------------> foundation
 
@@ -509,6 +512,8 @@ apps ---------------------------------------------------> runtime + adapters + p
 Required rules:
 
 - Foundation does not depend on platform, scene, terrain, renderer, editor, MCP, or UI.
+- Security contracts remain backend-neutral and depend only on Foundation;
+  operating-system entropy and durable credential adapters remain in Platform.
 - The foundation logging facade and structured record model do not depend on
   GUI, editor, transport, or a concrete sink backend.
 - Foundation metric descriptors, aggregation, and profiler instrumentation do

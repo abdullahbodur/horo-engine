@@ -36,6 +36,21 @@ editor and CLI hosts.
   [ADR-058](../../adr/058-package-source-policy.md).
 - Security decisions are explicit, auditable, and revocable.
 
+## Implemented Security Primitive Baseline
+
+[ADR-178](../../adr/178-application-security-primitive-and-signature-baseline.md)
+defines the shared executable baseline. `HoroSecurity` owns typed security
+errors, move-only zeroizing secret values, opaque credential references,
+credential lifecycle coordination, trusted signing roots, and exact-artifact
+signature evidence. The public contracts do not expose MbedTLS or native OS
+types.
+
+Secure random bytes come only from the host-composed OS entropy provider. A
+missing or failed entropy, credential, trust, or signature provider is a typed
+failure and never selects a plaintext, unsigned, hash-only, or pseudorandom
+fallback. Evidence is bound to the current SHA-256 digest and cannot be directly
+constructed by callers.
+
 ## Trust Domains
 
 | Domain | Default trust |
@@ -220,6 +235,11 @@ extra arguments through untyped strings.
 
 Native code can access process memory and therefore requires trust. Plugin
 permissions improve authority control but are not a security sandbox.
+
+Native activation is gated before platform library loading. The gate requires
+an approved algorithm, exact artifact digest, trusted publisher/key identity,
+and valid detached signature. Missing, corrupt, stale, unknown, or unverifiable
+evidence prevents the platform loader and every module callback from running.
 
 Untrusted extension execution requires process isolation with:
 
