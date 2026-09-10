@@ -196,7 +196,7 @@ namespace Horo::Animation {
             return slot;
         }
 
-        Result<std::uint32_t> ResolveActiveMutablePose(Detail::PoseArenaState &state, const PoseHandle &pose) {
+        Result<std::uint32_t> ResolveActiveMutablePose(const Detail::PoseArenaState &state, const PoseHandle &pose) {
             if (const auto owner = OwnerThreadResult(state); owner.HasError())
                 return Result<std::uint32_t>::Failure(owner.ErrorValue());
             if (const auto active = ActiveResult(state); active.HasError())
