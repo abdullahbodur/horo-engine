@@ -40,7 +40,7 @@ namespace Horo::Security {
                     MakeError(SecurityErrors::MissingEvidence, "Native artifact could not be opened for verification."));
             std::vector<std::byte> bytes(static_cast<std::size_t>(size));
             input.read(reinterpret_cast<char *>(bytes.data()), static_cast<std::streamsize>(bytes.size()));
-            if (!input || static_cast<std::size_t>(input.gcount()) != bytes.size())
+            if (!input || static_cast<std::size_t>(input.gcount()) != bytes.size() || input.peek() != std::char_traits<char>::eof())
                 return Result<std::vector<std::byte>>::Failure(
                     MakeError(SecurityErrors::StaleEvidence, "Native artifact changed while it was being verified."));
             return Result<std::vector<std::byte>>::Success(std::move(bytes));

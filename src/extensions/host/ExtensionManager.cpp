@@ -312,13 +312,14 @@ namespace Horo::Extensions {
             if (evidence.HasError())
                 return evidence;
             std::error_code artifactSizeError;
-            if (const std::uintmax_t artifactSize = fs::file_size(libraryPath, artifactSizeError);
-                artifactSizeError || artifactSize > kMaximumNativeArtifactBytes)
+            const std::uintmax_t artifactSize = fs::file_size(libraryPath, artifactSizeError);
+            if (artifactSizeError || artifactSize > kMaximumNativeArtifactBytes)
                 return Result<Security::VerifiedArtifactEvidence>::Failure(MakeError(SecurityErrors::StaleEvidence));
             std::ifstream verifiedFile{libraryPath, std::ios::binary};
-            const std::string verifiedBytes{std::istreambuf_iterator<char>{verifiedFile}, std::istreambuf_iterator<char>{}};
-            const std::span<const std::byte> verifiedSpan{reinterpret_cast<const std::byte *>(verifiedBytes.data()), verifiedBytes.size()};
-            if (!verifiedFile || ComputeSha256(verifiedSpan) != evidence.Value().ArtifactDigest())
+            std::vector<std::byte> verifiedBytes(static_cast<std::size_t>(artifactSize));
+            verifiedFile.read(reinterpret_cast<char *>(verifiedBytes.data()), static_cast<std::streamsize>(verifiedBytes.size()));
+            if (!verifiedFile || static_cast<std::size_t>(verifiedFile.gcount()) != verifiedBytes.size() ||
+                verifiedFile.peek() != std::char_traits<char>::eof() || ComputeSha256(verifiedBytes) != evidence.Value().ArtifactDigest())
                 return Result<Security::VerifiedArtifactEvidence>::Failure(MakeError(SecurityErrors::StaleEvidence));
             return evidence;
         }
