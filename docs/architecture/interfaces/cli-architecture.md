@@ -208,9 +208,9 @@ Accepted descriptors are copied, canonicalized, and sorted by hierarchical path.
 accepted collection; there is no handwritten help or completion inventory.
 Options, enum alternatives, and capability requirements are also sorted so the
 same contribution set produces byte-identical LF-delimited help and discovery
-order on every supported platform. Parsing, dispatch, output presentation, and
-adapter execution remain later CLI tickets and are not performed by registry
-construction or discovery.
+order on every supported platform. Registry construction and discovery remain
+inert: parsing is an explicit invocation step, while dispatch, output presentation,
+and adapter execution remain separate later stages.
 
 ### Save Command Boundary
 
@@ -392,7 +392,18 @@ Rules:
   pipeline as GUI/MCP; a canonical save-directory path does not skip verification
 
 Common options such as project, output format, logging, and non-interactive mode
-use shared descriptors.
+use one shared descriptor inventory. The current shared names are `--project`
+(`-p`), `--output` (`-o`), `--log-level`, and `--non-interactive`; command
+registration rejects any local long-name or short-name collision with that inventory.
+
+`CliOptionParser` performs a bounded, allocation-visible pre-dispatch pass. It
+resolves the longest registered command path, accepts long and single-character
+short options, produces typed values for flags, strings, integers, finite
+floating-point numbers, closed enums, and platform-normalized paths, then binds
+ordered typed positionals. Grouped short options are deliberately unsupported.
+Unknown commands, malformed values, duplicates of non-repeatable options, missing
+required values, conflicting schemas, and extra positionals produce bounded
+structured diagnostics without including argument contents.
 
 ## Configuration
 
@@ -400,6 +411,14 @@ CLI options participate in the precedence defined by
 [Configuration System](../foundation/configuration-system.md). Explicit command options
 override environment and persisted configuration only for keys the command is
 allowed to control.
+
+The parser never reads environment variables or persisted files. The composition
+root supplies an immutable `ConfigurationSnapshot` already resolved by the
+configuration system. Invocation values win over that snapshot; when invocation
+input is absent, only a descriptor-declared configuration key is consulted, and
+the exact `ConfigurationSource` provenance is retained. Descriptor defaults are
+the final fallback. A type-incompatible resolved value fails parsing rather than
+being coerced or silently ignored.
 
 The effective safe configuration and its provenance may be shown with a
 diagnostic command. Secret values are never printed.
@@ -541,10 +560,18 @@ Supported policies:
 - `BinaryStream`: stdin contains binary input and requires a declared size or
   bounded streaming policy.
 
+The current parser captures an explicitly selected payload once, enforces the
+host byte limit before dispatch, validates complete JSON documents or every
+non-empty JSONL record, and enforces a JSONL record-count limit. Binary mode is
+opaque but remains byte-bounded. Malformed structured input produces a typed
+parse failure with a `stdin` diagnostic location.
+
 Commands must not accidentally block on stdin. In non-interactive mode, a
 command may read stdin only when its descriptor declares it and the user selected
 the matching input option. A command that declares `StdinPolicy::None` keeps
-stdin closed or drained to avoid blocking subprocesses or piped automation.
+stdin unopened; it never calls the injected reader. A missing reader, an
+unselected mode, or a selected mode that differs from the descriptor fails before
+dispatch instead of probing ambient stdin.
 
 ## Interactive Input
 
@@ -612,7 +639,10 @@ The migration path removes legacy ad-hoc parsing in `apps/horo-engine/main.cpp`
 without maintaining competing sources of truth:
 
 1. **Foundation**: Implement `HoroEngine::CliHost` with `CliCommandDescriptor`,
-   `CliCommandRegistry`, and `CliOptionParser`.
+   `CliCommandRegistry`, and `CliOptionParser`. The descriptor, registry, typed
+   parsing, configuration provenance, explicit input policies, and parser-level
+   interactive admission portions are complete. Executable composition still
+   uses the legacy entry point until the dispatch and presentation stages exist.
 2. **Dispatch & Adapters**: Introduce `CliDispatcher`, `CliExecutionContext`, and
    migrate built-in commands (`--emit-observability-smoke`, `--diagnostic-bundle`)
    into typed `ICliCommandAdapter` registrations:

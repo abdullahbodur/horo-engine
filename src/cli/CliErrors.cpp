@@ -77,4 +77,52 @@ namespace Horo::Cli::CliErrors {
                                                           .remediationHint = "Use the host contract major and no newer minor version.",
                                                           .retryable = false,
                                                           .userActionable = false};
+
+    const ErrorCodeDescriptor ParserPolicyInvalid{.domain = CliDomain,
+                                                  .code = ErrorCode{"cli.parser_policy_invalid"},
+                                                  .defaultSeverity = ErrorSeverity::Error,
+                                                  .summary = "CLI parser policy is invalid.",
+                                                  .remediationHint = "Provide non-zero parser limits and explicit host input seams.",
+                                                  .retryable = false,
+                                                  .userActionable = false};
+
+    const ErrorCodeDescriptor CommandUnknown{.domain = CliDomain,
+                                             .code = ErrorCode{"cli.command_unknown"},
+                                             .defaultSeverity = ErrorSeverity::Error,
+                                             .summary = "CLI command is unknown.",
+                                             .remediationHint = "Select a command from generated CLI help.",
+                                             .retryable = false,
+                                             .userActionable = true};
+
+    const ErrorCodeDescriptor ParseFailed{.domain = CliDomain,
+                                          .code = ErrorCode{"cli.parse_failed"},
+                                          .defaultSeverity = ErrorSeverity::Error,
+                                          .summary = "CLI arguments failed validation.",
+                                          .remediationHint = "Correct every structured usage diagnostic and retry.",
+                                          .retryable = false,
+                                          .userActionable = true};
+
+    const ErrorCodeDescriptor InputModeUnsupported{.domain = CliDomain,
+                                                   .code = ErrorCode{"cli.input_mode_unsupported"},
+                                                   .defaultSeverity = ErrorSeverity::Error,
+                                                   .summary = "CLI stdin mode is not supported by the command.",
+                                                   .remediationHint = "Select only the input grammar declared by generated help.",
+                                                   .retryable = false,
+                                                   .userActionable = true};
+
+    const ErrorCodeDescriptor InputCapacityExceeded{.domain = CliDomain,
+                                                    .code = ErrorCode{"cli.input_capacity_exceeded"},
+                                                    .defaultSeverity = ErrorSeverity::Error,
+                                                    .summary = "CLI input exceeds its configured bound.",
+                                                    .remediationHint = "Reduce argv or stdin input to the documented limit.",
+                                                    .retryable = false,
+                                                    .userActionable = true};
+
+    const ErrorCodeDescriptor InteractiveInputUnavailable{.domain = CliDomain,
+                                                          .code = ErrorCode{"cli.interactive_input_unavailable"},
+                                                          .defaultSeverity = ErrorSeverity::Error,
+                                                          .summary = "Required interactive input is unavailable.",
+                                                          .remediationHint = "Provide the command's deterministic option alternative.",
+                                                          .retryable = false,
+                                                          .userActionable = true};
 }  // namespace Horo::Cli::CliErrors

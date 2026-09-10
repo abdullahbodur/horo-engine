@@ -40,11 +40,16 @@ target_include_directories(HoroFoundation
 
 add_library(HoroCliHost STATIC
         cli/CliCommandRegistry.cpp
+        cli/CliCommonOptions.cpp
         cli/CliErrors.cpp
+        cli/CliOptionParser.cpp
 )
 add_library(HoroEngine::CliHost ALIAS HoroCliHost)
 target_compile_features(HoroCliHost PUBLIC cxx_std_20)
-target_link_libraries(HoroCliHost PUBLIC HoroEngine::Foundation)
+target_link_libraries(HoroCliHost
+        PUBLIC HoroEngine::Foundation
+        PRIVATE nlohmann_json::nlohmann_json
+)
 
 if (HORO_ENABLE_OPENTELEMETRY)
     add_library(HoroOpenTelemetry STATIC

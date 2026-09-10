@@ -20,6 +20,7 @@ namespace Horo::Cli {
         std::size_t maximumCommands{512};              /**< Maximum accepted descriptors. */
         std::size_t maximumPathSegments{16};           /**< Maximum segments in one path. */
         std::size_t maximumOptionsPerCommand{128};     /**< Maximum options in one command. */
+        std::size_t maximumPositionalsPerCommand{32};  /**< Maximum positional declarations in one command. */
         std::size_t maximumCapabilitiesPerCommand{64}; /**< Maximum requirements in one command. */
         std::size_t maximumEnumerationValues{256};     /**< Maximum values in one enum option. */
         std::size_t maximumIdentifierBytes{128};       /**< Maximum bytes in an identifier or path segment. */

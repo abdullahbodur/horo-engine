@@ -44,6 +44,7 @@ horo_configure_target_header_boundary(HoroCliHost PUBLIC_HEADERS
     Horo/Cli/CliCommandDescriptor.h
     Horo/Cli/CliCommandRegistry.h
     Horo/Cli/CliErrors.h
+    Horo/Cli/CliOptionParser.h
 )
 
 horo_configure_target_header_boundary(HoroOpenTelemetry PUBLIC_HEADERS
