@@ -22,13 +22,13 @@ namespace Horo::Cli {
                                  .formats = CliOutputFormat::Human | CliOutputFormat::Json};
             descriptor.interactive = CliInteractivePolicy::Forbidden;
             descriptor.hosts = CliHostAvailability::HoroEngine;
+            descriptor.ownerId = "horo.project";
+            descriptor.origin = CliCommandOrigin::BuiltIn;
             descriptor.contractVersion = Contract;
             descriptor.sideEffects = CliSideEffectPolicy::ReadsState;
             descriptor.cancellation = CliCancellationPolicy::Cooperative;
             descriptor.timeout = {.defaultMilliseconds = 1'000, .maximumMilliseconds = 5'000};
             descriptor.stdinPolicy = CliStdinPolicy::None;
-            descriptor.origin = CliCommandOrigin::BuiltIn;
-            descriptor.ownerId = "horo.project";
             return descriptor;
         }
 
@@ -175,6 +175,19 @@ namespace Horo::Cli {
                     .project = CliSafeProjectContext{"project-123"}};
         }
 
+        [[nodiscard]] CliDispatcher RequiredDispatcher(UseCaseState &state, IProjectInspectionUseCase &useCase) {
+            auto created = MakeDispatcher(state, useCase);
+            REQUIRE(created.HasValue());
+            return std::move(created).Value();
+        }
+
+        struct DispatcherFixture final {
+            UseCaseState state;
+            ProjectInspectionUseCase useCase{state};
+            CliDispatcher dispatcher{RequiredDispatcher(state, useCase)};
+            ConfigurationSnapshot configuration{Configuration()};
+        };
+
         void RequireError(const CliTerminalResult &result, const ErrorCodeDescriptor &descriptor) {
             REQUIRE(result.Outcome().HasError());
             CHECK(result.Outcome().ErrorValue().domain.Value() == "horo.cli");
@@ -183,21 +196,16 @@ namespace Horo::Cli {
     }  // namespace
 
     TEST_CASE("CLI dispatch exposes only declared capabilities and preserves complete correlation") {
-        UseCaseState state;
-        ProjectInspectionUseCase useCase(state);
-        auto created = MakeDispatcher(state, useCase);
-        REQUIRE(created.HasValue());
-        CliDispatcher dispatcher = std::move(created).Value();
-        const ConfigurationSnapshot configuration = Configuration();
+        DispatcherFixture fixture;
         ProgressSink progress;
 
-        const CliTerminalResult terminal = dispatcher.Dispatch(Request(), Invocation(configuration, &progress));
+        const CliTerminalResult terminal = fixture.dispatcher.Dispatch(Request(), Invocation(fixture.configuration, &progress));
 
         REQUIRE(terminal.Outcome().HasValue());
-        CHECK(state.calls == 1);
-        CHECK(state.observedRead);
-        CHECK_FALSE(state.observedWrite);
-        CHECK(state.revision == 17);
+        CHECK(fixture.state.calls == 1);
+        CHECK(fixture.state.observedRead);
+        CHECK_FALSE(fixture.state.observedWrite);
+        CHECK(fixture.state.revision == 17);
         CHECK(progress.calls == 1);
         CHECK(progress.lastPhase == "inspect");
         CHECK(terminal.Correlation().invocation == CliInvocationId{11});
@@ -281,60 +289,50 @@ namespace Horo::Cli {
     }
 
     TEST_CASE("CLI dispatcher rejects invocation authority failures before application execution") {
-        UseCaseState state;
-        ProjectInspectionUseCase useCase(state);
-        auto created = MakeDispatcher(state, useCase);
-        REQUIRE(created.HasValue());
-        CliDispatcher dispatcher = std::move(created).Value();
-        const ConfigurationSnapshot configuration = Configuration();
+        DispatcherFixture fixture;
 
-        CliInvocationContext invalid = Invocation(configuration);
+        CliInvocationContext invalid = Invocation(fixture.configuration);
         invalid.invocation = {};
-        RequireError(dispatcher.Dispatch(Request(), invalid), CliErrors::ExecutionContextInvalid);
+        RequireError(fixture.dispatcher.Dispatch(Request(), invalid), CliErrors::ExecutionContextInvalid);
 
-        invalid = Invocation(configuration);
+        invalid = Invocation(fixture.configuration);
         invalid.configuration = nullptr;
-        RequireError(dispatcher.Dispatch(Request(), invalid), CliErrors::ExecutionContextInvalid);
+        RequireError(fixture.dispatcher.Dispatch(Request(), invalid), CliErrors::ExecutionContextInvalid);
 
-        invalid = Invocation(configuration);
+        invalid = Invocation(fixture.configuration);
         invalid.timeoutMilliseconds = 5'001;
-        RequireError(dispatcher.Dispatch(Request(), invalid), CliErrors::ExecutionContextInvalid);
+        RequireError(fixture.dispatcher.Dispatch(Request(), invalid), CliErrors::ExecutionContextInvalid);
 
-        invalid = Invocation(configuration);
+        invalid = Invocation(fixture.configuration);
         invalid.project = CliSafeProjectContext{"   "};
-        RequireError(dispatcher.Dispatch(Request(), invalid), CliErrors::ExecutionContextInvalid);
-        CHECK(state.calls == 0);
+        RequireError(fixture.dispatcher.Dispatch(Request(), invalid), CliErrors::ExecutionContextInvalid);
+        CHECK(fixture.state.calls == 0);
     }
 
     TEST_CASE("CLI dispatcher preserves cancellation and application failures with correlation") {
-        UseCaseState state;
-        ProjectInspectionUseCase useCase(state);
-        auto created = MakeDispatcher(state, useCase);
-        REQUIRE(created.HasValue());
-        CliDispatcher dispatcher = std::move(created).Value();
-        const ConfigurationSnapshot configuration = Configuration();
+        DispatcherFixture fixture;
 
         CancellationSource cancelled;
         cancelled.RequestCancellation();
-        CliInvocationContext invocation = Invocation(configuration);
+        CliInvocationContext invocation = Invocation(fixture.configuration);
         invocation.cancellation = cancelled.Token();
-        const CliTerminalResult preCancelled = dispatcher.Dispatch(Request(), invocation);
+        const CliTerminalResult preCancelled = fixture.dispatcher.Dispatch(Request(), invocation);
         RequireError(preCancelled, CliErrors::ExecutionCancelled);
-        CHECK(state.calls == 0);
+        CHECK(fixture.state.calls == 0);
         CHECK(preCancelled.Correlation().invocation == CliInvocationId{11});
 
-        state.fail = true;
-        const CliTerminalResult failed = dispatcher.Dispatch(Request(), Invocation(configuration));
+        fixture.state.fail = true;
+        const CliTerminalResult failed = fixture.dispatcher.Dispatch(Request(), Invocation(fixture.configuration));
         RequireError(failed, CliErrors::ParseFailed);
         CHECK(failed.Correlation().operation == CliOperationId{41});
         CHECK(failed.Correlation().job == CliJobId{73});
 
-        state.fail = false;
+        fixture.state.fail = false;
         CancellationSource duringExecution;
-        state.cancelDuringExecution = &duringExecution;
-        invocation = Invocation(configuration);
+        fixture.state.cancelDuringExecution = &duringExecution;
+        invocation = Invocation(fixture.configuration);
         invocation.cancellation = duringExecution.Token();
-        const CliTerminalResult cancelledDuringExecution = dispatcher.Dispatch(Request(), invocation);
+        const CliTerminalResult cancelledDuringExecution = fixture.dispatcher.Dispatch(Request(), invocation);
         RequireError(cancelledDuringExecution, CliErrors::ExecutionCancelled);
         CHECK(cancelledDuringExecution.Correlation().operation == CliOperationId{41});
     }

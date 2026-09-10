@@ -93,28 +93,22 @@ namespace Horo::Cli {
             return (character >= 'a' && character <= 'z') || (character >= '0' && character <= '9') || character == '-';
         }
 
-        [[nodiscard]] bool HasNamespacedCapabilityShape(const std::string_view value) noexcept {
-            return !value.empty() && value.find('.') != std::string_view::npos && value.front() != '.' && value.back() != '.';
-        }
-
-        [[nodiscard]] bool ValidCapabilityToken(const std::string_view token) noexcept {
-            return !token.empty() && token.front() >= 'a' && token.front() <= 'z' && std::ranges::all_of(token, IsCapabilityCharacter);
-        }
-
         [[nodiscard]] bool ValidCapabilityIdentity(const std::string_view value) noexcept {
-            if (!HasNamespacedCapabilityShape(value))
-                return false;
-            std::size_t begin = 0;
-            while (begin < value.size()) {
-                const std::size_t end = value.find('.', begin);
-                if (const std::string_view token = value.substr(begin, end == std::string_view::npos ? value.size() - begin : end - begin);
-                    !ValidCapabilityToken(token))
+            bool atTokenStart = true;
+            bool foundSeparator = false;
+            for (const char character : value) {
+                if (character == '.') {
+                    if (atTokenStart)
+                        return false;
+                    atTokenStart = true;
+                    foundSeparator = true;
+                    continue;
+                }
+                if ((atTokenStart && (character < 'a' || character > 'z')) || !IsCapabilityCharacter(character))
                     return false;
-                if (end == std::string_view::npos)
-                    break;
-                begin = end + 1;
+                atTokenStart = false;
             }
-            return true;
+            return foundSeparator && !atTokenStart;
         }
 
         [[nodiscard]] CliHostAvailability HostBit(const CliHostKind host) noexcept {
