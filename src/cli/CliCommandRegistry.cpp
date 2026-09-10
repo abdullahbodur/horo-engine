@@ -5,7 +5,9 @@
 #include <algorithm>
 #include <charconv>
 #include <cmath>
+#include <cstddef>
 #include <locale>
+#include <memory>
 #include <sstream>
 
 namespace Horo::Cli {
@@ -32,8 +34,8 @@ namespace Horo::Cli {
             bool foundSeparator = false;
             while (begin < value.size()) {
                 const std::size_t end = value.find('.', begin);
-                const std::string_view token = value.substr(begin, end == std::string_view::npos ? value.size() - begin : end - begin);
-                if (!IsCanonicalToken(token, maximumBytes))
+                if (const std::string_view token = value.substr(begin, end == std::string_view::npos ? value.size() - begin : end - begin);
+                    !IsCanonicalToken(token, maximumBytes))
                     return false;
                 if (end == std::string_view::npos)
                     break;
@@ -50,30 +52,32 @@ namespace Horo::Cli {
         }
 
         template <> [[nodiscard]] bool IsKnown(const CliOptionValueKind value) noexcept {
+            using enum CliOptionValueKind;
             switch (value) {
-                case CliOptionValueKind::Flag:
-                case CliOptionValueKind::String:
-                case CliOptionValueKind::SignedInteger:
-                case CliOptionValueKind::FloatingPoint:
-                case CliOptionValueKind::Enumeration:
-                case CliOptionValueKind::Path:
+                case Flag:
+                case String:
+                case SignedInteger:
+                case FloatingPoint:
+                case Enumeration:
+                case Path:
                     return true;
             }
             return false;
         }
 
         template <> [[nodiscard]] bool IsKnown(const CliInteractivePolicy value) noexcept {
-            return value == CliInteractivePolicy::Forbidden || value == CliInteractivePolicy::Optional ||
-                   value == CliInteractivePolicy::Required;
+            using enum CliInteractivePolicy;
+            return value == Forbidden || value == Optional || value == Required;
         }
 
         template <> [[nodiscard]] bool IsKnown(const CliSideEffectPolicy value) noexcept {
+            using enum CliSideEffectPolicy;
             switch (value) {
-                case CliSideEffectPolicy::None:
-                case CliSideEffectPolicy::ReadsState:
-                case CliSideEffectPolicy::MutatesState:
-                case CliSideEffectPolicy::WritesFiles:
-                case CliSideEffectPolicy::StartsExternalProcess:
+                case None:
+                case ReadsState:
+                case MutatesState:
+                case WritesFiles:
+                case StartsExternalProcess:
                     return true;
             }
             return false;
@@ -84,11 +88,12 @@ namespace Horo::Cli {
         }
 
         template <> [[nodiscard]] bool IsKnown(const CliStdinPolicy value) noexcept {
+            using enum CliStdinPolicy;
             switch (value) {
-                case CliStdinPolicy::None:
-                case CliStdinPolicy::JsonDocument:
-                case CliStdinPolicy::JsonLines:
-                case CliStdinPolicy::BinaryStream:
+                case None:
+                case JsonDocument:
+                case JsonLines:
+                case BinaryStream:
                     return true;
             }
             return false;
@@ -107,18 +112,18 @@ namespace Horo::Cli {
         }
 
         [[nodiscard]] bool ValidFormats(const CliOutputFormat formats) noexcept {
-            constexpr auto KnownBits = static_cast<std::uint8_t>(CliOutputFormat::Human) |
-                                       static_cast<std::uint8_t>(CliOutputFormat::Json) |
-                                       static_cast<std::uint8_t>(CliOutputFormat::JsonLines);
-            const auto bits = static_cast<std::uint8_t>(formats);
-            const bool hasMachineFormat = HasFormat(formats, CliOutputFormat::Json) || HasFormat(formats, CliOutputFormat::JsonLines);
-            return (bits & static_cast<std::uint8_t>(~KnownBits)) == 0 && HasFormat(formats, CliOutputFormat::Human) && hasMachineFormat;
+            using enum CliOutputFormat;
+            constexpr std::byte KnownBits = std::byte{static_cast<std::uint8_t>(Human)} | std::byte{static_cast<std::uint8_t>(Json)} |
+                                            std::byte{static_cast<std::uint8_t>(JsonLines)};
+            const std::byte bits{static_cast<std::uint8_t>(formats)};
+            const bool hasMachineFormat = HasFormat(formats, Json) || HasFormat(formats, JsonLines);
+            return (bits & ~KnownBits) == std::byte{} && HasFormat(formats, Human) && hasMachineFormat;
         }
 
         [[nodiscard]] bool ValidAvailability(const CliHostAvailability availability) noexcept {
-            constexpr auto KnownBits = static_cast<std::uint8_t>(CliHostAvailability::All);
-            const auto bits = static_cast<std::uint8_t>(availability);
-            return bits != 0 && (bits & static_cast<std::uint8_t>(~KnownBits)) == 0;
+            constexpr std::byte KnownBits{static_cast<std::uint8_t>(CliHostAvailability::All)};
+            const std::byte bits{static_cast<std::uint8_t>(availability)};
+            return bits != std::byte{} && (bits & ~KnownBits) == std::byte{};
         }
 
         [[nodiscard]] bool ValidInteger(const std::string_view value) noexcept {
@@ -161,7 +166,7 @@ namespace Horo::Cli {
         [[nodiscard]] bool HasDuplicateOption(const std::span<const CliOptionDescriptor> options, const std::size_t candidate) noexcept {
             for (std::size_t prior = 0; prior < candidate; ++prior) {
                 if (options[prior].name == options[candidate].name ||
-                    (options[prior].shortName && options[prior].shortName == options[candidate].shortName))
+                    (options[prior].shortName.has_value() && options[prior].shortName == options[candidate].shortName))
                     return true;
             }
             return false;
@@ -179,7 +184,7 @@ namespace Horo::Cli {
             if (!IsCanonicalToken(option.name, limits.maximumIdentifierBytes) ||
                 !IsSafeSummary(option.summary, limits.maximumSummaryBytes) || !IsKnown(option.valueKind))
                 return Result<void>::Failure(MakeError(CliErrors::DescriptorInvalid, "CLI option metadata is invalid."));
-            if (option.shortName && !IsValidShortName(*option.shortName))
+            if (option.shortName.has_value() && !IsValidShortName(*option.shortName))
                 return Result<void>::Failure(MakeError(CliErrors::DescriptorInvalid, "CLI option metadata is invalid."));
             return Result<void>::Success();
         }
@@ -187,7 +192,7 @@ namespace Horo::Cli {
         [[nodiscard]] bool HasInvalidFlagSchema(const CliOptionDescriptor &option) noexcept {
             if (option.valueKind != CliOptionValueKind::Flag)
                 return false;
-            return option.defaultValue || !option.enumerationValues.empty() || option.sensitive;
+            return option.defaultValue.has_value() || !option.enumerationValues.empty() || option.sensitive;
         }
 
         [[nodiscard]] bool HasInvalidEnumerationSchema(const CliOptionDescriptor &option) noexcept {
@@ -198,8 +203,8 @@ namespace Horo::Cli {
         [[nodiscard]] Result<void> ValidateOptionShape(const CliOptionDescriptor &option, const CliCommandRegistryLimits &limits) {
             if (option.enumerationValues.size() > limits.maximumEnumerationValues)
                 return Result<void>::Failure(MakeError(CliErrors::RegistryCapacityExceeded));
-            if ((option.required && option.defaultValue) || (option.sensitive && option.defaultValue) || HasInvalidFlagSchema(option) ||
-                HasInvalidEnumerationSchema(option))
+            if ((option.required && option.defaultValue.has_value()) || (option.sensitive && option.defaultValue.has_value()) ||
+                HasInvalidFlagSchema(option) || HasInvalidEnumerationSchema(option))
                 return Result<void>::Failure(MakeError(CliErrors::OptionSchemaIncompatible));
             return Result<void>::Success();
         }
@@ -214,24 +219,25 @@ namespace Horo::Cli {
         }
 
         [[nodiscard]] bool HasValidDefaultValue(const CliOptionDescriptor &option) {
+            using enum CliOptionValueKind;
             switch (option.valueKind) {
-                case CliOptionValueKind::Flag:
+                case Flag:
                     return false;
-                case CliOptionValueKind::String:
-                case CliOptionValueKind::Path:
+                case String:
+                case Path:
                     return !option.defaultValue->empty();
-                case CliOptionValueKind::SignedInteger:
+                case SignedInteger:
                     return ValidInteger(*option.defaultValue);
-                case CliOptionValueKind::FloatingPoint:
+                case FloatingPoint:
                     return ValidFloat(*option.defaultValue);
-                case CliOptionValueKind::Enumeration:
+                case Enumeration:
                     return std::ranges::find(option.enumerationValues, *option.defaultValue) != option.enumerationValues.end();
             }
             return false;
         }
 
         [[nodiscard]] Result<void> ValidateDefaultValue(const CliOptionDescriptor &option, const CliCommandRegistryLimits &limits) {
-            if (!option.defaultValue)
+            if (!option.defaultValue.has_value())
                 return Result<void>::Success();
             if (option.defaultValue->size() > limits.maximumIdentifierBytes)
                 return Result<void>::Failure(MakeError(CliErrors::RegistryCapacityExceeded));
@@ -383,22 +389,23 @@ namespace Horo::Cli {
         }
 
         void AppendOptionValue(std::string &help, const CliOptionDescriptor &option) {
+            using enum CliOptionValueKind;
             switch (option.valueKind) {
-                case CliOptionValueKind::Flag:
+                case Flag:
                     return;
-                case CliOptionValueKind::String:
+                case String:
                     help.append(" <string>");
                     return;
-                case CliOptionValueKind::SignedInteger:
+                case SignedInteger:
                     help.append(" <integer>");
                     return;
-                case CliOptionValueKind::FloatingPoint:
+                case FloatingPoint:
                     help.append(" <number>");
                     return;
-                case CliOptionValueKind::Path:
+                case Path:
                     help.append(" <path>");
                     return;
-                case CliOptionValueKind::Enumeration:
+                case Enumeration:
                     help.append(" <");
                     for (std::size_t index = 0; index < option.enumerationValues.size(); ++index) {
                         if (index > 0)
@@ -413,7 +420,7 @@ namespace Horo::Cli {
         void AppendOptionPolicy(std::string &help, const CliOptionDescriptor &option) {
             if (option.required)
                 help.append(" (required)");
-            else if (option.defaultValue && !option.sensitive)
+            else if (option.defaultValue.has_value() && !option.sensitive)
                 help.append(" (default: ").append(*option.defaultValue).push_back(')');
             if (option.repeatable)
                 help.append(" (repeatable)");
@@ -453,7 +460,7 @@ namespace Horo::Cli {
     /** @copydoc CliCommandRegistry::Find */
     const CliCommandDescriptor *CliCommandRegistry::Find(const CommandPath &path) const noexcept {
         const auto found = std::ranges::lower_bound(commands_, path, {}, &CliCommandDescriptor::path);
-        return found != commands_.end() && found->path == path ? &*found : nullptr;
+        return found != commands_.end() && found->path == path ? std::to_address(found) : nullptr;
     }
 
     /** @copydoc CliCommandRegistry::Discover */
@@ -503,7 +510,7 @@ namespace Horo::Cli {
             help.append("\nOptions:\n");
             for (const CliOptionDescriptor &option : descriptor->options) {
                 help.append("  ");
-                if (option.shortName) {
+                if (option.shortName.has_value()) {
                     help.push_back('-');
                     help.push_back(*option.shortName);
                     help.append(", ");
