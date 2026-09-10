@@ -44,6 +44,10 @@ namespace Horo::Cinematic {
             return IdentityLess(left.track, right.track);
         }
 
+        [[nodiscard]] bool SameTrackIdentity(const SequenceFrameTrackDescriptor &left, const SequenceFrameTrackDescriptor &right) noexcept {
+            return left.track == right.track;
+        }
+
         template <typename Key> [[nodiscard]] bool TimedKeyLess(const Key &left, const Key &right) noexcept {
             if (left.time != right.time)
                 return left.time < right.time;
@@ -56,6 +60,10 @@ namespace Horo::Cinematic {
             if (left.track != right.track)
                 return IdentityLess(left.track, right.track);
             return IdentityLess(left.key, right.key);
+        }
+
+        template <typename Key> [[nodiscard]] bool SameKeyIdentity(const Key &left, const Key &right) noexcept {
+            return left.track == right.track && left.key == right.key;
         }
 
         [[nodiscard]] bool PlayerLess(const SequenceFramePlayerOrder &left, const SequenceFramePlayerOrder &right) noexcept {
@@ -83,8 +91,7 @@ namespace Horo::Cinematic {
         [[nodiscard]] bool CanonicalizeUnique(std::vector<Value> &values, IdentityLess identityLess, SameIdentity sameIdentity,
                                               CanonicalLess canonicalLess) {
             std::ranges::sort(values, identityLess);
-            const auto collision = std::ranges::adjacent_find(values, sameIdentity);
-            if (collision != values.end())
+            if (const auto collision = std::ranges::adjacent_find(values, sameIdentity); collision != values.end())
                 return false;
             std::ranges::sort(values, canonicalLess);
             return true;
@@ -432,15 +439,11 @@ namespace Horo::Cinematic {
         std::vector<SequenceFrameTrackDescriptor> orderedTracks(tracks.begin(), tracks.end());
         std::vector<SequenceFrameEventKey> orderedEvents(events.begin(), events.end());
         std::vector<SequenceFrameCameraCutKey> orderedCuts(cameraCuts.begin(), cameraCuts.end());
-        const auto sameTrack = [](const auto &left, const auto &right) {
-            return left.track == right.track;
-        };
-        const auto sameKey = [](const auto &left, const auto &right) {
-            return left.track == right.track && left.key == right.key;
-        };
-        if (!CanonicalizeUnique(orderedTracks, TrackIdentityLess, sameTrack, TrackLess) ||
-            !CanonicalizeUnique(orderedEvents, KeyIdentityLess<SequenceFrameEventKey>, sameKey, TimedKeyLess<SequenceFrameEventKey>) ||
-            !CanonicalizeUnique(orderedCuts, KeyIdentityLess<SequenceFrameCameraCutKey>, sameKey, TimedKeyLess<SequenceFrameCameraCutKey>))
+        if (!CanonicalizeUnique(orderedTracks, TrackIdentityLess, SameTrackIdentity, TrackLess) ||
+            !CanonicalizeUnique(orderedEvents, KeyIdentityLess<SequenceFrameEventKey>, SameKeyIdentity<SequenceFrameEventKey>,
+                                TimedKeyLess<SequenceFrameEventKey>) ||
+            !CanonicalizeUnique(orderedCuts, KeyIdentityLess<SequenceFrameCameraCutKey>, SameKeyIdentity<SequenceFrameCameraCutKey>,
+                                TimedKeyLess<SequenceFrameCameraCutKey>))
             return Failed<SequenceFrameEvaluationPlan>(SequenceEvaluationErrors::Malformed);
         return Result<SequenceFrameEvaluationPlan>::Success(SequenceFrameEvaluationPlan{duration, loopMode, maximumLoopCrossings,
                                                                                         std::move(orderedTracks), std::move(orderedEvents),
