@@ -238,6 +238,7 @@ without perturbing frame time or editor responsiveness, the design is incomplete
 src/
   foundation/          math, identifiers, results, logs/metrics/profiler facade
   platform/            window, filesystem, process, keychain, OS log sinks
+  cli/                 typed command metadata, host registry, discovery and help
   asset/               archive, import, metadata, cooked assets
   scene/
     model/              durable runtime scene definitions
@@ -299,6 +300,7 @@ src/
 
 ```text
 HoroEngine::Foundation
+HoroEngine::CliHost
 HoroEngine::Platform
 HoroEngine::Runtime
 HoroEngine::Assets

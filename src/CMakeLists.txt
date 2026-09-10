@@ -37,6 +37,14 @@ target_include_directories(HoroFoundation
         $<TARGET_PROPERTY:nlohmann_json::nlohmann_json,INTERFACE_INCLUDE_DIRECTORIES>
 )
 
+add_library(HoroCliHost STATIC
+        cli/CliCommandRegistry.cpp
+        cli/CliErrors.cpp
+)
+add_library(HoroEngine::CliHost ALIAS HoroCliHost)
+target_compile_features(HoroCliHost PUBLIC cxx_std_20)
+target_link_libraries(HoroCliHost PUBLIC HoroEngine::Foundation)
+
 if (HORO_ENABLE_OPENTELEMETRY)
     add_library(HoroOpenTelemetry STATIC
             foundation/telemetry/OpenTelemetrySink.cpp
