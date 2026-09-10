@@ -368,6 +368,15 @@ limit failures transactionally. Renderer buffers, backend handles, mutable pose
 palettes, import parsers, scene instances, and filesystem state remain outside
 the public boundary; existing AnimationApi consumers require no migration.
 
+ANI-001.5 adds `Horo/Animation/PoseStorage.h` to the same owner. Runtime
+composition creates one bounded arena for an exact runtime and immutable publication,
+then performs allocation-free owner-thread pose mutation and hierarchy evaluation.
+External consumers receive move-only immutable leases instead of mutable spans or
+recyclable pointers. Frame reset, cancellation, reload, and shutdown preserve exact
+runtime, skeleton, frame, slot, and semantic pose generations. The contract adds no
+RuntimeScene, Physics, Render, job-system, platform, editor, service-locator, or
+backend-native dependency; those future adapters must consume AnimationApi explicitly.
+
 ## Destruction Identity Boundary
 
 `HoroEngine::DestructionApi` owns `Horo/Destruction/DestructibleDescriptor.h`,

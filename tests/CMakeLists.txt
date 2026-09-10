@@ -259,6 +259,7 @@ horo_register_catch_test(HoroAITests LABELS "unit;ai;headless")
 add_executable(HoroAnimationApiTests
         unit/runtime/animation/AnimationComponentTests.cpp
         unit/runtime/animation/AnimationIdentityTests.cpp
+        unit/runtime/animation/PoseStorageTests.cpp
         unit/runtime/animation/SkeletonAssetTests.cpp
         unit/runtime/animation/SkeletalMeshSkinningTests.cpp
 )

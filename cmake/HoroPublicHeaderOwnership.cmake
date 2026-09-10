@@ -237,6 +237,7 @@ horo_configure_target_header_boundary(HoroAnimationApi PUBLIC_HEADERS
     Horo/Animation/AnimationComponents.h
     Horo/Animation/AnimationErrors.h
     Horo/Animation/AnimationIdentity.h
+    Horo/Animation/PoseStorage.h
     Horo/Animation/SkeletonAsset.h
     Horo/Animation/SkeletalMeshSkinning.h
 )
