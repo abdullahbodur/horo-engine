@@ -38,10 +38,10 @@ namespace Horo::Animation {
             std::thread::id ownerThread{};
             PoseArenaLifecycle lifecycle{PoseArenaLifecycle::WaitingForFrame};
             std::uint32_t jointCount{};
-            std::unique_ptr<PoseSlot[]> slots{};
-            std::unique_ptr<Math::Transform[]> localTransforms{};
-            std::unique_ptr<Math::Mat4[]> modelMatrices{};
-            std::unique_ptr<std::uint8_t[]> dirty{};
+            std::vector<PoseSlot> slots{};
+            std::vector<Math::Transform> localTransforms{};
+            std::vector<Math::Mat4> modelMatrices{};
+            std::vector<std::uint8_t> dirty{};
             std::vector<std::uint32_t> parentIndices{};
             std::vector<JointLookup> jointLookup{};
             std::vector<std::uint8_t> evaluationScratch{};
@@ -70,10 +70,7 @@ namespace Horo::Animation {
         }
 
         std::uint32_t FindJointIndex(const Detail::PoseArenaState &state, const JointId joint) {
-            const auto found = std::lower_bound(state.jointLookup.begin(), state.jointLookup.end(), joint,
-                                                [](const Detail::JointLookup &entry, const JointId value) {
-                return entry.id < value;
-            });
+            const auto found = std::ranges::lower_bound(state.jointLookup, joint, {}, &Detail::JointLookup::id);
             return found != state.jointLookup.end() && found->id == joint ? found->index : NoParent;
         }
 
@@ -84,20 +81,19 @@ namespace Horo::Animation {
                 return Result<std::uint32_t>::Failure(MakeError(AnimationErrors::HandleOwnerMismatch));
             if (pose.slot.index >= state.limits.maximumPosesPerFrame)
                 return Result<std::uint32_t>::Failure(MakeError(AnimationErrors::HandleMalformed));
-            const Detail::PoseSlot &slot = state.slots[pose.slot.index];
-            if (!slot.occupied || slot.handle != pose)
+            if (const Detail::PoseSlot &slot = state.slots[pose.slot.index]; !slot.occupied || slot.handle != pose)
                 return Result<std::uint32_t>::Failure(MakeError(AnimationErrors::HandleStale));
             return Result<std::uint32_t>::Success(pose.slot.index);
         }
 
         bool HasLeases(const Detail::PoseArenaState &state) noexcept {
-            return state.activeLeases.load(std::memory_order_acquire) != 0;
+            return state.activeLeases.load() != 0;
         }
 
         Result<void> RetireSlots(Detail::PoseArenaState &state) {
             if (HasLeases(state))
                 return Result<void>::Failure(MakeError(AnimationErrors::PoseLeaseConflict));
-            const std::uint32_t used = state.usedPoses.load(std::memory_order_relaxed);
+            const std::uint32_t used = state.usedPoses.load();
             for (std::uint32_t index = 0; index < used; ++index) {
                 if (state.slots[index].storageGeneration == std::numeric_limits<std::uint32_t>::max())
                     return Result<void>::Failure(MakeError(AnimationErrors::GenerationExhausted));
@@ -108,7 +104,7 @@ namespace Horo::Animation {
                 slot.handle = {};
                 slot.occupied = false;
             }
-            state.usedPoses.store(0, std::memory_order_relaxed);
+            state.usedPoses.store(0);
             return Result<void>::Success();
         }
 
@@ -135,11 +131,11 @@ namespace Horo::Animation {
         }
 
         Result<void> ValidateCreateLimits(const PoseStorageLimits &limits, const std::size_t jointCount) {
-            const bool invalidPoseLimit =
-                limits.maximumPosesPerFrame == 0 || limits.maximumPosesPerFrame > PoseStorageHardLimits::PosesPerFrame;
-            const bool invalidJointLimit =
-                limits.maximumJointsPerPose == 0 || limits.maximumJointsPerPose > PoseStorageHardLimits::JointsPerPose;
-            if (invalidPoseLimit || invalidJointLimit || jointCount == 0 || jointCount > limits.maximumJointsPerPose)
+            if (const bool invalidPoseLimit =
+                    limits.maximumPosesPerFrame == 0 || limits.maximumPosesPerFrame > PoseStorageHardLimits::PosesPerFrame;
+                invalidPoseLimit || limits.maximumJointsPerPose == 0 ||
+                limits.maximumJointsPerPose > PoseStorageHardLimits::JointsPerPose || jointCount == 0 ||
+                jointCount > limits.maximumJointsPerPose)
                 return Result<void>::Failure(MakeError(AnimationErrors::PoseLimitExceeded));
             return Result<void>::Success();
         }
@@ -157,8 +153,7 @@ namespace Horo::Animation {
                     return Result<void>::Failure(MakeError(AnimationErrors::PoseJointMissing));
                 state.parentIndices[index] = static_cast<std::uint32_t>(std::distance(joints.begin(), parent));
             }
-            std::sort(state.jointLookup.begin(), state.jointLookup.end(),
-                      [](const Detail::JointLookup &left, const Detail::JointLookup &right) {
+            std::ranges::sort(state.jointLookup, [](const Detail::JointLookup &left, const Detail::JointLookup &right) {
                 return left.id < right.id;
             });
             return Result<void>::Success();
@@ -196,7 +191,7 @@ namespace Horo::Animation {
             const auto slot = ResolvePoseSlot(state, pose);
             if (slot.HasError())
                 return slot;
-            if (state.slots[slot.Value()].leases.load(std::memory_order_acquire) != 0)
+            if (state.slots[slot.Value()].leases.load() != 0)
                 return Result<std::uint32_t>::Failure(MakeError(AnimationErrors::PoseLeaseConflict));
             return slot;
         }
@@ -210,7 +205,7 @@ namespace Horo::Animation {
         }
 
         Result<void> PrepareEvaluationMask(Detail::PoseArenaState &state, const std::span<const JointId> requestedJoints) {
-            std::fill(state.evaluationScratch.begin(), state.evaluationScratch.end(), requestedJoints.empty() ? 1U : 0U);
+            std::ranges::fill(state.evaluationScratch, requestedJoints.empty() ? 1U : 0U);
             for (const JointId joint : requestedJoints) {
                 std::uint32_t index = FindJointIndex(state, joint);
                 if (index == NoParent)
@@ -284,7 +279,7 @@ namespace Horo::Animation {
     std::span<const Math::Transform> PoseReadLease::LocalTransforms() const noexcept {
         if (!IsValid())
             return {};
-        return {state_->localTransforms.get() + PoseOffset(*state_, slot_), state_->jointCount};
+        return {state_->localTransforms.data() + PoseOffset(*state_, slot_), state_->jointCount};
     }
 
     /** @copydoc PoseReadLease::ModelSpace */
@@ -303,8 +298,8 @@ namespace Horo::Animation {
     void PoseReadLease::Release() noexcept {
         if (!state_ || slot_ >= state_->limits.maximumPosesPerFrame)
             return;
-        state_->slots[slot_].leases.fetch_sub(1, std::memory_order_acq_rel);
-        state_->activeLeases.fetch_sub(1, std::memory_order_acq_rel);
+        state_->slots[slot_].leases.fetch_sub(1);
+        state_->activeLeases.fetch_sub(1);
         state_.reset();
         slot_ = Horo::Handle<AnimationPoseSlotTag>::InvalidIndex;
     }
@@ -325,11 +320,11 @@ namespace Horo::Animation {
         state->limits = limits;
         state->ownerThread = std::this_thread::get_id();
         state->jointCount = static_cast<std::uint32_t>(jointCount);
-        state->slots = std::make_unique<Detail::PoseSlot[]>(limits.maximumPosesPerFrame);
+        state->slots = std::vector<Detail::PoseSlot>(limits.maximumPosesPerFrame);
         const std::size_t elementCount = static_cast<std::size_t>(limits.maximumPosesPerFrame) * jointCount;
-        state->localTransforms = std::make_unique<Math::Transform[]>(elementCount);
-        state->modelMatrices = std::make_unique<Math::Mat4[]>(elementCount);
-        state->dirty = std::make_unique<std::uint8_t[]>(elementCount);
+        state->localTransforms.resize(elementCount);
+        state->modelMatrices.resize(elementCount);
+        state->dirty.resize(elementCount);
         state->parentIndices.resize(jointCount, NoParent);
         state->jointLookup.reserve(jointCount);
         state->evaluationScratch.resize(jointCount);
@@ -340,8 +335,8 @@ namespace Horo::Animation {
     }
 
     /** @copydoc PoseFrameArena::BeginFrame */
-    Result<void> PoseFrameArena::BeginFrame(const AnimationFrameId frame, const SkeletonId skeleton,
-                                            const SkeletonAssetGeneration generation) {
+    Result<void> PoseFrameArena::BeginFrame(  // NOSONAR(cpp:S5817) Mutable access is reserved for the sole owner facade.
+        const AnimationFrameId frame, const SkeletonId skeleton, const SkeletonAssetGeneration generation) {
         if (const auto owner = OwnerThreadResult(*state_); owner.HasError())
             return owner;
         if (state_->lifecycle == Detail::PoseArenaLifecycle::ShutDown)
@@ -356,8 +351,8 @@ namespace Horo::Animation {
     }
 
     /** @copydoc PoseFrameArena::AllocatePose */
-    Result<PoseHandle> PoseFrameArena::AllocatePose(const AnimationInstanceHandle &instance, const PoseGeneration generation,
-                                                    const std::span<const Math::Transform> localTransforms) {
+    Result<PoseHandle> PoseFrameArena::AllocatePose(  // NOSONAR(cpp:S5817) Mutable access is reserved for the sole owner facade.
+        const AnimationInstanceHandle &instance, const PoseGeneration generation, const std::span<const Math::Transform> localTransforms) {
         if (const auto owner = OwnerThreadResult(*state_); owner.HasError())
             return Result<PoseHandle>::Failure(owner.ErrorValue());
         if (const auto active = ActiveResult(*state_); active.HasError())
@@ -365,25 +360,26 @@ namespace Horo::Animation {
         if (const auto candidate = ValidatePoseCandidate(*state_, instance, generation, localTransforms); candidate.HasError())
             return Result<PoseHandle>::Failure(candidate.ErrorValue());
 
-        const std::uint32_t slotIndex = state_->usedPoses.load(std::memory_order_relaxed);
+        const std::uint32_t slotIndex = state_->usedPoses.load();
         if (slotIndex >= state_->limits.maximumPosesPerFrame) {
-            state_->failedAllocations.fetch_add(1, std::memory_order_relaxed);
+            state_->failedAllocations.fetch_add(1);
             return Result<PoseHandle>::Failure(MakeError(AnimationErrors::PoseArenaExhausted));
         }
         Detail::PoseSlot &slot = state_->slots[slotIndex];
         slot.handle = {.instance = instance, .slot = {.index = slotIndex, .generation = slot.storageGeneration}, .generation = generation};
         slot.occupied = true;
         const std::size_t offset = PoseOffset(*state_, slotIndex);
-        std::copy(localTransforms.begin(), localTransforms.end(), state_->localTransforms.get() + offset);
-        std::fill_n(state_->dirty.get() + offset, state_->jointCount, std::uint8_t{1});
+        std::ranges::copy(localTransforms, state_->localTransforms.begin() + static_cast<std::ptrdiff_t>(offset));
+        std::fill_n(state_->dirty.data() + offset, state_->jointCount, std::uint8_t{1});
         const std::uint32_t used = slotIndex + 1U;
-        state_->usedPoses.store(used, std::memory_order_relaxed);
-        state_->peakUsedPoses.store(std::max(used, state_->peakUsedPoses.load(std::memory_order_relaxed)), std::memory_order_relaxed);
+        state_->usedPoses.store(used);
+        state_->peakUsedPoses.store(std::max(used, state_->peakUsedPoses.load()));
         return Result<PoseHandle>::Success(slot.handle);
     }
 
     /** @copydoc PoseFrameArena::SetLocalTransform */
-    Result<void> PoseFrameArena::SetLocalTransform(const PoseHandle &pose, const JointId joint, const Math::Transform &transform) {
+    Result<void> PoseFrameArena::SetLocalTransform(  // NOSONAR(cpp:S5817) Mutable access is reserved for the sole owner facade.
+        const PoseHandle &pose, const JointId joint, const Math::Transform &transform) {
         const auto slotResult = ResolveActiveMutablePose(*state_, pose);
         if (slotResult.HasError())
             return Result<void>::Failure(slotResult.ErrorValue());
@@ -406,7 +402,8 @@ namespace Horo::Animation {
     }
 
     /** @copydoc PoseFrameArena::EvaluateModelSpace */
-    Result<void> PoseFrameArena::EvaluateModelSpace(const PoseHandle &pose, const std::span<const JointId> requestedJoints) {
+    Result<void> PoseFrameArena::EvaluateModelSpace(  // NOSONAR(cpp:S5817) Mutable access is reserved for the sole owner facade.
+        const PoseHandle &pose, const std::span<const JointId> requestedJoints) {
         const auto slotResult = ResolveActiveMutablePose(*state_, pose);
         if (slotResult.HasError())
             return Result<void>::Failure(slotResult.ErrorValue());
@@ -417,7 +414,8 @@ namespace Horo::Animation {
     }
 
     /** @copydoc PoseFrameArena::AcquireReadLease */
-    Result<PoseReadLease> PoseFrameArena::AcquireReadLease(const PoseHandle &pose) {
+    Result<PoseReadLease> PoseFrameArena::AcquireReadLease(  // NOSONAR(cpp:S5817) Mutable access is reserved for the sole owner facade.
+        const PoseHandle &pose) {
         if (const auto owner = OwnerThreadResult(*state_); owner.HasError())
             return Result<PoseReadLease>::Failure(owner.ErrorValue());
         if (const auto active = ActiveResult(*state_); active.HasError())
@@ -427,36 +425,38 @@ namespace Horo::Animation {
             return Result<PoseReadLease>::Failure(slotResult.ErrorValue());
         const std::uint32_t slotIndex = slotResult.Value();
         Detail::PoseSlot &slot = state_->slots[slotIndex];
-        if (slot.leases.load(std::memory_order_relaxed) >= PoseStorageHardLimits::LeasesPerPose)
+        if (slot.leases.load() >= PoseStorageHardLimits::LeasesPerPose)
             return Result<PoseReadLease>::Failure(MakeError(AnimationErrors::PoseLimitExceeded));
-        slot.leases.fetch_add(1, std::memory_order_release);
-        state_->activeLeases.fetch_add(1, std::memory_order_release);
+        slot.leases.fetch_add(1);
+        state_->activeLeases.fetch_add(1);
         return Result<PoseReadLease>::Success(PoseReadLease{state_, slotIndex});
     }
 
     /** @copydoc PoseFrameArena::CancelFrame */
-    Result<void> PoseFrameArena::CancelFrame() {
+    Result<void> PoseFrameArena::CancelFrame() {  // NOSONAR(cpp:S5817) Mutable access is reserved for the sole owner facade.
+        using enum Detail::PoseArenaLifecycle;
         if (const auto owner = OwnerThreadResult(*state_); owner.HasError())
             return owner;
-        if (state_->lifecycle == Detail::PoseArenaLifecycle::Cancelled)
+        if (state_->lifecycle == Cancelled)
             return Result<void>::Success();
-        if (state_->lifecycle == Detail::PoseArenaLifecycle::ShutDown)
+        if (state_->lifecycle == ShutDown)
             return Result<void>::Failure(MakeError(AnimationErrors::PoseAdmissionRejected));
         if (const auto retired = RetireSlots(*state_); retired.HasError())
             return retired;
-        state_->lifecycle = Detail::PoseArenaLifecycle::Cancelled;
+        state_->lifecycle = Cancelled;
         return Result<void>::Success();
     }
 
     /** @copydoc PoseFrameArena::Shutdown */
-    Result<void> PoseFrameArena::Shutdown() {
+    Result<void> PoseFrameArena::Shutdown() {  // NOSONAR(cpp:S5817) Mutable access is reserved for the sole owner facade.
+        using enum Detail::PoseArenaLifecycle;
         if (const auto owner = OwnerThreadResult(*state_); owner.HasError())
             return owner;
-        if (state_->lifecycle == Detail::PoseArenaLifecycle::ShutDown)
+        if (state_->lifecycle == ShutDown)
             return Result<void>::Success();
         if (const auto retired = RetireSlots(*state_); retired.HasError())
             return retired;
-        state_->lifecycle = Detail::PoseArenaLifecycle::ShutDown;
+        state_->lifecycle = ShutDown;
         state_->frame = {};
         return Result<void>::Success();
     }
@@ -464,9 +464,9 @@ namespace Horo::Animation {
     /** @copydoc PoseFrameArena::Statistics */
     PoseStorageStatistics PoseFrameArena::Statistics() const noexcept {
         return {.capacityPoses = state_->limits.maximumPosesPerFrame,
-                .usedPoses = state_->usedPoses.load(std::memory_order_relaxed),
-                .peakUsedPoses = state_->peakUsedPoses.load(std::memory_order_relaxed),
-                .failedAllocations = state_->failedAllocations.load(std::memory_order_relaxed),
-                .activeLeases = state_->activeLeases.load(std::memory_order_acquire)};
+                .usedPoses = state_->usedPoses.load(),
+                .peakUsedPoses = state_->peakUsedPoses.load(),
+                .failedAllocations = state_->failedAllocations.load(),
+                .activeLeases = state_->activeLeases.load()};
     }
 }  // namespace Horo::Animation
