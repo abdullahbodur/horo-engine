@@ -984,6 +984,14 @@ Registry pull requests must be validated by CI:
 - declared permissions and contribution types known to the current registry
 - signature verification when package signing is enabled
 
+Native module activation is never controlled by the marketplace's optional
+display metadata. [ADR-178](../../adr/178-application-security-primitive-and-signature-baseline.md)
+requires a host-composed gate to authenticate the selected library's exact bytes
+against explicit trusted roots before the platform loader runs. Hash mismatch,
+invalid signature, unknown algorithm/key, missing provider/evidence, or evidence
+for older bytes is terminal for that activation transaction; no entry point or
+registration callback is invoked.
+
 CLI surface:
 
 ```bash

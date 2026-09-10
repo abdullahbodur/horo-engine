@@ -1,5 +1,6 @@
 #include "Horo/Extensions/ExtensionManager.h"
 #include "Horo/Platform/DynamicLibrary.h"
+#include "SecurityTestSupport.h"
 
 #include <array>
 #include <catch2/catch_test_macros.hpp>
@@ -43,7 +44,7 @@ namespace Horo::Extensions::Tests {
                 reinterpret_cast<std::uint32_t (*)()>(loaded.Value()->GetSymbol("horo_test_load_count"));  // NOSONAR(cpp:S3630)
             REQUIRE(count != nullptr);
             REQUIRE(count() == 0);
-            ExtensionManager manager;
+            ExtensionManager manager{nullptr, ExtensionHostProfile::Interactive, {}, Horo::Tests::CreateAcceptingArtifactGate()};
             const auto result = manager.LoadExtension(packageRoot.string());
             CHECK(result.HasValue() == (mode < 2));
             CHECK(manager.GetLoadedExtensionIds().size() == (mode < 2 ? 1 : 0));

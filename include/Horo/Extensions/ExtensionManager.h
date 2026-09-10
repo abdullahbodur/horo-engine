@@ -4,7 +4,10 @@
 #include "Horo/Extensions/ExtensionModuleResolution.h"
 #include "Horo/Foundation/Result.h"
 #include "Horo/Foundation/TransparentString.h"
+#include "Horo/Platform/DynamicLibrary.h"
+#include "Horo/Security/ArtifactSignature.h"
 
+#include <functional>
 #include <memory>
 #include <string>
 #include <vector>
@@ -28,16 +31,23 @@ namespace Horo::Extensions {
      */
     class ExtensionManager {
     public:
+        using NativeLibraryLoader = std::function<Result<std::unique_ptr<Platform::DynamicLibrary>>(const std::string &)>;
+
         /**
          * @brief Creates an extension manager bound to an optional unsealed importer catalog.
          * @param importerCatalog Host-owned candidate catalog receiving transactional asset.importer registrations.
          * @param hostProfile Explicit presentation shape available to extension modules.
          * @param hostCapabilities Stable capability identities granted by the host composition root. Invalid, duplicate, or excess
          *                         identities are omitted so module requirements fail closed.
+         * @param artifactGate Mandatory host-composed integrity, trust, and signature gate. Null composition fails closed before native
+         * load.
+         * @param libraryLoader Explicit native loader boundary; empty uses the platform loader after security verification.
          */
         explicit ExtensionManager(Assets::AssetImporterCatalog *importerCatalog = nullptr,
                                   ExtensionHostProfile hostProfile = ExtensionHostProfile::Interactive,
-                                  std::vector<std::string> hostCapabilities = {});
+                                  std::vector<std::string> hostCapabilities = {},
+                                  std::shared_ptr<const Security::NativeArtifactGate> artifactGate = {},
+                                  NativeLibraryLoader libraryLoader = {});
         ~ExtensionManager();
         ExtensionManager(const ExtensionManager &) = delete;
         ExtensionManager &operator=(const ExtensionManager &) = delete;
@@ -72,6 +82,8 @@ namespace Horo::Extensions {
         Assets::AssetImporterCatalog *m_importerCatalog{};
         ExtensionHostProfile m_hostProfile{ExtensionHostProfile::Interactive};
         std::vector<std::string> m_hostCapabilities;
+        std::shared_ptr<const Security::NativeArtifactGate> m_artifactGate;
+        NativeLibraryLoader m_libraryLoader;
         TransparentStringMap<std::unique_ptr<LoadedExtension>> m_loadedExtensions;
     };
 

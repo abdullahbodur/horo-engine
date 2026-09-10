@@ -1324,6 +1324,7 @@ foreach(abi_fixture_mode RANGE 0 3)
 endforeach()
 target_include_directories(HoroExtensionManagerTests PRIVATE ${PROJECT_SOURCE_DIR}/src/extensions/host)
 target_include_directories(HoroExtensionManagerTests PRIVATE ${PROJECT_SOURCE_DIR}/src/extensions/capabilities/asset_pipeline_points)
+target_include_directories(HoroExtensionManagerTests PRIVATE ${PROJECT_SOURCE_DIR}/tests/support)
 target_compile_features(HoroExtensionManagerTests PRIVATE cxx_std_20)
 target_link_libraries(HoroExtensionManagerTests PRIVATE HoroEngine::Extensions Catch2::Catch2WithMain)
 if(TARGET HoroAssetImporterBasicExample)
@@ -1333,6 +1334,12 @@ if(TARGET HoroAssetImporterBasicExample)
     )
 endif()
 add_test(NAME HoroExtensionManagerTests COMMAND HoroExtensionManagerTests)
+
+add_executable(HoroSecurityBaselineTests unit/security/SecurityBaselineTests.cpp)
+target_compile_features(HoroSecurityBaselineTests PRIVATE cxx_std_20)
+target_link_libraries(HoroSecurityBaselineTests PRIVATE
+        HoroEngine::Security HoroEngine::Platform Catch2::Catch2WithMain MbedTLS::mbedcrypto)
+add_test(NAME HoroSecurityBaselineTests COMMAND HoroSecurityBaselineTests)
 
 if (HORO_BUILD_RENDER_OPENGL)
     add_executable(HoroRenderOpenGLTests

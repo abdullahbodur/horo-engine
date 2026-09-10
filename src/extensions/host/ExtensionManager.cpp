@@ -9,6 +9,7 @@
 #include "Horo/Extensions/ExtensionModuleResolution.h"
 #include "Horo/Foundation/Logging/Logger.h"
 #include "Horo/Platform/DynamicLibrary.h"
+#include "Horo/Security/SecurityErrors.h"
 
 #include <algorithm>
 #include <filesystem>
@@ -25,6 +26,7 @@ namespace Horo::Extensions {
         constexpr std::uint32_t kMaximumModuleIdentityBytes = 256;
         constexpr ExtensionManifestLimits kManifestLimits{};
         constexpr std::size_t kMaximumHostCapabilities = kManifestLimits.maximumContributions;
+        constexpr std::uintmax_t kMaximumNativeArtifactBytes = 1024ULL * 1024ULL * 1024ULL;
 
         [[nodiscard]] std::string_view View(const HoroExtensionStringView value) noexcept {
             return value.data != nullptr ? std::string_view{value.data, value.length} : std::string_view{};
@@ -299,9 +301,15 @@ namespace Horo::Extensions {
 
     /** @copydoc ExtensionManager::ExtensionManager */
     ExtensionManager::ExtensionManager(Assets::AssetImporterCatalog *importerCatalog, const ExtensionHostProfile hostProfile,
-                                       std::vector<std::string> hostCapabilities)
-        : m_importerCatalog(importerCatalog), m_hostProfile(hostProfile), m_hostCapabilities(std::move(hostCapabilities)) {
+                                       std::vector<std::string> hostCapabilities,
+                                       std::shared_ptr<const Security::NativeArtifactGate> artifactGate, NativeLibraryLoader libraryLoader)
+        : m_importerCatalog(importerCatalog), m_hostProfile(hostProfile), m_hostCapabilities(std::move(hostCapabilities)),
+          m_artifactGate(std::move(artifactGate)), m_libraryLoader(std::move(libraryLoader)) {
         CanonicalizeHostCapabilities(m_hostCapabilities);
+        if (!m_libraryLoader)
+            m_libraryLoader = [](const std::string &path) {
+                return Platform::LoadDynamicLibrary(path);
+            };
     }
 
     ExtensionManager::~ExtensionManager() {
@@ -339,7 +347,22 @@ namespace Horo::Extensions {
             auto libraryPathResult = ResolveModuleLibraryPath(manifest, plan.selectedEntries[moduleIndex]);
             if (libraryPathResult.HasError())
                 return Result<std::string>::Failure(transaction.Rollback(libraryPathResult.ErrorValue()));
-            auto loadResult = Platform::LoadDynamicLibrary(libraryPathResult.Value().string());
+            if (!m_artifactGate)
+                return Result<std::string>::Failure(
+                    transaction.Rollback(MakeError(SecurityErrors::MissingEvidence, "Native extension activation has no security gate.")));
+            auto evidence = m_artifactGate->Verify(libraryPathResult.Value());
+            if (evidence.HasError())
+                return Result<std::string>::Failure(transaction.Rollback(evidence.ErrorValue()));
+            std::error_code artifactSizeError;
+            if (const std::uintmax_t artifactSize = fs::file_size(libraryPathResult.Value(), artifactSizeError);
+                artifactSizeError || artifactSize > kMaximumNativeArtifactBytes)
+                return Result<std::string>::Failure(transaction.Rollback(MakeError(SecurityErrors::StaleEvidence)));
+            std::ifstream verifiedFile{libraryPathResult.Value(), std::ios::binary};
+            const std::string verifiedBytes{std::istreambuf_iterator<char>{verifiedFile}, std::istreambuf_iterator<char>{}};
+            const std::span<const std::byte> verifiedSpan{reinterpret_cast<const std::byte *>(verifiedBytes.data()), verifiedBytes.size()};
+            if (!verifiedFile || ComputeSha256(verifiedSpan) != evidence.Value().ArtifactDigest())
+                return Result<std::string>::Failure(transaction.Rollback(MakeError(SecurityErrors::StaleEvidence)));
+            auto loadResult = m_libraryLoader(libraryPathResult.Value().string());
             if (loadResult.HasError())
                 return Result<std::string>::Failure(transaction.Rollback(loadResult.ErrorValue()));
             std::shared_ptr<Platform::DynamicLibrary> library{std::move(loadResult).Value()};
