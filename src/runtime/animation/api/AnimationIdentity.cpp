@@ -25,9 +25,9 @@ namespace Horo::Animation {
     /** @copydoc ValidatePoseAccess */
     Result<void> ValidatePoseAccess(const PoseHandle &submitted, const AnimationInstanceHandle &currentInstance,
                                     const PoseGeneration currentGeneration) {
-        const auto association =
-            ValidateInstanceBoundValue(submitted.IsValid() && currentGeneration.IsValid(), submitted.instance, currentInstance);
-        if (association.HasError())
+        if (auto association =
+                ValidateInstanceBoundValue(submitted.IsValid() && currentGeneration.IsValid(), submitted.instance, currentInstance);
+            association.HasError())
             return association;
         if (submitted.generation != currentGeneration)
             return Result<void>::Failure(MakeError(AnimationErrors::HandleStale));
@@ -38,8 +38,7 @@ namespace Horo::Animation {
     Result<void> ValidateRootMotionRequestAccess(const RootMotionRequestId &submitted, const AnimationInstanceHandle &currentInstance,
                                                  const AnimationTickId expectedTick, const RootMotionGeneration currentGeneration) {
         const bool representationValid = submitted.IsValid() && expectedTick.IsValid() && currentGeneration.IsValid();
-        const auto association = ValidateInstanceBoundValue(representationValid, submitted.instance, currentInstance);
-        if (association.HasError())
+        if (auto association = ValidateInstanceBoundValue(representationValid, submitted.instance, currentInstance); association.HasError())
             return association;
         if (submitted.tick != expectedTick || submitted.generation != currentGeneration)
             return Result<void>::Failure(MakeError(AnimationErrors::HandleStale));
