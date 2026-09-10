@@ -1,16 +1,27 @@
 #include "Horo/Foundation/Platform.h"
+#include "Horo/Platform/ConfigurationFileStore.h"
 #include "Horo/Platform/ExternalProcess.h"
 
 #include <catch2/catch_test_macros.hpp>
+#include <chrono>
+#include <cstdint>
 #include <cstring>
 #include <filesystem>
 #include <fstream>
 #include <optional>
+#include <span>
 #include <string>
 #include <string_view>
 #include <vector>
 
 namespace {
+    const Horo::ErrorCodeDescriptor kInjectedStoreFailure{
+        .domain = Horo::ErrorDomainId{"test.configuration-store"},
+        .code = Horo::ErrorCode{"injected_failure"},
+        .defaultSeverity = Horo::ErrorSeverity::Error,
+        .summary = "Injected configuration-store failure.",
+    };
+
     class RecordingFileSystem final : public Horo::FileSystem {
     public:
         [[nodiscard]] bool Exists(const std::filesystem::path &path) const override {
@@ -34,6 +45,84 @@ namespace {
             return std::nullopt;
         }
     };
+
+    [[nodiscard]] Horo::ConfigurationSnapshot BuildConfigurationSnapshot() {
+        Horo::ConfigurationSchema schema;
+        REQUIRE(schema
+                    .Register({.key = Horo::SettingKey{"runtime.worker_count"},
+                               .type = Horo::SettingValueType::Integer,
+                               .defaultValue = std::int64_t{4},
+                               .scope = Horo::SettingScope::Engine,
+                               .reloadPolicy = Horo::ReloadPolicy::ProcessRestart,
+                               .sensitivity = Horo::SettingSensitivity::Public})
+                    .HasValue());
+        REQUIRE(schema.Seal().HasValue());
+        Horo::ConfigurationService service{std::move(schema)};
+        return service.Snapshot();
+    }
+
+    class FaultingDurableFileSystem final : public Horo::DurableFileSystem {
+    public:
+        [[nodiscard]] Horo::Result<Horo::ExclusiveFileLock> TryAcquireExclusive(const std::filesystem::path &path,
+                                                                                const std::string_view ownerMetadata) override {
+            operations.push_back("lock:" + path.filename().string() + ":" + std::string{ownerMetadata});
+            if (failLock)
+                return Horo::Result<Horo::ExclusiveFileLock>::Failure(Horo::MakeError(kInjectedStoreFailure));
+            return Horo::Result<Horo::ExclusiveFileLock>::Success(Horo::ExclusiveFileLock{});
+        }
+
+        [[nodiscard]] Horo::Result<std::uint64_t> AvailableBytes(const std::filesystem::path &) const override {
+            return Horo::Result<std::uint64_t>::Success(availableBytes);
+        }
+
+        [[nodiscard]] Horo::Result<void> WriteDurable(const std::filesystem::path &path, const std::span<const std::byte> bytes) override {
+            operations.push_back("write:" + path.filename().string());
+            prepared.assign(reinterpret_cast<const char *>(bytes.data()), bytes.size());
+            if (failWrite)
+                return Horo::Result<void>::Failure(Horo::MakeError(kInjectedStoreFailure));
+            return Horo::Result<void>::Success();
+        }
+
+        [[nodiscard]] Horo::Result<void> CopyDurable(const std::filesystem::path &, const std::filesystem::path &) override {
+            return Horo::Result<void>::Failure(Horo::MakeError(kInjectedStoreFailure));
+        }
+
+        [[nodiscard]] Horo::Result<void> AtomicReplace(const std::filesystem::path &, const std::filesystem::path &path) override {
+            operations.push_back("replace:" + path.filename().string());
+            if (failReplace)
+                return Horo::Result<void>::Failure(Horo::MakeError(kInjectedStoreFailure));
+            published = prepared;
+            prepared.clear();
+            return Horo::Result<void>::Success();
+        }
+
+        [[nodiscard]] Horo::Result<void> RemoveDurable(const std::filesystem::path &path) override {
+            operations.push_back("remove:" + path.filename().string());
+            prepared.clear();
+            return Horo::Result<void>::Success();
+        }
+
+        [[nodiscard]] Horo::Result<void> SyncDirectory(const std::filesystem::path &) override {
+            return Horo::Result<void>::Success();
+        }
+
+        bool failLock{false};
+        bool failWrite{false};
+        bool failReplace{false};
+        std::uint64_t availableBytes{1024 * 1024};
+        std::string prepared;
+        std::string published{"last-valid"};
+        std::vector<std::string> operations;
+    };
+
+    void RequireRejectedWritePreservesPublishedDocument(Horo::ConfigurationFileStore &store, const Horo::ConfigurationSnapshot &snapshot,
+                                                        const FaultingDurableFileSystem &files,
+                                                        const std::vector<std::string> &expectedOperations) {
+        REQUIRE(store.Write("settings.json", snapshot).HasError());
+        REQUIRE(files.published == "last-valid");
+        REQUIRE(files.prepared.empty());
+        REQUIRE(files.operations == expectedOperations);
+    }
 
     TEST_CASE("Platform Services Use Explicitly Injected Baseline Services", "[unit][foundation]") {
         RecordingFileSystem files;
@@ -128,6 +217,57 @@ namespace {
         REQUIRE((files.RemoveDurable(root / "copied").HasValue()));
         REQUIRE((files.RemoveDurable(root / "published").HasValue()));
         std::filesystem::remove_all(root, ignored);
+    }
+
+    TEST_CASE("Configuration File Store Publishes Deterministic Versioned Documents", "[unit][foundation][configuration]") {
+        const auto stamp = std::chrono::steady_clock::now().time_since_epoch().count();
+        const std::filesystem::path root = std::filesystem::temp_directory_path() / ("horo-configuration-store-" + std::to_string(stamp));
+        std::filesystem::create_directories(root);
+        Horo::NativeDurableFileSystem files;
+        Horo::ConfigurationFileStore store{files};
+        const Horo::ConfigurationSnapshot snapshot = BuildConfigurationSnapshot();
+        const std::filesystem::path path = root / "settings.json";
+
+        REQUIRE(store.Write(path, snapshot).HasValue());
+        Horo::Result<std::string> first = store.Read(path);
+        REQUIRE(first.HasValue());
+        REQUIRE(first.Value() == snapshot.ToJson());
+        REQUIRE(store.Write(path, snapshot).HasValue());
+        REQUIRE(store.Read(path).Value() == first.Value());
+
+        auto held = files.TryAcquireExclusive(root / "settings.json.lock", "competing-writer");
+        REQUIRE(held.HasValue());
+        REQUIRE(store.Write(path, snapshot).HasError());
+        REQUIRE(store.Read(path).Value() == first.Value());
+
+        Horo::ConfigurationLimits tiny;
+        tiny.maximumDocumentBytes = 8;
+        REQUIRE(store.Read(path, tiny).HasError());
+        std::error_code ignored;
+        std::filesystem::remove_all(root, ignored);
+    }
+
+    TEST_CASE("Configuration File Store Never Publishes Partial Or Failed Writes", "[unit][foundation][configuration]") {
+        const Horo::ConfigurationSnapshot snapshot = BuildConfigurationSnapshot();
+        FaultingDurableFileSystem files;
+        Horo::ConfigurationFileStore store{files};
+
+        Horo::ConfigurationLimits tiny;
+        tiny.maximumDocumentBytes = 8;
+        REQUIRE(store.Write("settings.json", snapshot, tiny).HasError());
+        REQUIRE(files.operations.empty());
+
+        files.failWrite = true;
+        RequireRejectedWritePreservesPublishedDocument(store, snapshot, files,
+                                                       {"lock:settings.json.lock:horo.configuration", "write:settings.json.tmp",
+                                                        "remove:settings.json.tmp"});
+
+        files.operations.clear();
+        files.failWrite = false;
+        files.failReplace = true;
+        RequireRejectedWritePreservesPublishedDocument(store, snapshot, files,
+                                                       {"lock:settings.json.lock:horo.configuration", "write:settings.json.tmp",
+                                                        "replace:settings.json", "remove:settings.json.tmp"});
     }
 
 #if !defined(_WIN32)
