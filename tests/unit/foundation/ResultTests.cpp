@@ -85,15 +85,18 @@ namespace {
         const Horo::ErrorCodeDescriptor permissionDescriptor =
             Descriptor("horo.platform", "platform.file.permission_denied", "Permission denied");
 
-        Horo::Error leaf = Horo::MakeError(permissionDescriptor, "Source file is not readable");
-        leaf.diagnostics.push_back({.code = Horo::DiagnosticCode{"platform.file.permission_denied"},
-                                    .severity = Horo::DiagnosticSeverity::Error,
-                                    .message = "Permission denied",
-                                    .location = {.source = "assets/tree.fbx"}});
-        const Horo::Error middle = Horo::WrapError(fileDescriptor, leaf, "Could not read import source");
-        const Horo::Error outer = Horo::WrapError(importDescriptor, middle, "Could not import tree asset");
-
-        const Horo::Result<int> copied = Horo::Result<int>::Failure(outer);
+        const Horo::Result<int> copied = [&] {
+            Horo::Error leaf = Horo::MakeError(permissionDescriptor, "Source file is not readable");
+            leaf.diagnostics.push_back({.code = Horo::DiagnosticCode{"platform.file.permission_denied"},
+                                        .severity = Horo::DiagnosticSeverity::Error,
+                                        .message = "Permission denied",
+                                        .location = {.source = "assets/tree.fbx"}});
+            const Horo::Error middle = Horo::WrapError(fileDescriptor, leaf, "Could not read import source");
+            const Horo::Error outer = Horo::WrapError(importDescriptor, middle, "Could not import tree asset");
+            REQUIRE((outer.cause.Get()->cause.Get() == middle.cause.Get()));
+            return Horo::Result<int>::Failure(outer);
+        }();
+        const Horo::Error *const sharedMiddle = copied.ErrorValue().cause.Get();
         Horo::Result<int> moved = ForwardAcrossModuleBoundary(copied);
         const Horo::Error &roundTripped = moved.ErrorValue();
 
@@ -104,8 +107,7 @@ namespace {
         REQUIRE((roundTripped.cause.Get()->cause.Get()->code.Value() == "platform.file.permission_denied"));
         REQUIRE((roundTripped.cause.Get()->cause.Get()->diagnostics.size() == 1));
         REQUIRE((roundTripped.cause.Get()->cause.Get()->diagnostics.front().location.source == "assets/tree.fbx"));
-        REQUIRE((leaf.cause.Get() == nullptr));
-        REQUIRE((outer.cause.Get()->cause.Get() == middle.cause.Get()));
+        REQUIRE((roundTripped.cause.Get() == sharedMiddle));
     }
 
     TEST_CASE("Error Cause Queries Use Typed Domain And Code Identity", "[unit][foundation]") {

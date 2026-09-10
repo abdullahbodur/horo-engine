@@ -346,7 +346,9 @@ initializers and `MakeError` callers remain source-compatible because an omitted
 cause defaults to empty. A boundary that previously replaced or concatenated an
 inner error message migrates to `WrapError(outerDescriptor, innerError, context)`.
 Consumers that need to classify nested failures use `ErrorChainContains`; host
-presentation adapters alone may flatten the chain for human output.
+presentation adapters alone may flatten the chain for human output. Because the
+public `Error` layout changes, binary consumers must rebuild against the updated
+Foundation contract even though their source remains compatible.
 
 Background jobs store their terminal `Result` in the authoritative job record.
 Completion events carry job identity and terminal state; subscribers query the
