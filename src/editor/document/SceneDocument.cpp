@@ -530,20 +530,30 @@ namespace Horo::Editor {
             FindPrefabInstance(instances, delta.instance)->parent = delta.after;
         }
 
-        void ApplyPrefabTypedDelta(std::vector<ScenePrefabInstance> &instances, const DeletedPrefabInstancesDelta &delta) {
-            std::erase_if(instances, [&delta](const ScenePrefabInstance &instance) {
-                return std::ranges::any_of(delta.instances, [&instance](const IndexedPrefabInstance &removed) {
+        void RemovePrefabInstances(std::vector<ScenePrefabInstance> &instances,
+                                   const std::vector<IndexedPrefabInstance> &removedInstances) {
+            std::erase_if(instances, [&removedInstances](const ScenePrefabInstance &instance) {
+                return std::ranges::any_of(removedInstances, [&instance](const IndexedPrefabInstance &removed) {
                     return removed.instance.instanceId == instance.instanceId;
                 });
             });
         }
 
+        void ApplyPrefabTypedDelta(std::vector<ScenePrefabInstance> &instances, const DeletedPrefabInstancesDelta &delta) {
+            RemovePrefabInstances(instances, delta.instances);
+        }
+
         void ApplyPrefabTypedDelta(std::vector<ScenePrefabInstance> &instances, const DeletedObjectsDelta &delta) {
-            std::erase_if(instances, [&delta](const ScenePrefabInstance &instance) {
-                return std::ranges::any_of(delta.prefabInstances, [&instance](const IndexedPrefabInstance &removed) {
-                    return removed.instance.instanceId == instance.instanceId;
-                });
-            });
+            RemovePrefabInstances(instances, delta.prefabInstances);
+        }
+
+        void ApplyDelta(std::vector<SceneObjectSnapshot> &objects, const SceneCommandDelta &delta) {
+            std::visit([&objects]<typename Delta>(const Delta &typedDelta) {
+                if constexpr (!std::is_same_v<Delta, CreatedPrefabInstanceDelta> && !std::is_same_v<Delta, PrefabInstanceTransformDelta> &&
+                              !std::is_same_v<Delta, PrefabInstanceReparentDelta> && !std::is_same_v<Delta, DeletedPrefabInstancesDelta>) {
+                    ApplyTypedDelta(objects, typedDelta);
+                }
+            }, delta);
         }
 
         void ApplyDelta(std::vector<SceneObjectSnapshot> &objects, std::vector<ScenePrefabInstance> &instances,
@@ -635,18 +645,20 @@ namespace Horo::Editor {
             FindPrefabInstance(instances, delta.instance)->parent = delta.before;
         }
 
-        void RevertPrefabTypedDelta(std::vector<ScenePrefabInstance> &instances, const DeletedPrefabInstancesDelta &delta) {
-            for (const IndexedPrefabInstance &removed : delta.instances) {
+        void RestorePrefabInstances(std::vector<ScenePrefabInstance> &instances,
+                                    const std::vector<IndexedPrefabInstance> &removedInstances) {
+            for (const IndexedPrefabInstance &removed : removedInstances) {
                 const std::size_t index = std::min(removed.index, instances.size());
                 instances.insert(instances.begin() + static_cast<std::ptrdiff_t>(index), removed.instance);
             }
         }
 
+        void RevertPrefabTypedDelta(std::vector<ScenePrefabInstance> &instances, const DeletedPrefabInstancesDelta &delta) {
+            RestorePrefabInstances(instances, delta.instances);
+        }
+
         void RevertPrefabTypedDelta(std::vector<ScenePrefabInstance> &instances, const DeletedObjectsDelta &delta) {
-            for (const IndexedPrefabInstance &removed : delta.prefabInstances) {
-                const std::size_t index = std::min(removed.index, instances.size());
-                instances.insert(instances.begin() + static_cast<std::ptrdiff_t>(index), removed.instance);
-            }
+            RestorePrefabInstances(instances, delta.prefabInstances);
         }
 
         void RevertDelta(std::vector<SceneObjectSnapshot> &objects, std::vector<ScenePrefabInstance> &instances,
@@ -917,6 +929,58 @@ namespace Horo::Editor {
             }
             return Result<void>::Success();
         }
+
+        [[nodiscard]] Result<void> ValidatePrefabParent(const std::vector<SceneObjectSnapshot> &objects,
+                                                        const std::optional<SceneObjectId> parent) {
+            if (parent.has_value() && FindObject(objects, *parent) == objects.end()) {
+                return Result<void>::Failure(
+                    MakeDocumentError(SceneDocumentErrors::ParentNotFound, "Prefab root parent must be a containing-scene object."));
+            }
+            if (parent.has_value() && IsEffectivelyLocked(objects, *parent))
+                return Result<void>::Failure(LockedObjectError());
+            return Result<void>::Success();
+        }
+
+        [[nodiscard]] Result<ScenePrefabInstance *> FindEditablePrefabInstance(std::vector<SceneObjectSnapshot> &objects,
+                                                                               std::vector<ScenePrefabInstance> &instances,
+                                                                               const Prefab::PrefabInstanceId id) {
+            const auto instance = FindPrefabInstance(instances, id);
+            if (instance == instances.end()) {
+                return Result<ScenePrefabInstance *>::Failure(
+                    MakeDocumentError(SceneDocumentErrors::PrefabInstanceNotFound, "Prefab instance does not exist."));
+            }
+            if (IsPrefabInstanceLocked(objects, *instance))
+                return Result<ScenePrefabInstance *>::Failure(LockedObjectError());
+            return Result<ScenePrefabInstance *>::Success(&*instance);
+        }
+
+        [[nodiscard]] Result<Prefab::PrefabInstanceId> AllocatePrefabInstanceId(const std::uint64_t nextInstanceId) {
+            if (nextInstanceId == std::numeric_limits<std::uint64_t>::max()) {
+                return Result<Prefab::PrefabInstanceId>::Failure(
+                    MakeDocumentError(SceneDocumentErrors::InvalidPrefabInstance, "Prefab instance identity space is exhausted."));
+            }
+            return Prefab::PrefabInstanceId::Create(nextInstanceId);
+        }
+
+        [[nodiscard]] SceneCommandResult PrefabNoOpResult(const DocumentRevision revision, const DocumentStateId state,
+                                                          const Prefab::PrefabInstanceId instance, const DocumentChangeKind kind) {
+            SceneCommandResult result{{}, revision, state, kind, {}, false};
+            result.prefabInstance = instance;
+            return result;
+        }
+
+        [[nodiscard]] SceneCommandResult HistoryCommandResult(const SceneDocument &document, const HistoryRecord &entry,
+                                                              const DocumentChangeKind kind) {
+            SceneCommandResult result{DeltaRootObject(entry.delta),
+                                      document.Revision(),
+                                      document.State(),
+                                      kind,
+                                      entry.affectedObjects,
+                                      true};
+            result.prefabInstance = DeltaRootPrefabInstance(entry.delta);
+            result.affectedPrefabInstances = entry.affectedPrefabInstances;
+            return result;
+        }
     }  // namespace
 
     /** @copydoc EditorHistory::EditorHistory */
@@ -1117,7 +1181,7 @@ namespace Horo::Editor {
         const std::size_t memoryBytes = EstimateMemoryBytes(delta, 1);
 
         const DocumentStateId beforeState = m_document.m_state;
-        ApplyDelta(m_document.m_objects, m_document.m_prefabInstances, delta);
+        ApplyDelta(m_document.m_objects, delta);
         ++m_document.m_nextObjectId;
         ++m_document.m_revision.value;
         m_document.m_state = DocumentStateId{m_document.m_nextStateId++};
@@ -1151,7 +1215,7 @@ namespace Horo::Editor {
             return Result<SceneCommandResult>::Failure(validHistory.ErrorValue());
         }
         const DocumentStateId beforeState = m_document.m_state;
-        ApplyDelta(m_document.m_objects, m_document.m_prefabInstances, delta);
+        ApplyDelta(m_document.m_objects, delta);
         ++m_document.m_revision.value;
         m_document.m_state = DocumentStateId{m_document.m_nextStateId++};
         std::vector affected{object->id};
@@ -1220,7 +1284,7 @@ namespace Horo::Editor {
         }
         const std::size_t memoryBytes = EstimateMemoryBytes(delta, affected.size());
         const DocumentStateId beforeState = m_document.m_state;
-        ApplyDelta(m_document.m_objects, m_document.m_prefabInstances, delta);
+        ApplyDelta(m_document.m_objects, delta);
         ++m_document.m_revision.value;
         m_document.m_state = DocumentStateId{m_document.m_nextStateId++};
         const SceneObjectId primary = affected.front();
@@ -1254,7 +1318,7 @@ namespace Horo::Editor {
         SceneCommandDelta delta = CameraChangedDelta{object->id, *object->components.camera, command.camera};
         const std::size_t memoryBytes = EstimateMemoryBytes(delta, 1);
         const DocumentStateId beforeState = m_document.m_state;
-        ApplyDelta(m_document.m_objects, m_document.m_prefabInstances, delta);
+        ApplyDelta(m_document.m_objects, delta);
         ++m_document.m_revision.value;
         m_document.m_state = DocumentStateId{m_document.m_nextStateId++};
         std::vector affected{object->id};
@@ -1288,7 +1352,7 @@ namespace Horo::Editor {
         SceneCommandDelta delta = LightChangedDelta{object->id, *object->components.light, command.light};
         const std::size_t memoryBytes = EstimateMemoryBytes(delta, 1);
         const DocumentStateId beforeState = m_document.m_state;
-        ApplyDelta(m_document.m_objects, m_document.m_prefabInstances, delta);
+        ApplyDelta(m_document.m_objects, delta);
         ++m_document.m_revision.value;
         m_document.m_state = DocumentStateId{m_document.m_nextStateId++};
         std::vector affected{object->id};
@@ -1318,7 +1382,7 @@ namespace Horo::Editor {
         SceneCommandDelta delta = TriggerVolumeChangedDelta{object->id, *object->components.triggerVolume, command.triggerVolume};
         const std::size_t memoryBytes = EstimateMemoryBytes(delta, 1);
         const DocumentStateId beforeState = m_document.m_state;
-        ApplyDelta(m_document.m_objects, m_document.m_prefabInstances, delta);
+        ApplyDelta(m_document.m_objects, delta);
         ++m_document.m_revision.value;
         m_document.m_state = DocumentStateId{m_document.m_nextStateId++};
         std::vector affected{object->id};
@@ -1352,7 +1416,7 @@ namespace Horo::Editor {
         SceneCommandDelta delta = AudioSourceChangedDelta{object->id, *object->components.audioSource, command.audioSource};
         const std::size_t memoryBytes = EstimateMemoryBytes(delta, 1);
         const DocumentStateId beforeState = m_document.m_state;
-        ApplyDelta(m_document.m_objects, m_document.m_prefabInstances, delta);
+        ApplyDelta(m_document.m_objects, delta);
         ++m_document.m_revision.value;
         m_document.m_state = DocumentStateId{m_document.m_nextStateId++};
         std::vector affected{object->id};
@@ -1374,7 +1438,7 @@ namespace Horo::Editor {
         SceneCommandDelta delta = EditorStateChangedDelta{object->id, object->editorState, command.editorState};
         const std::size_t memoryBytes = EstimateMemoryBytes(delta, 1);
         const DocumentStateId beforeState = m_document.m_state;
-        ApplyDelta(m_document.m_objects, m_document.m_prefabInstances, delta);
+        ApplyDelta(m_document.m_objects, delta);
         ++m_document.m_revision.value;
         m_document.m_state = DocumentStateId{m_document.m_nextStateId++};
         std::vector affected{object->id};
@@ -1401,7 +1465,7 @@ namespace Horo::Editor {
         SceneCommandDelta delta = ComponentAddedDelta{object->id, command.type};
         const std::size_t memoryBytes = EstimateMemoryBytes(delta, 1);
         const DocumentStateId beforeState = m_document.m_state;
-        ApplyDelta(m_document.m_objects, m_document.m_prefabInstances, delta);
+        ApplyDelta(m_document.m_objects, delta);
         ++m_document.m_revision.value;
         m_document.m_state = DocumentStateId{m_document.m_nextStateId++};
         std::vector affected{object->id};
@@ -1434,7 +1498,7 @@ namespace Horo::Editor {
                                                         object->components.audioSource};
         const std::size_t memoryBytes = EstimateMemoryBytes(delta, 1);
         const DocumentStateId beforeState = m_document.m_state;
-        ApplyDelta(m_document.m_objects, m_document.m_prefabInstances, delta);
+        ApplyDelta(m_document.m_objects, delta);
         ++m_document.m_revision.value;
         m_document.m_state = DocumentStateId{m_document.m_nextStateId++};
         std::vector affected{object->id};
@@ -1471,7 +1535,7 @@ namespace Horo::Editor {
             return Result<SceneCommandResult>::Failure(valid.ErrorValue());
         const std::size_t memoryBytes = EstimateMemoryBytes(delta, 1);
         const DocumentStateId beforeState = m_document.m_state;
-        ApplyDelta(m_document.m_objects, m_document.m_prefabInstances, delta);
+        ApplyDelta(m_document.m_objects, delta);
         ++m_document.m_nextBehaviorInstanceId;
         ++m_document.m_revision.value;
         m_document.m_state = DocumentStateId{m_document.m_nextStateId++};
@@ -1507,7 +1571,7 @@ namespace Horo::Editor {
             return Result<SceneCommandResult>::Failure(valid.ErrorValue());
         const std::size_t memoryBytes = EstimateMemoryBytes(delta, 1);
         const DocumentStateId beforeState = m_document.m_state;
-        ApplyDelta(m_document.m_objects, m_document.m_prefabInstances, delta);
+        ApplyDelta(m_document.m_objects, delta);
         ++m_document.m_revision.value;
         m_document.m_state = DocumentStateId{m_document.m_nextStateId++};
         std::vector affected{object->id};
@@ -1535,7 +1599,7 @@ namespace Horo::Editor {
         SceneCommandDelta delta = BehaviorsChangedDelta{object->id, object->components.behaviors, std::move(after)};
         const std::size_t memoryBytes = EstimateMemoryBytes(delta, 1);
         const DocumentStateId beforeState = m_document.m_state;
-        ApplyDelta(m_document.m_objects, m_document.m_prefabInstances, delta);
+        ApplyDelta(m_document.m_objects, delta);
         ++m_document.m_revision.value;
         m_document.m_state = DocumentStateId{m_document.m_nextStateId++};
         std::vector affected{object->id};
@@ -1576,7 +1640,7 @@ namespace Horo::Editor {
         };
         const std::size_t memoryBytes = EstimateMemoryBytes(delta, 1);
         const DocumentStateId beforeState = m_document.m_state;
-        ApplyDelta(m_document.m_objects, m_document.m_prefabInstances, delta);
+        ApplyDelta(m_document.m_objects, delta);
         ++m_document.m_nextObjectId;
         ++m_document.m_revision.value;
         m_document.m_state = DocumentStateId{m_document.m_nextStateId++};
@@ -1640,18 +1704,11 @@ namespace Horo::Editor {
             return Result<SceneCommandResult>::Failure(
                 MakeDocumentError(SceneDocumentErrors::InvalidTransform, "Prefab root placement transform must be finite."));
         }
-        if (command.parent.has_value() && FindObject(m_document.m_objects, *command.parent) == m_document.m_objects.end()) {
-            return Result<SceneCommandResult>::Failure(
-                MakeDocumentError(SceneDocumentErrors::ParentNotFound, "Prefab root parent must be a containing-scene object."));
-        }
-        if (command.parent.has_value() && IsEffectivelyLocked(m_document.m_objects, *command.parent))
-            return Result<SceneCommandResult>::Failure(LockedObjectError());
-
-        if (m_document.m_nextPrefabInstanceId == std::numeric_limits<std::uint64_t>::max()) {
-            return Result<SceneCommandResult>::Failure(
-                MakeDocumentError(SceneDocumentErrors::InvalidPrefabInstance, "Prefab instance identity space is exhausted."));
-        }
-        auto instanceId = Prefab::PrefabInstanceId::Create(m_document.m_nextPrefabInstanceId);
+        if (const Result<void> validParent = ValidatePrefabParent(m_document.m_objects, command.parent); validParent.HasError())
+            return Result<SceneCommandResult>::Failure(validParent.ErrorValue());
+        auto instanceId = AllocatePrefabInstanceId(m_document.m_nextPrefabInstanceId);
+        if (instanceId.HasError())
+            return Result<SceneCommandResult>::Failure(instanceId.ErrorValue());
         SceneCommandDelta delta = CreatedPrefabInstanceDelta{
             .instance = ScenePrefabInstance{instanceId.Value(), command.sourcePrefab, command.parent, command.rootTransform},
             .index = m_document.m_prefabInstances.size(),
@@ -1665,42 +1722,25 @@ namespace Horo::Editor {
             return Result<SceneCommandResult>::Failure(
                 MakeDocumentError(SceneDocumentErrors::InvalidTransform, "Prefab root placement transform must be finite."));
         }
-        const auto instance = FindPrefabInstance(m_document.m_prefabInstances, command.instance);
-        if (instance == m_document.m_prefabInstances.end()) {
-            return Result<SceneCommandResult>::Failure(
-                MakeDocumentError(SceneDocumentErrors::PrefabInstanceNotFound, "Prefab instance does not exist."));
-        }
-        if (IsPrefabInstanceLocked(m_document.m_objects, *instance))
-            return Result<SceneCommandResult>::Failure(LockedObjectError());
-        if (instance->rootTransform == command.rootTransform) {
-            SceneCommandResult result{{},
-                                      m_document.m_revision,
-                                      m_document.m_state,
-                                      DocumentChangeKind::PrefabInstanceTransformChanged,
-                                      {},
-                                      false};
-            result.prefabInstance = command.instance;
-            return Result<SceneCommandResult>::Success(std::move(result));
-        }
-        SceneCommandDelta delta = PrefabInstanceTransformDelta{command.instance, instance->rootTransform, command.rootTransform};
+        auto instance = FindEditablePrefabInstance(m_document.m_objects, m_document.m_prefabInstances, command.instance);
+        if (instance.HasError())
+            return Result<SceneCommandResult>::Failure(instance.ErrorValue());
+        if (instance.Value()->rootTransform == command.rootTransform)
+            return Result<SceneCommandResult>::Success(PrefabNoOpResult(m_document.m_revision, m_document.m_state, command.instance,
+                                                                        DocumentChangeKind::PrefabInstanceTransformChanged));
+        SceneCommandDelta delta = PrefabInstanceTransformDelta{command.instance, instance.Value()->rootTransform, command.rootTransform};
         return CommitPrefab(PrefabCommitContext{std::move(delta), command.instance, DocumentChangeKind::PrefabInstanceTransformChanged});
     }
 
     /** @copydoc SceneDocumentCommandExecutor::Execute(const DuplicateScenePrefabInstanceCommand&) */
     Result<SceneCommandResult> SceneDocumentCommandExecutor::Execute(const DuplicateScenePrefabInstanceCommand &command) {
-        const auto source = FindPrefabInstance(m_document.m_prefabInstances, command.source);
-        if (source == m_document.m_prefabInstances.end()) {
-            return Result<SceneCommandResult>::Failure(
-                MakeDocumentError(SceneDocumentErrors::PrefabInstanceNotFound, "Prefab instance does not exist."));
-        }
-        if (IsPrefabInstanceLocked(m_document.m_objects, *source))
-            return Result<SceneCommandResult>::Failure(LockedObjectError());
-        if (m_document.m_nextPrefabInstanceId == std::numeric_limits<std::uint64_t>::max()) {
-            return Result<SceneCommandResult>::Failure(
-                MakeDocumentError(SceneDocumentErrors::InvalidPrefabInstance, "Prefab instance identity space is exhausted."));
-        }
-        auto instanceId = Prefab::PrefabInstanceId::Create(m_document.m_nextPrefabInstanceId);
-        ScenePrefabInstance duplicate = *source;
+        auto source = FindEditablePrefabInstance(m_document.m_objects, m_document.m_prefabInstances, command.source);
+        if (source.HasError())
+            return Result<SceneCommandResult>::Failure(source.ErrorValue());
+        auto instanceId = AllocatePrefabInstanceId(m_document.m_nextPrefabInstanceId);
+        if (instanceId.HasError())
+            return Result<SceneCommandResult>::Failure(instanceId.ErrorValue());
+        ScenePrefabInstance duplicate = *source.Value();
         duplicate.instanceId = instanceId.Value();
         SceneCommandDelta delta = CreatedPrefabInstanceDelta{
             .instance = std::move(duplicate),
@@ -1712,40 +1752,25 @@ namespace Horo::Editor {
 
     /** @copydoc SceneDocumentCommandExecutor::Execute(const ReparentScenePrefabInstanceCommand&) */
     Result<SceneCommandResult> SceneDocumentCommandExecutor::Execute(const ReparentScenePrefabInstanceCommand &command) {
-        const auto instance = FindPrefabInstance(m_document.m_prefabInstances, command.instance);
-        if (instance == m_document.m_prefabInstances.end()) {
-            return Result<SceneCommandResult>::Failure(
-                MakeDocumentError(SceneDocumentErrors::PrefabInstanceNotFound, "Prefab instance does not exist."));
-        }
-        if (IsPrefabInstanceLocked(m_document.m_objects, *instance))
-            return Result<SceneCommandResult>::Failure(LockedObjectError());
-        if (command.parent.has_value() && FindObject(m_document.m_objects, *command.parent) == m_document.m_objects.end()) {
-            return Result<SceneCommandResult>::Failure(
-                MakeDocumentError(SceneDocumentErrors::ParentNotFound, "Prefab root parent must be a containing-scene object."));
-        }
-        if (command.parent.has_value() && IsEffectivelyLocked(m_document.m_objects, *command.parent))
-            return Result<SceneCommandResult>::Failure(LockedObjectError());
-        if (instance->parent == command.parent) {
-            SceneCommandResult result{{},   m_document.m_revision, m_document.m_state, DocumentChangeKind::PrefabInstanceReparented, {},
-                                      false};
-            result.prefabInstance = command.instance;
-            return Result<SceneCommandResult>::Success(std::move(result));
-        }
-        SceneCommandDelta delta = PrefabInstanceReparentDelta{command.instance, instance->parent, command.parent};
+        auto instance = FindEditablePrefabInstance(m_document.m_objects, m_document.m_prefabInstances, command.instance);
+        if (instance.HasError())
+            return Result<SceneCommandResult>::Failure(instance.ErrorValue());
+        if (const Result<void> validParent = ValidatePrefabParent(m_document.m_objects, command.parent); validParent.HasError())
+            return Result<SceneCommandResult>::Failure(validParent.ErrorValue());
+        if (instance.Value()->parent == command.parent)
+            return Result<SceneCommandResult>::Success(PrefabNoOpResult(m_document.m_revision, m_document.m_state, command.instance,
+                                                                        DocumentChangeKind::PrefabInstanceReparented));
+        SceneCommandDelta delta = PrefabInstanceReparentDelta{command.instance, instance.Value()->parent, command.parent};
         return CommitPrefab(PrefabCommitContext{std::move(delta), command.instance, DocumentChangeKind::PrefabInstanceReparented});
     }
 
     /** @copydoc SceneDocumentCommandExecutor::Execute(const DeleteScenePrefabInstanceCommand&) */
     Result<SceneCommandResult> SceneDocumentCommandExecutor::Execute(const DeleteScenePrefabInstanceCommand &command) {
-        const auto instance = FindPrefabInstance(m_document.m_prefabInstances, command.instance);
-        if (instance == m_document.m_prefabInstances.end()) {
-            return Result<SceneCommandResult>::Failure(
-                MakeDocumentError(SceneDocumentErrors::PrefabInstanceNotFound, "Prefab instance does not exist."));
-        }
-        if (IsPrefabInstanceLocked(m_document.m_objects, *instance))
-            return Result<SceneCommandResult>::Failure(LockedObjectError());
-        const std::size_t index = static_cast<std::size_t>(std::distance(m_document.m_prefabInstances.begin(), instance));
-        SceneCommandDelta delta = DeletedPrefabInstancesDelta{{IndexedPrefabInstance{*instance, index}}};
+        auto instance = FindEditablePrefabInstance(m_document.m_objects, m_document.m_prefabInstances, command.instance);
+        if (instance.HasError())
+            return Result<SceneCommandResult>::Failure(instance.ErrorValue());
+        const std::size_t index = static_cast<std::size_t>(instance.Value() - m_document.m_prefabInstances.data());
+        SceneCommandDelta delta = DeletedPrefabInstancesDelta{{IndexedPrefabInstance{*instance.Value(), index}}};
         return CommitPrefab(PrefabCommitContext{std::move(delta), command.instance, DocumentChangeKind::PrefabInstanceDeleted});
     }
 
@@ -1760,14 +1785,8 @@ namespace Horo::Editor {
         RevertDelta(m_document.m_objects, m_document.m_prefabInstances, entry.delta);
         ++m_document.m_revision.value;
         m_document.m_state = entry.beforeState;
-        const SceneObjectId object = DeltaRootObject(entry.delta);
-        const auto prefabInstance = DeltaRootPrefabInstance(entry.delta);
-        std::vector affected = entry.affectedObjects;
-        std::vector affectedPrefabInstances = entry.affectedPrefabInstances;
+        SceneCommandResult result = HistoryCommandResult(m_document, entry, DocumentChangeKind::Undone);
         m_history.m_impl->redo.push_back(std::move(entry));
-        SceneCommandResult result{object, m_document.m_revision, m_document.m_state, DocumentChangeKind::Undone, std::move(affected), true};
-        result.prefabInstance = prefabInstance;
-        result.affectedPrefabInstances = std::move(affectedPrefabInstances);
         return Result<SceneCommandResult>::Success(std::move(result));
     }
 
@@ -1782,14 +1801,8 @@ namespace Horo::Editor {
         ApplyDelta(m_document.m_objects, m_document.m_prefabInstances, entry.delta);
         ++m_document.m_revision.value;
         m_document.m_state = entry.afterState;
-        const SceneObjectId object = DeltaRootObject(entry.delta);
-        const auto prefabInstance = DeltaRootPrefabInstance(entry.delta);
-        std::vector affected = entry.affectedObjects;
-        std::vector affectedPrefabInstances = entry.affectedPrefabInstances;
+        SceneCommandResult result = HistoryCommandResult(m_document, entry, DocumentChangeKind::Redone);
         m_history.m_impl->undo.push_back(std::move(entry));
-        SceneCommandResult result{object, m_document.m_revision, m_document.m_state, DocumentChangeKind::Redone, std::move(affected), true};
-        result.prefabInstance = prefabInstance;
-        result.affectedPrefabInstances = std::move(affectedPrefabInstances);
         return Result<SceneCommandResult>::Success(std::move(result));
     }
 
