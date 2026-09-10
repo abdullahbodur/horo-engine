@@ -259,6 +259,7 @@ horo_register_catch_test(HoroAITests LABELS "unit;ai;headless")
 add_executable(HoroAnimationApiTests
         unit/runtime/animation/AnimationComponentTests.cpp
         unit/runtime/animation/AnimationIdentityTests.cpp
+        unit/runtime/animation/PoseStorageTests.cpp
         unit/runtime/animation/SkeletonAssetTests.cpp
         unit/runtime/animation/SkeletalMeshSkinningTests.cpp
 )
@@ -948,6 +949,7 @@ add_executable(HoroPlatformRequestTests
         unit/platform_services/PlatformRequestTests.cpp
         unit/platform_services/PlatformServicesBackendTests.cpp
         unit/platform_services/PlatformStableIdRegistryTests.cpp
+        unit/platform_services/PlatformUserSessionTests.cpp
 )
 target_compile_features(HoroPlatformRequestTests PRIVATE cxx_std_20)
 target_link_libraries(HoroPlatformRequestTests PRIVATE HoroEngine::PlatformServices Threads::Threads)

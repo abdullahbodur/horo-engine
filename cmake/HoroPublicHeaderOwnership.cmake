@@ -67,6 +67,7 @@ horo_configure_target_header_boundary(HoroPlatformServices PUBLIC_HEADERS
     Horo/PlatformServices/PlatformServiceInterfaces.h
     Horo/PlatformServices/PlatformServicesBackend.h
     Horo/PlatformServices/PlatformStableIdRegistry.h
+    Horo/PlatformServices/PlatformUserSession.h
 )
 
 horo_configure_target_header_boundary(HoroApplication PUBLIC_HEADERS
@@ -237,6 +238,7 @@ horo_configure_target_header_boundary(HoroAnimationApi PUBLIC_HEADERS
     Horo/Animation/AnimationComponents.h
     Horo/Animation/AnimationErrors.h
     Horo/Animation/AnimationIdentity.h
+    Horo/Animation/PoseStorage.h
     Horo/Animation/SkeletonAsset.h
     Horo/Animation/SkeletalMeshSkinning.h
 )

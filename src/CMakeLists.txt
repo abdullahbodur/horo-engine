@@ -106,6 +106,7 @@ add_library(HoroPlatformServices STATIC
         platform_services/PlatformRequestErrors.cpp
         platform_services/PlatformServicesBackend.cpp
         platform_services/PlatformStableIdRegistry.cpp
+        platform_services/PlatformUserSession.cpp
 )
 add_library(HoroEngine::PlatformServices ALIAS HoroPlatformServices)
 target_compile_features(HoroPlatformServices PUBLIC cxx_std_20)
@@ -457,6 +458,7 @@ add_library(HoroAnimationApi STATIC
         runtime/animation/api/AnimationComponents.cpp
         runtime/animation/api/AnimationErrors.cpp
         runtime/animation/api/AnimationIdentity.cpp
+        runtime/animation/api/PoseStorage.cpp
         runtime/animation/api/SkeletonAsset.cpp
         runtime/animation/api/SkeletalMeshSkinning.cpp
 )

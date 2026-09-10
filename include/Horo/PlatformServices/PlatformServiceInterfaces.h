@@ -6,6 +6,7 @@
  */
 
 #include "Horo/PlatformServices/PlatformRequest.h"
+#include "Horo/PlatformServices/PlatformUserSession.h"
 
 #include <compare>
 #include <cstddef>
@@ -42,19 +43,6 @@ namespace Horo::PlatformServices {
     using StatId = PlatformStableId<StatIdTag>;
     using CloudObjectId = PlatformStableId<CloudObjectIdTag>;
     using PresenceStatusId = PlatformStableId<PresenceStatusIdTag>;
-
-    /** @brief Ephemeral subject capability fenced to one provider session generation. */
-    struct PlatformSubjectHandle final {
-        std::uint64_t nonce{};             /**< Opaque Horo nonce; never a provider account ID. */
-        std::uint64_t sessionGeneration{}; /**< Nonzero live-session generation. */
-
-        /** @brief Checks representation. @return Whether both dimensions are nonzero. */
-        [[nodiscard]] constexpr bool IsValid() const noexcept {
-            return nonce != 0 && sessionGeneration != 0;
-        }
-
-        [[nodiscard]] constexpr auto operator<=>(const PlatformSubjectHandle &) const noexcept = default;
-    };
 
     /** @brief Typed achievement unlock intent. */
     struct AchievementUnlockRequest final {
@@ -118,12 +106,6 @@ namespace Horo::PlatformServices {
     struct FriendsPage final {
         std::vector<FriendPresentation> entries;
         bool hasMore{};
-    };
-
-    /** @brief Current session observation, distinct from provider account identity. */
-    struct PlatformSessionSnapshot final {
-        PlatformSubjectHandle subject;
-        bool signedIn{};
     };
 
     /** @brief Achievement request surface. Unsupported implementations return a typed failure. */

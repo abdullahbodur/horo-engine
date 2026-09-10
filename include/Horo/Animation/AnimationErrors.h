@@ -66,4 +66,30 @@ namespace Horo::Animation::AnimationErrors {
     extern const ErrorCodeDescriptor SkinningInfluenceInvalid;
     /** @brief LOD, section, range, or bounds metadata is malformed or contradictory. */
     extern const ErrorCodeDescriptor SkinningLayoutInvalid;
+    /** @brief Pose storage was produced for an unsupported public contract version. */
+    extern const ErrorCodeDescriptor PoseVersionUnsupported;
+    /** @brief Pose storage or evaluation is closed because its owner is unavailable. */
+    extern const ErrorCodeDescriptor PoseAdmissionRejected;
+    /** @brief The active pose frame was cancelled before publication. */
+    extern const ErrorCodeDescriptor PoseEvaluationCancelled;
+    /** @brief Pose storage targets another skeleton identity. */
+    extern const ErrorCodeDescriptor PoseSkeletonMismatch;
+    /** @brief Pose storage targets a retired skeleton publication generation. */
+    extern const ErrorCodeDescriptor PoseSkeletonStale;
+    /** @brief Pose arena capacity or caller policy exceeds a finite limit. */
+    extern const ErrorCodeDescriptor PoseLimitExceeded;
+    /** @brief The preallocated frame pose capacity has been consumed. */
+    extern const ErrorCodeDescriptor PoseArenaExhausted;
+    /** @brief An active immutable lease prevents mutation, reset, cancellation, or shutdown. */
+    extern const ErrorCodeDescriptor PoseLeaseConflict;
+    /** @brief A local pose transform is non-finite or has an invalid rotation. */
+    extern const ErrorCodeDescriptor PoseTransformInvalid;
+    /** @brief Pose evaluation references a joint absent from the immutable hierarchy. */
+    extern const ErrorCodeDescriptor PoseJointMissing;
+    /** @brief A requested model matrix has not been evaluated for the current local pose. */
+    extern const ErrorCodeDescriptor PoseNotEvaluated;
+    /** @brief A pose operation targets a retired or non-monotonic frame identity. */
+    extern const ErrorCodeDescriptor PoseFrameStale;
+    /** @brief A mutable pose operation ran outside the arena's declared owner thread. */
+    extern const ErrorCodeDescriptor PoseThreadViolation;
 }  // namespace Horo::Animation::AnimationErrors
