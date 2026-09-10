@@ -28,11 +28,11 @@ namespace Horo::PlatformServices {
         [[nodiscard]] bool IsCanonicalKey(const std::string_view key) noexcept {
             if (key.empty() || key.size() > 96 || key.front() < 'a' || key.front() > 'z')
                 return false;
-            return std::all_of(key.begin() + 1, key.end(), IsCanonicalKeyCharacter);
+            return std::ranges::all_of(key.substr(1), IsCanonicalKeyCharacter);
         }
 
         [[nodiscard]] bool IsZero(const Sha256Digest &digest) noexcept {
-            return std::all_of(digest.bytes.begin(), digest.bytes.end(), [](const std::uint8_t byte) {
+            return std::ranges::all_of(digest.bytes, [](const std::uint8_t byte) {
                 return byte == 0;
             });
         }
@@ -85,11 +85,11 @@ namespace Horo::PlatformServices {
             if (!HasValidEntryShape(entry))
                 return Result<void>::Failure(MakeError(StableIdErrors::InvalidLedger));
             const bool activeHasRemoval = entry.state == PlatformStableIdState::Active && !entry.removalProvenance.empty();
-            const bool tombstoneLacksRemoval = entry.state == PlatformStableIdState::Tombstoned && entry.removalProvenance.empty();
-            if (activeHasRemoval || tombstoneLacksRemoval)
+            if (const bool tombstoneLacksRemoval = entry.state == PlatformStableIdState::Tombstoned && entry.removalProvenance.empty();
+                activeHasRemoval || tombstoneLacksRemoval)
                 return Result<void>::Failure(MakeError(StableIdErrors::InvalidLedger));
-            std::sort(entry.aliases.begin(), entry.aliases.end());
-            if (std::any_of(entry.aliases.begin(), entry.aliases.end(), [](const auto &alias) {
+            std::ranges::sort(entry.aliases);
+            if (std::ranges::any_of(entry.aliases, [](const auto &alias) {
                 return !IsCanonicalKey(alias);
             }))
                 return Result<void>::Failure(MakeError(StableIdErrors::InvalidKey));
@@ -107,8 +107,8 @@ namespace Horo::PlatformServices {
             numericIds.reserve(entries.size());
             for (const auto &entry : entries)
                 numericIds.push_back(entry.storedId.value);
-            std::sort(numericIds.begin(), numericIds.end());
-            if (std::adjacent_find(numericIds.begin(), numericIds.end()) != numericIds.end())
+            std::ranges::sort(numericIds);
+            if (std::ranges::adjacent_find(numericIds) != numericIds.end())
                 return Result<void>::Failure(MakeError(StableIdErrors::HashCollision));
             for (const auto &entry : entries) {
                 const auto derived = DerivePlatformServiceStableId(salt, entry.kind, entry.canonicalKey);
@@ -122,11 +122,11 @@ namespace Horo::PlatformServices {
             std::vector<KeyOwner> keys;
             keys.reserve(entries.size() * 2U);
             for (const auto &entry : entries) {
-                keys.push_back({entry.kind, entry.canonicalKey, entry.state});
+                keys.emplace_back(KeyOwner{entry.kind, entry.canonicalKey, entry.state});
                 for (const auto &alias : entry.aliases)
-                    keys.push_back({entry.kind, alias, entry.state});
+                    keys.emplace_back(KeyOwner{entry.kind, alias, entry.state});
             }
-            std::sort(keys.begin(), keys.end(), [](const KeyOwner &left, const KeyOwner &right) {
+            std::ranges::sort(keys, [](const KeyOwner &left, const KeyOwner &right) {
                 if (left.kind != right.kind)
                     return left.kind < right.kind;
                 return left.key < right.key;
@@ -177,17 +177,17 @@ namespace Horo::PlatformServices {
         }
 
         [[nodiscard]] bool HasDuplicates(std::vector<PlatformServiceStableIdValue> &mappedIds, std::vector<Sha256Digest> &providerValues) {
-            std::sort(mappedIds.begin(), mappedIds.end());
-            std::sort(providerValues.begin(), providerValues.end());
-            return std::adjacent_find(mappedIds.begin(), mappedIds.end()) != mappedIds.end() ||
-                   std::adjacent_find(providerValues.begin(), providerValues.end()) != providerValues.end();
+            std::ranges::sort(mappedIds);
+            std::ranges::sort(providerValues);
+            return std::ranges::adjacent_find(mappedIds) != mappedIds.end() ||
+                   std::ranges::adjacent_find(providerValues) != providerValues.end();
         }
 
         [[nodiscard]] bool HasAllRequiredMappings(const PlatformStableIdRegistry &registry, const PlatformProviderMappingPolicy &policy,
                                                   const std::vector<PlatformServiceStableIdValue> &mappedIds) {
-            return std::all_of(registry.Entries().begin(), registry.Entries().end(), [&](const auto &entry) {
+            return std::ranges::all_of(registry.Entries(), [&](const auto &entry) {
                 return entry.state != PlatformStableIdState::Active || !policy.requiredKinds[KindIndex(entry.kind)] ||
-                       std::binary_search(mappedIds.begin(), mappedIds.end(), entry.storedId);
+                       std::ranges::binary_search(mappedIds, entry.storedId);
             });
         }
     }  // namespace
@@ -264,7 +264,7 @@ namespace Horo::PlatformServices {
 
     /** @copydoc PlatformServicesIdSalt::IsValid */
     bool PlatformServicesIdSalt::IsValid() const noexcept {
-        return std::any_of(bytes.begin(), bytes.end(), [](const std::byte byte) {
+        return std::ranges::any_of(bytes, [](const std::byte byte) {
             return byte != std::byte{};
         });
     }
@@ -301,7 +301,7 @@ namespace Horo::PlatformServices {
         PlatformStableIdRegistry registry;
         registry.projectId_ = candidate.projectId;
         registry.entries_ = candidate.entries;
-        std::sort(registry.entries_.begin(), registry.entries_.end(), [](const auto &left, const auto &right) {
+        std::ranges::sort(registry.entries_, [](const auto &left, const auto &right) {
             if (left.kind != right.kind)
                 return left.kind < right.kind;
             return left.storedId < right.storedId;
@@ -312,11 +312,9 @@ namespace Horo::PlatformServices {
             if (canonicalized.HasError())
                 return Result<PlatformStableIdRegistry>::Failure(canonicalized.ErrorValue());
         }
-        const auto numericIds = ValidateNumericIds(registry.entries_, candidate.salt);
-        if (numericIds.HasError())
+        if (const auto numericIds = ValidateNumericIds(registry.entries_, candidate.salt); numericIds.HasError())
             return Result<PlatformStableIdRegistry>::Failure(numericIds.ErrorValue());
-        const auto keys = ValidateKeys(registry.entries_);
-        if (keys.HasError())
+        if (const auto keys = ValidateKeys(registry.entries_); keys.HasError())
             return Result<PlatformStableIdRegistry>::Failure(keys.ErrorValue());
         registry.fingerprint_ = ComputeRegistryFingerprint(candidate.schemaVersion, registry.projectId_, registry.entries_);
         return Result<PlatformStableIdRegistry>::Success(std::move(registry));
@@ -343,8 +341,7 @@ namespace Horo::PlatformServices {
         if (!IsKnown(kind) || !IsCanonicalKey(key))
             return InvalidId(StableIdErrors::InvalidKey);
         for (const auto &entry : entries_) {
-            if (entry.kind != kind ||
-                (entry.canonicalKey != key && std::find(entry.aliases.begin(), entry.aliases.end(), key) == entry.aliases.end()))
+            if (entry.kind != kind || (entry.canonicalKey != key && std::ranges::find(entry.aliases, key) == entry.aliases.end()))
                 continue;
             if (entry.state == PlatformStableIdState::Tombstoned)
                 return InvalidId(StableIdErrors::Tombstoned);
@@ -388,11 +385,8 @@ namespace Horo::PlatformServices {
     bool PlatformStableIdRegistry::ContainsActive(const PlatformServiceIdKind kind, const PlatformServiceStableIdValue id) const noexcept {
         if (!IsKnown(kind) || !id.IsValid())
             return false;
-        const auto found =
-            std::lower_bound(entries_.begin(), entries_.end(), std::pair{kind, id}, [](const auto &entry, const auto &needle) {
-            if (entry.kind != needle.first)
-                return entry.kind < needle.first;
-            return entry.storedId < needle.second;
+        const auto found = std::ranges::lower_bound(entries_, std::pair{kind, id}, {}, [](const auto &entry) {
+            return std::pair{entry.kind, entry.storedId};
         });
         return found != entries_.end() && found->kind == kind && found->storedId == id && found->state == PlatformStableIdState::Active;
     }
