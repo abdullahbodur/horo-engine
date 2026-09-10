@@ -181,6 +181,17 @@ namespace {
                                              },
                                      });
         REQUIRE((created.HasValue()));
+        const auto prefabAsset = Assets::AssetId::Parse("11112222-3333-4444-8888-9999aaaabbbb");
+        REQUIRE(prefabAsset.HasValue());
+        const auto sourcePrefab = Prefab::PrefabAssetReference::Create(prefabAsset.Value());
+        REQUIRE(sourcePrefab.HasValue());
+        REQUIRE(commands
+                    .Execute(CreateScenePrefabInstanceCommand{
+                        sourcePrefab.Value(),
+                        created.Value().object,
+                        Math::Transform{.translation = {-3.0F, 2.0F, 7.0F}, .scale = {0.5F, 0.5F, 0.5F}},
+                    })
+                    .HasValue());
         return document.Snapshot();
     }
 
@@ -215,15 +226,18 @@ TEST_CASE("Project Scene Save Reopens The Same Authored State", "[unit][editor][
     REQUIRE((loaded.Value().has_value()));
     REQUIRE((loaded.Value()->absolutePath.is_absolute()));
     REQUIRE((loaded.Value()->objects.size() == 1));
+    REQUIRE((loaded.Value()->prefabInstances.size() == 1));
 
     SceneDocument reopened;
-    REQUIRE((reopened.LoadSaved(std::move(loaded.Value()->objects)).HasValue()));
+    REQUIRE((reopened.LoadSaved(std::move(loaded.Value()->objects), std::move(loaded.Value()->prefabInstances)).HasValue()));
     REQUIRE((!reopened.IsDirty()));
     REQUIRE((reopened.Objects().size() == 1));
     REQUIRE((reopened.Objects().front().name == authored.objects.front().name));
     REQUIRE((reopened.Objects().front().localTransform == authored.objects.front().localTransform));
     REQUIRE((reopened.Objects().front().primitiveMesh == authored.objects.front().primitiveMesh));
     REQUIRE((reopened.Objects().front().components == authored.objects.front().components));
+    REQUIRE((reopened.PrefabInstances().size() == 1));
+    REQUIRE((reopened.PrefabInstances().front() == authored.prefabInstances.front()));
 }
 
 TEST_CASE("Every authored light kind survives project scene save and reload", "[unit][editor][persistence]") {
@@ -295,6 +309,24 @@ TEST_CASE("Imported mesh asset identity persists without a source path", "[unit]
 }
 
 TEST_CASE("Scene Comparison Classifies Typed Added Removed And Modified Objects", "[unit][editor][persistence][compare]") {
+    const auto instanceOne = Prefab::PrefabInstanceId::Create(1);
+    const auto instanceTwo = Prefab::PrefabInstanceId::Create(2);
+    const auto instanceThree = Prefab::PrefabInstanceId::Create(3);
+    const auto documentSourceOne =
+        Prefab::PrefabAssetReference::Create(Assets::AssetId::Parse("aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa").Value());
+    const auto documentSourceTwo =
+        Prefab::PrefabAssetReference::Create(Assets::AssetId::Parse("bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb").Value());
+    const auto diskSourceOne = Prefab::PrefabAssetReference::Create(Assets::AssetId::Parse("cccccccc-cccc-4ccc-8ccc-cccccccccccc").Value());
+    const auto diskSourceThree =
+        Prefab::PrefabAssetReference::Create(Assets::AssetId::Parse("dddddddd-dddd-4ddd-8ddd-dddddddddddd").Value());
+    REQUIRE((instanceOne.HasValue()));
+    REQUIRE((instanceTwo.HasValue()));
+    REQUIRE((instanceThree.HasValue()));
+    REQUIRE((documentSourceOne.HasValue()));
+    REQUIRE((documentSourceTwo.HasValue()));
+    REQUIRE((diskSourceOne.HasValue()));
+    REQUIRE((diskSourceThree.HasValue()));
+
     SceneObjectSnapshot documentModified{
         .id = SceneObjectId{1},
         .name = "Document Name",
@@ -316,6 +348,17 @@ TEST_CASE("Scene Comparison Classifies Typed Added Removed And Modified Objects"
                     .name = "Removed",
                 },
             },
+        .prefabInstances =
+            {
+                ScenePrefabInstance{
+                    .instanceId = instanceOne.Value(),
+                    .sourcePrefab = documentSourceOne.Value(),
+                },
+                ScenePrefabInstance{
+                    .instanceId = instanceTwo.Value(),
+                    .sourcePrefab = documentSourceTwo.Value(),
+                },
+            },
     };
     const SceneDocumentSnapshot disk{
         .objects =
@@ -326,13 +369,28 @@ TEST_CASE("Scene Comparison Classifies Typed Added Removed And Modified Objects"
                     .name = "Added",
                 },
             },
+        .prefabInstances =
+            {
+                ScenePrefabInstance{
+                    .instanceId = instanceOne.Value(),
+                    .sourcePrefab = diskSourceOne.Value(),
+                },
+                ScenePrefabInstance{
+                    .instanceId = instanceThree.Value(),
+                    .sourcePrefab = diskSourceThree.Value(),
+                },
+            },
     };
 
     const SceneDocumentComparison comparison = CompareSceneDocuments(document, disk);
     REQUIRE((comparison.addedOnDisk == 1));
     REQUIRE((comparison.removedFromDisk == 1));
     REQUIRE((comparison.modified == 1));
+    REQUIRE((comparison.prefabInstancesAddedOnDisk == 1));
+    REQUIRE((comparison.prefabInstancesRemovedFromDisk == 1));
+    REQUIRE((comparison.prefabInstancesModified == 1));
     REQUIRE((comparison.objects.size() == 3));
+    REQUIRE((comparison.prefabInstances.size() == 3));
 
     const SceneObjectComparison &modified = comparison.objects[0];
     REQUIRE((modified.id == SceneObjectId{1}));
@@ -347,6 +405,13 @@ TEST_CASE("Scene Comparison Classifies Typed Added Removed And Modified Objects"
     REQUIRE((!modified.fields.primitive));
     REQUIRE((comparison.objects[1].kind == SceneObjectComparisonKind::RemovedFromDisk));
     REQUIRE((comparison.objects[2].kind == SceneObjectComparisonKind::AddedOnDisk));
+    REQUIRE((comparison.prefabInstances[0].id == instanceOne.Value()));
+    REQUIRE((comparison.prefabInstances[0].kind == SceneObjectComparisonKind::Modified));
+    REQUIRE((comparison.prefabInstances[0].fields.sourcePrefab));
+    REQUIRE((!comparison.prefabInstances[0].fields.parent));
+    REQUIRE((!comparison.prefabInstances[0].fields.rootTransform));
+    REQUIRE((comparison.prefabInstances[1].kind == SceneObjectComparisonKind::RemovedFromDisk));
+    REQUIRE((comparison.prefabInstances[2].kind == SceneObjectComparisonKind::AddedOnDisk));
 }
 
 TEST_CASE("Failed Atomic Scene Replace Preserves Canonical Bytes", "[unit][editor][persistence]") {
@@ -554,7 +619,8 @@ TEST_CASE("Scene Recovery Round Trips Without Mutating Canonical Scene", "[unit]
     RequireSameSceneObject(inspected.Value()->objects.front(), authored.objects.front());
 
     SceneDocument restored;
-    REQUIRE((restored.LoadRecovered(std::move(inspected.Value()->objects)).HasValue()));
+    REQUIRE((restored.LoadRecovered(std::move(inspected.Value()->objects), std::move(inspected.Value()->prefabInstances)).HasValue()));
+    REQUIRE((restored.PrefabInstances().size() == authored.prefabInstances.size()));
     REQUIRE((restored.IsDirty()));
     REQUIRE((restored.Objects().size() == authored.objects.size()));
     RequireSameSceneObject(restored.Objects().front(), authored.objects.front());

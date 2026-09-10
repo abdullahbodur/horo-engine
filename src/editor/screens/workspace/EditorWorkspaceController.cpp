@@ -127,7 +127,9 @@ namespace Horo::Editor {
             LOG_ERROR("editor.scene_document", "Default scene load failed: %s", loaded.ErrorValue().message.c_str());
         } else if (loaded.Value().has_value()) {
             LoadedProjectScene projectScene = *loaded.Value();
-            if (const Result<void> installed = m_document.LoadSaved(std::move(projectScene.objects)); installed.HasError()) {
+            if (const Result<void> installed =
+                    m_document.LoadSaved(std::move(projectScene.objects), std::move(projectScene.prefabInstances));
+                installed.HasError()) {
                 m_initializationError = installed.ErrorValue();
                 LOG_ERROR("editor.scene_document", "Default scene validation failed: %s", installed.ErrorValue().message.c_str());
             } else {
@@ -455,7 +457,8 @@ namespace Horo::Editor {
         } else {
             LoadedProjectScene external = loaded.Value();
             SceneDocument validatedExternal;
-            if (const Result<void> validated = validatedExternal.LoadSaved(external.objects); validated.HasError()) {
+            if (const Result<void> validated = validatedExternal.LoadSaved(external.objects, external.prefabInstances);
+                validated.HasError()) {
                 LOG_ERROR("editor.scene_document", "External scene validation failed: %s", validated.ErrorValue().message.c_str());
                 return;
             }
@@ -466,7 +469,8 @@ namespace Horo::Editor {
                           recoveryDiscarded.ErrorValue().message.c_str());
                 return;
             }
-            if (const Result<void> installed = m_document.LoadSaved(std::move(external.objects)); installed.HasError()) {
+            if (const Result<void> installed = m_document.LoadSaved(std::move(external.objects), std::move(external.prefabInstances));
+                installed.HasError()) {
                 LOG_ERROR("editor.scene_document", "External scene validation failed: %s", installed.ErrorValue().message.c_str());
                 return;
             }
@@ -503,7 +507,9 @@ namespace Horo::Editor {
             return;
         }
         std::optional<ProjectSceneRecoveryRecord> recoveryRecord = std::move(recovery).Value();
-        if (const Result<void> restored = m_document.LoadRecovered(std::move(recoveryRecord->objects)); restored.HasError()) {
+        if (const Result<void> restored =
+                m_document.LoadRecovered(std::move(recoveryRecord->objects), std::move(recoveryRecord->prefabInstances));
+            restored.HasError()) {
             LOG_ERROR("editor.scene_recovery", "Recovery restore validation failed: %s", restored.ErrorValue().message.c_str());
             return;
         }

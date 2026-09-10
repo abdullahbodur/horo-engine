@@ -19,6 +19,8 @@ namespace Horo::Editor::SceneDocumentErrors {
     extern const ErrorCodeDescriptor NothingToUndo;
     extern const ErrorCodeDescriptor ObjectNotFound;
     extern const ErrorCodeDescriptor ParentNotFound;
+    extern const ErrorCodeDescriptor InvalidPrefabInstance;
+    extern const ErrorCodeDescriptor PrefabInstanceNotFound;
     extern const ErrorCodeDescriptor PrimitiveNotCreatable;
     extern const ErrorCodeDescriptor UnknownPrimitive;
 }  // namespace Horo::Editor::SceneDocumentErrors

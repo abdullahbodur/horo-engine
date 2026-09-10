@@ -711,6 +711,7 @@ target_include_directories(HoroEditorModel
 target_link_libraries(HoroEditorModel
         PUBLIC
         HoroEngine::Foundation
+        HoroEngine::Prefab
         HoroEngine::SceneModel
         HoroEngine::RuntimeScene
 )

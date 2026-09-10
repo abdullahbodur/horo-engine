@@ -13,7 +13,8 @@ namespace Horo::Editor {
      * @brief Converts one committed authoring snapshot to a validated backend-neutral runtime definition.
      * @param document Immutable committed document snapshot.
      * @param sceneId Stable logical identity of this editor preview scene.
-     * @return Immutable definition or the first typed validation diagnostic.
+     * @return Immutable definition or the first typed validation diagnostic. Unresolved prefab references reject the
+     * conversion rather than producing a partial runtime candidate.
      */
     [[nodiscard]] Result<Runtime::RuntimeSceneDefinition> ConvertSceneDocumentToRuntime(const SceneDocumentSnapshot &document,
                                                                                         Runtime::SceneDefinitionId sceneId);

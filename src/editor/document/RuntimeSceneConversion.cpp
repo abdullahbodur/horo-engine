@@ -2,6 +2,17 @@
 
 namespace Horo::Editor {
     namespace {
+        const ErrorDomainId SceneConversionDomain{"horo.editor.scene_conversion"};
+        const ErrorCodeDescriptor PrefabResolutionRequired{
+            .domain = SceneConversionDomain,
+            .code = ErrorCode{"scene_conversion.prefab_resolution_required"},
+            .defaultSeverity = ErrorSeverity::Error,
+            .summary = "Scene prefab instances require a pinned resolver snapshot before runtime conversion.",
+            .remediationHint = "Resolve every authored prefab instance before preparing a runtime scene candidate.",
+            .retryable = true,
+            .userActionable = false,
+        };
+
         template <typename Component> [[nodiscard]] std::optional<Component> ActiveComponent(const std::optional<Component> &component) {
             return component.has_value() && component->enabled ? component : std::nullopt;
         }
@@ -10,6 +21,8 @@ namespace Horo::Editor {
     /** @copydoc ConvertSceneDocumentToRuntime */
     Result<Runtime::RuntimeSceneDefinition> ConvertSceneDocumentToRuntime(const SceneDocumentSnapshot &document,
                                                                           const Runtime::SceneDefinitionId sceneId) {
+        if (!document.prefabInstances.empty())
+            return Result<Runtime::RuntimeSceneDefinition>::Failure(MakeError(PrefabResolutionRequired));
         Runtime::SceneDefinitionBuilder builder{sceneId, Runtime::SceneDefinitionRevision{document.state.value}};
         for (const SceneObjectSnapshot &object : document.objects) {
             const Runtime::RuntimeComponentSet components{

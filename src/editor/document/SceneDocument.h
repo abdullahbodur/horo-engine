@@ -9,6 +9,7 @@
 #include "Horo/Foundation/Result.h"
 #include "Horo/Gameplay/BehaviorTypes.h"
 #include "Horo/Math/SceneMath.h"
+#include "Horo/Prefab/PrefabIdentity.h"
 #include "Horo/Runtime/Scene/PrimitiveMeshDescriptor.h"
 
 #include <memory>
@@ -122,6 +123,16 @@ namespace Horo::Editor {
         SceneObjectEditorState editorState;
     };
 
+    /** @brief Lightweight authored placement of one prefab asset in a containing scene. */
+    struct ScenePrefabInstance final {
+        Prefab::PrefabInstanceId instanceId;       /**< Stable scene-local occurrence identity. */
+        Prefab::PrefabAssetReference sourcePrefab; /**< Path-independent source asset identity. */
+        std::optional<SceneObjectId> parent;       /**< Optional containing-scene parent; never a prefab member. */
+        Math::Transform rootTransform;             /**< Placement transform, separate from prefab-local transforms. */
+
+        [[nodiscard]] bool operator==(const ScenePrefabInstance &) const noexcept = default;
+    };
+
     /**
      * @brief Resolves local and inherited editor visibility/lock state.
      * @param objects Immutable objects from one coherent scene snapshot.
@@ -136,6 +147,7 @@ namespace Horo::Editor {
         DocumentRevision revision;
         DocumentStateId state;
         std::vector<SceneObjectSnapshot> objects;
+        std::vector<ScenePrefabInstance> prefabInstances;
     };
 
     /** @brief One transient local-transform override keyed by stable scene-object identity. */
@@ -166,6 +178,11 @@ namespace Horo::Editor {
         Undone,
         Redone,
         SaveStateChanged,
+        PrefabInstanceCreated,
+        PrefabInstanceTransformChanged,
+        PrefabInstanceReparented,
+        PrefabInstanceDuplicated,
+        PrefabInstanceDeleted,
     };
 
     /** @brief Typed request to create one authored scene object. */
@@ -313,6 +330,35 @@ namespace Horo::Editor {
         std::vector<SceneObjectId> objects;
     };
 
+    /** @brief Typed request to place a path-independent prefab reference in the containing scene. */
+    struct CreateScenePrefabInstanceCommand final {
+        Prefab::PrefabAssetReference sourcePrefab;
+        std::optional<SceneObjectId> parent;
+        Math::Transform rootTransform;
+    };
+
+    /** @brief Typed request to replace only a prefab instance's containing-scene root transform. */
+    struct SetScenePrefabInstanceRootTransformCommand final {
+        Prefab::PrefabInstanceId instance;
+        Math::Transform rootTransform;
+    };
+
+    /** @brief Typed request to duplicate a placement with a fresh scene-local instance identity. */
+    struct DuplicateScenePrefabInstanceCommand final {
+        Prefab::PrefabInstanceId source;
+    };
+
+    /** @brief Typed request to reparent a prefab root to a containing-scene object or the scene root. */
+    struct ReparentScenePrefabInstanceCommand final {
+        Prefab::PrefabInstanceId instance;
+        std::optional<SceneObjectId> parent;
+    };
+
+    /** @brief Typed request to remove one prefab reference without mutating its source asset. */
+    struct DeleteScenePrefabInstanceCommand final {
+        Prefab::PrefabInstanceId instance;
+    };
+
     /** @brief Result metadata returned after a committed scene command. */
     struct SceneCommandResult {
         SceneObjectId object;
@@ -321,6 +367,8 @@ namespace Horo::Editor {
         DocumentChangeKind kind{DocumentChangeKind::Created};
         std::vector<SceneObjectId> affectedObjects;
         bool committed{false};
+        std::optional<Prefab::PrefabInstanceId> prefabInstance;
+        std::vector<Prefab::PrefabInstanceId> affectedPrefabInstances;
     };
 
     class SceneDocumentCommandExecutor;
@@ -370,6 +418,9 @@ namespace Horo::Editor {
          */
         [[nodiscard]] std::span<const SceneObjectSnapshot> Objects() const noexcept;
 
+        /** @brief Returns a borrowed immutable view of authored prefab instance references. */
+        [[nodiscard]] std::span<const ScenePrefabInstance> PrefabInstances() const noexcept;
+
         /**
          * @brief Reports whether the committed document contains @p object.
          * @param object Stable scene object identity to query.
@@ -397,24 +448,29 @@ namespace Horo::Editor {
         /**
          * @brief Replaces the document at an explicit durable-load boundary.
          * @param objects Fully parsed object values from one validated scene document.
+         * @param prefabInstances Fully parsed prefab-instance references from that document.
          * @return Success after installing a clean baseline, or a typed validation error.
          *
          * This operation clears the current authored state but does not own editor history;
          * the document-session owner must clear its history at the same load boundary.
          */
-        [[nodiscard]] Result<void> LoadSaved(std::vector<SceneObjectSnapshot> objects);
+        [[nodiscard]] Result<void> LoadSaved(std::vector<SceneObjectSnapshot> objects,
+                                             std::vector<ScenePrefabInstance> prefabInstances = {});
 
         /**
          * @brief Installs validated recovery content as a new dirty editor session.
          * @param objects Fully parsed object values from a trusted recovery-service result.
+         * @param prefabInstances Fully parsed prefab-instance references from that recovery result.
          * @return Success with recovered content dirty relative to the saved baseline, or a typed validation error.
          */
-        [[nodiscard]] Result<void> LoadRecovered(std::vector<SceneObjectSnapshot> objects);
+        [[nodiscard]] Result<void> LoadRecovered(std::vector<SceneObjectSnapshot> objects,
+                                                 std::vector<ScenePrefabInstance> prefabInstances = {});
 
     private:
         friend class SceneDocumentCommandExecutor;
 
         std::vector<SceneObjectSnapshot> m_objects;
+        std::vector<ScenePrefabInstance> m_prefabInstances;
         DocumentRevision m_revision{};
         DocumentRevision m_savedRevision{};
         DocumentStateId m_state{1};
@@ -422,6 +478,7 @@ namespace Horo::Editor {
         std::uint64_t m_nextStateId{2};
         std::uint64_t m_nextObjectId{1};
         std::uint64_t m_nextBehaviorInstanceId{1};
+        std::uint64_t m_nextPrefabInstanceId{1};
     };
 
     /** @brief Sole mutation boundary for the minimum typed scene command set. */
@@ -474,6 +531,21 @@ namespace Horo::Editor {
         /** @brief Validates and atomically deletes normalized object subtrees as one history entry. */
         [[nodiscard]] Result<SceneCommandResult> Execute(const DeleteSceneObjectsCommand &command);
 
+        /** @brief Validates and atomically commits one prefab placement. */
+        [[nodiscard]] Result<SceneCommandResult> Execute(const CreateScenePrefabInstanceCommand &command);
+
+        /** @brief Validates and atomically replaces one prefab root placement transform. */
+        [[nodiscard]] Result<SceneCommandResult> Execute(const SetScenePrefabInstanceRootTransformCommand &command);
+
+        /** @brief Atomically duplicates a prefab reference under a fresh instance identity. */
+        [[nodiscard]] Result<SceneCommandResult> Execute(const DuplicateScenePrefabInstanceCommand &command);
+
+        /** @brief Atomically reparents a prefab root without crossing into prefab-local hierarchy. */
+        [[nodiscard]] Result<SceneCommandResult> Execute(const ReparentScenePrefabInstanceCommand &command);
+
+        /** @brief Atomically removes a prefab instance reference. */
+        [[nodiscard]] Result<SceneCommandResult> Execute(const DeleteScenePrefabInstanceCommand &command);
+
         /** @brief Reverts the newest committed semantic history entry. */
         [[nodiscard]] Result<SceneCommandResult> Undo();
 
@@ -494,6 +566,7 @@ namespace Horo::Editor {
         DocumentChangeKind kind{DocumentChangeKind::Created};
         bool dirty{false};
         std::vector<SceneObjectId> affectedObjects;
+        std::vector<Prefab::PrefabInstanceId> affectedPrefabInstances;
     };
 
     /** @brief Validates catalog creation requests and commits one typed document command. */

@@ -10,6 +10,12 @@
 #include <memory>
 
 namespace {
+    [[nodiscard]] Horo::Prefab::PrefabAssetReference PrefabAsset(const std::uint8_t suffix = 1) {
+        std::array<std::uint8_t, 16> bytes{};
+        bytes.back() = suffix;
+        return Horo::Prefab::PrefabAssetReference::Create(Horo::Assets::AssetId::FromBytes(bytes)).Value();
+    }
+
     [[nodiscard]] std::unique_ptr<Horo::Runtime::RuntimeScene> MakeRuntimeScene(const Horo::Editor::SceneDocument &document) {
         auto definition = Horo::Editor::ConvertSceneDocumentToRuntime(document.Snapshot(), Horo::Runtime::SceneDefinitionId{1});
         REQUIRE((definition.HasValue()));
@@ -859,5 +865,213 @@ namespace {
         REQUIRE(document.Objects().front().components.behaviors.empty());
         REQUIRE(commands.Undo().HasValue());
         REQUIRE(document.Objects().front().components.behaviors.front().instanceId == firstId);
+    }
+
+    TEST_CASE("Scene prefab placements keep source identity separate from containing-scene root placement", "[unit][editor][prefab]") {
+        using namespace Horo;
+        using namespace Horo::Editor;
+        SceneDocument document;
+        EditorHistory history;
+        SceneDocumentCommandExecutor commands{document, history};
+        const auto parent = commands.Execute(CreateSceneObjectCommand{.name = "Placement Parent"});
+        REQUIRE(parent.HasValue());
+        const Math::Transform rootTransform{
+            .translation = {3.0F, 4.0F, 5.0F},
+            .rotation = Math::Quaternion::FromEulerRadians({0.1F, 0.2F, 0.3F}),
+            .scale = {2.0F, 2.0F, 2.0F},
+        };
+        const Prefab::PrefabAssetReference source = PrefabAsset();
+
+        const auto created = commands.Execute(CreateScenePrefabInstanceCommand{source, parent.Value().object, rootTransform});
+        REQUIRE(created.HasValue());
+        REQUIRE(created.Value().prefabInstance.has_value());
+        REQUIRE(document.PrefabInstances().size() == 1);
+        const ScenePrefabInstance &instance = document.PrefabInstances().front();
+        REQUIRE(instance.instanceId == *created.Value().prefabInstance);
+        REQUIRE(instance.sourcePrefab == source);
+        REQUIRE(instance.parent == parent.Value().object);
+        REQUIRE(instance.rootTransform == rootTransform);
+        REQUIRE(document.Objects().size() == 1);
+    }
+
+    TEST_CASE("Scene prefab duplication reparent delete and history preserve reference boundaries", "[unit][editor][prefab][history]") {
+        using namespace Horo;
+        using namespace Horo::Editor;
+        SceneDocument document;
+        EditorHistory history;
+        SceneDocumentCommandExecutor commands{document, history};
+        const auto firstParent = commands.Execute(CreateSceneObjectCommand{.name = "First Parent"});
+        const auto secondParent = commands.Execute(CreateSceneObjectCommand{.name = "Second Parent"});
+        REQUIRE(firstParent.HasValue());
+        REQUIRE(secondParent.HasValue());
+        const auto created = commands.Execute(CreateScenePrefabInstanceCommand{PrefabAsset(7), firstParent.Value().object,
+                                                                               Math::Transform{.translation = {1.0F, 2.0F, 3.0F}}});
+        REQUIRE(created.HasValue());
+        const Prefab::PrefabInstanceId originalId = *created.Value().prefabInstance;
+
+        const auto duplicated = commands.Execute(DuplicateScenePrefabInstanceCommand{originalId});
+        REQUIRE(duplicated.HasValue());
+        const Prefab::PrefabInstanceId duplicateId = *duplicated.Value().prefabInstance;
+        REQUIRE(duplicateId != originalId);
+        REQUIRE(document.PrefabInstances().size() == 2);
+        REQUIRE(document.PrefabInstances()[1].sourcePrefab == document.PrefabInstances()[0].sourcePrefab);
+        REQUIRE(document.PrefabInstances()[1].rootTransform == document.PrefabInstances()[0].rootTransform);
+        REQUIRE(document.PrefabInstances()[1].parent == document.PrefabInstances()[0].parent);
+
+        REQUIRE(commands.Execute(ReparentScenePrefabInstanceCommand{duplicateId, secondParent.Value().object}).HasValue());
+        REQUIRE(document.PrefabInstances()[1].instanceId == duplicateId);
+        REQUIRE(document.PrefabInstances()[1].sourcePrefab == PrefabAsset(7));
+        REQUIRE(document.PrefabInstances()[1].parent == secondParent.Value().object);
+
+        REQUIRE(commands.Execute(DeleteScenePrefabInstanceCommand{duplicateId}).HasValue());
+        REQUIRE(document.PrefabInstances().size() == 1);
+        const auto undone = commands.Undo();
+        REQUIRE(undone.HasValue());
+        REQUIRE(undone.Value().affectedPrefabInstances == std::vector{duplicateId});
+        REQUIRE(document.PrefabInstances().size() == 2);
+        REQUIRE(document.PrefabInstances()[1].instanceId == duplicateId);
+        REQUIRE(document.PrefabInstances()[1].sourcePrefab == PrefabAsset(7));
+        REQUIRE(commands.Redo().HasValue());
+        REQUIRE(document.PrefabInstances().size() == 1);
+    }
+
+    TEST_CASE("Scene prefab root edits are undoable no-ops and honor containing-scene locks", "[unit][editor][prefab][history]") {
+        using namespace Horo;
+        using namespace Horo::Editor;
+        SceneDocument document;
+        EditorHistory history;
+        SceneDocumentCommandExecutor commands{document, history};
+        const auto parent = commands.Execute(CreateSceneObjectCommand{.name = "Parent"});
+        REQUIRE(parent.HasValue());
+        const auto created = commands.Execute(CreateScenePrefabInstanceCommand{PrefabAsset(), parent.Value().object, {}});
+        REQUIRE(created.HasValue());
+        const Prefab::PrefabInstanceId instance = *created.Value().prefabInstance;
+        const Math::Transform moved{.translation = {4.0F, -2.0F, 9.0F}};
+
+        const auto transformed = commands.Execute(SetScenePrefabInstanceRootTransformCommand{instance, moved});
+        REQUIRE(transformed.HasValue());
+        REQUIRE(transformed.Value().committed);
+        REQUIRE(document.PrefabInstances().front().rootTransform == moved);
+        REQUIRE(commands.Undo().HasValue());
+        REQUIRE(document.PrefabInstances().front().rootTransform == Math::Transform{});
+        REQUIRE(commands.Redo().HasValue());
+        REQUIRE(document.PrefabInstances().front().rootTransform == moved);
+
+        const DocumentRevision beforeNoOp = document.Revision();
+        const auto noOp = commands.Execute(SetScenePrefabInstanceRootTransformCommand{instance, moved});
+        REQUIRE(noOp.HasValue());
+        REQUIRE_FALSE(noOp.Value().committed);
+        REQUIRE(document.Revision() == beforeNoOp);
+
+        REQUIRE(
+            commands
+                .Execute(SetSceneObjectEditorStateCommand{parent.Value().object, SceneObjectEditorState{.visible = true, .locked = true}})
+                .HasValue());
+        REQUIRE(commands.Execute(SetScenePrefabInstanceRootTransformCommand{instance, {}}).HasError());
+        REQUIRE(commands.Execute(ReparentScenePrefabInstanceCommand{instance, std::nullopt}).HasError());
+        REQUIRE(commands.Execute(DuplicateScenePrefabInstanceCommand{instance}).HasError());
+        REQUIRE(commands.Execute(DeleteScenePrefabInstanceCommand{instance}).HasError());
+        REQUIRE(document.PrefabInstances().size() == 1);
+        REQUIRE(document.PrefabInstances().front().rootTransform == moved);
+    }
+
+    TEST_CASE("Deleting a containing-scene subtree removes attached prefab roots atomically", "[unit][editor][prefab]") {
+        using namespace Horo::Editor;
+        SceneDocument document;
+        EditorHistory history;
+        SceneDocumentCommandExecutor commands{document, history};
+        const auto root = commands.Execute(CreateSceneObjectCommand{.name = "Root"});
+        const auto child = commands.Execute(CreateSceneObjectCommand{.name = "Child", .parent = root.Value().object});
+        REQUIRE(root.HasValue());
+        REQUIRE(child.HasValue());
+        const auto attached = commands.Execute(CreateScenePrefabInstanceCommand{PrefabAsset(), child.Value().object, {}});
+        const auto independent = commands.Execute(CreateScenePrefabInstanceCommand{PrefabAsset(2), std::nullopt, {}});
+        REQUIRE(attached.HasValue());
+        REQUIRE(independent.HasValue());
+
+        const auto deleted = commands.Execute(DeleteSceneObjectCommand{root.Value().object});
+        REQUIRE(deleted.HasValue());
+        REQUIRE(deleted.Value().affectedPrefabInstances == std::vector{*attached.Value().prefabInstance});
+        REQUIRE(document.PrefabInstances().size() == 1);
+        REQUIRE(document.PrefabInstances().front().instanceId == *independent.Value().prefabInstance);
+        REQUIRE(commands.Undo().HasValue());
+        REQUIRE(document.PrefabInstances().size() == 2);
+        REQUIRE(document.PrefabInstances().front().instanceId == *attached.Value().prefabInstance);
+    }
+
+    TEST_CASE("Malformed prefab placements reject transactionally and cannot target prefab-local members",
+              "[unit][editor][prefab][malformed]") {
+        using namespace Horo;
+        using namespace Horo::Editor;
+        SceneDocument document;
+        EditorHistory history;
+        SceneDocumentCommandExecutor commands{document, history};
+        const DocumentRevision initialRevision = document.Revision();
+        REQUIRE(commands.Execute(CreateScenePrefabInstanceCommand{{}, std::nullopt, {}}).HasError());
+        REQUIRE(commands.Execute(CreateScenePrefabInstanceCommand{PrefabAsset(), SceneObjectId{99}, {}}).HasError());
+        Math::Transform nonFinite;
+        nonFinite.translation.x = std::numeric_limits<float>::infinity();
+        REQUIRE(commands.Execute(CreateScenePrefabInstanceCommand{PrefabAsset(), std::nullopt, nonFinite}).HasError());
+        REQUIRE(document.Revision() == initialRevision);
+        REQUIRE(document.PrefabInstances().empty());
+
+        const auto existing = commands.Execute(CreateScenePrefabInstanceCommand{PrefabAsset(), std::nullopt, {}});
+        REQUIRE(existing.HasValue());
+        const auto sourceIdentity = document.PrefabInstances().front().sourcePrefab;
+        const auto missingInstance = Prefab::PrefabInstanceId::Create(99).Value();
+        REQUIRE(commands.Execute(SetScenePrefabInstanceRootTransformCommand{missingInstance, {}}).HasError());
+        REQUIRE(commands.Execute(DuplicateScenePrefabInstanceCommand{missingInstance}).HasError());
+        REQUIRE(commands.Execute(ReparentScenePrefabInstanceCommand{missingInstance, std::nullopt}).HasError());
+        REQUIRE(commands.Execute(DeleteScenePrefabInstanceCommand{missingInstance}).HasError());
+        REQUIRE(commands.Execute(ReparentScenePrefabInstanceCommand{*existing.Value().prefabInstance, SceneObjectId{99}}).HasError());
+        REQUIRE(commands.Execute(SetScenePrefabInstanceRootTransformCommand{*existing.Value().prefabInstance, nonFinite}).HasError());
+        REQUIRE(document.PrefabInstances().front().sourcePrefab == sourceIdentity);
+        REQUIRE_FALSE(document.PrefabInstances().front().parent.has_value());
+    }
+
+    TEST_CASE("Runtime conversion rejects unresolved prefab references instead of publishing a partial definition",
+              "[unit][editor][prefab][runtime]") {
+        using namespace Horo;
+        using namespace Horo::Editor;
+        SceneDocument document;
+        EditorHistory history;
+        SceneDocumentCommandExecutor commands{document, history};
+        REQUIRE(commands.Execute(CreateSceneObjectCommand{.name = "Authored Object"}).HasValue());
+        REQUIRE(commands.Execute(CreateScenePrefabInstanceCommand{PrefabAsset(), std::nullopt, {}}).HasValue());
+
+        const auto converted = ConvertSceneDocumentToRuntime(document.Snapshot(), Runtime::SceneDefinitionId{1});
+        REQUIRE(converted.HasError());
+        REQUIRE(converted.ErrorValue().code.Value() == "scene_conversion.prefab_resolution_required");
+    }
+
+    TEST_CASE("Loading prefab placements validates identity parent and lifecycle counters transactionally",
+              "[unit][editor][prefab][lifecycle]") {
+        using namespace Horo;
+        using namespace Horo::Editor;
+        SceneDocument document;
+        REQUIRE(document
+                    .LoadSaved({SceneObjectSnapshot{.id = SceneObjectId{4}, .name = "Parent"}},
+                               {ScenePrefabInstance{Prefab::PrefabInstanceId::Create(8).Value(), PrefabAsset(3), SceneObjectId{4}, {}}})
+                    .HasValue());
+        REQUIRE(document.PrefabInstances().front().instanceId == Prefab::PrefabInstanceId::Create(8).Value());
+
+        EditorHistory history;
+        SceneDocumentCommandExecutor commands{document, history};
+        const auto next = commands.Execute(CreateScenePrefabInstanceCommand{PrefabAsset(4), std::nullopt, {}});
+        REQUIRE(next.HasValue());
+        REQUIRE(next.Value().prefabInstance == Prefab::PrefabInstanceId::Create(9).Value());
+
+        const SceneDocumentSnapshot before = document.Snapshot();
+        const auto duplicateId = Prefab::PrefabInstanceId::Create(8).Value();
+        REQUIRE(document
+                    .LoadSaved(before.objects, {ScenePrefabInstance{duplicateId, PrefabAsset(), std::nullopt, {}},
+                                                ScenePrefabInstance{duplicateId, PrefabAsset(2), std::nullopt, {}}})
+                    .HasError());
+        REQUIRE(document.Snapshot().prefabInstances == before.prefabInstances);
+        REQUIRE(document
+                    .LoadSaved(before.objects,
+                               {ScenePrefabInstance{Prefab::PrefabInstanceId::Create(10).Value(), PrefabAsset(), SceneObjectId{999}, {}}})
+                    .HasError());
+        REQUIRE(document.Snapshot().prefabInstances == before.prefabInstances);
     }
 }  // namespace
