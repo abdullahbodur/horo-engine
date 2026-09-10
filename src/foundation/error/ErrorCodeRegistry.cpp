@@ -55,8 +55,8 @@ namespace Horo {
                 return false;
             bool previousWasSeparator = true;
             for (const unsigned char ch : value) {
-                constexpr std::string_view kIdentityCharacters = "abcdefghijklmnopqrstuvwxyz0123456789.-_";
-                if (kIdentityCharacters.find(static_cast<char>(ch)) == std::string_view::npos)
+                if (constexpr std::string_view kIdentityCharacters = "abcdefghijklmnopqrstuvwxyz0123456789.-_";
+                    kIdentityCharacters.find(static_cast<char>(ch)) == std::string_view::npos)
                     return false;
                 if (ch == '.' || ch == '-' || ch == '_') {
                     if (previousWasSeparator)
@@ -78,12 +78,12 @@ namespace Horo {
         }
 
         /** @brief Validates whether a module may claim the root and scope of an error domain. */
-        [[nodiscard]] bool IsDomainAllowedForModule(const std::string_view domain, const std::string_view module) noexcept {
+        [[nodiscard]] bool IsDomainAllowedForModule(const std::string_view domain, const std::string_view moduleId) noexcept {
             const std::string_view root = RootNamespace(domain);
-            if (root != RootNamespace(module) || (root != "horo" && root != "project" && root != "extension"))
+            if (root != RootNamespace(moduleId) || (root != "horo" && root != "project" && root != "extension"))
                 return false;
             if (root == "project" || root == "extension")
-                return IsSameOrNested(domain, module);
+                return IsSameOrNested(domain, moduleId);
             return true;
         }
 
@@ -93,11 +93,12 @@ namespace Horo {
 
         /** @brief Returns whether a descriptor carries a supported severity enumerator. */
         [[nodiscard]] bool IsKnownSeverity(const ErrorSeverity severity) noexcept {
+            using enum ErrorSeverity;
             switch (severity) {
-                case ErrorSeverity::Info:
-                case ErrorSeverity::Warning:
-                case ErrorSeverity::Error:
-                case ErrorSeverity::Critical:
+                case Info:
+                case Warning:
+                case Error:
+                case Critical:
                     return true;
             }
             return false;
@@ -119,8 +120,8 @@ namespace Horo {
             if (base != nullptr && base->storage_ != nullptr)
                 CopyBase(*base->storage_, *storage, domainOwners, registeredCodes);
 
-            for (const ModuleDescriptor &module : descriptors) {
-                const Result<void> added = AddModule(module, *storage, domainOwners, registeredCodes);
+            for (const ModuleDescriptor &moduleDescriptor : descriptors) {
+                const Result<void> added = AddModule(moduleDescriptor, *storage, domainOwners, registeredCodes);
                 if (added.HasError())
                     return Result<ErrorCodeRegistry>::Failure(added.ErrorValue());
             }
@@ -135,39 +136,40 @@ namespace Horo {
         }
 
     private:
-        [[nodiscard]] static Result<void> AddModule(const ModuleDescriptor &module, ErrorCodeRegistry::Storage &storage,
+        [[nodiscard]] static Result<void> AddModule(const ModuleDescriptor &moduleDescriptor, ErrorCodeRegistry::Storage &storage,
                                                     std::map<std::string, std::string, std::less<>> &domainOwners,
                                                     std::set<TextPair> &registeredCodes) {
-            for (const ModuleErrorDomainDescriptor &domain : module.errorDomains) {
-                const Result<void> added = AddDomain(module, domain, storage, domainOwners, registeredCodes);
+            for (const ModuleErrorDomainDescriptor &domain : moduleDescriptor.errorDomains) {
+                const Result<void> added = AddDomain(moduleDescriptor, domain, storage, domainOwners, registeredCodes);
                 if (added.HasError())
                     return added;
             }
             return Result<void>::Success();
         }
 
-        [[nodiscard]] static Result<void> AddDomain(const ModuleDescriptor &module, const ModuleErrorDomainDescriptor &domain,
+        [[nodiscard]] static Result<void> AddDomain(const ModuleDescriptor &moduleDescriptor, const ModuleErrorDomainDescriptor &domain,
                                                     ErrorCodeRegistry::Storage &storage,
                                                     std::map<std::string, std::string, std::less<>> &domainOwners,
                                                     std::set<TextPair> &registeredCodes) {
             const std::string &domainId = domain.id.Value();
-            if (!IsCanonicalNamespacedId(domainId) || !IsDomainAllowedForModule(domainId, module.id.value)) {
+            if (!IsCanonicalNamespacedId(domainId) || !IsDomainAllowedForModule(domainId, moduleDescriptor.id.value)) {
                 return RegistryFailure<void>(ErrorCodeRegistryErrors::InvalidNamespace,
                                              std::format("Module '{}' cannot own non-canonical or escaped error domain '{}'.",
-                                                         module.id.value, domainId));
+                                                         moduleDescriptor.id.value, domainId));
             }
 
-            const auto [owner, inserted] = domainOwners.try_emplace(domainId, module.id.value);
+            const auto [owner, inserted] = domainOwners.try_emplace(domainId, moduleDescriptor.id.value);
             if (!inserted) {
-                const ErrorCodeDescriptor &failure = owner->second == module.id.value ? ErrorCodeRegistryErrors::InvalidNamespace
-                                                                                      : ErrorCodeRegistryErrors::DomainOwnershipConflict;
+                const ErrorCodeDescriptor &failure = owner->second == moduleDescriptor.id.value
+                                                         ? ErrorCodeRegistryErrors::InvalidNamespace
+                                                         : ErrorCodeRegistryErrors::DomainOwnershipConflict;
                 return RegistryFailure<void>(failure,
                                              std::format("Error domain '{}' is already claimed by module '{}'.", domainId, owner->second));
             }
-            storage.domains.push_back({.id = domain.id, .owner = module.id});
+            storage.domains.push_back({.id = domain.id, .owner = moduleDescriptor.id});
 
             for (const ErrorCodeDescriptor *descriptor : domain.descriptors) {
-                const Result<void> added = AddCode(module.id, domainId, descriptor, storage, registeredCodes);
+                const Result<void> added = AddCode(moduleDescriptor.id, domainId, descriptor, storage, registeredCodes);
                 if (added.HasError())
                     return added;
             }
@@ -190,8 +192,7 @@ namespace Horo {
                                              std::format("Error code '{}' escapes or has an invalid namespace under domain '{}'.",
                                                          descriptor->code.Value(), domainId));
             }
-            const TextPair key{domainId, descriptor->code.Value()};
-            if (!registeredCodes.emplace(key).second) {
+            if (!registeredCodes.emplace(domainId, descriptor->code.Value()).second) {
                 return RegistryFailure<void>(ErrorCodeRegistryErrors::DuplicateCode,
                                              std::format("Duplicate error identity ('{}', '{}').", domainId, descriptor->code.Value()));
             }
@@ -212,7 +213,7 @@ namespace Horo {
                              std::map<std::string, std::string, std::less<>> &domainOwners, std::set<TextPair> &registeredCodes) {
             target.domains = base.domains;
             for (const ErrorCodeRegistry::Storage::Domain &domain : target.domains)
-                domainOwners.emplace(domain.id.Value(), domain.owner.value);
+                domainOwners.try_emplace(domain.id.Value(), domain.owner.value);
             target.codes.reserve(base.codes.size());
             for (const std::unique_ptr<ErrorCodeRegistry::Storage::Code> &code : base.codes) {
                 registeredCodes.emplace(code->descriptor.domain.Value(), code->descriptor.code.Value());
@@ -301,7 +302,7 @@ namespace Horo {
 
     /** @copydoc ErrorCodeRegistry::Empty */
     bool ErrorCodeRegistry::Empty() const noexcept {
-        return Size() == 0 && DomainCount() == 0;
+        return storage_ == nullptr || (storage_->codes.empty() && storage_->domains.empty());
     }
 
     /** @copydoc BuildErrorCodeRegistry */
