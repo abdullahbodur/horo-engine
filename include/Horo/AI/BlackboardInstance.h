@@ -130,6 +130,12 @@ namespace Horo::AI {
     /** @brief Scene-owner blackboard whose only mutation is transactional BlackboardSync publication. */
     class BlackboardInstance final {
     public:
+        /** @brief Factory-only construction token; callers cannot create one. */
+        class ConstructionKey final {
+            ConstructionKey() = default;
+            friend class BlackboardInstance;
+        };
+
         BlackboardInstance() = delete;
         /**
          * @brief Allocates a default-populated instance from one immutable schema publication.
@@ -137,7 +143,7 @@ namespace Horo::AI {
          * @param schema Immutable admitted schema.
          * @return Owned instance or a stable validation/storage failure.
          */
-        [[nodiscard]] static Result<std::unique_ptr<BlackboardInstance>> Create(BlackboardInstanceBinding binding,
+        [[nodiscard]] static Result<std::unique_ptr<BlackboardInstance>> Create(const BlackboardInstanceBinding &binding,
                                                                                 std::shared_ptr<const BlackboardSchema> schema);
         /** @brief Captures an immutable value copy for worker observation. @return Snapshot or stale failure. */
         [[nodiscard]] Result<BlackboardSnapshot> Snapshot() const;
@@ -155,7 +161,7 @@ namespace Horo::AI {
          * @param replacementSchema Immutable replacement schema.
          * @return Success or a stable failure that preserves the old active instance.
          */
-        [[nodiscard]] Result<void> ReplaceAtBlackboardSync(BlackboardInstanceBinding replacementBinding,
+        [[nodiscard]] Result<void> ReplaceAtBlackboardSync(const BlackboardInstanceBinding &replacementBinding,
                                                            std::shared_ptr<const BlackboardSchema> replacementSchema);
         /** @brief Resets every key to the active schema default. @return Revision/change facts or stable failure. */
         [[nodiscard]] Result<BlackboardCommitResult> ResetAtBlackboardSync();
@@ -170,13 +176,24 @@ namespace Horo::AI {
         BlackboardInstance(const BlackboardInstance &) = delete;
         BlackboardInstance &operator=(const BlackboardInstance &) = delete;
 
-    private:
-        BlackboardInstance(BlackboardInstanceBinding binding, std::shared_ptr<const BlackboardSchema> schema,
-                           std::vector<std::optional<BlackboardValue>> values, std::vector<std::optional<BlackboardValue>> scratch,
-                           std::shared_ptr<std::atomic_bool> generationActive)
+        /**
+         * @brief Constructs validated factory-owned storage; callers use Create.
+         * @param key Unforgeable token issued only by Create.
+         * @param binding Validated instance generation fence.
+         * @param schema Immutable admitted schema.
+         * @param values Default-populated active values.
+         * @param scratch Equally sized transaction scratch storage.
+         * @param generationActive Shared lease-validity flag for this generation.
+         */
+        BlackboardInstance(const ConstructionKey &key, const BlackboardInstanceBinding &binding,
+                           std::shared_ptr<const BlackboardSchema> schema, std::vector<std::optional<BlackboardValue>> values,
+                           std::vector<std::optional<BlackboardValue>> scratch, std::shared_ptr<std::atomic_bool> generationActive)
             : binding_(binding), schema_(std::move(schema)), values_(std::move(values)), scratch_(std::move(scratch)),
-              generationActive_(std::move(generationActive)) {}
+              generationActive_(std::move(generationActive)) {
+            (void)key;
+        }
 
+    private:
         BlackboardInstanceBinding binding_;
         std::shared_ptr<const BlackboardSchema> schema_;
         std::vector<std::optional<BlackboardValue>> values_;

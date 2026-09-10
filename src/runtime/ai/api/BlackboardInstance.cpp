@@ -121,7 +121,7 @@ namespace Horo::AI {
     }
 
     /** @copydoc BlackboardInstance::Create */
-    Result<std::unique_ptr<BlackboardInstance>> BlackboardInstance::Create(BlackboardInstanceBinding binding,
+    Result<std::unique_ptr<BlackboardInstance>> BlackboardInstance::Create(const BlackboardInstanceBinding &binding,
                                                                            std::shared_ptr<const BlackboardSchema> schema) {
         if (!binding.IsValid() || schema == nullptr || binding.schema != schema->Identity() || binding.schemaVersion != schema->Version())
             return Result<std::unique_ptr<BlackboardInstance>>::Failure(Failure(AIErrors::BlackboardInstanceInvalid));
@@ -131,9 +131,10 @@ namespace Horo::AI {
         try {
             auto generationActive = std::make_shared<std::atomic_bool>(true);
             auto scratch = values.Value();
+            const ConstructionKey key;
             return Result<std::unique_ptr<BlackboardInstance>>::Success(
-                std::unique_ptr<BlackboardInstance>{new BlackboardInstance(binding, std::move(schema), std::move(values).Value(),
-                                                                           std::move(scratch), std::move(generationActive))});
+                std::make_unique<BlackboardInstance>(key, binding, std::move(schema), std::move(values).Value(), std::move(scratch),
+                                                     std::move(generationActive)));
         } catch (const std::bad_alloc &) {
             return Result<std::unique_ptr<BlackboardInstance>>::Failure(Failure(AIErrors::BlackboardStorageUnavailable));
         }
@@ -180,7 +181,7 @@ namespace Horo::AI {
     }
 
     /** @copydoc BlackboardInstance::ReplaceAtBlackboardSync */
-    Result<void> BlackboardInstance::ReplaceAtBlackboardSync(BlackboardInstanceBinding replacementBinding,
+    Result<void> BlackboardInstance::ReplaceAtBlackboardSync(const BlackboardInstanceBinding &replacementBinding,
                                                              std::shared_ptr<const BlackboardSchema> replacementSchema) {
         if (!active_ || !IsCompatibleReplacement(binding_, replacementBinding, replacementSchema))
             return Result<void>::Failure(Failure(AIErrors::BlackboardInstanceInvalid));
