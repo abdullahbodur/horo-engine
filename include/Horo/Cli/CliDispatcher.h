@@ -256,6 +256,10 @@ namespace Horo::Cli {
 
         /** @brief Takes ownership of an already-validated registry and adapter table. */
         CliDispatcher(CliCommandRegistry registry, std::vector<Entry> entries, CliDispatchPolicy policy);
+        /** @brief Applies bounded terminal validation after one adapter invocation returns. */
+        [[nodiscard]] CliTerminalResult Finalize(const CliInvocationContext &invocation, CliExecutionContext &context,
+                                                 const std::optional<std::chrono::steady_clock::time_point> &deadline,
+                                                 Result<CliCommandResult> result) const;
         CliCommandRegistry registry_;
         std::vector<Entry> entries_;
         CliDispatchPolicy policy_;

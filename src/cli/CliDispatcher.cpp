@@ -28,12 +28,22 @@ namespace Horo::Cli {
                    left.minimumNumber == right.minimumNumber && left.maximumNumber == right.maximumNumber;
         }
 
+        [[nodiscard]] bool SameOptionIdentity(const CliOptionDescriptor &left, const CliOptionDescriptor &right) noexcept {
+            return left.name == right.name && left.shortName == right.shortName && left.summary == right.summary;
+        }
+
+        [[nodiscard]] bool SameOptionShape(const CliOptionDescriptor &left, const CliOptionDescriptor &right) noexcept {
+            return left.valueKind == right.valueKind && left.required == right.required && left.repeatable == right.repeatable &&
+                   left.sensitive == right.sensitive;
+        }
+
+        [[nodiscard]] bool SameOptionValues(const CliOptionDescriptor &left, const CliOptionDescriptor &right) noexcept {
+            return left.defaultValue == right.defaultValue && left.enumerationValues == right.enumerationValues &&
+                   SameNumericRange(left.numericRange, right.numericRange) && left.configurationKey == right.configurationKey;
+        }
+
         [[nodiscard]] bool SameOption(const CliOptionDescriptor &left, const CliOptionDescriptor &right) noexcept {
-            return left.name == right.name && left.shortName == right.shortName && left.summary == right.summary &&
-                   left.valueKind == right.valueKind && left.required == right.required && left.repeatable == right.repeatable &&
-                   left.sensitive == right.sensitive && left.defaultValue == right.defaultValue &&
-                   left.enumerationValues == right.enumerationValues && SameNumericRange(left.numericRange, right.numericRange) &&
-                   left.configurationKey == right.configurationKey;
+            return SameOptionIdentity(left, right) && SameOptionShape(left, right) && SameOptionValues(left, right);
         }
 
         [[nodiscard]] bool SamePositional(const CliPositionalDescriptor &left, const CliPositionalDescriptor &right) noexcept {
@@ -47,15 +57,21 @@ namespace Horo::Cli {
             return left.size() == right.size() && std::ranges::equal(left, right, predicate);
         }
 
-        [[nodiscard]] bool SameDescriptor(const CliCommandDescriptor &left, const CliCommandDescriptor &right) noexcept {
-            return left.path == right.path && left.summary == right.summary && SameVector(left.options, right.options, SameOption) &&
-                   SameVector(left.positionals, right.positionals, SamePositional) &&
+        [[nodiscard]] bool SameDescriptorSchema(const CliCommandDescriptor &left, const CliCommandDescriptor &right) noexcept {
+            return SameVector(left.options, right.options, SameOption) && SameVector(left.positionals, right.positionals, SamePositional) &&
                    SameVector(left.requiredCapabilities, right.requiredCapabilities, SameCapability) && left.output.id == right.output.id &&
-                   left.output.version == right.output.version && left.output.formats == right.output.formats &&
-                   left.interactive == right.interactive && left.hosts == right.hosts && left.contractVersion == right.contractVersion &&
+                   left.output.version == right.output.version && left.output.formats == right.output.formats;
+        }
+
+        [[nodiscard]] bool SameDescriptorExecution(const CliCommandDescriptor &left, const CliCommandDescriptor &right) noexcept {
+            return left.interactive == right.interactive && left.hosts == right.hosts && left.contractVersion == right.contractVersion &&
                    left.sideEffects == right.sideEffects && left.cancellation == right.cancellation && left.timeout == right.timeout &&
-                   left.stdinPolicy == right.stdinPolicy && left.interactiveAlternativeOption == right.interactiveAlternativeOption &&
-                   left.origin == right.origin && left.ownerId == right.ownerId;
+                   left.stdinPolicy == right.stdinPolicy && left.interactiveAlternativeOption == right.interactiveAlternativeOption;
+        }
+
+        [[nodiscard]] bool SameDescriptor(const CliCommandDescriptor &left, const CliCommandDescriptor &right) noexcept {
+            return left.path == right.path && left.summary == right.summary && SameDescriptorSchema(left, right) &&
+                   SameDescriptorExecution(left, right) && left.origin == right.origin && left.ownerId == right.ownerId;
         }
 
         [[nodiscard]] bool SameCapabilitySet(const std::vector<CliCapabilityId> &left, const std::vector<CliCapabilityId> &right) {
@@ -73,16 +89,26 @@ namespace Horo::Cli {
                    limits.maximumResultFields != 0 && limits.maximumResultTextBytes != 0 && limits.maximumProjectIdentityBytes != 0;
         }
 
+        [[nodiscard]] bool IsCapabilityCharacter(const char character) noexcept {
+            return (character >= 'a' && character <= 'z') || (character >= '0' && character <= '9') || character == '-';
+        }
+
+        [[nodiscard]] bool HasNamespacedCapabilityShape(const std::string_view value) noexcept {
+            return !value.empty() && value.find('.') != std::string_view::npos && value.front() != '.' && value.back() != '.';
+        }
+
+        [[nodiscard]] bool ValidCapabilityToken(const std::string_view token) noexcept {
+            return !token.empty() && token.front() >= 'a' && token.front() <= 'z' && std::ranges::all_of(token, IsCapabilityCharacter);
+        }
+
         [[nodiscard]] bool ValidCapabilityIdentity(const std::string_view value) noexcept {
-            if (value.empty() || value.find('.') == std::string_view::npos || value.front() == '.' || value.back() == '.')
+            if (!HasNamespacedCapabilityShape(value))
                 return false;
             std::size_t begin = 0;
             while (begin < value.size()) {
                 const std::size_t end = value.find('.', begin);
                 const std::string_view token = value.substr(begin, end == std::string_view::npos ? value.size() - begin : end - begin);
-                if (token.empty() || token.front() < 'a' || token.front() > 'z' || !std::ranges::all_of(token, [](const char character) {
-                    return (character >= 'a' && character <= 'z') || (character >= '0' && character <= '9') || character == '-';
-                }))
+                if (!ValidCapabilityToken(token))
                     return false;
                 if (end == std::string_view::npos)
                     break;
@@ -127,6 +153,46 @@ namespace Horo::Cli {
 
         [[nodiscard]] bool TextWithin(const std::string &value, const std::size_t maximumBytes) noexcept {
             return !Text::IsBlank(value) && value.size() <= maximumBytes;
+        }
+
+        [[nodiscard]] bool ValidInvocation(const CliInvocationContext &invocation, const CliExecutionLimits &limits) noexcept {
+            if (!invocation.invocation.IsValid() || invocation.configuration == nullptr)
+                return false;
+            return !invocation.project.has_value() || TextWithin(invocation.project->identity, limits.maximumProjectIdentityBytes);
+        }
+
+        [[nodiscard]] Result<std::optional<std::chrono::steady_clock::time_point>> ResolveDeadline(
+            const CliTimeoutPolicy &policy, const std::uint64_t requestedMilliseconds) {
+            if (requestedMilliseconds != 0 && (policy.maximumMilliseconds == 0 || requestedMilliseconds > policy.maximumMilliseconds))
+                return Result<std::optional<std::chrono::steady_clock::time_point>>::Failure(MakeError(CliErrors::ExecutionContextInvalid));
+
+            const std::uint64_t timeout = requestedMilliseconds == 0 ? policy.defaultMilliseconds : requestedMilliseconds;
+            if (timeout == 0)
+                return Result<std::optional<std::chrono::steady_clock::time_point>>::Success(std::nullopt);
+            return Result<std::optional<std::chrono::steady_clock::time_point>>::Success(std::chrono::steady_clock::now() +
+                                                                                         std::chrono::milliseconds(timeout));
+        }
+
+        [[nodiscard]] Result<const CliCommandDescriptor *> ValidateRegistration(const CliCommandAdapterRegistration &registration,
+                                                                                const CliCommandRegistry &registry,
+                                                                                const CliDispatchPolicy &policy) {
+            if (registration.adapter == nullptr)
+                return Result<const CliCommandDescriptor *>::Failure(MakeError(CliErrors::DispatchRegistrationInvalid));
+
+            const CliCommandDescriptor &adapterDescriptor = registration.adapter->GetDescriptor();
+            const CliCommandDescriptor *accepted = registry.Find(adapterDescriptor.path);
+            if (accepted == nullptr || !SameDescriptor(*accepted, adapterDescriptor) ||
+                !SameCapabilitySet(accepted->requiredCapabilities, registration.capabilities))
+                return Result<const CliCommandDescriptor *>::Failure(MakeError(CliErrors::DispatchRegistrationInvalid));
+            if ((accepted->hosts & HostBit(policy.activeHost)) == CliHostAvailability::None)
+                return Result<const CliCommandDescriptor *>::Failure(MakeError(CliErrors::HostUnsupported));
+            if (!SideEffectsAdmitted(accepted->sideEffects, policy.maximumSideEffects))
+                return Result<const CliCommandDescriptor *>::Failure(MakeError(CliErrors::SideEffectUnauthorized));
+            if (std::ranges::any_of(registration.capabilities, [&policy](const CliCapabilityId &capability) {
+                return !ContainsCapability(policy.grantedCapabilities, capability);
+            }))
+                return Result<const CliCommandDescriptor *>::Failure(MakeError(CliErrors::CapabilityUnauthorized));
+            return Result<const CliCommandDescriptor *>::Success(accepted);
         }
 
         [[nodiscard]] std::optional<Error> ValidateResult(const CliCommandResult &result, const CliExecutionLimits &limits) {
@@ -257,23 +323,10 @@ namespace Horo::Cli {
         std::vector<Entry> entries;
         entries.reserve(registrations.size());
         for (CliCommandAdapterRegistration &registration : registrations) {
-            if (registration.adapter == nullptr)
-                return Result<CliDispatcher>::Failure(MakeError(CliErrors::DispatchRegistrationInvalid));
-
-            const CliCommandDescriptor &adapterDescriptor = registration.adapter->GetDescriptor();
-            const CliCommandDescriptor *accepted = registry.Find(adapterDescriptor.path);
-            if (accepted == nullptr || !SameDescriptor(*accepted, adapterDescriptor) ||
-                !SameCapabilitySet(accepted->requiredCapabilities, registration.capabilities))
-                return Result<CliDispatcher>::Failure(MakeError(CliErrors::DispatchRegistrationInvalid));
-            if ((accepted->hosts & HostBit(policy.activeHost)) == CliHostAvailability::None)
-                return Result<CliDispatcher>::Failure(MakeError(CliErrors::HostUnsupported));
-            if (!SideEffectsAdmitted(accepted->sideEffects, policy.maximumSideEffects))
-                return Result<CliDispatcher>::Failure(MakeError(CliErrors::SideEffectUnauthorized));
-
-            if (std::ranges::any_of(registration.capabilities, [&policy](const CliCapabilityId &capability) {
-                return !ContainsCapability(policy.grantedCapabilities, capability);
-            }))
-                return Result<CliDispatcher>::Failure(MakeError(CliErrors::CapabilityUnauthorized));
+            Result<const CliCommandDescriptor *> validation = ValidateRegistration(registration, registry, policy);
+            if (validation.HasError())
+                return Result<CliDispatcher>::Failure(validation.ErrorValue());
+            const CliCommandDescriptor *accepted = validation.Value();
 
             if (std::ranges::any_of(entries, [accepted](const Entry &entry) {
                 return entry.descriptor->path == accepted->path;
@@ -300,27 +353,28 @@ namespace Horo::Cli {
         if (entry == entries_.end())
             return CliTerminalResult::Failure(std::move(initial), MakeError(CliErrors::CommandUnavailable));
 
-        if (!invocation.invocation.IsValid() || invocation.configuration == nullptr ||
-            (invocation.project.has_value() && !TextWithin(invocation.project->identity, policy_.limits.maximumProjectIdentityBytes)))
+        if (!ValidInvocation(invocation, policy_.limits))
             return CliTerminalResult::Failure(std::move(initial), MakeError(CliErrors::ExecutionContextInvalid));
         initial.project = invocation.project;
 
         if (invocation.cancellation.IsCancellationRequested())
             return CliTerminalResult::Failure(std::move(initial), MakeError(CliErrors::ExecutionCancelled));
 
-        std::uint64_t timeout = invocation.timeoutMilliseconds;
-        if (timeout == 0)
-            timeout = descriptor->timeout.defaultMilliseconds;
-        if (invocation.timeoutMilliseconds != 0 &&
-            (descriptor->timeout.maximumMilliseconds == 0 || invocation.timeoutMilliseconds > descriptor->timeout.maximumMilliseconds))
-            return CliTerminalResult::Failure(std::move(initial), MakeError(CliErrors::ExecutionContextInvalid));
-
-        std::optional<std::chrono::steady_clock::time_point> deadline;
-        if (timeout != 0)
-            deadline = std::chrono::steady_clock::now() + std::chrono::milliseconds(timeout);
+        Result<std::optional<std::chrono::steady_clock::time_point>> admittedDeadline =
+            ResolveDeadline(descriptor->timeout, invocation.timeoutMilliseconds);
+        if (admittedDeadline.HasError())
+            return CliTerminalResult::Failure(std::move(initial), admittedDeadline.ErrorValue());
+        const std::optional<std::chrono::steady_clock::time_point> deadline = std::move(admittedDeadline).Value();
 
         CliExecutionContext context(invocation, entry->capabilities, policy_.limits, deadline);
         Result<CliCommandResult> result = entry->adapter->Execute(request, context);
+        return Finalize(invocation, context, deadline, std::move(result));
+    }
+
+    /** @copydoc CliDispatcher::Finalize */
+    CliTerminalResult CliDispatcher::Finalize(const CliInvocationContext &invocation, CliExecutionContext &context,
+                                              const std::optional<std::chrono::steady_clock::time_point> &deadline,
+                                              Result<CliCommandResult> result) const {
         CliExecutionCorrelation correlation = context.Correlation();
 
         if (context.correlationRejected_)
