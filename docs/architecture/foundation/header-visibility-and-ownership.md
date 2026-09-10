@@ -475,8 +475,8 @@ job-system, codec, middleware, callback, or backend-native dependency.
 ## Destruction Identity Boundary
 
 `HoroEngine::DestructionApi` owns `Horo/Destruction/DestructibleDescriptor.h`,
-`Horo/Destruction/DestructionIdentity.h`, `Horo/Destruction/DestructionStateMachine.h`
-and `Horo/Destruction/DestructionErrors.h`.
+`Horo/Destruction/DestructionCommand.h`, `Horo/Destruction/DestructionIdentity.h`,
+`Horo/Destruction/DestructionStateMachine.h` and `Horo/Destruction/DestructionErrors.h`.
 Its public dependencies are limited to
 Foundation and Assets for typed results/errors, the shared SHA-256 value and the
 path-independent `AssetId`. Physics, Render, RuntimeScene and native provider headers
@@ -505,3 +505,12 @@ Exact retries are idempotent, conflicting command reuse is rejected, and replace
 cancellation and shutdown preserve the last published snapshot until a legal successor
 commits. Existing prototypes with mutable health/state fields must migrate to this
 single-owner contract rather than dual-write both representations.
+
+The `[DFR-001.5]` slice adds fixed-size impact, explosion, collision, damage and
+script commands with exact authority, capability, generation, revision and fixed-tick
+evidence. Callers validate the immutable value before queue admission, then lower it to
+the existing state-machine command without changing its identity. Durable terminal
+results preserve successful, rejected, cancelled, unsupported and failed dispositions
+as closed types. Producers must migrate from provider handles, callback mutation and
+message parsing to this contract; rejected or stale private work is discarded and is
+never published as a partial fallback.
