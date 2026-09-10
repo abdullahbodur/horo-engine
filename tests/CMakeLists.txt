@@ -296,6 +296,12 @@ add_executable(HoroCinematicModelTests
 target_compile_features(HoroCinematicModelTests PRIVATE cxx_std_20)
 target_link_libraries(HoroCinematicModelTests PRIVATE HoroEngine::CinematicModel)
 horo_register_catch_test(HoroCinematicModelTests LABELS "unit;cinematic;headless")
+add_executable(HoroCinematicRuntimeTests
+        unit/runtime/cinematic/TransformTrackTests.cpp
+)
+target_compile_features(HoroCinematicRuntimeTests PRIVATE cxx_std_20)
+target_link_libraries(HoroCinematicRuntimeTests PRIVATE HoroEngine::CinematicRuntime)
+horo_register_catch_test(HoroCinematicRuntimeTests LABELS "unit;cinematic;runtime;headless")
 add_executable(HoroCinematicCurveSamplingBenchmark EXCLUDE_FROM_ALL
         benchmarks/cinematic/CurveSamplingBenchmark.cpp
 )

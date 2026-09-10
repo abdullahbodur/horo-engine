@@ -297,6 +297,21 @@ struct TransformKeyframe {
   anchor. Root tracks require an anchor in canonical world coordinates; they never
   treat a rebased root transform as a permanently stable origin. See Origin Rebase.
 
+The implemented CIN-001.5 baseline represents position, quaternion and scale as ten
+validated scalar channels, so every channel preserves the sampling core's declared
+constant, linear, cubic Bezier or Hermite tangent behavior. Quaternion channels share
+key times, use one continuous hemisphere and normalize every result; invalid or
+zero-length rotations fail instead of producing an identity fallback. The same pure
+random-access `TransformTrackView::Sample` call serves runtime and editor preview.
+
+Runtime application resolves each durable `SceneObjectId` against the current scene
+generation, verifies the current authored parent, orders the batch parent-before-child
+with caller-owned bounded workspace, and produces one atomic local-transform command
+batch for the RuntimeScene lifecycle safe point. Root localization subtracts one
+immutable origin epoch from the canonical
+`WorldCoordinate64` anchor exactly once; neither curve keys nor child-local offsets
+change during a rebase.
+
 ### 2. Property Track
 
 Animates typed component properties registered in `PropertyBindingRegistry`:

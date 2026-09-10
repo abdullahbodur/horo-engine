@@ -46,4 +46,24 @@ namespace Horo::Cinematic::CinematicErrors {
     extern const ErrorCodeDescriptor CurveTangentInvalid;
     /** @brief Scalar curve input exceeds the compiled sampling capacity. */
     extern const ErrorCodeDescriptor CurveLimitExceeded;
+    /** @brief A transform track target, parent, or anchor-space declaration is invalid. */
+    extern const ErrorCodeDescriptor TransformBindingInvalid;
+    /** @brief Multiple transform tracks target the same authored scene object. */
+    extern const ErrorCodeDescriptor TransformBindingDuplicate;
+    /** @brief Transform track parent bindings contain a cycle. */
+    extern const ErrorCodeDescriptor TransformHierarchyCycle;
+    /** @brief A transform target is absent from the current runtime scene generation. */
+    extern const ErrorCodeDescriptor TransformTargetMissing;
+    /** @brief A transform parent is absent from the current runtime scene generation. */
+    extern const ErrorCodeDescriptor TransformParentMissing;
+    /** @brief A resolved runtime parent differs from the track's durable authored parent. */
+    extern const ErrorCodeDescriptor TransformParentMismatch;
+    /** @brief Sampled quaternion channels cannot form a finite normalized rotation. */
+    extern const ErrorCodeDescriptor TransformRotationInvalid;
+    /** @brief A sampled transform is not a finite representable local TRS value. */
+    extern const ErrorCodeDescriptor TransformSampleInvalid;
+    /** @brief A canonical root anchor or origin epoch cannot be localized safely. */
+    extern const ErrorCodeDescriptor TransformOriginInvalid;
+    /** @brief Transform hierarchy input or workspace exceeds its compiled capacity. */
+    extern const ErrorCodeDescriptor TransformCapacityExceeded;
 }  // namespace Horo::Cinematic::CinematicErrors
