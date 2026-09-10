@@ -53,6 +53,13 @@ namespace Horo::Security {
             MakeError(SecurityErrors::EntropyUnavailable, "Secure entropy produced repeated credential references."));
     }
 
+    Result<CredentialVault::Record *> CredentialVault::FindRecord(const CredentialReference &reference) {
+        const auto record = records_.find(std::string{reference.Value()});
+        if (record == records_.end())
+            return Result<Record *>::Failure(MakeError(SecurityErrors::CredentialNotFound));
+        return Result<Record *>::Success(&record->second);
+    }
+
     /** @copydoc CredentialVault::Put */
     Result<CredentialReference> CredentialVault::Put(SecureBytes secret, const std::uint64_t expiresAtMillis) {
         if (secret.Empty())
@@ -70,14 +77,14 @@ namespace Horo::Security {
 
     /** @copydoc CredentialVault::Resolve */
     Result<SecureBytes> CredentialVault::Resolve(const CredentialReference &reference, const std::uint64_t nowMillis) {
-        const auto record = records_.find(std::string{reference.Value()});
-        if (record == records_.end())
-            return Result<SecureBytes>::Failure(MakeError(SecurityErrors::CredentialNotFound));
-        if (record->second.revoked)
+        auto record = FindRecord(reference);
+        if (record.HasError())
+            return Result<SecureBytes>::Failure(record.ErrorValue());
+        if (record.Value()->revoked)
             return Result<SecureBytes>::Failure(MakeError(SecurityErrors::CredentialRevoked));
-        if (record->second.expiresAtMillis != 0 && nowMillis >= record->second.expiresAtMillis) {
+        if (record.Value()->expiresAtMillis != 0 && nowMillis >= record.Value()->expiresAtMillis) {
             static_cast<void>(backend_ ? backend_->Remove(reference) : Result<void>::Success());
-            record->second.revoked = true;
+            record.Value()->revoked = true;
             return Result<SecureBytes>::Failure(MakeError(SecurityErrors::CredentialExpired));
         }
         if (!backend_ || !backend_->Available())
@@ -87,24 +94,24 @@ namespace Horo::Security {
 
     /** @copydoc CredentialVault::Revoke */
     Result<void> CredentialVault::Revoke(const CredentialReference &reference) {
-        const auto record = records_.find(std::string{reference.Value()});
-        if (record == records_.end())
-            return Result<void>::Failure(MakeError(SecurityErrors::CredentialNotFound));
+        auto record = FindRecord(reference);
+        if (record.HasError())
+            return Result<void>::Failure(record.ErrorValue());
         if (!backend_ || !backend_->Available())
             return Result<void>::Failure(MakeError(SecurityErrors::CredentialBackendUnavailable));
         if (auto removed = backend_->Remove(reference); removed.HasError())
             return removed;
-        record->second.revoked = true;
+        record.Value()->revoked = true;
         return Result<void>::Success();
     }
 
     /** @copydoc CredentialVault::Rotate */
     Result<void> CredentialVault::Rotate(const CredentialReference &reference, SecureBytes replacement,
                                          const std::uint64_t expiresAtMillis) {
-        const auto record = records_.find(std::string{reference.Value()});
-        if (record == records_.end())
-            return Result<void>::Failure(MakeError(SecurityErrors::CredentialNotFound));
-        if (record->second.revoked)
+        auto record = FindRecord(reference);
+        if (record.HasError())
+            return Result<void>::Failure(record.ErrorValue());
+        if (record.Value()->revoked)
             return Result<void>::Failure(MakeError(SecurityErrors::CredentialRevoked));
         if (replacement.Empty())
             return Result<void>::Failure(MakeError(SecurityErrors::InvalidInput, "Credential material must not be empty."));
@@ -112,7 +119,7 @@ namespace Horo::Security {
             return Result<void>::Failure(MakeError(SecurityErrors::CredentialBackendUnavailable));
         if (auto stored = backend_->Put(reference, std::move(replacement)); stored.HasError())
             return stored;
-        record->second.expiresAtMillis = expiresAtMillis;
+        record.Value()->expiresAtMillis = expiresAtMillis;
         return Result<void>::Success();
     }
 

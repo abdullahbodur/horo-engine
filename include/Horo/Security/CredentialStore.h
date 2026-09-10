@@ -93,6 +93,7 @@ namespace Horo::Security {
         };
 
         [[nodiscard]] Result<CredentialReference> NewReference();
+        [[nodiscard]] Result<Record *> FindRecord(const CredentialReference &reference);
         std::shared_ptr<CredentialBackend> backend_;
         std::shared_ptr<SecureRandomSource> random_;
         std::unordered_map<std::string, Record> records_;

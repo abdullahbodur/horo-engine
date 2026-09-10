@@ -116,6 +116,15 @@ namespace Horo::Extensions::Tests {
             std::ofstream output{tempDir / "extension.json", std::ios::binary | std::ios::trunc};
             output << "{\"id\":\"com.example.multi\",\"version\":\"1.0.0\",\"modules\":" << modules << '}';
         }
+
+        [[nodiscard]] static std::string MissingPresentationModules(const std::string &extension) {
+            return "[{\"id\":\"com.example.multi.backend\",\"version\":\"1.0.0\",\"kind\":\"native\","
+                   "\"roles\":[\"backend-capability\"],\"entry\":\"backend" +
+                   extension +
+                   "\"},{\"id\":\"com.example.multi.editor\",\"version\":\"1.0.0\",\"kind\":\"native\","
+                   "\"roles\":[\"editor-presentation\"],\"dependencies\":[\"com.example.multi.backend\"],\"entry\":\"missing" +
+                   extension + "\"}]";
+        }
 #endif
     };
 
@@ -402,26 +411,14 @@ namespace Horo::Extensions::Tests {
                      "[Extensions][Modules]") {
         const std::string extension = PrepareMultiModuleLibraries();
         SECTION("a failing sibling rolls back the complete activation attempt") {
-            WriteMultiModuleManifest(
-                "[{\"id\":\"com.example.multi.backend\",\"version\":\"1.0.0\",\"kind\":\"native\","
-                "\"roles\":[\"backend-capability\"],\"entry\":\"backend" +
-                extension +
-                "\"},{\"id\":\"com.example.multi.editor\",\"version\":\"1.0.0\",\"kind\":\"native\","
-                "\"roles\":[\"editor-presentation\"],\"dependencies\":[\"com.example.multi.backend\"],\"entry\":\"missing" +
-                extension + "\"}]");
+            WriteMultiModuleManifest(MissingPresentationModules(extension));
             ExtensionManager manager{nullptr, ExtensionHostProfile::Interactive, {}, Horo::Tests::CreateAcceptingArtifactGate()};
             REQUIRE(manager.LoadExtension(fs::absolute(tempDir).string()).HasError());
             CHECK(manager.GetLoadedExtensionIds().empty());
         }
 
         SECTION("headless activation does not construct an optional presentation sibling") {
-            WriteMultiModuleManifest(
-                "[{\"id\":\"com.example.multi.backend\",\"version\":\"1.0.0\",\"kind\":\"native\","
-                "\"roles\":[\"backend-capability\"],\"entry\":\"backend" +
-                extension +
-                "\"},{\"id\":\"com.example.multi.editor\",\"version\":\"1.0.0\",\"kind\":\"native\","
-                "\"roles\":[\"editor-presentation\"],\"dependencies\":[\"com.example.multi.backend\"],\"entry\":\"missing" +
-                extension + "\"}]");
+            WriteMultiModuleManifest(MissingPresentationModules(extension));
             ExtensionManager manager{nullptr, ExtensionHostProfile::Headless, {}, Horo::Tests::CreateAcceptingArtifactGate()};
             REQUIRE(manager.LoadExtension(fs::absolute(tempDir).string()).HasValue());
             CHECK(manager.GetLoadedExtensionIds() == std::vector<std::string>{"com.example.multi"});
