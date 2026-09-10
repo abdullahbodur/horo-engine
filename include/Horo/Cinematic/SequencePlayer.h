@@ -183,12 +183,12 @@ namespace Horo::Cinematic {
 
         [[nodiscard]] Result<void> ValidateHandle(const SequencePlayerHandle &handle) const;
         [[nodiscard]] Result<void> ValidateControllableHandle(const SequencePlayerHandle &handle) const;
-        [[nodiscard]] Result<bool> PrepareValueChange(const SequencePlayerHandle &handle, bool valueChanged) const;
         [[nodiscard]] Result<SequencePlayerTransition> Change(const SequencePlayerHandle &handle, SequencePlaybackState state,
                                                               SequencePlaybackSignal signal, SequenceEventTransitionPolicy eventPolicy);
-        [[nodiscard]] Result<SequencePlayerTransition> PublishValueChange(const SequencePlayerSnapshot &previous,
-                                                                          SequencePlaybackSignal signal,
-                                                                          SequenceEventTransitionPolicy eventPolicy);
+        [[nodiscard]] Result<SequencePlayerTransition> ApplyValueChange(const SequencePlayerHandle &handle,
+                                                                        const SequencePlayerSnapshot &requested,
+                                                                        SequencePlaybackSignal signal,
+                                                                        SequenceEventTransitionPolicy eventPolicy);
         [[nodiscard]] SequencePlayerTransition NoChange() const noexcept;
         [[nodiscard]] SequencePlayerTransition TransitionFrom(const SequencePlayerSnapshot &previous, SequencePlaybackSignal signal,
                                                               SequenceEventTransitionPolicy eventPolicy) const noexcept;
