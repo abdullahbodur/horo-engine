@@ -63,6 +63,30 @@ generation-checked, non-serializable identity. Copying it does not own or extend
 the pose lifetime. External systems receive immutable snapshots or leases, never
 mutable arrays or cached pointers into a recyclable pose pool.
 
+ANI-001.2 realizes that decision through the `HoroEngine::AnimationApi` boundary.
+`SkeletonId`, `AnimationClipId`, `AnimationGraphId`, and `RetargetProfileId` are
+distinct wrappers around the canonical persistent `AssetId`; paths, display names,
+pointers, and load order are never identity. `AnimationComponentId` and `JointId`
+are stable authored non-zero values. `AnimationInstanceHandle` combines an exact
+process-local runtime owner, authored component identity, slot, and non-wrapping
+slot generation. `PoseHandle` additionally identifies recyclable pose storage and
+the committed semantic `PoseGeneration`. `PresentationPoseHandle` binds one exact
+committed source pose to a presentation-frame generation and recyclable frame-pool
+slot; it cannot feed simulation. `RootMotionRequestId` binds the exact instance,
+attempted fixed tick, and non-reusable request generation.
+
+The authoring component is inert metadata with one typed clip-or-graph source,
+skeleton, optional retarget profile, and explicit root-motion intent. The runtime
+component is an immutable non-owning projection of the exact instance, asset
+binding, evaluation domain, lifecycle state, and previous/current committed pose
+handles. Validation is bounded and has no successful-path allocation or ambient
+side effect. It proves representation and association, not registry occupancy,
+asset readiness, storage retention, or permission to consume root motion. Runtime
+replacement retires generations; shutdown closes admission, joins bounded work,
+revokes leases, and releases pose storage before immutable assets and runtime
+dependencies. There is deliberately no compatibility path through untyped entity
+IDs, array indexes, names, raw pose pointers, or native animation handles.
+
 ### 2. Evaluation domains and clocks
 
 Skeletal/pose animation has three explicit evaluation domains:

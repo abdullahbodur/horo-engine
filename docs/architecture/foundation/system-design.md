@@ -307,6 +307,7 @@ HoroEngine::Assets
 HoroEngine::SceneModel
 HoroEngine::RuntimeScene
 HoroEngine::Physics
+HoroEngine::AnimationApi
 HoroEngine::AudioApi
 HoroEngine::AudioRuntime
 HoroEngine::AudioPlatform
@@ -380,6 +381,11 @@ the canonical runtime and solver boundary. If interchangeable third-party
 physics backends are introduced, it must first split into explicit API, runtime,
 and backend targets; callers must not infer those layers from directory symmetry
 alone.
+
+`HoroEngine::AnimationApi` owns only backend-neutral identity and component
+contracts. It depends one-way on Foundation and Assets for stable primitives and
+canonical asset identity; runtime registries, evaluators, pose storage,
+presentation extraction, and native animation backends must remain downstream.
 
 Each target owns an explicit source list and the smallest practical public
 include surface. Production targets are linked into tests; production sources

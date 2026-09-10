@@ -268,6 +268,25 @@ represent pointers, container positions, runtime registry handles, callbacks,
 filesystem paths, or backend-native values. Existing callers require no migration
 because this is the first published PCG API slice.
 
+## Animation Identity And Component Boundary
+
+`HoroEngine::AnimationApi` owns `Horo/Animation/AnimationErrors.h`,
+`Horo/Animation/AnimationIdentity.h`, and `Horo/Animation/AnimationComponents.h`.
+Its only public dependencies are Foundation and Assets for typed results/errors,
+generation-safe slots, and the canonical persistent `AssetId`. RuntimeScene,
+Physics, Render, editor, platform, native animation middleware, pose buffers,
+callbacks, and service-locator types remain outside this public boundary.
+
+This ANI-001.2 slice introduces inert identity and component values plus bounded
+association validation. It does not create an animation runtime, load an asset,
+allocate pose storage, issue a lease, evaluate a graph, consume root motion, or
+register a scene component. No production caller requires migration because this
+is the first published Animation API slice. Future animation runtime, scene cook,
+physics handoff, cinematic, and render-extraction targets must link AnimationApi
+explicitly instead of duplicating IDs or persisting process-local handles. The
+generated standalone public-header consumer verifies this staged dependency
+boundary.
+
 ## Destruction Identity Boundary
 
 `HoroEngine::DestructionApi` owns `Horo/Destruction/DestructibleDescriptor.h`,

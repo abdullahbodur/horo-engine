@@ -256,6 +256,14 @@ target_compile_features(HoroAITests PRIVATE cxx_std_20)
 target_link_libraries(HoroAITests PRIVATE HoroEngine::AI)
 horo_register_catch_test(HoroAITests LABELS "unit;ai;headless")
 
+add_executable(HoroAnimationApiTests
+        unit/runtime/animation/AnimationComponentTests.cpp
+        unit/runtime/animation/AnimationIdentityTests.cpp
+)
+target_compile_features(HoroAnimationApiTests PRIVATE cxx_std_20)
+target_link_libraries(HoroAnimationApiTests PRIVATE HoroEngine::AnimationApi)
+horo_register_catch_test(HoroAnimationApiTests LABELS "unit;animation;headless")
+
 add_executable(HoroPCGTests
         unit/runtime/pcg/PCGIdentityTests.cpp
 )

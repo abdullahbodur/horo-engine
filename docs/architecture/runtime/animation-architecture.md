@@ -62,6 +62,45 @@ Not covered:
 
 ## Skeleton
 
+### Identity And Component Contract
+
+`HoroEngine::AnimationApi` owns the backend-neutral ANI-001.2 contract in
+`Horo/Animation/AnimationIdentity.h` and `AnimationComponents.h`. Persistent
+skeleton, clip, graph, and retarget identities wrap canonical Assets identities in
+distinct C++ types. Stable component and joint identities do not depend on names,
+entity slots, hierarchy positions, memory addresses, or load order.
+
+Runtime instance and pose handles are process-local, non-owning, non-serializable,
+and generation checked. An instance handle is fenced by runtime incarnation,
+authored component, registry slot, and slot generation. A pose handle is also
+fenced by its committed semantic generation; copying one does not retain recyclable
+pose storage. Each typed registry admits at most `MaximumAnimationHandleSlots`
+live or recyclable slots and rejects larger indexes before lookup. A
+`PresentationPoseHandle` additionally fences the exact committed source pose to a
+presentation-frame generation and frame-pool slot, so it cannot alias a replacement
+pose or become later simulation input. Root-motion
+requests carry the exact instance, attempted fixed tick,
+and request generation, while successful tick commit separately owns durable
+consumption deduplication.
+
+The persistent authoring component declares exactly one clip or graph source, one
+skeleton, an optional retarget profile, initial playback intent, and typed root-
+motion policy. Its construction/validation is inert. The runtime component is an
+immutable projection of the live instance, exact authored asset binding, explicit
+evaluation domain/lifecycle state, and ordered previous/current committed poses.
+It neither owns nor exposes mutable pose arrays, callbacks, jobs, leases, service
+locators, concrete animation middleware, renderer state, or physics state.
+
+Validation is bounded and allocation-free on success. It rejects reserved IDs,
+contradictory source unions, unsupported contract versions, cross-runtime/component
+handles, retired generations, asset-binding skew, and reversed committed-pose
+generations before registry or pose access. Success proves value association only;
+the Animation owner still proves residency and issues any immutable lease. Reload
+publishes a compatible replacement at the owner safe point and retires old handles.
+Scene unload and shutdown stop admission, cancel/join bounded work, revoke/drain
+leases, and retire generations before pose storage, assets, and dependencies are
+released. No fallback converts stale handles to a newly loaded instance.
+
 A skeleton is a hierarchy of joints. Each joint has:
 
 - stable name and index
