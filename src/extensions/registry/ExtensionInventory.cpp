@@ -411,6 +411,13 @@ namespace Horo::Extensions {
             entry.stateRevision = projection.stateRevision;
             entry.activationGeneration = projection.activationGeneration;
         }
+
+        /** @brief Finds one mutable inventory entry without duplicating public-operation admission. */
+        [[nodiscard]] ExtensionInventoryEntry *FindEntry(std::vector<ExtensionInventoryEntry> &entries,
+                                                         const std::string_view packageId) noexcept {
+            const auto found = std::ranges::find(entries, packageId, &ExtensionInventoryEntry::packageId);
+            return found == entries.end() ? nullptr : &*found;
+        }
     }  // namespace
 
     /** @copydoc ExtensionInventoryEntry::ActivationState */
@@ -517,8 +524,8 @@ namespace Horo::Extensions {
 
     /** @copydoc ExtensionInventory::SetEnabled */
     Result<void> ExtensionInventory::SetEnabled(const std::string_view packageId, const bool enabled) {
-        const auto entry = std::ranges::find(entries_, packageId, &ExtensionInventoryEntry::packageId);
-        if (entry == entries_.end())
+        ExtensionInventoryEntry *entry = FindEntry(entries_, packageId);
+        if (entry == nullptr)
             return Result<void>::Failure(MakeError(ExtensionErrors::InvalidManifest, "Unknown extension package ID."));
         auto transition =
             TransitionExtensionActivation(entry->ActivationState(), {.action = enabled ? ExtensionLifecycleAction::EnableForProject
@@ -545,8 +552,8 @@ namespace Horo::Extensions {
 
     /** @copydoc ExtensionInventory::SetTrusted */
     Result<void> ExtensionInventory::SetTrusted(const std::string_view packageId, const bool trusted) {
-        const auto entry = std::ranges::find(entries_, packageId, &ExtensionInventoryEntry::packageId);
-        if (entry == entries_.end())
+        ExtensionInventoryEntry *entry = FindEntry(entries_, packageId);
+        if (entry == nullptr)
             return Result<void>::Failure(MakeError(ExtensionErrors::InvalidManifest, "Unknown extension package ID."));
         auto transition =
             TransitionExtensionActivation(entry->ActivationState(),
@@ -576,8 +583,8 @@ namespace Horo::Extensions {
 
     /** @copydoc ExtensionInventory::MarkRuntimeActive */
     Result<void> ExtensionInventory::MarkRuntimeActive(const std::string_view packageId) {
-        const auto entry = std::ranges::find(entries_, packageId, &ExtensionInventoryEntry::packageId);
-        if (entry == entries_.end())
+        ExtensionInventoryEntry *entry = FindEntry(entries_, packageId);
+        if (entry == nullptr)
             return Result<void>::Failure(MakeError(ExtensionErrors::InvalidManifest, "Unknown extension package ID."));
         auto state = entry->ActivationState();
         if (state.compatibility == ExtensionHostCompatibilityState::NotEvaluated) {
@@ -612,8 +619,8 @@ namespace Horo::Extensions {
     /** @copydoc ExtensionInventory::RecordActivationFailure */
     Result<void> ExtensionInventory::RecordActivationFailure(const std::string_view packageId,
                                                              const ExtensionActivationFailureReason reason, std::string message) {
-        const auto entry = std::ranges::find(entries_, packageId, &ExtensionInventoryEntry::packageId);
-        if (entry == entries_.end())
+        ExtensionInventoryEntry *entry = FindEntry(entries_, packageId);
+        if (entry == nullptr)
             return Result<void>::Failure(MakeError(ExtensionErrors::InvalidManifest, "Unknown extension package ID."));
         auto failed =
             TransitionExtensionActivation(entry->ActivationState(), {.action = ExtensionLifecycleAction::RecordActivationFailure,
