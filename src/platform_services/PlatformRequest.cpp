@@ -3,6 +3,7 @@
 #include "Horo/PlatformServices/PlatformRequestErrors.h"
 
 #include <algorithm>
+#include <array>
 #include <atomic>
 #include <deque>
 #include <mutex>
@@ -78,25 +79,63 @@ namespace Horo::PlatformServices {
         std::uint64_t callbackFailures{};
         bool closed{};
         std::atomic_flag dispatching = ATOMIC_FLAG_INIT;
+
+        [[nodiscard]] Record *FindRecord(const PlatformRequestId id, const PlatformRequestGeneration generation,
+                                         const std::type_index type) noexcept {
+            if (!id.IsValid() || generation != config.generation)
+                return nullptr;
+            const auto found = records.find(id.value);
+            if (found == records.end() || found->second.type != type)
+                return nullptr;
+            return &found->second;
+        }
+
+        void QueueObservers(Record &record) {
+            for (const auto &weak : record.observers)
+                if (auto slot = weak.lock())
+                    deliveries.push_back(Delivery{.slot = std::move(slot), .snapshot = record.snapshot});
+            record.observers.clear();
+        }
+
+        void ExpireTerminalRecords() {
+            while (terminalOrder.size() > config.terminalCapacity) {
+                records.erase(terminalOrder.front());
+                terminalOrder.pop_front();
+            }
+        }
+
+        void ReleaseObserver(const PlatformRequestId id, const PlatformRequestSubscription::Slot *slotIdentity) {
+            if (observerCount > 0)
+                --observerCount;
+            if (const auto record = records.find(id.value); record != records.end()) {
+                std::erase_if(record->second.observers, [slotIdentity](const auto &weak) {
+                    const auto candidate = weak.lock();
+                    return !candidate || candidate.get() == slotIdentity;
+                });
+            }
+            std::erase_if(deliveries, [slotIdentity](const auto &delivery) {
+                return delivery.slot.get() == slotIdentity;
+            });
+        }
     };
 
     namespace {
         [[nodiscard]] bool CanComplete(const PlatformRequestState from, const PlatformRequestState to) noexcept {
-            using enum PlatformRequestState;
-            switch (from) {
-                case Queued:
-                    return to == Failed || to == TimedOut;
-                case Running:
-                    return to == Succeeded || to == Failed || to == TimedOut;
-                case Cancelling:
-                    return to == Succeeded || to == Failed || to == Cancelled || to == TimedOut;
-                case Succeeded:
-                case Failed:
-                case Cancelled:
-                case TimedOut:
-                    return false;
-            }
-            return false;
+            constexpr auto StateBit = [](const PlatformRequestState state) {
+                return static_cast<std::uint8_t>(1U << static_cast<std::uint8_t>(state));
+            };
+            constexpr std::array<std::uint8_t, 7> AllowedTerminalStates{
+                StateBit(PlatformRequestState::Failed) | StateBit(PlatformRequestState::TimedOut),
+                StateBit(PlatformRequestState::Succeeded) | StateBit(PlatformRequestState::Failed) |
+                    StateBit(PlatformRequestState::TimedOut),
+                StateBit(PlatformRequestState::Succeeded) | StateBit(PlatformRequestState::Failed) |
+                    StateBit(PlatformRequestState::Cancelled) | StateBit(PlatformRequestState::TimedOut),
+                0,
+                0,
+                0,
+                0,
+            };
+            return (AllowedTerminalStates[static_cast<std::size_t>(from)] & StateBit(to)) != 0;
         }
 
         [[nodiscard]] bool TerminalShapeIsValid(const PlatformRequestState state, const std::shared_ptr<const void> &value,
@@ -186,10 +225,10 @@ namespace Horo::PlatformServices {
                                                                             const PlatformRequestGeneration generation,
                                                                             const std::type_index type) {
         std::lock_guard lock(state_->mutex);
-        const auto found = state_->records.find(id.value);
-        if (!id.IsValid() || generation != state_->config.generation || found == state_->records.end() || found->second.type != type)
+        auto *record = state_->FindRecord(id, generation, type);
+        if (record == nullptr)
             return Result<PlatformRequestMutation>::Failure(MakeError(RequestErrors::Stale));
-        auto &snapshot = found->second.snapshot;
+        auto &snapshot = record->snapshot;
         if (snapshot.state == PlatformRequestState::Running)
             return Result<PlatformRequestMutation>::Success(PlatformRequestMutation::Unchanged);
         if (snapshot.state != PlatformRequestState::Queued)
@@ -205,10 +244,10 @@ namespace Horo::PlatformServices {
                                                                               const std::type_index type) {
         const auto now = std::chrono::steady_clock::now();
         std::lock_guard lock(state_->mutex);
-        const auto found = state_->records.find(id.value);
-        if (!id.IsValid() || generation != state_->config.generation || found == state_->records.end() || found->second.type != type)
+        auto *record = state_->FindRecord(id, generation, type);
+        if (record == nullptr)
             return Result<PlatformRequestMutation>::Failure(MakeError(RequestErrors::Stale));
-        auto &snapshot = found->second.snapshot;
+        auto &snapshot = record->snapshot;
         if (IsTerminal(snapshot.state) || snapshot.cancellationRequested)
             return Result<PlatformRequestMutation>::Success(PlatformRequestMutation::Unchanged);
         snapshot.cancellationRequested = true;
@@ -230,32 +269,23 @@ namespace Horo::PlatformServices {
                                                                          std::shared_ptr<const void> value, std::optional<Error> error) {
         const auto now = std::chrono::steady_clock::now();
         std::lock_guard lock(state_->mutex);
-        const auto found = state_->records.find(id.value);
-        if (!id.IsValid() || generation != state_->config.generation || found == state_->records.end() || found->second.type != type)
+        auto *record = state_->FindRecord(id, generation, type);
+        if (record == nullptr)
             return Result<PlatformRequestMutation>::Failure(MakeError(RequestErrors::Stale));
-        auto &record = found->second;
-        if (IsTerminal(record.snapshot.state))
+        if (IsTerminal(record->snapshot.state))
             return Result<PlatformRequestMutation>::Success(PlatformRequestMutation::Unchanged);
-        if (!CanComplete(record.snapshot.state, terminalState) || !TerminalShapeIsValid(terminalState, value, error))
+        if (!CanComplete(record->snapshot.state, terminalState) || !TerminalShapeIsValid(terminalState, value, error))
             return Result<PlatformRequestMutation>::Failure(MakeError(RequestErrors::InvalidTransition));
 
-        record.snapshot.state = terminalState;
-        record.snapshot.terminal = true;
-        record.snapshot.value = std::move(value);
-        record.snapshot.error = std::move(error);
-        record.snapshot.timing.terminalAt = now;
+        record->snapshot.state = terminalState;
+        record->snapshot.terminal = true;
+        record->snapshot.value = std::move(value);
+        record->snapshot.error = std::move(error);
+        record->snapshot.timing.terminalAt = now;
         --state_->activeCount;
         state_->terminalOrder.push_back(id.value);
-        for (const auto &weak : record.observers)
-            if (auto slot = weak.lock())
-                state_->deliveries.push_back(State::Delivery{.slot = std::move(slot), .snapshot = record.snapshot});
-        record.observers.clear();
-
-        while (state_->terminalOrder.size() > state_->config.terminalCapacity) {
-            const auto expired = state_->terminalOrder.front();
-            state_->terminalOrder.pop_front();
-            state_->records.erase(expired);
-        }
+        state_->QueueObservers(*record);
+        state_->ExpireTerminalRecords();
         return Result<PlatformRequestMutation>::Success(PlatformRequestMutation::Applied);
     }
 
@@ -299,17 +329,7 @@ namespace Horo::PlatformServices {
         slot->release = [weakState, id, slotIdentity]() noexcept {
             if (const auto state = weakState.lock()) {
                 std::lock_guard stateLock(state->mutex);
-                if (state->observerCount > 0)
-                    --state->observerCount;
-                if (const auto record = state->records.find(id.value); record != state->records.end()) {
-                    std::erase_if(record->second.observers, [slotIdentity](const auto &weak) {
-                        const auto candidate = weak.lock();
-                        return !candidate || candidate.get() == slotIdentity;
-                    });
-                }
-                std::erase_if(state->deliveries, [slotIdentity](const auto &delivery) {
-                    return delivery.slot.get() == slotIdentity;
-                });
+                state->ReleaseObserver(id, slotIdentity);
             }
         };
         ++state_->observerCount;
@@ -384,10 +404,7 @@ namespace Horo::PlatformServices {
                 observers.push_back(std::move(delivery.slot));
             state_->deliveries.clear();
             state_->activeCount = 0;
-            while (state_->terminalOrder.size() > state_->config.terminalCapacity) {
-                state_->records.erase(state_->terminalOrder.front());
-                state_->terminalOrder.pop_front();
-            }
+            state_->ExpireTerminalRecords();
         }
         for (const auto &observer : observers)
             observer->Reset();
