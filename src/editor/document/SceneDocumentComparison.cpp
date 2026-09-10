@@ -26,6 +26,15 @@ namespace Horo::Editor {
                 .editorState = document.editorState != disk.editorState,
             };
         }
+
+        [[nodiscard]] ScenePrefabInstanceDifferenceFields ComparePrefabInstanceFields(const ScenePrefabInstance &document,
+                                                                                      const ScenePrefabInstance &disk) {
+            return {
+                .sourcePrefab = document.sourcePrefab != disk.sourcePrefab,
+                .parent = document.parent != disk.parent,
+                .rootTransform = document.rootTransform != disk.rootTransform,
+            };
+        }
     }  // namespace
 
     /** @copydoc CompareSceneDocuments */
@@ -73,6 +82,46 @@ namespace Horo::Editor {
             });
             ++comparison.addedOnDisk;
         }
+
+        std::unordered_map<std::uint64_t, const ScenePrefabInstance *> diskPrefabInstances;
+        diskPrefabInstances.reserve(disk.prefabInstances.size());
+        for (const ScenePrefabInstance &instance : disk.prefabInstances)
+            diskPrefabInstances.emplace(instance.instanceId.Value(), &instance);
+
+        comparison.prefabInstances.reserve(document.prefabInstances.size() + disk.prefabInstances.size());
+        for (const ScenePrefabInstance &documentInstance : document.prefabInstances) {
+            const auto diskInstance = diskPrefabInstances.find(documentInstance.instanceId.Value());
+            if (diskInstance == diskPrefabInstances.end()) {
+                comparison.prefabInstances.push_back({
+                    .id = documentInstance.instanceId,
+                    .kind = SceneObjectComparisonKind::RemovedFromDisk,
+                });
+                ++comparison.prefabInstancesRemovedFromDisk;
+                continue;
+            }
+
+            if (const ScenePrefabInstanceDifferenceFields fields = ComparePrefabInstanceFields(documentInstance, *diskInstance->second);
+                fields.Any()) {
+                comparison.prefabInstances.push_back({
+                    .id = documentInstance.instanceId,
+                    .kind = SceneObjectComparisonKind::Modified,
+                    .fields = fields,
+                });
+                ++comparison.prefabInstancesModified;
+            }
+
+            diskPrefabInstances.erase(diskInstance);
+        }
+
+        for (const ScenePrefabInstance &diskInstance : disk.prefabInstances) {
+            if (!diskPrefabInstances.contains(diskInstance.instanceId.Value()))
+                continue;
+            comparison.prefabInstances.push_back({
+                .id = diskInstance.instanceId,
+                .kind = SceneObjectComparisonKind::AddedOnDisk,
+            });
+            ++comparison.prefabInstancesAddedOnDisk;
+        }
         return comparison;
     }
 
@@ -90,8 +139,10 @@ namespace Horo::Editor {
             return Result<SceneDocumentComparison>::Failure(MakeError(SceneComparisonUnavailable));
         }
 
+        LoadedProjectScene diskScene = std::move(loaded).Value().value();
         SceneDocumentSnapshot disk{
-            .objects = std::move(loaded).Value()->objects,
+            .objects = std::move(diskScene.objects),
+            .prefabInstances = std::move(diskScene.prefabInstances),
         };
         SceneDocumentComparison comparison = CompareSceneDocuments(request.document, disk);
         comparison.absoluteScenePath = request.absoluteScenePath.string();

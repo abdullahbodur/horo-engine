@@ -152,6 +152,24 @@ namespace Horo::Editor {
             .retryable = false,
             .userActionable = true,
         };
+        const ErrorCodeDescriptor InvalidPrefabInstance{
+            .domain = SceneDocumentDomain,
+            .code = ErrorCode{"scene_document.invalid_prefab_instance"},
+            .defaultSeverity = ErrorSeverity::Error,
+            .summary = "Scene prefab instance is invalid.",
+            .remediationHint = "Use a stable instance ID, valid prefab AssetId, finite root transform, and containing-scene parent.",
+            .retryable = false,
+            .userActionable = true,
+        };
+        const ErrorCodeDescriptor PrefabInstanceNotFound{
+            .domain = SceneDocumentDomain,
+            .code = ErrorCode{"scene_document.prefab_instance_not_found"},
+            .defaultSeverity = ErrorSeverity::Error,
+            .summary = "Scene prefab instance was not found.",
+            .remediationHint = "Refresh the stable instance identity from the active document.",
+            .retryable = false,
+            .userActionable = true,
+        };
         const ErrorCodeDescriptor PrimitiveNotCreatable{
             .domain = SceneDocumentDomain,
             .code = ErrorCode{"scene_document.primitive_not_creatable"},

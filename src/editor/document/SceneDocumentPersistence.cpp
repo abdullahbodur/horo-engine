@@ -621,7 +621,18 @@ namespace Horo::Editor {
                 value["meshAsset"] = object.meshAsset.has_value() ? Json(object.meshAsset->ToString()) : Json(nullptr);
                 objects.push_back(std::move(value));
             }
-            return Json{{"schemaVersion", kSceneSchemaVersion}, {"objects", std::move(objects)}};
+            Json prefabInstances = Json::array();
+            for (const ScenePrefabInstance &instance : snapshot.prefabInstances) {
+                prefabInstances.push_back({
+                    {"instanceId", instance.instanceId.Value()},
+                    {"sourceAsset", instance.sourcePrefab.Asset().ToString()},
+                    {"parent", instance.parent.has_value() ? Json(instance.parent->value) : Json(nullptr)},
+                    {"rootTransform", TransformJson(instance.rootTransform)},
+                });
+            }
+            return Json{{"schemaVersion", kSceneSchemaVersion},
+                        {"objects", std::move(objects)},
+                        {"prefabInstances", std::move(prefabInstances)}};
         }
 
         [[nodiscard]] Result<SceneObjectSnapshot> ParseSceneObjectSnapshot(const Json &value) {
@@ -688,28 +699,71 @@ namespace Horo::Editor {
             });
         }
 
-        [[nodiscard]] Result<std::vector<SceneObjectSnapshot>> ParseScene(const std::string &contents) {
+        struct ParsedScene final {
+            std::vector<SceneObjectSnapshot> objects;
+            std::vector<ScenePrefabInstance> prefabInstances;
+        };
+
+        [[nodiscard]] Result<ScenePrefabInstance> ParseScenePrefabInstance(const Json &value) {
+            if (!value.is_object() || !value.contains("instanceId") || !value["instanceId"].is_number_unsigned() ||
+                !value.contains("sourceAsset") || !value["sourceAsset"].is_string() || !value.contains("parent") ||
+                !value.contains("rootTransform")) {
+                return Result<ScenePrefabInstance>::Failure(PersistenceError(SceneInvalid, "Scene prefab instance schema is incomplete."));
+            }
+            auto instanceId = Prefab::PrefabInstanceId::Create(value["instanceId"].get<std::uint64_t>());
+            auto assetId = Assets::AssetId::Parse(value["sourceAsset"].get<std::string>());
+            auto rootTransform = ParseTransform(value["rootTransform"]);
+            if (instanceId.HasError() || assetId.HasError() || rootTransform.HasError()) {
+                return Result<ScenePrefabInstance>::Failure(
+                    PersistenceError(SceneInvalid, "Scene prefab instance identity, source, or root transform is invalid."));
+            }
+            auto sourcePrefab = Prefab::PrefabAssetReference::Create(assetId.Value());
+            if (sourcePrefab.HasError()) {
+                return Result<ScenePrefabInstance>::Failure(
+                    PersistenceError(SceneInvalid, "Scene prefab source asset identity is invalid."));
+            }
+            std::optional<SceneObjectId> parent;
+            if (!value["parent"].is_null()) {
+                if (!value["parent"].is_number_unsigned()) {
+                    return Result<ScenePrefabInstance>::Failure(PersistenceError(SceneInvalid, "Scene prefab instance parent is invalid."));
+                }
+                parent = SceneObjectId{value["parent"].get<std::uint64_t>()};
+            }
+            return Result<ScenePrefabInstance>::Success(
+                ScenePrefabInstance{instanceId.Value(), sourcePrefab.Value(), parent, rootTransform.Value()});
+        }
+
+        [[nodiscard]] Result<ParsedScene> ParseScene(const std::string &contents) {
             try {
                 const Json document = Json::parse(contents);
                 if (!document.is_object() || !document.contains("schemaVersion") || document["schemaVersion"] != kSceneSchemaVersion ||
-                    !document.contains("objects") || !document["objects"].is_array() || document["objects"].size() > kMaximumSceneObjects) {
-                    return Result<std::vector<SceneObjectSnapshot>>::Failure(
-                        PersistenceError(SceneInvalid, "Scene schema is unsupported or incomplete."));
+                    !document.contains("objects") || !document["objects"].is_array() || document["objects"].size() > kMaximumSceneObjects ||
+                    (document.contains("prefabInstances") &&
+                     (!document["prefabInstances"].is_array() || document["prefabInstances"].size() > kMaximumSceneObjects))) {
+                    return Result<ParsedScene>::Failure(PersistenceError(SceneInvalid, "Scene schema is unsupported or incomplete."));
                 }
 
-                std::vector<SceneObjectSnapshot> objects;
-                objects.reserve(document["objects"].size());
+                ParsedScene scene;
+                scene.objects.reserve(document["objects"].size());
                 for (const Json &value : document["objects"]) {
                     auto object = ParseSceneObjectSnapshot(value);
                     if (object.HasError()) {
-                        return Result<std::vector<SceneObjectSnapshot>>::Failure(object.ErrorValue());
+                        return Result<ParsedScene>::Failure(object.ErrorValue());
                     }
-                    objects.push_back(std::move(object).Value());
+                    scene.objects.push_back(std::move(object).Value());
                 }
-                return Result<std::vector<SceneObjectSnapshot>>::Success(std::move(objects));
+                if (document.contains("prefabInstances")) {
+                    scene.prefabInstances.reserve(document["prefabInstances"].size());
+                    for (const Json &value : document["prefabInstances"]) {
+                        auto instance = ParseScenePrefabInstance(value);
+                        if (instance.HasError())
+                            return Result<ParsedScene>::Failure(instance.ErrorValue());
+                        scene.prefabInstances.push_back(std::move(instance).Value());
+                    }
+                }
+                return Result<ParsedScene>::Success(std::move(scene));
             } catch (const Json::exception &exception) {
-                return Result<std::vector<SceneObjectSnapshot>>::Failure(
-                    PersistenceError(SceneInvalid, "Invalid scene JSON: " + std::string{exception.what()}));
+                return Result<ParsedScene>::Failure(PersistenceError(SceneInvalid, "Invalid scene JSON: " + std::string{exception.what()}));
             }
         }
 
@@ -805,18 +859,20 @@ namespace Horo::Editor {
                 return Result<LoadedProjectScene>::Failure(
                     PersistenceError(SceneReadFailed, "Unable to inspect '" + absoluteScenePath.string() + "'."));
             }
-            return Result<LoadedProjectScene>::Success(LoadedProjectScene{absoluteScenePath, {}, false, SceneFileFingerprint{}});
+            return Result<LoadedProjectScene>::Success(LoadedProjectScene{absoluteScenePath, {}, {}, false, SceneFileFingerprint{}});
         }
         auto sceneBytes = ReadBoundedFile(absoluteScenePath, kMaximumSceneBytes);
         if (sceneBytes.HasError()) {
             return Result<LoadedProjectScene>::Failure(sceneBytes.ErrorValue());
         }
-        auto objects = ParseScene(sceneBytes.Value());
-        if (objects.HasError()) {
-            return Result<LoadedProjectScene>::Failure(objects.ErrorValue());
+        auto scene = ParseScene(sceneBytes.Value());
+        if (scene.HasError()) {
+            return Result<LoadedProjectScene>::Failure(scene.ErrorValue());
         }
-        return Result<LoadedProjectScene>::Success(
-            LoadedProjectScene{absoluteScenePath, std::move(objects).Value(), true, Fingerprint(sceneBytes.Value())});
+        ParsedScene parsed = std::move(scene).Value();
+        return Result<LoadedProjectScene>::Success(LoadedProjectScene{absoluteScenePath, std::move(parsed.objects),
+                                                                      std::move(parsed.prefabInstances), true,
+                                                                      Fingerprint(sceneBytes.Value())});
     }
 
     /** @copydoc InspectProjectSceneFingerprint */
@@ -1035,17 +1091,19 @@ namespace Horo::Editor {
                     PersistenceError(SceneInvalid, "Recovery scene checksum does not match its payload."));
             }
 
-            auto objects = ParseScene(record["scene"].dump());
-            if (objects.HasError()) {
-                return Result<std::optional<ProjectSceneRecoveryRecord>>::Failure(objects.ErrorValue());
+            auto scene = ParseScene(record["scene"].dump());
+            if (scene.HasError()) {
+                return Result<std::optional<ProjectSceneRecoveryRecord>>::Failure(scene.ErrorValue());
             }
+            ParsedScene parsed = std::move(scene).Value();
             ProjectSceneRecoveryRecord result{
                 .absoluteCanonicalPath = absoluteScenePath,
                 .savedRevision = DocumentRevision{record["savedRevision"].get<std::uint64_t>()},
                 .savedState = DocumentStateId{record["savedState"].get<std::uint64_t>()},
                 .recoveredRevision = DocumentRevision{record["recoveredRevision"].get<std::uint64_t>()},
                 .recoveredState = DocumentStateId{record["recoveredState"].get<std::uint64_t>()},
-                .objects = std::move(objects).Value(),
+                .objects = std::move(parsed.objects),
+                .prefabInstances = std::move(parsed.prefabInstances),
             };
             if (!result.savedState.IsValid() || !result.recoveredState.IsValid() || result.recoveredRevision < result.savedRevision) {
                 return Result<std::optional<ProjectSceneRecoveryRecord>>::Failure(

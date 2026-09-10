@@ -45,17 +45,40 @@ namespace Horo::Editor {
         SceneObjectDifferenceFields fields;
     };
 
+    /** @brief Semantic authored fields that differ for one stable prefab instance. */
+    struct ScenePrefabInstanceDifferenceFields {
+        bool sourcePrefab{};
+        bool parent{};
+        bool rootTransform{};
+
+        /** @brief Reports whether at least one authored field differs. */
+        [[nodiscard]] constexpr bool Any() const noexcept {
+            return sourcePrefab || parent || rootTransform;
+        }
+    };
+
+    /** @brief Read-only comparison row keyed by stable scene-local prefab-instance identity. */
+    struct ScenePrefabInstanceComparison {
+        Prefab::PrefabInstanceId id;
+        SceneObjectComparisonKind kind{SceneObjectComparisonKind::Modified};
+        ScenePrefabInstanceDifferenceFields fields;
+    };
+
     /** @brief Complete bounded presentation projection for one external scene conflict. */
     struct SceneDocumentComparison {
         std::string absoluteScenePath;
         std::vector<SceneObjectComparison> objects;
+        std::vector<ScenePrefabInstanceComparison> prefabInstances;
         std::size_t addedOnDisk{};
         std::size_t removedFromDisk{};
         std::size_t modified{};
+        std::size_t prefabInstancesAddedOnDisk{};
+        std::size_t prefabInstancesRemovedFromDisk{};
+        std::size_t prefabInstancesModified{};
 
         /** @brief Reports whether the authored snapshots differ semantically. */
         [[nodiscard]] bool HasDifferences() const noexcept {
-            return !objects.empty();
+            return !objects.empty() || !prefabInstances.empty();
         }
     };
 

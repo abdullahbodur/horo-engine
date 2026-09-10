@@ -27,6 +27,7 @@ namespace Horo::Editor {
     struct LoadedProjectScene {
         std::filesystem::path absolutePath;
         std::vector<SceneObjectSnapshot> objects;
+        std::vector<ScenePrefabInstance> prefabInstances;
         bool existed{};
         SceneFileFingerprint fingerprint;
     };
@@ -64,6 +65,7 @@ namespace Horo::Editor {
         DocumentRevision recoveredRevision;
         DocumentStateId recoveredState;
         std::vector<SceneObjectSnapshot> objects;
+        std::vector<ScenePrefabInstance> prefabInstances;
     };
 
     /**
