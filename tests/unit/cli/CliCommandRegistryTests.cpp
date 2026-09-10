@@ -52,6 +52,12 @@ namespace Horo::Cli {
             REQUIRE(result.ErrorValue().code.Value() == expected.code.Value());
         }
 
+        template <typename Mutator> void RequireOptionSchemaError(Mutator mutator) {
+            CliCommandDescriptor descriptor = Descriptor({"project", "validate"});
+            mutator(descriptor);
+            RequireError(CliCommandRegistry::Create(std::span{&descriptor, 1}, Policy()), CliErrors::OptionSchemaIncompatible);
+        }
+
         [[nodiscard]] CliCommandRegistry CreateRegistry(const std::span<const CliCommandDescriptor> descriptors) {
             auto created = CliCommandRegistry::Create(descriptors, Policy());
             REQUIRE(created.HasValue());
@@ -89,35 +95,29 @@ namespace Horo::Cli {
     }
 
     TEST_CASE("CLI registry rejects incompatible option schema combinations", "[unit][cli][registry]") {
-        CliCommandDescriptor descriptor = Descriptor({"project", "validate"});
-        descriptor.options[0].defaultValue = "true";
-        RequireError(CliCommandRegistry::Create(std::span{&descriptor, 1}, Policy()), CliErrors::OptionSchemaIncompatible);
-
-        descriptor = Descriptor({"project", "validate"});
-        descriptor.options[0].sensitive = true;
-        RequireError(CliCommandRegistry::Create(std::span{&descriptor, 1}, Policy()), CliErrors::OptionSchemaIncompatible);
-
-        descriptor = Descriptor({"project", "validate"});
-        descriptor.options[1].enumerationValues.clear();
-        RequireError(CliCommandRegistry::Create(std::span{&descriptor, 1}, Policy()), CliErrors::OptionSchemaIncompatible);
-
-        descriptor = Descriptor({"project", "validate"});
-        descriptor.options[1].defaultValue = "unknown";
-        RequireError(CliCommandRegistry::Create(std::span{&descriptor, 1}, Policy()), CliErrors::OptionSchemaIncompatible);
-
-        descriptor = Descriptor({"project", "validate"});
-        descriptor.options[1].enumerationValues = {"fast", "fast"};
-        RequireError(CliCommandRegistry::Create(std::span{&descriptor, 1}, Policy()), CliErrors::OptionSchemaIncompatible);
-
-        descriptor = Descriptor({"project", "validate"});
-        descriptor.options[1].sensitive = true;
-        RequireError(CliCommandRegistry::Create(std::span{&descriptor, 1}, Policy()), CliErrors::OptionSchemaIncompatible);
-
-        descriptor = Descriptor({"project", "validate"});
-        descriptor.options[1].valueKind = CliOptionValueKind::String;
-        descriptor.options[1].enumerationValues.clear();
-        descriptor.options[1].defaultValue = "unsafe\ndefault";
-        RequireError(CliCommandRegistry::Create(std::span{&descriptor, 1}, Policy()), CliErrors::OptionSchemaIncompatible);
+        RequireOptionSchemaError([](CliCommandDescriptor &descriptor) {
+            descriptor.options[0].defaultValue = "true";
+        });
+        RequireOptionSchemaError([](CliCommandDescriptor &descriptor) {
+            descriptor.options[0].sensitive = true;
+        });
+        RequireOptionSchemaError([](CliCommandDescriptor &descriptor) {
+            descriptor.options[1].enumerationValues.clear();
+        });
+        RequireOptionSchemaError([](CliCommandDescriptor &descriptor) {
+            descriptor.options[1].defaultValue = "unknown";
+        });
+        RequireOptionSchemaError([](CliCommandDescriptor &descriptor) {
+            descriptor.options[1].enumerationValues = {"fast", "fast"};
+        });
+        RequireOptionSchemaError([](CliCommandDescriptor &descriptor) {
+            descriptor.options[1].sensitive = true;
+        });
+        RequireOptionSchemaError([](CliCommandDescriptor &descriptor) {
+            descriptor.options[1].valueKind = CliOptionValueKind::String;
+            descriptor.options[1].enumerationValues.clear();
+            descriptor.options[1].defaultValue = "unsafe\ndefault";
+        });
     }
 
     TEST_CASE("CLI registry validates typed scalar defaults", "[unit][cli][registry]") {

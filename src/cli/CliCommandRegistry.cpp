@@ -171,32 +171,68 @@ namespace Horo::Cli {
             return std::ranges::find(values.first(candidate), values[candidate]) != values.first(candidate).end();
         }
 
-        [[nodiscard]] Result<void> ValidateOption(const CliOptionDescriptor &option, const CliCommandRegistryLimits &limits) {
-            if (!IsCanonicalToken(option.name, limits.maximumIdentifierBytes) ||
-                !IsSafeSummary(option.summary, limits.maximumSummaryBytes) || !IsKnown(option.valueKind) ||
-                (option.shortName &&
-                 !((*option.shortName >= 'a' && *option.shortName <= 'z') || (*option.shortName >= 'A' && *option.shortName <= 'Z') ||
-                   (*option.shortName >= '0' && *option.shortName <= '9'))))
-                return Result<void>::Failure(MakeError(CliErrors::DescriptorInvalid, "CLI option metadata is invalid."));
+        [[nodiscard]] bool IsValidShortName(const char value) noexcept {
+            return (value >= 'a' && value <= 'z') || (value >= 'A' && value <= 'Z') || (value >= '0' && value <= '9');
+        }
 
+        [[nodiscard]] Result<void> ValidateOptionMetadata(const CliOptionDescriptor &option, const CliCommandRegistryLimits &limits) {
+            if (!IsCanonicalToken(option.name, limits.maximumIdentifierBytes) ||
+                !IsSafeSummary(option.summary, limits.maximumSummaryBytes) || !IsKnown(option.valueKind))
+                return Result<void>::Failure(MakeError(CliErrors::DescriptorInvalid, "CLI option metadata is invalid."));
+            if (option.shortName && !IsValidShortName(*option.shortName))
+                return Result<void>::Failure(MakeError(CliErrors::DescriptorInvalid, "CLI option metadata is invalid."));
+            return Result<void>::Success();
+        }
+
+        [[nodiscard]] bool HasInvalidFlagSchema(const CliOptionDescriptor &option) noexcept {
+            if (option.valueKind != CliOptionValueKind::Flag)
+                return false;
+            return option.defaultValue || !option.enumerationValues.empty() || option.sensitive;
+        }
+
+        [[nodiscard]] bool HasInvalidEnumerationSchema(const CliOptionDescriptor &option) noexcept {
+            const bool isEnumeration = option.valueKind == CliOptionValueKind::Enumeration;
+            return isEnumeration == option.enumerationValues.empty();
+        }
+
+        [[nodiscard]] Result<void> ValidateOptionShape(const CliOptionDescriptor &option, const CliCommandRegistryLimits &limits) {
             if (option.enumerationValues.size() > limits.maximumEnumerationValues)
                 return Result<void>::Failure(MakeError(CliErrors::RegistryCapacityExceeded));
-
-            if ((option.required && option.defaultValue) || (option.sensitive && option.defaultValue) ||
-                (option.valueKind == CliOptionValueKind::Flag &&
-                 (option.defaultValue || !option.enumerationValues.empty() || option.sensitive)) ||
-                (option.valueKind != CliOptionValueKind::Enumeration && !option.enumerationValues.empty()) ||
-                (option.valueKind == CliOptionValueKind::Enumeration && option.enumerationValues.empty()))
+            if ((option.required && option.defaultValue) || (option.sensitive && option.defaultValue) || HasInvalidFlagSchema(option) ||
+                HasInvalidEnumerationSchema(option))
                 return Result<void>::Failure(MakeError(CliErrors::OptionSchemaIncompatible));
+            return Result<void>::Success();
+        }
 
+        [[nodiscard]] Result<void> ValidateEnumerationValues(const CliOptionDescriptor &option, const CliCommandRegistryLimits &limits) {
             for (std::size_t index = 0; index < option.enumerationValues.size(); ++index) {
                 if (!IsCanonicalToken(option.enumerationValues[index], limits.maximumIdentifierBytes) ||
                     HasDuplicateString(option.enumerationValues, index))
                     return Result<void>::Failure(MakeError(CliErrors::OptionSchemaIncompatible));
             }
+            return Result<void>::Success();
+        }
+
+        [[nodiscard]] bool HasValidDefaultValue(const CliOptionDescriptor &option) {
+            switch (option.valueKind) {
+                case CliOptionValueKind::Flag:
+                    return false;
+                case CliOptionValueKind::String:
+                case CliOptionValueKind::Path:
+                    return !option.defaultValue->empty();
+                case CliOptionValueKind::SignedInteger:
+                    return ValidInteger(*option.defaultValue);
+                case CliOptionValueKind::FloatingPoint:
+                    return ValidFloat(*option.defaultValue);
+                case CliOptionValueKind::Enumeration:
+                    return std::ranges::find(option.enumerationValues, *option.defaultValue) != option.enumerationValues.end();
+            }
+            return false;
+        }
+
+        [[nodiscard]] Result<void> ValidateDefaultValue(const CliOptionDescriptor &option, const CliCommandRegistryLimits &limits) {
             if (!option.defaultValue)
                 return Result<void>::Success();
-
             if (option.defaultValue->size() > limits.maximumIdentifierBytes)
                 return Result<void>::Failure(MakeError(CliErrors::RegistryCapacityExceeded));
             if (!std::ranges::all_of(*option.defaultValue, [](const char character) {
@@ -204,63 +240,115 @@ namespace Horo::Cli {
                 return byte >= 0x20U && byte != 0x7FU;
             }))
                 return Result<void>::Failure(MakeError(CliErrors::OptionSchemaIncompatible));
-
-            bool validDefault = !option.defaultValue->empty();
-            if (option.valueKind == CliOptionValueKind::Enumeration)
-                validDefault = std::ranges::find(option.enumerationValues, *option.defaultValue) != option.enumerationValues.end();
-            else if (option.valueKind == CliOptionValueKind::SignedInteger)
-                validDefault = ValidInteger(*option.defaultValue);
-            else if (option.valueKind == CliOptionValueKind::FloatingPoint)
-                validDefault = ValidFloat(*option.defaultValue);
-            return validDefault ? Result<void>::Success() : Result<void>::Failure(MakeError(CliErrors::OptionSchemaIncompatible));
+            return HasValidDefaultValue(option) ? Result<void>::Success()
+                                                : Result<void>::Failure(MakeError(CliErrors::OptionSchemaIncompatible));
         }
 
-        [[nodiscard]] Result<void> ValidateDescriptor(const CliCommandDescriptor &descriptor, const CliCommandRegistryPolicy &policy) {
-            const auto &limits = policy.limits;
-            if (descriptor.path.segments.empty() || descriptor.path.segments.size() > limits.maximumPathSegments ||
-                !IsSafeSummary(descriptor.summary, limits.maximumSummaryBytes) ||
-                descriptor.options.size() > limits.maximumOptionsPerCommand ||
-                descriptor.requiredCapabilities.size() > limits.maximumCapabilitiesPerCommand || !IsKnown(descriptor.interactive) ||
-                !IsKnown(descriptor.sideEffects) || !IsKnown(descriptor.cancellation) || !IsKnown(descriptor.stdinPolicy) ||
-                !IsKnown(descriptor.origin) || !IsCanonicalNamespacedId(descriptor.ownerId, limits.maximumIdentifierBytes) ||
-                !IsCanonicalNamespacedId(descriptor.output.id, limits.maximumIdentifierBytes) || !ValidAvailability(descriptor.hosts))
+        [[nodiscard]] Result<void> ValidateOption(const CliOptionDescriptor &option, const CliCommandRegistryLimits &limits) {
+            if (const Result<void> valid = ValidateOptionMetadata(option, limits); valid.HasError())
+                return valid;
+            if (const Result<void> valid = ValidateOptionShape(option, limits); valid.HasError())
+                return valid;
+            if (const Result<void> valid = ValidateEnumerationValues(option, limits); valid.HasError())
+                return valid;
+            return ValidateDefaultValue(option, limits);
+        }
+
+        [[nodiscard]] bool HasKnownDescriptorPolicies(const CliCommandDescriptor &descriptor) noexcept {
+            return IsKnown(descriptor.interactive) && IsKnown(descriptor.sideEffects) && IsKnown(descriptor.cancellation) &&
+                   IsKnown(descriptor.stdinPolicy) && IsKnown(descriptor.origin);
+        }
+
+        [[nodiscard]] bool HasValidDescriptorIdentities(const CliCommandDescriptor &descriptor,
+                                                        const CliCommandRegistryLimits &limits) noexcept {
+            return IsCanonicalNamespacedId(descriptor.ownerId, limits.maximumIdentifierBytes) &&
+                   IsCanonicalNamespacedId(descriptor.output.id, limits.maximumIdentifierBytes) && ValidAvailability(descriptor.hosts);
+        }
+
+        [[nodiscard]] Result<void> ValidateDescriptorMetadata(const CliCommandDescriptor &descriptor,
+                                                              const CliCommandRegistryLimits &limits) {
+            if (descriptor.path.segments.empty() || descriptor.path.segments.size() > limits.maximumPathSegments)
                 return Result<void>::Failure(MakeError(CliErrors::DescriptorInvalid));
+            if (!IsSafeSummary(descriptor.summary, limits.maximumSummaryBytes))
+                return Result<void>::Failure(MakeError(CliErrors::DescriptorInvalid));
+            if (descriptor.options.size() > limits.maximumOptionsPerCommand ||
+                descriptor.requiredCapabilities.size() > limits.maximumCapabilitiesPerCommand)
+                return Result<void>::Failure(MakeError(CliErrors::DescriptorInvalid));
+            if (!HasKnownDescriptorPolicies(descriptor) || !HasValidDescriptorIdentities(descriptor, limits))
+                return Result<void>::Failure(MakeError(CliErrors::DescriptorInvalid));
+            return Result<void>::Success();
+        }
 
-            if (descriptor.output.version == 0 || !ValidFormats(descriptor.output.formats))
+        [[nodiscard]] Result<void> ValidateOutputSchema(const CliOutputSchema &output) {
+            if (output.version == 0 || !ValidFormats(output.formats))
                 return Result<void>::Failure(MakeError(CliErrors::OutputSchemaIncompatible));
+            return Result<void>::Success();
+        }
 
-            if ((descriptor.timeout.defaultMilliseconds == 0) != (descriptor.timeout.maximumMilliseconds == 0) ||
-                descriptor.timeout.defaultMilliseconds > descriptor.timeout.maximumMilliseconds)
+        [[nodiscard]] Result<void> ValidateTimeoutPolicy(const CliTimeoutPolicy &timeout) {
+            if ((timeout.defaultMilliseconds == 0) != (timeout.maximumMilliseconds == 0) ||
+                timeout.defaultMilliseconds > timeout.maximumMilliseconds)
                 return Result<void>::Failure(MakeError(CliErrors::DescriptorInvalid, "CLI timeout policy is invalid."));
+            return Result<void>::Success();
+        }
 
-            if (!std::ranges::all_of(descriptor.path.segments, [&limits](const std::string &segment) {
+        [[nodiscard]] Result<void> ValidateCommandPath(const CommandPath &path, const CliCommandRegistryLimits &limits) {
+            if (!std::ranges::all_of(path.segments, [&limits](const std::string &segment) {
                 return IsCanonicalToken(segment, limits.maximumIdentifierBytes);
             }))
                 return Result<void>::Failure(MakeError(CliErrors::DescriptorInvalid, "CLI command path is invalid."));
+            return Result<void>::Success();
+        }
 
+        [[nodiscard]] Result<void> ValidateDescriptorAdmission(const CliCommandDescriptor &descriptor,
+                                                               const CliCommandRegistryPolicy &policy) {
             if ((descriptor.hosts & AvailabilityFor(policy.activeHost)) == CliHostAvailability::None)
                 return Result<void>::Failure(MakeError(CliErrors::HostUnsupported));
-
             if (descriptor.contractVersion.major == 0 || descriptor.contractVersion.major != policy.supportedContractVersion.major ||
                 descriptor.contractVersion.minor > policy.supportedContractVersion.minor)
                 return Result<void>::Failure(MakeError(CliErrors::ContractVersionIncompatible));
+            return Result<void>::Success();
+        }
 
-            for (std::size_t index = 0; index < descriptor.options.size(); ++index) {
-                if (HasDuplicateOption(descriptor.options, index))
+        [[nodiscard]] Result<void> ValidateOptions(const std::span<const CliOptionDescriptor> options,
+                                                   const CliCommandRegistryLimits &limits) {
+            for (std::size_t index = 0; index < options.size(); ++index) {
+                if (HasDuplicateOption(options, index))
                     return Result<void>::Failure(MakeError(CliErrors::OptionNameDuplicate));
-                if (const Result<void> valid = ValidateOption(descriptor.options[index], limits); valid.HasError())
+                if (const Result<void> valid = ValidateOption(options[index], limits); valid.HasError())
                     return valid;
             }
+            return Result<void>::Success();
+        }
 
-            for (std::size_t index = 0; index < descriptor.requiredCapabilities.size(); ++index) {
-                const CliCapabilityId &capability = descriptor.requiredCapabilities[index];
+        [[nodiscard]] Result<void> ValidateCapabilities(const std::span<const CliCapabilityId> capabilities,
+                                                        const CliCommandRegistryPolicy &policy) {
+            const auto &limits = policy.limits;
+            for (std::size_t index = 0; index < capabilities.size(); ++index) {
+                const CliCapabilityId &capability = capabilities[index];
                 if (!IsCanonicalNamespacedId(capability.value, limits.maximumIdentifierBytes) ||
-                    ContainsCapability(std::span{descriptor.requiredCapabilities}.first(index), capability))
+                    ContainsCapability(capabilities.first(index), capability))
                     return Result<void>::Failure(MakeError(CliErrors::DescriptorInvalid, "CLI capability requirement is invalid."));
                 if (!ContainsCapability(policy.grantedCapabilities, capability))
                     return Result<void>::Failure(MakeError(CliErrors::CapabilityUnauthorized));
             }
             return Result<void>::Success();
+        }
+
+        [[nodiscard]] Result<void> ValidateDescriptor(const CliCommandDescriptor &descriptor, const CliCommandRegistryPolicy &policy) {
+            if (const Result<void> valid = ValidateDescriptorMetadata(descriptor, policy.limits); valid.HasError())
+                return valid;
+            if (const Result<void> valid = ValidateOutputSchema(descriptor.output); valid.HasError())
+                return valid;
+            if (const Result<void> valid = ValidateTimeoutPolicy(descriptor.timeout); valid.HasError())
+                return valid;
+            if (const Result<void> valid = ValidateCommandPath(descriptor.path, policy.limits); valid.HasError())
+                return valid;
+            if (const Result<void> valid = ValidateDescriptorAdmission(descriptor, policy); valid.HasError())
+                return valid;
+            if (const Result<void> valid = ValidateOptions(descriptor.options, policy.limits); valid.HasError())
+                return valid;
+            return ValidateCapabilities(descriptor.requiredCapabilities, policy);
         }
 
         [[nodiscard]] std::string JoinPath(const CommandPath &path) {
