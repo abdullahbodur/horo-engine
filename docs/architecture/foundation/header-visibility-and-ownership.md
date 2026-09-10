@@ -465,7 +465,8 @@ job-system, codec, middleware, callback, or backend-native dependency.
 
 `HoroEngine::DestructionApi` owns `Horo/Destruction/DestructibleDescriptor.h`,
 `Horo/Destruction/DestructionCommand.h`, `Horo/Destruction/DestructionIdentity.h`,
-`Horo/Destruction/DestructionStateMachine.h` and `Horo/Destruction/DestructionErrors.h`.
+`Horo/Destruction/DestructionRegistry.h`, `Horo/Destruction/DestructionStateMachine.h`
+and `Horo/Destruction/DestructionErrors.h`.
 Its public dependencies are limited to
 Foundation and Assets for typed results/errors, the shared SHA-256 value and the
 path-independent `AssetId`. Physics, Render, RuntimeScene and native provider headers
@@ -503,3 +504,12 @@ results preserve successful, rejected, cancelled, unsupported and failed disposi
 as closed types. Producers must migrate from provider handles, callback mutation and
 message parsing to this contract; rejected or stale private work is discarded and is
 never published as a partial fallback.
+
+The `[DFR-001.6]` slice adds the explicit fixed-capacity registry, immutable value
+snapshots, bounded queries and capability projections. The composition owner copies
+only current backend-neutral publication evidence into the registry; membership never
+owns a destructible or extends Scene, Physics, Render, artifact or authority lifetime.
+Consumers link `HoroEngine::DestructionApi`, retain snapshots for read-only work and
+revalidate generation/state/capability revisions before live operations. Ad-hoc global
+registries, mutable record exposure, native handles and silently widened queries have no
+compatibility path.

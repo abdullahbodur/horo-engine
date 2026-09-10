@@ -113,6 +113,26 @@ request in every core-1.0 tier.
 
 ## Destruction Model
 
+### Registry, query, and capability boundary
+
+`Horo/Destruction/DestructionRegistry.h` defines the explicit discovery boundary.
+One host-owned `DestructionRegistry` copies current state and capability projections into
+fixed-capacity storage. Registry membership is not destructible residency or lifetime:
+register, replace, remove, and shutdown never create, mutate, retain, or destroy a
+destructible, artifact, Physics body, Render resource, authority grant, or backend object.
+There is no global registry or service-location path.
+
+Consumers retain `DestructionRegistrySnapshot` values. Each snapshot is immutable,
+revisioned, sorted by the complete generation-safe handle, and remains readable after
+registry replacement or shutdown. Exact lookup distinguishes an unknown authored owner
+from a stale generation. Queries require an exact world, explicit finite result bound,
+optional closed phase, and required-feature set. They perform fixed work, copy at most the
+requested bound, and report `HasMore` rather than silently widening or substituting a
+feature profile. Capability queries return fixed-size value evidence tied to the registry,
+state, and capability revisions; the evidence grants no command authority and transfers
+no feature ownership. Live operations must still revalidate those revisions at their
+owning admission boundary.
+
 Scene components carry stable binding and authored policy, not live mutable state:
 
 ```cpp

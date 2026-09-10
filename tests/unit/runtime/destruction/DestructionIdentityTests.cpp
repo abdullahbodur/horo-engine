@@ -220,19 +220,21 @@ namespace Horo::Destruction {
     }
 
     TEST_CASE("Destruction identity errors are stable and unique", "[unit][destruction][identity]") {
-        const std::array errors{DestructionErrors::IdentityInvalid,      DestructionErrors::IdentityUnknown,
-                                DestructionErrors::StaleGeneration,      DestructionErrors::StaleContent,
-                                DestructionErrors::StaleRevision,        DestructionErrors::GenerationExhausted,
-                                DestructionErrors::RevisionExhausted,    DestructionErrors::SerializedIdentityInvalid,
-                                DestructionErrors::DescriptorInvalid,    DestructionErrors::TierInvalid,
-                                DestructionErrors::FeatureUnsatisfied,   DestructionErrors::RuntimeGeometryUnsupported,
-                                DestructionErrors::LimitProfileInvalid,  DestructionErrors::LimitExceeded,
-                                DestructionErrors::StaleConfiguration,   DestructionErrors::StateInvalid,
-                                DestructionErrors::InvalidDamage,        DestructionErrors::DuplicateCommand,
-                                DestructionErrors::StateTerminal,        DestructionErrors::CancelledBeforeCommit,
-                                DestructionErrors::ShutdownInProgress,   DestructionErrors::CommandInvalid,
-                                DestructionErrors::CommandLimitExceeded, DestructionErrors::CommandAuthorityDenied,
-                                DestructionErrors::CommandUnsupported,   DestructionErrors::CommandResultInvalid};
+        const std::array errors{DestructionErrors::IdentityInvalid,         DestructionErrors::IdentityUnknown,
+                                DestructionErrors::StaleGeneration,         DestructionErrors::StaleContent,
+                                DestructionErrors::StaleRevision,           DestructionErrors::GenerationExhausted,
+                                DestructionErrors::RevisionExhausted,       DestructionErrors::SerializedIdentityInvalid,
+                                DestructionErrors::DescriptorInvalid,       DestructionErrors::TierInvalid,
+                                DestructionErrors::FeatureUnsatisfied,      DestructionErrors::RuntimeGeometryUnsupported,
+                                DestructionErrors::LimitProfileInvalid,     DestructionErrors::LimitExceeded,
+                                DestructionErrors::StaleConfiguration,      DestructionErrors::StateInvalid,
+                                DestructionErrors::InvalidDamage,           DestructionErrors::DuplicateCommand,
+                                DestructionErrors::StateTerminal,           DestructionErrors::CancelledBeforeCommit,
+                                DestructionErrors::ShutdownInProgress,      DestructionErrors::CommandInvalid,
+                                DestructionErrors::CommandLimitExceeded,    DestructionErrors::CommandAuthorityDenied,
+                                DestructionErrors::CommandUnsupported,      DestructionErrors::CommandResultInvalid,
+                                DestructionErrors::RegistryInvalid,         DestructionErrors::RegistryDuplicate,
+                                DestructionErrors::RegistryCapacityExceeded};
         std::set<std::string_view> codes;
         for (const auto &error : errors) {
             CHECK(error.domain.Value() == std::string_view{"horo.destruction"});
