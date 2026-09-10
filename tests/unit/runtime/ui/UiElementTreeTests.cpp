@@ -72,9 +72,16 @@ namespace Horo::Runtime::Ui {
                     {Stable<UiElementId>(4), Stable<UiElementId>(2)}};
         }
 
+        Result<UiElementTree> CreateTree(const UiElementTreeDescriptor &descriptor, const std::span<const UiElementDescriptor> elements) {
+            auto allocator = UiElementSlotAllocator::Create(descriptor.instance.ownership);
+            REQUIRE(allocator.HasValue());
+            auto value = std::move(allocator).Value();
+            return UiElementTree::Create(value, descriptor, elements);
+        }
+
         UiElementTree Tree(UiElementTreeDescriptor descriptor = Descriptor()) {
             const auto elements = Elements();
-            auto result = UiElementTree::Create(descriptor, elements);
+            auto result = CreateTree(descriptor, elements);
             REQUIRE(result.HasValue());
             return std::move(result).Value();
         }
@@ -117,30 +124,92 @@ namespace Horo::Runtime::Ui {
 
         TEST_CASE("Retained UI tree rejects malformed roots parents and identities transactionally", "[runtime_ui][tree]") {
             auto descriptor = Descriptor();
-            REQUIRE(UiElementTree::Create(descriptor, {}).HasError());
+            REQUIRE(CreateTree(descriptor, {}).HasError());
             descriptor.canvas = Canvas(Owner(8));
-            REQUIRE(UiElementTree::Create(descriptor, Elements()).HasError());
+            REQUIRE(CreateTree(descriptor, Elements()).HasError());
 
             auto elements = Elements();
             elements[1].id = elements[0].id;
-            REQUIRE(UiElementTree::Create(Descriptor(), elements).HasError());
+            REQUIRE(CreateTree(Descriptor(), elements).HasError());
             elements = Elements();
             elements[1].parent = Stable<UiElementId>(99);
-            REQUIRE(UiElementTree::Create(Descriptor(), elements).HasError());
+            REQUIRE(CreateTree(Descriptor(), elements).HasError());
             elements = Elements();
             elements[1].parent = {};
-            REQUIRE(UiElementTree::Create(Descriptor(), elements).HasError());
+            REQUIRE(CreateTree(Descriptor(), elements).HasError());
         }
 
         TEST_CASE("Retained UI tree rejects cycles depth overflow and unsupported limits", "[runtime_ui][tree]") {
             auto elements = Elements();
             elements[0].parent = elements[3].id;
-            REQUIRE(UiElementTree::Create(Descriptor(), elements).HasError());
-            REQUIRE(UiElementTree::Create(Descriptor({4, 2, 4}), Elements()).HasError());
-            REQUIRE(UiElementTree::Create(Descriptor({4, 3, 4}), Elements()).HasValue());
-            REQUIRE(UiElementTree::Create(Descriptor({3, 3, 4}), Elements()).HasError());
+            REQUIRE(CreateTree(Descriptor(), elements).HasError());
+            REQUIRE(CreateTree(Descriptor({4, 2, 4}), Elements()).HasError());
+            REQUIRE(CreateTree(Descriptor({4, 3, 4}), Elements()).HasValue());
+            REQUIRE(CreateTree(Descriptor({3, 3, 4}), Elements()).HasError());
             REQUIRE_FALSE(UiElementTreeLimits{0, 1, 1}.IsValid());
             REQUIRE_FALSE(UiElementTreeLimits{1, MaximumUiTreeDepth + 1, 1}.IsValid());
+        }
+
+        TEST_CASE("Retained UI trees reject handles from another canvas in the same owner generation", "[runtime_ui][tree][identity]") {
+            auto allocatorResult = UiElementSlotAllocator::Create(Owner());
+            REQUIRE(allocatorResult.HasValue());
+            auto allocator = std::move(allocatorResult).Value();
+            const auto elements = Elements();
+            auto firstResult = UiElementTree::Create(allocator, Descriptor(), elements);
+            REQUIRE(firstResult.HasValue());
+            auto first = std::move(firstResult).Value();
+            auto secondDescriptor = Descriptor();
+            secondDescriptor.canvas.slot = 3;
+            auto secondResult = UiElementTree::Create(allocator, secondDescriptor, elements);
+            REQUIRE(secondResult.HasValue());
+            auto second = std::move(secondResult).Value();
+            const auto firstRoot = first.Root().Value().handle;
+            const auto secondRoot = second.Root().Value().handle;
+            REQUIRE(firstRoot != secondRoot);
+            REQUIRE(second.Get(firstRoot).HasError());
+            REQUIRE(first.Get(secondRoot).HasError());
+
+            std::array<UiElementHandle, 2> children{};
+            REQUIRE(second.Children(firstRoot, children).HasError());
+            const auto before = PreorderIds(second);
+            const auto revision = second.Revision();
+            auto remove = Commands(second);
+            Add(remove, UiRemoveElementCommand{first.Find(Stable<UiElementId>(2)).Value()});
+            REQUIRE(second.CommitDeferred(remove, UiStructuralCommitPoint::ApplyQueuedOwnerThreadCommands).HasError());
+            auto insert = Commands(second);
+            Add(insert, UiInsertElementCommand{Stable<UiElementId>(9), firstRoot, 0});
+            REQUIRE(second.CommitDeferred(insert, UiStructuralCommitPoint::ApplyQueuedOwnerThreadCommands).HasError());
+            auto reparent = Commands(second);
+            Add(reparent, UiReparentElementCommand{second.Find(Stable<UiElementId>(2)).Value(), firstRoot, 0});
+            REQUIRE(second.CommitDeferred(reparent, UiStructuralCommitPoint::ApplyQueuedOwnerThreadCommands).HasError());
+            REQUIRE(second.Revision() == revision);
+            REQUIRE(PreorderIds(second) == before);
+        }
+
+        TEST_CASE("Retained UI element slots are owner-issued disjoint and never reused", "[runtime_ui][tree][identity]") {
+            REQUIRE(UiElementSlotAllocator::Create({}).HasError());
+            auto allocatorResult = UiElementSlotAllocator::Create(Owner());
+            REQUIRE(allocatorResult.HasValue());
+            auto allocator = std::move(allocatorResult).Value();
+
+            auto wrongOwner = Descriptor();
+            wrongOwner.instance = Instance(Owner(8));
+            wrongOwner.canvas = Canvas(Owner(8));
+            REQUIRE(UiElementTree::Create(allocator, wrongOwner, Elements()).HasError());
+
+            auto malformed = Elements();
+            malformed[1].id = malformed[0].id;
+            REQUIRE(UiElementTree::Create(allocator, Descriptor(), malformed).HasError());
+
+            auto validResult = UiElementTree::Create(allocator, Descriptor(), Elements());
+            REQUIRE(validResult.HasValue());
+            REQUIRE(validResult.Value().Root().Value().handle.slot == 9);
+
+            auto transferred = std::move(allocator);
+            REQUIRE(UiElementTree::Create(allocator, Descriptor(), Elements()).HasError());
+            auto nextResult = UiElementTree::Create(transferred, Descriptor(), Elements());
+            REQUIRE(nextResult.HasValue());
+            REQUIRE(nextResult.Value().Root().Value().handle.slot == 17);
         }
 
         TEST_CASE("Deferred UI insertion publishes only at a declared safe point", "[runtime_ui][tree][commands]") {
@@ -290,11 +359,13 @@ namespace Horo::Runtime::Ui {
             REQUIRE(oldTree.Get(replacement.Root().Value().handle).HasError());
             auto invalid = Elements();
             invalid[1].parent = Stable<UiElementId>(99);
-            REQUIRE(UiElementTree::Create(replacementDescriptor, invalid).HasError());
+            REQUIRE(CreateTree(replacementDescriptor, invalid).HasError());
             REQUIRE(oldTree.Size() == 4);
             REQUIRE(oldTree.Root().HasValue());
         }
 
         static_assert(!std::is_copy_constructible_v<UiElementTree>);
+        static_assert(!std::is_copy_constructible_v<UiElementSlotAllocator>);
+        static_assert(!std::is_move_assignable_v<UiElementSlotAllocator>);
     }  // namespace
 }  // namespace Horo::Runtime::Ui

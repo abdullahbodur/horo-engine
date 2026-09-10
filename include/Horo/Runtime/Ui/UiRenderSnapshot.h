@@ -27,6 +27,7 @@ namespace Horo::Runtime::Ui {
     inline constexpr std::uint32_t MaximumUiRenderMasks = 1'024;
     inline constexpr std::uint32_t MaximumUiRenderTransforms = 4'096;
     inline constexpr std::uint32_t MaximumUiRenderResources = 4'096;
+    inline constexpr std::uint32_t MaximumUiRenderSnapshotsInFlight = 64;
 
     struct UiRenderViewHandleTag;
     struct UiRenderSnapshotRevisionTag;
@@ -193,22 +194,42 @@ namespace Horo::Runtime::Ui {
         std::span<const UiRenderResourceReference> resources; /**< Stable resource reference table. */
     };
 
+    /** @brief Load-time bounds and exact view identity for one allocation-free extraction store. */
+    struct UiRenderExtractorDescriptor final {
+        UiRenderViewId view;                 /**< Exact Horo view incarnation owned by this extractor. */
+        UiRenderSnapshotLimits limits;       /**< Maximum capacity reserved in every storage slot. */
+        std::uint32_t concurrentSnapshots{}; /**< Simultaneously leased snapshot slots. */
+
+        /** @brief Validates view identity, table limits, and the bounded slot count. @return Whether this store can be created. */
+        [[nodiscard]] bool IsValid() const noexcept;
+    };
+
+    /** @brief Explicit admission lifecycle for one render extraction store. */
+    enum class UiRenderExtractorState : std::uint8_t {
+        Active,
+        Closed,
+    };
+
+    class UiRenderExtractor;
+
     /**
      * @brief Owning immutable per-view Runtime UI render projection.
-     * @details The snapshot owns every array and can outlive the tree and caller inputs. Renderer may realize resources and batch
-     *          equivalent paint, but cannot mutate these values or recover a live Runtime UI owner from them.
+     * @details The snapshot leases one preallocated immutable slot and can outlive the tree, extractor, and caller inputs. Copies
+     *          retain that exact slot until the last lease retires. Renderer may realize resources and batch equivalent paint, but
+     *          cannot mutate these values or recover a live Runtime UI owner from them.
      */
     class UiRenderSnapshot final {
     public:
-        /**
-         * @brief Validates and copies one complete ordered extraction transaction.
-         * @param tree Exact active retained tree supplying identity and residency evidence.
-         * @param descriptor Exact view, source revisions, output revision, and bounds.
-         * @param projection Complete non-owning projection copied by the transaction.
-         * @return Complete owning snapshot or a typed validation/capacity/lifecycle failure.
-         */
-        [[nodiscard]] static Result<UiRenderSnapshot> Extract(const UiElementTree &tree, const UiRenderSnapshotDescriptor &descriptor,
-                                                              const UiRenderProjection &projection);
+        /** @brief Releases this snapshot's immutable storage lease. */
+        ~UiRenderSnapshot();
+        /** @brief Copies one immutable snapshot and retains its exact storage slot. @param other Live snapshot to retain. */
+        UiRenderSnapshot(const UiRenderSnapshot &other) noexcept;
+        /** @brief Replaces this lease with a retained copy. @param other Live snapshot to retain. @return This snapshot. */
+        UiRenderSnapshot &operator=(const UiRenderSnapshot &other) noexcept;
+        /** @brief Transfers one immutable snapshot lease. @param other Snapshot whose lease is transferred. */
+        UiRenderSnapshot(UiRenderSnapshot &&other) noexcept;
+        /** @brief Replaces this lease by transfer. @param other Snapshot whose lease is transferred. @return This snapshot. */
+        UiRenderSnapshot &operator=(UiRenderSnapshot &&other) noexcept;
 
         /** @brief Returns exact extraction evidence. @return Borrowed immutable descriptor. */
         [[nodiscard]] const UiRenderSnapshotDescriptor &Descriptor() const noexcept;
@@ -229,8 +250,59 @@ namespace Horo::Runtime::Ui {
 
     private:
         struct Storage;
-        /** @brief Adopts validated immutable storage. */
+        friend class UiRenderExtractor;
+        /** @brief Adopts one already leased immutable storage slot. */
         explicit UiRenderSnapshot(std::shared_ptr<const Storage> storage) noexcept;
+        /** @brief Retains the current slot for one additional immutable snapshot copy. */
+        void Retain() noexcept;
+        /** @brief Releases the current slot and makes it reusable after the final lease. */
+        void Release() noexcept;
         std::shared_ptr<const Storage> storage_;
+    };
+
+    /**
+     * @brief Owner-thread bounded store that publishes allocation-free immutable per-view snapshots.
+     * @details Creation reserves every table in every slot. Extract performs a bounded scan and never blocks, allocates fallback
+     *          storage, or overwrites a leased slot. Close stops admission while existing snapshots remain valid and drain normally.
+     */
+    class UiRenderExtractor final {
+    public:
+        /**
+         * @brief Allocates all storage required by one exact view before frame-hot extraction begins.
+         * @param descriptor Exact view, per-slot table limits, and simultaneous snapshot bound.
+         * @return Active extractor or a typed identity/capacity failure.
+         * @pre Called exactly once by the Runtime UI view owner for descriptor.view.
+         */
+        [[nodiscard]] static Result<UiRenderExtractor> Create(const UiRenderExtractorDescriptor &descriptor);
+        /** @brief Closes extraction admission; outstanding snapshots keep their slots alive. */
+        ~UiRenderExtractor();
+        /** @brief Transfers an extraction store. @param other Extractor whose ownership is transferred. */
+        UiRenderExtractor(UiRenderExtractor &&) noexcept;
+        /** @brief Replaces this store by transfer. @param other Extractor whose ownership is transferred. @return This extractor. */
+        UiRenderExtractor &operator=(UiRenderExtractor &&) noexcept;
+        UiRenderExtractor(const UiRenderExtractor &) = delete;
+        UiRenderExtractor &operator=(const UiRenderExtractor &) = delete;
+
+        /**
+         * @brief Validates and copies one complete ordered extraction transaction into a free preallocated slot.
+         * @param tree Exact active retained tree supplying identity and residency evidence.
+         * @param descriptor Exact view, source revisions, strictly increasing output revision, and requested bounds.
+         * @param projection Complete non-owning projection copied by the transaction.
+         * @return Complete snapshot lease or a typed validation, exhaustion, capacity, or lifecycle failure.
+         * @pre Calls for one extractor are serialized on its owner thread.
+         */
+        [[nodiscard]] Result<UiRenderSnapshot> Extract(const UiElementTree &tree, const UiRenderSnapshotDescriptor &descriptor,
+                                                       const UiRenderProjection &projection);
+        /** @brief Idempotently stops new extraction without invalidating live snapshot leases. */
+        void Close() noexcept;
+        /** @brief Reports whether no snapshot slot is currently leased. @return True after every snapshot copy retires. */
+        [[nodiscard]] bool IsDrained() const noexcept;
+        /** @brief Returns the current admission lifecycle. @return Active or Closed. */
+        [[nodiscard]] UiRenderExtractorState State() const noexcept;
+
+    private:
+        struct Storage;
+        explicit UiRenderExtractor(std::unique_ptr<Storage> storage) noexcept;
+        std::unique_ptr<Storage> storage_;
     };
 }  // namespace Horo::Runtime::Ui

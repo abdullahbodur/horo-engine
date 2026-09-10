@@ -81,6 +81,22 @@ checked runtime handles; they are not ordinary ECS entities. HoroEditor owns onl
 authoring documents, previews, inspector state and revision-checked editor commands.
 It never owns or lends widget pointers to a game runtime instance.
 
+The Runtime UI owner reserves disjoint, non-reusable element-slot ranges for every
+retained tree in one ownership generation. Tree storage remains local and bounded,
+but published handles use the owner-wide slot so equal local indexes in two canvases
+cannot alias. Destroyed or failed tree ranges remain tombstoned until the owner
+generation ends.
+
+### Retained-tree creation migration
+
+`UiElementTree::Create` now requires the owner service's retained
+`UiElementSlotAllocator`. Every caller of the former
+`Create(descriptor, elements)` overload must keep one allocator for the complete
+`UiOwnershipGeneration` and call `Create(ownerElementSlots, descriptor, elements)`.
+Creating an allocator per tree is invalid because it would restart the owner-wide
+namespace and permit cross-canvas handle aliasing. Failed preparation burns its
+reserved range; shutdown does not make the range reusable.
+
 ## Instance Lifecycle And Frame Order
 
 Documents, cooked data, mutable runtime trees, immutable interaction/layout
@@ -98,7 +114,9 @@ Runtime UI uses the existing host phases:
    last successfully presented interaction layout, applies bounded UI-local state,
    advances declared UI time, resolves bindings/layout/focus/hit tests, and
    publishes an immutable generation;
-4. RenderExtraction creates per-view `UiRenderSnapshot` values;
+4. RenderExtraction creates per-view `UiRenderSnapshot` values from view-owned,
+   preallocated bounded stores; live snapshot copies lease their immutable slots,
+   and store exhaustion fails explicitly without blocking or fallback allocation;
 5. RenderExecution composes world- and screen-space UI; `RenderGui` remains
    editor/development GUI, not the game UI implementation;
 6. successful presentation adopts the next interaction revision, then deferred
