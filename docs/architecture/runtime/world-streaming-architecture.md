@@ -541,6 +541,30 @@ not reset the counter; this replaces the ambiguous "volume cooldown trigger" and
 prevents camera flapping from creating endless retry storms. Diagnostics expose
 attempt count, next retry time and terminal cause.
 
+## Bounded Diagnostic Projection And Decision Evidence
+
+`WorldStreamingDiagnosticSnapshot` is the single immutable diagnostic projection
+of an authority safe point. It owns bounded source, cell, failure, queue, budget
+and structured decision rows; it does not schedule work, decide admission, change
+residency, publish Scene state or become a second lifecycle authority. Every
+structured event is bound to the exact runtime owner, composition revision,
+snapshot revision, cell-attempt fence and operation identity that produced it.
+
+Decision rows use closed typed categories for cell lifecycle, admission and
+rollback, with severity kept independent from the typed operation outcome. Their
+context is a small inline set of canonical numeric fields. Provider/native payloads,
+arbitrary strings and credentials are not accepted. Snapshot creation sorts rows
+and context fields canonically and rejects malformed, stale, duplicated,
+unsupported or over-capacity candidates transactionally. Replacement requires the
+same owner, a non-decreasing composition revision and a strictly newer diagnostic
+revision; failure leaves the previously published immutable snapshot usable.
+
+When structured event instrumentation is disabled, the event input is ignored
+before validation or allocation and the published event view is empty. Source,
+residency, queue, budget and operation behavior remain identical. Event records are
+read-only evidence for later observability adapters; they are not emitted directly
+to logs, metrics, EngineDataBus, overlays, CLI or MCP from this boundary.
+
 ## Scene, Prefab And Navigation Reconciliation
 
 Cell CoreEcs packages use ADR-017 Tier 0-style offline expansion: placed prefab

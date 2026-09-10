@@ -46,20 +46,20 @@ namespace Horo::WorldStreaming::WorldStreamingErrors {
 
     const ErrorCodeDescriptor DiagnosticProjectionInvalid =
         Describe("world_streaming.diagnostic_projection.invalid", ErrorSeverity::Error,
-                 "A World Streaming diagnostic snapshot contains malformed or incoherent authority facts.",
-                 "Capture one complete authority-safe-point projection with valid owner, queue and budget facts.", true);
+                 "A World Streaming diagnostic snapshot contains malformed or incoherent authority or decision facts.",
+                 "Capture one complete authority-safe-point projection with valid owner, queue, budget and typed decision facts.", true);
     const ErrorCodeDescriptor DiagnosticProjectionStale =
         Describe("world_streaming.diagnostic_projection.stale", ErrorSeverity::Warning,
-                 "A World Streaming diagnostic row no longer belongs to the captured authority revision.",
-                 "Discard the stale row and capture the current partition epoch, fence and budget revisions together.", false);
+                 "A World Streaming diagnostic row no longer belongs to the captured authority or snapshot revision.",
+                 "Discard the stale row and capture the current owner, partition epoch, fence and revisions together.", false);
     const ErrorCodeDescriptor DiagnosticProjectionUnsupported =
         Describe("world_streaming.diagnostic_projection.unsupported", ErrorSeverity::Error,
-                 "A World Streaming diagnostic projection contains an unsupported typed state or reason.",
-                 "Use only the lifecycle, residency and terminal-reason values declared by this contract version.", true);
+                 "A World Streaming diagnostic projection contains an unsupported typed state, decision, severity or reason.",
+                 "Use only the lifecycle, residency, decision and terminal-reason values declared by this contract version.", true);
     const ErrorCodeDescriptor DiagnosticProjectionIdentityConflict =
         Describe("world_streaming.diagnostic_projection.identity_conflict", ErrorSeverity::Error,
-                 "A World Streaming diagnostic projection repeats a stable source, cell attempt or failure identity.",
-                 "Publish exactly one row for each source, cell generation and terminal operation.", true);
+                 "A World Streaming diagnostic projection repeats a stable source, cell, failure, event, sequence or context identity.",
+                 "Publish unique canonical rows and context keys for each captured authority decision.", true);
     const ErrorCodeDescriptor DiagnosticProjectionCapacityExceeded =
         Describe("world_streaming.diagnostic_projection.capacity_exceeded", ErrorSeverity::Warning,
                  "A World Streaming diagnostic projection exceeds an admitted bounded row or queue capacity.",

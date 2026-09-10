@@ -20,13 +20,13 @@ namespace Horo::WorldStreaming::WorldStreamingErrors {
     extern const ErrorCodeDescriptor OriginFrameLifecycleUnavailable;
     /** @brief Storage required for an origin-frame owner or replacement lease could not be allocated. */
     extern const ErrorCodeDescriptor OriginFrameStorageUnavailable;
-    /** @brief A World Streaming diagnostic snapshot or aggregate queue fact is malformed. */
+    /** @brief A World Streaming diagnostic snapshot, decision row or aggregate queue fact is malformed. */
     extern const ErrorCodeDescriptor DiagnosticProjectionInvalid;
-    /** @brief A diagnostic row names a foreign partition epoch or mismatched budget revision. */
+    /** @brief A diagnostic row names a foreign owner, partition epoch, operation or revision. */
     extern const ErrorCodeDescriptor DiagnosticProjectionStale;
-    /** @brief A diagnostic lifecycle, cell-state or failure value is unsupported. */
+    /** @brief A diagnostic lifecycle, cell-state, event or failure value is unsupported. */
     extern const ErrorCodeDescriptor DiagnosticProjectionUnsupported;
-    /** @brief A diagnostic snapshot repeats a stable source, cell generation or failure identity. */
+    /** @brief A diagnostic snapshot repeats a stable source, cell, failure, event, sequence or context identity. */
     extern const ErrorCodeDescriptor DiagnosticProjectionIdentityConflict;
     /** @brief A diagnostic snapshot exceeds a configured or implementation-owned bound. */
     extern const ErrorCodeDescriptor DiagnosticProjectionCapacityExceeded;
