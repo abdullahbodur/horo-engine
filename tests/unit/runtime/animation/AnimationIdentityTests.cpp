@@ -148,6 +148,19 @@ namespace Horo::Animation {
             &AnimationErrors::SkinningJointMissing,
             &AnimationErrors::SkinningInfluenceInvalid,
             &AnimationErrors::SkinningLayoutInvalid,
+            &AnimationErrors::PoseVersionUnsupported,
+            &AnimationErrors::PoseAdmissionRejected,
+            &AnimationErrors::PoseEvaluationCancelled,
+            &AnimationErrors::PoseSkeletonMismatch,
+            &AnimationErrors::PoseSkeletonStale,
+            &AnimationErrors::PoseLimitExceeded,
+            &AnimationErrors::PoseArenaExhausted,
+            &AnimationErrors::PoseLeaseConflict,
+            &AnimationErrors::PoseTransformInvalid,
+            &AnimationErrors::PoseJointMissing,
+            &AnimationErrors::PoseNotEvaluated,
+            &AnimationErrors::PoseFrameStale,
+            &AnimationErrors::PoseThreadViolation,
         };
         std::set<std::string_view> codes;
         for (const ErrorCodeDescriptor *descriptor : descriptors) {

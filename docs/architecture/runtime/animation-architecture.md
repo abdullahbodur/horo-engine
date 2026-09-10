@@ -146,16 +146,35 @@ closed without publishing partial state or replacing the last good snapshot.
 
 ## Pose
 
-A pose is a snapshot of skeleton joint transforms in local or model space.
+`Horo/Animation/PoseStorage.h` is the ANI-001.5 owner of bounded local/model
+pose memory. `PoseFrameArena::Create` runs only at a runtime control boundary and
+preallocates structure-of-arrays storage for its complete pose and joint policy.
+After creation, frame begin/reset, pose allocation, local mutation, dirty
+propagation, hierarchy evaluation, lease acquisition/release, cancellation, and
+shutdown perform no dynamic allocation or blocking I/O.
 
-```cpp
-struct Pose {
-    const Skeleton* skeleton;
-    std::vector<Transform> localTransforms;   // local per joint
-    std::vector<Mat4> modelSpaceMatrices;     // computed on demand
-    uint32_t dirtyFromJoint;                  // for incremental update
-};
-```
+The arena is bound to one `AnimationRuntimeId`, persistent `SkeletonId`, and exact
+`SkeletonAssetGeneration`. Mutation is owner-thread-only. Canonical skeleton order
+provides parent-before-child evaluation, while a sorted stable-ID lookup keeps joint
+identity separate from dense storage. A local edit marks exactly that joint and its
+descendants dirty. Full evaluation visits every dirty joint once; partial evaluation
+visits only requested joints and the ancestors required to make their cached model
+matrices valid. Both paths have work bounded by the captured joint limit.
+
+Each allocation returns a `PoseHandle` carrying the runtime/instance, recyclable
+slot generation, and semantic pose generation. Beginning a strictly newer frame
+retires every unleased slot without wrapping its generation. Old frame handles,
+cross-runtime handles, non-monotonic frames, skeleton reload skew, malformed local
+transforms, and exhausted capacity fail with stable typed results rather than
+aliasing replacement storage.
+
+`PoseReadLease` is move-only and exposes immutable contiguous local transforms plus
+checked model-matrix lookup. A lease may be read and destroyed on a consumer thread,
+but it pins the exact slot: owner mutation, reset, cancellation, and shutdown reject
+while any lease remains. Shared internal control state makes a late lease destructor
+safe if the arena facade has already been destroyed; it does not restore admission or
+grant mutation authority. Cancellation retires uncommitted frame storage, and
+idempotent shutdown closes all later admission after leases drain.
 
 Rules:
 
@@ -169,6 +188,8 @@ Rules:
   poses remain valid until presentation and render leases retire.
 - Render extraction receives a frame-owned immutable pose/palette projection
   tagged with scene, instance, tick, and pose-generation identity.
+- Arena statistics expose fixed capacity, current/peak usage, failed allocations,
+  and active leases without allocating; hosts may project these into observability.
 
 ### Cinematic Pose Authority
 

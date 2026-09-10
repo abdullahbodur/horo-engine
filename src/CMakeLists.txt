@@ -457,6 +457,7 @@ add_library(HoroAnimationApi STATIC
         runtime/animation/api/AnimationComponents.cpp
         runtime/animation/api/AnimationErrors.cpp
         runtime/animation/api/AnimationIdentity.cpp
+        runtime/animation/api/PoseStorage.cpp
         runtime/animation/api/SkeletonAsset.cpp
         runtime/animation/api/SkeletalMeshSkinning.cpp
 )

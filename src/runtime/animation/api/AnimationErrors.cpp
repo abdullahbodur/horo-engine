@@ -115,4 +115,43 @@ namespace Horo::Animation::AnimationErrors {
     const ErrorCodeDescriptor SkinningLayoutInvalid{AnimationDomain, ErrorCode{"animation.skinning.layout_invalid"}, ErrorSeverity::Error,
                                                     "Skeletal-mesh LOD, section, range, or bounds metadata is invalid.",
                                                     "Provide contiguous sections, valid bounds, and canonical LOD levels."};
+    const ErrorCodeDescriptor PoseVersionUnsupported{AnimationDomain, ErrorCode{"animation.pose.version_unsupported"}, ErrorSeverity::Error,
+                                                     "The pose-storage contract version is unsupported.",
+                                                     "Create storage using the current pose contract version."};
+    const ErrorCodeDescriptor PoseAdmissionRejected{AnimationDomain, ErrorCode{"animation.pose.admission_rejected"}, ErrorSeverity::Warning,
+                                                    "The animation owner is not accepting pose work.",
+                                                    "Submit work only to an active owner-controlled frame arena."};
+    const ErrorCodeDescriptor PoseEvaluationCancelled{AnimationDomain, ErrorCode{"animation.pose.evaluation_cancelled"},
+                                                      ErrorSeverity::Warning, "The active pose frame was cancelled before publication.",
+                                                      "Begin a newer frame before submitting replacement work."};
+    const ErrorCodeDescriptor PoseSkeletonMismatch{AnimationDomain, ErrorCode{"animation.pose.skeleton_mismatch"}, ErrorSeverity::Error,
+                                                   "The pose arena targets another skeleton identity.",
+                                                   "Use the exact immutable skeleton bound when the arena was created."};
+    const ErrorCodeDescriptor PoseSkeletonStale{AnimationDomain, ErrorCode{"animation.pose.skeleton_stale"}, ErrorSeverity::Warning,
+                                                "The pose arena targets a retired skeleton publication.",
+                                                "Recreate pose storage for the current skeleton generation."};
+    const ErrorCodeDescriptor PoseLimitExceeded{AnimationDomain, ErrorCode{"animation.pose.limit_exceeded"}, ErrorSeverity::Error,
+                                                "Pose storage exceeds a finite capacity or hierarchy limit.",
+                                                "Reduce pose or joint capacity to the captured hard limits."};
+    const ErrorCodeDescriptor PoseArenaExhausted{AnimationDomain, ErrorCode{"animation.pose.arena_exhausted"}, ErrorSeverity::Warning,
+                                                 "The preallocated frame pose arena is exhausted.",
+                                                 "Increase bounded setup capacity or reduce poses produced this frame."};
+    const ErrorCodeDescriptor PoseLeaseConflict{AnimationDomain, ErrorCode{"animation.pose.lease_conflict"}, ErrorSeverity::Warning,
+                                                "An immutable lease pins storage required for mutation or retirement.",
+                                                "Release the consumer lease at its documented synchronization point."};
+    const ErrorCodeDescriptor PoseTransformInvalid{AnimationDomain, ErrorCode{"animation.pose.transform_invalid"}, ErrorSeverity::Error,
+                                                   "A local pose transform is non-finite or has an invalid rotation.",
+                                                   "Provide finite transform values and a normalizable rotation."};
+    const ErrorCodeDescriptor PoseJointMissing{AnimationDomain, ErrorCode{"animation.pose.joint_missing"}, ErrorSeverity::Error,
+                                               "Pose evaluation references a joint absent from the immutable hierarchy.",
+                                               "Use stable joint identities declared by the arena skeleton."};
+    const ErrorCodeDescriptor PoseNotEvaluated{AnimationDomain, ErrorCode{"animation.pose.not_evaluated"}, ErrorSeverity::Warning,
+                                               "The requested model-space matrix remains dirty.",
+                                               "Evaluate the requested joint and its ancestors before reading it."};
+    const ErrorCodeDescriptor PoseFrameStale{AnimationDomain, ErrorCode{"animation.pose.frame_stale"}, ErrorSeverity::Warning,
+                                             "The pose operation targets a retired or non-monotonic frame.",
+                                             "Discard frame-local handles and begin a strictly newer frame."};
+    const ErrorCodeDescriptor PoseThreadViolation{AnimationDomain, ErrorCode{"animation.pose.thread_violation"}, ErrorSeverity::Error,
+                                                  "A mutable pose operation ran outside the arena owner thread.",
+                                                  "Route arena mutation through the animation runtime owner thread."};
 }  // namespace Horo::Animation::AnimationErrors
