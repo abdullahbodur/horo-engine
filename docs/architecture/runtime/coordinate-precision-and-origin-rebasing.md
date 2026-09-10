@@ -177,6 +177,28 @@ using CameraRelativeFloat3 = Vec3;
 
 ## Floating Origin Rebasing Architecture
 
+### Origin Frame Identity
+
+`HoroWorldStreaming` owns the backend-neutral identity boundary between canonical
+global coordinates and localized simulation values. An immutable `OriginFrame`
+binds one stable `OriginFrameId`, exact publication `OriginFrameRevision`,
+non-wrapping `OriginGeneration`, and a `WorldCoordinate64` origin. Local values are
+an explicit `OriginLocalCoordinate`; they carry frame identity and generation and
+cannot be substituted for save, cell, network, or other canonical world authority.
+
+Global-to-local conversion subtracts exact signed integer millimeters before the
+bounded result is projected to fp32. The inverse accepts only finite,
+millimeter-representable values inside the documented 8192 m local half-extent and
+rejects foreign or stale generations. Candidate frame replacement requires exact
+revision and generation successors, remains invisible until publication, and
+preserves the active frame when validation or storage fails. Cancellation discards
+only the unpublished candidate. Replacement and shutdown expire outstanding frame
+leases; neither operation mutates any stable global coordinate.
+
+This contract does not choose a trigger, safe point, participant set, or subsystem
+adapter. Those responsibilities remain with the later `OriginRebaseCoordinator`
+and integration work described below.
+
 ### 1. Origin Rebase Coordinator
 
 The `OriginRebaseCoordinator` is owned by `SceneRuntime` and updated during the pre-render frame phase on the host thread that ticks `SceneRuntime` (editor, game, and dedicated-server hosts). It is a runtime type and must not depend on editor types.

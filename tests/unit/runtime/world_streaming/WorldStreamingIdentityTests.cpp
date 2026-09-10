@@ -144,6 +144,12 @@ namespace Horo::WorldStreaming {
 
         TEST_CASE("World streaming errors expose unique stable descriptors", "[unit][world_streaming][errors]") {
             const std::array descriptors{
+                &WorldStreamingErrors::OriginFrameInvalid,
+                &WorldStreamingErrors::OriginFrameStale,
+                &WorldStreamingErrors::OriginFrameRangeExceeded,
+                &WorldStreamingErrors::OriginFramePrecisionLoss,
+                &WorldStreamingErrors::OriginFrameLifecycleUnavailable,
+                &WorldStreamingErrors::OriginFrameStorageUnavailable,
                 &WorldStreamingErrors::CellStateInvalid,
                 &WorldStreamingErrors::CellStateUnresolved,
                 &WorldStreamingErrors::CellStateStale,

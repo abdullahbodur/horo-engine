@@ -413,6 +413,15 @@ runtime, skeleton, frame, slot, and semantic pose generations. The contract adds
 RuntimeScene, Physics, Render, job-system, platform, editor, service-locator, or
 backend-native dependency; those future adapters must consume AnimationApi explicitly.
 
+## World Streaming Origin Frame Boundary
+
+`Horo/WorldStreaming/OriginFrame.h` is owned by `HoroWorldStreaming`. It exposes
+only Horo Foundation scene-math, strong-identity, result, and World Streaming
+error contracts. The header owns canonical-to-local conversion and immutable
+frame lease semantics; it has no Scene Runtime, renderer, physics, native,
+editor, or GUI dependency. Trigger policy, participant coordination, and backend
+adapters remain outside this public identity boundary.
+
 ## Destruction Identity Boundary
 
 `HoroEngine::DestructionApi` owns `Horo/Destruction/DestructibleDescriptor.h`,

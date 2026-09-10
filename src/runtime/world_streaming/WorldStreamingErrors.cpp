@@ -19,6 +19,31 @@ namespace Horo::WorldStreaming::WorldStreamingErrors {
         }
     }  // namespace
 
+    const ErrorCodeDescriptor OriginFrameInvalid =
+        Describe("world_streaming.origin_frame.invalid", ErrorSeverity::Error,
+                 "An origin-frame binding or externally supplied local coordinate is malformed.",
+                 "Provide non-zero typed frame identities and finite millimeter-aligned local coordinates.", true);
+    const ErrorCodeDescriptor OriginFrameStale =
+        Describe("world_streaming.origin_frame.stale", ErrorSeverity::Warning,
+                 "An origin-frame candidate, local coordinate, or lease no longer names the active generation.",
+                 "Capture the current origin-frame publication and regenerate the local coordinate before retrying.", false);
+    const ErrorCodeDescriptor OriginFrameRangeExceeded =
+        Describe("world_streaming.origin_frame.range_exceeded", ErrorSeverity::Error,
+                 "A global/local conversion exceeds the supported local frame or signed global coordinate range.",
+                 "Rebase to a nearer canonical origin and keep every local axis inside the declared half-extent.", false);
+    const ErrorCodeDescriptor OriginFramePrecisionLoss =
+        Describe("world_streaming.origin_frame.precision_loss", ErrorSeverity::Error,
+                 "An externally supplied local coordinate cannot preserve canonical millimeter precision.",
+                 "Provide finite local meters aligned to canonical millimeters or derive the value from an origin frame.", true);
+    const ErrorCodeDescriptor OriginFrameLifecycleUnavailable =
+        Describe("world_streaming.origin_frame.lifecycle_unavailable", ErrorSeverity::Warning,
+                 "The origin-frame owner is closed or has no staged replacement to publish.",
+                 "Use the active owner lifecycle and stage a validated successor before publication.", false);
+    const ErrorCodeDescriptor OriginFrameStorageUnavailable =
+        Describe("world_streaming.origin_frame.storage_unavailable", ErrorSeverity::Error,
+                 "Storage required for an origin-frame owner or replacement lease is unavailable.",
+                 "Release retained frame leases or retry at a later owner safe point.", false);
+
     const ErrorCodeDescriptor DiagnosticProjectionInvalid =
         Describe("world_streaming.diagnostic_projection.invalid", ErrorSeverity::Error,
                  "A World Streaming diagnostic snapshot contains malformed or incoherent authority facts.",

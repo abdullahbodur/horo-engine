@@ -8,6 +8,18 @@
 #include "Horo/Foundation/ErrorCode.h"
 
 namespace Horo::WorldStreaming::WorldStreamingErrors {
+    /** @brief An origin-frame binding or externally supplied local coordinate is malformed. */
+    extern const ErrorCodeDescriptor OriginFrameInvalid;
+    /** @brief A local coordinate, candidate, or lease belongs to a non-active origin generation. */
+    extern const ErrorCodeDescriptor OriginFrameStale;
+    /** @brief A global/local conversion exceeds the supported local frame or signed global range. */
+    extern const ErrorCodeDescriptor OriginFrameRangeExceeded;
+    /** @brief An externally supplied local coordinate cannot preserve canonical millimeter precision. */
+    extern const ErrorCodeDescriptor OriginFramePrecisionLoss;
+    /** @brief An origin-frame operation is unavailable because no candidate exists or the owner is closed. */
+    extern const ErrorCodeDescriptor OriginFrameLifecycleUnavailable;
+    /** @brief Storage required for an origin-frame owner or replacement lease could not be allocated. */
+    extern const ErrorCodeDescriptor OriginFrameStorageUnavailable;
     /** @brief A World Streaming diagnostic snapshot or aggregate queue fact is malformed. */
     extern const ErrorCodeDescriptor DiagnosticProjectionInvalid;
     /** @brief A diagnostic row names a foreign partition epoch or mismatched budget revision. */
