@@ -217,3 +217,12 @@ SDK visibility at compile time. A separate native-boundary test deliberately
 links Jolt to verify binary ABI mismatch rejection and unchanged factory/allocator
 state. The check itself never registers types or initializes a world; explicit
 activation and world teardown remain the scene lifecycle owner's responsibility.
+
+## PCG Identity Boundary
+
+HoroEngine::PCG owns Horo/PCG/PCGIdentity.h and Horo/PCG/PCGErrors.h.
+The public contract contains only durable authored identities and exact graph-revision
+associations, with a Foundation-only dependency. Its canonical encodings cannot
+represent pointers, container positions, runtime registry handles, callbacks,
+filesystem paths, or backend-native values. Existing callers require no migration
+because this is the first published PCG API slice.
