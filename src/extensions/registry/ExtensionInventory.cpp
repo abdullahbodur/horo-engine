@@ -2,6 +2,7 @@
 
 #include "Horo/Extensions/ExtensionErrors.h"
 #include "Horo/Foundation/Platform.h"
+#include "Horo/Foundation/Sha256.h"
 #include "Horo/Foundation/TransparentString.h"
 
 #include <algorithm>
@@ -10,6 +11,7 @@
 #include <cstddef>
 #include <cstdlib>
 #include <fstream>
+#include <limits>
 #include <nlohmann/json.hpp>
 #include <optional>
 #include <ranges>
@@ -38,11 +40,21 @@ namespace Horo::Extensions {
             fs::file_status status;
         };
 
+        /** @brief Parsed direct-directory manifest plus its exact encoded-byte identity. */
+        struct ParsedManifestFile {
+            ExtensionManifest manifest;
+            std::string compositionVersion;
+        };
+
         /** @brief Preserves process-local activation state across inventory refreshes. */
         struct RuntimeState {
             bool active{};
-            std::string loadError;
+            ExtensionHostCompatibilityState compatibility{ExtensionHostCompatibilityState::NotEvaluated};
+            ExtensionActivationOutcome outcome{ExtensionActivationOutcome::NotAttempted};
+            ExtensionActivationFailure failure;
             std::string compositionVersion;
+            std::uint64_t stateRevision{1};
+            std::uint64_t activationGeneration{};
         };
 
         using RuntimeStateMap = TransparentStringMap<RuntimeState>;
@@ -87,8 +99,8 @@ namespace Horo::Extensions {
             });
         }
 
-        [[nodiscard]] std::string BuildCompositionVersion(const std::string_view packageVersion,
-                                                          const std::vector<ExtensionModuleManifest> &modules) {
+        [[nodiscard]] std::string BuildBuiltInCompositionVersion(const std::string_view packageVersion,
+                                                                 const std::vector<ExtensionModuleManifest> &modules) {
             std::string fingerprint{packageVersion};
             for (const auto &mod : modules) {
                 fingerprint.append("|");
@@ -98,27 +110,34 @@ namespace Horo::Extensions {
                 fingerprint.append("@");
                 fingerprint.append(mod.version);
             }
-            return fingerprint;
+            const auto bytes = std::as_bytes(std::span{fingerprint.data(), fingerprint.size()});
+            return "sha256:" + FormatSha256(ComputeSha256(bytes));
         }
 
-        [[nodiscard]] Result<ExtensionManifest> ReadManifest(const fs::path &absoluteManifestPath) {
+        [[nodiscard]] Result<ParsedManifestFile> ReadManifest(const fs::path &absoluteManifestPath) {
             if (!absoluteManifestPath.is_absolute())
-                return Result<ExtensionManifest>::Failure(
+                return Result<ParsedManifestFile>::Failure(
                     MakeError(ExtensionErrors::InvalidManifest, "Extension manifest path must be absolute."));
             std::error_code error;
             if (!fs::is_regular_file(absoluteManifestPath, error) || error ||
                 fs::is_symlink(fs::symlink_status(absoluteManifestPath, error))) {
-                return Result<ExtensionManifest>::Failure(
+                return Result<ParsedManifestFile>::Failure(
                     MakeError(ExtensionErrors::InvalidManifest, "Extension manifest must be a regular non-symlink file."));
             }
             if (const std::uintmax_t size = fs::file_size(absoluteManifestPath, error);
                 error || size > kManifestLimits.maximumDocumentBytes)
-                return Result<ExtensionManifest>::Failure(
+                return Result<ParsedManifestFile>::Failure(
                     MakeError(ExtensionErrors::InvalidManifest, "Extension manifest exceeds the bounded size."));
             std::ifstream input(absoluteManifestPath, std::ios::binary);
             std::ostringstream contents;
             contents << input.rdbuf();
-            return ParseExtensionManifest(contents.str(), kManifestLimits);
+            const std::string encoded = contents.str();
+            auto parsed = ParseExtensionManifest(encoded, kManifestLimits);
+            if (parsed.HasError())
+                return Result<ParsedManifestFile>::Failure(parsed.ErrorValue());
+            const auto bytes = std::as_bytes(std::span{encoded.data(), encoded.size()});
+            return Result<ParsedManifestFile>::Success(
+                {.manifest = std::move(parsed).Value(), .compositionVersion = "sha256:" + FormatSha256(ComputeSha256(bytes))});
         }
 
         /** @brief Validates one source entry and accounts for the package entry limit. */
@@ -199,8 +218,12 @@ namespace Horo::Extensions {
             runtimeStates.reserve(entries.size());
             for (auto &entry : entries) {
                 runtimeStates.try_emplace(entry.packageId, RuntimeState{.active = entry.runtimeActive,
-                                                                        .loadError = std::move(entry.loadError),
-                                                                        .compositionVersion = std::move(entry.runtimeCompositionVersion)});
+                                                                        .compatibility = entry.hostCompatibility,
+                                                                        .outcome = entry.activationOutcome,
+                                                                        .failure = std::move(entry.activationFailure),
+                                                                        .compositionVersion = std::move(entry.runtimeCompositionVersion),
+                                                                        .stateRevision = entry.stateRevision,
+                                                                        .activationGeneration = entry.activationGeneration});
             }
             return runtimeStates;
         }
@@ -210,8 +233,16 @@ namespace Horo::Extensions {
             for (auto &entry : entries) {
                 if (auto runtime = runtimeStates.find(entry.packageId); runtime != runtimeStates.end()) {
                     entry.runtimeActive = runtime->second.active;
-                    entry.loadError = std::move(runtime->second.loadError);
+                    entry.hostCompatibility = runtime->second.compatibility;
+                    entry.activationOutcome = runtime->second.outcome;
+                    entry.activationFailure = std::move(runtime->second.failure);
+                    entry.loadError = entry.activationFailure.message;
                     entry.runtimeCompositionVersion = std::move(runtime->second.compositionVersion);
+                    entry.stateRevision = runtime->second.stateRevision;
+                    entry.activationGeneration = runtime->second.activationGeneration;
+                    if (entry.runtimeCompositionVersion != entry.compositionVersion &&
+                        entry.stateRevision != std::numeric_limits<std::uint64_t>::max())
+                        ++entry.stateRevision;
                 }
             }
         }
@@ -224,21 +255,23 @@ namespace Horo::Extensions {
         }
 
         /** @brief Builds one installed-package projection, or skips an invalid or duplicate package. */
-        [[nodiscard]] std::optional<ExtensionInventoryEntry> ReadInstalledEntry(const fs::directory_entry &directory,
-                                                                                const std::vector<ExtensionInventoryEntry> &existing,
-                                                                                const TransparentStringSet &enabled,
-                                                                                const TransparentStringSet &trusted) {
+        [[nodiscard]] std::optional<ExtensionInventoryEntry> ReadInstalledEntry(
+            const fs::directory_entry &directory, const std::vector<ExtensionInventoryEntry> &existing, const TransparentStringSet &enabled,
+            const TransparentStringMap<std::string> &trustedCompositions) {
             auto parsed = ReadManifest(fs::absolute(directory.path() / "extension.json"));
             if (parsed.HasError())
                 return std::nullopt;
-            ExtensionManifest manifest = std::move(parsed).Value();
+            ParsedManifestFile manifestFile = std::move(parsed).Value();
+            ExtensionManifest manifest = std::move(manifestFile.manifest);
             if (const bool duplicate = std::ranges::any_of(existing,
                                                            [&manifest](const ExtensionInventoryEntry &entry) {
                 return entry.packageId == manifest.id;
             });
                 !IsSafePackageId(manifest.id) || directory.path().filename() != fs::path{manifest.id} || duplicate)
                 return std::nullopt;
-            const std::string compositionVersion = BuildCompositionVersion(manifest.version, manifest.modules);
+            const std::string compositionVersion = std::move(manifestFile.compositionVersion);
+            const auto trust = trustedCompositions.find(manifest.id);
+            const bool hasCurrentTrust = trust != trustedCompositions.end() && trust->second == compositionVersion;
             return ExtensionInventoryEntry{
                 .packageId = manifest.id,
                 .displayName = manifest.displayName.empty() ? manifest.id : manifest.displayName,
@@ -251,14 +284,16 @@ namespace Horo::Extensions {
                 .modules = std::move(manifest.modules),
                 .contributions = std::move(manifest.contributions),
                 .enabled = enabled.contains(manifest.id),
-                .locallyTrusted = trusted.contains(manifest.id),
+                .locallyTrusted = hasCurrentTrust,
                 .compositionVersion = compositionVersion,
+                .trustedCompositionVersion = hasCurrentTrust ? compositionVersion : std::string{},
             };
         }
 
         /** @brief Adds valid installed packages from the managed root to the inventory projection. */
         [[nodiscard]] Result<void> DiscoverInstalledEntries(const fs::path &installRoot, std::vector<ExtensionInventoryEntry> &entries,
-                                                            const TransparentStringSet &enabled, const TransparentStringSet &trusted) {
+                                                            const TransparentStringSet &enabled,
+                                                            const TransparentStringMap<std::string> &trustedCompositions) {
             std::error_code error;
             fs::create_directories(installRoot, error);
             if (error)
@@ -268,7 +303,7 @@ namespace Horo::Extensions {
                     return Result<void>::Failure(MakeError(ExtensionErrors::LoadFailed, "Unable to enumerate installed extensions."));
                 if (!IsDiscoverableDirectory(directory, error))
                     continue;
-                if (auto entry = ReadInstalledEntry(directory, entries, enabled, trusted); entry.has_value())
+                if (auto entry = ReadInstalledEntry(directory, entries, enabled, trustedCompositions); entry.has_value())
                     entries.push_back(std::move(*entry));
             }
             return Result<void>::Success();
@@ -319,10 +354,11 @@ namespace Horo::Extensions {
             auto parsed = ReadManifest(source / "extension.json");
             if (parsed.HasError())
                 return Result<ExtensionManifest>::Failure(parsed.ErrorValue());
-            if (!IsSafePackageId(parsed.Value().id))
+            ParsedManifestFile manifestFile = std::move(parsed).Value();
+            if (!IsSafePackageId(manifestFile.manifest.id))
                 return Result<ExtensionManifest>::Failure(
                     MakeError(ExtensionErrors::InvalidManifest, "Extension package ID is unsafe for installation."));
-            return parsed;
+            return Result<ExtensionManifest>::Success(std::move(manifestFile.manifest));
         }
 
         /** @brief Creates the managed root and resolves an unused package destination. */
@@ -345,7 +381,60 @@ namespace Horo::Extensions {
                     values.insert(id.get<std::string>());
             }
         }
+
+        /** @brief Loads bounded exact-composition trust records; legacy ID-only trust is intentionally not migrated. */
+        void LoadTrustedCompositions(const Json &state, TransparentStringMap<std::string> &values) {
+            const auto trusted = state.find("trustedCompositions");
+            if (trusted == state.end() || !trusted->is_object())
+                return;
+            for (auto it = trusted->begin(); it != trusted->end(); ++it) {
+                if (IsSafePackageId(it.key()) && it.value().is_string()) {
+                    std::string composition = it.value().get<std::string>();
+                    if (!composition.empty() && composition.size() <= 512)
+                        values.emplace(it.key(), std::move(composition));
+                }
+            }
+        }
+
+        /** @brief Replaces legacy entry fields from the canonical typed projection. */
+        void PublishProjection(ExtensionInventoryEntry &entry, ExtensionActivationProjection projection) {
+            entry.enabled = projection.enablement == ExtensionEnablementState::Enabled;
+            entry.locallyTrusted = projection.HasCurrentTrust();
+            entry.hostCompatibility = projection.compatibility;
+            entry.runtimeActive = projection.runtime == ExtensionRuntimeActivityState::Active;
+            entry.activationOutcome = projection.outcome;
+            entry.activationFailure = std::move(projection.failure);
+            entry.loadError = entry.activationFailure.message;
+            entry.compositionVersion = std::move(projection.installedComposition);
+            entry.trustedCompositionVersion = std::move(projection.trustedComposition);
+            entry.runtimeCompositionVersion = std::move(projection.runtimeComposition);
+            entry.stateRevision = projection.stateRevision;
+            entry.activationGeneration = projection.activationGeneration;
+        }
     }  // namespace
+
+    /** @copydoc ExtensionInventoryEntry::ActivationState */
+    ExtensionActivationProjection ExtensionInventoryEntry::ActivationState() const {
+        return {
+            .installation = ExtensionInstallationState::Installed,
+            .trust = locallyTrusted ? ExtensionTrustState::Trusted : ExtensionTrustState::Untrusted,
+            .enablement = enabled ? ExtensionEnablementState::Enabled : ExtensionEnablementState::Disabled,
+            .compatibility = hostCompatibility,
+            .runtime = runtimeActive ? ExtensionRuntimeActivityState::Active : ExtensionRuntimeActivityState::Inactive,
+            .outcome = activationOutcome,
+            .failure = activationFailure,
+            .installedComposition = compositionVersion,
+            .trustedComposition = trustedCompositionVersion,
+            .runtimeComposition = runtimeCompositionVersion,
+            .stateRevision = stateRevision,
+            .activationGeneration = activationGeneration,
+        };
+    }
+
+    /** @copydoc ExtensionInventoryEntry::RestartRequired */
+    bool ExtensionInventoryEntry::RestartRequired() const {
+        return ActivationState().RestartReason() != ExtensionRestartReason::None;
+    }
 
     /** @copydoc ExtensionInventory::ExtensionInventory */
     ExtensionInventory::ExtensionInventory(fs::path absoluteInstallRoot)
@@ -375,7 +464,7 @@ namespace Horo::Extensions {
         if (auto loaded = LoadState(); loaded.HasError())
             return loaded;
         AddBuiltInPackages();
-        if (auto discovered = DiscoverInstalledEntries(installRoot_, entries_, enabled_, trusted_); discovered.HasError())
+        if (auto discovered = DiscoverInstalledEntries(installRoot_, entries_, enabled_, trustedCompositions_); discovered.HasError())
             return discovered;
         RestoreRuntimeStates(entries_, runtimeStates);
         std::ranges::sort(entries_, [](const ExtensionInventoryEntry &left, const ExtensionInventoryEntry &right) {
@@ -415,7 +504,7 @@ namespace Horo::Extensions {
         if (auto published = PublishPackage(source, staging, destination); published.HasError())
             return Result<std::string>::Failure(published.ErrorValue());
         enabled_.erase(manifest.id);
-        trusted_.erase(manifest.id);
+        trustedCompositions_.erase(manifest.id);
         if (auto saved = SaveState(); saved.HasError()) {
             std::error_code ignored;
             fs::remove_all(destination, ignored);
@@ -431,53 +520,118 @@ namespace Horo::Extensions {
         const auto entry = std::ranges::find(entries_, packageId, &ExtensionInventoryEntry::packageId);
         if (entry == entries_.end())
             return Result<void>::Failure(MakeError(ExtensionErrors::InvalidManifest, "Unknown extension package ID."));
+        auto transition =
+            TransitionExtensionActivation(entry->ActivationState(), {.action = enabled ? ExtensionLifecycleAction::EnableForProject
+                                                                                       : ExtensionLifecycleAction::DisableForProject,
+                                                                     .owner = ExtensionLifecycleOwner::PackageLifecycleService,
+                                                                     .expectedRevision = entry->stateRevision});
+        if (transition.HasError())
+            return Result<void>::Failure(transition.ErrorValue());
         const bool wasEnabled = enabled_.contains(entry->packageId);
-        const bool wasTrusted = trusted_.contains(entry->packageId);
-        if (enabled) {
+        if (enabled)
             enabled_.insert(entry->packageId);
-            trusted_.insert(entry->packageId);
-        } else {
+        else
             enabled_.erase(entry->packageId);
-        }
         if (auto saved = SaveState(); saved.HasError()) {
             if (wasEnabled)
                 enabled_.insert(entry->packageId);
             else
                 enabled_.erase(entry->packageId);
-            if (wasTrusted)
-                trusted_.insert(entry->packageId);
-            else
-                trusted_.erase(entry->packageId);
             return saved;
         }
-        entry->enabled = enabled;
-        entry->locallyTrusted = trusted_.contains(entry->packageId);
+        PublishProjection(*entry, std::move(transition).Value().next);
+        return Result<void>::Success();
+    }
+
+    /** @copydoc ExtensionInventory::SetTrusted */
+    Result<void> ExtensionInventory::SetTrusted(const std::string_view packageId, const bool trusted) {
+        const auto entry = std::ranges::find(entries_, packageId, &ExtensionInventoryEntry::packageId);
+        if (entry == entries_.end())
+            return Result<void>::Failure(MakeError(ExtensionErrors::InvalidManifest, "Unknown extension package ID."));
+        auto transition =
+            TransitionExtensionActivation(entry->ActivationState(),
+                                          {.action = trusted ? ExtensionLifecycleAction::GrantTrust : ExtensionLifecycleAction::RevokeTrust,
+                                           .owner = ExtensionLifecycleOwner::TrustService,
+                                           .expectedRevision = entry->stateRevision,
+                                           .composition = trusted ? entry->compositionVersion : std::string{}});
+        if (transition.HasError())
+            return Result<void>::Failure(transition.ErrorValue());
+        const auto previous = trustedCompositions_.find(entry->packageId);
+        const std::optional<std::string> previousComposition =
+            previous == trustedCompositions_.end() ? std::nullopt : std::optional<std::string>{previous->second};
+        if (trusted)
+            trustedCompositions_.insert_or_assign(entry->packageId, entry->compositionVersion);
+        else
+            trustedCompositions_.erase(entry->packageId);
+        if (auto saved = SaveState(); saved.HasError()) {
+            if (previousComposition.has_value())
+                trustedCompositions_.insert_or_assign(entry->packageId, *previousComposition);
+            else
+                trustedCompositions_.erase(entry->packageId);
+            return saved;
+        }
+        PublishProjection(*entry, std::move(transition).Value().next);
         return Result<void>::Success();
     }
 
     /** @copydoc ExtensionInventory::MarkRuntimeActive */
-    void ExtensionInventory::MarkRuntimeActive(const std::string_view packageId) {
-        if (auto entry = std::ranges::find(entries_, packageId, &ExtensionInventoryEntry::packageId); entry != entries_.end()) {
-            entry->runtimeActive = true;
-            entry->runtimeCompositionVersion = entry->compositionVersion;
-            entry->loadError.clear();
+    Result<void> ExtensionInventory::MarkRuntimeActive(const std::string_view packageId) {
+        const auto entry = std::ranges::find(entries_, packageId, &ExtensionInventoryEntry::packageId);
+        if (entry == entries_.end())
+            return Result<void>::Failure(MakeError(ExtensionErrors::InvalidManifest, "Unknown extension package ID."));
+        auto state = entry->ActivationState();
+        if (state.compatibility == ExtensionHostCompatibilityState::NotEvaluated) {
+            auto compatible = TransitionExtensionActivation(state, {.action = ExtensionLifecycleAction::MarkCompatible,
+                                                                    .owner = ExtensionLifecycleOwner::PackageLifecycleService,
+                                                                    .expectedRevision = state.stateRevision});
+            if (compatible.HasError())
+                return Result<void>::Failure(compatible.ErrorValue());
+            state = std::move(compatible).Value().next;
         }
+        auto loaded = TransitionExtensionActivation(state, {.action = ExtensionLifecycleAction::MarkLoaded,
+                                                            .owner = ExtensionLifecycleOwner::ExtensionHost,
+                                                            .expectedRevision = state.stateRevision,
+                                                            .composition = state.installedComposition});
+        if (loaded.HasError())
+            return Result<void>::Failure(loaded.ErrorValue());
+        state = std::move(loaded).Value().next;
+        if (nextActivationGeneration_ == 0)
+            return Result<void>::Failure(MakeError(ExtensionErrors::LifecycleCapacityExceeded));
+        auto active = TransitionExtensionActivation(state, {.action = ExtensionLifecycleAction::MarkActive,
+                                                            .owner = ExtensionLifecycleOwner::ExtensionHost,
+                                                            .expectedRevision = state.stateRevision,
+                                                            .activationGeneration = nextActivationGeneration_,
+                                                            .composition = state.installedComposition});
+        if (active.HasError())
+            return Result<void>::Failure(active.ErrorValue());
+        ++nextActivationGeneration_;
+        PublishProjection(*entry, std::move(active).Value().next);
+        return Result<void>::Success();
     }
 
-    /** @copydoc ExtensionInventory::SetLoadError */
-    void ExtensionInventory::SetLoadError(const std::string_view packageId, std::string message) {
-        if (auto entry = std::ranges::find(entries_, packageId, &ExtensionInventoryEntry::packageId); entry != entries_.end()) {
-            entry->runtimeActive = false;
-            entry->loadError = std::move(message);
-        }
+    /** @copydoc ExtensionInventory::RecordActivationFailure */
+    Result<void> ExtensionInventory::RecordActivationFailure(const std::string_view packageId,
+                                                             const ExtensionActivationFailureReason reason, std::string message) {
+        const auto entry = std::ranges::find(entries_, packageId, &ExtensionInventoryEntry::packageId);
+        if (entry == entries_.end())
+            return Result<void>::Failure(MakeError(ExtensionErrors::InvalidManifest, "Unknown extension package ID."));
+        auto failed =
+            TransitionExtensionActivation(entry->ActivationState(), {.action = ExtensionLifecycleAction::RecordActivationFailure,
+                                                                     .owner = ExtensionLifecycleOwner::PackageLifecycleService,
+                                                                     .expectedRevision = entry->stateRevision,
+                                                                     .failure = {.reason = reason, .message = std::move(message)}});
+        if (failed.HasError())
+            return Result<void>::Failure(failed.ErrorValue());
+        PublishProjection(*entry, std::move(failed).Value().next);
+        return Result<void>::Success();
     }
 
     /** @copydoc ExtensionInventory::EnabledUserPackageRoots */
     std::vector<fs::path> ExtensionInventory::EnabledUserPackageRoots() const {
         std::vector<fs::path> roots;
         for (const auto &entry : entries_) {
-            if (entry.origin == ExtensionOrigin::UserInstalled && entry.enabled && entry.locallyTrusted &&
-                entry.absoluteRootPath.is_absolute())
+            if (entry.origin == ExtensionOrigin::UserInstalled &&
+                entry.ActivationState().DesiredActivation() == ExtensionDesiredActivation::Active && entry.absoluteRootPath.is_absolute())
                 roots.push_back(entry.absoluteRootPath);
         }
         return roots;
@@ -490,17 +644,16 @@ namespace Horo::Extensions {
 
     Result<void> ExtensionInventory::LoadState() {
         enabled_.clear();
-        trusted_.clear();
+        trustedCompositions_.clear();
         if (std::error_code error; !fs::exists(statePath_, error) || error) {
             enabled_.emplace("horo.builtin.assets");
-            trusted_.emplace("horo.builtin.assets");
             return Result<void>::Success();
         }
         std::ifstream input(statePath_, std::ios::binary);
         try {
             const Json state = Json::parse(input);
             LoadStringSet(state, "enabled", enabled_);
-            LoadStringSet(state, "trusted", trusted_);
+            LoadTrustedCompositions(state, trustedCompositions_);
         } catch (const Json::exception &) {
             return Result<void>::Failure(MakeError(ExtensionErrors::InvalidManifest, "Extension activation state is malformed."));
         }
@@ -513,14 +666,20 @@ namespace Horo::Extensions {
         if (error)
             return Result<void>::Failure(MakeError(ExtensionErrors::LoadFailed, "Unable to create extension state directory."));
         std::vector<std::string> enabled{enabled_.begin(), enabled_.end()};
-        std::vector<std::string> trusted{trusted_.begin(), trusted_.end()};
         std::ranges::sort(enabled);
-        std::ranges::sort(trusted);
+        Json trustedCompositions = Json::object();
+        std::vector<std::string> trustedIds;
+        trustedIds.reserve(trustedCompositions_.size());
+        for (const auto &[id, composition] : trustedCompositions_)
+            trustedIds.push_back(id);
+        std::ranges::sort(trustedIds);
+        for (const auto &id : trustedIds)
+            trustedCompositions[id] = trustedCompositions_.at(id);
         const std::string serialized =
             Json{
-                {"schemaVersion", 1},
+                {"schemaVersion", 2},
                 {"enabled", enabled},
-                {"trusted", trusted},
+                {"trustedCompositions", trustedCompositions},
             }
                 .dump(2) +
             "\n";
@@ -553,7 +712,8 @@ namespace Horo::Extensions {
             .enabled = enabled_.contains("horo.builtin.assets"),
             .locallyTrusted = true,
         };
-        builtIn.compositionVersion = BuildCompositionVersion(builtIn.version, builtIn.modules);
+        builtIn.compositionVersion = BuildBuiltInCompositionVersion(builtIn.version, builtIn.modules);
+        builtIn.trustedCompositionVersion = builtIn.compositionVersion;
         entries_.push_back(std::move(builtIn));
     }
 }  // namespace Horo::Extensions

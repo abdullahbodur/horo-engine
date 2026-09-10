@@ -77,20 +77,31 @@ namespace Horo::Editor {
         if (const bool enableBuiltIns = extensionInventory_ == nullptr || extensionInventory_->IsEnabled("horo.builtin.assets");
             enableBuiltIns) {
             const Result<void> registered = RegisterAllBuiltinImporters(*importerCatalogCandidate_);
-            if (registered.HasValue() && extensionInventory_ != nullptr)
-                extensionInventory_->MarkRuntimeActive("horo.builtin.assets");
-            else if (registered.HasError() && extensionInventory_ != nullptr)
-                extensionInventory_->SetLoadError("horo.builtin.assets", registered.ErrorValue().message);
+            if (registered.HasValue() && extensionInventory_ != nullptr) {
+                if (auto activated = extensionInventory_->MarkRuntimeActive("horo.builtin.assets"); activated.HasError())
+                    LOG_ERROR("editor.extensions", "Built-in extension activation state was rejected.");
+            } else if (registered.HasError() && extensionInventory_ != nullptr) {
+                static_cast<void>(
+                    extensionInventory_->RecordActivationFailure("horo.builtin.assets",
+                                                                 Extensions::ExtensionActivationFailureReason::ContributionRejected,
+                                                                 registered.ErrorValue().message));
+            }
         }
         if (extensionInventory_ != nullptr) {
             for (const auto &extension : extensionInventory_->Entries()) {
-                if (extension.origin != Extensions::ExtensionOrigin::UserInstalled || !extension.enabled || !extension.locallyTrusted)
+                if (extension.origin != Extensions::ExtensionOrigin::UserInstalled ||
+                    extension.ActivationState().DesiredActivation() != Extensions::ExtensionDesiredActivation::Active)
                     continue;
                 Result<std::string> loaded = extensionManager_->LoadExtension(extension.absoluteRootPath.string());
-                if (loaded.HasValue())
-                    extensionInventory_->MarkRuntimeActive(extension.packageId);
-                else
-                    extensionInventory_->SetLoadError(extension.packageId, loaded.ErrorValue().message);
+                if (loaded.HasValue()) {
+                    if (auto activated = extensionInventory_->MarkRuntimeActive(extension.packageId); activated.HasError())
+                        LOG_ERROR("editor.extensions", "Extension activation state was rejected for '{}'.", extension.packageId);
+                } else {
+                    static_cast<void>(
+                        extensionInventory_->RecordActivationFailure(extension.packageId,
+                                                                     Extensions::ExtensionActivationFailureReason::HostLoadFailed,
+                                                                     loaded.ErrorValue().message));
+                }
             }
         }
         if (auto published = importerCatalogCandidate_->Publish(); published.HasValue())

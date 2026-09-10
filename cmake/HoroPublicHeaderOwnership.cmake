@@ -435,6 +435,7 @@ horo_configure_target_header_boundary(HoroGui PUBLIC_HEADERS
 
 horo_configure_target_header_boundary(HoroExtensions PUBLIC_HEADERS
     Horo/Extensions/ExtensionAbi.h
+    Horo/Extensions/ExtensionActivationState.h
     Horo/Extensions/ExtensionDiscovery.h
     Horo/Extensions/ExtensionErrors.h
     Horo/Extensions/ExtensionInventory.h

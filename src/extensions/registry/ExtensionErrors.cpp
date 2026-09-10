@@ -62,4 +62,34 @@ namespace Horo::Extensions::ExtensionErrors {
         .retryable = false,
         .userActionable = true,
     };
+
+    const ErrorCodeDescriptor LifecycleTransitionInvalid{
+        .domain = Domain,
+        .code = ErrorCode{"lifecycle_transition_invalid"},
+        .defaultSeverity = ErrorSeverity::Error,
+        .summary = "The extension lifecycle transition is invalid for the current state or authority.",
+        .remediationHint = "Refresh lifecycle state and submit a legal transition through its owning service.",
+        .retryable = false,
+        .userActionable = false,
+    };
+
+    const ErrorCodeDescriptor LifecycleRevisionStale{
+        .domain = Domain,
+        .code = ErrorCode{"lifecycle_revision_stale"},
+        .defaultSeverity = ErrorSeverity::Warning,
+        .summary = "The extension lifecycle state changed before the requested transition could commit.",
+        .remediationHint = "Refresh the current lifecycle revision before retrying the transition.",
+        .retryable = true,
+        .userActionable = false,
+    };
+
+    const ErrorCodeDescriptor LifecycleCapacityExceeded{
+        .domain = Domain,
+        .code = ErrorCode{"lifecycle_capacity_exceeded"},
+        .defaultSeverity = ErrorSeverity::Error,
+        .summary = "The bounded extension lifecycle state or audit capacity was exhausted.",
+        .remediationHint = "Retire archived audit state or begin a fresh package lifecycle generation.",
+        .retryable = false,
+        .userActionable = false,
+    };
 }  // namespace Horo::Extensions::ExtensionErrors
