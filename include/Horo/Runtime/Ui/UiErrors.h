@@ -38,6 +38,16 @@ namespace Horo::Runtime::Ui::UiErrors {
     extern const ErrorCodeDescriptor CanvasReferenceInvalid;
     /** @brief A runtime instance cannot admit the requested lifecycle transition. */
     extern const ErrorCodeDescriptor InstanceStateInvalid;
+    /** @brief A retained element tree is malformed, disconnected, cyclic, or exceeds its declared depth. */
+    extern const ErrorCodeDescriptor ElementTreeInvalid;
+    /** @brief A retained element tree repeats a stable authored identity. */
+    extern const ErrorCodeDescriptor ElementTreeIdentityConflict;
+    /** @brief A structural command has an invalid safe point, identity, or child position. */
+    extern const ErrorCodeDescriptor StructuralCommandInvalid;
+    /** @brief A structural command would remove the root or create a cyclic/conflicting topology. */
+    extern const ErrorCodeDescriptor StructuralCommandConflict;
+    /** @brief A retained element tree is retiring, stopped, or otherwise unavailable for the request. */
+    extern const ErrorCodeDescriptor ElementTreeLifecycleUnavailable;
     /** @brief Runtime UI diagnostic evidence is malformed or exceeds its fixed bounds. */
     extern const ErrorCodeDescriptor DiagnosticInvalid;
     /** @brief A Runtime UI diagnostic category or source error is not part of the declared contract. */
