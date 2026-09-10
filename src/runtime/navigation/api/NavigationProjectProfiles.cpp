@@ -36,10 +36,9 @@ namespace Horo::Navigation {
         }
 
         bool AggregateEnvelopeFits(const NavigationCapacityLimits &capacities, const NavigationQueryRequirement &maximumQuery) noexcept {
-            if (std::uint64_t residentBytes{};
-                !CheckedMultiply(static_cast<std::uint64_t>(capacities.maximumResidentTiles), capacities.maximumBytesPerResidentTile,
-                                 residentBytes) ||
-                residentBytes > capacities.maximumResidentMemoryBytes)
+            if (std::uint64_t residentBytes{}; !CheckedMultiply(static_cast<std::uint64_t>(capacities.maximumResidentTiles),
+                                                                capacities.maximumBytesPerResidentTile, residentBytes) ||
+                                               residentBytes > capacities.maximumResidentMemoryBytes)
                 return false;
 
             std::uint64_t queryWork{};
