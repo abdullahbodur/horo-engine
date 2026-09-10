@@ -198,6 +198,21 @@ only the fixed-width stable identity or dataset-plus-tile-coordinate encodings.
 be resolved again after replacement, world unload or shutdown; they are deliberately
 excluded from the serialization surface.
 
+## CIN-001.3 Migration Notes
+
+`HoroEngine::CinematicModel` now owns `Horo/Cinematic/SequenceAsset.h` and has the
+deliberate public dependency on `HoroEngine::Assets` required by stable external
+`AssetId` references. Consumers that parse, validate, or plan sequence assets must
+link CinematicModel directly; linking Assets, Runtime, EditorServices, or a future
+cinematic runtime does not implicitly publish the sequence schema.
+
+There was no implemented sequence schema caller to migrate. New persisted sources
+use exact schema `1.0`; no legacy schematic `SequenceAsset` structure is accepted as
+a compatibility path. Older same-major sources require an explicit migration before
+parsing, while newer minor or major versions require a compatible engine. Cook and
+reload consumers resolve stable asset identities through an exact registry/provider
+snapshot rather than persisting paths, runtime handles, or native backend values.
+
 ## Audio Backend Contract Boundary
 
 `HoroEngine::AudioApi` owns the public discovery, format, capability, timing and

@@ -490,10 +490,15 @@ target_link_libraries(HoroDestructionApi PUBLIC HoroEngine::Foundation HoroEngin
 add_library(HoroCinematicModel STATIC
         runtime/cinematic/model/CinematicErrors.cpp
         runtime/cinematic/model/CinematicIdentity.cpp
+        runtime/cinematic/model/SequenceAsset.cpp
+        runtime/cinematic/model/SequenceAssetCook.cpp
 )
 add_library(HoroEngine::CinematicModel ALIAS HoroCinematicModel)
 target_compile_features(HoroCinematicModel PUBLIC cxx_std_20)
-target_link_libraries(HoroCinematicModel PUBLIC HoroEngine::Foundation)
+target_link_libraries(HoroCinematicModel
+        PUBLIC HoroEngine::Foundation HoroEngine::Assets
+        PRIVATE nlohmann_json::nlohmann_json
+)
 
 add_library(HoroNavigationApi STATIC
         runtime/navigation/api/NavigationAreas.cpp
