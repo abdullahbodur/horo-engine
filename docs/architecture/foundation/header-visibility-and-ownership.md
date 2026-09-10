@@ -123,8 +123,9 @@ and non-monotonic cubic tangents are rejected rather than normalized silently.
 
 ## CIN-002.3 Migration Notes
 
-`HoroEngine::CinematicRuntime` owns `Horo/Cinematic/SequencePlayer.h` and
-`Horo/Cinematic/SequencePlayerErrors.h`. Runtime hosts that own sequence-player
+`HoroEngine::CinematicRuntime` owns `Horo/Cinematic/SequencePlayer.h`,
+`Horo/Cinematic/SequencePlayerErrors.h`, `Horo/Cinematic/SequenceEvaluation.h`,
+and `Horo/Cinematic/SequenceEvaluationErrors.h`. Runtime hosts that own sequence-player
 registries link this target directly. Model-only asset, cook and curve consumers keep
 linking `HoroEngine::CinematicModel`; the runtime state machine does not widen that
 lower-level public surface or introduce an Editor/GUI dependency. Detailed call-site
