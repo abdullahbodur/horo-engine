@@ -24,6 +24,18 @@ function(horo_allow_target_dependencies)
             "horo_allow_target_dependencies requires TARGET and optional DEPENDENCIES arguments")
     endif()
 
+    if(NOT ARG_TARGET MATCHES "^HoroMcp"
+            AND NOT ARG_TARGET STREQUAL "HoroEditor"
+            AND NOT ARG_TARGET STREQUAL "horo-engine")
+        foreach(dependency IN LISTS ARG_DEPENDENCIES)
+            if(dependency MATCHES "^HoroMcp")
+                message(FATAL_ERROR
+                    "MCP boundary violation: domain target '${ARG_TARGET}' may not depend on MCP adapter target "
+                    "'${dependency}'. MCP targets depend on application capabilities; domain dependencies never reverse.")
+            endif()
+        endforeach()
+    endif()
+
     _horo_dependency_key(target_key "${ARG_TARGET}")
     get_property(existing GLOBAL PROPERTY "HORO_DEPENDENCY_POLICY_${target_key}" SET)
     if(existing)

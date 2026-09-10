@@ -8,6 +8,24 @@ external clients through a stable, typed protocol. The same application use
 cases power GUI, CLI, and MCP interactions; MCP does not implement engine
 business logic independently.
 
+Normative decision: [ADR-177: MCP Application Capability and Host Boundary](../../adr/177-mcp-application-capability-and-host-boundary.md).
+
+## Core Decisions
+
+- MCP is a transport and in-process adapter over Horo application capabilities;
+  it is never an authoritative domain API.
+- Every entry path dispatches through one host-owned `McpController` and one
+  immutable registry snapshot.
+- Tool descriptors classify effects as `Query`, `PresentationSideEffect`, or
+  `Mutation`; classification is explicit and mandatory.
+- Protocol version, tool-contract version, and application-capability version
+  are separate compatibility domains.
+- Application errors, cancellation, deadlines, bounds, and operation ownership
+  survive adapter translation without being converted into empty success.
+- Domain targets never depend on MCP targets or types. Executable composition
+  roots construct application owners before MCP adapters and tear them down after
+  MCP admission closes and drains.
+
 ## Scope
 
 MCP is available in both supported hosts:
@@ -43,14 +61,17 @@ HoroEditor                    horo-engine
                     Scene, Asset, Build, Release, Diagnostics
 ```
 
-`McpServer` owns the transport lifecycle. `McpController` owns tool dispatch
-and protocol-level validation. Application use cases own the actual operations.
+`McpServer` owns the transport lifecycle. `McpController` owns protocol-level
+validation and dispatch through a host-owned registry snapshot. Application
+capabilities own the actual operations. Both transport and embedded in-process
+adapters submit the same transport-neutral request context to that controller;
+the embedded path has no privileged handler or service access.
 
 ## Transport Layer
 
-Horo Engine supports stdio transport for local clients and SSE (Server-Sent
-Events) over HTTP for remote or web clients. The transport layer is swappable
-and does not depend on the engine module.
+The initial transport/session profile is selected by [MCP-001.2]. This document
+requires any selected transport to be swappable and independent of engine domain
+targets; it does not authorize remote binding or select an HTTP implementation.
 
 ```cpp
 class IMcpTransport {
@@ -62,11 +83,10 @@ public:
 };
 ```
 
-_stdio transport_ reads JSON-RPC messages from `stdin` and writes responses to
-`stdout`. It is the default for CLI and local editor integration.
-
-_SSE transport_ runs an HTTP server that emits server-sent events. It is used
-for web-based clients and remote automation.
+The in-process adapter does not implement `IMcpTransport`; it translates its
+caller envelope into the same controller request and receives the same controller
+result. Session creation, concrete transport selection, and remote policy are
+implemented by later lifecycle and security tickets.
 
 ## Session Lifecycle
 
@@ -94,7 +114,7 @@ struct McpToolDescriptor {
     nlohmann::json outputSchema;
     CapabilitySet capabilities;
     HostAvailability hosts;
-    SideEffectPolicy sideEffects;
+    McpToolEffect effect;
     CancellationPolicy cancellation;
     TimeoutPolicy timeout;
     RateLimitPolicy rateLimit;
@@ -131,7 +151,7 @@ struct CreateObjectTool {
             })"_json,
             .capabilities = CapabilitySet{Capability::SceneMutation},
             .hosts = HostAvailability::Both,
-            .sideEffects = SideEffectPolicy::ProjectWrite,
+            .effect = McpToolEffect::Mutation,
             .cancellation = CancellationPolicy::Cooperative,
             .timeout = TimeoutPolicy::FromDescriptor,
             .rateLimit = RateLimitPolicy::Default,
@@ -139,7 +159,9 @@ struct CreateObjectTool {
         };
     }
 
-    static McpCommandResult Execute(Application& app, const nlohmann::json& args);
+    static McpCommandResult Execute(IObjectCreationCapability& capability,
+                                    const ObjectCreationRequest& request,
+                                    const McpRequestContext& context);
 };
 ```
 
@@ -156,9 +178,24 @@ mcpController.RegisterTool<ImportAssetTool>();
 mcpController.RegisterTool<BuildProjectTool>();
 ```
 
-The host validates tool names, schemas, capabilities, side-effect policy,
+The host validates tool names, schemas, capabilities, effect category,
 supported hosts, and permission requirements before advertising the tool to a
 client.
+
+The registry implementation and public descriptor types are delivered by
+[MCP-001.3]. Their contract is fixed here: every descriptor declares exactly one
+closed effect category.
+
+| Effect | Allowed behavior |
+|---|---|
+| `Query` | Read one authoritative bounded snapshot. It cannot change focus, selection, documents, caches, external systems, or domain state. |
+| `PresentationSideEffect` | Request an ephemeral interactive-host action such as reveal, focus, or selection through an application controller. It cannot mutate portable project state. |
+| `Mutation` | Change durable state, start externally observable work, or perform an external side effect through an authoritative application capability. |
+
+Discovery exposes this category to clients and authorization policy. Missing or
+unknown categories reject registration. Runtime behavior that exceeds the
+declared category is a contract violation; a query reports a repair proposal
+rather than repairing state implicitly.
 
 ## Request Lifecycle
 
@@ -439,15 +476,17 @@ no player/effects and is redacted/audited without disclosing unavailable sequenc
 world details.
 
 - MCP transport does not accept anonymous remote connections in production.
-- The SSE transport requires authentication when exposed beyond localhost.
+- Any network transport requires authentication when exposed beyond localhost.
 - Tool arguments are validated against JSON Schema before execution.
 - Long-running tools support cooperative cancellation.
 - Secrets are never returned in tool results or logs.
 
 ## Remote Transport Policy
 
-SSE transport binds to localhost by default. Binding to non-loopback interfaces
-requires explicit configuration, authentication, and project trust approval.
+Any future network transport binds to loopback by default. Binding to non-loopback
+interfaces requires explicit configuration, authentication, and project trust
+approval. The concrete remote transport and session policy are deferred to the
+transport and security tickets.
 
 Remote transports enforce:
 

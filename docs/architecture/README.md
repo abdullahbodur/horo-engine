@@ -596,8 +596,9 @@ dependency direction in [System Design](./foundation/system-design.md).
 
 - [CLI Architecture](./interfaces/cli-architecture.md): command registry, parsing, output,
   exit codes, progress, cancellation, and headless execution.
-- [MCP Architecture](./interfaces/mcp-architecture.md): MCP transport, tool registry,
-  request lifecycle, errors, and threading.
+- [MCP Architecture](./interfaces/mcp-architecture.md): accepted MCP application-capability
+  boundary, shared controller/registry, effect categories, request lifecycle, errors,
+  bounds, cancellation, and threading.
 - [Application Security](./security/application-security.md): project and plugin trust,
   path/process policy, MCP access, credentials, and parser limits.
 
