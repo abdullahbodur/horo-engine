@@ -92,4 +92,17 @@ namespace Horo::Extensions::Tests {
         CHECK(rolledBack.diagnostics[1].code.Value() == "extension.activation.rollback_cleanup_failed");
         CHECK(order == std::vector<int>{-2, -1});
     }
+
+    TEST_CASE("Unreleased activation transaction invokes the reverse-order rollback safety net", "[Extensions][Registration][Rollback]") {
+        std::vector<int> order;
+        CleanupRecord first{.order = &order, .module = 1};
+        CleanupRecord second{.order = &order, .module = 2, .throwOnUnload = true};
+        {
+            ExtensionActivationTransaction transaction;
+            transaction.Stage(Lifetime(first), {Contribution(order, 1)});
+            transaction.Stage(Lifetime(second), {Contribution(order, 2)});
+        }
+
+        CHECK(order == std::vector<int>{2, 1, -2, -1});
+    }
 }  // namespace Horo::Extensions::Tests
