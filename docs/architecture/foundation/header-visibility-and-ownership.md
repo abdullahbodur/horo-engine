@@ -130,6 +130,19 @@ nullable pointers. Private provider adapters implement the Horo interfaces while
 types, native handles, allocator ownership, callbacks and credentials stay behind the
 ADR-131 extension boundary.
 
+## PLS-003.2 Migration Notes
+
+`HoroEngine::PlatformServices` additionally owns
+`Horo/PlatformServices/PlatformStableIdRegistry.h`. Project/cook composition must pass
+the root project salt and detached ledger candidate to
+`BuildPlatformStableIdRegistry`, publish only a successful immutable snapshot and use
+the service-specific typed resolution functions for authored keys. Callers must not
+derive IDs with `std::hash`, register provider-native values as aliases, erase
+tombstones or retain a mapping after its registry fingerprint/revision changes.
+Provider adapters validate mappings through opaque digests; concrete provider values,
+SDK types and reverse maps remain private. The generated PlatformServices public-header
+consumer compiles the registry header through its sole owning target.
+
 ## XRA-001.2 Migration Notes
 
 `HoroEngine::XRApi` owns the four public headers under `Horo/XR/` and depends

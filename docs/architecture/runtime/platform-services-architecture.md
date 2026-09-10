@@ -29,6 +29,17 @@ defines the one committed project identity ledger, byte-exact SHA-256 ID derivat
 canonical encodings, permanent tombstones, key aliases, clone/fork migration and the
 private provider-mapping boundary used by all service categories.
 
+Implementation status on 10 September 2026: PLS-003.2 publishes the common
+`PlatformStableIdRegistry` contract in `HoroEngine::PlatformServices`. Detached
+candidates are bounded and validated before immutable publication; schema-v1 IDs use
+the exact project-salted ADR-132 derivation, typed service lookup, canonical salt/ID
+text, global collision detection, per-kind primary/alias uniqueness and permanent
+tombstones. Deterministic registry fingerprints fence opaque provider mapping evidence
+to one complete registry and mapping revision. Provider-native values remain private:
+the public validator receives only SHA-256 evidence and never treats it as Horo
+identity. JSON loading, atomic project mutation, fork migration planning and concrete
+provider manifest codecs remain with their Project, migration and adapter owners.
+
 [ADR-133](../../adr/133-platform-progression-authority-trust-and-idempotency.md)
 separates gameplay facts from remote projection, selects local or server authority per
 definition and makes retry/replay depend on typed mutation algebra plus qualified
