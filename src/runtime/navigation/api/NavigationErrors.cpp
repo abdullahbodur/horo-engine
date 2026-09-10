@@ -251,4 +251,31 @@ namespace Horo::Navigation::NavigationErrors {
         .retryable = true,
         .userActionable = false,
     };
+    const ErrorCodeDescriptor ProjectProfileInvalid{
+        .domain = NavigationDomain,
+        .code = ErrorCode{"navigation.project_profile.invalid"},
+        .defaultSeverity = ErrorSeverity::Error,
+        .summary = "The navigation project profile or preview preference is invalid.",
+        .remediationHint = "Use non-zero typed identities, known capabilities, and positive finite unit-labelled capacities.",
+        .retryable = false,
+        .userActionable = true,
+    };
+    const ErrorCodeDescriptor ProjectProfileStale{
+        .domain = NavigationDomain,
+        .code = ErrorCode{"navigation.project_profile.stale"},
+        .defaultSeverity = ErrorSeverity::Warning,
+        .summary = "The navigation project profile changed before replacement or preview resolution.",
+        .remediationHint = "Resolve the current project revision and rebuild the complete candidate transaction.",
+        .retryable = true,
+        .userActionable = false,
+    };
+    const ErrorCodeDescriptor ProjectProfileCapacityExceeded{
+        .domain = NavigationDomain,
+        .code = ErrorCode{"navigation.project_profile.capacity_exceeded"},
+        .defaultSeverity = ErrorSeverity::Error,
+        .summary = "The navigation profile, provider, or usage exceeds an authoritative finite capacity.",
+        .remediationHint = "Reduce the requested capacity or select a qualified project profile and provider before activation.",
+        .retryable = false,
+        .userActionable = true,
+    };
 }  // namespace Horo::Navigation::NavigationErrors
