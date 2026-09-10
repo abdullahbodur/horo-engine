@@ -181,6 +181,43 @@ struct SequenceAsset {
 };
 ```
 
+The implemented source contract is `SequenceSchemaVersion { major, minor }` with
+current version `1.0`. The reader accepts only the exact current version. An older
+minor in the current major is classified as `MigrationRequired`; a newer minor,
+different major, or reserved zero version is `Unsupported`. No best-effort field
+dropping, silent default insertion, or parallel legacy reader is permitted. A
+migration must produce and validate the exact current schema before cook.
+
+Sequence source JSON is treated as hostile input. The CinematicModel parser enforces
+compiled and project-lowerable byte, nesting, name, track, dependency, and key-count
+ceilings before a value becomes a `SequenceAsset`. Unknown/duplicate fields,
+duplicate stable track identities, duplicate per-track dependencies, invalid clock
+combinations, non-canonical asset identities, and type-incompatible track references
+return stable typed errors. The validated value owns its data and contains no live
+provider, editor, runtime, native, or backend handle.
+
+Audio, sub-sequence, and external binding-descriptor references persist only stable
+path-independent `AssetId` values plus their declared domain kind. Cook pins one
+Asset Registry/provider snapshot and requires exact resolution evidence for every
+reference. `Missing`, `Moved`, `Unloadable`, type mismatch, and a cyclic reachable
+sub-sequence are separate actionable failures; cook never substitutes, skips, or
+synchronously loads a dependency. A moved asset is usable only after the Asset
+Registry publishes a later snapshot in which the same `AssetId` is `Available` at
+its new location. The authored reference is not rewritten.
+
+Editor delete/move notifications are revision hints under ADR-121: they invalidate
+derived compile/preview state and trigger bounded revalidation against a fresh
+registry snapshot. Runtime activation performs the same stable-ID/provider check on
+the exact cooked generation; deletion, package unload, or replacement invalidates
+the provider generation and yields a typed unavailable result rather than retaining
+a stale pointer. Existing players retain only explicitly leased old generations;
+reload never retargets a live reference in place.
+
+Cook profiles use the provider-neutral Compact/Standard/Large evaluation tiers from
+this document. The resolved immutable plan records exact track, key, dependency, and
+root-inclusive nesting counts. Profile limits cannot be raised by source data, and
+tier overflow fails before artifact output or runtime activation.
+
 ### Track Structure
 
 Each track animates an object transform, component property, camera cut, audio source, sub-sequence, or event timeline:

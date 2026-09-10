@@ -289,6 +289,7 @@ horo_register_catch_test(HoroDestructionApiTests LABELS "unit;destruction;headle
 
 add_executable(HoroCinematicModelTests
         unit/runtime/cinematic/CinematicIdentityTests.cpp
+        unit/runtime/cinematic/SequenceAssetTests.cpp
 )
 target_compile_features(HoroCinematicModelTests PRIVATE cxx_std_20)
 target_link_libraries(HoroCinematicModelTests PRIVATE HoroEngine::CinematicModel)
