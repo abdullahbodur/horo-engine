@@ -47,8 +47,13 @@ namespace Horo::Runtime {
                                             const std::span<const SaveDiagnosticContextEntry> context = {},
                                             const std::span<const SavePartialDataFact> partial = {},
                                             const std::string_view privateEvidence = {}) {
-            return MakeSaveDiagnosticRecord(error, disposition, SaveDiagnosticStage::Admission, outcome, commit, context, partial,
-                                            privateEvidence);
+            return MakeSaveDiagnosticRecord(error, {.disposition = disposition,
+                                                    .stage = SaveDiagnosticStage::Admission,
+                                                    .outcome = outcome,
+                                                    .commitOutcome = commit,
+                                                    .context = context,
+                                                    .partialData = partial,
+                                                    .privateEvidence = privateEvidence});
         }
 
         void RequireFailure(const Result<SaveDiagnosticRecord> &result, const ErrorCodeDescriptor &descriptor) {
@@ -84,9 +89,7 @@ namespace Horo::Runtime {
 
             for (std::uint8_t value = 0; value < static_cast<std::uint8_t>(SaveDiagnosticStage::Count); ++value) {
                 const auto stage = static_cast<SaveDiagnosticStage>(value);
-                const auto record =
-                    MakeSaveDiagnosticRecord(MakeError(SaveErrors::IdentityInvalid), SaveFailureDisposition::Abort, stage,
-                                             SaveDiagnosticOutcome::AdmissionRejected, SaveDiagnosticCommitOutcome::NotCommitted);
+                const auto record = MakeSaveDiagnosticRecord(MakeError(SaveErrors::IdentityInvalid), {.stage = stage});
                 REQUIRE(record.HasValue());
                 REQUIRE(record.Value().Stage() == stage);
             }
@@ -105,13 +108,11 @@ namespace Horo::Runtime {
             auto foreign = MakeError(SaveErrors::IdentityInvalid);
             foreign.domain = ErrorDomainId{"horo.platform"};
             RequireFailure(Record(foreign), SaveErrors::DiagnosticUnsupported);
-            RequireFailure(MakeSaveDiagnosticRecord(MakeError(SaveErrors::IdentityInvalid), static_cast<SaveFailureDisposition>(255),
-                                                    SaveDiagnosticStage::Admission, SaveDiagnosticOutcome::AdmissionRejected,
-                                                    SaveDiagnosticCommitOutcome::NotCommitted),
+            RequireFailure(MakeSaveDiagnosticRecord(MakeError(SaveErrors::IdentityInvalid),
+                                                    {.disposition = static_cast<SaveFailureDisposition>(255)}),
                            SaveErrors::DiagnosticInvalid);
-            RequireFailure(MakeSaveDiagnosticRecord(MakeError(SaveErrors::IdentityInvalid), SaveFailureDisposition::Abort,
-                                                    static_cast<SaveDiagnosticStage>(255), SaveDiagnosticOutcome::AdmissionRejected,
-                                                    SaveDiagnosticCommitOutcome::NotCommitted),
+            RequireFailure(MakeSaveDiagnosticRecord(MakeError(SaveErrors::IdentityInvalid),
+                                                    {.stage = static_cast<SaveDiagnosticStage>(255)}),
                            SaveErrors::DiagnosticInvalid);
         }
 

@@ -136,13 +136,13 @@ namespace Horo::Runtime {
         }
 
         bool ContextIsValid(const std::span<const SaveDiagnosticContextEntry> context, const SaveDiagnosticOutcome outcome) noexcept {
+            using enum SaveDiagnosticContextKey;
             if (context.size() > MaximumSaveDiagnosticContextEntries || !ContextEntriesAreCanonical(context))
                 return false;
-            const bool hasOperation = HasContextKey(context, SaveDiagnosticContextKey::Operation);
+            const bool hasOperation = HasContextKey(context, Operation);
             if (outcome == SaveDiagnosticOutcome::AdmissionRejected)
                 return !hasOperation;
-            return hasOperation && HasContextKey(context, SaveDiagnosticContextKey::Namespace) &&
-                   HasContextKey(context, SaveDiagnosticContextKey::Slot);
+            return hasOperation && HasContextKey(context, Namespace) && HasContextKey(context, Slot);
         }
 
         bool PartialFactIsValid(const SavePartialDataFact &fact) noexcept {
@@ -315,13 +315,14 @@ namespace Horo::Runtime {
         bool GenerationsMatch(const SaveDiagnosticRecord &record, const std::uint64_t registryGeneration,
                               const std::uint64_t namespaceRevision, const SlotGenerationId &slotGeneration,
                               const std::uint64_t archiveGeneration) noexcept {
-            if (!ContextMatches<OperationId>(record, SaveDiagnosticContextKey::RegistryGeneration, registryGeneration))
+            using enum SaveDiagnosticContextKey;
+            if (!ContextMatches<OperationId>(record, RegistryGeneration, registryGeneration))
                 return false;
-            if (!ContextMatches<OperationId>(record, SaveDiagnosticContextKey::NamespaceRevision, namespaceRevision))
+            if (!ContextMatches<OperationId>(record, NamespaceRevision, namespaceRevision))
                 return false;
-            if (!ContextMatches<SlotGenerationId>(record, SaveDiagnosticContextKey::SlotGeneration, slotGeneration))
+            if (!ContextMatches<SlotGenerationId>(record, SlotGeneration, slotGeneration))
                 return false;
-            return ContextMatches<OperationId>(record, SaveDiagnosticContextKey::ArchiveGeneration, archiveGeneration);
+            return ContextMatches<OperationId>(record, ArchiveGeneration, archiveGeneration);
         }
     }  // namespace
 
@@ -348,17 +349,13 @@ namespace Horo::Runtime {
         return descriptors;
     }
 
-    Result<SaveDiagnosticRecord> MakeSaveDiagnosticRecord(const Error &error, const SaveFailureDisposition disposition,
-                                                          const SaveDiagnosticStage stage, const SaveDiagnosticOutcome outcome,
-                                                          const SaveDiagnosticCommitOutcome commitOutcome,
-                                                          const std::span<const SaveDiagnosticContextEntry> context,
-                                                          const std::span<const SavePartialDataFact> partialData,
-                                                          const std::string_view privateEvidence) {
+    Result<SaveDiagnosticRecord> MakeSaveDiagnosticRecord(const Error &error, const SaveDiagnosticRecordInput &input) {
         const auto policy = PolicyFor(error);
         const auto severity = DiagnosticSeverityForError(error.severity);
         if (!policy.has_value())
             return Result<SaveDiagnosticRecord>::Failure(MakeError(SaveErrors::DiagnosticUnsupported));
-        if (!severity.has_value() || !RequestIsValid(*policy, disposition, stage, outcome, commitOutcome, context, partialData))
+        if (!severity.has_value() ||
+            !RequestIsValid(*policy, input.disposition, input.stage, input.outcome, input.commitOutcome, input.context, input.partialData))
             return Result<SaveDiagnosticRecord>::Failure(MakeError(SaveErrors::DiagnosticInvalid));
 
         const auto causes = ProjectCauses(error);
@@ -367,18 +364,18 @@ namespace Horo::Runtime {
 
         SaveDiagnosticRecord record;
         record.category_ = policy->category;
-        record.disposition_ = disposition;
-        record.stage_ = stage;
-        record.outcome_ = outcome;
-        record.commitOutcome_ = commitOutcome;
+        record.disposition_ = input.disposition;
+        record.stage_ = input.stage;
+        record.outcome_ = input.outcome;
+        record.commitOutcome_ = input.commitOutcome;
         record.code_ = DiagnosticCode{policy->descriptor->code.Value()};
         record.severity_ = *severity;
         record.message_ = policy->descriptor->summary;
-        record.contextCount_ = context.size();
-        std::ranges::copy(context, record.context_.begin());
-        record.partialDataCount_ = partialData.size();
-        std::ranges::copy(partialData, record.partialData_.begin());
-        record.privateEvidence_ = SummarizePrivateEvidence(privateEvidence);
+        record.contextCount_ = input.context.size();
+        std::ranges::copy(input.context, record.context_.begin());
+        record.partialDataCount_ = input.partialData.size();
+        std::ranges::copy(input.partialData, record.partialData_.begin());
+        record.privateEvidence_ = SummarizePrivateEvidence(input.privateEvidence);
         record.causes_ = causes->values;
         record.causeCount_ = causes->count;
         return Result<SaveDiagnosticRecord>::Success(std::move(record));

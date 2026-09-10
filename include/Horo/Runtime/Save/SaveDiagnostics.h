@@ -147,6 +147,17 @@ namespace Horo::Runtime {
         constexpr auto operator<=>(const SavePrivateEvidenceSummary &) const noexcept = default;
     };
 
+    /** @brief Complete typed input for constructing one bounded immutable Runtime Save diagnostic. */
+    struct SaveDiagnosticRecordInput final {
+        SaveFailureDisposition disposition{SaveFailureDisposition::Abort};
+        SaveDiagnosticStage stage{SaveDiagnosticStage::Admission};
+        SaveDiagnosticOutcome outcome{SaveDiagnosticOutcome::AdmissionRejected};
+        SaveDiagnosticCommitOutcome commitOutcome{SaveDiagnosticCommitOutcome::NotCommitted};
+        std::span<const SaveDiagnosticContextEntry> context;
+        std::span<const SavePartialDataFact> partialData;
+        std::string_view privateEvidence;
+    };
+
     /** @brief Immutable backend-neutral Runtime Save failure evidence with no raw save or native data. */
     class SaveDiagnosticRecord final {
     public:
@@ -191,10 +202,7 @@ namespace Horo::Runtime {
         }
 
     private:
-        friend Result<SaveDiagnosticRecord> MakeSaveDiagnosticRecord(const Error &, SaveFailureDisposition, SaveDiagnosticStage,
-                                                                     SaveDiagnosticOutcome, SaveDiagnosticCommitOutcome,
-                                                                     std::span<const SaveDiagnosticContextEntry>,
-                                                                     std::span<const SavePartialDataFact>, std::string_view);
+        friend Result<SaveDiagnosticRecord> MakeSaveDiagnosticRecord(const Error &, const SaveDiagnosticRecordInput &);
 
         SaveFailureCategory category_{SaveFailureCategory::Validation};
         SaveFailureDisposition disposition_{SaveFailureDisposition::Abort};
@@ -219,21 +227,10 @@ namespace Horo::Runtime {
     /**
      * @brief Builds one bounded immutable diagnostic record from an existing typed Runtime Save error.
      * @param error Canonical Runtime Save error; operation text is discarded in favor of its safe descriptor summary.
-     * @param disposition Explicit typed owner policy, never inferred by a presentation adapter.
-     * @param stage Exact operation stage observed by the authority.
-     * @param outcome Immediate rejection or sticky terminal outcome.
-     * @param commitOutcome Exact durable publication knowledge.
-     * @param context Safe typed correlation in strictly increasing key order.
-     * @param partialData Explicit required/optional facts in canonical kind/participant order.
-     * @param privateEvidence Borrowed native/provider/path/content evidence inspected only for bounded flags and never retained.
+     * @param input Typed policy, stage, outcome, correlation, partial-data and private-evidence input.
      * @return Owned record or SaveErrors::DiagnosticInvalid/DiagnosticUnsupported.
      */
-    [[nodiscard]] Result<SaveDiagnosticRecord> MakeSaveDiagnosticRecord(const Error &error, SaveFailureDisposition disposition,
-                                                                        SaveDiagnosticStage stage, SaveDiagnosticOutcome outcome,
-                                                                        SaveDiagnosticCommitOutcome commitOutcome,
-                                                                        std::span<const SaveDiagnosticContextEntry> context = {},
-                                                                        std::span<const SavePartialDataFact> partialData = {},
-                                                                        std::string_view privateEvidence = {});
+    [[nodiscard]] Result<SaveDiagnosticRecord> MakeSaveDiagnosticRecord(const Error &error, const SaveDiagnosticRecordInput &input = {});
 
     /**
      * @brief Validates retained diagnostic generation evidence against current owner facts.
