@@ -57,6 +57,31 @@ namespace Horo::AI {
             }
             return Result<BlackboardValueStorage>::Success(std::move(values));
         }
+
+        [[nodiscard]] Result<bool> ApplyWrite(const BlackboardSchema &schema, BlackboardValueStorage &values,
+                                              const BlackboardWrite &write) {
+            const std::size_t index = FindKey(schema, write.key);
+            if (index == schema.Keys().size())
+                return Result<bool>::Failure(Failure(AIErrors::BlackboardUnknownValueRejected));
+            if (schema.Keys()[index].access == BlackboardKeyAccess::ReadOnly)
+                return Result<bool>::Failure(Failure(AIErrors::BlackboardBatchInvalid));
+            if (const auto valid = ValidateBlackboardValue(write.value, &schema.Keys()[index], schema.UnknownValuePolicy());
+                valid.HasError())
+                return Result<bool>::Failure(valid.ErrorValue());
+            if (values[index].has_value() && *values[index] == write.value)
+                return Result<bool>::Success(false);
+            values[index] = write.value;
+            return Result<bool>::Success(true);
+        }
+
+        [[nodiscard]] bool IsCompatibleReplacement(const BlackboardInstanceBinding &current, const BlackboardInstanceBinding &replacement,
+                                                   const std::shared_ptr<const BlackboardSchema> &schema) noexcept {
+            return schema != nullptr && replacement.IsValid() && replacement.agent == current.agent &&
+                   replacement.schema == schema->Identity() && replacement.schemaVersion == schema->Version() &&
+                   replacement.schemaGeneration > current.schemaGeneration &&
+                   current.instanceGeneration != std::numeric_limits<std::uint32_t>::max() &&
+                   replacement.instanceGeneration == current.instanceGeneration + 1;
+        }
     }  // namespace
 
     /** @copydoc BlackboardInstanceBinding::IsValid */
@@ -139,18 +164,11 @@ namespace Horo::AI {
         scratch_ = values_;
         BlackboardCommitResult result{.revision = revision_};
         for (const auto &write : batch.Writes()) {
-            const std::size_t index = FindKey(*schema_, write.key);
-            if (index == schema_->Keys().size())
-                return Result<BlackboardCommitResult>::Failure(Failure(AIErrors::BlackboardUnknownValueRejected));
-            if (schema_->Keys()[index].access == BlackboardKeyAccess::ReadOnly)
-                return Result<BlackboardCommitResult>::Failure(Failure(AIErrors::BlackboardBatchInvalid));
-            if (const auto valid = ValidateBlackboardValue(write.value, &schema_->Keys()[index], schema_->UnknownValuePolicy());
-                valid.HasError())
-                return Result<BlackboardCommitResult>::Failure(valid.ErrorValue());
-            if (!scratch_[index].has_value() || *scratch_[index] != write.value) {
-                scratch_[index] = write.value;
+            auto applied = ApplyWrite(*schema_, scratch_, write);
+            if (applied.HasError())
+                return Result<BlackboardCommitResult>::Failure(applied.ErrorValue());
+            if (applied.Value())
                 result.changedKeys[result.changedKeyCount++] = write.key;
-            }
         }
         if (result.changedKeyCount == 0)
             return Result<BlackboardCommitResult>::Success(std::move(result));
@@ -164,12 +182,7 @@ namespace Horo::AI {
     /** @copydoc BlackboardInstance::ReplaceAtBlackboardSync */
     Result<void> BlackboardInstance::ReplaceAtBlackboardSync(BlackboardInstanceBinding replacementBinding,
                                                              std::shared_ptr<const BlackboardSchema> replacementSchema) {
-        if (!active_ || replacementSchema == nullptr || !replacementBinding.IsValid() || replacementBinding.agent != binding_.agent ||
-            replacementBinding.schema != replacementSchema->Identity() ||
-            replacementBinding.schemaVersion != replacementSchema->Version() ||
-            replacementBinding.schemaGeneration <= binding_.schemaGeneration ||
-            binding_.instanceGeneration == std::numeric_limits<std::uint32_t>::max() ||
-            replacementBinding.instanceGeneration != binding_.instanceGeneration + 1)
+        if (!active_ || !IsCompatibleReplacement(binding_, replacementBinding, replacementSchema))
             return Result<void>::Failure(Failure(AIErrors::BlackboardInstanceInvalid));
         if (revision_ == std::numeric_limits<std::uint64_t>::max())
             return Result<void>::Failure(Failure(AIErrors::BlackboardRevisionExhausted));
