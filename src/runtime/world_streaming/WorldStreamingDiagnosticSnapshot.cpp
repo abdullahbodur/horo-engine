@@ -91,8 +91,9 @@ namespace Horo::WorldStreaming {
         Result<void> ValidateRollbackEvent(const StreamingDiagnosticDecisionEvent &event) {
             if (!event.transition || event.admission || !IsFailureReason(event.outcome))
                 return Internal::Failure<void>(WorldStreamingErrors::DiagnosticProjectionInvalid);
-            constexpr std::array terminalStates{StreamingCellState::Evicting, StreamingCellState::Unloaded, StreamingCellState::Failed};
-            if (std::ranges::find(terminalStates, event.transition->current) == terminalStates.end())
+            using enum StreamingCellState;
+            if (constexpr std::array terminalStates{Evicting, Unloaded, Failed};
+                std::ranges::find(terminalStates, event.transition->current) == terminalStates.end())
                 return Internal::Failure<void>(WorldStreamingErrors::DiagnosticProjectionInvalid);
             return Result<void>::Success();
         }
@@ -290,16 +291,23 @@ namespace Horo::WorldStreaming {
                                  const std::vector<StreamingCellStateRecord> &cells,
                                  const std::vector<StreamingDiagnosticFailureRecord> &failures,
                                  const std::vector<StreamingDiagnosticDecisionEvent> &events) {
-            const bool rowConflict = std::ranges::adjacent_find(sources, [](const auto &left, const auto &right) {
+            if (const bool rowConflict = std::ranges::adjacent_find(sources,
+                                                                    [](const auto &left, const auto &right) {
                 return left.Source().id == right.Source().id;
-            }) != sources.end() || std::ranges::adjacent_find(cells, [](const auto &left, const auto &right) {
+            }) != sources.end() ||
+                                         std::ranges::adjacent_find(cells,
+                                                                    [](const auto &left, const auto &right) {
                 return left.operation.fence == right.operation.fence;
-            }) != cells.end() || std::ranges::adjacent_find(failures, [](const auto &left, const auto &right) {
+            }) != cells.end() ||
+                                         std::ranges::adjacent_find(failures,
+                                                                    [](const auto &left, const auto &right) {
                 return left.operation == right.operation;
-            }) != failures.end() || std::ranges::adjacent_find(events, [](const auto &left, const auto &right) {
+            }) != failures.end() ||
+                                         std::ranges::adjacent_find(events,
+                                                                    [](const auto &left, const auto &right) {
                 return left.sequence == right.sequence;
             }) != events.end();
-            if (rowConflict)
+                rowConflict)
                 return true;
 
             std::vector<std::uint64_t> eventIds;
