@@ -553,6 +553,11 @@ namespace Horo::Editor {
         [[nodiscard]] Result<SceneCommandResult> Redo();
 
     private:
+        struct PrefabCommitContext;
+
+        /** @brief Commits one validated prefab delta through the shared document/history transition. */
+        [[nodiscard]] Result<SceneCommandResult> CommitPrefab(PrefabCommitContext context);
+
         SceneDocument &m_document;
         EditorHistory &m_history;
     };

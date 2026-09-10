@@ -874,6 +874,13 @@ namespace Horo::Editor {
         }
     }  // namespace
 
+    struct SceneDocumentCommandExecutor::PrefabCommitContext final {
+        SceneCommandDelta delta;
+        Prefab::PrefabInstanceId instance;
+        DocumentChangeKind kind;
+        bool advanceInstanceId{};
+    };
+
     struct EditorHistory::Impl {
         Impl() {
             undo.reserve(kMaximumHistoryEntries);
@@ -1041,6 +1048,27 @@ namespace Horo::Editor {
     /** @copydoc SceneDocumentCommandExecutor::SceneDocumentCommandExecutor */
     SceneDocumentCommandExecutor::SceneDocumentCommandExecutor(SceneDocument &document, EditorHistory &history) noexcept
         : m_document(document), m_history(history) {}
+
+    /** @copydoc SceneDocumentCommandExecutor::CommitPrefab */
+    Result<SceneCommandResult> SceneDocumentCommandExecutor::CommitPrefab(PrefabCommitContext context) {
+        if (const Result<void> validHistory = ValidateHistoryDelta(context.delta, 1); validHistory.HasError())
+            return Result<SceneCommandResult>::Failure(validHistory.ErrorValue());
+
+        const std::size_t memoryBytes = EstimateMemoryBytes(context.delta, 1);
+        const DocumentStateId beforeState = m_document.m_state;
+        ApplyDelta(m_document.m_objects, m_document.m_prefabInstances, context.delta);
+        if (context.advanceInstanceId)
+            ++m_document.m_nextPrefabInstanceId;
+        ++m_document.m_revision.value;
+        m_document.m_state = DocumentStateId{m_document.m_nextStateId++};
+
+        std::vector affected{context.instance};
+        PushHistory(*m_history.m_impl, HistoryRecord{beforeState, m_document.m_state, std::move(context.delta), {}, memoryBytes, affected});
+        SceneCommandResult result{{}, m_document.m_revision, m_document.m_state, context.kind, {}, true};
+        result.prefabInstance = context.instance;
+        result.affectedPrefabInstances = std::move(affected);
+        return Result<SceneCommandResult>::Success(std::move(result));
+    }
 
     /** @copydoc SceneDocumentCommandExecutor::Execute(const CreateSceneObjectCommand&) */
     Result<SceneCommandResult> SceneDocumentCommandExecutor::Execute(const CreateSceneObjectCommand &command) {
@@ -1628,20 +1656,7 @@ namespace Horo::Editor {
             .instance = ScenePrefabInstance{instanceId.Value(), command.sourcePrefab, command.parent, command.rootTransform},
             .index = m_document.m_prefabInstances.size(),
         };
-        if (const Result<void> validHistory = ValidateHistoryDelta(delta, 1); validHistory.HasError())
-            return Result<SceneCommandResult>::Failure(validHistory.ErrorValue());
-        const std::size_t memoryBytes = EstimateMemoryBytes(delta, 1);
-        const DocumentStateId beforeState = m_document.m_state;
-        ApplyDelta(m_document.m_objects, m_document.m_prefabInstances, delta);
-        ++m_document.m_nextPrefabInstanceId;
-        ++m_document.m_revision.value;
-        m_document.m_state = DocumentStateId{m_document.m_nextStateId++};
-        std::vector affected{instanceId.Value()};
-        PushHistory(*m_history.m_impl, HistoryRecord{beforeState, m_document.m_state, std::move(delta), {}, memoryBytes, affected});
-        SceneCommandResult result{{}, m_document.m_revision, m_document.m_state, DocumentChangeKind::PrefabInstanceCreated, {}, true};
-        result.prefabInstance = instanceId.Value();
-        result.affectedPrefabInstances = std::move(affected);
-        return Result<SceneCommandResult>::Success(std::move(result));
+        return CommitPrefab(PrefabCommitContext{std::move(delta), instanceId.Value(), DocumentChangeKind::PrefabInstanceCreated, true});
     }
 
     /** @copydoc SceneDocumentCommandExecutor::Execute(const SetScenePrefabInstanceRootTransformCommand&) */
@@ -1668,18 +1683,7 @@ namespace Horo::Editor {
             return Result<SceneCommandResult>::Success(std::move(result));
         }
         SceneCommandDelta delta = PrefabInstanceTransformDelta{command.instance, instance->rootTransform, command.rootTransform};
-        const std::size_t memoryBytes = EstimateMemoryBytes(delta, 1);
-        const DocumentStateId beforeState = m_document.m_state;
-        ApplyDelta(m_document.m_objects, m_document.m_prefabInstances, delta);
-        ++m_document.m_revision.value;
-        m_document.m_state = DocumentStateId{m_document.m_nextStateId++};
-        std::vector affected{command.instance};
-        PushHistory(*m_history.m_impl, HistoryRecord{beforeState, m_document.m_state, std::move(delta), {}, memoryBytes, affected});
-        SceneCommandResult result{{},  m_document.m_revision, m_document.m_state, DocumentChangeKind::PrefabInstanceTransformChanged, {},
-                                  true};
-        result.prefabInstance = command.instance;
-        result.affectedPrefabInstances = std::move(affected);
-        return Result<SceneCommandResult>::Success(std::move(result));
+        return CommitPrefab(PrefabCommitContext{std::move(delta), command.instance, DocumentChangeKind::PrefabInstanceTransformChanged});
     }
 
     /** @copydoc SceneDocumentCommandExecutor::Execute(const DuplicateScenePrefabInstanceCommand&) */
@@ -1703,18 +1707,7 @@ namespace Horo::Editor {
             .index = m_document.m_prefabInstances.size(),
             .kind = DocumentChangeKind::PrefabInstanceDuplicated,
         };
-        const std::size_t memoryBytes = EstimateMemoryBytes(delta, 1);
-        const DocumentStateId beforeState = m_document.m_state;
-        ApplyDelta(m_document.m_objects, m_document.m_prefabInstances, delta);
-        ++m_document.m_nextPrefabInstanceId;
-        ++m_document.m_revision.value;
-        m_document.m_state = DocumentStateId{m_document.m_nextStateId++};
-        std::vector affected{instanceId.Value()};
-        PushHistory(*m_history.m_impl, HistoryRecord{beforeState, m_document.m_state, std::move(delta), {}, memoryBytes, affected});
-        SceneCommandResult result{{}, m_document.m_revision, m_document.m_state, DocumentChangeKind::PrefabInstanceDuplicated, {}, true};
-        result.prefabInstance = instanceId.Value();
-        result.affectedPrefabInstances = std::move(affected);
-        return Result<SceneCommandResult>::Success(std::move(result));
+        return CommitPrefab(PrefabCommitContext{std::move(delta), instanceId.Value(), DocumentChangeKind::PrefabInstanceDuplicated, true});
     }
 
     /** @copydoc SceneDocumentCommandExecutor::Execute(const ReparentScenePrefabInstanceCommand&) */
@@ -1739,17 +1732,7 @@ namespace Horo::Editor {
             return Result<SceneCommandResult>::Success(std::move(result));
         }
         SceneCommandDelta delta = PrefabInstanceReparentDelta{command.instance, instance->parent, command.parent};
-        const std::size_t memoryBytes = EstimateMemoryBytes(delta, 1);
-        const DocumentStateId beforeState = m_document.m_state;
-        ApplyDelta(m_document.m_objects, m_document.m_prefabInstances, delta);
-        ++m_document.m_revision.value;
-        m_document.m_state = DocumentStateId{m_document.m_nextStateId++};
-        std::vector affected{command.instance};
-        PushHistory(*m_history.m_impl, HistoryRecord{beforeState, m_document.m_state, std::move(delta), {}, memoryBytes, affected});
-        SceneCommandResult result{{}, m_document.m_revision, m_document.m_state, DocumentChangeKind::PrefabInstanceReparented, {}, true};
-        result.prefabInstance = command.instance;
-        result.affectedPrefabInstances = std::move(affected);
-        return Result<SceneCommandResult>::Success(std::move(result));
+        return CommitPrefab(PrefabCommitContext{std::move(delta), command.instance, DocumentChangeKind::PrefabInstanceReparented});
     }
 
     /** @copydoc SceneDocumentCommandExecutor::Execute(const DeleteScenePrefabInstanceCommand&) */
@@ -1763,17 +1746,7 @@ namespace Horo::Editor {
             return Result<SceneCommandResult>::Failure(LockedObjectError());
         const std::size_t index = static_cast<std::size_t>(std::distance(m_document.m_prefabInstances.begin(), instance));
         SceneCommandDelta delta = DeletedPrefabInstancesDelta{{IndexedPrefabInstance{*instance, index}}};
-        const std::size_t memoryBytes = EstimateMemoryBytes(delta, 1);
-        const DocumentStateId beforeState = m_document.m_state;
-        ApplyDelta(m_document.m_objects, m_document.m_prefabInstances, delta);
-        ++m_document.m_revision.value;
-        m_document.m_state = DocumentStateId{m_document.m_nextStateId++};
-        std::vector affected{command.instance};
-        PushHistory(*m_history.m_impl, HistoryRecord{beforeState, m_document.m_state, std::move(delta), {}, memoryBytes, affected});
-        SceneCommandResult result{{}, m_document.m_revision, m_document.m_state, DocumentChangeKind::PrefabInstanceDeleted, {}, true};
-        result.prefabInstance = command.instance;
-        result.affectedPrefabInstances = std::move(affected);
-        return Result<SceneCommandResult>::Success(std::move(result));
+        return CommitPrefab(PrefabCommitContext{std::move(delta), command.instance, DocumentChangeKind::PrefabInstanceDeleted});
     }
 
     /** @copydoc SceneDocumentCommandExecutor::Undo */
