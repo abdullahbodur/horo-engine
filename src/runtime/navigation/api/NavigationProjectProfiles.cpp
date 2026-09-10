@@ -35,17 +35,17 @@ namespace Horo::Navigation {
                    requirement.limits.maximumSearchDistanceMeters <= std::numeric_limits<float>::max();
         }
 
-        bool AggregateEnvelopeFits(const NavigationProjectProfileInput &input) noexcept {
+        bool AggregateEnvelopeFits(const NavigationCapacityLimits &capacities, const NavigationQueryRequirement &maximumQuery) noexcept {
             std::uint64_t residentBytes{};
-            if (!CheckedMultiply(static_cast<std::uint64_t>(input.capacities.maximumResidentTiles),
-                                 input.capacities.maximumBytesPerResidentTile, residentBytes) ||
-                residentBytes > input.capacities.maximumResidentMemoryBytes)
+            if (!CheckedMultiply(static_cast<std::uint64_t>(capacities.maximumResidentTiles), capacities.maximumBytesPerResidentTile,
+                                 residentBytes) ||
+                residentBytes > capacities.maximumResidentMemoryBytes)
                 return false;
 
             std::uint64_t queryWork{};
-            return CheckedMultiply(static_cast<std::uint64_t>(input.capacities.maximumConcurrentQueries),
-                                   static_cast<std::uint64_t>(input.maximumQuery.limits.maximumNodeExpansions), queryWork) &&
-                   queryWork <= input.capacities.maximumWorkUnitsPerTick;
+            return CheckedMultiply(static_cast<std::uint64_t>(capacities.maximumConcurrentQueries),
+                                   static_cast<std::uint64_t>(maximumQuery.limits.maximumNodeExpansions), queryWork) &&
+                   queryWork <= capacities.maximumWorkUnitsPerTick;
         }
 
         void HashByte(std::uint64_t &hash, const std::uint8_t value) noexcept {
@@ -102,7 +102,7 @@ namespace Horo::Navigation {
         if (!input.id.IsValid() || !input.revision.IsValid() || !IsPositive(input.capacities) ||
             !IsKnownQueryRequirement(input.maximumQuery) || !std::ranges::all_of(input.capabilities, IsKnownRequirement))
             return Result<NavigationProjectProfile>::Failure(MakeError(NavigationErrors::ProjectProfileInvalid));
-        if (!AggregateEnvelopeFits(input))
+        if (!AggregateEnvelopeFits(input.capacities, input.maximumQuery))
             return Result<NavigationProjectProfile>::Failure(MakeError(NavigationErrors::ProjectProfileCapacityExceeded));
         return Result<NavigationProjectProfile>::Success(NavigationProjectProfile{input, ComputeFingerprint(input)});
     }
@@ -153,32 +153,65 @@ namespace Horo::Navigation {
         return input_.capabilities[index];
     }
 
+    /** @copydoc ResolvedNavigationProjectProfile::ResolvedNavigationProjectProfile */
+    ResolvedNavigationProjectProfile::ResolvedNavigationProjectProfile(const NavigationProjectProfile &project,
+                                                                       std::optional<NavigationPreviewPreferenceRevision> previewRevision,
+                                                                       NavigationCapacityLimits capacities) noexcept
+        : id_(project.Id()), projectRevision_(project.Revision()), projectFingerprint_(project.Fingerprint()),
+          previewRevision_(previewRevision), capacities_(capacities), maximumQuery_(project.MaximumQuery()) {}
+
+    /** @copydoc ResolvedNavigationProjectProfile::Id */
+    NavigationProjectProfileId ResolvedNavigationProjectProfile::Id() const noexcept {
+        return id_;
+    }
+
+    /** @copydoc ResolvedNavigationProjectProfile::ProjectRevision */
+    NavigationProjectProfileRevision ResolvedNavigationProjectProfile::ProjectRevision() const noexcept {
+        return projectRevision_;
+    }
+
+    /** @copydoc ResolvedNavigationProjectProfile::ProjectFingerprint */
+    NavigationProjectProfileFingerprint ResolvedNavigationProjectProfile::ProjectFingerprint() const noexcept {
+        return projectFingerprint_;
+    }
+
+    /** @copydoc ResolvedNavigationProjectProfile::PreviewRevision */
+    std::optional<NavigationPreviewPreferenceRevision> ResolvedNavigationProjectProfile::PreviewRevision() const noexcept {
+        return previewRevision_;
+    }
+
+    /** @copydoc ResolvedNavigationProjectProfile::Capacities */
+    const NavigationCapacityLimits &ResolvedNavigationProjectProfile::Capacities() const noexcept {
+        return capacities_;
+    }
+
+    /** @copydoc ResolvedNavigationProjectProfile::MaximumQuery */
+    const NavigationQueryRequirement &ResolvedNavigationProjectProfile::MaximumQuery() const noexcept {
+        return maximumQuery_;
+    }
+
     /** @copydoc ResolveNavigationProjectProfile */
     Result<ResolvedNavigationProjectProfile> ResolveNavigationProjectProfile(
         const NavigationProjectProfile &project, const std::optional<NavigationDeveloperPreviewPreference> &preview) {
-        ResolvedNavigationProjectProfile resolved{
-            .id = project.Id(),
-            .projectRevision = project.Revision(),
-            .projectFingerprint = project.Fingerprint(),
-            .capacities = project.Capacities(),
-            .maximumQuery = project.MaximumQuery(),
-        };
         if (!preview.has_value())
-            return Result<ResolvedNavigationProjectProfile>::Success(resolved);
+            return Result<ResolvedNavigationProjectProfile>::Success(
+                ResolvedNavigationProjectProfile{project, std::nullopt, project.Capacities()});
         if (!preview->revision.IsValid() || !IsPositive(preview->requestedMaximums))
             return Result<ResolvedNavigationProjectProfile>::Failure(MakeError(NavigationErrors::ProjectProfileInvalid));
         if (preview->projectRevision != project.Revision())
             return Result<ResolvedNavigationProjectProfile>::Failure(MakeError(NavigationErrors::ProjectProfileStale));
-        resolved.previewRevision = preview->revision;
-        resolved.capacities = Clamp(preview->requestedMaximums, project.Capacities());
-        return Result<ResolvedNavigationProjectProfile>::Success(resolved);
+        const auto capacities = Clamp(preview->requestedMaximums, project.Capacities());
+        if (!AggregateEnvelopeFits(capacities, project.MaximumQuery()))
+            return Result<ResolvedNavigationProjectProfile>::Failure(MakeError(NavigationErrors::ProjectProfileCapacityExceeded));
+        return Result<ResolvedNavigationProjectProfile>::Success(ResolvedNavigationProjectProfile{project, preview->revision, capacities});
     }
 
     /** @copydoc AdmitNavigationCapacity */
     Result<void> AdmitNavigationCapacity(const ResolvedNavigationProjectProfile &profile, const NavigationCapacityUsage &usage) {
-        const auto &limits = profile.capacities;
+        const auto &limits = profile.Capacities();
         if (usage.agents > limits.maximumAgents || usage.surfaces > limits.maximumSurfaces ||
             usage.residentTiles > limits.maximumResidentTiles || usage.concurrentQueries > limits.maximumConcurrentQueries ||
+            usage.bytesPerResidentTile > limits.maximumBytesPerResidentTile ||
             usage.residentMemoryBytes > limits.maximumResidentMemoryBytes || usage.workUnitsThisTick > limits.maximumWorkUnitsPerTick)
             return Result<void>::Failure(MakeError(NavigationErrors::ProjectProfileCapacityExceeded));
         return Result<void>::Success();

@@ -52,12 +52,13 @@ namespace Horo::Navigation {
 
     /** @brief One observed/admitted usage sample checked without mutating runtime state. */
     struct NavigationCapacityUsage final {
-        std::uint32_t agents{};              /**< Logical agents in use. */
-        std::uint32_t surfaces{};            /**< Active surfaces in use. */
-        std::uint32_t residentTiles{};       /**< Resident tiles in use. */
-        std::uint32_t concurrentQueries{};   /**< Query records in use. */
-        std::uint64_t residentMemoryBytes{}; /**< Charged resident bytes in use. */
-        std::uint64_t workUnitsThisTick{};   /**< Work units charged to the current tick. */
+        std::uint32_t agents{};               /**< Logical agents in use. */
+        std::uint32_t surfaces{};             /**< Active surfaces in use. */
+        std::uint32_t residentTiles{};        /**< Resident tiles in use. */
+        std::uint32_t concurrentQueries{};    /**< Query records in use. */
+        std::uint64_t bytesPerResidentTile{}; /**< Largest observed or requested charge for one resident tile. */
+        std::uint64_t residentMemoryBytes{};  /**< Charged resident bytes in use. */
+        std::uint64_t workUnitsThisTick{};    /**< Work units charged to the current tick. */
     };
 
     /** @brief Detached input used to transactionally construct or replace an authoritative project profile. */
@@ -120,14 +121,36 @@ namespace Horo::Navigation {
         NavigationCapacityLimits requestedMaximums;       /**< Requested ceilings, clamped to project authority. */
     };
 
-    /** @brief Resolved capacities retain exact project authority and optional preview provenance. */
-    struct ResolvedNavigationProjectProfile final {
-        NavigationProjectProfileId id;                                      /**< Stable project identity. */
-        NavigationProjectProfileRevision projectRevision;                   /**< Exact authoritative revision. */
-        NavigationProjectProfileFingerprint projectFingerprint;             /**< Deterministic authoritative fingerprint. */
-        std::optional<NavigationPreviewPreferenceRevision> previewRevision; /**< Applied preview provenance, if any. */
-        NavigationCapacityLimits capacities;                                /**< Resolved ceilings, never above project authority. */
-        NavigationQueryRequirement maximumQuery;                            /**< Unchanged project query envelope. */
+    /** @brief Construction-guarded resolved capacities retaining exact project authority and preview provenance. */
+    class ResolvedNavigationProjectProfile final {
+    public:
+        /** @brief Returns the stable project identity. @return Non-zero project profile identity. */
+        [[nodiscard]] NavigationProjectProfileId Id() const noexcept;
+        /** @brief Returns the exact authoritative project revision. @return Non-zero project revision. */
+        [[nodiscard]] NavigationProjectProfileRevision ProjectRevision() const noexcept;
+        /** @brief Returns the authoritative deterministic fingerprint. @return Non-zero project fingerprint. */
+        [[nodiscard]] NavigationProjectProfileFingerprint ProjectFingerprint() const noexcept;
+        /** @brief Returns applied preview provenance. @return Valid preview revision, or empty for project-only resolution. */
+        [[nodiscard]] std::optional<NavigationPreviewPreferenceRevision> PreviewRevision() const noexcept;
+        /** @brief Returns coherent resolved ceilings. @return Limits never exceeding project authority. */
+        [[nodiscard]] const NavigationCapacityLimits &Capacities() const noexcept;
+        /** @brief Returns the unchanged project query envelope. @return Immutable typed query requirement. */
+        [[nodiscard]] const NavigationQueryRequirement &MaximumQuery() const noexcept;
+
+    private:
+        friend Result<ResolvedNavigationProjectProfile> ResolveNavigationProjectProfile(
+            const NavigationProjectProfile &, const std::optional<NavigationDeveloperPreviewPreference> &);
+
+        ResolvedNavigationProjectProfile(const NavigationProjectProfile &project,
+                                         std::optional<NavigationPreviewPreferenceRevision> previewRevision,
+                                         NavigationCapacityLimits capacities) noexcept;
+
+        NavigationProjectProfileId id_;
+        NavigationProjectProfileRevision projectRevision_;
+        NavigationProjectProfileFingerprint projectFingerprint_;
+        std::optional<NavigationPreviewPreferenceRevision> previewRevision_;
+        NavigationCapacityLimits capacities_;
+        NavigationQueryRequirement maximumQuery_;
     };
 
     /**

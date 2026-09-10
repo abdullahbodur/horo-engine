@@ -4,6 +4,7 @@
 
 #include <array>
 #include <limits>
+#include <type_traits>
 
 namespace Horo::Navigation {
     namespace {
@@ -40,9 +41,17 @@ namespace Horo::Navigation {
         ResolvedNavigationProjectProfile Resolved() {
             return ResolveNavigationProjectProfile(Profile()).Value();
         }
+
+        void RequireProviderQueryLimitRejected(const NavigationProjectProfile &profile, const NavigationQueryLimits &availableLimits) {
+            auto provider = Provider();
+            provider.queryLimits[static_cast<std::size_t>(NavigationQueryKind::Path)]
+                                [static_cast<std::size_t>(NavigationQualityLevel::Balanced)] = availableLimits;
+            TestSupport::RequireError(AdmitNavigationProjectProfile(profile, provider, 9), NavigationErrors::QueryLimitExceeded);
+        }
     }  // namespace
 
     TEST_CASE("Navigation project profile owns deterministic typed authority", "[unit][navigation][profile][project]") {
+        static_assert(!std::is_default_constructible_v<ResolvedNavigationProjectProfile>);
         const auto first = Profile();
         const auto second = Profile();
         REQUIRE(first.Id() == second.Id());
@@ -157,8 +166,12 @@ namespace Horo::Navigation {
         const auto project = Profile();
         const auto authoritative = ResolveNavigationProjectProfile(project);
         REQUIRE(authoritative.HasValue());
-        REQUIRE_FALSE(authoritative.Value().previewRevision.has_value());
-        REQUIRE(authoritative.Value().capacities == project.Capacities());
+        REQUIRE_FALSE(authoritative.Value().PreviewRevision().has_value());
+        REQUIRE(authoritative.Value().Capacities() == project.Capacities());
+        REQUIRE(authoritative.Value().Id() == project.Id());
+        REQUIRE(authoritative.Value().ProjectRevision() == project.Revision());
+        REQUIRE(authoritative.Value().ProjectFingerprint() == project.Fingerprint());
+        REQUIRE(authoritative.Value().MaximumQuery().limits == project.MaximumQuery().limits);
 
         auto requested = project.Capacities();
         requested.maximumAgents = 16;
@@ -170,9 +183,9 @@ namespace Horo::Navigation {
         };
         const auto resolved = ResolveNavigationProjectProfile(project, preview);
         REQUIRE(resolved.HasValue());
-        REQUIRE(resolved.Value().capacities.maximumAgents == 16);
-        REQUIRE(resolved.Value().capacities.maximumResidentTiles == project.Capacities().maximumResidentTiles);
-        REQUIRE(resolved.Value().projectFingerprint == project.Fingerprint());
+        REQUIRE(resolved.Value().Capacities().maximumAgents == 16);
+        REQUIRE(resolved.Value().Capacities().maximumResidentTiles == project.Capacities().maximumResidentTiles);
+        REQUIRE(resolved.Value().ProjectFingerprint() == project.Fingerprint());
 
         auto stale = preview;
         stale.projectRevision = NavigationProjectProfileRevision::Create(2).Value();
@@ -180,6 +193,18 @@ namespace Horo::Navigation {
         auto invalid = preview;
         invalid.requestedMaximums.maximumWorkUnitsPerTick = 0;
         TestSupport::RequireError(ResolveNavigationProjectProfile(project, invalid), NavigationErrors::ProjectProfileInvalid);
+
+        auto incoherent = preview;
+        incoherent.requestedMaximums.maximumResidentMemoryBytes = 4'095;
+        TestSupport::RequireError(ResolveNavigationProjectProfile(project, incoherent), NavigationErrors::ProjectProfileCapacityExceeded);
+        incoherent = preview;
+        incoherent.requestedMaximums.maximumWorkUnitsPerTick = 2'047;
+        TestSupport::RequireError(ResolveNavigationProjectProfile(project, incoherent), NavigationErrors::ProjectProfileCapacityExceeded);
+        incoherent = preview;
+        incoherent.requestedMaximums.maximumResidentTiles = std::numeric_limits<std::uint32_t>::max();
+        incoherent.requestedMaximums.maximumBytesPerResidentTile = std::numeric_limits<std::uint64_t>::max();
+        incoherent.requestedMaximums.maximumResidentMemoryBytes = std::numeric_limits<std::uint64_t>::max();
+        REQUIRE(ResolveNavigationProjectProfile(project, incoherent).HasValue());
     }
 
     TEST_CASE("Every resolved navigation capacity admits exact and rejects one over", "[unit][navigation][profile][admission]") {
@@ -188,6 +213,7 @@ namespace Horo::Navigation {
                                             .surfaces = 4,
                                             .residentTiles = 8,
                                             .concurrentQueries = 2,
+                                            .bytesPerResidentTile = 512,
                                             .residentMemoryBytes = 4'096,
                                             .workUnitsThisTick = 2'048};
         REQUIRE(AdmitNavigationCapacity(profile, exact).HasValue());
@@ -203,6 +229,8 @@ namespace Horo::Navigation {
         TestSupport::RequireError(AdmitNavigationCapacity(profile, excessive), NavigationErrors::ProjectProfileCapacityExceeded);
         excessive = exact;
         ++excessive.concurrentQueries;
+        TestSupport::RequireError(AdmitNavigationCapacity(profile, excessive), NavigationErrors::ProjectProfileCapacityExceeded);
+        excessive = {.residentTiles = 1, .bytesPerResidentTile = 513, .residentMemoryBytes = 513};
         TestSupport::RequireError(AdmitNavigationCapacity(profile, excessive), NavigationErrors::ProjectProfileCapacityExceeded);
         excessive = exact;
         ++excessive.residentMemoryBytes;
@@ -230,23 +258,15 @@ namespace Horo::Navigation {
         provider.maximumConcurrentQueries = 1;
         TestSupport::RequireError(AdmitNavigationProjectProfile(profile, provider, 9), NavigationErrors::ProjectProfileCapacityExceeded);
 
-        provider = Provider();
-        provider
-            .queryLimits[static_cast<std::size_t>(NavigationQueryKind::Path)][static_cast<std::size_t>(NavigationQualityLevel::Balanced)]
-            .maximumNodeExpansions = 1'023;
-        TestSupport::RequireError(AdmitNavigationProjectProfile(profile, provider, 9), NavigationErrors::QueryLimitExceeded);
-
-        provider = Provider();
-        provider
-            .queryLimits[static_cast<std::size_t>(NavigationQueryKind::Path)][static_cast<std::size_t>(NavigationQualityLevel::Balanced)]
-            .maximumResultPoints = 127;
-        TestSupport::RequireError(AdmitNavigationProjectProfile(profile, provider, 9), NavigationErrors::QueryLimitExceeded);
-
-        provider = Provider();
-        provider
-            .queryLimits[static_cast<std::size_t>(NavigationQueryKind::Path)][static_cast<std::size_t>(NavigationQualityLevel::Balanced)]
-            .maximumSearchDistanceMeters = 1'999.0F;
-        TestSupport::RequireError(AdmitNavigationProjectProfile(profile, provider, 9), NavigationErrors::QueryLimitExceeded);
+        auto availableLimits = profile.MaximumQuery().limits;
+        --availableLimits.maximumNodeExpansions;
+        RequireProviderQueryLimitRejected(profile, availableLimits);
+        availableLimits = profile.MaximumQuery().limits;
+        --availableLimits.maximumResultPoints;
+        RequireProviderQueryLimitRejected(profile, availableLimits);
+        availableLimits = profile.MaximumQuery().limits;
+        availableLimits.maximumSearchDistanceMeters -= 1.0F;
+        RequireProviderQueryLimitRejected(profile, availableLimits);
     }
 
     TEST_CASE("Packaged editor and headless consumers share one renderer-independent resolver", "[unit][navigation][profile][headless]") {
@@ -255,8 +275,8 @@ namespace Horo::Navigation {
                                   ResolveNavigationProjectProfile(project)};
         for (const auto &host : resolved) {
             REQUIRE(host.HasValue());
-            REQUIRE(host.Value().projectFingerprint == project.Fingerprint());
-            REQUIRE(host.Value().capacities == project.Capacities());
+            REQUIRE(host.Value().ProjectFingerprint() == project.Fingerprint());
+            REQUIRE(host.Value().Capacities() == project.Capacities());
         }
     }
 }  // namespace Horo::Navigation
