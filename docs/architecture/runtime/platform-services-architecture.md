@@ -529,6 +529,20 @@ generation/revision. Leaderboard order is provider-owned under the cooked defini
 These values support UI and local hints; clients cannot use them as authority for
 shared economy, rewards, simulation or access control.
 
+Implementation status on 10 September 2026: PLS-003.4 publishes immutable typed
+`StatDefinitionRegistry` and `LeaderboardDefinitionRegistry` snapshots in
+`HoroEngine::PlatformServices`. Each complete candidate is fenced to one ADR-132
+project/ledger fingerprint, canonicalized by unsigned stable ID and assigned a
+deterministic semantic fingerprint. Definitions fix authority, signed/unsigned integer
+domain, inclusive range, stat mutation algebra and leaderboard ordering before cook.
+An optional leaderboard-to-stat reference must resolve in the captured stat snapshot
+with an identical numeric kind and a range covering every leaderboard score. Missing,
+wrong-kind, incompatible, duplicate, tombstoned, stale, unbounded and incomplete input
+fails before publication with a field-path diagnostic. Presentation may evolve during
+ordinary replacement, while semantic changes or removal without an ADR-132 tombstone
+require an explicit migration. Provider mappings remain opaque ADR-132 inputs rather
+than definition fields.
+
 ### Cloud Save
 
 Cloud save is authenticated transport of opaque complete objects. It is not a
@@ -698,6 +712,14 @@ ADR-132 registry/mapping pipeline. Optional detail is bounded untrusted presenta
 data. Publication requires a current subject plus `PresencePublish` access, and the
 captured session/access generations are revalidated before provider submission and
 observable completion.
+
+PLS-003.4 also publishes the immutable `PresenceDefinitionRegistry`. Every active
+presence-status identity has exactly one definition fixing whether free detail is
+forbidden or optional and, when optional, its finite UTF-8 byte ceiling. Localization
+and visibility remain presentation metadata. Deterministic registry construction,
+stale-ledger rejection, tombstone-gated removal and transactional replacement mirror
+the stat/leaderboard lifecycle; runtime session handles, raw account identifiers,
+provider art/native values and implicit fallback are deliberately absent.
 
 ### Friends
 

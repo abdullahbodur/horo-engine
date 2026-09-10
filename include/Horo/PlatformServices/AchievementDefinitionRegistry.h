@@ -16,12 +16,6 @@
 namespace Horo::PlatformServices {
     inline constexpr std::uint32_t AchievementDefinitionRegistrySchemaVersion = 1;
 
-    /** @brief Immutable owner allowed to accept the gameplay fact represented by an achievement. */
-    enum class ProgressionAuthorityMode : std::uint8_t {
-        LocalProduct,
-        AuthorityServer
-    };
-
     /** @brief Portable achievement mutation algebra selected at authoring time. */
     enum class AchievementProgressKind : std::uint8_t {
         UnlockOnce,

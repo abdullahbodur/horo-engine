@@ -155,6 +155,19 @@ semantics are immutable across ordinary replacement, while localization keys and
 presentation may change. Provider-native identifiers, SDK values and account identity
 remain outside this public definition contract.
 
+## PLS-003.4 Migration Notes
+
+`HoroEngine::PlatformServices` additionally owns
+`Horo/PlatformServices/PlatformDefinitionRegistries.h`. The shared
+`ProgressionAuthorityMode` now lives in `PlatformServiceInterfaces.h`, its lowest
+backend-neutral owner, so achievement, stat and leaderboard definitions use one type
+without depending on one another. Project/cook composition builds stats first, then
+leaderboards against that immutable stat snapshot, and presence independently; all
+three candidates reference the same captured ADR-132 ledger fingerprint. Public
+callers consume only typed definitions and immutable spans. Provider-native mapping,
+runtime subject/session handles and raw account identities remain private or
+generation-scoped and never enter these durable definition registries.
+
 ## XRA-001.2 Migration Notes
 
 `HoroEngine::XRApi` owns the four public headers under `Horo/XR/` and depends

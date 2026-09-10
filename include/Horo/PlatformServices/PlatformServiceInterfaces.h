@@ -14,6 +14,12 @@
 #include <vector>
 
 namespace Horo::PlatformServices {
+    /** @brief Immutable owner allowed to accept one authored progression fact. */
+    enum class ProgressionAuthorityMode : std::uint8_t {
+        LocalProduct,
+        AuthorityServer
+    };
+
     /** @brief Strong nonzero project-authored identity. */
     template <typename Tag> struct PlatformStableId final {
         std::uint64_t value{}; /**< Zero is reserved and invalid. */
