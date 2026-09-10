@@ -101,6 +101,7 @@ add_library(HoroPlatformServices STATIC
         platform_services/AchievementDefinitionRegistry.cpp
         platform_services/PlatformDefinitionErrors.cpp
         platform_services/PlatformDefinitionRegistries.cpp
+        platform_services/PlatformProjectConfiguration.cpp
         platform_services/PlatformRequest.cpp
         platform_services/PlatformRequestErrors.cpp
         platform_services/PlatformServicesBackend.cpp
