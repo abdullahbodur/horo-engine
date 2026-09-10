@@ -269,6 +269,7 @@ horo_register_catch_test(HoroAnimationApiTests LABELS "unit;animation;headless")
 
 add_executable(HoroPCGTests
         unit/runtime/pcg/PCGIdentityTests.cpp
+        unit/runtime/pcg/PCGPointSchemaTests.cpp
 )
 target_compile_features(HoroPCGTests PRIVATE cxx_std_20)
 target_link_libraries(HoroPCGTests PRIVATE HoroEngine::PCG)
@@ -276,6 +277,7 @@ horo_register_catch_test(HoroPCGTests LABELS "unit;pcg;headless")
 
 add_executable(HoroVfxApiTests
         unit/runtime/vfx/VfxIdentityTests.cpp
+        unit/runtime/vfx/VfxQualityPolicyTests.cpp
 )
 target_compile_features(HoroVfxApiTests PRIVATE cxx_std_20)
 target_link_libraries(HoroVfxApiTests PRIVATE HoroEngine::VfxApi)
@@ -290,11 +292,14 @@ target_link_libraries(HoroDestructionApiTests PRIVATE HoroEngine::DestructionApi
 horo_register_catch_test(HoroDestructionApiTests LABELS "unit;destruction;headless")
 
 add_executable(HoroCinematicModelTests
+        support/AllocationProbe.cpp
         unit/runtime/cinematic/CurveSamplingTests.cpp
         unit/runtime/cinematic/CinematicIdentityTests.cpp
         unit/runtime/cinematic/SequenceAssetTests.cpp
+        unit/runtime/cinematic/TransformTrackTests.cpp
 )
 target_compile_features(HoroCinematicModelTests PRIVATE cxx_std_20)
+target_include_directories(HoroCinematicModelTests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
 target_link_libraries(HoroCinematicModelTests PRIVATE HoroEngine::CinematicModel)
 horo_register_catch_test(HoroCinematicModelTests LABELS "unit;cinematic;headless")
 add_executable(HoroCinematicCurveSamplingBenchmark EXCLUDE_FROM_ALL
@@ -333,6 +338,7 @@ target_link_libraries(HoroTerrainApiTests PRIVATE HoroEngine::TerrainApi)
 horo_register_catch_test(HoroTerrainApiTests LABELS "unit;terrain;headless")
 
 add_executable(HoroWorldStreamingTests
+        unit/runtime/world_streaming/OriginFrameTests.cpp
         unit/runtime/world_streaming/CookedWorldIndexManifestTests.cpp
         unit/runtime/world_streaming/FallbackStreamingProviderTests.cpp
         unit/runtime/world_streaming/StreamingBudgetModelTests.cpp
@@ -946,6 +952,7 @@ add_executable(HoroPlatformRequestTests
         unit/platform_services/PlatformRequestTests.cpp
         unit/platform_services/PlatformServicesBackendTests.cpp
         unit/platform_services/PlatformStableIdRegistryTests.cpp
+        unit/platform_services/PlatformUserSessionTests.cpp
 )
 target_compile_features(HoroPlatformRequestTests PRIVATE cxx_std_20)
 target_link_libraries(HoroPlatformRequestTests PRIVATE HoroEngine::PlatformServices Threads::Threads)

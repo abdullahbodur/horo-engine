@@ -1079,6 +1079,25 @@ non-guessable and valid only for its exact provider/session generations. It is n
 provider ID, persistent account key, authorization secret or display value and is never
 serialized/logged. Gameplay cannot construct or enumerate handles.
 
+The `[PLS-006.2]` public model implements this boundary in
+`Horo/PlatformServices/PlatformUserSession.h`. Only the detached identity-broker
+candidate carries the 128 random nonce bytes; a published `PlatformSubjectHandle`
+keeps them private and exposes only provider/session generations needed for fencing.
+The handle deliberately has equality but no ordering, text conversion, serialization,
+hash, native-account accessor or display projection. Complete snapshot validation is
+inert and allocation-free after error construction: it does not authenticate, call a
+provider, publish an observer or mutate ambient session state.
+
+`BuildPlatformSessionSnapshotReplacement` validates the explicit phase transition and
+monotonic generations before returning a detached replacement. An Active-to-Active
+refresh may retain the exact subject/session generation only while advancing the access
+revision; provider or subject changes require the close/rebind path. Every consuming
+commit calls `ValidatePlatformSessionAccess` with its captured handle and access
+revision. The validator returns typed phase, stale-session, stale-policy, consent,
+denial, restriction, revocation or unavailable errors and never converts them to empty
+success. Session observer dispatch and the orchestration that cancels/quarantines
+service work during account switching remain owned by `[PLS-006.3]` and `[PLS-006.4]`.
+
 `Active` has exactly one subject and immutable effective access snapshot. Other phases
 have none for admission; there is no second `signedIn` bool or nullable provider object.
 A restricted account may be Active while individual operations are unavailable. The

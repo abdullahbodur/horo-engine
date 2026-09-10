@@ -60,6 +60,7 @@ namespace Horo::Cinematic {
     struct TrackIdentityTag;
     struct KeyframeIdentityTag;
     struct PropertyBindingIdentityTag;
+    struct TransformBindingIdentityTag;
 
     /** @brief Stable generation-safe identity of one authored cinematic sequence. */
     using SequenceId = CinematicIdentity<SequenceIdentityTag>;
@@ -69,6 +70,8 @@ namespace Horo::Cinematic {
     using KeyframeId = CinematicIdentity<KeyframeIdentityTag>;
     /** @brief Stable generation-safe identity of one declared property binding. */
     using PropertyBindingId = CinematicIdentity<PropertyBindingIdentityTag>;
+    /** @brief Stable generation-safe identity of one scene transform binding. */
+    using TransformBindingId = CinematicIdentity<TransformBindingIdentityTag>;
 
     /**
      * @brief Creates a validated cinematic identity from owner-issued dimensions.

@@ -73,7 +73,7 @@ receipt assigns the allocation elsewhere.
 | Attributes per point | 16 | 32 | 64 |
 | Canonical attribute value bytes per point | 256 | 512 | 1,024 |
 | Points in one node output | 16,384 | 262,144 | 2,097,152 |
-| Total materialized point records per evaluation | 65,536 | 1,048,576 | 2,097,152 |
+| Total materialized point records per evaluation | 65,536 | 1,048,576 | 8,388,608 |
 | Output intents per generated set | 16,384 | 262,144 | 2,097,152 |
 | Cooked plan plus PCG auxiliary artifacts | 2 MiB | 16 MiB | 64 MiB |
 | Bounded diagnostics per operation | 256 / 1 MiB | 1,024 / 4 MiB | 4,096 / 16 MiB |

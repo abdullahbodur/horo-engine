@@ -123,6 +123,7 @@ add_library(HoroPlatformServices STATIC
         platform_services/PlatformRequestErrors.cpp
         platform_services/PlatformServicesBackend.cpp
         platform_services/PlatformStableIdRegistry.cpp
+        platform_services/PlatformUserSession.cpp
 )
 add_library(HoroEngine::PlatformServices ALIAS HoroPlatformServices)
 target_compile_features(HoroPlatformServices PUBLIC cxx_std_20)
@@ -485,6 +486,7 @@ target_link_libraries(HoroAnimationApi PUBLIC HoroEngine::Foundation HoroEngine:
 add_library(HoroPCG STATIC
         runtime/pcg/api/PCGErrors.cpp
         runtime/pcg/api/PCGIdentity.cpp
+        runtime/pcg/api/PCGPointSchema.cpp
 )
 add_library(HoroEngine::PCG ALIAS HoroPCG)
 target_compile_features(HoroPCG PUBLIC cxx_std_20)
@@ -493,6 +495,7 @@ target_link_libraries(HoroPCG PUBLIC HoroEngine::Foundation)
 add_library(HoroVfxApi STATIC
         runtime/vfx/api/VfxErrors.cpp
         runtime/vfx/api/VfxIdentity.cpp
+        runtime/vfx/api/VfxQualityPolicy.cpp
 )
 add_library(HoroEngine::VfxApi ALIAS HoroVfxApi)
 target_compile_features(HoroVfxApi PUBLIC cxx_std_20)
@@ -513,6 +516,7 @@ add_library(HoroCinematicModel STATIC
         runtime/cinematic/model/CinematicIdentity.cpp
         runtime/cinematic/model/SequenceAsset.cpp
         runtime/cinematic/model/SequenceAssetCook.cpp
+        runtime/cinematic/model/TransformTrack.cpp
 )
 add_library(HoroEngine::CinematicModel ALIAS HoroCinematicModel)
 target_compile_features(HoroCinematicModel PUBLIC cxx_std_20)
@@ -560,6 +564,7 @@ target_compile_features(HoroNavigationNull PUBLIC cxx_std_20)
 target_link_libraries(HoroNavigationNull PUBLIC HoroEngine::NavigationApi)
 
 add_library(HoroWorldStreaming STATIC
+        runtime/world_streaming/OriginFrame.cpp
         runtime/world_streaming/CookedWorldIndexManifest.cpp
         runtime/world_streaming/FallbackStreamingProvider.cpp
         runtime/world_streaming/StreamingBudgetModel.cpp

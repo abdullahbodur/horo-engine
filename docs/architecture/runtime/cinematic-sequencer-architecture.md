@@ -297,6 +297,17 @@ struct TransformKeyframe {
   anchor. Root tracks require an anchor in canonical world coordinates; they never
   treat a rebased root transform as a permanently stable origin. See Origin Rebase.
 
+The CIN-001.5 model contract compiles exact binding topology into one stable
+parent-before-child order at activation. Compilation rejects missing or stale
+bindings, parent cycles, duplicate identities, unsupported versions and the
+1,024-track hard ceiling. Evaluation then samples the ten scalar translation,
+quaternion and scale channels directly into caller-owned output; it performs no
+allocation or topology search. Runtime application and editor preview use this
+same path, so preview values cannot drift into a second interpolation model.
+Scene and binding revisions fence replacement, while each root resolves its
+canonical anchor against the current non-zero origin epoch exactly once. Child
+outputs remain local-space across origin changes.
+
 ### 2. Property Track
 
 Animates typed component properties registered in `PropertyBindingRegistry`:

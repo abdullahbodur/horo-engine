@@ -20,6 +20,10 @@ Public placement is a compatibility commitment, not merely a convenient include
 path. Moving a source header into `include/Horo/` requires a stable owner, a narrow
 contract, Doxygen documentation, migration notes, and consumer coverage.
 
+`Horo/Vfx/VfxQualityPolicy.h` is owned by `HoroVfxApi`. It adds backend-neutral
+immutable capability/policy evidence and pure admission decisions; consumers keep
+linking `HoroEngine::VfxApi`, and no include spelling or existing caller migrates.
+
 ## Build-Tree Contract
 
 `cmake/HoroPublicHeaderOwnership.cmake` assigns each public header to one real
@@ -117,6 +121,17 @@ state with direct `Sample(time)` calls and choose explicit clamp, repeat, or
 ping-pong behavior for each boundary. Legacy non-finite values, duplicate times,
 and non-monotonic cubic tangents are rejected rather than normalized silently.
 
+## CIN-001.5 Migration Notes
+
+`HoroEngine::CinematicModel` owns `Horo/Cinematic/TransformTrack.h`. Consumers
+compile a `TransformEvaluationPlan` at activation from exact generation-checked
+bindings and retain the immutable scalar-key storage borrowed by its curve views.
+Frame and editor-preview evaluation share the same random-access API and caller-
+owned output storage. Root tracks require a canonical `WorldCoordinate64` anchor;
+children remain local-space, so callers must not subtract the active origin again.
+Scene replacement requires a new plan rather than carrying cached bindings across
+the scene-generation fence.
+
 ## PLS-001.2 Migration Notes
 
 `HoroEngine::PlatformServices` owns
@@ -190,6 +205,24 @@ identities, and validation admits only bounded inert contributions from those mo
 Constructing or validating policy performs no discovery, registration, lifecycle call,
 SDK initialization or ambient-state mutation. Existing callers require no signature
 migration because this is the first published project configuration contract.
+
+## PLS-006.2 Migration Notes
+
+`HoroEngine::PlatformServices` additionally owns
+`Horo/PlatformServices/PlatformUserSession.h`. `PlatformProviderGeneration` and the
+exhaustive `PlatformServiceKind` move to this lower backend-neutral owner so the live
+subject and session snapshot can fence service calls without depending on the backend
+bundle declaration. `PlatformServiceInterfaces.h` includes the new owner and retains
+its existing request signatures.
+
+The provisional aggregate `PlatformSubjectHandle{nonce, generation}` and
+`PlatformSessionSnapshot{subject, signedIn}` are intentionally replaced. Callers obtain
+a handle only from a validated Active snapshot, branch on `PlatformSessionPhase`, and
+revalidate the handle plus `PlatformAccessPolicyRevision` before user-scoped commit.
+There is no compatibility `signedIn` boolean, public nonce accessor, serialization or
+native account value. Existing provider test fixtures must build detached candidates;
+production identity brokers supply cryptographic random nonce evidence and retain the
+provider-private authenticated binding outside this public target.
 
 ## XRA-001.2 Migration Notes
 
@@ -331,6 +364,13 @@ represent pointers, container positions, runtime registry handles, callbacks,
 filesystem paths, or backend-native values. Existing callers require no migration
 because this is the first published PCG API slice.
 
+`[PCG-1.3]` adds `Horo/PCG/PCGPointSchema.h` to the same Foundation-only owner.
+Consumers now use its canonical immutable schema, typed columnar point snapshots and
+exact provider-neutral tier limits instead of publishing free-form per-point maps.
+The contract uses only Foundation and Horo Scene Math values; Scene, target-owner,
+renderer, editor, platform and native backend authority remain outside HoroPCG.
+Rejected replacement candidates do not mutate or invalidate the last good snapshot.
+
 ## Animation Identity And Component Boundary
 
 `HoroEngine::AnimationApi` owns `Horo/Animation/AnimationErrors.h`,
@@ -376,6 +416,15 @@ recyclable pointers. Frame reset, cancellation, reload, and shutdown preserve ex
 runtime, skeleton, frame, slot, and semantic pose generations. The contract adds no
 RuntimeScene, Physics, Render, job-system, platform, editor, service-locator, or
 backend-native dependency; those future adapters must consume AnimationApi explicitly.
+
+## World Streaming Origin Frame Boundary
+
+`Horo/WorldStreaming/OriginFrame.h` is owned by `HoroWorldStreaming`. It exposes
+only Horo Foundation scene-math, strong-identity, result, and World Streaming
+error contracts. The header owns canonical-to-local conversion and immutable
+frame lease semantics; it has no Scene Runtime, renderer, physics, native,
+editor, or GUI dependency. Trigger policy, participant coordination, and backend
+adapters remain outside this public identity boundary.
 
 ## Destruction Identity Boundary
 

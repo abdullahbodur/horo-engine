@@ -1,41 +1,12 @@
 #include "Horo/Cinematic/CinematicErrors.h"
 #include "Horo/Cinematic/CurveSampling.h"
+#include "support/AllocationProbe.h"
 
 #include <array>
-#include <atomic>
 #include <catch2/catch_approx.hpp>
 #include <catch2/catch_test_macros.hpp>
-#include <cstdlib>
 #include <limits>
-#include <new>
 #include <vector>
-
-namespace {
-    std::atomic<std::size_t> gCurveTestAllocations{};
-
-    [[nodiscard]] void *CountedTestAllocation(const std::size_t size) noexcept {
-        static_cast<void>(gCurveTestAllocations.fetch_add(1, std::memory_order_relaxed));
-        return std::malloc(size);
-    }
-
-    void ReleaseTestAllocation(void *const memory) noexcept {
-        std::free(memory);
-    }
-}  // namespace
-
-void *operator new(const std::size_t size) {
-    if (void *const memory = CountedTestAllocation(size); memory != nullptr)
-        return memory;
-    throw std::bad_alloc{};
-}
-
-void operator delete(void *memory) noexcept {
-    ReleaseTestAllocation(memory);
-}
-
-void operator delete(void *memory, std::size_t) noexcept {
-    ReleaseTestAllocation(memory);
-}
 
 namespace Horo::Cinematic {
     namespace {
@@ -209,12 +180,12 @@ namespace Horo::Cinematic {
         auto curve = ScalarCurveView::Create(keys);
         REQUIRE(curve.HasValue());
         static_cast<void>(curve.Value().Sample(4));
-        const std::size_t before = gCurveTestAllocations.load(std::memory_order_relaxed);
+        const std::size_t before = Tests::AllocationProbe::Count();
         for (std::size_t iteration = 0; iteration < 10'000; ++iteration) {
             auto sample = curve.Value().Sample(static_cast<CurveTime>(iteration % 11));
             REQUIRE(sample.HasValue());
         }
-        CHECK(gCurveTestAllocations.load(std::memory_order_relaxed) == before);
+        CHECK(Tests::AllocationProbe::Count() == before);
     }
 
     TEST_CASE("Scalar curve admits the exact key ceiling and rejects one over", "[unit][cinematic][curve][capacity]") {

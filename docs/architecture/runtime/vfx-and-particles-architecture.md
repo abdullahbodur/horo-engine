@@ -317,6 +317,17 @@ They may identify external product presets, but must resolve through typed capab
 facts and quality policy. Identical inputs resolve deterministically; this does not
 promise bitwise-identical visual CPU/GPU algorithms across devices.
 
+The implemented `HoroVfxApi` baseline exposes immutable `VfxCapabilities` and
+`VfxQualityPolicy` revisions plus the pure `ResolveSimulationDomain` contract.
+Capability snapshots contain only effective usable facts and finite limits; policy
+validation constructs a complete candidate before the host may replace its previous
+valid revision. Resolution returns requested/selected profile, selected domain,
+authored degradation, selected variant/count and both evidence revisions. Final
+activation revalidates those revisions through `ValidateVfxResolutionFreshness`.
+Successful resolution performs no heap allocation, registration, backend discovery
+or partial activation and accepts at most the contract's bounded authored fallback
+count. Typed failure construction follows the shared Foundation error contract.
+
 Readback is a separate effective capability with normalized format/alignment,
 device-to-host copy, maximum byte/work and pending-result limits. Missing optional
 readback produces an explicit degraded resolution while the GPU visual may continue.
