@@ -100,4 +100,26 @@ namespace Horo::Network::NetworkErrors {
     extern const ErrorCodeDescriptor MessageEnvelopeTimedOut;
     /** @brief Caller-owned shutdown state rejected message codec admission. */
     extern const ErrorCodeDescriptor MessageEnvelopeShuttingDown;
+    /** @brief A terminal failure record is malformed or uses an incompatible layer/kind/context combination. */
+    extern const ErrorCodeDescriptor TerminalRecordInvalid;
+    /** @brief A second terminal completion attempted to replace the immutable first result. */
+    extern const ErrorCodeDescriptor TerminalAlreadyResolved;
+    /** @brief A terminal completion belongs to a retired or foreign connection generation. */
+    extern const ErrorCodeDescriptor TerminalGenerationStale;
+    /** @brief Private backend name resolution failed before transport connection. */
+    extern const ErrorCodeDescriptor NameResolutionFailed;
+    /** @brief Immutable local session policy rejected admission. */
+    extern const ErrorCodeDescriptor SessionPolicyRejected;
+    /** @brief The remote peer explicitly and safely rejected the session. */
+    extern const ErrorCodeDescriptor SessionRemoteRejected;
+    /** @brief The owning caller cancelled session admission. */
+    extern const ErrorCodeDescriptor SessionCancelled;
+    /** @brief The bounded session admission deadline expired. */
+    extern const ErrorCodeDescriptor SessionTimedOut;
+    /** @brief Session work was terminated by owner-controlled shutdown. */
+    extern const ErrorCodeDescriptor SessionShuttingDown;
+    /** @brief Gameplay dispatch was rejected before invoking game code. */
+    extern const ErrorCodeDescriptor GameplayDispatchRejected;
+    /** @brief A non-recoverable network invariant failed. */
+    extern const ErrorCodeDescriptor FatalFailure;
 }  // namespace Horo::Network::NetworkErrors
