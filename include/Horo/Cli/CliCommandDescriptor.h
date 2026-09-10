@@ -69,17 +69,39 @@ namespace Horo::Cli {
         Path,
     };
 
+    /** @brief Optional closed numeric interval attached to an integer or floating-point CLI value. */
+    struct CliNumericRange final {
+        std::optional<std::int64_t> minimumInteger; /**< Inclusive integer lower bound. */
+        std::optional<std::int64_t> maximumInteger; /**< Inclusive integer upper bound. */
+        std::optional<double> minimumNumber;        /**< Inclusive floating-point lower bound. */
+        std::optional<double> maximumNumber;        /**< Inclusive floating-point upper bound. */
+    };
+
     /** @brief Complete inert schema for one command option. */
     struct CliOptionDescriptor final {
-        std::string name;                           /**< Canonical long name without the leading `--`. */
-        std::optional<char> shortName;              /**< Optional single-character alias without `-`. */
+        std::string name;                            /**< Canonical long name without the leading `--`. */
+        std::optional<char> shortName;               /**< Optional single-character alias without `-`. */
+        std::string summary;                         /**< Concise help text. */
+        CliOptionValueKind valueKind{};              /**< Typed value grammar. */
+        bool required{};                             /**< Whether callers must provide the option. */
+        bool repeatable{};                           /**< Whether more than one occurrence is accepted. */
+        bool sensitive{};                            /**< Whether presentation layers must redact its value. */
+        std::optional<std::string> defaultValue;     /**< Canonical default spelling, when present. */
+        std::vector<std::string> enumerationValues;  /**< Closed value set for `Enumeration` options. */
+        CliNumericRange numericRange;                /**< Optional range for numeric values. */
+        std::optional<std::string> configurationKey; /**< Setting key used when invocation input is absent. */
+    };
+
+    /** @brief Typed positional input declaration; sensitive values are deliberately unsupported. */
+    struct CliPositionalDescriptor final {
+        std::string name;                           /**< Stable diagnostic/help name. */
         std::string summary;                        /**< Concise help text. */
-        CliOptionValueKind valueKind{};             /**< Typed value grammar. */
-        bool required{};                            /**< Whether callers must provide the option. */
-        bool repeatable{};                          /**< Whether more than one occurrence is accepted. */
-        bool sensitive{};                           /**< Whether presentation layers must redact its value. */
-        std::optional<std::string> defaultValue;    /**< Canonical default spelling, when present. */
-        std::vector<std::string> enumerationValues; /**< Closed value set for `Enumeration` options. */
+        CliOptionValueKind valueKind{};             /**< Typed value grammar; `Flag` is invalid here. */
+        bool required{};                            /**< Whether this position must be present. */
+        bool repeatable{};                          /**< Whether this final position consumes the remainder. */
+        bool sensitive{};                           /**< Must remain false; credentials cannot be positional. */
+        std::vector<std::string> enumerationValues; /**< Closed value set for `Enumeration` inputs. */
+        CliNumericRange numericRange;               /**< Optional range for numeric values. */
     };
 
     /** @brief Output encodings a command promises to support. */
@@ -153,19 +175,21 @@ namespace Horo::Cli {
 
     /** @brief Complete inert declaration consumed by the host-owned CLI command registry. */
     struct CliCommandDescriptor final {
-        CommandPath path;                                  /**< Hierarchical command identity. */
-        std::string summary;                               /**< One-line help and discovery summary. */
-        std::vector<CliOptionDescriptor> options;          /**< Typed option schema. */
-        std::vector<CliCapabilityId> requiredCapabilities; /**< Capabilities required before activation. */
-        CliOutputSchema output;                            /**< Human and machine output contract. */
-        CliInteractivePolicy interactive{};                /**< Prompt admission policy. */
-        CliHostAvailability hosts{};                       /**< Executable compositions allowed to activate it. */
-        CliContractVersion contractVersion{};              /**< CLI descriptor contract authored against. */
-        CliSideEffectPolicy sideEffects{};                 /**< Highest side-effect category performed. */
-        CliCancellationPolicy cancellation{};              /**< Cooperative cancellation support. */
-        CliTimeoutPolicy timeout{};                        /**< Bounded execution deadline policy. */
-        CliStdinPolicy stdinPolicy{};                      /**< Explicit stdin consumption policy. */
-        CliCommandOrigin origin{};                         /**< Built-in or approved contribution provenance. */
-        std::string ownerId;                               /**< Canonical module or extension identity. */
+        CommandPath path;                                        /**< Hierarchical command identity. */
+        std::string summary;                                     /**< One-line help and discovery summary. */
+        std::vector<CliOptionDescriptor> options;                /**< Typed option schema. */
+        std::vector<CliPositionalDescriptor> positionals;        /**< Typed ordered positional schema. */
+        std::vector<CliCapabilityId> requiredCapabilities;       /**< Capabilities required before activation. */
+        CliOutputSchema output;                                  /**< Human and machine output contract. */
+        CliInteractivePolicy interactive{};                      /**< Prompt admission policy. */
+        CliHostAvailability hosts{};                             /**< Executable compositions allowed to activate it. */
+        CliContractVersion contractVersion{};                    /**< CLI descriptor contract authored against. */
+        CliSideEffectPolicy sideEffects{};                       /**< Highest side-effect category performed. */
+        CliCancellationPolicy cancellation{};                    /**< Cooperative cancellation support. */
+        CliTimeoutPolicy timeout{};                              /**< Bounded execution deadline policy. */
+        CliStdinPolicy stdinPolicy{};                            /**< Explicit stdin consumption policy. */
+        std::optional<std::string> interactiveAlternativeOption; /**< Option replacing prompts when interaction is unavailable. */
+        CliCommandOrigin origin{};                               /**< Built-in or approved contribution provenance. */
+        std::string ownerId;                                     /**< Canonical module or extension identity. */
     };
 }  // namespace Horo::Cli

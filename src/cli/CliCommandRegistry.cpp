@@ -1,6 +1,7 @@
 #include "Horo/Cli/CliCommandRegistry.h"
 
 #include "Horo/Cli/CliErrors.h"
+#include "Horo/Cli/CliOptionParser.h"
 
 #include <algorithm>
 #include <charconv>
@@ -12,6 +13,11 @@
 
 namespace Horo::Cli {
     namespace {
+        [[nodiscard]] bool IsConfigurationKeyCharacter(const char character) noexcept {
+            return (character >= 'a' && character <= 'z') || (character >= '0' && character <= '9') || character == '-' ||
+                   character == '_' || character == '.';
+        }
+
         [[nodiscard]] bool IsCanonicalToken(const std::string_view value, const std::size_t maximumBytes) noexcept {
             if (value.empty() || value.size() > maximumBytes || value.front() < 'a' || value.front() > 'z')
                 return false;
@@ -43,6 +49,13 @@ namespace Horo::Cli {
                 begin = end + 1;
             }
             return foundSeparator;
+        }
+
+        [[nodiscard]] bool IsConfigurationKey(const std::string_view value, const std::size_t maximumBytes) noexcept {
+            if (value.empty() || value.size() > maximumBytes || value.front() == '.' || value.back() == '.')
+                return false;
+            return value.find('.') != std::string_view::npos && value.find("..") == std::string_view::npos &&
+                   std::ranges::all_of(value, IsConfigurationKeyCharacter);
         }
 
         template <typename Enum> [[nodiscard]] bool IsKnown(Enum value) noexcept;
@@ -126,12 +139,6 @@ namespace Horo::Cli {
             return bits != std::byte{} && (bits & ~KnownBits) == std::byte{};
         }
 
-        [[nodiscard]] bool ValidInteger(const std::string_view value) noexcept {
-            std::int64_t parsed{};
-            const auto [end, error] = std::from_chars(value.data(), value.data() + value.size(), parsed);
-            return error == std::errc{} && end == value.data() + value.size();
-        }
-
         [[nodiscard]] bool ValidFloat(const std::string &value) {
             std::istringstream stream{value};
             stream.imbue(std::locale::classic());
@@ -147,8 +154,8 @@ namespace Horo::Cli {
 
         [[nodiscard]] bool ValidLimits(const CliCommandRegistryLimits &limits) noexcept {
             return limits.maximumCommands > 0 && limits.maximumPathSegments > 0 && limits.maximumOptionsPerCommand > 0 &&
-                   limits.maximumCapabilitiesPerCommand > 0 && limits.maximumEnumerationValues > 0 && limits.maximumIdentifierBytes > 0 &&
-                   limits.maximumSummaryBytes > 0;
+                   limits.maximumPositionalsPerCommand > 0 && limits.maximumCapabilitiesPerCommand > 0 &&
+                   limits.maximumEnumerationValues > 0 && limits.maximumIdentifierBytes > 0 && limits.maximumSummaryBytes > 0;
         }
 
         [[nodiscard]] Result<void> ValidatePolicy(const CliCommandRegistryPolicy &policy) {
@@ -192,7 +199,42 @@ namespace Horo::Cli {
         [[nodiscard]] bool HasInvalidFlagSchema(const CliOptionDescriptor &option) noexcept {
             if (option.valueKind != CliOptionValueKind::Flag)
                 return false;
-            return option.defaultValue.has_value() || !option.enumerationValues.empty() || option.sensitive;
+            return option.defaultValue.has_value() || !option.enumerationValues.empty() || option.sensitive ||
+                   option.numericRange.minimumInteger.has_value() || option.numericRange.maximumInteger.has_value() ||
+                   option.numericRange.minimumNumber.has_value() || option.numericRange.maximumNumber.has_value();
+        }
+
+        [[nodiscard]] bool HasIntegerRange(const CliNumericRange &range) noexcept {
+            return range.minimumInteger.has_value() || range.maximumInteger.has_value();
+        }
+
+        [[nodiscard]] bool HasNumberRange(const CliNumericRange &range) noexcept {
+            return range.minimumNumber.has_value() || range.maximumNumber.has_value();
+        }
+
+        [[nodiscard]] bool HasValidIntegerRange(const CliNumericRange &range) noexcept {
+            const bool ordered =
+                !range.minimumInteger.has_value() || !range.maximumInteger.has_value() || *range.minimumInteger <= *range.maximumInteger;
+            return !HasNumberRange(range) && ordered;
+        }
+
+        [[nodiscard]] bool HasValidNumberRange(const CliNumericRange &range) noexcept {
+            const auto finite = [](const std::optional<double> &value) noexcept {
+                return !value.has_value() || std::isfinite(*value);
+            };
+            const bool ordered =
+                !range.minimumNumber.has_value() || !range.maximumNumber.has_value() || *range.minimumNumber <= *range.maximumNumber;
+            const bool minimumValid = finite(range.minimumNumber);
+            const bool maximumValid = finite(range.maximumNumber);
+            return !HasIntegerRange(range) && minimumValid && maximumValid && ordered;
+        }
+
+        [[nodiscard]] bool HasValidNumericRange(const CliOptionValueKind kind, const CliNumericRange &range) noexcept {
+            if (kind == CliOptionValueKind::SignedInteger)
+                return HasValidIntegerRange(range);
+            if (kind == CliOptionValueKind::FloatingPoint)
+                return HasValidNumberRange(range);
+            return !HasIntegerRange(range) && !HasNumberRange(range);
         }
 
         [[nodiscard]] bool HasInvalidEnumerationSchema(const CliOptionDescriptor &option) noexcept {
@@ -204,7 +246,9 @@ namespace Horo::Cli {
             if (option.enumerationValues.size() > limits.maximumEnumerationValues)
                 return Result<void>::Failure(MakeError(CliErrors::RegistryCapacityExceeded));
             if ((option.required && option.defaultValue.has_value()) || (option.sensitive && option.defaultValue.has_value()) ||
-                HasInvalidFlagSchema(option) || HasInvalidEnumerationSchema(option))
+                (option.sensitive && option.configurationKey.has_value()) || HasInvalidFlagSchema(option) ||
+                HasInvalidEnumerationSchema(option) || !HasValidNumericRange(option.valueKind, option.numericRange) ||
+                (option.configurationKey.has_value() && !IsConfigurationKey(*option.configurationKey, limits.maximumIdentifierBytes)))
                 return Result<void>::Failure(MakeError(CliErrors::OptionSchemaIncompatible));
             return Result<void>::Success();
         }
@@ -226,10 +270,24 @@ namespace Horo::Cli {
                 case String:
                 case Path:
                     return !option.defaultValue->empty();
-                case SignedInteger:
-                    return ValidInteger(*option.defaultValue);
-                case FloatingPoint:
-                    return ValidFloat(*option.defaultValue);
+                case SignedInteger: {
+                    std::int64_t parsed{};
+                    const auto [end, error] =
+                        std::from_chars(option.defaultValue->data(), option.defaultValue->data() + option.defaultValue->size(), parsed);
+                    return error == std::errc{} && end == option.defaultValue->data() + option.defaultValue->size() &&
+                           (!option.numericRange.minimumInteger.has_value() || parsed >= *option.numericRange.minimumInteger) &&
+                           (!option.numericRange.maximumInteger.has_value() || parsed <= *option.numericRange.maximumInteger);
+                }
+                case FloatingPoint: {
+                    if (!ValidFloat(*option.defaultValue))
+                        return false;
+                    std::istringstream stream{*option.defaultValue};
+                    stream.imbue(std::locale::classic());
+                    double parsed{};
+                    stream >> parsed;
+                    return (!option.numericRange.minimumNumber.has_value() || parsed >= *option.numericRange.minimumNumber) &&
+                           (!option.numericRange.maximumNumber.has_value() || parsed <= *option.numericRange.maximumNumber);
+                }
                 case Enumeration:
                     return std::ranges::find(option.enumerationValues, *option.defaultValue) != option.enumerationValues.end();
             }
@@ -260,6 +318,62 @@ namespace Horo::Cli {
             return ValidateDefaultValue(option, limits);
         }
 
+        [[nodiscard]] bool HasDuplicatePositionalName(const std::span<const CliPositionalDescriptor> positionals,
+                                                      const std::size_t index) noexcept {
+            return std::ranges::any_of(positionals.first(index), [&positionals, index](const CliPositionalDescriptor &prior) {
+                return prior.name == positionals[index].name;
+            });
+        }
+
+        [[nodiscard]] bool HasValidPositionalMetadata(const CliPositionalDescriptor &positional,
+                                                      const CliCommandRegistryLimits &limits) noexcept {
+            return IsCanonicalToken(positional.name, limits.maximumIdentifierBytes) &&
+                   IsSafeSummary(positional.summary, limits.maximumSummaryBytes) && IsKnown(positional.valueKind);
+        }
+
+        [[nodiscard]] bool HasValidPositionalPolicy(const CliPositionalDescriptor &positional, const bool isLast,
+                                                    const bool optionalSeen) noexcept {
+            return positional.valueKind != CliOptionValueKind::Flag && !positional.sensitive && (!positional.repeatable || isLast) &&
+                   (!optionalSeen || !positional.required);
+        }
+
+        [[nodiscard]] bool HasValidPositionalValueSchema(const CliPositionalDescriptor &positional,
+                                                         const CliCommandRegistryLimits &limits) noexcept {
+            return positional.enumerationValues.size() <= limits.maximumEnumerationValues &&
+                   HasValidNumericRange(positional.valueKind, positional.numericRange);
+        }
+
+        [[nodiscard]] bool HasValidPositionalShape(const CliPositionalDescriptor &positional, const CliCommandRegistryLimits &limits,
+                                                   const bool isLast, const bool optionalSeen) noexcept {
+            return HasValidPositionalMetadata(positional, limits) && HasValidPositionalPolicy(positional, isLast, optionalSeen) &&
+                   HasValidPositionalValueSchema(positional, limits);
+        }
+
+        [[nodiscard]] Result<void> ValidatePositionalEnumeration(const CliPositionalDescriptor &positional,
+                                                                 const CliCommandRegistryLimits &limits) {
+            const CliOptionDescriptor equivalent{.name = positional.name,
+                                                 .summary = positional.summary,
+                                                 .valueKind = positional.valueKind,
+                                                 .enumerationValues = positional.enumerationValues,
+                                                 .numericRange = positional.numericRange};
+            return ValidateEnumerationValues(equivalent, limits);
+        }
+
+        [[nodiscard]] Result<void> ValidatePositionals(const std::span<const CliPositionalDescriptor> positionals,
+                                                       const CliCommandRegistryLimits &limits) {
+            bool optionalSeen = false;
+            for (std::size_t index = 0; index < positionals.size(); ++index) {
+                const CliPositionalDescriptor &positional = positionals[index];
+                if (!HasValidPositionalShape(positional, limits, index + 1 == positionals.size(), optionalSeen) ||
+                    HasDuplicatePositionalName(positionals, index))
+                    return Result<void>::Failure(MakeError(CliErrors::OptionSchemaIncompatible));
+                optionalSeen = optionalSeen || !positional.required;
+                if (const Result<void> valid = ValidatePositionalEnumeration(positional, limits); valid.HasError())
+                    return valid;
+            }
+            return Result<void>::Success();
+        }
+
         [[nodiscard]] bool HasKnownDescriptorPolicies(const CliCommandDescriptor &descriptor) noexcept {
             return IsKnown(descriptor.interactive) && IsKnown(descriptor.sideEffects) && IsKnown(descriptor.cancellation) &&
                    IsKnown(descriptor.stdinPolicy) && IsKnown(descriptor.origin);
@@ -278,9 +392,16 @@ namespace Horo::Cli {
             if (!IsSafeSummary(descriptor.summary, limits.maximumSummaryBytes))
                 return Result<void>::Failure(MakeError(CliErrors::DescriptorInvalid));
             if (descriptor.options.size() > limits.maximumOptionsPerCommand ||
+                descriptor.positionals.size() > limits.maximumPositionalsPerCommand ||
                 descriptor.requiredCapabilities.size() > limits.maximumCapabilitiesPerCommand)
                 return Result<void>::Failure(MakeError(CliErrors::DescriptorInvalid));
             if (!HasKnownDescriptorPolicies(descriptor) || !HasValidDescriptorIdentities(descriptor, limits))
+                return Result<void>::Failure(MakeError(CliErrors::DescriptorInvalid));
+            if (descriptor.interactive == CliInteractivePolicy::Forbidden && descriptor.interactiveAlternativeOption.has_value())
+                return Result<void>::Failure(MakeError(CliErrors::DescriptorInvalid));
+            if (descriptor.interactive != CliInteractivePolicy::Forbidden &&
+                (!descriptor.interactiveAlternativeOption.has_value() ||
+                 !IsCanonicalToken(*descriptor.interactiveAlternativeOption, limits.maximumIdentifierBytes)))
                 return Result<void>::Failure(MakeError(CliErrors::DescriptorInvalid));
             return Result<void>::Success();
         }
@@ -321,6 +442,11 @@ namespace Horo::Cli {
             for (std::size_t index = 0; index < options.size(); ++index) {
                 if (HasDuplicateOption(options, index))
                     return Result<void>::Failure(MakeError(CliErrors::OptionNameDuplicate));
+                if (std::ranges::any_of(CliOptionParser::CommonOptions(), [&options, index](const CliOptionDescriptor &common) {
+                    return common.name == options[index].name ||
+                           (common.shortName.has_value() && common.shortName == options[index].shortName);
+                }))
+                    return Result<void>::Failure(MakeError(CliErrors::OptionNameDuplicate));
                 if (const Result<void> valid = ValidateOption(options[index], limits); valid.HasError())
                     return valid;
             }
@@ -354,6 +480,19 @@ namespace Horo::Cli {
                 return valid;
             if (const Result<void> valid = ValidateOptions(descriptor.options, policy.limits); valid.HasError())
                 return valid;
+            if (const Result<void> valid = ValidatePositionals(descriptor.positionals, policy.limits); valid.HasError())
+                return valid;
+            if (descriptor.interactiveAlternativeOption.has_value()) {
+                const bool foundInCommand = std::ranges::any_of(descriptor.options, [&descriptor](const CliOptionDescriptor &option) {
+                    return option.name == *descriptor.interactiveAlternativeOption;
+                });
+                const bool foundInCommon =
+                    std::ranges::any_of(CliOptionParser::CommonOptions(), [&descriptor](const CliOptionDescriptor &option) {
+                    return option.name == *descriptor.interactiveAlternativeOption;
+                });
+                if (!foundInCommand && !foundInCommon)
+                    return Result<void>::Failure(MakeError(CliErrors::DescriptorInvalid));
+            }
             return ValidateCapabilities(descriptor.requiredCapabilities, policy);
         }
 
@@ -424,6 +563,22 @@ namespace Horo::Cli {
                 help.append(" (default: ").append(*option.defaultValue).push_back(')');
             if (option.repeatable)
                 help.append(" (repeatable)");
+        }
+
+        void AppendOptions(std::string &help, const std::span<const CliOptionDescriptor> options) {
+            for (const CliOptionDescriptor &option : options) {
+                help.append("  ");
+                if (option.shortName.has_value()) {
+                    help.push_back('-');
+                    help.push_back(*option.shortName);
+                    help.append(", ");
+                }
+                help.append("--").append(option.name);
+                AppendOptionValue(help, option);
+                help.append("  ").append(option.summary);
+                AppendOptionPolicy(help, option);
+                help.push_back('\n');
+            }
         }
     }  // namespace
 
@@ -505,23 +660,19 @@ namespace Horo::Cli {
         help.append(JoinPath(path));
         if (!descriptor->options.empty())
             help.append(" [options]");
+        for (const CliPositionalDescriptor &positional : descriptor->positionals) {
+            help.append(positional.required ? " <" : " [").append(positional.name);
+            if (positional.repeatable)
+                help.append("...");
+            help.push_back(positional.required ? '>' : ']');
+        }
         help.append("\n\n").append(descriptor->summary).push_back('\n');
         if (!descriptor->options.empty()) {
             help.append("\nOptions:\n");
-            for (const CliOptionDescriptor &option : descriptor->options) {
-                help.append("  ");
-                if (option.shortName.has_value()) {
-                    help.push_back('-');
-                    help.push_back(*option.shortName);
-                    help.append(", ");
-                }
-                help.append("--").append(option.name);
-                AppendOptionValue(help, option);
-                help.append("  ").append(option.summary);
-                AppendOptionPolicy(help, option);
-                help.push_back('\n');
-            }
+            AppendOptions(help, descriptor->options);
         }
+        help.append("\nCommon options:\n");
+        AppendOptions(help, CliOptionParser::CommonOptions());
         help.push_back('\n');
         AppendFormats(help, descriptor->output.formats);
         return help;

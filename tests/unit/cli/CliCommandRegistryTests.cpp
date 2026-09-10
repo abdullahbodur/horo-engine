@@ -216,6 +216,11 @@ namespace Horo::Cli {
                 "Options:\n"
                 "  -f, --force  Enable the operation.\n"
                 "  -m, --mode <fast|safe>  Select the operating mode. (default: fast)\n\n"
+                "Common options:\n"
+                "  --log-level <critical|debug|error|info|trace|warning>  Set the invocation log threshold.\n"
+                "  --non-interactive  Disable terminal prompts.\n"
+                "  -o, --output <human|json|jsonl>  Select the output encoding. (default: human)\n"
+                "  -p, --project <path>  Select the project root.\n\n"
                 "Output: human, json, jsonl\n");
         REQUIRE(registry.GenerateHelp("horo-engine", {{"not", "accepted"}}).empty());
     }
@@ -354,16 +359,43 @@ namespace Horo::Cli {
     }
 
     TEST_CASE("CLI validation failures retain unique stable typed identities", "[unit][cli][registry]") {
-        const std::array errors{&CliErrors::DescriptorInvalid,          &CliErrors::RegistryCapacityExceeded,
-                                &CliErrors::CommandPathDuplicate,       &CliErrors::OptionNameDuplicate,
-                                &CliErrors::OptionSchemaIncompatible,   &CliErrors::OutputSchemaIncompatible,
-                                &CliErrors::CapabilityUnauthorized,     &CliErrors::HostUnsupported,
-                                &CliErrors::ContractVersionIncompatible};
+        const std::array
+            errors{&CliErrors::DescriptorInvalid,      &CliErrors::RegistryCapacityExceeded, &CliErrors::CommandPathDuplicate,
+                   &CliErrors::OptionNameDuplicate,    &CliErrors::OptionSchemaIncompatible, &CliErrors::OutputSchemaIncompatible,
+                   &CliErrors::CapabilityUnauthorized, &CliErrors::HostUnsupported,          &CliErrors::ContractVersionIncompatible,
+                   &CliErrors::ParserPolicyInvalid,    &CliErrors::CommandUnknown,           &CliErrors::ParseFailed,
+                   &CliErrors::InputModeUnsupported,   &CliErrors::InputCapacityExceeded,    &CliErrors::InteractiveInputUnavailable};
         for (std::size_t current = 0; current < errors.size(); ++current) {
             REQUIRE(errors[current]->domain.Value() == "horo.cli");
             REQUIRE_FALSE(errors[current]->code.Value().empty());
             for (std::size_t prior = 0; prior < current; ++prior)
                 REQUIRE(errors[current]->code.Value() != errors[prior]->code.Value());
         }
+    }
+
+    TEST_CASE("CLI registry validates parser ranges positionals common names and prompt alternatives", "[unit][cli][registry]") {
+        CliCommandDescriptor descriptor = Descriptor({"project", "validate"});
+        descriptor.options[1].numericRange.minimumInteger = 1;
+        RequireError(CliCommandRegistry::Create(std::span{&descriptor, 1}, Policy()), CliErrors::OptionSchemaIncompatible);
+
+        descriptor = Descriptor({"project", "validate"});
+        descriptor.options.push_back(
+            {.name = "project", .summary = "Conflicts with shared project.", .valueKind = CliOptionValueKind::Path});
+        RequireError(CliCommandRegistry::Create(std::span{&descriptor, 1}, Policy()), CliErrors::OptionNameDuplicate);
+
+        descriptor = Descriptor({"project", "validate"});
+        descriptor.positionals = {{.name = "password",
+                                   .summary = "Credential input.",
+                                   .valueKind = CliOptionValueKind::String,
+                                   .required = true,
+                                   .sensitive = true}};
+        RequireError(CliCommandRegistry::Create(std::span{&descriptor, 1}, Policy()), CliErrors::OptionSchemaIncompatible);
+
+        descriptor = Descriptor({"project", "validate"});
+        descriptor.interactive = CliInteractivePolicy::Required;
+        RequireError(CliCommandRegistry::Create(std::span{&descriptor, 1}, Policy()), CliErrors::DescriptorInvalid);
+
+        descriptor.interactiveAlternativeOption = "missing";
+        RequireError(CliCommandRegistry::Create(std::span{&descriptor, 1}, Policy()), CliErrors::DescriptorInvalid);
     }
 }  // namespace Horo::Cli

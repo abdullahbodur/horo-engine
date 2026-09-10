@@ -26,4 +26,16 @@ namespace Horo::Cli::CliErrors {
     extern const ErrorCodeDescriptor HostUnsupported;
     /** @brief A descriptor targets a contract generation unsupported by the host. */
     extern const ErrorCodeDescriptor ContractVersionIncompatible;
+    /** @brief Parser input or resource-limit policy is malformed. */
+    extern const ErrorCodeDescriptor ParserPolicyInvalid;
+    /** @brief No registered command matches the requested hierarchical path. */
+    extern const ErrorCodeDescriptor CommandUnknown;
+    /** @brief One or more command-line values failed bounded syntax validation. */
+    extern const ErrorCodeDescriptor ParseFailed;
+    /** @brief Explicit stdin selection is unsupported or conflicts with the command contract. */
+    extern const ErrorCodeDescriptor InputModeUnsupported;
+    /** @brief Explicit argv or stdin data exceeds a declared parser bound. */
+    extern const ErrorCodeDescriptor InputCapacityExceeded;
+    /** @brief Required interactive input is unavailable and its deterministic alternative was omitted. */
+    extern const ErrorCodeDescriptor InteractiveInputUnavailable;
 }  // namespace Horo::Cli::CliErrors
