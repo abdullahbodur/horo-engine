@@ -98,8 +98,7 @@ namespace Horo::PlatformServices {
         static_assert(!std::is_same_v<CloudObjectId, PresenceStatusId>);
         REQUIRE_FALSE(AchievementId{}.IsValid());
         REQUIRE(AchievementId{1}.IsValid());
-        REQUIRE_FALSE(PlatformSubjectHandle{1, 0}.IsValid());
-        REQUIRE(PlatformSubjectHandle{1, 2}.IsValid());
+        REQUIRE_FALSE(PlatformSubjectHandle{}.IsValid());
     }
 
     TEST_CASE("Capability snapshots require one coherent entry for every service", "[platform-services][backend][capability]") {
@@ -201,7 +200,7 @@ namespace Horo::PlatformServices {
         REQUIRE(activated.HasValue());
         CHECK(backend.activated);
         CHECK(activated.Value().providerGeneration == PlatformProviderGeneration{7});
-        const auto unsupported = backend.UnlockAchievement({{1, 1}, {5}});
+        const auto unsupported = backend.UnlockAchievement({{}, {5}});
         REQUIRE(unsupported.HasError());
         CHECK(unsupported.ErrorValue().code.Value() == BackendErrors::ServiceUnavailable.code.Value());
 
