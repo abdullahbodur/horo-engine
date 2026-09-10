@@ -90,6 +90,16 @@ namespace Horo::PlatformServices {
             return &found->second;
         }
 
+        template <typename Operation>
+        [[nodiscard]] Result<PlatformRequestMutation> MutateRecord(const PlatformRequestId id, const PlatformRequestGeneration generation,
+                                                                   const std::type_index type, Operation &&operation) {
+            std::lock_guard lock(mutex);
+            auto *record = FindRecord(id, generation, type);
+            if (record == nullptr)
+                return Result<PlatformRequestMutation>::Failure(MakeError(RequestErrors::Stale));
+            return std::forward<Operation>(operation)(*record);
+        }
+
         void QueueObservers(Record &record) {
             for (const auto &weak : record.observers)
                 if (auto slot = weak.lock())
@@ -224,36 +234,31 @@ namespace Horo::PlatformServices {
     Result<PlatformRequestMutation> PlatformRequestStore::MarkRunningErased(const PlatformRequestId id,
                                                                             const PlatformRequestGeneration generation,
                                                                             const std::type_index type) {
-        std::lock_guard lock(state_->mutex);
-        auto *record = state_->FindRecord(id, generation, type);
-        if (record == nullptr)
-            return Result<PlatformRequestMutation>::Failure(MakeError(RequestErrors::Stale));
-        auto &snapshot = record->snapshot;
-        if (snapshot.state == PlatformRequestState::Running)
-            return Result<PlatformRequestMutation>::Success(PlatformRequestMutation::Unchanged);
-        if (snapshot.state != PlatformRequestState::Queued)
-            return Result<PlatformRequestMutation>::Failure(MakeError(RequestErrors::InvalidTransition));
-        snapshot.state = PlatformRequestState::Running;
-        snapshot.timing.startedAt = std::chrono::steady_clock::now();
-        return Result<PlatformRequestMutation>::Success(PlatformRequestMutation::Applied);
+        return state_->MutateRecord(id, generation, type, [](State::Record &record) {
+            auto &snapshot = record.snapshot;
+            if (snapshot.state == PlatformRequestState::Running)
+                return Result<PlatformRequestMutation>::Success(PlatformRequestMutation::Unchanged);
+            if (snapshot.state != PlatformRequestState::Queued)
+                return Result<PlatformRequestMutation>::Failure(MakeError(RequestErrors::InvalidTransition));
+            snapshot.state = PlatformRequestState::Running;
+            snapshot.timing.startedAt = std::chrono::steady_clock::now();
+            return Result<PlatformRequestMutation>::Success(PlatformRequestMutation::Applied);
+        });
     }
 
     /** @copydoc PlatformRequestStore::RequestCancel */
     Result<PlatformRequestMutation> PlatformRequestStore::RequestCancelErased(const PlatformRequestId id,
                                                                               const PlatformRequestGeneration generation,
                                                                               const std::type_index type) {
-        const auto now = std::chrono::steady_clock::now();
-        std::lock_guard lock(state_->mutex);
-        auto *record = state_->FindRecord(id, generation, type);
-        if (record == nullptr)
-            return Result<PlatformRequestMutation>::Failure(MakeError(RequestErrors::Stale));
-        auto &snapshot = record->snapshot;
-        if (IsTerminal(snapshot.state) || snapshot.cancellationRequested)
-            return Result<PlatformRequestMutation>::Success(PlatformRequestMutation::Unchanged);
-        snapshot.cancellationRequested = true;
-        snapshot.timing.cancellationRequestedAt = now;
-        snapshot.state = PlatformRequestState::Cancelling;
-        return Result<PlatformRequestMutation>::Success(PlatformRequestMutation::Applied);
+        return state_->MutateRecord(id, generation, type, [](State::Record &record) {
+            auto &snapshot = record.snapshot;
+            if (IsTerminal(snapshot.state) || snapshot.cancellationRequested)
+                return Result<PlatformRequestMutation>::Success(PlatformRequestMutation::Unchanged);
+            snapshot.cancellationRequested = true;
+            snapshot.timing.cancellationRequestedAt = std::chrono::steady_clock::now();
+            snapshot.state = PlatformRequestState::Cancelling;
+            return Result<PlatformRequestMutation>::Success(PlatformRequestMutation::Applied);
+        });
     }
 
     /** @copydoc PlatformRequestStore::CompleteSuccess */
@@ -267,26 +272,25 @@ namespace Horo::PlatformServices {
                                                                          const std::type_index type,
                                                                          const PlatformRequestState terminalState,
                                                                          std::shared_ptr<const void> value, std::optional<Error> error) {
-        const auto now = std::chrono::steady_clock::now();
-        std::lock_guard lock(state_->mutex);
-        auto *record = state_->FindRecord(id, generation, type);
-        if (record == nullptr)
-            return Result<PlatformRequestMutation>::Failure(MakeError(RequestErrors::Stale));
-        if (IsTerminal(record->snapshot.state))
-            return Result<PlatformRequestMutation>::Success(PlatformRequestMutation::Unchanged);
-        if (!CanComplete(record->snapshot.state, terminalState) || !TerminalShapeIsValid(terminalState, value, error))
-            return Result<PlatformRequestMutation>::Failure(MakeError(RequestErrors::InvalidTransition));
+        return state_->MutateRecord(id, generation, type,
+                                    [this, id, terminalState, value = std::move(value),
+                                     error = std::move(error)](State::Record &record) mutable {
+            if (IsTerminal(record.snapshot.state))
+                return Result<PlatformRequestMutation>::Success(PlatformRequestMutation::Unchanged);
+            if (!CanComplete(record.snapshot.state, terminalState) || !TerminalShapeIsValid(terminalState, value, error))
+                return Result<PlatformRequestMutation>::Failure(MakeError(RequestErrors::InvalidTransition));
 
-        record->snapshot.state = terminalState;
-        record->snapshot.terminal = true;
-        record->snapshot.value = std::move(value);
-        record->snapshot.error = std::move(error);
-        record->snapshot.timing.terminalAt = now;
-        --state_->activeCount;
-        state_->terminalOrder.push_back(id.value);
-        state_->QueueObservers(*record);
-        state_->ExpireTerminalRecords();
-        return Result<PlatformRequestMutation>::Success(PlatformRequestMutation::Applied);
+            record.snapshot.state = terminalState;
+            record.snapshot.terminal = true;
+            record.snapshot.value = std::move(value);
+            record.snapshot.error = std::move(error);
+            record.snapshot.timing.terminalAt = std::chrono::steady_clock::now();
+            --state_->activeCount;
+            state_->terminalOrder.push_back(id.value);
+            state_->QueueObservers(record);
+            state_->ExpireTerminalRecords();
+            return Result<PlatformRequestMutation>::Success(PlatformRequestMutation::Applied);
+        });
     }
 
     /** @copydoc PlatformRequestStore::Query */
