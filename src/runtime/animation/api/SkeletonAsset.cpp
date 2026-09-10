@@ -41,21 +41,51 @@ namespace Horo::Animation {
             return static_cast<std::size_t>(std::distance(joints.begin(), found));
         }
 
+        /** @brief Validates the stable identities referenced by one joint. */
+        [[nodiscard]] bool HasValidIdentities(const SkeletonJoint &joint) noexcept {
+            const bool parentValid = !joint.parent || joint.parent->IsValid();
+            const bool mirrorValid = !joint.mirror || joint.mirror->IsValid();
+            return joint.id.IsValid() && parentValid && mirrorValid;
+        }
+
+        /** @brief Validates the closed and bounded descriptive metadata of one joint. */
+        [[nodiscard]] bool HasValidMetadata(const SkeletonJoint &joint, const SkeletonAssetLimits &limits) noexcept {
+            return IsValidName(joint.name, limits) && IsKnown(joint.retargetRole) && IsKnown(joint.side);
+        }
+
+        /** @brief Validates the finite invertible transform representation of one joint. */
+        [[nodiscard]] bool HasValidTransform(const SkeletonJoint &joint) {
+            return joint.referenceLocalTransform.TryToMatrix().HasValue() && Math::IsFinite(joint.inverseBindMatrix) &&
+                   Math::TryInverseAffine(joint.inverseBindMatrix).HasValue();
+        }
+
         /** @brief Validates stable identity, bounded metadata and local transform representation. */
         [[nodiscard]] Result<void> ValidateJointRepresentations(const std::vector<SkeletonJoint> &joints,
                                                                 const SkeletonAssetLimits &limits) {
             for (const SkeletonJoint &joint : joints) {
-                if (!joint.id.IsValid())
+                if (!HasValidIdentities(joint))
                     return Fail<void>(AnimationErrors::IdentityInvalid);
-                if ((joint.parent && !joint.parent->IsValid()) || (joint.mirror && !joint.mirror->IsValid()))
-                    return Fail<void>(AnimationErrors::IdentityInvalid);
-                if (!IsValidName(joint.name, limits) || !IsKnown(joint.retargetRole) || !IsKnown(joint.side))
+                if (!HasValidMetadata(joint, limits))
                     return Fail<void>(AnimationErrors::SkeletonMetadataInvalid);
-                if (!joint.referenceLocalTransform.TryToMatrix().HasValue() || !Math::IsFinite(joint.inverseBindMatrix) ||
-                    !Math::TryInverseAffine(joint.inverseBindMatrix).HasValue())
+                if (!HasValidTransform(joint))
                     return Fail<void>(AnimationErrors::SkeletonTransformInvalid);
             }
             return Result<void>::Success();
+        }
+
+        /** @brief Checks that a declared mirror has the opposite lateral side. */
+        [[nodiscard]] constexpr bool HasOppositeSide(const SkeletonJointSide side, const SkeletonJointSide mirrorSide) noexcept {
+            if (side == SkeletonJointSide::Left)
+                return mirrorSide == SkeletonJointSide::Right;
+            if (side == SkeletonJointSide::Right)
+                return mirrorSide == SkeletonJointSide::Left;
+            return false;
+        }
+
+        /** @brief Checks the reciprocal identity and semantic invariants of a mirror pair. */
+        [[nodiscard]] bool IsValidMirrorPair(const SkeletonJoint &joint, const SkeletonJoint &mirror) noexcept {
+            return mirror.id != joint.id && mirror.mirror == joint.id && mirror.retargetRole == joint.retargetRole &&
+                   HasOppositeSide(joint.side, mirror.side);
         }
 
         /** @brief Validates reciprocal typed mirror metadata after all joint identities are known. */
@@ -67,9 +97,7 @@ namespace Horo::Animation {
                 if (!mirrorIndex)
                     return Fail<void>(AnimationErrors::SkeletonJointMissing);
                 const SkeletonJoint &mirror = joints[*mirrorIndex];
-                const bool oppositeSides = (joint.side == SkeletonJointSide::Left && mirror.side == SkeletonJointSide::Right) ||
-                                           (joint.side == SkeletonJointSide::Right && mirror.side == SkeletonJointSide::Left);
-                if (mirror.id == joint.id || mirror.mirror != joint.id || mirror.retargetRole != joint.retargetRole || !oppositeSides)
+                if (!IsValidMirrorPair(joint, mirror))
                     return Fail<void>(AnimationErrors::SkeletonMetadataInvalid);
             }
             return Result<void>::Success();
@@ -221,37 +249,61 @@ namespace Horo::Animation {
                 ordered.push_back(std::move(joints[index]));
             return ordered;
         }
+
+        /** @brief Checks that optional reload identity agrees with the candidate asset. */
+        [[nodiscard]] bool MatchesReloadIdentity(const SkeletonAssetData &candidate, const SkeletonAssetBuildContext &context) noexcept {
+            if (!context.replacing)
+                return true;
+            return context.replacing->IsValid() && *context.replacing == candidate.skeleton;
+        }
+
+        /** @brief Checks candidate cardinalities against validated caller limits. */
+        [[nodiscard]] bool FitsLimits(const SkeletonAssetData &candidate, const SkeletonAssetLimits &limits) noexcept {
+            const bool jointCountValid = !candidate.joints.empty() && candidate.joints.size() <= limits.maximumJoints;
+            return jointCountValid && candidate.sockets.size() <= limits.maximumSockets;
+        }
+
+        /** @brief Validates admission, version, identity and caller-supplied bounds. */
+        [[nodiscard]] Result<void> ValidateBuildRequest(const SkeletonAssetData &candidate, const SkeletonAssetBuildContext &context) {
+            if (context.admission == SkeletonAssetAdmissionState::CancellationRequested)
+                return Fail<void>(AnimationErrors::SkeletonValidationCancelled);
+            if (context.admission != SkeletonAssetAdmissionState::Accepting)
+                return Fail<void>(AnimationErrors::SkeletonAdmissionRejected);
+            if (candidate.contractVersion != CurrentSkeletonAssetContractVersion)
+                return Fail<void>(AnimationErrors::SkeletonVersionUnsupported);
+            if (!candidate.skeleton.IsValid())
+                return Fail<void>(AnimationErrors::IdentityInvalid);
+            if (!MatchesReloadIdentity(candidate, context))
+                return Fail<void>(AnimationErrors::SkeletonReloadMismatch);
+            if (!AreLimitsValid(context.limits))
+                return Fail<void>(AnimationErrors::SkeletonLimitExceeded);
+            if (!FitsLimits(candidate, context.limits))
+                return Fail<void>(AnimationErrors::SkeletonLimitExceeded);
+            return Result<void>::Success();
+        }
+
+        /** @brief Validates stable joint data and derives its canonical hierarchy order. */
+        [[nodiscard]] Result<std::vector<std::size_t>> ValidateJoints(std::vector<SkeletonJoint> &joints,
+                                                                      const SkeletonAssetLimits &limits) {
+            std::ranges::sort(joints, {}, &SkeletonJoint::id);
+            if (auto validation = ValidateJointRepresentations(joints, limits); validation.HasError())
+                return Result<std::vector<std::size_t>>::Failure(validation.ErrorValue());
+            if (const auto duplicate = std::ranges::adjacent_find(joints, {}, &SkeletonJoint::id); duplicate != joints.end())
+                return Fail<std::vector<std::size_t>>(AnimationErrors::SkeletonDuplicateIdentity);
+            if (auto validation = ValidateMirrorMetadata(joints); validation.HasError())
+                return Result<std::vector<std::size_t>>::Failure(validation.ErrorValue());
+            auto parents = ResolveParents(joints);
+            if (parents.HasError())
+                return Result<std::vector<std::size_t>>::Failure(parents.ErrorValue());
+            return BuildCanonicalOrder(joints, parents.Value(), limits.maximumHierarchyDepth);
+        }
     }  // namespace
 
     /** @copydoc SkeletonAsset::Create */
     Result<SkeletonAsset> SkeletonAsset::Create(SkeletonAssetData candidate, const SkeletonAssetBuildContext &context) {
-        if (context.admission == SkeletonAssetAdmissionState::CancellationRequested)
-            return Fail<SkeletonAsset>(AnimationErrors::SkeletonValidationCancelled);
-        if (context.admission != SkeletonAssetAdmissionState::Accepting)
-            return Fail<SkeletonAsset>(AnimationErrors::SkeletonAdmissionRejected);
-        if (candidate.contractVersion != CurrentSkeletonAssetContractVersion)
-            return Fail<SkeletonAsset>(AnimationErrors::SkeletonVersionUnsupported);
-        if (!candidate.skeleton.IsValid())
-            return Fail<SkeletonAsset>(AnimationErrors::IdentityInvalid);
-        if (context.replacing && (!context.replacing->IsValid() || *context.replacing != candidate.skeleton))
-            return Fail<SkeletonAsset>(AnimationErrors::SkeletonReloadMismatch);
-        if (!AreLimitsValid(context.limits) || candidate.joints.empty() || candidate.joints.size() > context.limits.maximumJoints ||
-            candidate.sockets.size() > context.limits.maximumSockets)
-            return Fail<SkeletonAsset>(AnimationErrors::SkeletonLimitExceeded);
-
-        std::ranges::sort(candidate.joints, {}, &SkeletonJoint::id);
-        if (auto validation = ValidateJointRepresentations(candidate.joints, context.limits); validation.HasError())
+        if (auto validation = ValidateBuildRequest(candidate, context); validation.HasError())
             return Result<SkeletonAsset>::Failure(validation.ErrorValue());
-        if (const auto duplicate = std::ranges::adjacent_find(candidate.joints, {}, &SkeletonJoint::id);
-            duplicate != candidate.joints.end())
-            return Fail<SkeletonAsset>(AnimationErrors::SkeletonDuplicateIdentity);
-        if (auto validation = ValidateMirrorMetadata(candidate.joints); validation.HasError())
-            return Result<SkeletonAsset>::Failure(validation.ErrorValue());
-
-        auto resolvedParents = ResolveParents(candidate.joints);
-        if (resolvedParents.HasError())
-            return Result<SkeletonAsset>::Failure(resolvedParents.ErrorValue());
-        auto canonicalOrder = BuildCanonicalOrder(candidate.joints, resolvedParents.Value(), context.limits.maximumHierarchyDepth);
+        auto canonicalOrder = ValidateJoints(candidate.joints, context.limits);
         if (canonicalOrder.HasError())
             return Result<SkeletonAsset>::Failure(canonicalOrder.ErrorValue());
 

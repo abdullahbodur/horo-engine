@@ -25,6 +25,10 @@ namespace Horo::Animation {
             return {.skeleton = Asset<SkeletonId>(1), .joints = std::move(joints)};
         }
 
+        SkeletonAssetData ThreeJointChain() {
+            return Candidate({Joint(1), Joint(2, 1), Joint(3, 2)});
+        }
+
         template <typename Value> void RequireSkeletonError(const Result<Value> &result, const ErrorCodeDescriptor &expected) {
             REQUIRE(result.HasError());
             CHECK(result.ErrorValue().domain.Value() == "horo.animation");
@@ -93,23 +97,21 @@ namespace Horo::Animation {
     }
 
     TEST_CASE("Skeleton limits bound counts depth names and caller policy", "[unit][animation][skeleton][limits]") {
-        SkeletonAssetBuildContext context{};
-        context.limits.maximumJoints = 2;
-        RequireSkeletonError(SkeletonAsset::Create(Candidate({Joint(1), Joint(2, 1), Joint(3, 2)}), context),
-                             AnimationErrors::SkeletonLimitExceeded);
+        SkeletonAssetBuildContext jointLimitContext{};
+        jointLimitContext.limits.maximumJoints = 2;
+        RequireSkeletonError(SkeletonAsset::Create(ThreeJointChain(), jointLimitContext), AnimationErrors::SkeletonLimitExceeded);
 
-        context = {};
-        context.limits.maximumHierarchyDepth = 2;
-        RequireSkeletonError(SkeletonAsset::Create(Candidate({Joint(1), Joint(2, 1), Joint(3, 2)}), context),
-                             AnimationErrors::SkeletonLimitExceeded);
+        SkeletonAssetBuildContext depthLimitContext{};
+        depthLimitContext.limits.maximumHierarchyDepth = 2;
+        RequireSkeletonError(SkeletonAsset::Create(ThreeJointChain(), depthLimitContext), AnimationErrors::SkeletonLimitExceeded);
 
-        context = {};
-        context.limits.maximumNameBytes = 4;
-        RequireSkeletonError(SkeletonAsset::Create(Candidate({Joint(1)}), context), AnimationErrors::SkeletonMetadataInvalid);
+        SkeletonAssetBuildContext nameLimitContext{};
+        nameLimitContext.limits.maximumNameBytes = 4;
+        RequireSkeletonError(SkeletonAsset::Create(Candidate({Joint(1)}), nameLimitContext), AnimationErrors::SkeletonMetadataInvalid);
 
-        context = {};
-        context.limits.maximumJoints = SkeletonAssetHardLimits::Joints + 1U;
-        RequireSkeletonError(SkeletonAsset::Create(Candidate({Joint(1)}), context), AnimationErrors::SkeletonLimitExceeded);
+        SkeletonAssetBuildContext hardLimitContext{};
+        hardLimitContext.limits.maximumJoints = SkeletonAssetHardLimits::Joints + 1U;
+        RequireSkeletonError(SkeletonAsset::Create(Candidate({Joint(1)}), hardLimitContext), AnimationErrors::SkeletonLimitExceeded);
         RequireSkeletonError(SkeletonAsset::Create(Candidate({})), AnimationErrors::SkeletonLimitExceeded);
     }
 
