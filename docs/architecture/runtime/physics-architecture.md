@@ -591,7 +591,11 @@ vocabulary and selects `Off`, `Core` or `Detailed`; an unavailable required bind
 rejects explicitly, while optional unavailable and policy-off bindings remain
 distinct from a zero measurement. World activation creates the binding on the
 Physics owner thread; moving the binding never transfers that affinity. The
-fixed-step path performs no string lookup,
+world generation is validation evidence, never a metric dimension: process metrics
+remain intentionally aggregate and low-cardinality. Valid dropped-event and
+overflow evidence at the admitted bounds is still published; only impossible
+one-over snapshots reject before invoking a provider. The fixed-step path performs
+no string lookup,
 dimension binding, clock read or heap growth. Telemetry contention, saturation,
 shutdown and stale internal handles may lose observations but cannot influence
 simulation admission, order, state or determinism. Detailed stage timings are

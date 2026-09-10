@@ -90,8 +90,8 @@ namespace Horo::Physics {
                     .queryCount = maximum,
                     .commandDepth = maximum,
                     .eventDepth = maximum,
-                    .droppedEventCount = 2,
-                    .overflowCount = 1};
+                    .droppedEventCount = maximum,
+                    .overflowCount = 2};
         }
 
         [[nodiscard]] Result<PhysicsMetricBinding> AvailableBinding(const Telemetry::MetricCollectionLevel level) {
