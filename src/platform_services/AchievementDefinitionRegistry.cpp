@@ -1,6 +1,7 @@
 #include "Horo/PlatformServices/AchievementDefinitionRegistry.h"
 
 #include <algorithm>
+#include <format>
 #include <memory>
 #include <new>
 #include <utility>
@@ -48,7 +49,7 @@ namespace Horo::PlatformServices {
 
         [[nodiscard]] Error FieldError(const ErrorCodeDescriptor &descriptor, const std::size_t index, const std::string_view field,
                                        const std::string_view message) {
-            return DiagnosticError(descriptor, "definitions[" + std::to_string(index) + "]." + std::string{field}, message);
+            return DiagnosticError(descriptor, std::format("definitions[{}].{}", index, field), message);
         }
 
         [[nodiscard]] Error DocumentError(const ErrorCodeDescriptor &descriptor, const std::string_view field,
@@ -125,8 +126,8 @@ namespace Horo::PlatformServices {
             if (!definition.id.IsValid())
                 return Result<void>::Failure(
                     FieldError(AchievementDefinitionErrors::InvalidDefinition, index, "id", "Achievement ID must be nonzero."));
-            const PlatformStableIdDeclaration *ledgerEntry = FindLedgerEntry(stableIds, definition.id);
-            if (ledgerEntry == nullptr || ledgerEntry->state != PlatformStableIdState::Active)
+            if (const PlatformStableIdDeclaration *ledgerEntry = FindLedgerEntry(stableIds, definition.id);
+                ledgerEntry == nullptr || ledgerEntry->state != PlatformStableIdState::Active)
                 return Result<void>::Failure(FieldError(AchievementDefinitionErrors::UnknownIdentity, index, "id",
                                                         "Achievement ID must reference one active stable ledger entry."));
             return Result<void>::Success();
@@ -347,8 +348,7 @@ namespace Horo::PlatformServices {
         if (replacement.HasError())
             return replacement;
         for (const AchievementDefinition &prior : previous.Definitions()) {
-            const auto current = replacement.Value().Find(prior.id);
-            if (current.HasValue()) {
+            if (const auto current = replacement.Value().Find(prior.id); current.HasValue()) {
                 if (!ImmutableSemanticsMatch(prior, *current.Value()))
                     return Result<AchievementDefinitionRegistry>::Failure(MakeError(AchievementDefinitionErrors::ImmutableContractChanged));
                 continue;
