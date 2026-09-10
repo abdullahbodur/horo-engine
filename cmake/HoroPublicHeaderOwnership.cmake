@@ -225,6 +225,10 @@ horo_configure_target_header_boundary(HoroAI PUBLIC_HEADERS
     Horo/AI/AIIdentity.h
     Horo/AI/BlackboardSchema.h
 )
+horo_configure_target_header_boundary(HoroPCG PUBLIC_HEADERS
+    Horo/PCG/PCGErrors.h
+    Horo/PCG/PCGIdentity.h
+)
 horo_configure_target_header_boundary(HoroVfxApi PUBLIC_HEADERS
     Horo/Vfx/VfxErrors.h
     Horo/Vfx/VfxIdentity.h

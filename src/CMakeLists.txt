@@ -441,6 +441,14 @@ add_library(HoroEngine::AI ALIAS HoroAI)
 target_compile_features(HoroAI PUBLIC cxx_std_20)
 target_link_libraries(HoroAI PUBLIC HoroEngine::Foundation)
 
+add_library(HoroPCG STATIC
+        runtime/pcg/api/PCGErrors.cpp
+        runtime/pcg/api/PCGIdentity.cpp
+)
+add_library(HoroEngine::PCG ALIAS HoroPCG)
+target_compile_features(HoroPCG PUBLIC cxx_std_20)
+target_link_libraries(HoroPCG PUBLIC HoroEngine::Foundation)
+
 add_library(HoroVfxApi STATIC
         runtime/vfx/api/VfxErrors.cpp
         runtime/vfx/api/VfxIdentity.cpp

@@ -341,6 +341,22 @@ PCG-7.2–PCG-7.6. Hierarchical/subgraph composition (PCG-7.7) and custom execut
 providers (PCG-7.8) are post-1.0. They do not gate M5 and are rejected under version-1
 plan/profile identities.
 
+## Stable Identity Contract
+
+PCG source persists distinct non-zero graph, node and pin identities. Names, paths,
+array positions, graph-layout coordinates, object addresses and container allocation
+order never participate in identity. A graph generation pairs its stable graph
+identity with an exact non-zero durable revision. Execution identity includes that
+generation, and generated-output identity additionally includes the stable output node,
+pin, source sample and deterministic ordinal.
+
+All identity values have fixed-width canonical network-byte-order encodings. Reload
+and deterministic recook preserve the authored values exactly. Resolution compares the
+complete generation and execution association, so completion or output from a retired
+revision cannot resolve into its replacement. Process-local registry handles, worker
+tokens, callbacks, filesystem paths and backend-native values remain outside this
+durable contract and are rebuilt by their owners after load.
+
 ## Related Documents
 
 - [PCG Ownership, Authority, Tier and Lifecycle](../../adr/151-pcg-ownership-authority-tier-and-lifecycle.md)
