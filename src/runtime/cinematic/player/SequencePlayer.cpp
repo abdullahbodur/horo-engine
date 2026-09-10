@@ -21,8 +21,8 @@ namespace Horo::Cinematic {
         }
 
         [[nodiscard]] constexpr bool IsControllable(const SequencePlaybackState state) noexcept {
-            return state == SequencePlaybackState::Ready || state == SequencePlaybackState::Playing ||
-                   state == SequencePlaybackState::Paused;
+            using enum SequencePlaybackState;
+            return state == Ready || state == Playing || state == Paused;
         }
     }  // namespace
 
