@@ -457,6 +457,14 @@ add_library(HoroEngine::VfxApi ALIAS HoroVfxApi)
 target_compile_features(HoroVfxApi PUBLIC cxx_std_20)
 target_link_libraries(HoroVfxApi PUBLIC HoroEngine::Foundation)
 
+add_library(HoroDestructionApi STATIC
+        runtime/destruction/api/DestructionErrors.cpp
+        runtime/destruction/api/DestructionIdentity.cpp
+)
+add_library(HoroEngine::DestructionApi ALIAS HoroDestructionApi)
+target_compile_features(HoroDestructionApi PUBLIC cxx_std_20)
+target_link_libraries(HoroDestructionApi PUBLIC HoroEngine::Foundation HoroEngine::Assets)
+
 add_library(HoroCinematicModel STATIC
         runtime/cinematic/model/CinematicErrors.cpp
         runtime/cinematic/model/CinematicIdentity.cpp

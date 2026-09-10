@@ -226,3 +226,19 @@ associations, with a Foundation-only dependency. Its canonical encodings cannot
 represent pointers, container positions, runtime registry handles, callbacks,
 filesystem paths, or backend-native values. Existing callers require no migration
 because this is the first published PCG API slice.
+
+## Destruction Identity Boundary
+
+`HoroEngine::DestructionApi` owns `Horo/Destruction/DestructionIdentity.h` and
+`Horo/Destruction/DestructionErrors.h`. Its public dependencies are limited to
+Foundation and Assets for typed results/errors, the shared SHA-256 value and the
+path-independent `AssetId`. Physics, Render, RuntimeScene and native provider headers
+remain outside the public boundary.
+
+This `[DFR-001.2]` slice introduces identity values and validation only; it does not
+create a runtime world, registry, fracture artifact, physics body or render resource.
+No production caller requires migration because the destruction target did not
+previously exist. Future cook/runtime targets must consume this owner rather than
+duplicate identities, expose native handles or infer stable identity from names, paths
+or table positions. The standalone Destruction API test consumer verifies the staged
+header dependency boundary.
