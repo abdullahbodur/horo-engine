@@ -18,12 +18,15 @@ namespace Horo::PlatformServices::DefinitionRegistryDetail {
         });
     }
 
+    [[nodiscard]] inline bool IsLocalizationCharacter(const char value) noexcept {
+        const bool lowerCaseLetter = value >= 'a' && value <= 'z';
+        const bool digit = value >= '0' && value <= '9';
+        return lowerCaseLetter || digit || value == '_' || value == '.' || value == '-';
+    }
+
     [[nodiscard]] inline bool IsLocalizationKey(const std::string_view key, const std::uint32_t maximumBytes) noexcept {
-        const auto validCharacter = [](const char value) {
-            return (value >= 'a' && value <= 'z') || (value >= '0' && value <= '9') || value == '_' || value == '.' || value == '-';
-        };
         return !key.empty() && key.size() <= maximumBytes && key.front() >= 'a' && key.front() <= 'z' &&
-               std::ranges::all_of(key.substr(1), validCharacter);
+               std::ranges::all_of(key.substr(1), IsLocalizationCharacter);
     }
 
     [[nodiscard]] inline Error MakeDiagnostic(const ErrorCodeDescriptor &descriptor, std::string source, const std::string_view message) {

@@ -50,19 +50,27 @@ namespace Horo::PlatformServices {
             writer.AddU64(static_cast<std::uint64_t>(range.maximum));
         }
 
+        template <typename Definition> void AddProgressionSemantics(FingerprintWriter &writer, const Definition &definition) {
+            writer.AddU64(definition.id.value);
+            writer.AddByte(static_cast<std::uint8_t>(definition.authority));
+            writer.AddByte(static_cast<std::uint8_t>(definition.valueKind));
+            AddRange(writer, definition.range);
+        }
+
+        void AddPresentation(FingerprintWriter &writer, const std::string_view localizationKey, const bool hidden) {
+            writer.AddText(localizationKey);
+            writer.AddByte(hidden ? 1U : 0U);
+        }
+
         [[nodiscard]] Sha256Digest Fingerprint(const Sha256Digest &stableIds, const std::span<const StatDefinition> definitions) {
             FingerprintWriter writer{64U + definitions.size() * 48U};
             writer.AddText("horo.platform-services.stat-definitions.v1");
             writer.AddDigest(stableIds);
             writer.AddU32(static_cast<std::uint32_t>(definitions.size()));
             for (const StatDefinition &definition : definitions) {
-                writer.AddU64(definition.id.value);
-                writer.AddByte(static_cast<std::uint8_t>(definition.authority));
-                writer.AddByte(static_cast<std::uint8_t>(definition.valueKind));
-                AddRange(writer, definition.range);
+                AddProgressionSemantics(writer, definition);
                 writer.AddByte(static_cast<std::uint8_t>(definition.mutation));
-                writer.AddText(definition.localizationKey);
-                writer.AddByte(definition.hidden ? 1U : 0U);
+                AddPresentation(writer, definition.localizationKey, definition.hidden);
             }
             return writer.Finish();
         }
@@ -73,16 +81,12 @@ namespace Horo::PlatformServices {
             writer.AddDigest(stableIds);
             writer.AddU32(static_cast<std::uint32_t>(definitions.size()));
             for (const LeaderboardDefinition &definition : definitions) {
-                writer.AddU64(definition.id.value);
-                writer.AddByte(static_cast<std::uint8_t>(definition.authority));
-                writer.AddByte(static_cast<std::uint8_t>(definition.valueKind));
-                AddRange(writer, definition.range);
+                AddProgressionSemantics(writer, definition);
                 writer.AddByte(static_cast<std::uint8_t>(definition.ordering));
                 writer.AddByte(definition.sourceStat.has_value() ? 1U : 0U);
                 if (definition.sourceStat)
                     writer.AddU64(definition.sourceStat->value);
-                writer.AddText(definition.localizationKey);
-                writer.AddByte(definition.hidden ? 1U : 0U);
+                AddPresentation(writer, definition.localizationKey, definition.hidden);
             }
             return writer.Finish();
         }
@@ -96,8 +100,7 @@ namespace Horo::PlatformServices {
                 writer.AddU64(definition.id.value);
                 writer.AddByte(static_cast<std::uint8_t>(definition.detailPolicy));
                 writer.AddU32(definition.maximumDetailUtf8Bytes);
-                writer.AddText(definition.localizationKey);
-                writer.AddByte(definition.hidden ? 1U : 0U);
+                AddPresentation(writer, definition.localizationKey, definition.hidden);
             }
             return writer.Finish();
         }
