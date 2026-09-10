@@ -293,6 +293,33 @@ namespace Horo::Runtime {
                             SaveDiagnosticOutcome::AdmissionRejected, SaveDiagnosticCommitOutcome::NotCommitted, {}, {}, malformed);
             REQUIRE(record.HasValue());
             REQUIRE(record.Value().PrivateEvidence().malformed);
+
+            const std::array validUtf8Boundaries{
+                std::string{"\xc2\x80", 2},
+                std::string{"\xe0\xa0\x80", 3},
+                std::string{"\xf0\x90\x80\x80", 4},
+                std::string{"\xf4\x8f\xbf\xbf", 4},
+            };
+            for (const auto &evidence : validUtf8Boundaries) {
+                record = Record(MakeError(SaveErrors::SaveRootUnavailable), SaveFailureDisposition::RequireUserAction,
+                                SaveDiagnosticOutcome::AdmissionRejected, SaveDiagnosticCommitOutcome::NotCommitted, {}, {}, evidence);
+                REQUIRE(record.HasValue());
+                REQUIRE_FALSE(record.Value().PrivateEvidence().malformed);
+            }
+
+            const std::array malformedUtf8{
+                std::string{"\x1b", 1},
+                std::string{"\xc0\x80", 2},
+                std::string{"\xed\xa0\x80", 3},
+                std::string{"\xf4\x90\x80\x80", 4},
+                std::string{"\xe2\x82", 2},
+            };
+            for (const auto &evidence : malformedUtf8) {
+                record = Record(MakeError(SaveErrors::SaveRootUnavailable), SaveFailureDisposition::RequireUserAction,
+                                SaveDiagnosticOutcome::AdmissionRejected, SaveDiagnosticCommitOutcome::NotCommitted, {}, {}, evidence);
+                REQUIRE(record.HasValue());
+                REQUIRE(record.Value().PrivateEvidence().malformed);
+            }
         }
 
         TEST_CASE("Runtime Save diagnostic generations fail closed and retained records remain unchanged", "[save][diagnostics]") {

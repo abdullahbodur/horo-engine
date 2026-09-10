@@ -136,13 +136,13 @@ namespace Horo::Runtime {
         }
 
         bool ContextIsValid(const std::span<const SaveDiagnosticContextEntry> context, const SaveDiagnosticOutcome outcome) noexcept {
-            using Key = SaveDiagnosticContextKey;
+            using enum SaveDiagnosticContextKey;
             if (context.size() > MaximumSaveDiagnosticContextEntries || !ContextEntriesAreCanonical(context))
                 return false;
-            const bool hasOperation = HasContextKey(context, Key::Operation);
+            const bool hasOperation = HasContextKey(context, Operation);
             if (outcome == SaveDiagnosticOutcome::AdmissionRejected)
                 return !hasOperation;
-            return hasOperation && HasContextKey(context, Key::Namespace) && HasContextKey(context, Key::Slot);
+            return hasOperation && HasContextKey(context, Namespace) && HasContextKey(context, Slot);
         }
 
         bool PartialFactIsValid(const SavePartialDataFact &fact) noexcept {
@@ -214,11 +214,11 @@ namespace Horo::Runtime {
 
         std::optional<Utf8Lead> DecodeUtf8Lead(const std::byte lead) noexcept {
             const auto value = std::to_integer<std::uint8_t>(lead);
-            if (value >= 0xc2U && value <= 0xdfU)
+            if ((value & 0xe0U) == 0xc0U && value >= 0xc2U)
                 return Utf8Lead{1, std::to_integer<std::uint8_t>(lead & std::byte{0x1f})};
-            if (value >= 0xe0U && value <= 0xefU)
+            if ((value & 0xf0U) == 0xe0U)
                 return Utf8Lead{2, std::to_integer<std::uint8_t>(lead & std::byte{0x0f})};
-            if (value >= 0xf0U && value <= 0xf4U)
+            if ((value & 0xf8U) == 0xf0U && value <= 0xf4U)
                 return Utf8Lead{3, std::to_integer<std::uint8_t>(lead & std::byte{0x07})};
             return std::nullopt;
         }
@@ -315,14 +315,14 @@ namespace Horo::Runtime {
         bool GenerationsMatch(const SaveDiagnosticRecord &record, const std::uint64_t registryGeneration,
                               const std::uint64_t namespaceRevision, const SlotGenerationId &slotGeneration,
                               const std::uint64_t archiveGeneration) noexcept {
-            using Key = SaveDiagnosticContextKey;
-            if (!ContextMatches<OperationId>(record, Key::RegistryGeneration, registryGeneration))
+            using enum SaveDiagnosticContextKey;
+            if (!ContextMatches<OperationId>(record, RegistryGeneration, registryGeneration))
                 return false;
-            if (!ContextMatches<OperationId>(record, Key::NamespaceRevision, namespaceRevision))
+            if (!ContextMatches<OperationId>(record, NamespaceRevision, namespaceRevision))
                 return false;
-            if (!ContextMatches<SlotGenerationId>(record, Key::SlotGeneration, slotGeneration))
+            if (!ContextMatches<SlotGenerationId>(record, SlotGeneration, slotGeneration))
                 return false;
-            return ContextMatches<OperationId>(record, Key::ArchiveGeneration, archiveGeneration);
+            return ContextMatches<OperationId>(record, ArchiveGeneration, archiveGeneration);
         }
     }  // namespace
 
