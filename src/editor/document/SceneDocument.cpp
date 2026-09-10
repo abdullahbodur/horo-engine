@@ -556,20 +556,6 @@ namespace Horo::Editor {
             }, delta);
         }
 
-        void ApplyDelta(std::vector<SceneObjectSnapshot> &objects, std::vector<ScenePrefabInstance> &instances,
-                        const SceneCommandDelta &delta) {
-            std::visit([&objects, &instances]<typename Delta>(const Delta &typedDelta) {
-                if constexpr (std::is_same_v<Delta, CreatedPrefabInstanceDelta> || std::is_same_v<Delta, PrefabInstanceTransformDelta> ||
-                              std::is_same_v<Delta, PrefabInstanceReparentDelta> || std::is_same_v<Delta, DeletedPrefabInstancesDelta>) {
-                    ApplyPrefabTypedDelta(instances, typedDelta);
-                } else {
-                    ApplyTypedDelta(objects, typedDelta);
-                    if constexpr (std::is_same_v<Delta, DeletedObjectsDelta>)
-                        ApplyPrefabTypedDelta(instances, typedDelta);
-                }
-            }, delta);
-        }
-
         void RevertTypedDelta(std::vector<SceneObjectSnapshot> &objects, const CreatedObjectDelta &delta) {
             std::erase_if(objects, [&delta](const SceneObjectSnapshot &object) {
                 return object.id == delta.object.id;
@@ -661,18 +647,39 @@ namespace Horo::Editor {
             RestorePrefabInstances(instances, delta.prefabInstances);
         }
 
-        void RevertDelta(std::vector<SceneObjectSnapshot> &objects, std::vector<ScenePrefabInstance> &instances,
+        template <bool Revert>
+        void MutateDelta(std::vector<SceneObjectSnapshot> &objects, std::vector<ScenePrefabInstance> &instances,
                          const SceneCommandDelta &delta) {
             std::visit([&objects, &instances]<typename Delta>(const Delta &typedDelta) {
                 if constexpr (std::is_same_v<Delta, CreatedPrefabInstanceDelta> || std::is_same_v<Delta, PrefabInstanceTransformDelta> ||
                               std::is_same_v<Delta, PrefabInstanceReparentDelta> || std::is_same_v<Delta, DeletedPrefabInstancesDelta>) {
-                    RevertPrefabTypedDelta(instances, typedDelta);
-                } else {
-                    RevertTypedDelta(objects, typedDelta);
-                    if constexpr (std::is_same_v<Delta, DeletedObjectsDelta>)
+                    if constexpr (Revert)
                         RevertPrefabTypedDelta(instances, typedDelta);
+                    else
+                        ApplyPrefabTypedDelta(instances, typedDelta);
+                } else {
+                    if constexpr (Revert)
+                        RevertTypedDelta(objects, typedDelta);
+                    else
+                        ApplyTypedDelta(objects, typedDelta);
+                    if constexpr (std::is_same_v<Delta, DeletedObjectsDelta>) {
+                        if constexpr (Revert)
+                            RevertPrefabTypedDelta(instances, typedDelta);
+                        else
+                            ApplyPrefabTypedDelta(instances, typedDelta);
+                    }
                 }
             }, delta);
+        }
+
+        void ApplyDelta(std::vector<SceneObjectSnapshot> &objects, std::vector<ScenePrefabInstance> &instances,
+                        const SceneCommandDelta &delta) {
+            MutateDelta<false>(objects, instances, delta);
+        }
+
+        void RevertDelta(std::vector<SceneObjectSnapshot> &objects, std::vector<ScenePrefabInstance> &instances,
+                         const SceneCommandDelta &delta) {
+            MutateDelta<true>(objects, instances, delta);
         }
 
         [[nodiscard]] Result<void> ValidateLoadedBehaviors(const SceneObjectSnapshot &object,
