@@ -36,8 +36,8 @@ namespace Horo::Navigation {
         }
 
         bool AggregateEnvelopeFits(const NavigationCapacityLimits &capacities, const NavigationQueryRequirement &maximumQuery) noexcept {
-            std::uint64_t residentBytes{};
-            if (!CheckedMultiply(static_cast<std::uint64_t>(capacities.maximumResidentTiles), capacities.maximumBytesPerResidentTile,
+            if (std::uint64_t residentBytes{};
+                !CheckedMultiply(static_cast<std::uint64_t>(capacities.maximumResidentTiles), capacities.maximumBytesPerResidentTile,
                                  residentBytes) ||
                 residentBytes > capacities.maximumResidentMemoryBytes)
                 return false;
@@ -156,7 +156,7 @@ namespace Horo::Navigation {
     /** @copydoc ResolvedNavigationProjectProfile::ResolvedNavigationProjectProfile */
     ResolvedNavigationProjectProfile::ResolvedNavigationProjectProfile(const NavigationProjectProfile &project,
                                                                        std::optional<NavigationPreviewPreferenceRevision> previewRevision,
-                                                                       NavigationCapacityLimits capacities) noexcept
+                                                                       const NavigationCapacityLimits &capacities) noexcept
         : id_(project.Id()), projectRevision_(project.Revision()), projectFingerprint_(project.Fingerprint()),
           previewRevision_(previewRevision), capacities_(capacities), maximumQuery_(project.MaximumQuery()) {}
 
@@ -208,8 +208,8 @@ namespace Horo::Navigation {
 
     /** @copydoc AdmitNavigationCapacity */
     Result<void> AdmitNavigationCapacity(const ResolvedNavigationProjectProfile &profile, const NavigationCapacityUsage &usage) {
-        const auto &limits = profile.Capacities();
-        if (usage.agents > limits.maximumAgents || usage.surfaces > limits.maximumSurfaces ||
+        if (const auto &limits = profile.Capacities();
+            usage.agents > limits.maximumAgents || usage.surfaces > limits.maximumSurfaces ||
             usage.residentTiles > limits.maximumResidentTiles || usage.concurrentQueries > limits.maximumConcurrentQueries ||
             usage.bytesPerResidentTile > limits.maximumBytesPerResidentTile ||
             usage.residentMemoryBytes > limits.maximumResidentMemoryBytes || usage.workUnitsThisTick > limits.maximumWorkUnitsPerTick)

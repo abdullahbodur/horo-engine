@@ -143,7 +143,7 @@ namespace Horo::Navigation {
 
         ResolvedNavigationProjectProfile(const NavigationProjectProfile &project,
                                          std::optional<NavigationPreviewPreferenceRevision> previewRevision,
-                                         NavigationCapacityLimits capacities) noexcept;
+                                         const NavigationCapacityLimits &capacities) noexcept;
 
         NavigationProjectProfileId id_;
         NavigationProjectProfileRevision projectRevision_;
