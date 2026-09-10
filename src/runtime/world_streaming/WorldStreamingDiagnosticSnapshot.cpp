@@ -98,17 +98,22 @@ namespace Horo::WorldStreaming {
             return Result<void>::Success();
         }
 
-        using EventValidator = Result<void> (*)(const StreamingDiagnosticDecisionEvent &);
-
         Result<void> ValidateEventSemantics(const StreamingDiagnosticDecisionEvent &event) {
-            static constexpr std::array<EventValidator, 3> validators{
-                ValidateLifecycleEvent,
-                ValidateAdmissionEvent,
-                ValidateRollbackEvent,
-            };
             if (!IsKnownCategory(event.category) || !IsKnownSeverity(event.severity))
                 return Internal::Failure<void>(WorldStreamingErrors::DiagnosticProjectionUnsupported);
-            if (const auto category = validators[static_cast<std::size_t>(event.category)](event); category.HasError())
+            Result<void> category = Result<void>::Success();
+            switch (event.category) {
+                case StreamingDiagnosticEventCategory::CellLifecycle:
+                    category = ValidateLifecycleEvent(event);
+                    break;
+                case StreamingDiagnosticEventCategory::Admission:
+                    category = ValidateAdmissionEvent(event);
+                    break;
+                case StreamingDiagnosticEventCategory::Rollback:
+                    category = ValidateRollbackEvent(event);
+                    break;
+            }
+            if (category.HasError())
                 return category;
             if (event.transition && !IsLegalTransition(*event.transition))
                 return Internal::Failure<void>(WorldStreamingErrors::CellStateTransitionInvalid);
@@ -126,15 +131,15 @@ namespace Horo::WorldStreaming {
             return Result<void>::Success();
         }
 
+        bool OperationLess(const StreamingCellOperationHandle &left, const StreamingCellOperationHandle &right) noexcept;
+
         Result<void> ValidateEventCellCorrelation(const StreamingDiagnosticDecisionEvent &event,
                                                   const std::span<const StreamingCellStateRecord> cells) {
             if (event.category == StreamingDiagnosticEventCategory::Admission)
                 return Result<void>::Success();
-            const auto matchingCell = std::ranges::find_if(cells, [&event](const StreamingCellStateRecord &cell) {
-                return cell.operation == event.operation;
-            });
-            return matchingCell != cells.end() ? Result<void>::Success()
-                                               : Internal::Failure<void>(WorldStreamingErrors::DiagnosticProjectionStale);
+            const bool matchingCell =
+                std::ranges::binary_search(cells, event.operation, OperationLess, &StreamingCellStateRecord::operation);
+            return matchingCell ? Result<void>::Success() : Internal::Failure<void>(WorldStreamingErrors::DiagnosticProjectionStale);
         }
 
         /** @brief Orders exact operation handles by persistent cell key, generation and operation identity. */
@@ -266,24 +271,25 @@ namespace Horo::WorldStreaming {
                     return Internal::Failure<void>(WorldStreamingErrors::DiagnosticProjectionUnsupported);
                 if (!MatchesOwner(failure.operation.fence, owner))
                     return Internal::Failure<void>(WorldStreamingErrors::DiagnosticProjectionStale);
-                const auto matchingCell = std::ranges::find_if(cells, [&failure](const StreamingCellStateRecord &cell) {
-                    return cell.operation == failure.operation;
-                });
-                if (matchingCell == cells.end())
+                if (!std::ranges::binary_search(cells, failure.operation, OperationLess, &StreamingCellStateRecord::operation))
                     return Internal::Failure<void>(WorldStreamingErrors::DiagnosticProjectionStale);
             }
             return Result<void>::Success();
         }
 
-        /** @brief Validates every bounded row against the same captured authority. */
-        Result<void> ValidateRecords(const WorldStreamingDiagnosticSnapshotInput &input, const WorldStreamingDiagnosticRows &rows) {
+        /** @brief Validates records that do not require a sorted cell lookup. */
+        Result<void> ValidateBaseRecords(const WorldStreamingDiagnosticSnapshotInput &input, const WorldStreamingDiagnosticRows &rows) {
             if (const auto validSources = ValidateSources(rows.sources, input.owner); validSources.HasError())
                 return validSources;
-            if (const auto validCells = ValidateCells(rows.cells, input.owner); validCells.HasError())
-                return validCells;
-            if (const auto validFailures = ValidateFailures(rows.failures, rows.cells, input.owner); validFailures.HasError())
+            return ValidateCells(rows.cells, input.owner);
+        }
+
+        /** @brief Validates failure/event correlation against canonical sorted cell records. */
+        Result<void> ValidateCorrelatedRecords(const WorldStreamingDiagnosticSnapshotInput &input, const WorldStreamingDiagnosticRows &rows,
+                                               const std::span<const StreamingCellStateRecord> sortedCells) {
+            if (const auto validFailures = ValidateFailures(rows.failures, sortedCells, input.owner); validFailures.HasError())
                 return validFailures;
-            return ValidateEvents(rows.events, rows.cells, input);
+            return ValidateEvents(rows.events, sortedCells, input);
         }
 
         /** @brief Checks canonicalized records for competing identities. */
@@ -349,7 +355,7 @@ namespace Horo::WorldStreaming {
                                                                                       const WorldStreamingDiagnosticRows &rows) {
         if (const auto validInput = ValidateSnapshotInput(input, policy, sample, rows); validInput.HasError())
             return Result<WorldStreamingDiagnosticSnapshot>::Failure(validInput.ErrorValue());
-        if (const auto validRecords = ValidateRecords(input, rows); validRecords.HasError())
+        if (const auto validRecords = ValidateBaseRecords(input, rows); validRecords.HasError())
             return Result<WorldStreamingDiagnosticSnapshot>::Failure(validRecords.ErrorValue());
 
         try {
@@ -366,6 +372,8 @@ namespace Horo::WorldStreaming {
             std::ranges::sort(ownedCells, [](const StreamingCellStateRecord &left, const StreamingCellStateRecord &right) {
                 return OperationLess(left.operation, right.operation);
             });
+            if (const auto validRecords = ValidateCorrelatedRecords(input, rows, ownedCells); validRecords.HasError())
+                return Result<WorldStreamingDiagnosticSnapshot>::Failure(validRecords.ErrorValue());
             std::ranges::sort(ownedFailures,
                               [](const StreamingDiagnosticFailureRecord &left, const StreamingDiagnosticFailureRecord &right) {
                 return OperationLess(left.operation, right.operation);
