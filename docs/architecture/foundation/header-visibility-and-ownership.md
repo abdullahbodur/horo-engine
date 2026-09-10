@@ -118,6 +118,18 @@ Future frontend/provider targets consume this boundary by linking PlatformServic
 they must not duplicate request state, retain a provider object in the handle, or rely
 on repository-wide include visibility.
 
+## PLS-002.2 Migration Notes
+
+`HoroEngine::PlatformServices` additionally owns
+`Horo/PlatformServices/PlatformServiceInterfaces.h` and
+`Horo/PlatformServices/PlatformServicesBackend.h`. These are the first published
+backend bundle and service interfaces, so no existing caller signature changes. Future
+composition roots must inspect and validate the complete capability snapshot before
+calling `Activate`; they consume unavailable services through typed failures instead of
+nullable pointers. Private provider adapters implement the Horo interfaces while SDK
+types, native handles, allocator ownership, callbacks and credentials stay behind the
+ADR-131 extension boundary.
+
 ## XRA-001.2 Migration Notes
 
 `HoroEngine::XRApi` owns the four public headers under `Horo/XR/` and depends

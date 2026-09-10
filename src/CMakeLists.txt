@@ -94,6 +94,7 @@ target_link_libraries(HoroPlatform PUBLIC HoroEngine::Foundation)
 add_library(HoroPlatformServices STATIC
         platform_services/PlatformRequest.cpp
         platform_services/PlatformRequestErrors.cpp
+        platform_services/PlatformServicesBackend.cpp
 )
 add_library(HoroEngine::PlatformServices ALIAS HoroPlatformServices)
 target_compile_features(HoroPlatformServices PUBLIC cxx_std_20)

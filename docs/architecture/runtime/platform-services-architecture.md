@@ -907,6 +907,15 @@ exactly one compatible private binding; `Unavailable` has no binding and exactly
 reason. Missing, duplicate or mismatched bindings fail composition. Public callers do
 not inspect provider pointers, backend names or SDK flags.
 
+Implementation status on 10 September 2026: PLS-002.2 publishes the version-1
+backend-neutral capability bundle and typed achievement, leaderboard/stat, cloud,
+presence, friends and session interfaces in `HoroEngine::PlatformServices`. Candidate
+inspection is inert; `ActivatePlatformServicesBackend` validates interface version,
+provider/generation identity, exact service coverage, finite limits, binding/reason
+coherence and required-service policy before invoking activation. Unavailable services
+remain real interface methods that return typed failure, never nullable bindings.
+Private SDK objects and ABI tokens remain outside this C++ surface under ADR-131.
+
 Installed/provider capability and effective subject access are distinct immutable
 snapshots; admission intersects them instead of collapsing them into a boolean.
 Connectivity and rate-limit state remain dynamic request preconditions. Provider

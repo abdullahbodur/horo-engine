@@ -1,0 +1,177 @@
+#pragma once
+
+/**
+ * @file PlatformServiceInterfaces.h
+ * @brief Backend-neutral Platform Services identities, requests, results, and narrow service interfaces.
+ */
+
+#include "Horo/PlatformServices/PlatformRequest.h"
+
+#include <compare>
+#include <cstddef>
+#include <cstdint>
+#include <string>
+#include <vector>
+
+namespace Horo::PlatformServices {
+    /** @brief Strong nonzero project-authored identity. */
+    template <typename Tag> struct PlatformStableId final {
+        std::uint64_t value{}; /**< Zero is reserved and invalid. */
+
+        /** @brief Checks representation. @return Whether the ID is nonzero. */
+        [[nodiscard]] constexpr bool IsValid() const noexcept {
+            return value != 0;
+        }
+
+        [[nodiscard]] constexpr auto operator<=>(const PlatformStableId &) const noexcept = default;
+    };
+
+    struct AchievementIdTag;
+    struct LeaderboardIdTag;
+    struct StatIdTag;
+    struct CloudObjectIdTag;
+    struct PresenceStatusIdTag;
+    using AchievementId = PlatformStableId<AchievementIdTag>;
+    using LeaderboardId = PlatformStableId<LeaderboardIdTag>;
+    using StatId = PlatformStableId<StatIdTag>;
+    using CloudObjectId = PlatformStableId<CloudObjectIdTag>;
+    using PresenceStatusId = PlatformStableId<PresenceStatusIdTag>;
+
+    /** @brief Ephemeral subject capability fenced to one provider session generation. */
+    struct PlatformSubjectHandle final {
+        std::uint64_t nonce{};             /**< Opaque Horo nonce; never a provider account ID. */
+        std::uint64_t sessionGeneration{}; /**< Nonzero live-session generation. */
+
+        /** @brief Checks representation. @return Whether both dimensions are nonzero. */
+        [[nodiscard]] constexpr bool IsValid() const noexcept {
+            return nonce != 0 && sessionGeneration != 0;
+        }
+
+        [[nodiscard]] constexpr auto operator<=>(const PlatformSubjectHandle &) const noexcept = default;
+    };
+
+    /** @brief Typed achievement unlock intent. */
+    struct AchievementUnlockRequest final {
+        PlatformSubjectHandle subject;
+        AchievementId achievement;
+    };
+
+    /** @brief Typed leaderboard score submission intent. */
+    struct LeaderboardScoreRequest final {
+        PlatformSubjectHandle subject;
+        LeaderboardId leaderboard;
+        std::int64_t score{};
+    };
+
+    /** @brief Typed persistent-stat replacement intent. */
+    struct StatWriteRequest final {
+        PlatformSubjectHandle subject;
+        StatId stat;
+        std::int64_t value{};
+    };
+
+    /** @brief Typed cloud object read address; it is not a filesystem path. */
+    struct CloudReadRequest final {
+        PlatformSubjectHandle subject;
+        CloudObjectId object;
+    };
+
+    /** @brief Owned cloud object write intent suitable for asynchronous retention. */
+    struct CloudWriteRequest final {
+        PlatformSubjectHandle subject;
+        CloudObjectId object;
+        std::vector<std::byte> bytes;
+    };
+
+    /** @brief Bounded presence publication intent. */
+    struct PresenceUpdateRequest final {
+        PlatformSubjectHandle subject;
+        PresenceStatusId status;
+        std::string detail;
+    };
+
+    /** @brief Bounded friends-page query. */
+    struct FriendsQuery final {
+        PlatformSubjectHandle subject;
+        std::uint32_t pageSize{};
+    };
+
+    /** @brief Immutable owned cloud object payload. */
+    struct CloudReadResult final {
+        CloudObjectId object;
+        std::vector<std::byte> bytes;
+    };
+
+    /** @brief Privacy-safe friend presentation; display text is never durable identity. */
+    struct FriendPresentation final {
+        PlatformSubjectHandle subject;
+        std::string displayName;
+    };
+
+    /** @brief Owned bounded friends page. */
+    struct FriendsPage final {
+        std::vector<FriendPresentation> entries;
+        bool hasMore{};
+    };
+
+    /** @brief Current session observation, distinct from provider account identity. */
+    struct PlatformSessionSnapshot final {
+        PlatformSubjectHandle subject;
+        bool signedIn{};
+    };
+
+    /** @brief Achievement request surface. Unsupported implementations return a typed failure. */
+    class IAchievementService {
+    public:
+        virtual ~IAchievementService() = default;
+        /** @brief Submits one typed unlock intent. @param request Owned semantic request. @return Admitted request handle or typed failure.
+         */
+        [[nodiscard]] virtual Result<PlatformRequestHandle<void>> UnlockAchievement(AchievementUnlockRequest request) = 0;
+    };
+
+    /** @brief Leaderboard and persistent-stat request surface. */
+    class ILeaderboardStatService {
+    public:
+        virtual ~ILeaderboardStatService() = default;
+        /** @brief Submits one score. @param request Owned score intent. @return Admitted request handle or typed failure. */
+        [[nodiscard]] virtual Result<PlatformRequestHandle<void>> SubmitScore(LeaderboardScoreRequest request) = 0;
+        /** @brief Writes one stat value. @param request Owned stat intent. @return Admitted request handle or typed failure. */
+        [[nodiscard]] virtual Result<PlatformRequestHandle<void>> WriteStat(StatWriteRequest request) = 0;
+    };
+
+    /** @brief Opaque cloud-object transport surface; it owns no save format or filesystem path. */
+    class ICloudService {
+    public:
+        virtual ~ICloudService() = default;
+        /** @brief Reads one opaque object. @param request Typed object address. @return Admitted typed request or failure. */
+        [[nodiscard]] virtual Result<PlatformRequestHandle<CloudReadResult>> ReadCloudObject(CloudReadRequest request) = 0;
+        /** @brief Writes one complete opaque object. @param request Owned bytes and address. @return Admitted request or failure. */
+        [[nodiscard]] virtual Result<PlatformRequestHandle<void>> WriteCloudObject(CloudWriteRequest request) = 0;
+    };
+
+    /** @brief Best-effort presence publication surface. */
+    class IPresenceService {
+    public:
+        virtual ~IPresenceService() = default;
+        /** @brief Publishes bounded presence. @param request Owned state. @return Admitted request or typed failure. */
+        [[nodiscard]] virtual Result<PlatformRequestHandle<void>> SetPresence(PresenceUpdateRequest request) = 0;
+        /** @brief Clears presence for a subject. @param subject Current subject capability. @return Admitted request or typed failure. */
+        [[nodiscard]] virtual Result<PlatformRequestHandle<void>> ClearPresence(PlatformSubjectHandle subject) = 0;
+    };
+
+    /** @brief Consent-gated read-only social graph surface. */
+    class IFriendsService {
+    public:
+        virtual ~IFriendsService() = default;
+        /** @brief Queries one bounded page. @param query Current subject and bound. @return Admitted typed request or failure. */
+        [[nodiscard]] virtual Result<PlatformRequestHandle<FriendsPage>> QueryFriends(FriendsQuery query) = 0;
+    };
+
+    /** @brief Provider-session observation surface. */
+    class ISessionService {
+    public:
+        virtual ~ISessionService() = default;
+        /** @brief Queries the current session. @return Admitted typed request or failure. */
+        [[nodiscard]] virtual Result<PlatformRequestHandle<PlatformSessionSnapshot>> QueryCurrentSession() = 0;
+    };
+}  // namespace Horo::PlatformServices
