@@ -65,8 +65,7 @@ namespace Horo::Editor {
                     extension.ActivationState().DesiredActivation() != Extensions::ExtensionDesiredActivation::Active)
                     continue;
 
-                Result<std::string> loaded = manager.LoadExtension(extension.absoluteRootPath.string());
-                if (loaded.HasError()) {
+                if (Result<std::string> loaded = manager.LoadExtension(extension.absoluteRootPath.string()); loaded.HasError()) {
                     static_cast<void>(inventory.RecordActivationFailure(extension.packageId,
                                                                         Extensions::ExtensionActivationFailureReason::HostLoadFailed,
                                                                         loaded.ErrorValue().message));

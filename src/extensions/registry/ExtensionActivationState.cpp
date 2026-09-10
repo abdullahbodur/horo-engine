@@ -72,18 +72,18 @@ namespace Horo::Extensions {
 
         [[nodiscard]] Result<void> ApplyInstallation(ExtensionActivationProjection &next, const ExtensionLifecycleCommand &command) {
             using enum ExtensionLifecycleAction;
+            using enum ExtensionInstallationState;
             switch (command.action) {
                 case PublishInstalledComposition:
-                    if (next.installation != ExtensionInstallationState::NotInstalled || !ValidCompositionEvidence(command.composition))
+                    if (next.installation != NotInstalled || !ValidCompositionEvidence(command.composition))
                         return InvalidTransition();
-                    next.installation = ExtensionInstallationState::Installed;
+                    next.installation = Installed;
                     next.installedComposition = command.composition;
                     return Result<void>::Success();
                 case RemoveInstalledComposition:
-                    if (next.installation != ExtensionInstallationState::Installed ||
-                        next.runtime != ExtensionRuntimeActivityState::Inactive)
+                    if (next.installation != Installed || next.runtime != ExtensionRuntimeActivityState::Inactive)
                         return InvalidTransition();
-                    next.installation = ExtensionInstallationState::NotInstalled;
+                    next.installation = NotInstalled;
                     next.trust = ExtensionTrustState::Untrusted;
                     next.compatibility = ExtensionHostCompatibilityState::NotEvaluated;
                     next.outcome = ExtensionActivationOutcome::NotAttempted;
@@ -130,15 +130,16 @@ namespace Horo::Extensions {
         [[nodiscard]] Result<void> ApplyCompatibility(ExtensionActivationProjection &next, const ExtensionLifecycleAction action) {
             ExtensionHostCompatibilityState compatibility;
             using enum ExtensionLifecycleAction;
+            using enum ExtensionHostCompatibilityState;
             switch (action) {
                 case MarkCompatible:
-                    compatibility = ExtensionHostCompatibilityState::Compatible;
+                    compatibility = Compatible;
                     break;
                 case MarkIncompatible:
-                    compatibility = ExtensionHostCompatibilityState::Incompatible;
+                    compatibility = Incompatible;
                     break;
                 case MarkUnsupportedInHostProfile:
-                    compatibility = ExtensionHostCompatibilityState::UnsupportedInHostProfile;
+                    compatibility = UnsupportedInHostProfile;
                     break;
                 default:
                     return InvalidTransition();
