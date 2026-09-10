@@ -29,7 +29,7 @@ Production modules use the same shape regardless of target role:
 | Target role | Descriptor representation |
 |---|---|
 | API/model | Stable module ID, contract version, provided capabilities |
-| Runtime/application service | Required modules and capabilities, budgets, observability |
+| Runtime/application service | Required modules and capabilities, budgets, observability, owned error domains |
 | Concrete backend | Backend-specific module ID behind backend-neutral capability IDs |
 | GUI/CLI/MCP adapter | Optional presentation module requiring application capabilities |
 | Headless/null implementation | Ordinary provider of the same backend-neutral capability |
@@ -58,6 +58,7 @@ typed `Result`. It rejects:
 
 - malformed descriptors and unpaired lifecycle callbacks;
 - duplicate module identities or descriptor-local entries;
+- malformed or conflicting error-domain ownership and duplicate error codes;
 - missing required modules and incompatible dependency versions;
 - missing required capabilities;
 - cycles introduced by module or capability edges.
@@ -78,7 +79,8 @@ activation stage that consumes this descriptor contract. A composition root:
    Registration is inert: it performs only local metadata checks and never
    invokes a callback or inspects the full graph.
 2. Calls `ModuleHost::ActivateRegistered`, which validates the complete graph,
-   then activates modules in the validated provider-before-dependant order,
+   builds an immutable candidate error-code registry, then activates modules in
+   the validated provider-before-dependant order,
    passing a composition-root-supplied dependency bundle through
    `ModuleActivationContext::Bindings`. Modules receive only approved bindings;
    there is no runtime discovery.
@@ -88,6 +90,11 @@ activation stage that consumes this descriptor contract. A composition root:
    reached by the failed attempt enter one terminal state. A graph rejected before
    activation leaves registrations intact so composition can be retried after
    correcting the descriptor set.
+
+Registry validation occurs before lifecycle callbacks. If it fails, the host
+keeps all affected modules `Registered` and preserves its previously published
+registry snapshot. A successful incremental activation publishes a new snapshot;
+active readers may retain the old snapshot safely.
 
 Headless compositions stay headless by construction: they simply do not
 register GUI-only descriptors, so GUI modules are neither activated nor linked
@@ -154,6 +161,11 @@ graph owns copies of module IDs and does not borrow descriptor storage. Callback
 function addresses, when present, must remain valid for the later composition
 lifetime; the descriptor does not own callback state.
 
+Error-domain contributions borrow descriptor pointers only until registry
+construction. The registry owns copies of descriptor text and module ownership
+identities. Modules must not rely on registry indices or numeric allocation;
+textual domain/code pairs are the stable serialization contract.
+
 Existing built-in module-specific descriptors may remain at ABI or package
 boundaries. Composition adapters translate their stable metadata into this
 internal contract rather than making `HoroFoundation` depend on gameplay,
@@ -163,7 +175,8 @@ renderer, GUI, platform, or transport types.
 
 Regression coverage must prove deterministic ordering, missing requirements,
 version incompatibility, duplicate identities, cycles, optional absence, paired
-callbacks, and the invariant that validation never invokes lifecycle callbacks.
+callbacks, error-domain ownership/duplicate rejection, transactional registry
+publication, and the invariant that validation never invokes lifecycle callbacks.
 
 ## Related Documents
 

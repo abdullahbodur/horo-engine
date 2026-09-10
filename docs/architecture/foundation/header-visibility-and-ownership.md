@@ -97,6 +97,16 @@ copying untyped integers or depending on a concrete device backend. There are no
 existing audio API callers to migrate. The handle registry remains target-private;
 only stable IDs and generation-safe client handles cross the public boundary.
 
+## ERR-001.3 Migration Notes
+
+`HoroEngine::Foundation` owns the new
+`Horo/Foundation/ErrorCodeRegistry.h` public contract. Consumers that build or
+query the host-validated registry link Foundation directly; the header exposes
+only Foundation error and module-descriptor identities and does not publish an
+application, platform, renderer, or third-party dependency. Existing error
+producers keep their textual `ErrorDomainId` and `ErrorCode` values while module
+composition migrates descriptor ownership into `ModuleDescriptor::errorDomains`.
+
 ## Audio Backend Contract Boundary
 
 `HoroEngine::AudioApi` owns the public discovery, format, capability, timing and

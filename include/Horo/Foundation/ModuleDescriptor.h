@@ -90,6 +90,17 @@ namespace Horo {
         std::string id;                 /**< Canonical module-namespaced contribution identity. */
     };
 
+    /**
+     * @brief One error domain explicitly owned and contributed by a module.
+     *
+     * Descriptor pointers need remain valid only through registry construction during
+     * activation; the published registry snapshot owns copies of all textual metadata.
+     */
+    struct ModuleErrorDomainDescriptor {
+        ErrorDomainId id;                                     /**< Stable textual domain claimed by the module. */
+        std::vector<const ErrorCodeDescriptor *> descriptors; /**< Module-owned descriptors registered under this exact domain. */
+    };
+
     /** @brief Host-owned narrow dependency bundle supplied only at activation time. */
     class ModuleActivationContext;
 
@@ -118,6 +129,7 @@ namespace Horo {
         std::vector<ModuleCapabilityId> requiredCapabilities;     /**< Capabilities required before activation. */
         std::vector<ModuleResourceBudget> resourceBudgets;        /**< Host-policy resource hints. */
         std::vector<ModuleObservabilityDescriptor> observability; /**< Inert observability contributions. */
+        std::vector<ModuleErrorDomainDescriptor> errorDomains;    /**< Stable error namespaces contributed for host validation. */
         ModuleLifecycleCallbacks lifecycle{};                     /**< Optional paired lifecycle callbacks. */
     };
 

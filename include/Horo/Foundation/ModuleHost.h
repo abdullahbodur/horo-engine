@@ -6,6 +6,7 @@
  */
 
 #include "Horo/Foundation/CancellationToken.h"
+#include "Horo/Foundation/ErrorCodeRegistry.h"
 #include "Horo/Foundation/ModuleDescriptor.h"
 #include "Horo/Foundation/Result.h"
 
@@ -220,6 +221,15 @@ namespace Horo {
          */
         [[nodiscard]] std::optional<ModuleLifecycleState> StateOf(const ModuleId &id) const noexcept;
 
+        /**
+         * @brief Returns the latest immutable registry published by a successful activation.
+         * @return Shared registry snapshot, or null before the first successful activation.
+         *
+         * Existing snapshots remain valid when a later incremental activation publishes an
+         * extended registry. Failed activation never replaces the last successful snapshot.
+         */
+        [[nodiscard]] std::shared_ptr<const ErrorCodeRegistry> ErrorCodes() const noexcept;
+
     private:
         struct ModuleStateRecord {
             ModuleId id;
@@ -237,5 +247,6 @@ namespace Horo {
         std::vector<ModuleDescriptor> m_registered;
         std::vector<ActiveModule> m_active;
         std::vector<ModuleStateRecord> m_states;
+        std::shared_ptr<const ErrorCodeRegistry> m_errorCodes;
     };
 }  // namespace Horo

@@ -202,6 +202,28 @@ The registry is host-owned and immutable after module activation. It validates:
 - extension-provided codes that escape the module's registered domain;
 - host translation coverage for public CLI, MCP, Python, and GUI surfaces.
 
+Modules contribute ownership explicitly through
+`ModuleDescriptor::errorDomains`; descriptor construction remains inert. During
+`ModuleHost::ActivateRegistered`, the host builds a candidate
+`ErrorCodeRegistry` before invoking any lifecycle callback. A malformed
+namespace, duplicate pair, ownership collision, or invalid deprecation returns a
+typed `foundation.error_registry.*` failure and leaves the previously published
+snapshot unchanged. Successful incremental activation publishes a new immutable
+snapshot; readers retaining the prior snapshot continue to observe its original
+contents.
+
+Only `horo`, `project`, and `extension` are valid roots. Project and extension
+domains must equal or be nested below their exact module ID. Built-in `horo.*`
+modules may claim explicit `horo.*` subsystem domains, but two modules may not
+claim equal or overlapping domains. A descriptor's domain must equal the domain
+claim, and its code must be a canonical lowercase namespaced identity.
+
+Every adapter that exposes an `Error` outside C++ resolves the exact textual
+`(domain, code)` pair through the active snapshot first. A null resolution is an
+invalid external contract, not permission to synthesize presentation metadata.
+The resolved descriptor supplies stable summary, remediation and behavior
+metadata while the operation-specific message remains on the `Error` value.
+
 Runtime errors carry a `severity` field, but that severity is bounded by the code
 descriptor. A caller may raise or lower severity within the range allowed by the
 descriptor; it may not downgrade `Fatal` or internal invariant severities, and it
@@ -213,6 +235,20 @@ when the descriptor explicitly allows promotion.
 Code descriptors are metadata, not a dispatch mechanism. Runtime hot paths may
 store compact interned identifiers after validation, but serialized errors keep
 the stable textual domain and code.
+
+### Error Registry Migration
+
+ERR-001.3 migrates modules by adding one `ModuleErrorDomainDescriptor` per owned
+domain to `ModuleDescriptor::errorDomains`. The contribution contains pointers
+to the module's static `ErrorCodeDescriptor` values; those pointers need remain
+valid only through activation because the registry deep-copies all textual
+metadata. Existing host adapters then replace local descriptor tables or
+failure-site string synthesis with `ModuleHost::ErrorCodes()->Resolve(error)`.
+
+Serialized storage, logs, diagnostics and protocol payloads continue to persist
+the textual `domain` and `code` values. Registry ordering, vector indices, hash
+values, or any future compact numeric allocation are process-local details and
+must never appear in public headers, files or wire formats.
 
 ### Platform Services Async Failures
 

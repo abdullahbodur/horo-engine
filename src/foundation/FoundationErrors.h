@@ -63,3 +63,11 @@ namespace Horo::PathErrors {
     extern const ErrorCodeDescriptor PathEscape;
     extern const ErrorCodeDescriptor InvalidPath;
 }  // namespace Horo::PathErrors
+
+namespace Horo::ErrorCodeRegistryErrors {
+    extern const ErrorCodeDescriptor InvalidDescriptor;
+    extern const ErrorCodeDescriptor InvalidNamespace;
+    extern const ErrorCodeDescriptor DomainOwnershipConflict;
+    extern const ErrorCodeDescriptor DuplicateCode;
+    extern const ErrorCodeDescriptor InvalidDeprecation;
+}  // namespace Horo::ErrorCodeRegistryErrors

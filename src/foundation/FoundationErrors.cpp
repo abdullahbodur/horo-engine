@@ -7,6 +7,7 @@ namespace Horo {
         const ErrorDomainId JobDomain{"horo.foundation.jobs"};
         const ErrorDomainId MathDomain{"horo.foundation.math"};
         const ErrorDomainId ModuleDescriptorDomain{"horo.foundation.modules"};
+        const ErrorDomainId ErrorCodeRegistryDomain{"horo.foundation.errors"};
         const ErrorDomainId ObservabilityDomain{"horo.foundation.observability"};
     }  // namespace
 
@@ -208,6 +209,35 @@ namespace Horo {
                                                   .retryable = false,
                                                   .userActionable = false};
     }  // namespace ModuleDescriptorErrors
+
+    namespace ErrorCodeRegistryErrors {
+        const ErrorCodeDescriptor InvalidDescriptor{.domain = ErrorCodeRegistryDomain,
+                                                    .code = ErrorCode{"foundation.error_registry.invalid_descriptor"},
+                                                    .defaultSeverity = ErrorSeverity::Error,
+                                                    .summary = "Error code descriptor is invalid.",
+                                                    .remediationHint = "Contribute non-null stable descriptors before activation."};
+        const ErrorCodeDescriptor InvalidNamespace{.domain = ErrorCodeRegistryDomain,
+                                                   .code = ErrorCode{"foundation.error_registry.invalid_namespace"},
+                                                   .defaultSeverity = ErrorSeverity::Error,
+                                                   .summary = "Error namespace is invalid.",
+                                                   .remediationHint = "Use a canonical domain owned by the contributing module."};
+        const ErrorCodeDescriptor DomainOwnershipConflict{.domain = ErrorCodeRegistryDomain,
+                                                          .code = ErrorCode{"foundation.error_registry.domain_ownership_conflict"},
+                                                          .defaultSeverity = ErrorSeverity::Error,
+                                                          .summary = "Error domain ownership conflicts with another module.",
+                                                          .remediationHint =
+                                                              "Assign each namespace and its descendants to one module owner."};
+        const ErrorCodeDescriptor DuplicateCode{.domain = ErrorCodeRegistryDomain,
+                                                .code = ErrorCode{"foundation.error_registry.duplicate_code"},
+                                                .defaultSeverity = ErrorSeverity::Error,
+                                                .summary = "Error domain and code pair is duplicated.",
+                                                .remediationHint = "Declare each stable error identity exactly once."};
+        const ErrorCodeDescriptor InvalidDeprecation{.domain = ErrorCodeRegistryDomain,
+                                                     .code = ErrorCode{"foundation.error_registry.invalid_deprecation"},
+                                                     .defaultSeverity = ErrorSeverity::Error,
+                                                     .summary = "Error code deprecation replacement is invalid.",
+                                                     .remediationHint = "Reference a distinct registered code in the same domain."};
+    }  // namespace ErrorCodeRegistryErrors
 
     namespace ObservabilityErrors {
         const ErrorCodeDescriptor InvalidBundleRequest{.domain = ObservabilityDomain,

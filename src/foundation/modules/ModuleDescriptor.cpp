@@ -1,5 +1,6 @@
 #include "Horo/Foundation/ModuleDescriptor.h"
 
+#include "Horo/Foundation/ErrorCodeRegistry.h"
 #include "foundation/FoundationErrors.h"
 
 #include <algorithm>
@@ -291,6 +292,9 @@ namespace Horo {
 
     /** @copydoc ValidateModuleGraph */
     Result<ValidatedModuleGraph> ValidateModuleGraph(const std::span<const ModuleDescriptor> descriptors) {
+        if (auto registry = BuildErrorCodeRegistry(descriptors); registry.HasError())
+            return Result<ValidatedModuleGraph>::Failure(registry.ErrorValue());
+
         auto modules = IndexModules(descriptors);
         if (modules.HasError())
             return Result<ValidatedModuleGraph>::Failure(modules.ErrorValue());

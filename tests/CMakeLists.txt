@@ -819,6 +819,13 @@ add_executable(HoroCliCommandRegistryTests
 target_compile_features(HoroCliCommandRegistryTests PRIVATE cxx_std_20)
 target_link_libraries(HoroCliCommandRegistryTests PRIVATE HoroEngine::CliHost)
 horo_register_catch_test(HoroCliCommandRegistryTests LABELS "unit;cli;headless")
+
+add_executable(HoroFoundationErrorCodeRegistryTests
+        unit/foundation/ErrorCodeRegistryTests.cpp
+)
+
+target_compile_features(HoroFoundationErrorCodeRegistryTests PRIVATE cxx_std_20)
+target_link_libraries(HoroFoundationErrorCodeRegistryTests PRIVATE HoroEngine::Foundation)
 add_executable(HoroFoundationModuleDescriptorTests
         unit/foundation/ModuleDescriptorTests.cpp
         unit/foundation/ModuleDescriptorGraphTests.cpp
@@ -1414,6 +1421,7 @@ set(HORO_CATCH_TEST_TARGETS
         HoroViewportPanelRenderTests
         HoroDataBusTests
         HoroFoundationResultTests
+        HoroFoundationErrorCodeRegistryTests
         HoroFoundationModuleDescriptorTests
         HoroFoundationModuleHostCompositionTests
         HoroHostModuleCompositionTests

@@ -14,6 +14,7 @@ horo_configure_target_header_boundary(HoroFoundation PUBLIC_HEADERS
     Horo/Foundation/Diagnostics/OperationHistory.h
     Horo/Foundation/DiagnosticsEngine.h
     Horo/Foundation/ErrorCode.h
+    Horo/Foundation/ErrorCodeRegistry.h
     Horo/Foundation/Handles.h
     Horo/Foundation/JobSystem.h
     Horo/Foundation/Logging/LogContext.h

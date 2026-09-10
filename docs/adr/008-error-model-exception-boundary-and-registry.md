@@ -5,7 +5,8 @@
 - **Supersedes**: None
 - **Scope**: Foundation `Result<T,Error>`, `ErrorCode`/`Error`, diagnostics, registry and exception boundaries
 - **Issues**: [ERR-001.1](https://github.com/abdullahbodur/horo-engine/issues/1814),
-  [ERR-001.2](https://github.com/abdullahbodur/horo-engine/issues/1815)
+  [ERR-001.2](https://github.com/abdullahbodur/horo-engine/issues/1815),
+  [ERR-001.3](https://github.com/abdullahbodur/horo-engine/issues/1816)
 - **Normative document**: [Error And Diagnostics](../architecture/foundation/error-and-diagnostics.md)
 
 ## Context
@@ -35,7 +36,7 @@ Implementation audit (2026-08-27) found the baseline is structurally aligned but
 - `HoroFoundation` (target `HoroFoundation`) owns: `include/Horo/Foundation/ErrorCode.h`, `include/Horo/Foundation/Result.h`, `include/Horo/Foundation/Diagnostics.h`, and the implementation `src/foundation/error/ErrorCode.cpp` (+ descriptor sources). These are inert type/descriptor definitions — creating or validating a descriptor never registers a service, selects a backend, or mutates ambient state, per `docs/architecture/foundation/internal-module-descriptor.md`.
 - `src/foundation/error/` is canonical. `MakeError()` moves from `src/foundation/diagnostics/ErrorCode.cpp` to `src/foundation/error/ErrorCode.cpp`. `src/foundation/diagnostics/` keeps `DiagnosticsEngine`, `OperationStore`, `DiagnosticBundle`, `BuildOutputStore` — observation and persistence of diagnostics, not error construction.
 - `src/foundation/FoundationErrors.h/.cpp` is ratified at its current path for this milestone to avoid churn; it is conceptually owned by `src/foundation/error/` and may be relocated to `src/foundation/error/FoundationErrors.h/.cpp` in a follow-up without changing public headers. Public consumers include only `Horo/Foundation/ErrorCode.h`.
-- The host composition root (`ModuleHost` / application layer) owns the **ErrorCodeRegistry**: a host-constructed, immutable-after-activation table that validates every `ErrorCodeDescriptor` contributed by selected modules. Foundation declares; host validates. This preserves dependency direction — feature code never discovers or registers error domains through a global locator.
+- The host composition root (`ModuleHost` / application layer) owns the **ErrorCodeRegistry**: a host-constructed, immutable-after-activation table that validates every `ErrorCodeDescriptor` contributed by selected modules. Foundation declares; host validates. `ModuleDescriptor::errorDomains` is inert metadata, while `ModuleHost::ActivateRegistered` transactionally validates and publishes a snapshot before callbacks. This preserves dependency direction — feature code never discovers or registers error domains through a global locator.
 - `cmake/HoroPublicHeaderOwnership.cmake` continues to assign `Horo/Foundation/ErrorCode.h`, `Result.h`, `Diagnostics.h` to `HoroFoundation`. `horo_configure_target_header_boundary` remains the enforcement gate; no repository-wide `src/` include is published.
 
 ### Stable error codes and registry (ratify with bounded revision)
@@ -44,10 +45,10 @@ Implementation audit (2026-08-27) found the baseline is structurally aligned but
 |---|---|---|
 | `ErrorCode`/`ErrorDomainId`/`ErrorCodeDescriptor` shape | Matches normative struct (including `deprecatedBy`) | **Ratified** |
 | Descriptor declarations as `const` globals per domain namespace | Present in `FoundationErrors.h` | **Ratified** |
-| Registry validation (duplicate detection, domain prefix, deprecation lifecycle, translation coverage) | Absent | **Revised — host-owned registry added** (immutable after activation, duplicate `(domain,code)` is composition failure, extension codes must nest under module's registered domain) |
+| Registry validation (duplicate detection, domain prefix, deprecation lifecycle, translation coverage) | Implemented by ERR-001.3 | **Revised — host-owned registry added** (immutable snapshots, duplicate `(domain,code)` and overlapping ownership are typed composition failures, project/extension codes must nest under the exact module ID, and external adapters resolve the registered textual pair) |
 | `Error` fields `code/domain/severity/message/diagnostics` | Present | **Ratified** |
 | `Error.cause` chain and `ErrorMetadata` bounded fields per normative doc | Cause chain implemented by ERR-001.2; metadata absent | **Cause implemented, metadata deferred.** `ErrorCause` is an immutable owned reference whose copies share const nodes, preserving aggregate initialization and value-copy `Result` callers. An empty cause does not allocate; each `WrapError` edge owns one node through `std::make_shared`, allowing standard-library implementations to co-allocate node and control-block storage. Bounded `ErrorMetadata` remains a future additive change and must follow `observability-logging.md`. |
-| Numeric interned IDs after validation | Not implemented | **Ratified as optional optimization** — serialized forms keep stable textual `domain`+`code`. |
+| Numeric interned IDs after validation | Not implemented | **Ratified as optional private optimization** — allocation and indices are not public contracts; serialized forms keep stable textual `domain`+`code`. |
 
 ### Result contract
 
@@ -84,6 +85,7 @@ Rules:
 ## Consequences
 
 - Every production module has one place to declare stable codes (module-owned `ErrorCodeDescriptor` under its domain), one branching contract (`ErrorCode`), and one host-validated registry that rejects duplicates and domain escapes at composition — satisfying [ERR-001.1] acceptance criteria 1 and 2.
+- Registry snapshots deep-copy borrowed descriptor text, remain immutable for readers, and publish only after validation and activation succeed. A failed incremental contribution cannot corrupt the active host registry.
 - `src/foundation/error/` becomes the discoverable owner for error types; `diagnostics/` no longer owns error construction, resolving the empty-directory anomaly without a header-visibility violation.
 - `Result<T,Error>` remains the sole expected-failure channel; validation does not fork the result model.
 - Exception safety is explicit and boundary-owned rather than relying on global `noexcept` propagation, preserving the concurrency and plugin ABI contracts.
