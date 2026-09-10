@@ -230,7 +230,7 @@ namespace Horo::Runtime::Ui {
 
             ~PublishLease() {
                 if (storage_)
-                    storage_->leases.store(0, std::memory_order_release);
+                    storage_->leases.store(0);
             }
 
             void Commit() noexcept {
@@ -308,7 +308,7 @@ namespace Horo::Runtime::Ui {
             for (std::size_t offset = 0; offset < slots.size(); ++offset) {
                 const auto index = (nextSlot + offset) % slots.size();
                 std::uint64_t expected{};
-                if (slots[index]->leases.compare_exchange_strong(expected, 1, std::memory_order_acquire, std::memory_order_relaxed)) {
+                if (slots[index]->leases.compare_exchange_strong(expected, 1)) {
                     nextSlot = (index + 1) % slots.size();
                     return slots[index];
                 }
@@ -319,7 +319,7 @@ namespace Horo::Runtime::Ui {
         /** @brief Reports whether every preallocated slot is no longer leased. */
         bool IsDrained() const noexcept {
             return std::ranges::all_of(slots, [](const auto &slot) {
-                return slot->leases.load(std::memory_order_acquire) == 0;
+                return slot->leases.load() == 0;
             });
         }
     };
@@ -359,12 +359,12 @@ namespace Horo::Runtime::Ui {
     }
 
     /** @copydoc UiRenderSnapshot::Retain */
-    void UiRenderSnapshot::Retain() noexcept {
+    void UiRenderSnapshot::Retain() const noexcept {
         if (!storage_)
             return;
-        auto current = storage_->leases.load(std::memory_order_relaxed);
+        auto current = storage_->leases.load();
         while (current != std::numeric_limits<std::uint64_t>::max()) {
-            if (storage_->leases.compare_exchange_weak(current, current + 1, std::memory_order_relaxed))
+            if (storage_->leases.compare_exchange_weak(current, current + 1))
                 return;
         }
         std::terminate();
@@ -374,7 +374,7 @@ namespace Horo::Runtime::Ui {
     void UiRenderSnapshot::Release() noexcept {
         if (!storage_)
             return;
-        storage_->leases.fetch_sub(1, std::memory_order_release);
+        storage_->leases.fetch_sub(1);
         storage_.reset();
     }
 

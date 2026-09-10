@@ -69,8 +69,8 @@ namespace Horo::Runtime::Ui {
             return Failure<UiElementSlotRange>(UiErrors::OwnershipGenerationInvalid);
         if (slotCount == 0)
             return Failure<UiElementSlotRange>(UiErrors::CapacityExceeded);
-        constexpr auto MaximumSlot = static_cast<std::uint64_t>(std::numeric_limits<std::uint32_t>::max());
-        if (nextSlot_ > MaximumSlot - slotCount + 1)
+        if (constexpr auto MaximumSlot = static_cast<std::uint64_t>(std::numeric_limits<std::uint32_t>::max());
+            nextSlot_ > MaximumSlot - slotCount + 1)
             return Failure<UiElementSlotRange>(UiErrors::GenerationExhausted);
         const auto firstSlot = static_cast<std::uint32_t>(nextSlot_);
         nextSlot_ += slotCount;

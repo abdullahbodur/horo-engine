@@ -254,7 +254,7 @@ namespace Horo::Runtime::Ui {
         /** @brief Adopts one already leased immutable storage slot. */
         explicit UiRenderSnapshot(std::shared_ptr<const Storage> storage) noexcept;
         /** @brief Retains the current slot for one additional immutable snapshot copy. */
-        void Retain() noexcept;
+        void Retain() const noexcept;
         /** @brief Releases the current slot and makes it reusable after the final lease. */
         void Release() noexcept;
         std::shared_ptr<const Storage> storage_;
