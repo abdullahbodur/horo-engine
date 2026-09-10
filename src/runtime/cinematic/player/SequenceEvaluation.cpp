@@ -40,15 +40,7 @@ namespace Horo::Cinematic {
             return IdentityLess(left.track, right.track);
         }
 
-        [[nodiscard]] bool EventLess(const SequenceFrameEventKey &left, const SequenceFrameEventKey &right) noexcept {
-            if (left.time != right.time)
-                return left.time < right.time;
-            if (left.track != right.track)
-                return IdentityLess(left.track, right.track);
-            return IdentityLess(left.key, right.key);
-        }
-
-        [[nodiscard]] bool CameraLess(const SequenceFrameCameraCutKey &left, const SequenceFrameCameraCutKey &right) noexcept {
+        template <typename Key> [[nodiscard]] bool TimedKeyLess(const Key &left, const Key &right) noexcept {
             if (left.time != right.time)
                 return left.time < right.time;
             if (left.track != right.track)
@@ -110,58 +102,55 @@ namespace Horo::Cinematic {
             return Result<void>::Success();
         }
 
+        [[nodiscard]] constexpr SequenceTraversalDirection TraversalDirection(const std::int8_t direction) noexcept {
+            return direction > 0 ? SequenceTraversalDirection::Forward : SequenceTraversalDirection::Reverse;
+        }
+
+        [[nodiscard]] Result<void> AddSegmentAndMove(AdvanceResult &result, const SequenceTime next,
+                                                     const SequenceTraversalDirection direction, const bool includeFrom) {
+            auto added = AddSegment(result, {result.cursor.position, next, result.cursor.traversal, direction, includeFrom});
+            if (added.HasError())
+                return added;
+            result.cursor.position = next;
+            return Result<void>::Success();
+        }
+
+        [[nodiscard]] Result<bool> AdvanceLoopStep(AdvanceResult &result, std::int64_t &remaining, const SequenceTime duration,
+                                                   const std::size_t maximumCrossings, std::size_t &crossings, bool &includeFrom) {
+            const bool forward = remaining > 0;
+            const SequenceTime distance = forward ? duration - result.cursor.position : result.cursor.position;
+            const std::int64_t magnitude = forward ? remaining : -remaining;
+            const auto direction = forward ? SequenceTraversalDirection::Forward : SequenceTraversalDirection::Reverse;
+            if (magnitude <= distance) {
+                auto moved = AddSegmentAndMove(result, result.cursor.position + remaining, direction, includeFrom);
+                if (moved.HasError())
+                    return Result<bool>::Failure(moved.ErrorValue());
+                return Result<bool>::Success(true);
+            }
+            if (distance > 0) {
+                auto moved = AddSegmentAndMove(result, forward ? duration : 0, direction, includeFrom);
+                if (moved.HasError())
+                    return Result<bool>::Failure(moved.ErrorValue());
+                remaining += forward ? -distance : distance;
+            }
+            if (++crossings > maximumCrossings || result.cursor.traversal == std::numeric_limits<std::uint64_t>::max())
+                return Failed<bool>(SequenceEvaluationErrors::CapacityExceeded);
+            ++result.cursor.traversal;
+            result.cursor.position = forward ? 0 : duration;
+            includeFrom = true;
+            return Result<bool>::Success(false);
+        }
+
         [[nodiscard]] Result<void> AdvanceLoop(AdvanceResult &result, std::int64_t remaining, const SequenceTime duration,
                                                const std::size_t maximumCrossings) {
             bool includeFrom = false;
             std::size_t crossings = 0;
             while (remaining != 0) {
-                if (remaining > 0) {
-                    const SequenceTime distance = duration - result.cursor.position;
-                    if (remaining <= distance) {
-                        const SequenceTime next = result.cursor.position + remaining;
-                        if (auto added = AddSegment(result, {result.cursor.position, next, result.cursor.traversal,
-                                                             SequenceTraversalDirection::Forward, includeFrom});
-                            added.HasError())
-                            return added;
-                        result.cursor.position = next;
-                        break;
-                    }
-                    if (distance > 0) {
-                        if (auto added = AddSegment(result, {result.cursor.position, duration, result.cursor.traversal,
-                                                             SequenceTraversalDirection::Forward, includeFrom});
-                            added.HasError())
-                            return added;
-                        remaining -= distance;
-                    }
-                    if (++crossings > maximumCrossings || result.cursor.traversal == std::numeric_limits<std::uint64_t>::max())
-                        return Failed<void>(SequenceEvaluationErrors::CapacityExceeded);
-                    ++result.cursor.traversal;
-                    result.cursor.position = 0;
-                    includeFrom = true;
-                } else {
-                    const SequenceTime distance = result.cursor.position;
-                    if (-remaining <= distance) {
-                        const SequenceTime next = result.cursor.position + remaining;
-                        if (auto added = AddSegment(result, {result.cursor.position, next, result.cursor.traversal,
-                                                             SequenceTraversalDirection::Reverse, includeFrom});
-                            added.HasError())
-                            return added;
-                        result.cursor.position = next;
-                        break;
-                    }
-                    if (distance > 0) {
-                        if (auto added = AddSegment(result, {result.cursor.position, 0, result.cursor.traversal,
-                                                             SequenceTraversalDirection::Reverse, includeFrom});
-                            added.HasError())
-                            return added;
-                        remaining += distance;
-                    }
-                    if (++crossings > maximumCrossings || result.cursor.traversal == std::numeric_limits<std::uint64_t>::max())
-                        return Failed<void>(SequenceEvaluationErrors::CapacityExceeded);
-                    ++result.cursor.traversal;
-                    result.cursor.position = duration;
-                    includeFrom = true;
-                }
+                auto step = AdvanceLoopStep(result, remaining, duration, maximumCrossings, crossings, includeFrom);
+                if (step.HasError())
+                    return Result<void>::Failure(step.ErrorValue());
+                if (step.Value())
+                    break;
             }
             return Result<void>::Success();
         }
@@ -175,24 +164,14 @@ namespace Horo::Cinematic {
                 const SequenceTime distance = direction > 0 ? duration - result.cursor.position : result.cursor.position;
                 if (remaining <= static_cast<std::uint64_t>(distance)) {
                     const SequenceTime next = result.cursor.position + static_cast<SequenceTime>(remaining) * direction;
-                    if (auto added =
-                            AddSegment(result,
-                                       {result.cursor.position, next, result.cursor.traversal,
-                                        direction > 0 ? SequenceTraversalDirection::Forward : SequenceTraversalDirection::Reverse, false});
-                        added.HasError())
-                        return added;
-                    result.cursor.position = next;
+                    if (auto moved = AddSegmentAndMove(result, next, TraversalDirection(direction), false); moved.HasError())
+                        return moved;
                     break;
                 }
                 if (distance > 0) {
                     const SequenceTime next = direction > 0 ? duration : 0;
-                    if (auto added =
-                            AddSegment(result,
-                                       {result.cursor.position, next, result.cursor.traversal,
-                                        direction > 0 ? SequenceTraversalDirection::Forward : SequenceTraversalDirection::Reverse, false});
-                        added.HasError())
-                        return added;
-                    result.cursor.position = next;
+                    if (auto moved = AddSegmentAndMove(result, next, TraversalDirection(direction), false); moved.HasError())
+                        return moved;
                     remaining -= static_cast<std::uint64_t>(distance);
                 }
                 if (++crossings > maximumCrossings || result.cursor.traversal == std::numeric_limits<std::uint64_t>::max())
@@ -274,11 +253,56 @@ namespace Horo::Cinematic {
             }
         }
 
+        struct StagedOccurrenceCounts final {
+            std::size_t events{};
+            std::size_t cameraCuts{};
+        };
+
+        [[nodiscard]] Result<StagedOccurrenceCounts> StageOccurrences(const SequencePlayerHandle player,
+                                                                      const std::span<const SequenceFrameEventKey> events,
+                                                                      const std::span<const SequenceFrameCameraCutKey> cameraCuts,
+                                                                      const std::span<const TraversalSegment> segments,
+                                                                      const SequenceFrameScratch &scratch) {
+            StagedOccurrenceCounts counts{};
+            bool capacityExceeded = false;
+            VisitCrossed<SequenceFrameEventKey>(events, segments, [&](const auto &event, const auto &segment) {
+                if (segment.direction == SequenceTraversalDirection::Reverse && !event.fireInReverse)
+                    return;
+                if (counts.events >= scratch.events.size()) {
+                    capacityExceeded = true;
+                    return;
+                }
+                scratch.events[counts.events++] = {player, event.track, event.key, event.time, segment.traversal, segment.direction};
+            });
+            VisitCrossed<SequenceFrameCameraCutKey>(cameraCuts, segments, [&](const auto &cut, const auto &segment) {
+                if (counts.cameraCuts >= scratch.cameraCuts.size()) {
+                    capacityExceeded = true;
+                    return;
+                }
+                scratch.cameraCuts[counts.cameraCuts++] = {player,   cut.track,         cut.key,          cut.camera,
+                                                           cut.time, segment.traversal, segment.direction};
+            });
+            if (capacityExceeded)
+                return Failed<StagedOccurrenceCounts>(SequenceEvaluationErrors::CapacityExceeded);
+            return Result<StagedOccurrenceCounts>::Success(counts);
+        }
+
         [[nodiscard]] bool ValidCursor(const SequenceFrameCursor &cursor, const SequenceTime duration,
                                        const SequencePlaybackRate rate) noexcept {
             return cursor.controlFence.handle.IsValid() && cursor.controlFence.controlRevision != 0 && cursor.position >= 0 &&
                    cursor.position <= duration && cursor.traversal != 0 && cursor.evaluationRevision != 0 &&
                    (cursor.pingPongDirection == 1 || cursor.pingPongDirection == -1) && rate.denominator != 0;
+        }
+
+        [[nodiscard]] Result<void> SampleTrackValues(const std::span<const SequenceFrameTrackDescriptor> tracks,
+                                                     const SequenceTime position, const std::span<SequenceSampledValue> values) {
+            for (std::size_t index = 0; index < tracks.size(); ++index) {
+                auto sampled = tracks[index].sample(tracks[index].context, position);
+                if (sampled.HasError())
+                    return Result<void>::Failure(sampled.ErrorValue());
+                values[index] = {tracks[index].track, tracks[index].stage, sampled.Value()};
+            }
+            return Result<void>::Success();
         }
     }  // namespace
 
@@ -343,8 +367,8 @@ namespace Horo::Cinematic {
         std::vector<SequenceFrameEventKey> orderedEvents(events.begin(), events.end());
         std::vector<SequenceFrameCameraCutKey> orderedCuts(cameraCuts.begin(), cameraCuts.end());
         std::ranges::sort(orderedTracks, TrackLess);
-        std::ranges::sort(orderedEvents, EventLess);
-        std::ranges::sort(orderedCuts, CameraLess);
+        std::ranges::sort(orderedEvents, TimedKeyLess<SequenceFrameEventKey>);
+        std::ranges::sort(orderedCuts, TimedKeyLess<SequenceFrameCameraCutKey>);
         if (HasIdentityCollision<SequenceFrameTrackDescriptor>(orderedTracks,
                                                                [](const auto &left, const auto &right) {
             return left.track == right.track;
@@ -383,49 +407,28 @@ namespace Horo::Cinematic {
             return Result<SequenceFrameEvaluationResult>::Failure(advanced.ErrorValue());
         const SequenceTime previousPosition = cursor.position;
         const auto segments = std::span{advanced.Value().segments}.first(advanced.Value().segmentCount);
-        std::size_t eventCount = 0;
-        VisitCrossed<SequenceFrameEventKey>(events_, segments, [&](const auto &event, const auto &segment) {
-            if (segment.direction == SequenceTraversalDirection::Forward || event.fireInReverse)
-                ++eventCount;
-        });
-        std::size_t cameraCount = 0;
-        VisitCrossed<SequenceFrameCameraCutKey>(cameraCuts_, segments, [&](const auto &, const auto &) {
-            ++cameraCount;
-        });
-        if (eventCount > scratch.events.size() || cameraCount > scratch.cameraCuts.size())
-            return Failed<SequenceFrameEvaluationResult>(SequenceEvaluationErrors::CapacityExceeded);
-        if ((eventCount != 0 && hooks.eventHook == nullptr) || (cameraCount != 0 && hooks.cameraHook == nullptr))
+        auto staged = StageOccurrences(player.handle, events_, cameraCuts_, segments, scratch);
+        if (staged.HasError())
+            return Result<SequenceFrameEvaluationResult>::Failure(staged.ErrorValue());
+        if ((staged.Value().events != 0 && hooks.eventHook == nullptr) || (staged.Value().cameraCuts != 0 && hooks.cameraHook == nullptr))
             return Failed<SequenceFrameEvaluationResult>(SequenceEvaluationErrors::HookUnavailable);
 
-        for (std::size_t index = 0; index < tracks_.size(); ++index) {
-            auto sampled = tracks_[index].sample(tracks_[index].context, advanced.Value().cursor.position);
-            if (sampled.HasError())
-                return Result<SequenceFrameEvaluationResult>::Failure(sampled.ErrorValue());
-            scratch.values[index] = {tracks_[index].track, tracks_[index].stage, sampled.Value()};
-        }
-
-        std::size_t eventIndex = 0;
-        VisitCrossed<SequenceFrameEventKey>(events_, segments, [&](const auto &event, const auto &segment) {
-            if (segment.direction == SequenceTraversalDirection::Forward || event.fireInReverse)
-                scratch.events[eventIndex++] = {player.handle, event.track, event.key, event.time, segment.traversal, segment.direction};
-        });
-        std::size_t cameraIndex = 0;
-        VisitCrossed<SequenceFrameCameraCutKey>(cameraCuts_, segments, [&](const auto &cut, const auto &segment) {
-            scratch.cameraCuts[cameraIndex++] = {player.handle, cut.track,         cut.key,          cut.camera,
-                                                 cut.time,      segment.traversal, segment.direction};
-        });
+        auto sampled = SampleTrackValues(tracks_, advanced.Value().cursor.position, scratch.values);
+        if (sampled.HasError())
+            return Result<SequenceFrameEvaluationResult>::Failure(sampled.ErrorValue());
 
         SequenceFrameCursor committed = advanced.Value().cursor;
         ++committed.evaluationRevision;
         cursor = committed;
         for (std::size_t index = 0; index < tracks_.size(); ++index)
             tracks_[index].apply(tracks_[index].context, scratch.values[index].value);
-        for (std::size_t index = 0; index < eventIndex; ++index)
+        for (std::size_t index = 0; index < staged.Value().events; ++index)
             hooks.eventHook(hooks.eventContext, scratch.events[index]);
-        for (std::size_t index = 0; index < cameraIndex; ++index)
+        for (std::size_t index = 0; index < staged.Value().cameraCuts; ++index)
             hooks.cameraHook(hooks.cameraContext, scratch.cameraCuts[index]);
-        return Result<SequenceFrameEvaluationResult>::Success(
-            {previousPosition, cursor.position, cursor.traversal, cursor.evaluationRevision, tracks_.size(), eventIndex, cameraIndex});
+        return Result<SequenceFrameEvaluationResult>::Success({previousPosition, cursor.position, cursor.traversal,
+                                                               cursor.evaluationRevision, tracks_.size(), staged.Value().events,
+                                                               staged.Value().cameraCuts});
     }
 
     /** @copydoc SequenceFrameEvaluationPlan::TrackCount */

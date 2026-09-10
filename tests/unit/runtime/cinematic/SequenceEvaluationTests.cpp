@@ -94,8 +94,8 @@ namespace Horo::Cinematic {
 
         template <typename T> void RequireError(const Result<T> &result, const ErrorCodeDescriptor &expected) {
             REQUIRE(result.HasError());
-            CHECK(result.ErrorValue().domain.Value() == expected.domain.Value());
-            CHECK(result.ErrorValue().code.Value() == expected.code.Value());
+            const auto &actual = result.ErrorValue();
+            CHECK((actual.domain.Value() == expected.domain.Value() && actual.code.Value() == expected.code.Value()));
         }
     }  // namespace
 
@@ -166,9 +166,8 @@ namespace Horo::Cinematic {
         ScratchStorage scratch;
         HookProbe hooks;
 
-        auto result = plan.Evaluate(player, 5, cursor, scratch.View(), Hooks(hooks));
-        REQUIRE(result.HasValue());
-        CHECK(result.Value().position == 5);
+        REQUIRE(plan.Evaluate(player, 5, cursor, scratch.View(), Hooks(hooks)).HasValue());
+        CHECK(cursor.position == 5);
         REQUIRE(hooks.eventCount == 1);
         CHECK(hooks.events[0].key == Key(1));
         CHECK(hooks.events[0].direction == SequenceTraversalDirection::Reverse);
@@ -198,10 +197,9 @@ namespace Horo::Cinematic {
         ScratchStorage scratch;
         HookProbe hooks;
 
-        auto result = plan.Evaluate(player, 5, cursor, scratch.View(), Hooks(hooks));
-        REQUIRE(result.HasValue());
-        CHECK(result.Value().position == 3);
-        CHECK(result.Value().traversal == 2);
+        REQUIRE(plan.Evaluate(player, 5, cursor, scratch.View(), Hooks(hooks)).HasValue());
+        CHECK(cursor.position == 3);
+        CHECK(cursor.traversal == 2);
         REQUIRE(hooks.eventCount == 3);
         CHECK(hooks.events[0].key == Key(3));
         CHECK(hooks.events[0].traversal == 1);
