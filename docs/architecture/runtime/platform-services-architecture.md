@@ -1353,6 +1353,19 @@ Configuration authority lives in Project Settings:
 - per-service timeout and retry policy
 - offline queue persistence settings
 
+Implementation status on 10 September 2026: PLS-003.5 publishes one typed immutable
+`PlatformProjectConfiguration` contract for GUI, CLI, headless and cook composition.
+The versioned project candidate fixes the exact host profile, explicit Null or exact
+provider selection, and disabled/optional/required policy for every service. Trusted
+provider packages contribute only bounded inert Horo metadata (module/provider
+identity, interface version, profile eligibility and capability claims); validation
+never discovers or activates code. Contributions are canonicalized before the policy
+fingerprint is computed, exact selection never falls back, required capability/profile
+conflicts fail before backend activation, and replacements are fenced to the prior
+immutable fingerprint. Provider SDK types, native handles, credentials and account
+identities remain outside the contract. Schema versions other than version 1 require
+an explicit project migration and fail closed in ordinary open/cook paths.
+
 The Platform Diagnostics panel shows runtime state:
 
 - session phase/generations and consent-safe presentation availability

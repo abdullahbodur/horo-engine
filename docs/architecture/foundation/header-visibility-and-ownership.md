@@ -168,6 +168,19 @@ callers consume only typed definitions and immutable spans. Provider-native mapp
 runtime subject/session handles and raw account identities remain private or
 generation-scoped and never enter these durable definition registries.
 
+## PLS-003.5 Migration Notes
+
+`HoroEngine::PlatformServices` additionally owns
+`Horo/PlatformServices/PlatformProjectConfiguration.h`. GUI, CLI, headless and cook
+composition roots now consume the same immutable typed project-policy snapshot rather
+than interpreting provider names or capability flags independently. Provider selection
+is exact or explicit Null; an unavailable exact provider never falls through to another
+installed contribution. Package/trust composition supplies the selected trusted module
+identities, and validation admits only bounded inert contributions from those modules.
+Constructing or validating policy performs no discovery, registration, lifecycle call,
+SDK initialization or ambient-state mutation. Existing callers require no signature
+migration because this is the first published project configuration contract.
+
 ## XRA-001.2 Migration Notes
 
 `HoroEngine::XRApi` owns the four public headers under `Horo/XR/` and depends
