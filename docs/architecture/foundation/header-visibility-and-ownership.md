@@ -107,6 +107,17 @@ application, platform, renderer, or third-party dependency. Existing error
 producers keep their textual `ErrorDomainId` and `ErrorCode` values while module
 composition migrates descriptor ownership into `ModuleDescriptor::errorDomains`.
 
+## PLS-001.2 Migration Notes
+
+`HoroEngine::PlatformServices` owns
+`Horo/PlatformServices/PlatformRequest.h` and
+`Horo/PlatformServices/PlatformRequestErrors.h`. It has only the public Foundation
+dependency and is deliberately separate from `HoroEngine::Platform`, whose operating-
+system adapters do not own online-provider requests. No existing caller is migrated.
+Future frontend/provider targets consume this boundary by linking PlatformServices;
+they must not duplicate request state, retain a provider object in the handle, or rely
+on repository-wide include visibility.
+
 ## Audio Backend Contract Boundary
 
 `HoroEngine::AudioApi` owns the public discovery, format, capability, timing and

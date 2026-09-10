@@ -91,6 +91,14 @@ target_include_directories(HoroPlatform
 )
 target_link_libraries(HoroPlatform PUBLIC HoroEngine::Foundation)
 
+add_library(HoroPlatformServices STATIC
+        platform_services/PlatformRequest.cpp
+        platform_services/PlatformRequestErrors.cpp
+)
+add_library(HoroEngine::PlatformServices ALIAS HoroPlatformServices)
+target_compile_features(HoroPlatformServices PUBLIC cxx_std_20)
+target_link_libraries(HoroPlatformServices PUBLIC HoroEngine::Foundation)
+
 add_library(HoroPackages STATIC
         packages/validation/PackagePath.cpp
         packages/validation/PackageArchive.cpp
