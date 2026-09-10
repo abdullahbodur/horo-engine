@@ -179,23 +179,42 @@ namespace Horo::WorldStreaming {
             return Result<void>::Success();
         }
 
+        bool SnapshotIdentityIsValid(const WorldStreamingDiagnosticSnapshotInput &input) noexcept {
+            return input.owner.IsValid() && input.revision.IsValid() && input.ownerRevision.IsValid() && input.limits.IsValid();
+        }
+
+        bool IsKnownInstrumentation(const StreamingDiagnosticInstrumentation instrumentation) noexcept {
+            return instrumentation >= StreamingDiagnosticInstrumentation::Enabled &&
+                   instrumentation <= StreamingDiagnosticInstrumentation::Disabled;
+        }
+
+        bool RowsFitDeclaredLimits(const WorldStreamingDiagnosticSnapshotInput &input,
+                                   const std::span<const StreamingSourceDesiredState> sources,
+                                   const std::span<const StreamingCellStateRecord> cells,
+                                   const std::span<const StreamingDiagnosticFailureRecord> failures,
+                                   const std::span<const StreamingDiagnosticDecisionEvent> events) noexcept {
+            const bool baseRowsFit =
+                sources.size() <= input.limits.sources && cells.size() <= input.limits.cells && failures.size() <= input.limits.failures;
+            const bool eventRowsFit =
+                input.instrumentation == StreamingDiagnosticInstrumentation::Disabled || events.size() <= input.limits.events;
+            return baseRowsFit && eventRowsFit;
+        }
+
         /** @brief Validates immutable aggregate identity, policy correlation and declared capacities. */
         Result<void> ValidateSnapshotInput(const WorldStreamingDiagnosticSnapshotInput &input, const StreamingBudgetPolicy &policy,
                                            const StreamingBudgetSample &sample, const std::span<const StreamingSourceDesiredState> sources,
                                            const std::span<const StreamingCellStateRecord> cells,
                                            const std::span<const StreamingDiagnosticFailureRecord> failures,
                                            const std::span<const StreamingDiagnosticDecisionEvent> events) {
-            if (!input.owner.IsValid() || !input.revision.IsValid() || !input.ownerRevision.IsValid() || !input.limits.IsValid())
+            if (!SnapshotIdentityIsValid(input))
                 return Internal::Failure<void>(WorldStreamingErrors::DiagnosticProjectionInvalid);
-            if (input.instrumentation < StreamingDiagnosticInstrumentation::Enabled ||
-                input.instrumentation > StreamingDiagnosticInstrumentation::Disabled)
+            if (!IsKnownInstrumentation(input.instrumentation))
                 return Internal::Failure<void>(WorldStreamingErrors::DiagnosticProjectionUnsupported);
             if (const auto queue = ValidateQueue(input); queue.HasError())
                 return queue;
             if (sample.PolicyRevision() != policy.Revision())
                 return Internal::Failure<void>(WorldStreamingErrors::DiagnosticProjectionStale);
-            if (sources.size() > input.limits.sources || cells.size() > input.limits.cells || failures.size() > input.limits.failures ||
-                (input.instrumentation == StreamingDiagnosticInstrumentation::Enabled && events.size() > input.limits.events))
+            if (!RowsFitDeclaredLimits(input, sources, cells, failures, events))
                 return Internal::Failure<void>(WorldStreamingErrors::DiagnosticProjectionCapacityExceeded);
             return Result<void>::Success();
         }
