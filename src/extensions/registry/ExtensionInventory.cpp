@@ -12,6 +12,7 @@
 #include <cstdlib>
 #include <fstream>
 #include <limits>
+#include <memory>
 #include <nlohmann/json.hpp>
 #include <optional>
 #include <ranges>
@@ -391,7 +392,7 @@ namespace Horo::Extensions {
                 if (IsSafePackageId(it.key()) && it.value().is_string()) {
                     std::string composition = it.value().get<std::string>();
                     if (!composition.empty() && composition.size() <= 512)
-                        values.emplace(it.key(), std::move(composition));
+                        values.try_emplace(it.key(), std::move(composition));
                 }
             }
         }
@@ -416,7 +417,7 @@ namespace Horo::Extensions {
         [[nodiscard]] ExtensionInventoryEntry *FindEntry(std::vector<ExtensionInventoryEntry> &entries,
                                                          const std::string_view packageId) noexcept {
             const auto found = std::ranges::find(entries, packageId, &ExtensionInventoryEntry::packageId);
-            return found == entries.end() ? nullptr : &*found;
+            return found == entries.end() ? nullptr : std::to_address(found);
         }
 
         /** @brief Applies common exact-entry transition admission for inventory mutations. */

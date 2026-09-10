@@ -13,27 +13,29 @@ namespace Horo::Extensions {
         }
 
         [[nodiscard]] ExtensionLifecycleOwner RequiredOwner(const ExtensionLifecycleAction action) noexcept {
+            using enum ExtensionLifecycleAction;
+            using enum ExtensionLifecycleOwner;
             switch (action) {
-                case ExtensionLifecycleAction::GrantTrust:
-                case ExtensionLifecycleAction::RevokeTrust:
-                    return ExtensionLifecycleOwner::TrustService;
-                case ExtensionLifecycleAction::PublishInstalledComposition:
-                case ExtensionLifecycleAction::RemoveInstalledComposition:
-                case ExtensionLifecycleAction::EnableForProject:
-                case ExtensionLifecycleAction::DisableForProject:
-                case ExtensionLifecycleAction::MarkCompatible:
-                case ExtensionLifecycleAction::MarkIncompatible:
-                case ExtensionLifecycleAction::MarkUnsupportedInHostProfile:
-                case ExtensionLifecycleAction::ReplaceInstalledComposition:
-                    return ExtensionLifecycleOwner::PackageLifecycleService;
-                case ExtensionLifecycleAction::MarkLoaded:
-                case ExtensionLifecycleAction::MarkActive:
-                case ExtensionLifecycleAction::MarkInactive:
-                    return ExtensionLifecycleOwner::ExtensionHost;
-                case ExtensionLifecycleAction::RecordActivationFailure:
-                    return ExtensionLifecycleOwner::PackageLifecycleService;
+                case GrantTrust:
+                case RevokeTrust:
+                    return TrustService;
+                case PublishInstalledComposition:
+                case RemoveInstalledComposition:
+                case EnableForProject:
+                case DisableForProject:
+                case MarkCompatible:
+                case MarkIncompatible:
+                case MarkUnsupportedInHostProfile:
+                case ReplaceInstalledComposition:
+                    return PackageLifecycleService;
+                case MarkLoaded:
+                case MarkActive:
+                case MarkInactive:
+                    return ExtensionHost;
+                case RecordActivationFailure:
+                    return PackageLifecycleService;
             }
-            return ExtensionLifecycleOwner::PackageLifecycleService;
+            return PackageLifecycleService;
         }
 
         [[nodiscard]] bool ValidCurrent(const ExtensionActivationProjection &current) noexcept {
@@ -252,26 +254,27 @@ namespace Horo::Extensions {
 
     /** @copydoc ExtensionActivationProjection::RestartReason */
     ExtensionRestartReason ExtensionActivationProjection::RestartReason() const noexcept {
+        using enum ExtensionRestartReason;
         if (runtime != ExtensionRuntimeActivityState::Inactive && runtimeComposition != installedComposition)
-            return ExtensionRestartReason::ReplacementRequired;
+            return ReplacementRequired;
         if (runtime != ExtensionRuntimeActivityState::Inactive && DesiredActivation() == ExtensionDesiredActivation::Inactive)
-            return ExtensionRestartReason::DeactivationRequired;
+            return DeactivationRequired;
         if (enablement == ExtensionEnablementState::Disabled)
-            return ExtensionRestartReason::None;
+            return None;
         if (installation == ExtensionInstallationState::NotInstalled)
-            return ExtensionRestartReason::InstallationRequired;
+            return InstallationRequired;
         if (enablement == ExtensionEnablementState::Enabled && !HasCurrentTrust())
-            return ExtensionRestartReason::TrustRequired;
+            return TrustRequired;
         if (outcome == ExtensionActivationOutcome::Failed)
-            return ExtensionRestartReason::ActivationFailed;
+            return ActivationFailed;
         if (compatibility == ExtensionHostCompatibilityState::NotEvaluated)
-            return ExtensionRestartReason::CompatibilityRequired;
+            return CompatibilityRequired;
         if (compatibility == ExtensionHostCompatibilityState::Incompatible ||
             compatibility == ExtensionHostCompatibilityState::UnsupportedInHostProfile)
-            return ExtensionRestartReason::HostIncompatible;
+            return HostIncompatible;
         if (runtime == ExtensionRuntimeActivityState::Inactive && DesiredActivation() == ExtensionDesiredActivation::Active)
-            return ExtensionRestartReason::ActivationRequired;
-        return ExtensionRestartReason::None;
+            return ActivationRequired;
+        return None;
     }
 
     /** @copydoc TransitionExtensionActivation */
