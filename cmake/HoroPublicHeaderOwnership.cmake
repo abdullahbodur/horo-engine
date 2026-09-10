@@ -233,6 +233,10 @@ horo_configure_target_header_boundary(HoroVfxApi PUBLIC_HEADERS
     Horo/Vfx/VfxErrors.h
     Horo/Vfx/VfxIdentity.h
 )
+horo_configure_target_header_boundary(HoroDestructionApi PUBLIC_HEADERS
+    Horo/Destruction/DestructionErrors.h
+    Horo/Destruction/DestructionIdentity.h
+)
 horo_configure_target_header_boundary(HoroCinematicModel PUBLIC_HEADERS
     Horo/Cinematic/CinematicErrors.h
     Horo/Cinematic/CinematicIdentity.h

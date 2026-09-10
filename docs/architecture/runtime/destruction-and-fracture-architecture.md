@@ -50,6 +50,48 @@ Physics contacts, replicated records, scripts, UI, Audio, VFX and Decals never m
 destruction state directly. They provide typed evidence/commands or consume post-commit
 snapshots/events. Native handles and mutable buffers do not cross the public boundary.
 
+## Identity Contract
+
+`HoroEngine::DestructionApi` owns the backend-neutral identity vocabulary in
+`Horo/Destruction/DestructionIdentity.h`. Authored `DestructibleId` and
+artifact-local `DestructionChunkId` values are non-zero stable IDs issued by their
+owning authoring/import boundary. They survive table reordering and runtime replacement;
+names, array positions, paths, entity slots, native body/subshape IDs and pointer values
+are never identities.
+
+`FractureAssetId` wraps the Assets-owned path-independent `AssetId`.
+`FractureArtifactContentIdentity` combines that stable asset with a non-wrapping durable
+content revision and the SHA-256 digest of all canonical semantic cook inputs.
+`FractureChunkIdentity` combines exact content with the stable artifact-local chunk ID,
+so equal chunk values from replaced or unrelated content cannot alias. A content
+replacement either supplies an explicit stable-chunk migration or produces
+`StaleContent`; matching array positions do not establish compatibility.
+
+Runtime references use `DestructionHandle { world, destructible, generation }`.
+The handle is non-owning and proves neither registry residency nor backing Scene,
+Physics or Render lifetime. The scene-scoped Destruction owner issues generations,
+increments them on replacement, retirement/recreation and world reload, and permanently
+retires an owner on counter exhaustion. Admission checks owner dimensions before the
+generation fence, producing `IdentityUnknown` for a foreign owner and
+`StaleGeneration` for a retired incarnation.
+
+`DestructionCommandId` binds an owner-issued idempotency value to the exact target
+handle. `DestructionEventOccurrenceId` is the deterministic composite of source handle,
+committed semantic state revision, closed fact kind and canonical zero-based ordinal
+within that revision. It is generated only after aggregate commit; replaying the same
+committed journal produces the same value, while distinct canonical facts cannot
+collide. Event access additionally rejects `StaleRevision`.
+
+All identity encodings are fixed-width, padding-free network byte order and contain no
+native representation. Zero is reserved for invalid scalar identities; decoders reject
+an invalid dimension or unknown fact kind. Generation and revision helpers fail on
+overflow rather than wrapping. The types and validation helpers are allocation-free and
+thread-compatible values; they schedule no work and own no mutable records, so
+cancellation, rollback and shutdown have nothing to drain in this API slice. Values may
+outlive runtime owners but become unusable when later owner validation reports a stale
+generation/content/revision. Live registry mutation, bounded work, synchronization and
+shutdown draining remain the DestructionRuntime owner's responsibility.
+
 ## Destruction Model
 
 Scene components carry stable binding and authored policy, not live mutable state:
@@ -57,7 +99,7 @@ Scene components carry stable binding and authored policy, not live mutable stat
 ```cpp
 struct DestructibleSceneBinding {
     DestructibleId destructible;
-    AssetId fractureAsset;
+    FractureAssetId fractureAsset;
     DestructionPolicyId policy;
     DestructionFeatureRequirements requiredFeatures;
 };
@@ -85,9 +127,7 @@ Pre-fractured meshes are authored and cooked offline through ADR-145:
 
 ```cpp
 struct CanonicalFractureArtifact {
-    FractureArtifactId artifact;
-    FractureArtifactRevision revision;
-    FractureFingerprint semanticFingerprint;
+    FractureArtifactContentIdentity content;
     FractureIntegrityDigest integrityDigest;
     AssetId sourceMesh;
     FractureRecipeId recipe;

@@ -25,6 +25,7 @@ horo_allow_target_dependencies(TARGET HoroPhysics DEPENDENCIES HoroFoundation Ho
 horo_allow_target_dependencies(TARGET HoroAI DEPENDENCIES HoroFoundation)
 horo_allow_target_dependencies(TARGET HoroPCG DEPENDENCIES HoroFoundation)
 horo_allow_target_dependencies(TARGET HoroVfxApi DEPENDENCIES HoroFoundation)
+horo_allow_target_dependencies(TARGET HoroDestructionApi DEPENDENCIES HoroFoundation HoroAssets)
 horo_allow_target_dependencies(TARGET HoroCinematicModel DEPENDENCIES HoroFoundation)
 horo_allow_target_dependencies(TARGET HoroNavigationApi DEPENDENCIES HoroFoundation)
 horo_allow_target_dependencies(TARGET HoroXRApi DEPENDENCIES HoroFoundation)
