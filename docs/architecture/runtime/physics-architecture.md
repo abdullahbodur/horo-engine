@@ -583,6 +583,19 @@ owned evidence with no logging, storage, event, lifetime or mutation authority.
 Metrics/profiler ingestion and native solver callback translation remain separate
 owning contracts.
 
+`PhysicsMetricSnapshot` is the immutable bounded handoff for one committed tick.
+Physics validates its exact world and publication revisions, finite host/adapter-
+supplied durations, coherent counts and admitted world limits before invoking any
+pre-bound Telemetry handle. Process composition registers the closed metric
+vocabulary and selects `Off`, `Core` or `Detailed`; an unavailable required binding
+rejects explicitly, while optional unavailable and policy-off bindings remain
+distinct from a zero measurement. The fixed-step path performs no string lookup,
+dimension binding, clock read or heap growth. Telemetry contention, saturation,
+shutdown and stale internal handles may lose observations but cannot influence
+simulation admission, order, state or determinism. Detailed stage timings are
+profiler-consumable measurements only; this slice does not create a second profiler
+store, arm native capture or claim backend timing support.
+
 NaN or non-finite body state is detected at owned boundaries, associated with
 body/entity identity, and quarantined or treated as fatal according to the
 configured runtime policy.

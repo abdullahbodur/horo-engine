@@ -349,6 +349,15 @@ the same boundary, and the standalone Physics consumer compiles the new header.
 No existing caller is migrated. The earlier Foundation-only statements above
 describe the initial identity/analytic slice, not this additional reference surface.
 
+`[PHY-009.2]` adds `Horo/Physics/PhysicsMetrics.h` to `HoroEngine::Physics`.
+The header exposes only bounded Horo measurement values, exact Physics world/revision
+identity and Foundation Telemetry handles already registered by process composition.
+It adds no solver SDK, renderer, editor, platform clock, metric store or profiler
+backend dependency. Existing Physics producers migrate by supplying one immutable
+post-publication snapshot and pre-bound handles; metric dimensions are never resolved
+on the fixed-tick path. The generated standalone Physics header consumer verifies the
+same ownership boundary.
+
 Reference validation does not read an artifact, recompute a target key or establish
 geometry readiness. Full target encoding and envelope verification remain the
 owning cook/runtime work; opaque digest equality alone cannot prove a correct
