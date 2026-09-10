@@ -107,8 +107,8 @@ namespace Horo::Cli {
             std::size_t begin = 0;
             while (begin < value.size()) {
                 const std::size_t end = value.find('.', begin);
-                const std::string_view token = value.substr(begin, end == std::string_view::npos ? value.size() - begin : end - begin);
-                if (!ValidCapabilityToken(token))
+                if (const std::string_view token = value.substr(begin, end == std::string_view::npos ? value.size() - begin : end - begin);
+                    !ValidCapabilityToken(token))
                     return false;
                 if (end == std::string_view::npos)
                     break;
@@ -372,7 +372,7 @@ namespace Horo::Cli {
     }
 
     /** @copydoc CliDispatcher::Finalize */
-    CliTerminalResult CliDispatcher::Finalize(const CliInvocationContext &invocation, CliExecutionContext &context,
+    CliTerminalResult CliDispatcher::Finalize(const CliInvocationContext &invocation, const CliExecutionContext &context,
                                               const std::optional<std::chrono::steady_clock::time_point> &deadline,
                                               Result<CliCommandResult> result) const {
         CliExecutionCorrelation correlation = context.Correlation();
