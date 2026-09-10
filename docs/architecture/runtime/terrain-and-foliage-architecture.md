@@ -67,6 +67,49 @@ entity/cell IDs and native handles. TRF-001.2 freezes their exact encoding. Cont
 residency, mutation and capability revisions advance independently so consumers check
 the state they actually use.
 
+### Stable Identity And Runtime Fencing Contract
+
+`HoroEngine::TerrainApi` implements the TRF-001.2 identity boundary. Stable project,
+dataset, foliage-type, cluster and baked-instance domains use distinct strong 128-bit
+values. The all-zero representation is reserved. Project identity comes from canonical
+project metadata; dataset and foliage-type identities are the first 128 bits of SHA-256
+over a versioned domain separator, exact project bytes and a non-empty bounded canonical
+semantic key. Display names, paths, locale, timestamps, pointer values and native handles
+are prohibited derivation inputs.
+
+`TerrainTileId` is not a hash of presentation state. Its canonical 25-byte encoding is
+the exact dataset identity followed by signed world-tile X and Z in network byte order
+and one LOD byte. Negative floor-quantized coordinates therefore remain stable across
+world-origin rebases. Dataset manifest membership and compatibility remain separate
+validation; equality of coordinates does not make tiles from different datasets equal.
+
+Foliage-cluster identity is domain-separated over the exact tile encoding and a bounded
+canonical cluster-provenance key, never an array position. Stable baked
+`FoliageInstanceId` is domain-separated over the exact tile,
+foliage type and bounded canonical placement-provenance key. Equal complete inputs yield
+equal bytes independent of job order; changing the domain, project, dataset, tile, LOD,
+type or placement key changes identity. A conflicting duplicate fails publication rather
+than being renamed or assigned an array index.
+
+Stable identity bytes are never recycled for different authored meaning. Deletion keeps
+the identity reserved in source/cooked history; compatible recook preserves it, while a
+new semantic object derives a new value. Runtime slot reuse always increments generation,
+and generation exhaustion retires the slot instead of wrapping.
+
+Runtime identities are deliberately different. `TerrainRuntimeHandle` contains the
+stable dataset plus a registry slot and non-wrapping generation;
+`RuntimeFoliageInstanceHandle` adds its own slot and non-wrapping generation. Access
+validates exact dataset, both slots, both generations and Active lifecycle state before
+registry use. Replacement makes the prior generation stale, Closing/Closed rejects new
+access, overflow closes reuse, and no runtime handle has a serialization function.
+
+`TerrainContentRevision`, `TerrainResidencyRevision`, `TerrainMutationRevision` and
+`TerrainCapabilityRevision` are independent non-zero, non-wrapping strong types. One
+`TerrainSnapshotRevision` captures all four; consumers compare the fields they actually
+read instead of substituting a generic dirty flag. Bounded catalog validation performs
+no registration, I/O, backend selection or ambient mutation and rejects malformed,
+duplicate, foreign-dataset and over-capacity candidates transactionally.
+
 ## Terrain System
 
 ### Heightfield Model

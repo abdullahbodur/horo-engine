@@ -102,6 +102,7 @@ device backend.
 | `HoroRenderFrontend` (`HoroEngine::RenderFrontend`) | Always | Owns `Runtime/Render/RenderFrontend.h` and frontend submission/resource coordination. | RenderApi, RenderBackendRegistry (public) |
 | `HoroRenderNull` (`HoroEngine::RenderNull`) | Always | Owns `Runtime/Render/NullBackendModule.h`; implementation is private and deterministic/headless. | RenderApi, RenderBackendRegistry (public) |
 | `HoroXRApi` (`HoroEngine::XRApi`) | Always | Owns backend-neutral XR contract versions, generation-safe live identities, immutable fixed-capacity capability snapshots, admission results, and stable error descriptors under `XR/**`. It owns no OpenXR/native state and performs no runtime discovery or activation. | Foundation (public) |
+| `HoroTerrainApi` (`HoroEngine::TerrainApi`) | Always | Owns deterministic stable project/dataset/tile/foliage identities, independent Terrain revisions, generation-safe runtime foliage handles, bounded catalog validation, and stable errors under `Terrain/**`. It owns no native Render/Physics/Navigation resource, world-streaming authority, runtime scheduler, or editor state. | Foundation (public) |
 | `HoroRenderOpenGL` (`HoroEngine::RenderOpenGL`) | `HORO_BUILD_RENDER_OPENGL` | Owns the concrete OpenGL backend. OpenGL and GL loader types remain private; no backend-specific public Horo header exists. | RenderBackendRegistry (public) |
 | `HoroRenderMetal` (`HoroEngine::RenderMetal`) | Apple and `HORO_BUILD_RENDER_METAL` | Owns the concrete Metal backend. Objective-C++, Metal, Foundation, and QuartzCore types remain private; no backend-specific public Horo header exists. | RenderBackendRegistry (public) |
 
@@ -122,7 +123,7 @@ device backend.
 
 ## Public Header Inventory And Boundary
 
-There are 134 non-placeholder headers under `include/Horo/` at this snapshot:
+There are 136 non-placeholder headers under `include/Horo/` at this snapshot:
 
 | Public path | Header count | Semantic owner |
 |---|---:|---|
@@ -136,6 +137,7 @@ There are 134 non-placeholder headers under `include/Horo/` at this snapshot:
 | `Platform/` | 3 | Platform |
 | `Runtime/` | 16 | Runtime, Input, RuntimeScene, SceneModel, RenderApi, RenderBackendRegistry, RenderFrontend, and RenderNull |
 | `XR/` | 4 | XRApi |
+| `Terrain/` | 2 | TerrainApi |
 
 The current CMake boundary is broader than this semantic ownership map:
 

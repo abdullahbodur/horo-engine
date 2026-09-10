@@ -132,6 +132,22 @@ must consume these Horo types without duplicating them, serializing process-loca
 identity values, or exposing OpenXR headers, handles, result integers, extension
 names, or platform-native types through the public boundary.
 
+## TRF-001.2 Migration Notes
+
+`HoroEngine::TerrainApi` owns `Horo/Terrain/TerrainIdentity.h` and
+`Horo/Terrain/TerrainErrors.h` with a Foundation-only public dependency. Future
+Terrain Runtime, cook, render-extraction, Physics, Navigation and World Streaming
+adapters must link TerrainApi explicitly; linking an adjacent subsystem does not
+publish Terrain identities transitively. The generated TerrainApi public-header
+consumer verifies that no native backend, editor, service-locator or repository-wide
+include path leaks through this boundary.
+
+There are no existing production Terrain callers to migrate. Persisted content uses
+only the fixed-width stable identity or dataset-plus-tile-coordinate encodings.
+`TerrainRuntimeHandle` and `RuntimeFoliageInstanceHandle` are process-local and must
+be resolved again after replacement, world unload or shutdown; they are deliberately
+excluded from the serialization surface.
+
 ## Audio Backend Contract Boundary
 
 `HoroEngine::AudioApi` owns the public discovery, format, capability, timing and
