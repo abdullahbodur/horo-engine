@@ -4,7 +4,7 @@
 - **Date**: 2026-09-02
 - **Supersedes**: None
 - **Scope**: Product and environment storage identity, platform-user partitions, game-profile ownership, save categories, logical slot addressing, physical storage mapping, multi-user fallback, profile switching and cloud/UI boundaries
-- **Issue**: [SAV-003.1](https://github.com/abdullahbodur/horo-engine/issues/1425)
+- **Issue**: [SAV-003.1](https://github.com/HoroCore/horo-engine/issues/1425)
 - **Jira**: [HORO-1425](https://horo-engine.atlassian.net/browse/HORO-1425)
 - **Related**: [ADR-008](008-error-model-exception-boundary-and-registry.md), [ADR-010](010-job-waiting-and-operation-store-ownership.md), [ADR-112](112-save-archive-container-and-compatibility-policy.md)
 - **Normative documents**: [Save Game And Persistence](../architecture/runtime/save-game-and-persistence.md), [Platform Services](../architecture/runtime/platform-services-architecture.md), [Platform Abstraction](../architecture/foundation/platform-abstraction.md)

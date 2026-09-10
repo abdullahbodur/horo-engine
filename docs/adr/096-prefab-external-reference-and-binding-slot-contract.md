@@ -4,7 +4,7 @@
 - **Date**: 2026-09-02
 - **Supersedes**: None
 - **Scope**: Prefab-local and asset reference classes, prohibited scene-external capture, stable typed binding-slot declarations and instance bindings, create-from-selection boundary reporting, nested re-exposure, cook/spawn validation, lifetime, diagnostics and transactions
-- **Issue**: [PFB-001.11](https://github.com/abdullahbodur/horo-engine/issues/1086)
+- **Issue**: [PFB-001.11](https://github.com/HoroCore/horo-engine/issues/1086)
 - **Jira**: [HORO-1086](https://horo-engine.atlassian.net/browse/HORO-1086)
 - **Related**: [ADR-017](017-prefab-role-ownership-and-capability-tiers.md), [ADR-093](093-prefab-override-property-identity-and-delta-operations.md), [ADR-094](094-prefab-nested-composition-and-variant-inheritance.md), [ADR-095](095-prefab-cook-boundary-and-artifact-model.md)
 - **Normative documents**: [Prefab Architecture](../architecture/runtime/prefab-architecture.md), [Scene Runtime](../architecture/runtime/scene-runtime.md), [Gameplay Behavior Authoring](../architecture/extensions/gameplay-behavior-authoring.md), [Editor Document Model](../architecture/editor/editor-document-model.md)

@@ -4,7 +4,7 @@
 - **Date**: 2026-09-02
 - **Supersedes**: None
 - **Scope**: Durable package identity, extension descriptors, trust and activation hand-off for extension-only and hybrid packages
-- **Issue**: [EXT-001.1](https://github.com/abdullahbodur/horo-engine/issues/69)
+- **Issue**: [EXT-001.1](https://github.com/HoroCore/horo-engine/issues/69)
 - **Jira**: [HORO-69](https://horo-engine.atlassian.net/browse/HORO-69)
 - **Normative documents**: [Horo Package System](../architecture/packages/package-system.md), [Package Lifecycle](../architecture/packages/package-lifecycle.md), [Extension System](../architecture/extensions/plugin-system.md), [Desired Project Trees](../architecture/desired-project-tree.md), [Application Security](../architecture/security/application-security.md)
 

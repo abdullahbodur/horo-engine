@@ -4,9 +4,9 @@
 - **Date**: 2026-09-02
 - **Supersedes**: None
 - **Scope**: Input-device capture, permissions, timestamped PCM transport, monitoring, recording, network voice, speech, privacy, and editor boundaries
-- **Issue**: [AUD-012.1](https://github.com/abdullahbodur/horo-engine/issues/645)
+- **Issue**: [AUD-012.1](https://github.com/HoroCore/horo-engine/issues/645)
 - **Jira**: [HORO-645](https://horo-engine.atlassian.net/browse/HORO-645)
-- **Parent**: [AUD-012](https://github.com/abdullahbodur/horo-engine/issues/644)
+- **Parent**: [AUD-012](https://github.com/HoroCore/horo-engine/issues/644)
 - **Related**: [ADR-062](062-audio-runtime-ownership-and-update-order.md), [ADR-063](063-audio-sample-format-and-channel-layout.md), [ADR-064](064-audio-asset-and-cook-boundary.md), [ADR-067](067-platform-audio-backend-strategy.md)
 - **Normative documents**: [Audio Architecture](../architecture/runtime/audio-architecture.md), [Platform Abstraction](../architecture/foundation/platform-abstraction.md), [Application Security](../architecture/security/application-security.md), [Networking Architecture](../architecture/runtime/networking-architecture.md)
 

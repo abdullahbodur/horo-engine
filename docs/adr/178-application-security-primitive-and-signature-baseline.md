@@ -4,7 +4,7 @@
 - Date: 2026-09-10
 - Deciders: Horo Engine maintainers
 - Supersedes: ADR-002 for credential storage and plaintext fallback semantics
-- Issue: [SEC-001](https://github.com/abdullahbodur/horo-engine/issues/33)
+- Issue: [SEC-001](https://github.com/HoroCore/horo-engine/issues/33)
 - Jira: [HORO-35](https://horo-engine.atlassian.net/browse/HORO-35)
 - Normative documents: `docs/architecture/security/application-security.md`, `docs/architecture/release/release-security.md`, `docs/architecture/foundation/platform-abstraction.md`, `docs/architecture/extensions/plugin-system.md`
 

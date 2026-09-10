@@ -4,9 +4,9 @@
 - **Date**: 2026-09-02
 - **Supersedes**: None
 - **Scope**: Procedural sound asset identity, graph compilation, generator execution, deterministic inputs, extension nodes, editor ownership, mixer/music boundaries, limits, and lifecycle
-- **Issue**: [AUD-013.1](https://github.com/abdullahbodur/horo-engine/issues/655)
+- **Issue**: [AUD-013.1](https://github.com/HoroCore/horo-engine/issues/655)
 - **Jira**: [HORO-655](https://horo-engine.atlassian.net/browse/HORO-655)
-- **Parent**: [AUD-013](https://github.com/abdullahbodur/horo-engine/issues/654)
+- **Parent**: [AUD-013](https://github.com/HoroCore/horo-engine/issues/654)
 - **Related**: [ADR-062](062-audio-runtime-ownership-and-update-order.md), [ADR-063](063-audio-sample-format-and-channel-layout.md), [ADR-064](064-audio-asset-and-cook-boundary.md), [ADR-065](065-mixer-topology-and-constrained-dag.md), [ADR-068](068-music-transport-and-cross-system-ownership.md), [ADR-069](069-audio-extension-capability-and-abi.md)
 - **Normative documents**: [Audio Architecture](../architecture/runtime/audio-architecture.md), [Asset Pipeline](../architecture/runtime/asset-pipeline.md), [Editor Panel Host](../architecture/editor/editor-panel-host.md), [Extension System](../architecture/extensions/plugin-system.md)
 

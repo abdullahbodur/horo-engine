@@ -4,7 +4,7 @@
 - **Date**: 2026-09-02
 - **Supersedes**: None
 - **Scope**: Deterministic foliage placement, immutable baked base, ephemeral runtime overlays, durable spawn/remove/update deltas, identity, authority, capacity, World Streaming eviction, save capture/restore, replacement, cancellation, multiplayer and shutdown
-- **Issue**: [TRF-004.1](https://github.com/abdullahbodur/horo-engine/issues/1954)
+- **Issue**: [TRF-004.1](https://github.com/HoroCore/horo-engine/issues/1954)
 - **Jira**: [HORO-1910](https://horo-engine.atlassian.net/browse/HORO-1910)
 - **Related**: [ADR-008](008-error-model-exception-boundary-and-registry.md), [ADR-010](010-job-waiting-and-operation-store-ownership.md), [ADR-012](012-world-streaming-partition-authority-and-subsystem-boundaries.md), [ADR-023](023-world-index-and-cell-format-architecture-decision.md), [ADR-108](108-dynamic-overlay-carving-and-tile-rebuild-policy.md), [ADR-114](114-canonical-runtime-world-persistence-boundary.md), [ADR-137](137-terrain-foliage-ownership-data-tier-and-lifecycle.md), [ADR-138](138-terrain-source-cooked-tile-cache-and-streaming-ownership.md), [ADR-139](139-terrain-render-extraction-material-lod-and-tier-boundary.md)
 - **Normative documents**: [Terrain and Foliage Architecture](../architecture/runtime/terrain-and-foliage-architecture.md), [Save Game and Persistence](../architecture/runtime/save-game-and-persistence.md), [World Streaming Architecture](../architecture/runtime/world-streaming-architecture.md)

@@ -4,7 +4,7 @@
 - **Date**: 2026-09-02
 - **Supersedes**: None
 - **Scope**: Terrain/Foliage render-candidate extraction, render-resource realization, material/permutation admission, per-view visibility and LOD ownership, Terrain-tier/render-profile interaction, 1.0 CPU baseline, post-1.0 GPU-driven recipes, replacement, cancellation, device loss and shutdown
-- **Issue**: [TRF-003.1](https://github.com/abdullahbodur/horo-engine/issues/1947)
+- **Issue**: [TRF-003.1](https://github.com/HoroCore/horo-engine/issues/1947)
 - **Jira**: [HORO-1903](https://horo-engine.atlassian.net/browse/HORO-1903)
 - **Related**: [ADR-027](027-renderer-resource-identity-and-descriptors.md), [ADR-028](028-renderer-capability-limits-and-product-profiles.md), [ADR-034](034-gpu-memory-and-residency-ownership.md), [ADR-035](035-shader-source-and-intermediate-representation.md), [ADR-036](036-raster-render-path-and-quality-architecture.md), [ADR-038](038-gpu-scene-and-instance-data-model.md), [ADR-137](137-terrain-foliage-ownership-data-tier-and-lifecycle.md), [ADR-138](138-terrain-source-cooked-tile-cache-and-streaming-ownership.md)
 - **Normative documents**: [Terrain and Foliage Architecture](../architecture/runtime/terrain-and-foliage-architecture.md), [Rendering Architecture](../architecture/runtime/rendering-architecture.md), [Material and Shader Model](../architecture/runtime/material-and-shader-model.md), [LOD and Culling Architecture](../architecture/runtime/lod-and-culling-architecture.md)

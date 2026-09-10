@@ -4,7 +4,7 @@
 - **Date**: 2026-09-02
 - **Supersedes**: None
 - **Scope**: Protected save assets, attacker capabilities, source trust classification, bounded admission, integrity/authenticity/replay policy, tool authority, credentials, development/shipping profiles and security non-goals
-- **Issue**: [SAV-008.1](https://github.com/abdullahbodur/horo-engine/issues/1495)
+- **Issue**: [SAV-008.1](https://github.com/HoroCore/horo-engine/issues/1495)
 - **Jira**: [HORO-1495](https://horo-engine.atlassian.net/browse/HORO-1495)
 - **Related**: [ADR-002](002-credential-handling.md), [ADR-008](008-error-model-exception-boundary-and-registry.md), [ADR-112](112-save-archive-container-and-compatibility-policy.md), [ADR-113](113-local-storage-user-profile-and-slot-ownership.md), [ADR-114](114-canonical-runtime-world-persistence-boundary.md), [ADR-115](115-cloud-save-authority-revision-and-conflict-policy.md)
 - **Normative documents**: [Save Game And Persistence](../architecture/runtime/save-game-and-persistence.md), [Application Security](../architecture/security/application-security.md), [Platform Services](../architecture/runtime/platform-services-architecture.md), [CLI Architecture](../architecture/interfaces/cli-architecture.md), [MCP Architecture](../architecture/interfaces/mcp-architecture.md), [Release Security](../architecture/release/release-security.md)

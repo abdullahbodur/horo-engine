@@ -4,7 +4,7 @@
 - **Date**: 2026-08-26
 - **Supersedes**: None
 - **Scope**: Import and export of foreign engine projects (Godot, Unity, Unreal) into and out of Horo
-- **Issue**: [PEX-001.1](https://github.com/abdullahbodur/horo-engine/issues/2308)
+- **Issue**: [PEX-001.1](https://github.com/HoroCore/horo-engine/issues/2308)
 - **Normative document**: [Cross-Engine Project Interchange](../architecture/foundation/cross-engine-interchange.md)
 
 ## Context
@@ -165,7 +165,7 @@ version risks. Until all three evidence records are reviewed, this ADR remains
   imports after mid-operation failure are exactly the class of damage the
   staging-and-publish model prevents.
 
-[PEX-001]: https://github.com/abdullahbodur/horo-engine/issues/2307
+[PEX-001]: https://github.com/HoroCore/horo-engine/issues/2307
 [ADR-004]: 004-cli-core-gui-boundary.md
 [System Design]: ../architecture/foundation/system-design.md
 [Project Versioning And Migration]: ../architecture/foundation/project-versioning-and-migration.md

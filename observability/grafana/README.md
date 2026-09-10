@@ -9,7 +9,7 @@ OpenTelemetry adapter.
 The stable public download URL is:
 
 ```text
-https://raw.githubusercontent.com/abdullahbodur/horo-engine/main/observability/grafana/dashboards/horo-editor.json
+https://raw.githubusercontent.com/HoroCore/horo-engine/main/observability/grafana/dashboards/horo-editor.json
 ```
 
 Download it directly when the repository checkout is not available:
@@ -17,7 +17,7 @@ Download it directly when the repository checkout is not available:
 ```bash
 curl -fL \
   -o horo-editor-grafana-dashboard.json \
-  https://raw.githubusercontent.com/abdullahbodur/horo-engine/main/observability/grafana/dashboards/horo-editor.json
+  https://raw.githubusercontent.com/HoroCore/horo-engine/main/observability/grafana/dashboards/horo-editor.json
 ```
 
 In Grafana, open **Dashboards → New → Import** and upload the downloaded JSON

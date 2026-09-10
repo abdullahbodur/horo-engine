@@ -4,9 +4,9 @@
 - **Date**: 2026-09-02
 - **Supersedes**: None
 - **Scope**: Initial canonical 3D physics solver, dependency pinning, Horo/native ownership boundary, world units, coordinate and matrix conventions, precision mode, numeric tolerance profile, scale envelope, fixed-step and jobs, platform support, licensing, determinism, serialization, observability, upgrade policy, unsupported cases, and qualification
-- **Issue**: [PHY-001.1](https://github.com/abdullahbodur/horo-engine/issues/837)
+- **Issue**: [PHY-001.1](https://github.com/HoroCore/horo-engine/issues/837)
 - **Jira**: [HORO-837](https://horo-engine.atlassian.net/browse/HORO-837)
-- **Parent**: [PHY-001](https://github.com/abdullahbodur/horo-engine/issues/828)
+- **Parent**: [PHY-001](https://github.com/HoroCore/horo-engine/issues/828)
 - **Related**: [ADR-005](005-submodule-compatibility.md), [ADR-008](008-error-model-exception-boundary-and-registry.md), [ADR-010](010-job-waiting-and-operation-store-ownership.md), [ADR-026](026-large-world-precision-and-floating-origin-strategy.md)
 - **Normative documents**: [Physics Architecture](../architecture/runtime/physics-architecture.md), [Runtime Lifecycle](../architecture/runtime/runtime-lifecycle.md), [Scene Math](../architecture/foundation/scene-math.md), [Coordinate Precision and Origin Rebasing](../architecture/runtime/coordinate-precision-and-origin-rebasing.md), [Developer Environment](../architecture/delivery/developer-environment.md)
 - **Upstream references**: [Jolt Physics](https://github.com/jrouwe/JoltPhysics), [Architecture and conventions](https://github.com/jrouwe/JoltPhysics/blob/v5.6.0/Docs/Architecture.md), [Release notes](https://github.com/jrouwe/JoltPhysics/blob/v5.6.0/Docs/ReleaseNotes.md), [API changes](https://github.com/jrouwe/JoltPhysics/blob/v5.6.0/Docs/APIChanges.md), [MIT license](https://github.com/jrouwe/JoltPhysics/blob/v5.6.0/LICENSE)

@@ -4,9 +4,9 @@
 - **Date**: 2026-09-02
 - **Supersedes**: None
 - **Scope**: Process, control-thread, callback, scene-context, suspend, failure, and teardown authority
-- **Issue**: [AUD-001.1](https://github.com/abdullahbodur/horo-engine/issues/525)
+- **Issue**: [AUD-001.1](https://github.com/HoroCore/horo-engine/issues/525)
 - **Jira**: [HORO-525](https://horo-engine.atlassian.net/browse/HORO-525)
-- **Parent**: [AUD-001](https://github.com/abdullahbodur/horo-engine/issues/524)
+- **Parent**: [AUD-001](https://github.com/HoroCore/horo-engine/issues/524)
 - **Normative documents**: [Audio Architecture](../architecture/runtime/audio-architecture.md), [Runtime Lifecycle](../architecture/runtime/runtime-lifecycle.md)
 
 ## Context

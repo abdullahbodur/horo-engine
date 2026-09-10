@@ -4,9 +4,9 @@
 - **Date**: 2026-09-02
 - **Supersedes**: None
 - **Scope**: Backend-neutral real-time sample representation, buffer layout, speaker/Ambisonic order, silence, denormals, and clipping
-- **Issue**: [AUD-001.3](https://github.com/abdullahbodur/horo-engine/issues/527)
+- **Issue**: [AUD-001.3](https://github.com/HoroCore/horo-engine/issues/527)
 - **Jira**: [HORO-527](https://horo-engine.atlassian.net/browse/HORO-527)
-- **Parent**: [AUD-001](https://github.com/abdullahbodur/horo-engine/issues/524)
+- **Parent**: [AUD-001](https://github.com/HoroCore/horo-engine/issues/524)
 - **Related**: [ADR-062](062-audio-runtime-ownership-and-update-order.md)
 - **Normative document**: [Audio Architecture](../architecture/runtime/audio-architecture.md)
 

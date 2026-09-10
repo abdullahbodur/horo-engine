@@ -4,7 +4,7 @@
 - **Date**: 2026-09-02
 - **Supersedes**: None
 - **Scope**: Public/private target boundary, provider discovery and trust, platform-services extension ABI values, candidate activation/rollback, provider selection and headless/test/unsupported/certification composition
-- **Issue**: [PLS-002.1](https://github.com/abdullahbodur/horo-engine/issues/1882)
+- **Issue**: [PLS-002.1](https://github.com/HoroCore/horo-engine/issues/1882)
 - **Jira**: [HORO-1838](https://horo-engine.atlassian.net/browse/HORO-1838)
 - **Related**: [ADR-008](008-error-model-exception-boundary-and-registry.md), [ADR-018](018-command-registration-permissions-threading-and-packaged-build-policy.md), [ADR-054](054-extension-and-package-authority-boundary.md), [ADR-055](055-extension-manifest-v1-typed-model.md), [ADR-056](056-external-editor-ui-boundary.md), [ADR-116](116-save-data-threat-model-and-trust-policy.md), [ADR-130](130-platform-services-frontend-request-lifetime-timeout-null-and-error-semantics.md)
 - **Normative documents**: [Platform Services Architecture](../architecture/runtime/platform-services-architecture.md), [Extension System](../architecture/extensions/plugin-system.md), [Internal Module Descriptor](../architecture/foundation/internal-module-descriptor.md), [Release Security](../architecture/release/release-security.md)

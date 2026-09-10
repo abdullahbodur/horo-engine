@@ -4,7 +4,7 @@
 - **Date**: 2026-09-01
 - **Supersedes**: None
 - **Scope**: Renderer benchmark workloads, measurement cohorts, variance policy, baselines and CI regression gates
-- **Issue**: [RND-017.11](https://github.com/abdullahbodur/horo-engine/issues/443)
+- **Issue**: [RND-017.11](https://github.com/HoroCore/horo-engine/issues/443)
 - **Jira**: [HORO-443](https://horo-engine.atlassian.net/browse/HORO-443)
 - **Companion decisions**: [ADR-028](028-renderer-capability-limits-and-product-profiles.md), [ADR-042](042-cpu-gpu-timestamps-and-pipeline-statistics.md), [ADR-043](043-gpu-memory-and-resource-inspection.md), [ADR-046](046-gpu-driver-compatibility-and-workaround-registry.md), [ADR-050](050-cross-backend-reference-image-tests.md)
 - **Normative documents**: [Rendering Architecture](../architecture/runtime/rendering-architecture.md), [Render Backend Parity Contract](../architecture/runtime/render-backend-parity-contract.md), [Metrics And Profiling](../architecture/observability/observability-performance.md), [Testing Architecture](../architecture/delivery/testing-architecture.md), [Quality And CI](../architecture/delivery/quality-and-ci.md)

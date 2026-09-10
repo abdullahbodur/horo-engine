@@ -4,7 +4,7 @@
 - **Date**: 2026-09-02
 - **Supersedes**: None
 - **Scope**: Prefab source, effective-resolution candidate, expanded-scene and spawnable-template artifact boundaries; AssetCook ownership; deterministic cache inputs; generation publication; migration, hot reload, shipping and failure retention
-- **Issue**: [PFB-007.1](https://github.com/abdullahbodur/horo-engine/issues/1066)
+- **Issue**: [PFB-007.1](https://github.com/HoroCore/horo-engine/issues/1066)
 - **Jira**: [HORO-1066](https://horo-engine.atlassian.net/browse/HORO-1066)
 - **Related**: [ADR-017](017-prefab-role-ownership-and-capability-tiers.md), [ADR-093](093-prefab-override-property-identity-and-delta-operations.md), [ADR-094](094-prefab-nested-composition-and-variant-inheritance.md)
 - **Normative documents**: [Prefab Architecture](../architecture/runtime/prefab-architecture.md), [Asset Pipeline](../architecture/runtime/asset-pipeline.md), [Project Versioning and Migration](../architecture/foundation/project-versioning-and-migration.md), [Scene Runtime](../architecture/runtime/scene-runtime.md)

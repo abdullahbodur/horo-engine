@@ -4,7 +4,7 @@
 - **Date**: 2026-09-01
 - **Supersedes**: None
 - **Scope**: Backend-neutral GPU memory, allocation, residency and resource inspection
-- **Issue**: [RND-017.3](https://github.com/abdullahbodur/horo-engine/issues/435)
+- **Issue**: [RND-017.3](https://github.com/HoroCore/horo-engine/issues/435)
 - **Jira**: [HORO-435](https://horo-engine.atlassian.net/browse/HORO-435)
 - **Related**: [ADR-012](012-world-streaming-partition-authority-and-subsystem-boundaries.md),
   [ADR-018](018-command-registration-permissions-threading-and-packaged-build-policy.md),

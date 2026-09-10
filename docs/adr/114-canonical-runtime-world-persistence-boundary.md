@@ -4,7 +4,7 @@
 - **Date**: 2026-09-02
 - **Supersedes**: None
 - **Scope**: Authoring defaults versus saved overrides, durable/derived/transient state classification, subsystem-owned canonical adapters, participant descriptors, capture and restore authority across PIE, packaged, server and client worlds
-- **Issue**: [SAV-004.1](https://github.com/abdullahbodur/horo-engine/issues/1438)
+- **Issue**: [SAV-004.1](https://github.com/HoroCore/horo-engine/issues/1438)
 - **Jira**: [HORO-1438](https://horo-engine.atlassian.net/browse/HORO-1438)
 - **Related**: [ADR-012](012-world-streaming-partition-authority-and-subsystem-boundaries.md), [ADR-024](024-perception-ownership-sense-policy-and-budget.md), [ADR-068](068-music-transport-and-cross-system-ownership.md), [ADR-092](092-character-controller-determinism-and-state-composition.md), [ADR-112](112-save-archive-container-and-compatibility-policy.md), [ADR-113](113-local-storage-user-profile-and-slot-ownership.md)
 - **Normative documents**: [Save Game And Persistence](../architecture/runtime/save-game-and-persistence.md), [Scene Runtime](../architecture/runtime/scene-runtime.md), [Gameplay Module Boundary](../architecture/extensions/gameplay-module-boundary.md), [World Streaming](../architecture/runtime/world-streaming-architecture.md)

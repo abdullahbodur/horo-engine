@@ -4,7 +4,7 @@
 - **Date**: 2026-09-02
 - **Supersedes**: None
 - **Scope**: Gameplay-script, scene-autoplay, gameplay-event, editor, MCP and remote cinematic triggers; typed capability/trust/authority admission; packaged-build availability; approval reuse; denial and lifecycle outcomes
-- **Issue**: [CIN-006.1](https://github.com/abdullahbodur/horo-engine/issues/1703)
+- **Issue**: [CIN-006.1](https://github.com/HoroCore/horo-engine/issues/1703)
 - **Jira**: [HORO-1662](https://horo-engine.atlassian.net/browse/HORO-1662)
 - **Related**: [ADR-014](014-sequencer-ownership-clock-authority-and-binding-boundary.md), [ADR-018](018-command-registration-permissions-threading-and-packaged-build-policy.md), [ADR-054](054-extension-and-package-authority-boundary.md), [ADR-117](117-playback-ownership-frame-order-and-determinism.md), [ADR-120](120-cinematic-event-dispatch-and-audio-coupling-boundary.md)
 - **Normative documents**: [Cinematic Sequencer Architecture](../architecture/runtime/cinematic-sequencer-architecture.md), [Gameplay Module Boundary](../architecture/extensions/gameplay-module-boundary.md), [MCP Architecture](../architecture/interfaces/mcp-architecture.md), [Editor AI Agent Architecture](../architecture/editor/editor-ai-agent-architecture.md), [Runtime Lifecycle](../architecture/runtime/runtime-lifecycle.md)

@@ -4,7 +4,7 @@
 - **Date**: 2026-09-06
 - **Supersedes**: None
 - **Scope**: Backend-neutral queue roles, deterministic submission, GPU completion and CPU wait policy
-- **Issue**: [RND-003.3](https://github.com/abdullahbodur/horo-engine/issues/298)
+- **Issue**: [RND-003.3](https://github.com/HoroCore/horo-engine/issues/298)
 - **Jira**: [HORO-298](https://horo-engine.atlassian.net/browse/HORO-298)
 - **Normative document**: [Rendering Architecture](../architecture/runtime/rendering-architecture.md)
 

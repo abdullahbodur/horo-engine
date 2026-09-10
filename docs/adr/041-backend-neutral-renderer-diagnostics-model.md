@@ -4,7 +4,7 @@
 - **Date**: 2026-09-01
 - **Supersedes**: None
 - **Scope**: Renderer diagnostic identity, context, ingestion, correlation and retention
-- **Issue**: [RND-017.1](https://github.com/abdullahbodur/horo-engine/issues/433)
+- **Issue**: [RND-017.1](https://github.com/HoroCore/horo-engine/issues/433)
 - **Jira**: [HORO-433](https://horo-engine.atlassian.net/browse/HORO-433)
 - **Related**: [ADR-008](008-error-model-exception-boundary-and-registry.md),
   [ADR-027](027-renderer-resource-identity-and-descriptors.md),

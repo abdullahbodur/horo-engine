@@ -4,7 +4,7 @@
 - **Date**: 2026-09-02
 - **Supersedes**: None
 - **Scope**: PCG spatial-provider snapshot ownership, coherent capture, query execution, numerical determinism, staleness, derived caching, built-in node catalog, extension trust, replacement and shutdown
-- **Issue**: [PCG-3.1](https://github.com/abdullahbodur/horo-engine/issues/2070)
+- **Issue**: [PCG-3.1](https://github.com/HoroCore/horo-engine/issues/2070)
 - **Jira**: [HORO-2024](https://horo-engine.atlassian.net/browse/HORO-2024)
 - **Related**: [ADR-008](008-error-model-exception-boundary-and-registry.md), [ADR-010](010-job-waiting-and-operation-store-ownership.md), [ADR-012](012-world-streaming-partition-authority-and-subsystem-boundaries.md), [ADR-018](018-command-registration-permissions-threading-and-packaged-build-policy.md), [ADR-026](026-large-world-precision-and-floating-origin-strategy.md), [ADR-054](054-extension-and-package-authority-boundary.md), [ADR-105](105-navigation-asset-and-scene-ownership-boundary.md), [ADR-107](107-navigation-query-consistency-and-snapshot-ownership.md), [ADR-137](137-terrain-foliage-ownership-data-tier-and-lifecycle.md), [ADR-150](150-pcg-graph-source-cooked-plan-cache-and-runtime-ownership.md), [ADR-151](151-pcg-ownership-authority-tier-and-lifecycle.md)
 - **Normative documents**: [Procedural Generation Architecture](../architecture/runtime/procedural-generation-architecture.md), [Scene Runtime](../architecture/runtime/scene-runtime.md), [World Streaming Architecture](../architecture/runtime/world-streaming-architecture.md), [Terrain and Foliage Architecture](../architecture/runtime/terrain-and-foliage-architecture.md), [Extension System](../architecture/extensions/plugin-system.md)

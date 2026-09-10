@@ -4,7 +4,7 @@
 - **Date**: 2026-09-02
 - **Supersedes**: None
 - **Scope**: PCG evaluation purity, generation-plan provenance, preview isolation, offline/runtime commit, target-owner preparation, generated-set identity, regeneration, cleanup, rollback and retirement
-- **Issue**: [PCG-4.1](https://github.com/abdullahbodur/horo-engine/issues/2074)
+- **Issue**: [PCG-4.1](https://github.com/HoroCore/horo-engine/issues/2074)
 - **Jira**: [HORO-2028](https://horo-engine.atlassian.net/browse/HORO-2028)
 - **Related**: [ADR-008](008-error-model-exception-boundary-and-registry.md), [ADR-010](010-job-waiting-and-operation-store-ownership.md), [ADR-012](012-world-streaming-partition-authority-and-subsystem-boundaries.md), [ADR-018](018-command-registration-permissions-threading-and-packaged-build-policy.md), [ADR-093](093-prefab-override-property-identity-and-delta-operations.md), [ADR-114](114-canonical-runtime-world-persistence-boundary.md), [ADR-140](140-foliage-placement-baked-dynamic-state-and-eviction-ownership.md), [ADR-150](150-pcg-graph-source-cooked-plan-cache-and-runtime-ownership.md), [ADR-151](151-pcg-ownership-authority-tier-and-lifecycle.md), [ADR-152](152-pcg-spatial-input-snapshot-and-node-library-ownership.md)
 - **Normative documents**: [Procedural Generation Architecture](../architecture/runtime/procedural-generation-architecture.md), [Scene Runtime](../architecture/runtime/scene-runtime.md), [Editor Document Model](../architecture/editor/editor-document-model.md), [World Streaming Architecture](../architecture/runtime/world-streaming-architecture.md), [Terrain and Foliage Architecture](../architecture/runtime/terrain-and-foliage-architecture.md)

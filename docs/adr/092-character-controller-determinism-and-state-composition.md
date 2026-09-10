@@ -4,9 +4,9 @@
 - **Date**: 2026-09-02
 - **Supersedes**: None
 - **Scope**: Canonical Character state fields and encoding, Physics/world checkpoint composition, exact hash and diagnostic tolerance policy, bounded history, restore/resimulation, save/replay/future-network reuse, lifecycle, errors, limits and qualification
-- **Issue**: [CHR-006.1](https://github.com/abdullahbodur/horo-engine/issues/980)
+- **Issue**: [CHR-006.1](https://github.com/HoroCore/horo-engine/issues/980)
 - **Jira**: [HORO-980](https://horo-engine.atlassian.net/browse/HORO-980)
-- **Parent**: [CHR-006](https://github.com/abdullahbodur/horo-engine/issues/935)
+- **Parent**: [CHR-006](https://github.com/HoroCore/horo-engine/issues/935)
 - **Related**: [ADR-008](008-error-model-exception-boundary-and-registry.md), [ADR-026](026-large-world-precision-and-floating-origin-strategy.md), [ADR-061](061-animation-ownership-update-order-and-clock.md), [ADR-084](084-canonical-physics-solver-units-and-tolerances.md), [ADR-087](087-scene-to-physics-ownership-and-conversion.md), [ADR-088](088-physics-determinism-capability-and-support-tiers.md), [ADR-089](089-character-controller-ownership-implementation-and-update-order.md), [ADR-090](090-character-dynamic-body-visibility-push-and-proxy-policy.md)
 - **Normative documents**: [Character Controller Architecture](../architecture/runtime/character-controller-architecture.md), [Physics Architecture](../architecture/runtime/physics-architecture.md), [Runtime Lifecycle](../architecture/runtime/runtime-lifecycle.md), [Scene Runtime](../architecture/runtime/scene-runtime.md), [Save Game And Persistence](../architecture/runtime/save-game-and-persistence.md), [Networking Architecture](../architecture/runtime/networking-architecture.md)
 

@@ -4,7 +4,7 @@
 - **Date**: 2026-09-02
 - **Supersedes**: None
 - **Scope**: Grounded-agent path following, local safe-velocity computation, crowd-provider selection, deterministic and best-effort modes, project scale and quality profiles, admission, overload, failure, networking, persistence, observability and lifecycle
-- **Issue**: [NAV-006.1](https://github.com/abdullahbodur/horo-engine/issues/1279)
+- **Issue**: [NAV-006.1](https://github.com/HoroCore/horo-engine/issues/1279)
 - **Jira**: [HORO-1279](https://horo-engine.atlassian.net/browse/HORO-1279)
 - **Related**: [ADR-010](010-job-waiting-and-operation-store-ownership.md), [ADR-016](016-navigation-target-ownership-and-dependency-boundary.md), [ADR-022](022-ai-fixed-tick-order-authority-and-simulation-budget.md), [ADR-024](024-perception-ownership-sense-policy-and-budget.md), [ADR-085](085-physics-shape-authoring-cook-and-runtime-boundary.md), [ADR-104](104-default-navigation-provider-and-recast-detour-adoption.md), [ADR-107](107-navigation-query-consistency-and-snapshot-ownership.md), [ADR-108](108-dynamic-overlay-carving-and-tile-rebuild-policy.md)
 - **Normative documents**: [Navigation and AI Architecture](../architecture/runtime/navigation-and-ai-architecture.md), [Concurrency and Jobs](../architecture/foundation/concurrency-and-jobs.md)

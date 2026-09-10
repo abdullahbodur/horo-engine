@@ -4,9 +4,9 @@
 - **Date**: 2026-09-02
 - **Supersedes**: None
 - **Scope**: Horo-owned kinematic query-controller strategy, scene ownership, private Jolt query boundary, fixed-tick command/root-motion cadence, movement/platform/orientation composition, transform authority/publication, backend replacement, lifecycle, migration and qualification
-- **Issue**: [CHR-001.1](https://github.com/abdullahbodur/horo-engine/issues/937)
+- **Issue**: [CHR-001.1](https://github.com/HoroCore/horo-engine/issues/937)
 - **Jira**: [HORO-937](https://horo-engine.atlassian.net/browse/HORO-937)
-- **Parent**: [CHR-001](https://github.com/abdullahbodur/horo-engine/issues/930)
+- **Parent**: [CHR-001](https://github.com/HoroCore/horo-engine/issues/930)
 - **Related**: [ADR-008](008-error-model-exception-boundary-and-registry.md), [ADR-022](022-ai-fixed-tick-order-authority-and-simulation-budget.md), [ADR-026](026-large-world-precision-and-floating-origin-strategy.md), [ADR-061](061-animation-ownership-update-order-and-clock.md), [ADR-084](084-canonical-physics-solver-units-and-tolerances.md), [ADR-086](086-collision-layer-profile-and-query-channel-policy.md), [ADR-087](087-scene-to-physics-ownership-and-conversion.md), [ADR-088](088-physics-determinism-capability-and-support-tiers.md), [ADR-090](090-character-dynamic-body-visibility-push-and-proxy-policy.md), [ADR-092](092-character-controller-determinism-and-state-composition.md)
 - **Normative documents**: [Character Controller Architecture](../architecture/runtime/character-controller-architecture.md), [Animation Architecture](../architecture/runtime/animation-architecture.md), [Physics Architecture](../architecture/runtime/physics-architecture.md), [Scene Runtime](../architecture/runtime/scene-runtime.md), [Runtime Lifecycle](../architecture/runtime/runtime-lifecycle.md)
 - **Upstream references**: [Jolt v5.6.0 character controllers](https://github.com/jrouwe/JoltPhysics/blob/v5.6.0/Docs/Architecture.md#character-controllers), [Jolt v5.6.0 CharacterVirtual](https://jrouwe.github.io/JoltPhysicsDocs/5.6.0/class_character_virtual.html)

@@ -4,9 +4,9 @@
 - **Date**: 2026-09-07
 - **Supersedes**: None
 - **Scope**: Runtime UI element kinds, orthogonal capabilities, control semantics, descriptor ownership, validation, compatibility, migration, and failure policy
-- **Issue**: [RUI-001.5](https://github.com/abdullahbodur/horo-engine/issues/701)
+- **Issue**: [RUI-001.5](https://github.com/HoroCore/horo-engine/issues/701)
 - **Jira**: [HORO-701](https://horo-engine.atlassian.net/browse/HORO-701)
-- **Parent**: [RUI-001](https://github.com/abdullahbodur/horo-engine/issues/700)
+- **Parent**: [RUI-001](https://github.com/HoroCore/horo-engine/issues/700)
 - **Related**: [ADR-073](073-runtime-ui-ownership-scope-and-update-order.md), [ADR-074](074-runtime-ui-layout-units-and-measure-arrange.md), [ADR-076](076-runtime-ui-style-asset-token-and-inheritance.md), [ADR-078](078-runtime-ui-input-context-and-player-routing.md), [ADR-079](079-runtime-ui-binding-provider-schema-identity-and-lifetime.md), [ADR-082](082-runtime-ui-accessibility-capability-and-ownership.md), [ADR-083](083-ui-template-identity-schema-and-expansion.md)
 - **Normative documents**: [Game UI and HUD](../architecture/runtime/game-ui-and-hud.md)
 

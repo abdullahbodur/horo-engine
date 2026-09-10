@@ -4,7 +4,7 @@
 - **Date**: 2026-09-01
 - **Supersedes**: None
 - **Scope**: Editor renderer-inspection snapshots, projection model and dockable UI ownership
-- **Issue**: [RND-017.9](https://github.com/abdullahbodur/horo-engine/issues/441)
+- **Issue**: [RND-017.9](https://github.com/HoroCore/horo-engine/issues/441)
 - **Jira**: [HORO-441](https://horo-engine.atlassian.net/browse/HORO-441)
 - **Companion decisions**: [ADR-027](027-renderer-resource-identity-and-descriptors.md), [ADR-041](041-backend-neutral-renderer-diagnostics-model.md), [ADR-042](042-cpu-gpu-timestamps-and-pipeline-statistics.md), [ADR-043](043-gpu-memory-and-resource-inspection.md), [ADR-044](044-render-markers-and-debug-labels.md)
 - **Normative documents**: [Rendering Architecture](../architecture/runtime/rendering-architecture.md), [Editor Panel And Tab Architecture](../architecture/editor/editor-panel-host.md), [Editor UI Design System](../architecture/editor/ui-design-system.md), [Metrics And Profiling](../architecture/observability/observability-performance.md)

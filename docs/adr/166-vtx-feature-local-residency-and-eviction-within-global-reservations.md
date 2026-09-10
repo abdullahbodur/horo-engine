@@ -4,9 +4,9 @@
 - **Date**: 2026-09-02
 - **Supersedes**: None
 - **Scope**: World Streaming budget authority, VTX-local demand/priority/pins/residency/eviction, multidimensional reservation accounting, pressure, shared pages, cancellation and retirement
-- **Issue**: [VTX-003.1](https://github.com/abdullahbodur/horo-engine/issues/2195)
+- **Issue**: [VTX-003.1](https://github.com/HoroCore/horo-engine/issues/2195)
 - **Jira**: [HORO-2149](https://horo-engine.atlassian.net/browse/HORO-2149)
-- **Parent**: [VTX-003](https://github.com/abdullahbodur/horo-engine/issues/2194)
+- **Parent**: [VTX-003](https://github.com/HoroCore/horo-engine/issues/2194)
 - **Related**: [ADR-008](008-error-model-exception-boundary-and-registry.md), [ADR-010](010-job-waiting-and-operation-store-ownership.md), [ADR-012](012-world-streaming-partition-authority-and-subsystem-boundaries.md), [ADR-027](027-renderer-resource-identity-and-descriptors.md), [ADR-034](034-gpu-memory-and-residency-ownership.md), [ADR-164](164-virtual-texturing-ownership-product-scope-and-capability-tier.md), [ADR-165](165-virtual-texture-source-cooked-artifact-page-store-and-cache-ownership.md)
 - **Normative documents**: [World Streaming Architecture](../architecture/runtime/world-streaming-architecture.md), [Virtual Texturing Architecture](../architecture/runtime/virtual-texturing-architecture.md)
 

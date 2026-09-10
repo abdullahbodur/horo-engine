@@ -4,7 +4,7 @@
 - **Date**: 2026-09-02
 - **Supersedes**: None
 - **Scope**: Terrain/foliage public and runtime module ownership, data strata, typed identity and revisions, capability tiers, scene/streaming/render/physics/navigation boundaries, mutable state, threading, replacement, cancellation and shutdown
-- **Issue**: [TRF-001.1](https://github.com/abdullahbodur/horo-engine/issues/1935)
+- **Issue**: [TRF-001.1](https://github.com/HoroCore/horo-engine/issues/1935)
 - **Jira**: [HORO-1891](https://horo-engine.atlassian.net/browse/HORO-1891)
 - **Related**: [ADR-008](008-error-model-exception-boundary-and-registry.md), [ADR-010](010-job-waiting-and-operation-store-ownership.md), [ADR-012](012-world-streaming-partition-authority-and-subsystem-boundaries.md), [ADR-027](027-renderer-resource-identity-and-descriptors.md), [ADR-028](028-renderer-capability-limits-and-product-profiles.md), [ADR-034](034-gpu-memory-and-residency-ownership.md), [ADR-085](085-physics-shape-authoring-cook-and-runtime-boundary.md), [ADR-105](105-navigation-asset-and-scene-ownership-boundary.md), [ADR-108](108-dynamic-overlay-carving-and-tile-rebuild-policy.md)
 - **Normative documents**: [System Design](../architecture/foundation/system-design.md), [Terrain and Foliage Architecture](../architecture/runtime/terrain-and-foliage-architecture.md), [World Streaming Architecture](../architecture/runtime/world-streaming-architecture.md), [Rendering Architecture](../architecture/runtime/rendering-architecture.md), [Physics Architecture](../architecture/runtime/physics-architecture.md), [Navigation and AI Architecture](../architecture/runtime/navigation-and-ai-architecture.md)

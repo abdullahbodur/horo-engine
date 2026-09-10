@@ -4,7 +4,7 @@
 - **Date**: 2026-08-28
 - **Supersedes**: None
 - **Scope**: Network target topology, compile-time dependency directions, public API encapsulation, optional linking and composition, threading model, and deterministic lifecycle/shutdown.
-- **Issue**: [NET-001.1](https://github.com/abdullahbodur/horo-engine/issues/1098)
+- **Issue**: [NET-001.1](https://github.com/HoroCore/horo-engine/issues/1098)
 - **Jira**: [HORO-1098](https://horo-engine.atlassian.net/browse/HORO-1098)
 - **Companion decision**: [ADR-097](097-default-real-time-transport-backend.md) replaces the ENet-specific concrete-backend selection while preserving this boundary
 - **Normative documents**:

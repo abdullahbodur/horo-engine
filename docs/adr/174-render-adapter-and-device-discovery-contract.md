@@ -4,7 +4,7 @@
 - **Date**: 2026-09-06
 - **Supersedes**: None
 - **Scope**: Backend-neutral adapter identity, bounded discovery, deterministic selection, and device-creation diagnostics
-- **Issue**: [RND-003.2](https://github.com/abdullahbodur/horo-engine/issues/297)
+- **Issue**: [RND-003.2](https://github.com/HoroCore/horo-engine/issues/297)
 - **Jira**: [HORO-297](https://horo-engine.atlassian.net/browse/HORO-297)
 - **Normative document**: [Rendering Architecture](../architecture/runtime/rendering-architecture.md)
 

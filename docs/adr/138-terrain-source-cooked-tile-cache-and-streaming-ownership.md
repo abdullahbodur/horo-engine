@@ -4,7 +4,7 @@
 - **Date**: 2026-09-02
 - **Supersedes**: None
 - **Scope**: Terrain/foliage imported and canonical source ownership, deterministic cook inputs/outputs, dataset/tile manifests, cache authorities, world-streaming integration, decoded residency, consumer-native artifacts, replacement generations, cancellation and shutdown
-- **Issue**: [TRF-002.1](https://github.com/abdullahbodur/horo-engine/issues/1937)
+- **Issue**: [TRF-002.1](https://github.com/HoroCore/horo-engine/issues/1937)
 - **Jira**: [HORO-1893](https://horo-engine.atlassian.net/browse/HORO-1893)
 - **Related**: [ADR-008](008-error-model-exception-boundary-and-registry.md), [ADR-010](010-job-waiting-and-operation-store-ownership.md), [ADR-012](012-world-streaming-partition-authority-and-subsystem-boundaries.md), [ADR-023](023-world-index-and-cell-format-architecture-decision.md), [ADR-027](027-renderer-resource-identity-and-descriptors.md), [ADR-034](034-gpu-memory-and-residency-ownership.md), [ADR-085](085-physics-shape-authoring-cook-and-runtime-boundary.md), [ADR-105](105-navigation-asset-and-scene-ownership-boundary.md), [ADR-137](137-terrain-foliage-ownership-data-tier-and-lifecycle.md)
 - **Normative documents**: [Asset Pipeline](../architecture/runtime/asset-pipeline.md), [Terrain and Foliage Architecture](../architecture/runtime/terrain-and-foliage-architecture.md), [World Streaming Architecture](../architecture/runtime/world-streaming-architecture.md)

@@ -4,9 +4,9 @@
 - **Date**: 2026-09-02
 - **Supersedes**: None
 - **Scope**: Generic and Terrain virtual-page producers, immutable input/hint boundaries, invalidation, World Streaming readiness, package reachability, fallback closure and headless/dedicated-server composition
-- **Issue**: [VTX-006.1](https://github.com/abdullahbodur/horo-engine/issues/2224)
+- **Issue**: [VTX-006.1](https://github.com/HoroCore/horo-engine/issues/2224)
 - **Jira**: [HORO-2178](https://horo-engine.atlassian.net/browse/HORO-2178)
-- **Parent**: [VTX-006](https://github.com/abdullahbodur/horo-engine/issues/2223)
+- **Parent**: [VTX-006](https://github.com/HoroCore/horo-engine/issues/2223)
 - **Related**: [ADR-012](012-world-streaming-partition-authority-and-subsystem-boundaries.md), [ADR-028](028-renderer-capability-limits-and-product-profiles.md), [ADR-057](057-package-manifest-v1-typed-model.md), [ADR-060](060-release-domain-model-and-state-machine.md), [ADR-137](137-terrain-foliage-ownership-data-tier-and-lifecycle.md), [ADR-138](138-terrain-source-cooked-tile-cache-and-streaming-ownership.md), [ADR-164](164-virtual-texturing-ownership-product-scope-and-capability-tier.md), [ADR-165](165-virtual-texture-source-cooked-artifact-page-store-and-cache-ownership.md), [ADR-166](166-vtx-feature-local-residency-and-eviction-within-global-reservations.md), [ADR-167](167-vtx-feedback-readback-prediction-and-camera-data-ownership.md), [ADR-168](168-vtx-gpu-page-table-physical-cache-shader-and-material-ownership.md)
 - **Normative documents**: [Virtual Texturing Architecture](../architecture/runtime/virtual-texturing-architecture.md), [Terrain and Foliage Architecture](../architecture/runtime/terrain-and-foliage-architecture.md), [World Streaming Architecture](../architecture/runtime/world-streaming-architecture.md), [Asset Pipeline](../architecture/runtime/asset-pipeline.md), [Release Architecture](../architecture/release/release.md)
 

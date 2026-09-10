@@ -103,7 +103,7 @@ SPDX 2.3 JSON, conforming to
   },
   "name": "HoroEngine-v0.0.1",
   "dataLicense": "CC0-1.0",
-  "documentNamespace": "https://github.com/abdullahbodur/horo-engine/sbom/HoroEngine-v0.0.1-<UUID>",
+  "documentNamespace": "https://github.com/HoroCore/horo-engine/sbom/HoroEngine-v0.0.1-<UUID>",
   "packages": [ /* ... */ ],
   "relationships": [ /* ... */ ]
 }

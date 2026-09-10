@@ -4,9 +4,9 @@
 - **Date**: 2026-09-02
 - **Supersedes**: None
 - **Scope**: Runtime UI accessibility semantics, settings projection, navigation/focus, localized accessible text, immutable semantic snapshots, native platform bridge, capability reporting, editor validation, support matrix, failure, compatibility, qualification, unload, and shutdown
-- **Issue**: [RUI-011.1](https://github.com/abdullahbodur/horo-engine/issues/802)
+- **Issue**: [RUI-011.1](https://github.com/HoroCore/horo-engine/issues/802)
 - **Jira**: [HORO-802](https://horo-engine.atlassian.net/browse/HORO-802)
-- **Parent**: [RUI-011](https://github.com/abdullahbodur/horo-engine/issues/780)
+- **Parent**: [RUI-011](https://github.com/HoroCore/horo-engine/issues/780)
 - **Related**: [ADR-009](009-configuration-schema-precedence-and-secret-boundary.md), [ADR-015](015-accessibility-ownership-typed-transport-and-non-gating-policy.md), [ADR-073](073-runtime-ui-ownership-scope-and-update-order.md), [ADR-076](076-runtime-ui-style-asset-token-and-inheritance.md), [ADR-078](078-runtime-ui-input-context-and-player-routing.md), [ADR-081](081-runtime-ui-and-localization-ownership-boundary.md)
 - **Normative documents**: [Accessibility Architecture](../architecture/runtime/accessibility-architecture.md), [Game UI and HUD](../architecture/runtime/game-ui-and-hud.md), [Runtime Lifecycle](../architecture/runtime/runtime-lifecycle.md), [Input Architecture](../architecture/runtime/input-architecture.md), [UI Design System](../architecture/editor/ui-design-system.md)
 

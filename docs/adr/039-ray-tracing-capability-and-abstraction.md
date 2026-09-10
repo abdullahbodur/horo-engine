@@ -4,7 +4,7 @@
 - **Date**: 2026-09-01
 - **Supersedes**: None
 - **Scope**: Acceleration structures, ray queries, ray pipelines, limits, scheduling and fallback
-- **Issue**: [RND-015.1](https://github.com/abdullahbodur/horo-engine/issues/412)
+- **Issue**: [RND-015.1](https://github.com/HoroCore/horo-engine/issues/412)
 - **Jira**: [HORO-412](https://horo-engine.atlassian.net/browse/HORO-412)
 - **Related**: [ADR-011](011-vfx-effect-ownership-simulation-domain-and-renderer-boundary.md),
   [ADR-018](018-command-registration-permissions-threading-and-packaged-build-policy.md),

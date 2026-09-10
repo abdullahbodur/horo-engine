@@ -4,7 +4,7 @@
 - **Date**: 2026-09-02
 - **Supersedes**: None
 - **Scope**: Destruction command safe points, intact/chunk authority, deterministic support loss, pre-cooked Physics body preparation, aggregate publication, cleanup, rollback, replacement, cancellation and shutdown
-- **Issue**: [DFR-003.1](https://github.com/abdullahbodur/horo-engine/issues/2011)
+- **Issue**: [DFR-003.1](https://github.com/HoroCore/horo-engine/issues/2011)
 - **Jira**: [HORO-1965](https://horo-engine.atlassian.net/browse/HORO-1965)
 - **Related**: [ADR-008](008-error-model-exception-boundary-and-registry.md), [ADR-010](010-job-waiting-and-operation-store-ownership.md), [ADR-012](012-world-streaming-partition-authority-and-subsystem-boundaries.md), [ADR-023](023-world-index-and-cell-format-architecture-decision.md), [ADR-027](027-renderer-resource-identity-and-descriptors.md), [ADR-085](085-physics-shape-authoring-cook-and-runtime-boundary.md), [ADR-087](087-scene-to-physics-ownership-and-conversion.md), [ADR-099](099-replication-ownership-authority-and-compatibility.md), [ADR-114](114-canonical-runtime-world-persistence-boundary.md), [ADR-144](144-destruction-ownership-authority-state-and-runtime-geometry-boundary.md), [ADR-145](145-destruction-source-chunk-geometry-collision-and-cook-ownership.md)
 - **Normative documents**: [Destruction and Fracture Architecture](../architecture/runtime/destruction-and-fracture-architecture.md), [Physics Architecture](../architecture/runtime/physics-architecture.md), [Scene Runtime](../architecture/runtime/scene-runtime.md), [Save Game and Persistence](../architecture/runtime/save-game-and-persistence.md)

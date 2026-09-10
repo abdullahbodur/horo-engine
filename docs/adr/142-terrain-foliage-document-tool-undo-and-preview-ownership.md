@@ -4,7 +4,7 @@
 - **Date**: 2026-09-02
 - **Supersedes**: None
 - **Scope**: Terrain/Foliage authoring-document identity, editor tool routing, bounded tile-patch operations and history, live preview isolation, source save/cook boundaries, stale work, cancellation, replacement and shutdown
-- **Issue**: [TRF-006.1](https://github.com/abdullahbodur/horo-engine/issues/1969)
+- **Issue**: [TRF-006.1](https://github.com/HoroCore/horo-engine/issues/1969)
 - **Jira**: [HORO-1925](https://horo-engine.atlassian.net/browse/HORO-1925)
 - **Related**: [ADR-008](008-error-model-exception-boundary-and-registry.md), [ADR-010](010-job-waiting-and-operation-store-ownership.md), [ADR-012](012-world-streaming-partition-authority-and-subsystem-boundaries.md), [ADR-056](056-external-editor-ui-boundary.md), [ADR-093](093-prefab-override-property-identity-and-delta-operations.md), [ADR-121](121-cinematic-editor-document-and-authoring-context.md), [ADR-129](129-vfx-editor-document-live-preview-and-module-authoring.md), [ADR-137](137-terrain-foliage-ownership-data-tier-and-lifecycle.md), [ADR-138](138-terrain-source-cooked-tile-cache-and-streaming-ownership.md), [ADR-139](139-terrain-render-extraction-material-lod-and-tier-boundary.md), [ADR-140](140-foliage-placement-baked-dynamic-state-and-eviction-ownership.md), [ADR-141](141-terrain-foliage-cross-system-ownership-and-readiness.md)
 - **Normative documents**: [Editor Document Model](../architecture/editor/editor-document-model.md), [Editor Panel Host](../architecture/editor/editor-panel-host.md), [Terrain and Foliage Architecture](../architecture/runtime/terrain-and-foliage-architecture.md), [Asset Pipeline](../architecture/runtime/asset-pipeline.md), [Project Model](../architecture/editor/project-model.md)

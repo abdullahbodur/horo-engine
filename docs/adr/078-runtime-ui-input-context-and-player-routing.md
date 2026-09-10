@@ -4,9 +4,9 @@
 - **Date**: 2026-09-02
 - **Supersedes**: None
 - **Scope**: Runtime UI/gameplay input priority, context/player/device/viewport identity, modal exclusivity, action consumption, pointer/text routing, device modality, focus/capture transitions, editor-play isolation, lifecycle, errors, compatibility, and shutdown
-- **Issue**: [RUI-005.1](https://github.com/abdullahbodur/horo-engine/issues/735)
+- **Issue**: [RUI-005.1](https://github.com/HoroCore/horo-engine/issues/735)
 - **Jira**: [HORO-735](https://horo-engine.atlassian.net/browse/HORO-735)
-- **Parent**: [RUI-005](https://github.com/abdullahbodur/horo-engine/issues/736)
+- **Parent**: [RUI-005](https://github.com/HoroCore/horo-engine/issues/736)
 - **Related**: [ADR-008](008-error-model-exception-boundary-and-registry.md), [ADR-018](018-command-registration-permissions-threading-and-packaged-build-policy.md), [ADR-033](033-presentation-and-display-ownership.md), [ADR-073](073-runtime-ui-ownership-scope-and-update-order.md)
 - **Normative documents**: [Input Architecture](../architecture/runtime/input-architecture.md), [Game UI and HUD](../architecture/runtime/game-ui-and-hud.md), [Runtime Lifecycle](../architecture/runtime/runtime-lifecycle.md)
 

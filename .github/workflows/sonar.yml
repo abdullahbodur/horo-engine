@@ -155,8 +155,8 @@ jobs:
             unzip -q /tmp/sonar-scanner.zip -d "$SONAR_USER_HOME"
           fi
           "$SONAR_USER_HOME/sonar-scanner-7.2.0.5079-linux-x64/bin/sonar-scanner" \
-            -Dsonar.organization=docktail \
-            -Dsonar.projectKey=abdullahbodur_horo-engine \
+            -Dsonar.organization=horocore \
+            -Dsonar.projectKey=horocore_horo-engine \
             -Dsonar.sourceEncoding=UTF-8 \
             -Dsonar.cfamily.compile-commands=build/sonar/compile_commands.json \
             -Dsonar.coverageReportPaths=build/sonar/coverage.xml \

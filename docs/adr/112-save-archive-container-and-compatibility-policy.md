@@ -4,7 +4,7 @@
 - **Date**: 2026-09-02
 - **Supersedes**: None
 - **Scope**: Portable `.horosave` framing, canonical logical-state serialization, archive and schema version axes, state/content/publication identities, release compatibility declarations, migration support and forward rejection
-- **Issue**: [SAV-002.1](https://github.com/abdullahbodur/horo-engine/issues/1410)
+- **Issue**: [SAV-002.1](https://github.com/HoroCore/horo-engine/issues/1410)
 - **Jira**: [HORO-1410](https://horo-engine.atlassian.net/browse/HORO-1410)
 - **Related**: [ADR-003](003-artifact-identity.md), [ADR-008](008-error-model-exception-boundary-and-registry.md), [ADR-057](057-package-manifest-v1-typed-model.md), [ADR-060](060-release-domain-model-and-state-machine.md)
 - **Normative documents**: [Save Game And Persistence](../architecture/runtime/save-game-and-persistence.md), [Release Architecture](../architecture/release/release.md), [Distribution And Update](../architecture/release/distribution-and-update.md)

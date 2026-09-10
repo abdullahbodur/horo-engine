@@ -4,9 +4,9 @@
 - **Date**: 2026-09-02
 - **Supersedes**: None
 - **Scope**: Android process entry, target/API/ABI baseline, platform and renderer ownership, lifecycle and packaging boundaries
-- **Issue**: [PLT-001.1](https://github.com/abdullahbodur/horo-engine/issues/2257)
+- **Issue**: [PLT-001.1](https://github.com/HoroCore/horo-engine/issues/2257)
 - **Jira**: [HORO-2196](https://horo-engine.atlassian.net/browse/HORO-2196)
-- **Parent**: [PLT-001](https://github.com/abdullahbodur/horo-engine/issues/2256)
+- **Parent**: [PLT-001](https://github.com/HoroCore/horo-engine/issues/2256)
 - **Related**: [ADR-004](004-cli-core-gui-boundary.md), [ADR-028](028-renderer-capability-limits-and-product-profiles.md), [ADR-031](031-vulkan-loader-platform-and-version-baseline.md), [ADR-033](033-presentation-and-display-ownership.md), [ADR-158](158-openxr-loader-backend-packaging-and-host-composition.md)
 - **Normative documents**: [Android Platform Host](../architecture/foundation/android-platform-host.md), [Platform Abstraction](../architecture/foundation/platform-abstraction.md), [Rendering Architecture](../architecture/runtime/rendering-architecture.md), [Release Architecture](../architecture/release/release.md)
 

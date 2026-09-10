@@ -4,7 +4,7 @@
 - **Date**: 2026-09-02
 - **Supersedes**: None
 - **Scope**: Authenticated opaque cloud-object transport, object/revision/address types, capability limits, conditional atomic write/delete, whole-blob integrity, partial transfer, cancellation/timeout ambiguity, retry and caller-owned durable intent
-- **Issue**: [PLS-005.1](https://github.com/abdullahbodur/horo-engine/issues/1890)
+- **Issue**: [PLS-005.1](https://github.com/HoroCore/horo-engine/issues/1890)
 - **Jira**: [HORO-1846](https://horo-engine.atlassian.net/browse/HORO-1846)
 - **Related**: [ADR-008](008-error-model-exception-boundary-and-registry.md), [ADR-112](112-save-archive-container-and-compatibility-policy.md), [ADR-113](113-local-storage-user-profile-and-slot-ownership.md), [ADR-115](115-cloud-save-authority-revision-and-conflict-policy.md), [ADR-116](116-save-data-threat-model-and-trust-policy.md), [ADR-130](130-platform-services-frontend-request-lifetime-timeout-null-and-error-semantics.md), [ADR-131](131-platform-services-closed-sdk-extension-abi-package-and-composition-boundary.md), [ADR-133](133-platform-progression-authority-trust-and-idempotency.md)
 - **Normative documents**: [Platform Services Architecture](../architecture/runtime/platform-services-architecture.md), [Save Game and Persistence](../architecture/runtime/save-game-and-persistence.md), [Application Security](../architecture/security/application-security.md)

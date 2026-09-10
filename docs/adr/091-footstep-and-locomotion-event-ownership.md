@@ -4,9 +4,9 @@
 - **Date**: 2026-09-02
 - **Supersedes**: None
 - **Scope**: Animation footstep timing, Character locomotion facts and surface evidence, committed-tick correlation, presentation routing, duplicate prevention, missing-marker/consumer behavior, lifecycle, limits and qualification
-- **Issue**: [CHR-004.3](https://github.com/abdullahbodur/horo-engine/issues/964)
+- **Issue**: [CHR-004.3](https://github.com/HoroCore/horo-engine/issues/964)
 - **Jira**: [HORO-964](https://horo-engine.atlassian.net/browse/HORO-964)
-- **Parent**: [CHR-004](https://github.com/abdullahbodur/horo-engine/issues/933)
+- **Parent**: [CHR-004](https://github.com/HoroCore/horo-engine/issues/933)
 - **Related**: [ADR-008](008-error-model-exception-boundary-and-registry.md), [ADR-061](061-animation-ownership-update-order-and-clock.md), [ADR-062](062-audio-runtime-ownership-and-update-order.md), [ADR-068](068-music-transport-and-cross-system-ownership.md), [ADR-089](089-character-controller-ownership-implementation-and-update-order.md)
 - **Normative documents**: [Character Controller Architecture](../architecture/runtime/character-controller-architecture.md), [Animation Architecture](../architecture/runtime/animation-architecture.md), [Audio Architecture](../architecture/runtime/audio-architecture.md), [VFX And Particles Architecture](../architecture/runtime/vfx-and-particles-architecture.md)
 

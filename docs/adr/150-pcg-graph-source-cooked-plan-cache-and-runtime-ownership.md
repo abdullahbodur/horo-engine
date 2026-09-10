@@ -4,7 +4,7 @@
 - **Date**: 2026-09-02
 - **Supersedes**: None
 - **Scope**: PCG graph source authority, deterministic lowering, cooked-plan schema, cache identity, immutable runtime delivery, evaluation intermediates, publication, replacement, compatibility and destruction
-- **Issue**: [PCG-2.1](https://github.com/abdullahbodur/horo-engine/issues/2052)
+- **Issue**: [PCG-2.1](https://github.com/HoroCore/horo-engine/issues/2052)
 - **Jira**: [HORO-2006](https://horo-engine.atlassian.net/browse/HORO-2006)
 - **Related**: [ADR-008](008-error-model-exception-boundary-and-registry.md), [ADR-010](010-job-waiting-and-operation-store-ownership.md), [ADR-017](017-prefab-role-ownership-and-capability-tiers.md), [ADR-028](028-renderer-capability-limits-and-product-profiles.md), [ADR-085](085-physics-shape-authoring-cook-and-runtime-boundary.md), [ADR-095](095-prefab-cook-boundary-and-artifact-model.md), [ADR-106](106-navigation-bake-ownership-transaction-and-cache.md), [ADR-126](126-vfx-graph-compilation-and-runtime-representation-convergence.md), [ADR-138](138-terrain-source-cooked-tile-cache-and-streaming-ownership.md)
 - **Normative documents**: [Procedural Generation Architecture](../architecture/runtime/procedural-generation-architecture.md), [Asset Pipeline](../architecture/runtime/asset-pipeline.md), [Editor Document Model](../architecture/editor/editor-document-model.md), [Scene Runtime](../architecture/runtime/scene-runtime.md), [World Streaming Architecture](../architecture/runtime/world-streaming-architecture.md)

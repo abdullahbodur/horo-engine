@@ -4,7 +4,7 @@
 - **Date**: 2026-09-01
 - **Supersedes**: None
 - **Scope**: Reconstruction, denoising, frame generation, latency categories and provider ownership
-- **Issue**: [RND-016.1](https://github.com/abdullahbodur/horo-engine/issues/422)
+- **Issue**: [RND-016.1](https://github.com/HoroCore/horo-engine/issues/422)
 - **Jira**: [HORO-422](https://horo-engine.atlassian.net/browse/HORO-422)
 - **Related**: [ADR-015](015-accessibility-ownership-typed-transport-and-non-gating-policy.md),
   [ADR-018](018-command-registration-permissions-threading-and-packaged-build-policy.md),

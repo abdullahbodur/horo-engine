@@ -4,7 +4,7 @@
 - **Date**: 2026-09-01
 - **Supersedes**: None
 - **Scope**: Native renderer validation policy, activation, callback integration and lifecycle
-- **Issue**: [RND-017.5](https://github.com/abdullahbodur/horo-engine/issues/437)
+- **Issue**: [RND-017.5](https://github.com/HoroCore/horo-engine/issues/437)
 - **Jira**: [HORO-437](https://horo-engine.atlassian.net/browse/HORO-437)
 - **Companion decisions**: [ADR-029](029-opengl-core-profile-and-platform-policy.md), [ADR-030](030-metal-platform-and-feature-baseline.md), [ADR-031](031-vulkan-loader-platform-and-version-baseline.md), [ADR-032](032-d3d12-baseline-and-agility-sdk-policy.md), [ADR-041](041-backend-neutral-renderer-diagnostics-model.md), [ADR-044](044-render-markers-and-debug-labels.md)
 - **Normative documents**: [Error And Diagnostics](../architecture/foundation/error-and-diagnostics.md), [Configuration System](../architecture/foundation/configuration-system.md), [Rendering Architecture](../architecture/runtime/rendering-architecture.md), [Render Backend Parity Contract](../architecture/runtime/render-backend-parity-contract.md)

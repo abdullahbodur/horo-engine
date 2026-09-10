@@ -4,7 +4,7 @@
 - **Date**: 2026-09-02
 - **Supersedes**: None
 - **Scope**: Blackboard, decision-graph and environment-query asset document routes; graph commands, history, save/conflict, compilation diagnostics, live runtime inspection, debug commands, provider extensions, presentation lifetime and lifecycle
-- **Issue**: [GAI-006.1](https://github.com/abdullahbodur/horo-engine/issues/1370)
+- **Issue**: [GAI-006.1](https://github.com/HoroCore/horo-engine/issues/1370)
 - **Jira**: [HORO-1370](https://horo-engine.atlassian.net/browse/HORO-1370)
 - **Related**: [ADR-013](013-environment-query-ownership-item-and-scoring-model.md), [ADR-021](021-gameplay-ai-ownership-scheduling-and-behavior-boundary.md), [ADR-022](022-ai-fixed-tick-order-authority-and-simulation-budget.md), [ADR-025](025-ai-decision-assets-and-gameplay-behavior-boundary.md), [ADR-056](056-external-editor-ui-boundary.md), [ADR-110](110-navigation-editor-surface-and-command-ownership.md)
 - **Normative documents**: [Navigation and AI Architecture](../architecture/runtime/navigation-and-ai-architecture.md), [Editor Document Model](../architecture/editor/editor-document-model.md), [Editor Panel Host](../architecture/editor/editor-panel-host.md), [Gameplay Behavior Authoring](../architecture/extensions/gameplay-behavior-authoring.md)

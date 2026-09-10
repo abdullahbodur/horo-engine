@@ -4,7 +4,7 @@
 - **Date**: 2026-09-01
 - **Supersedes**: None
 - **Scope**: Renderer timing clocks, query plans, delayed results, pipeline statistics and observability projection
-- **Issue**: [RND-017.2](https://github.com/abdullahbodur/horo-engine/issues/434)
+- **Issue**: [RND-017.2](https://github.com/HoroCore/horo-engine/issues/434)
 - **Jira**: [HORO-434](https://horo-engine.atlassian.net/browse/HORO-434)
 - **Related**: [ADR-018](018-command-registration-permissions-threading-and-packaged-build-policy.md),
   [ADR-027](027-renderer-resource-identity-and-descriptors.md),
