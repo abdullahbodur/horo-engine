@@ -105,10 +105,8 @@ namespace Horo::Cinematic {
 
     /** @copydoc SequencePlayer::Seek */
     Result<SequencePlayerTransition> SequencePlayer::Seek(const SequencePlayerHandle &handle, const SequenceTime target) {
-        if (const Result<void> validation = ValidateHandle(handle); validation.HasError())
+        if (const Result<void> validation = ValidateControllableHandle(handle); validation.HasError())
             return Result<SequencePlayerTransition>::Failure(validation.ErrorValue());
-        if (!IsControllable(snapshot_.state))
-            return Failed<SequencePlayerTransition>(SequencePlayerErrors::TransitionInvalid);
         if (target < 0 || target > snapshot_.duration)
             return Failed<SequencePlayerTransition>(SequencePlayerErrors::TimeInvalid);
         if (target == snapshot_.position)
@@ -117,17 +115,13 @@ namespace Horo::Cinematic {
             return Failed<SequencePlayerTransition>(SequencePlayerErrors::RevisionExhausted);
         const SequencePlayerSnapshot previous = snapshot_;
         snapshot_.position = target;
-        ++snapshot_.controlRevision;
-        return Result<SequencePlayerTransition>::Success(
-            TransitionFrom(previous, SequencePlaybackSignal::Seeked, SequenceEventTransitionPolicy::ResetWithoutDispatch));
+        return PublishValueChange(previous, SequencePlaybackSignal::Seeked, SequenceEventTransitionPolicy::ResetWithoutDispatch);
     }
 
     /** @copydoc SequencePlayer::SetPlaybackSpeed */
     Result<SequencePlayerTransition> SequencePlayer::SetPlaybackSpeed(const SequencePlayerHandle &handle, const SequencePlaybackRate rate) {
-        if (const Result<void> validation = ValidateHandle(handle); validation.HasError())
+        if (const Result<void> validation = ValidateControllableHandle(handle); validation.HasError())
             return Result<SequencePlayerTransition>::Failure(validation.ErrorValue());
-        if (!IsControllable(snapshot_.state))
-            return Failed<SequencePlayerTransition>(SequencePlayerErrors::TransitionInvalid);
         if (!IsRateValid(rate))
             return Failed<SequencePlayerTransition>(SequencePlayerErrors::RateInvalid);
         if (rate == snapshot_.rate)
@@ -136,9 +130,7 @@ namespace Horo::Cinematic {
             return Failed<SequencePlayerTransition>(SequencePlayerErrors::RevisionExhausted);
         const SequencePlayerSnapshot previous = snapshot_;
         snapshot_.rate = rate;
-        ++snapshot_.controlRevision;
-        return Result<SequencePlayerTransition>::Success(
-            TransitionFrom(previous, SequencePlaybackSignal::RateChanged, SequenceEventTransitionPolicy::Unchanged));
+        return PublishValueChange(previous, SequencePlaybackSignal::RateChanged, SequenceEventTransitionPolicy::Unchanged);
     }
 
     /** @copydoc SequencePlayer::Close */
@@ -190,6 +182,14 @@ namespace Horo::Cinematic {
         return Result<void>::Success();
     }
 
+    Result<void> SequencePlayer::ValidateControllableHandle(const SequencePlayerHandle &handle) const {
+        if (const Result<void> validation = ValidateHandle(handle); validation.HasError())
+            return validation;
+        if (!IsControllable(snapshot_.state))
+            return Failed<void>(SequencePlayerErrors::TransitionInvalid);
+        return Result<void>::Success();
+    }
+
     Result<SequencePlayerTransition> SequencePlayer::Change(const SequencePlayerHandle &handle, const SequencePlaybackState state,
                                                             const SequencePlaybackSignal signal,
                                                             const SequenceEventTransitionPolicy eventPolicy) {
@@ -199,6 +199,13 @@ namespace Horo::Cinematic {
             return Failed<SequencePlayerTransition>(SequencePlayerErrors::RevisionExhausted);
         const SequencePlayerSnapshot previous = snapshot_;
         snapshot_.state = state;
+        ++snapshot_.controlRevision;
+        return Result<SequencePlayerTransition>::Success(TransitionFrom(previous, signal, eventPolicy));
+    }
+
+    Result<SequencePlayerTransition> SequencePlayer::PublishValueChange(const SequencePlayerSnapshot &previous,
+                                                                        const SequencePlaybackSignal signal,
+                                                                        const SequenceEventTransitionPolicy eventPolicy) {
         ++snapshot_.controlRevision;
         return Result<SequencePlayerTransition>::Success(TransitionFrom(previous, signal, eventPolicy));
     }

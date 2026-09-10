@@ -13,9 +13,13 @@
 namespace Horo::Cinematic {
     namespace {
         template <typename T> void RequireError(const Result<T> &result, const ErrorCodeDescriptor &descriptor) {
-            REQUIRE(result.HasError());
-            CHECK(result.ErrorValue().domain.Value() == descriptor.domain.Value());
-            CHECK(result.ErrorValue().code.Value() == descriptor.code.Value());
+            INFO("Expected error code: " << descriptor.code.Value());
+            CHECK_FALSE(result.HasValue());
+            if (result.HasValue())
+                return;
+            const Error &actual = result.ErrorValue();
+            CHECK(actual.domain.Value() == descriptor.domain.Value());
+            CHECK(actual.code.Value() == descriptor.code.Value());
         }
 
         [[nodiscard]] constexpr SequencePlayerHandle Handle(const std::uint32_t sessionGeneration = 2,
