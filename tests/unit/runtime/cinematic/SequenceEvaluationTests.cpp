@@ -192,12 +192,11 @@ namespace Horo::Cinematic {
         const std::array events{SequenceFrameEventKey{Track(1), Key(1), 0, true}, SequenceFrameEventKey{Track(1), Key(2), 2, true},
                                 SequenceFrameEventKey{Track(1), Key(3), 10, true}};
         auto plan = Plan({}, events, {}, SequenceLoopMode::Loop);
-        const auto player = Playing(8);
-        auto cursor = MakeSequenceFrameCursor(player, SequenceCursorResetPolicy::SuppressCurrentBoundary).Value();
+        auto cursor = MakeSequenceFrameCursor(Playing(8), SequenceCursorResetPolicy::SuppressCurrentBoundary).Value();
         ScratchStorage scratch;
         HookProbe hooks;
 
-        REQUIRE(plan.Evaluate(player, 5, cursor, scratch.View(), Hooks(hooks)).HasValue());
+        REQUIRE(plan.Evaluate(Playing(8), 5, cursor, scratch.View(), Hooks(hooks)).HasValue());
         CHECK(cursor.position == 3);
         CHECK(cursor.traversal == 2);
         REQUIRE(hooks.eventCount == 3);
