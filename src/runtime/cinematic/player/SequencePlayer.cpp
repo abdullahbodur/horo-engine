@@ -105,14 +105,13 @@ namespace Horo::Cinematic {
 
     /** @copydoc SequencePlayer::Seek */
     Result<SequencePlayerTransition> SequencePlayer::Seek(const SequencePlayerHandle &handle, const SequenceTime target) {
-        if (const Result<void> validation = ValidateControllableHandle(handle); validation.HasError())
-            return Result<SequencePlayerTransition>::Failure(validation.ErrorValue());
         if (target < 0 || target > snapshot_.duration)
             return Failed<SequencePlayerTransition>(SequencePlayerErrors::TimeInvalid);
-        if (target == snapshot_.position)
+        const Result<bool> preparation = PrepareValueChange(handle, target != snapshot_.position);
+        if (preparation.HasError())
+            return Result<SequencePlayerTransition>::Failure(preparation.ErrorValue());
+        if (!preparation.Value())
             return Result<SequencePlayerTransition>::Success(NoChange());
-        if (snapshot_.controlRevision == std::numeric_limits<std::uint64_t>::max())
-            return Failed<SequencePlayerTransition>(SequencePlayerErrors::RevisionExhausted);
         const SequencePlayerSnapshot previous = snapshot_;
         snapshot_.position = target;
         return PublishValueChange(previous, SequencePlaybackSignal::Seeked, SequenceEventTransitionPolicy::ResetWithoutDispatch);
@@ -120,14 +119,13 @@ namespace Horo::Cinematic {
 
     /** @copydoc SequencePlayer::SetPlaybackSpeed */
     Result<SequencePlayerTransition> SequencePlayer::SetPlaybackSpeed(const SequencePlayerHandle &handle, const SequencePlaybackRate rate) {
-        if (const Result<void> validation = ValidateControllableHandle(handle); validation.HasError())
-            return Result<SequencePlayerTransition>::Failure(validation.ErrorValue());
         if (!IsRateValid(rate))
             return Failed<SequencePlayerTransition>(SequencePlayerErrors::RateInvalid);
-        if (rate == snapshot_.rate)
+        const Result<bool> preparation = PrepareValueChange(handle, rate != snapshot_.rate);
+        if (preparation.HasError())
+            return Result<SequencePlayerTransition>::Failure(preparation.ErrorValue());
+        if (!preparation.Value())
             return Result<SequencePlayerTransition>::Success(NoChange());
-        if (snapshot_.controlRevision == std::numeric_limits<std::uint64_t>::max())
-            return Failed<SequencePlayerTransition>(SequencePlayerErrors::RevisionExhausted);
         const SequencePlayerSnapshot previous = snapshot_;
         snapshot_.rate = rate;
         return PublishValueChange(previous, SequencePlaybackSignal::RateChanged, SequenceEventTransitionPolicy::Unchanged);
@@ -188,6 +186,16 @@ namespace Horo::Cinematic {
         if (!IsControllable(snapshot_.state))
             return Failed<void>(SequencePlayerErrors::TransitionInvalid);
         return Result<void>::Success();
+    }
+
+    Result<bool> SequencePlayer::PrepareValueChange(const SequencePlayerHandle &handle, const bool valueChanged) const {
+        if (const Result<void> validation = ValidateControllableHandle(handle); validation.HasError())
+            return Result<bool>::Failure(validation.ErrorValue());
+        if (!valueChanged)
+            return Result<bool>::Success(false);
+        if (snapshot_.controlRevision == std::numeric_limits<std::uint64_t>::max())
+            return Failed<bool>(SequencePlayerErrors::RevisionExhausted);
+        return Result<bool>::Success(true);
     }
 
     Result<SequencePlayerTransition> SequencePlayer::Change(const SequencePlayerHandle &handle, const SequencePlaybackState state,
