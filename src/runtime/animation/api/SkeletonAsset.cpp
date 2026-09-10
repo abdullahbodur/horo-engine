@@ -75,10 +75,11 @@ namespace Horo::Animation {
 
         /** @brief Checks that a declared mirror has the opposite lateral side. */
         [[nodiscard]] constexpr bool HasOppositeSide(const SkeletonJointSide side, const SkeletonJointSide mirrorSide) noexcept {
-            if (side == SkeletonJointSide::Left)
-                return mirrorSide == SkeletonJointSide::Right;
-            if (side == SkeletonJointSide::Right)
-                return mirrorSide == SkeletonJointSide::Left;
+            using enum SkeletonJointSide;
+            if (side == Left)
+                return mirrorSide == Right;
+            if (side == Right)
+                return mirrorSide == Left;
             return false;
         }
 
@@ -94,7 +95,7 @@ namespace Horo::Animation {
                 if (!joint.mirror)
                     continue;
                 const auto mirrorIndex = FindJoint(joints, *joint.mirror);
-                if (!mirrorIndex)
+                if (!mirrorIndex.has_value())
                     return Fail<void>(AnimationErrors::SkeletonJointMissing);
                 const SkeletonJoint &mirror = joints[*mirrorIndex];
                 if (!IsValidMirrorPair(joint, mirror))
@@ -105,12 +106,12 @@ namespace Horo::Animation {
 
         /** @brief Resolves all parent identities before topology processing. */
         [[nodiscard]] Result<std::vector<std::size_t>> ResolveParents(const std::vector<SkeletonJoint> &joints) {
-            std::vector<std::size_t> parents(joints.size(), NoJoint);
+            std::vector parents(joints.size(), NoJoint);
             for (std::size_t index = 0; index < joints.size(); ++index) {
                 if (!joints[index].parent)
                     continue;
                 const auto parentIndex = FindJoint(joints, *joints[index].parent);
-                if (!parentIndex)
+                if (!parentIndex.has_value())
                     return Fail<std::vector<std::size_t>>(AnimationErrors::SkeletonJointMissing);
                 parents[index] = *parentIndex;
             }
