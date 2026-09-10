@@ -122,9 +122,9 @@ namespace Horo::PlatformServices {
             std::vector<KeyOwner> keys;
             keys.reserve(entries.size() * 2U);
             for (const auto &entry : entries) {
-                keys.emplace_back(KeyOwner{entry.kind, entry.canonicalKey, entry.state});
+                keys.emplace_back(entry.kind, entry.canonicalKey, entry.state);
                 for (const auto &alias : entry.aliases)
-                    keys.emplace_back(KeyOwner{entry.kind, alias, entry.state});
+                    keys.emplace_back(entry.kind, alias, entry.state);
             }
             std::ranges::sort(keys, [](const KeyOwner &left, const KeyOwner &right) {
                 if (left.kind != right.kind)
