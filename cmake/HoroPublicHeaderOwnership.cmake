@@ -254,6 +254,7 @@ horo_configure_target_header_boundary(HoroDestructionApi PUBLIC_HEADERS
     Horo/Destruction/DestructionIdentity.h
 )
 horo_configure_target_header_boundary(HoroCinematicModel PUBLIC_HEADERS
+    Horo/Cinematic/CurveSampling.h
     Horo/Cinematic/CinematicErrors.h
     Horo/Cinematic/CinematicIdentity.h
     Horo/Cinematic/SequenceAsset.h

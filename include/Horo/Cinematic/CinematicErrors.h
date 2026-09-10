@@ -38,4 +38,12 @@ namespace Horo::Cinematic::CinematicErrors {
     extern const ErrorCodeDescriptor SequenceReferenceTypeMismatch;
     /** @brief The reachable sub-sequence graph contains a cycle. */
     extern const ErrorCodeDescriptor SequenceReferenceCycle;
+    /** @brief Scalar curve keys, ordering, or policies are malformed. */
+    extern const ErrorCodeDescriptor CurveMalformed;
+    /** @brief Scalar curve key or tangent data contains a non-finite value. */
+    extern const ErrorCodeDescriptor CurveNonFinite;
+    /** @brief Scalar curve time tangents cannot form a valid bounded segment. */
+    extern const ErrorCodeDescriptor CurveTangentInvalid;
+    /** @brief Scalar curve input exceeds the compiled sampling capacity. */
+    extern const ErrorCodeDescriptor CurveLimitExceeded;
 }  // namespace Horo::Cinematic::CinematicErrors
