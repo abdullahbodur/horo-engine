@@ -101,6 +101,7 @@ device backend.
 | `HoroRenderBackendRegistry` (`HoroEngine::RenderBackendRegistry`) | Always | Owns `Runtime/Render/RenderBackendRegistry.h` and backend registration/selection state. | RenderApi (public) |
 | `HoroRenderFrontend` (`HoroEngine::RenderFrontend`) | Always | Owns `Runtime/Render/RenderFrontend.h` and frontend submission/resource coordination. | RenderApi, RenderBackendRegistry (public) |
 | `HoroRenderNull` (`HoroEngine::RenderNull`) | Always | Owns `Runtime/Render/NullBackendModule.h`; implementation is private and deterministic/headless. | RenderApi, RenderBackendRegistry (public) |
+| `HoroXRApi` (`HoroEngine::XRApi`) | Always | Owns backend-neutral XR contract versions, generation-safe live identities, immutable fixed-capacity capability snapshots, admission results, and stable error descriptors under `XR/**`. It owns no OpenXR/native state and performs no runtime discovery or activation. | Foundation (public) |
 | `HoroRenderOpenGL` (`HoroEngine::RenderOpenGL`) | `HORO_BUILD_RENDER_OPENGL` | Owns the concrete OpenGL backend. OpenGL and GL loader types remain private; no backend-specific public Horo header exists. | RenderBackendRegistry (public) |
 | `HoroRenderMetal` (`HoroEngine::RenderMetal`) | Apple and `HORO_BUILD_RENDER_METAL` | Owns the concrete Metal backend. Objective-C++, Metal, Foundation, and QuartzCore types remain private; no backend-specific public Horo header exists. | RenderBackendRegistry (public) |
 
@@ -121,7 +122,7 @@ device backend.
 
 ## Public Header Inventory And Boundary
 
-There are 130 non-placeholder headers under `include/Horo/` at this snapshot:
+There are 134 non-placeholder headers under `include/Horo/` at this snapshot:
 
 | Public path | Header count | Semantic owner |
 |---|---:|---|
@@ -134,6 +135,7 @@ There are 130 non-placeholder headers under `include/Horo/` at this snapshot:
 | `Math/` | 1 | Foundation |
 | `Platform/` | 3 | Platform |
 | `Runtime/` | 16 | Runtime, Input, RuntimeScene, SceneModel, RenderApi, RenderBackendRegistry, RenderFrontend, and RenderNull |
+| `XR/` | 4 | XRApi |
 
 The current CMake boundary is broader than this semantic ownership map:
 

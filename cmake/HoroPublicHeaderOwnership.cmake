@@ -243,6 +243,12 @@ horo_configure_target_header_boundary(HoroNavigationApi PUBLIC_HEADERS
     Horo/Navigation/NavigationOutcomes.h
     Horo/Navigation/NavigationSourceGeometry.h
 )
+horo_configure_target_header_boundary(HoroXRApi PUBLIC_HEADERS
+    Horo/XR/XRCapabilities.h
+    Horo/XR/XRContract.h
+    Horo/XR/XRErrors.h
+    Horo/XR/XRIdentity.h
+)
 horo_configure_target_header_boundary(HoroNavigationNull PUBLIC_HEADERS
     Horo/Navigation/Backends/NullProvider.h
 )

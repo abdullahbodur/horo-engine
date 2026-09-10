@@ -17,6 +17,13 @@ below describe the target architecture. A runtime, headset, or platform is not
 supported merely because it appears in a design example or because an OpenXR
 loader can discover it. Support requires reproducible qualification evidence.
 
+The backend-neutral `HoroEngine::XRApi` contract is implemented. It owns the
+Horo XR contract version, generation-safe system/session/space/view/action/device
+identities, immutable fixed-size system capability snapshots, finite hard limits,
+pre-dispatch admission, and the `horo.xr` error descriptor contribution. It does
+not discover or activate an XR runtime and therefore does not constitute OpenXR,
+platform, headset, or product-profile support.
+
 [ADR-157](../../adr/157-xr-ownership-runtime-composition-and-capability-tier.md)
 is the normative foundation for XR module ownership, host composition, typed
 capability admission, 1.0 profiles, unsupported paths and lifecycle. The sections
@@ -144,6 +151,35 @@ attempt/revision and redacted failing layer; qualification remains keyed to the 
 product tuple.
 
 ## Capability And Identity Model
+
+### Implemented XRApi foundation
+
+`XRContractVersion` is the version of Horo's public semantic contract, never a
+native API version. Compatibility requires an equal non-zero major version and a
+provided minor version at least as new as the consumer requirement. Patch changes
+remain compatible. Producers publish this version in every capability snapshot so
+an incompatible contract fails before owner or native state is touched.
+
+`XRSystemId` is scoped to one `XRRuntimeGeneration`; `XRSessionId` is scoped to
+one exact system; and `XRSpaceId`, `XRViewId`, `XRActionId`, and `XRDeviceId` are
+scoped to one exact session. All are process-local live identities. They are not
+serialized, are not native handles or runtime paths, and cannot be rebound by
+matching a slot after replacement. Shutdown is represented by an invalid active
+owner and rejects all admission before registry access.
+
+`XRCapabilitySnapshot` is a fixed-size owned value. Its private state has no
+mutation API and captures one exact system, contract version, non-zero publication
+revision, closed capability states, and finite view/space/action/device limits.
+The hard ceilings are public compile-time storage/work bounds, not product support
+claims. `AdmitXRCapability` is a side-effect-free pre-dispatch check: it validates
+the active owner and exact revision, preserves unsupported/unavailable/incompatible
+categories, and rejects over-capacity requests without allocation, blocking I/O,
+job submission, native calls, or CPU/GPU synchronization.
+
+The descriptor set returned by `XRErrors::Descriptors()` is the complete bounded
+`horo.xr` contribution for later host module registration. XRRuntime and XROpenXR
+must extend this Horo-owned vocabulary through their owning module descriptors;
+they must not expose native result integers or branch on native message text.
 
 Capabilities are discovered from the selected runtime, platform host, renderer,
 device, permissions, and admitted optional extensions. They are not inferred
