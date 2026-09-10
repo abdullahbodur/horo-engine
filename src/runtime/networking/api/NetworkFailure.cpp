@@ -3,6 +3,7 @@
 #include "Horo/Network/NetworkErrors.h"
 
 #include <algorithm>
+#include <cstddef>
 #include <limits>
 #include <utility>
 
@@ -16,26 +17,21 @@ namespace Horo::Network {
 
         /** @brief Resolves the single canonical classification for a terminal kind. */
         std::optional<Classification> Classify(const NetworkFailureKind kind) noexcept {
+            using enum NetworkFailureLayer;
             static const std::array classifications{
-                Classification{NetworkFailureLayer::Transport, NetworkFailureDisposition::Retryable, &NetworkErrors::NameResolutionFailed},
-                Classification{NetworkFailureLayer::Transport, NetworkFailureDisposition::Retryable,
-                               &NetworkErrors::TransportCapabilityUnavailable},
-                Classification{NetworkFailureLayer::Transport, NetworkFailureDisposition::Retryable, &NetworkErrors::PacketQueueFull},
-                Classification{NetworkFailureLayer::Protocol, NetworkFailureDisposition::RemoteRejection,
-                               &NetworkErrors::MessageEnvelopeInvalid},
-                Classification{NetworkFailureLayer::Protocol, NetworkFailureDisposition::Incompatible,
-                               &NetworkErrors::ProtocolVersionIncompatible},
-                Classification{NetworkFailureLayer::Session, NetworkFailureDisposition::LocalPolicy, &NetworkErrors::SessionPolicyRejected},
-                Classification{NetworkFailureLayer::Session, NetworkFailureDisposition::RemoteRejection,
-                               &NetworkErrors::SessionRemoteRejected},
-                Classification{NetworkFailureLayer::Session, NetworkFailureDisposition::LocalPolicy, &NetworkErrors::SessionCancelled},
-                Classification{NetworkFailureLayer::Session, NetworkFailureDisposition::Retryable, &NetworkErrors::SessionTimedOut},
-                Classification{NetworkFailureLayer::Session, NetworkFailureDisposition::LocalPolicy, &NetworkErrors::SessionShuttingDown},
-                Classification{NetworkFailureLayer::Replication, NetworkFailureDisposition::Incompatible,
-                               &NetworkErrors::ReplicationDescriptorIncompatible},
-                Classification{NetworkFailureLayer::GameplayDispatch, NetworkFailureDisposition::RemoteRejection,
-                               &NetworkErrors::GameplayDispatchRejected},
-                Classification{NetworkFailureLayer::Count, NetworkFailureDisposition::Fatal, &NetworkErrors::FatalFailure},
+                Classification{Transport, NetworkFailureDisposition::Retryable, &NetworkErrors::NameResolutionFailed},
+                Classification{Transport, NetworkFailureDisposition::Retryable, &NetworkErrors::TransportCapabilityUnavailable},
+                Classification{Transport, NetworkFailureDisposition::Retryable, &NetworkErrors::PacketQueueFull},
+                Classification{Protocol, NetworkFailureDisposition::RemoteRejection, &NetworkErrors::MessageEnvelopeInvalid},
+                Classification{Protocol, NetworkFailureDisposition::Incompatible, &NetworkErrors::ProtocolVersionIncompatible},
+                Classification{Session, NetworkFailureDisposition::LocalPolicy, &NetworkErrors::SessionPolicyRejected},
+                Classification{Session, NetworkFailureDisposition::RemoteRejection, &NetworkErrors::SessionRemoteRejected},
+                Classification{Session, NetworkFailureDisposition::LocalPolicy, &NetworkErrors::SessionCancelled},
+                Classification{Session, NetworkFailureDisposition::Retryable, &NetworkErrors::SessionTimedOut},
+                Classification{Session, NetworkFailureDisposition::LocalPolicy, &NetworkErrors::SessionShuttingDown},
+                Classification{Replication, NetworkFailureDisposition::Incompatible, &NetworkErrors::ReplicationDescriptorIncompatible},
+                Classification{GameplayDispatch, NetworkFailureDisposition::RemoteRejection, &NetworkErrors::GameplayDispatchRejected},
+                Classification{Count, NetworkFailureDisposition::Fatal, &NetworkErrors::FatalFailure},
             };
             const auto index = static_cast<std::size_t>(kind);
             return index < classifications.size() ? std::optional{classifications[index]} : std::nullopt;
@@ -101,14 +97,20 @@ namespace Horo::Network {
         };
 
         /** @brief Decodes the shape and initial scalar bits of a non-ASCII UTF-8 lead byte. */
-        std::optional<Utf8Lead> DecodeUtf8Lead(const unsigned char lead) noexcept {
-            if (lead >= 0xc2U && lead <= 0xdfU)
-                return Utf8Lead{1, lead & 0x1fU};
-            if (lead >= 0xe0U && lead <= 0xefU)
-                return Utf8Lead{2, lead & 0x0fU};
-            if (lead >= 0xf0U && lead <= 0xf4U)
-                return Utf8Lead{3, lead & 0x07U};
+        std::optional<Utf8Lead> DecodeUtf8Lead(const std::byte lead) noexcept {
+            const auto value = std::to_integer<std::uint8_t>(lead);
+            if (value >= 0xc2U && value <= 0xdfU)
+                return Utf8Lead{1, value & 0x1fU};
+            if (value >= 0xe0U && value <= 0xefU)
+                return Utf8Lead{2, value & 0x0fU};
+            if (value >= 0xf0U && value <= 0xf4U)
+                return Utf8Lead{3, value & 0x07U};
             return std::nullopt;
+        }
+
+        /** @brief Reads one string byte without assigning byte protocol meaning to character data. */
+        std::byte ByteAt(const std::string_view text, const std::size_t index) noexcept {
+            return static_cast<std::byte>(static_cast<unsigned char>(text[index]));
         }
 
         /** @brief Rejects overlong, surrogate, and out-of-range decoded Unicode scalars. */
@@ -122,15 +124,15 @@ namespace Horo::Network {
 
         /** @brief Decodes one bounded non-ASCII UTF-8 scalar and returns its byte width. */
         std::optional<std::size_t> DecodeUtf8Scalar(const std::string_view text, const std::size_t index) noexcept {
-            const auto decodedLead = DecodeUtf8Lead(static_cast<unsigned char>(text[index]));
+            const auto decodedLead = DecodeUtf8Lead(ByteAt(text, index));
             if (!decodedLead.has_value() || index + decodedLead->continuationCount >= text.size())
                 return std::nullopt;
             std::uint32_t codepoint = decodedLead->codepoint;
             for (std::size_t offset = 1; offset <= decodedLead->continuationCount; ++offset) {
-                const auto continuation = static_cast<unsigned char>(text[index + offset]);
-                if ((continuation & 0xc0U) != 0x80U)
+                const auto continuation = ByteAt(text, index + offset);
+                if ((continuation & std::byte{0xc0}) != std::byte{0x80})
                     return std::nullopt;
-                codepoint = (codepoint << 6U) | (continuation & 0x3fU);
+                codepoint = (codepoint << 6U) | std::to_integer<std::uint8_t>(continuation & std::byte{0x3f});
             }
             if (!IsCanonicalUtf8Scalar(codepoint, decodedLead->continuationCount))
                 return std::nullopt;
@@ -141,8 +143,7 @@ namespace Horo::Network {
         bool IsPrintableUtf8(const std::string_view text) noexcept {
             std::size_t index = 0;
             while (index < text.size()) {
-                const auto lead = static_cast<unsigned char>(text[index]);
-                if (lead < 0x80U) {
+                if (const auto lead = std::to_integer<std::uint8_t>(ByteAt(text, index)); lead < 0x80U) {
                     if (lead < 0x20U || lead == 0x7fU)
                         return false;
                     ++index;
@@ -200,9 +201,9 @@ namespace Horo::Network {
                                                             const std::span<const NetworkFailureContextEntry> context) {
         const auto classification = Classify(kind);
         const bool layerKnown = static_cast<std::uint8_t>(layer) < static_cast<std::uint8_t>(NetworkFailureLayer::Count);
-        const bool layerIsValid =
-            layerKnown && (kind == NetworkFailureKind::FatalInternal || (classification.has_value() && classification->layer == layer));
-        if (!classification.has_value() || !layerIsValid || !ContextIsValid(context))
+        if (const bool layerIsValid =
+                layerKnown && (kind == NetworkFailureKind::FatalInternal || (classification.has_value() && classification->layer == layer));
+            !classification.has_value() || !layerIsValid || !ContextIsValid(context))
             return Result<NetworkTerminalRecord>::Failure(MakeError(NetworkErrors::TerminalRecordInvalid));
 
         NetworkTerminalRecord record;
