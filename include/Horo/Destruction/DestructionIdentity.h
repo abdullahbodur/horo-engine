@@ -255,7 +255,7 @@ namespace Horo::Destruction {
      */
     [[nodiscard]] Result<DestructionHandle> DeserializeDestructionHandle(const SerializedDestructionHandle &bytes);
     /** @brief Encodes a command identity. @param command Identity to encode. @return Canonical bytes. */
-    [[nodiscard]] SerializedDestructionCommandId SerializeDestructionCommandId(DestructionCommandId command) noexcept;
+    [[nodiscard]] SerializedDestructionCommandId SerializeDestructionCommandId(const DestructionCommandId &command) noexcept;
     /** @brief Decodes a command identity. @param bytes Canonical bytes.
      * @return Typed identity or DestructionErrors::SerializedIdentityInvalid.
      */
@@ -305,7 +305,7 @@ namespace Horo::Destruction {
     /** @brief Validates a command target generation. @param submitted Candidate command identity.
      * @param currentTarget Current target handle. @return Success or a typed identity/generation failure.
      */
-    [[nodiscard]] Result<void> ValidateDestructionCommandAccess(DestructionCommandId submitted, DestructionHandle currentTarget);
+    [[nodiscard]] Result<void> ValidateDestructionCommandAccess(const DestructionCommandId &submitted, DestructionHandle currentTarget);
     /** @brief Validates an event occurrence against current source and semantic revision.
      * @param submitted Candidate occurrence.
      * @param currentSource Current source handle.

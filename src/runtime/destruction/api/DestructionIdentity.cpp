@@ -183,7 +183,7 @@ namespace Horo::Destruction {
     }
 
     /** @copydoc SerializeDestructionCommandId */
-    SerializedDestructionCommandId SerializeDestructionCommandId(const DestructionCommandId command) noexcept {
+    SerializedDestructionCommandId SerializeDestructionCommandId(const DestructionCommandId &command) noexcept {
         SerializedDestructionCommandId bytes{};
         WriteHandle(bytes, 0, command.target);
         WriteNetworkValue(bytes, 24, command.value.Value(), 8);
@@ -270,7 +270,7 @@ namespace Horo::Destruction {
     }
 
     /** @copydoc ValidateDestructionCommandAccess */
-    Result<void> ValidateDestructionCommandAccess(const DestructionCommandId submitted, const DestructionHandle currentTarget) {
+    Result<void> ValidateDestructionCommandAccess(const DestructionCommandId &submitted, const DestructionHandle currentTarget) {
         if (!submitted.IsValid())
             return Result<void>::Failure(MakeError(DestructionErrors::IdentityInvalid));
         return ValidateDestructionHandleAccess(submitted.target, currentTarget);
@@ -281,8 +281,7 @@ namespace Horo::Destruction {
                                                 const DestructionStateRevision currentRevision) {
         if (!submitted.IsValid() || !currentRevision.IsValid())
             return Result<void>::Failure(MakeError(DestructionErrors::IdentityInvalid));
-        auto handle = ValidateDestructionHandleAccess(submitted.source, currentSource);
-        if (handle.HasError())
+        if (auto handle = ValidateDestructionHandleAccess(submitted.source, currentSource); handle.HasError())
             return handle;
         if (submitted.stateRevision != currentRevision)
             return Result<void>::Failure(MakeError(DestructionErrors::StaleRevision));
