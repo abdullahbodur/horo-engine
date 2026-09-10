@@ -41,51 +41,100 @@ namespace Horo::Network {
             return index < classifications.size() ? std::optional{classifications[index]} : std::nullopt;
         }
 
+        using ContextValidator = bool (*)(const NetworkFailureContextValue &);
+
+        /** @brief Validates a transport-handle diagnostic context value. */
+        bool ValidConnectionContext(const NetworkFailureContextValue &value) noexcept {
+            const auto *handle = std::get_if<TransportHandleDiagnostic>(&value);
+            return handle != nullptr && handle->slot != std::numeric_limits<std::uint32_t>::max() && handle->generation != 0;
+        }
+
+        /** @brief Validates a protocol identity context value. */
+        bool ValidProtocolContext(const NetworkFailureContextValue &value) noexcept {
+            const auto *identity = std::get_if<ProtocolId>(&value);
+            return identity != nullptr && identity->IsValid();
+        }
+
+        /** @brief Validates a close-reason identity context value. */
+        bool ValidCloseReasonContext(const NetworkFailureContextValue &value) noexcept {
+            const auto *identity = std::get_if<CloseReasonId>(&value);
+            return identity != nullptr && identity->IsValid();
+        }
+
+        /** @brief Validates a replicated-object identity context value. */
+        bool ValidNetworkObjectContext(const NetworkFailureContextValue &value) noexcept {
+            const auto *identity = std::get_if<NetworkObjectId>(&value);
+            return identity != nullptr && identity->IsValid();
+        }
+
+        /** @brief Validates a non-zero scalar context value. */
+        bool ValidNonZeroScalarContext(const NetworkFailureContextValue &value) noexcept {
+            const auto *scalar = std::get_if<std::uint64_t>(&value);
+            return scalar != nullptr && *scalar != 0;
+        }
+
+        /** @brief Validates a message-type identity context value. */
+        bool ValidMessageTypeContext(const NetworkFailureContextValue &value) noexcept {
+            const auto *identity = std::get_if<MessageTypeId>(&value);
+            return identity != nullptr && identity->IsValid();
+        }
+
+        /** @brief Validates a scalar context value that permits zero. */
+        bool ValidScalarContext(const NetworkFailureContextValue &value) noexcept {
+            return std::holds_alternative<std::uint64_t>(value);
+        }
+
         /** @brief Validates one context value against its closed key vocabulary. */
         bool ContextValueIsValid(const NetworkFailureContextEntry &entry) noexcept {
-            using Validator = bool (*)(const NetworkFailureContextValue &);
-            static const std::array<Validator, static_cast<std::size_t>(NetworkFailureContextKey::Count)> validators{
-                [](const auto &value) {
-                const auto *handle = std::get_if<TransportHandleDiagnostic>(&value);
-                return handle != nullptr && handle->slot != std::numeric_limits<std::uint32_t>::max() && handle->generation != 0;
-            },
-                [](const auto &value) {
-                const auto *identity = std::get_if<ProtocolId>(&value);
-                return identity != nullptr && identity->IsValid();
-            },
-                [](const auto &value) {
-                const auto *identity = std::get_if<CloseReasonId>(&value);
-                return identity != nullptr && identity->IsValid();
-            },
-                [](const auto &value) {
-                const auto *identity = std::get_if<NetworkObjectId>(&value);
-                return identity != nullptr && identity->IsValid();
-            },
-                [](const auto &value) {
-                const auto *scalar = std::get_if<std::uint64_t>(&value);
-                return scalar != nullptr && *scalar != 0;
-            },
-                [](const auto &value) {
-                const auto *scalar = std::get_if<std::uint64_t>(&value);
-                return scalar != nullptr && *scalar != 0;
-            },
-                [](const auto &value) {
-                const auto *identity = std::get_if<MessageTypeId>(&value);
-                return identity != nullptr && identity->IsValid();
-            },
-                [](const auto &value) {
-                return std::holds_alternative<std::uint64_t>(value);
-            },
-                [](const auto &value) {
-                return std::holds_alternative<std::uint64_t>(value);
-            },
-                [](const auto &value) {
-                const auto *scalar = std::get_if<std::uint64_t>(&value);
-                return scalar != nullptr && *scalar != 0;
-            },
+            static const std::array<ContextValidator, static_cast<std::size_t>(NetworkFailureContextKey::Count)> validators{
+                ValidConnectionContext,    ValidProtocolContext,      ValidCloseReasonContext, ValidNetworkObjectContext,
+                ValidNonZeroScalarContext, ValidNonZeroScalarContext, ValidMessageTypeContext, ValidScalarContext,
+                ValidScalarContext,        ValidNonZeroScalarContext,
             };
             const auto index = static_cast<std::size_t>(entry.key);
             return index < validators.size() && validators[index](entry.value);
+        }
+
+        struct Utf8Lead final {
+            std::size_t continuationCount;
+            std::uint32_t codepoint;
+        };
+
+        /** @brief Decodes the shape and initial scalar bits of a non-ASCII UTF-8 lead byte. */
+        std::optional<Utf8Lead> DecodeUtf8Lead(const unsigned char lead) noexcept {
+            if (lead >= 0xc2U && lead <= 0xdfU)
+                return Utf8Lead{1, lead & 0x1fU};
+            if (lead >= 0xe0U && lead <= 0xefU)
+                return Utf8Lead{2, lead & 0x0fU};
+            if (lead >= 0xf0U && lead <= 0xf4U)
+                return Utf8Lead{3, lead & 0x07U};
+            return std::nullopt;
+        }
+
+        /** @brief Rejects overlong, surrogate, and out-of-range decoded Unicode scalars. */
+        bool IsCanonicalUtf8Scalar(const std::uint32_t codepoint, const std::size_t continuationCount) noexcept {
+            if (continuationCount == 2)
+                return codepoint >= 0x800U && !(codepoint >= 0xd800U && codepoint <= 0xdfffU);
+            if (continuationCount == 3)
+                return codepoint >= 0x10000U && codepoint <= 0x10ffffU;
+            return true;
+        }
+
+        /** @brief Decodes one bounded non-ASCII UTF-8 scalar and returns its byte width. */
+        std::optional<std::size_t> DecodeUtf8Scalar(const std::string_view text, const std::size_t index) noexcept {
+            const auto decodedLead = DecodeUtf8Lead(static_cast<unsigned char>(text[index]));
+            if (!decodedLead.has_value() || index + decodedLead->continuationCount >= text.size())
+                return std::nullopt;
+            std::uint32_t codepoint = decodedLead->codepoint;
+            for (std::size_t offset = 1; offset <= decodedLead->continuationCount; ++offset) {
+                const auto continuation = static_cast<unsigned char>(text[index + offset]);
+                if ((continuation & 0xc0U) != 0x80U)
+                    return std::nullopt;
+                codepoint = (codepoint << 6U) | (continuation & 0x3fU);
+            }
+            if (!IsCanonicalUtf8Scalar(codepoint, decodedLead->continuationCount))
+                return std::nullopt;
+            return decodedLead->continuationCount + 1;
         }
 
         /** @brief Checks a bounded prefix for printable canonical UTF-8 without retaining it. */
@@ -99,32 +148,10 @@ namespace Horo::Network {
                     ++index;
                     continue;
                 }
-                std::size_t continuationCount = 0;
-                std::uint32_t codepoint = 0;
-                if (lead >= 0xc2U && lead <= 0xdfU) {
-                    continuationCount = 1;
-                    codepoint = lead & 0x1fU;
-                } else if (lead >= 0xe0U && lead <= 0xefU) {
-                    continuationCount = 2;
-                    codepoint = lead & 0x0fU;
-                } else if (lead >= 0xf0U && lead <= 0xf4U) {
-                    continuationCount = 3;
-                    codepoint = lead & 0x07U;
-                } else {
+                const auto scalarBytes = DecodeUtf8Scalar(text, index);
+                if (!scalarBytes.has_value())
                     return false;
-                }
-                if (index + continuationCount >= text.size())
-                    return false;
-                for (std::size_t offset = 1; offset <= continuationCount; ++offset) {
-                    const auto continuation = static_cast<unsigned char>(text[index + offset]);
-                    if ((continuation & 0xc0U) != 0x80U)
-                        return false;
-                    codepoint = (codepoint << 6U) | (continuation & 0x3fU);
-                }
-                if ((continuationCount == 2 && (codepoint < 0x800U || (codepoint >= 0xd800U && codepoint <= 0xdfffU))) ||
-                    (continuationCount == 3 && (codepoint < 0x10000U || codepoint > 0x10ffffU)))
-                    return false;
-                index += continuationCount + 1;
+                index += *scalarBytes;
             }
             return true;
         }

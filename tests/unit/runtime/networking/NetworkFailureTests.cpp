@@ -178,6 +178,22 @@ namespace Horo::Network {
         REQUIRE(malformed.HasValue());
         REQUIRE(malformed.Value().BackendEvidence().malformed);
 
+        const auto validUtf8 = NormalizePrivateBackendFailure(NetworkFailureLayer::Transport, NetworkFailureKind::TransportUnavailable,
+                                                              "r\xc3\xa9seau \xe2\x82\xac \xf0\x9f\x8c\x90");
+        REQUIRE(validUtf8.HasValue());
+        REQUIRE_FALSE(validUtf8.Value().BackendEvidence().malformed);
+
+        const std::array malformedUtf8{
+            std::string_view{"\x80"},         std::string_view{"\xe2\x82"},         std::string_view{"\xe0\x80\x80"},
+            std::string_view{"\xed\xa0\x80"}, std::string_view{"\xf4\x90\x80\x80"}, std::string_view{"\x7f"},
+        };
+        for (const auto detail : malformedUtf8) {
+            const auto rejected =
+                NormalizePrivateBackendFailure(NetworkFailureLayer::Transport, NetworkFailureKind::TransportUnavailable, detail);
+            REQUIRE(rejected.HasValue());
+            REQUIRE(rejected.Value().BackendEvidence().malformed);
+        }
+
         const auto empty = NormalizePrivateBackendFailure(NetworkFailureLayer::Transport, NetworkFailureKind::TransportUnavailable, {});
         REQUIRE(empty.HasValue());
         REQUIRE_FALSE(empty.Value().BackendEvidence().observed);
