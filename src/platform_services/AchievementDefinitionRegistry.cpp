@@ -1,34 +1,25 @@
 #include "Horo/PlatformServices/AchievementDefinitionRegistry.h"
 
+#include "PlatformDefinitionRegistryDetail.h"
+
 #include <algorithm>
-#include <format>
 #include <memory>
 #include <new>
 #include <utility>
 
 namespace Horo::PlatformServices {
+    using DefinitionRegistryDetail::DocumentError;
+    using DefinitionRegistryDetail::FieldError;
+    using DefinitionRegistryDetail::FingerprintWriter;
+    using DefinitionRegistryDetail::IsLocalizationKey;
+    using DefinitionRegistryDetail::IsZero;
+    using DefinitionRegistryDetail::MakeDescriptor;
+
     namespace {
         constexpr std::string_view FingerprintDomain = "horo.platform-services.achievement-definitions.v1";
         constexpr std::uint32_t HardMaximumDefinitions = 4096;
         constexpr std::uint32_t HardMaximumLocalizationKeyBytes = 512;
         constexpr std::uint32_t HardMaximumProgressTotal = 1'000'000'000;
-
-        [[nodiscard]] bool IsZero(const Sha256Digest &digest) noexcept {
-            return std::ranges::all_of(digest.bytes, [](const std::uint8_t byte) {
-                return byte == 0;
-            });
-        }
-
-        [[nodiscard]] bool IsLocalizationKeyCharacter(const char character) noexcept {
-            return (character >= 'a' && character <= 'z') || (character >= '0' && character <= '9') || character == '_' ||
-                   character == '.' || character == '-';
-        }
-
-        [[nodiscard]] bool IsLocalizationKey(const std::string_view key, const std::uint32_t maximumBytes) noexcept {
-            if (key.empty() || key.size() > maximumBytes || key.front() < 'a' || key.front() > 'z')
-                return false;
-            return std::ranges::all_of(key.substr(1), IsLocalizationKeyCharacter);
-        }
 
         [[nodiscard]] bool IsKnown(const ProgressionAuthorityMode mode) noexcept {
             return mode == ProgressionAuthorityMode::LocalProduct || mode == ProgressionAuthorityMode::AuthorityServer;
@@ -36,45 +27,6 @@ namespace Horo::PlatformServices {
 
         [[nodiscard]] bool IsKnown(const AchievementProgressKind kind) noexcept {
             return kind == AchievementProgressKind::UnlockOnce || kind == AchievementProgressKind::SetProgressMaximum;
-        }
-
-        [[nodiscard]] Error DiagnosticError(const ErrorCodeDescriptor &descriptor, std::string source, const std::string_view message) {
-            Error error = MakeError(descriptor);
-            error.diagnostics.push_back({.code = DiagnosticCode{descriptor.code.Value()},
-                                         .severity = DiagnosticSeverity::Error,
-                                         .message = std::string{message},
-                                         .location = {.source = std::move(source)}});
-            return error;
-        }
-
-        [[nodiscard]] Error FieldError(const ErrorCodeDescriptor &descriptor, const std::size_t index, const std::string_view field,
-                                       const std::string_view message) {
-            return DiagnosticError(descriptor, std::format("definitions[{}].{}", index, field), message);
-        }
-
-        [[nodiscard]] Error DocumentError(const ErrorCodeDescriptor &descriptor, const std::string_view field,
-                                          const std::string_view message) {
-            return DiagnosticError(descriptor, std::string{field}, message);
-        }
-
-        void AppendU8(std::vector<std::byte> &bytes, const std::uint8_t value) {
-            bytes.push_back(static_cast<std::byte>(value));
-        }
-
-        void AppendU32(std::vector<std::byte> &bytes, const std::uint32_t value) {
-            for (int shift = 24; shift >= 0; shift -= 8)
-                AppendU8(bytes, static_cast<std::uint8_t>(value >> static_cast<unsigned>(shift)));
-        }
-
-        void AppendU64(std::vector<std::byte> &bytes, const std::uint64_t value) {
-            for (int shift = 56; shift >= 0; shift -= 8)
-                AppendU8(bytes, static_cast<std::uint8_t>(value >> static_cast<unsigned>(shift)));
-        }
-
-        void AppendText(std::vector<std::byte> &bytes, const std::string_view text) {
-            AppendU32(bytes, static_cast<std::uint32_t>(text.size()));
-            for (const char character : text)
-                AppendU8(bytes, static_cast<std::uint8_t>(character));
         }
 
         [[nodiscard]] bool HasValidLimits(const AchievementDefinitionRegistryLimits &limits) noexcept {
@@ -93,23 +45,21 @@ namespace Horo::PlatformServices {
         }
 
         [[nodiscard]] Sha256Digest Fingerprint(const Sha256Digest &stableIds, const std::span<const AchievementDefinition> definitions) {
-            std::vector<std::byte> bytes;
-            bytes.reserve(96U + definitions.size() * 64U);
-            AppendText(bytes, FingerprintDomain);
-            AppendU32(bytes, AchievementDefinitionRegistrySchemaVersion);
-            for (const std::uint8_t byte : stableIds.bytes)
-                AppendU8(bytes, byte);
-            AppendU32(bytes, static_cast<std::uint32_t>(definitions.size()));
+            FingerprintWriter writer{96U + definitions.size() * 64U};
+            writer.AddText(FingerprintDomain);
+            writer.AddU32(AchievementDefinitionRegistrySchemaVersion);
+            writer.AddDigest(stableIds);
+            writer.AddU32(static_cast<std::uint32_t>(definitions.size()));
             for (const AchievementDefinition &definition : definitions) {
-                AppendU64(bytes, definition.id.value);
-                AppendU8(bytes, static_cast<std::uint8_t>(definition.authority));
-                AppendU8(bytes, static_cast<std::uint8_t>(definition.progress.kind));
-                AppendU32(bytes, definition.progress.total);
-                AppendText(bytes, definition.presentation.titleLocalizationKey);
-                AppendText(bytes, definition.presentation.descriptionLocalizationKey);
-                AppendU8(bytes, definition.presentation.hidden ? 1U : 0U);
+                writer.AddU64(definition.id.value);
+                writer.AddByte(static_cast<std::uint8_t>(definition.authority));
+                writer.AddByte(static_cast<std::uint8_t>(definition.progress.kind));
+                writer.AddU32(definition.progress.total);
+                writer.AddText(definition.presentation.titleLocalizationKey);
+                writer.AddText(definition.presentation.descriptionLocalizationKey);
+                writer.AddByte(definition.presentation.hidden ? 1U : 0U);
             }
-            return ComputeSha256(bytes);
+            return writer.Finish();
         }
 
         [[nodiscard]] const PlatformStableIdDeclaration *FindLedgerEntry(const PlatformStableIdRegistry &stableIds,
@@ -212,62 +162,32 @@ namespace Horo::PlatformServices {
             const ErrorDomainId Domain{"horo.platform.achievement-definition"};
         }
 
-        const ErrorCodeDescriptor UnsupportedVersion{Domain,
-                                                     ErrorCode{"platform.achievement.version_unsupported"},
-                                                     ErrorSeverity::Error,
-                                                     "Achievement definition schema version is unsupported.",
-                                                     "Migrate the document to the supported schema.",
-                                                     false,
-                                                     true};
-        const ErrorCodeDescriptor CapacityExceeded{Domain,
-                                                   ErrorCode{"platform.achievement.capacity_exceeded"},
-                                                   ErrorSeverity::Error,
-                                                   "Achievement definition bounds were exceeded.",
-                                                   "Reduce the definition document or use supported finite limits.",
-                                                   false,
-                                                   true};
-        const ErrorCodeDescriptor InvalidDefinition{Domain,
-                                                    ErrorCode{"platform.achievement.definition_invalid"},
-                                                    ErrorSeverity::Error,
-                                                    "Achievement definition is malformed or incomplete.",
-                                                    "Correct the field identified by the diagnostic.",
-                                                    false,
-                                                    true};
-        const ErrorCodeDescriptor DuplicateDefinition{Domain,
-                                                      ErrorCode{"platform.achievement.definition_duplicate"},
-                                                      ErrorSeverity::Error,
-                                                      "Achievement stable ID is defined more than once.",
-                                                      "Retain exactly one definition for the stable ID.",
-                                                      false,
-                                                      true};
-        const ErrorCodeDescriptor UnknownIdentity{Domain,
-                                                  ErrorCode{"platform.achievement.identity_unknown"},
-                                                  ErrorSeverity::Error,
-                                                  "Achievement definition references no active stable identity.",
-                                                  "Use one active achievement ID from the captured ledger.",
-                                                  false,
-                                                  true};
-        const ErrorCodeDescriptor IncompleteRegistry{Domain,
-                                                     ErrorCode{"platform.achievement.registry_incomplete"},
-                                                     ErrorSeverity::Error,
-                                                     "An active achievement has no definition.",
-                                                     "Define every active achievement before publication.",
-                                                     false,
-                                                     true};
-        const ErrorCodeDescriptor StaleIdentityRegistry{Domain,
-                                                        ErrorCode{"platform.achievement.identity_registry_stale"},
-                                                        ErrorSeverity::Error,
-                                                        "Achievement definitions target a different stable-ID registry generation.",
-                                                        "Rebuild definitions against the captured stable-ID fingerprint.",
-                                                        false,
-                                                        false};
-        const ErrorCodeDescriptor ImmutableContractChanged{Domain,
-                                                           ErrorCode{"platform.achievement.immutable_contract_changed"},
-                                                           ErrorSeverity::Error,
-                                                           "Published achievement authority or progress semantics changed.",
-                                                           "Create an explicit product migration instead of live replacement.",
-                                                           false,
-                                                           true};
+        const ErrorCodeDescriptor UnsupportedVersion =
+            MakeDescriptor(Domain, "platform.achievement.version_unsupported", "Achievement definition schema version is unsupported.",
+                           "Migrate the document to the supported schema.", true);
+        const ErrorCodeDescriptor CapacityExceeded =
+            MakeDescriptor(Domain, "platform.achievement.capacity_exceeded", "Achievement definition bounds were exceeded.",
+                           "Reduce the definition document or use supported finite limits.", true);
+        const ErrorCodeDescriptor InvalidDefinition =
+            MakeDescriptor(Domain, "platform.achievement.definition_invalid", "Achievement definition is malformed or incomplete.",
+                           "Correct the field identified by the diagnostic.", true);
+        const ErrorCodeDescriptor DuplicateDefinition =
+            MakeDescriptor(Domain, "platform.achievement.definition_duplicate", "Achievement stable ID is defined more than once.",
+                           "Retain exactly one definition for the stable ID.", true);
+        const ErrorCodeDescriptor UnknownIdentity =
+            MakeDescriptor(Domain, "platform.achievement.identity_unknown", "Achievement definition references no active stable identity.",
+                           "Use one active achievement ID from the captured ledger.", true);
+        const ErrorCodeDescriptor IncompleteRegistry =
+            MakeDescriptor(Domain, "platform.achievement.registry_incomplete", "An active achievement has no definition.",
+                           "Define every active achievement before publication.", true);
+        const ErrorCodeDescriptor StaleIdentityRegistry =
+            MakeDescriptor(Domain, "platform.achievement.identity_registry_stale",
+                           "Achievement definitions target a different stable-ID registry generation.",
+                           "Rebuild definitions against the captured stable-ID fingerprint.", false);
+        const ErrorCodeDescriptor ImmutableContractChanged =
+            MakeDescriptor(Domain, "platform.achievement.immutable_contract_changed",
+                           "Published achievement authority or progress semantics changed.",
+                           "Create an explicit product migration instead of live replacement.", true);
     }  // namespace AchievementDefinitionErrors
 
     /** @copydoc AchievementDefinitionRegistry::StableIdProjectId */
