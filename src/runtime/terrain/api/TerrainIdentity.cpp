@@ -29,11 +29,9 @@ namespace Horo::Terrain {
                                               const std::array<std::span<const std::byte>, PieceCount> &pieces) {
             std::array<std::byte, MaximumDerivationPreimageBytes> preimage{};
             std::size_t size{};
-            const auto domainBytes = std::as_bytes(std::span{domain.data(), domain.size()});
-            if (!Append(preimage, size, domainBytes))
+            if (const auto domainBytes = std::as_bytes(std::span{domain.data(), domain.size()}); !Append(preimage, size, domainBytes))
                 return Result<Identity>::Failure(MakeError(TerrainErrors::DerivationInvalid));
-            const std::byte separator{};
-            if (!Append(preimage, size, std::span{&separator, 1}))
+            if (constexpr std::byte separator{}; !Append(preimage, size, std::span{&separator, 1}))
                 return Result<Identity>::Failure(MakeError(TerrainErrors::DerivationInvalid));
             for (const auto piece : pieces) {
                 if (!Append(preimage, size, piece))
@@ -102,7 +100,7 @@ namespace Horo::Terrain {
         template <typename Integer>
         void StoreNetworkOrder(const Integer value, const std::span<std::uint8_t, sizeof(Integer)> output) noexcept {
             using Unsigned = std::make_unsigned_t<Integer>;
-            const Unsigned bits = static_cast<Unsigned>(value);
+            const auto bits = static_cast<Unsigned>(value);
             for (std::size_t index = 0; index < output.size(); ++index) {
                 const auto shift = static_cast<unsigned>((output.size() - index - 1U) * 8U);
                 output[index] = static_cast<std::uint8_t>(bits >> shift);
