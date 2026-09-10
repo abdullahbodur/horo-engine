@@ -552,15 +552,15 @@ namespace Horo::Extensions {
 
     /** @copydoc ExtensionInventory::SetTrusted */
     Result<void> ExtensionInventory::SetTrusted(const std::string_view packageId, const bool trusted) {
+        const ExtensionLifecycleAction action = trusted ? ExtensionLifecycleAction::GrantTrust : ExtensionLifecycleAction::RevokeTrust;
         ExtensionInventoryEntry *entry = FindEntry(entries_, packageId);
         if (entry == nullptr)
             return Result<void>::Failure(MakeError(ExtensionErrors::InvalidManifest, "Unknown extension package ID."));
         auto transition =
-            TransitionExtensionActivation(entry->ActivationState(),
-                                          {.action = trusted ? ExtensionLifecycleAction::GrantTrust : ExtensionLifecycleAction::RevokeTrust,
-                                           .owner = ExtensionLifecycleOwner::TrustService,
-                                           .expectedRevision = entry->stateRevision,
-                                           .composition = trusted ? entry->compositionVersion : std::string{}});
+            TransitionExtensionActivation(entry->ActivationState(), {.action = action,
+                                                                     .owner = ExtensionLifecycleOwner::TrustService,
+                                                                     .expectedRevision = entry->stateRevision,
+                                                                     .composition = trusted ? entry->compositionVersion : std::string{}});
         if (transition.HasError())
             return Result<void>::Failure(transition.ErrorValue());
         const auto previous = trustedCompositions_.find(entry->packageId);
