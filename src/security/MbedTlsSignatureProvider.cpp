@@ -1,6 +1,8 @@
 #include "Horo/Security/ArtifactSignature.h"
 #include "Horo/Security/SecurityErrors.h"
 
+#include <algorithm>
+#include <array>
 #include <mbedtls/bignum.h>
 #include <mbedtls/ecdsa.h>
 #include <mbedtls/ecp.h>
@@ -17,17 +19,23 @@ namespace Horo::Security {
             mbedtls_ecp_point_init(&point);
             mbedtls_mpi_init(&r);
             mbedtls_mpi_init(&s);
-            const auto *keyBytes = reinterpret_cast<const unsigned char *>(publicKey.data());
-            const auto *signatureBytes = reinterpret_cast<const unsigned char *>(signature.data());
+            std::array<unsigned char, 65> keyBytes{};
+            std::array<unsigned char, 64> signatureBytes{};
+            std::ranges::transform(publicKey, keyBytes.begin(), [](const std::byte byte) {
+                return std::to_integer<unsigned char>(byte);
+            });
+            std::ranges::transform(signature, signatureBytes.begin(), [](const std::byte byte) {
+                return std::to_integer<unsigned char>(byte);
+            });
             int status = mbedtls_ecp_group_load(&group, MBEDTLS_ECP_DP_SECP256R1);
             if (status == 0)
-                status = mbedtls_ecp_point_read_binary(&group, &point, keyBytes, publicKey.size());
+                status = mbedtls_ecp_point_read_binary(&group, &point, keyBytes.data(), keyBytes.size());
             if (status == 0)
                 status = mbedtls_ecp_check_pubkey(&group, &point);
             if (status == 0)
-                status = mbedtls_mpi_read_binary(&r, signatureBytes, 32U);
+                status = mbedtls_mpi_read_binary(&r, signatureBytes.data(), 32U);
             if (status == 0)
-                status = mbedtls_mpi_read_binary(&s, signatureBytes + 32U, 32U);
+                status = mbedtls_mpi_read_binary(&s, signatureBytes.data() + 32U, 32U);
             if (status == 0)
                 status = mbedtls_ecdsa_verify(&group, payloadDigest.bytes.data(), payloadDigest.bytes.size(), &point, &r, &s);
             mbedtls_mpi_free(&s);

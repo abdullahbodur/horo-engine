@@ -28,22 +28,22 @@ namespace Horo::Security {
                           reinterpret_cast<const std::byte *>(value.data() + value.size()));
         }
 
-        [[nodiscard]] Result<std::vector<std::byte>> ReadArtifact(const std::filesystem::path &path) {
+        [[nodiscard]] Result<std::vector<char>> ReadArtifact(const std::filesystem::path &path) {
             std::error_code ec;
             const std::uintmax_t size = std::filesystem::file_size(path, ec);
             if (ec || size > MaximumNativeArtifactBytes)
-                return Result<std::vector<std::byte>>::Failure(
+                return Result<std::vector<char>>::Failure(
                     MakeError(SecurityErrors::MissingEvidence, "Native artifact is unavailable or exceeds the verification bound."));
             std::ifstream input{path, std::ios::binary};
             if (!input)
-                return Result<std::vector<std::byte>>::Failure(
+                return Result<std::vector<char>>::Failure(
                     MakeError(SecurityErrors::MissingEvidence, "Native artifact could not be opened for verification."));
-            std::vector<std::byte> bytes(static_cast<std::size_t>(size));
-            input.read(reinterpret_cast<char *>(bytes.data()), static_cast<std::streamsize>(bytes.size()));
+            std::vector<char> bytes(static_cast<std::size_t>(size));
+            input.read(bytes.data(), static_cast<std::streamsize>(bytes.size()));
             if (!input || static_cast<std::size_t>(input.gcount()) != bytes.size() || input.peek() != std::char_traits<char>::eof())
-                return Result<std::vector<std::byte>>::Failure(
+                return Result<std::vector<char>>::Failure(
                     MakeError(SecurityErrors::StaleEvidence, "Native artifact changed while it was being verified."));
-            return Result<std::vector<std::byte>>::Success(std::move(bytes));
+            return Result<std::vector<char>>::Success(std::move(bytes));
         }
 
         [[nodiscard]] Result<void> ValidateEnvelope(const DetachedSignatureEnvelope &envelope) {
@@ -104,7 +104,7 @@ namespace Horo::Security {
         return key != keys_.end() ? std::optional<TrustedSigningKey>{*key} : std::nullopt;
     }
 
-    VerifiedArtifactEvidence::VerifiedArtifactEvidence(Sha256Digest digest, std::string publisherId, std::string keyId)
+    VerifiedArtifactEvidence::VerifiedArtifactEvidence(const Sha256Digest &digest, std::string publisherId, std::string keyId)
         : digest_(digest), publisherId_(std::move(publisherId)), keyId_(std::move(keyId)) {}
 
     /** @copydoc VerifiedArtifactEvidence::ArtifactDigest */
@@ -179,6 +179,6 @@ namespace Horo::Security {
         auto bytes = ReadArtifact(artifactPath);
         if (bytes.HasError())
             return Result<VerifiedArtifactEvidence>::Failure(bytes.ErrorValue());
-        return verifier_->Verify(bytes.Value(), envelope.Value());
+        return verifier_->Verify(std::as_bytes(std::span{bytes.Value()}), envelope.Value());
     }
 }  // namespace Horo::Security

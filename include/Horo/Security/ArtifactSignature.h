@@ -93,7 +93,7 @@ namespace Horo::Security {
         [[nodiscard]] std::string_view KeyId() const noexcept;
 
     private:
-        VerifiedArtifactEvidence(Sha256Digest digest, std::string publisherId, std::string keyId);
+        VerifiedArtifactEvidence(const Sha256Digest &digest, std::string publisherId, std::string keyId);
         Sha256Digest digest_;
         std::string publisherId_;
         std::string keyId_;

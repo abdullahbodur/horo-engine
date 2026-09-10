@@ -316,10 +316,11 @@ namespace Horo::Extensions {
             if (artifactSizeError || artifactSize > kMaximumNativeArtifactBytes)
                 return Result<Security::VerifiedArtifactEvidence>::Failure(MakeError(SecurityErrors::StaleEvidence));
             std::ifstream verifiedFile{libraryPath, std::ios::binary};
-            std::vector<std::byte> verifiedBytes(static_cast<std::size_t>(artifactSize));
-            verifiedFile.read(reinterpret_cast<char *>(verifiedBytes.data()), static_cast<std::streamsize>(verifiedBytes.size()));
+            std::vector<char> verifiedBytes(static_cast<std::size_t>(artifactSize));
+            verifiedFile.read(verifiedBytes.data(), static_cast<std::streamsize>(verifiedBytes.size()));
             if (!verifiedFile || static_cast<std::size_t>(verifiedFile.gcount()) != verifiedBytes.size() ||
-                verifiedFile.peek() != std::char_traits<char>::eof() || ComputeSha256(verifiedBytes) != evidence.Value().ArtifactDigest())
+                verifiedFile.peek() != std::char_traits<char>::eof() ||
+                ComputeSha256(std::as_bytes(std::span{verifiedBytes})) != evidence.Value().ArtifactDigest())
                 return Result<Security::VerifiedArtifactEvidence>::Failure(MakeError(SecurityErrors::StaleEvidence));
             return evidence;
         }
@@ -387,8 +388,7 @@ namespace Horo::Extensions {
             auto libraryPathResult = ResolveModuleLibraryPath(manifest, plan.selectedEntries[moduleIndex]);
             if (libraryPathResult.HasError())
                 return Result<std::string>::Failure(transaction.Rollback(libraryPathResult.ErrorValue()));
-            auto evidence = VerifyCurrentArtifact(m_artifactGate, libraryPathResult.Value());
-            if (evidence.HasError())
+            if (auto evidence = VerifyCurrentArtifact(m_artifactGate, libraryPathResult.Value()); evidence.HasError())
                 return Result<std::string>::Failure(transaction.Rollback(evidence.ErrorValue()));
             auto loadResult = m_libraryLoader(libraryPathResult.Value().string());
             if (loadResult.HasError())

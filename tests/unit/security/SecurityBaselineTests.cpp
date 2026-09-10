@@ -67,7 +67,7 @@ namespace Horo::Security::Tests {
                 return Result<SecureBytes>::Success(SecureBytes{value->second});
             }
 
-            [[nodiscard]] Result<void> Remove(const CredentialReference &reference) override {
+            [[nodiscard]] Result<void> Remove(const CredentialReference &reference) noexcept override {
                 ++removals;
                 values.erase(std::string{reference.Value()});
                 return Result<void>::Success();

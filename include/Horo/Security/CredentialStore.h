@@ -43,7 +43,7 @@ namespace Horo::Security {
          */
         [[nodiscard]] virtual Result<SecureBytes> Resolve(const CredentialReference &reference) = 0;
         /** @brief Erases provider-owned material. @param reference Opaque storage key. @return Typed outcome. */
-        [[nodiscard]] virtual Result<void> Remove(const CredentialReference &reference) = 0;
+        [[nodiscard]] virtual Result<void> Remove(const CredentialReference &reference) noexcept = 0;
     };
 
     /** @brief Coordinates opaque references, expiry, rotation, revocation, and provider recovery. */
@@ -92,7 +92,7 @@ namespace Horo::Security {
             bool revoked{};
         };
 
-        [[nodiscard]] Result<CredentialReference> NewReference();
+        [[nodiscard]] Result<CredentialReference> NewReference() const;
         [[nodiscard]] Result<Record *> FindRecord(const CredentialReference &reference);
         std::shared_ptr<CredentialBackend> backend_;
         std::shared_ptr<SecureRandomSource> random_;

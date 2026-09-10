@@ -32,7 +32,7 @@ namespace Horo::Security {
         backend_ = std::move(backend);
     }
 
-    Result<CredentialReference> CredentialVault::NewReference() {
+    Result<CredentialReference> CredentialVault::NewReference() const {
         if (!random_)
             return Result<CredentialReference>::Failure(MakeError(SecurityErrors::EntropyUnavailable));
         for (std::size_t attempt = 0; attempt < MaximumReferenceAttempts; ++attempt) {
@@ -71,7 +71,7 @@ namespace Horo::Security {
             return reference;
         if (auto stored = backend_->Put(reference.Value(), std::move(secret)); stored.HasError())
             return Result<CredentialReference>::Failure(stored.ErrorValue());
-        records_.emplace(std::string{reference.Value().Value()}, Record{.expiresAtMillis = expiresAtMillis});
+        records_.try_emplace(std::string{reference.Value().Value()}, Record{.expiresAtMillis = expiresAtMillis});
         return reference;
     }
 
@@ -128,11 +128,7 @@ namespace Horo::Security {
         if (backend_ && backend_->Available()) {
             for (const auto &[value, record] : records_) {
                 static_cast<void>(record);
-                try {
-                    static_cast<void>(backend_->Remove(CredentialReference{value}));
-                } catch (...) {
-                    // Destruction remains noexcept; the provider retains responsibility for material it could not remove.
-                }
+                static_cast<void>(backend_->Remove(CredentialReference{value}));
             }
         }
         records_.clear();
