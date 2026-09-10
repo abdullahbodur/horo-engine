@@ -19,15 +19,18 @@ namespace Horo::XR {
         /** @brief Constructs the reserved invalid generation. */
         XRGeneration() = default;
 
+        constexpr auto operator<=>(const XRGeneration &) const noexcept = default;
+
         /**
          * @brief Validates an owner-issued generation value.
          * @param value Non-zero monotonic value that will never be reused by the owner.
          * @return Strong generation or XRErrors::IdentityInvalid.
          */
         [[nodiscard]] static Result<XRGeneration> Create(const std::uint64_t value) {
-            if (value == 0)
-                return Result<XRGeneration>::Failure(MakeError(XRErrors::IdentityInvalid));
-            return Result<XRGeneration>::Success(XRGeneration{value});
+            XRGeneration candidate;
+            candidate.value_ = value;
+            return candidate.IsValid() ? Result<XRGeneration>::Success(candidate)
+                                       : Result<XRGeneration>::Failure(MakeError(XRErrors::IdentityInvalid));
         }
 
         /** @brief Returns the process-local owner-issued value. @return Zero only for the invalid generation. */
@@ -40,11 +43,7 @@ namespace Horo::XR {
             return value_ != 0;
         }
 
-        constexpr auto operator<=>(const XRGeneration &) const noexcept = default;
-
     private:
-        explicit constexpr XRGeneration(const std::uint64_t value) noexcept : value_(value) {}
-
         std::uint64_t value_{};
     };
 

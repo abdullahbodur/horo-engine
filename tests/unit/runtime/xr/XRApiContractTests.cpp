@@ -39,35 +39,30 @@ namespace Horo::XR {
             return result.Value();
         }
 
-        void ExpectError(const Result<void> &result, const ErrorCodeDescriptor &descriptor) {
-            REQUIRE(result.HasError());
-            REQUIRE(result.ErrorValue().domain.Value() == descriptor.domain.Value());
-            REQUIRE(result.ErrorValue().code.Value() == descriptor.code.Value());
-        }
-
-        void ExpectSnapshotError(const Result<XRCapabilitySnapshot> &result, const ErrorCodeDescriptor &descriptor) {
-            REQUIRE(result.HasError());
-            REQUIRE(result.ErrorValue().domain.Value() == descriptor.domain.Value());
-            REQUIRE(result.ErrorValue().code.Value() == descriptor.code.Value());
+        template <typename Value> void RequireFailureIdentity(const Result<Value> &result, const ErrorCodeDescriptor &expected) {
+            REQUIRE_FALSE(result.HasValue());
+            const auto &actual = result.ErrorValue();
+            CHECK(actual.domain.Value() == expected.domain.Value());
+            CHECK(actual.code.Value() == expected.code.Value());
         }
 
         template <typename Identity> void VerifySessionObjectIdentity(const XRSessionId &activeSession) {
             const Identity identity{activeSession, {9, 10}};
             REQUIRE(identity.IsValid());
             REQUIRE(ValidateXRSessionObject(identity, activeSession).HasValue());
-            ExpectError(ValidateXRSessionObject(Identity{}, activeSession), XRErrors::IdentityInvalid);
-            ExpectError(ValidateXRSessionObject(identity, {}), XRErrors::IdentityInvalid);
-            ExpectError(ValidateXRSessionObject(identity, MakeSession(activeSession.system, 4, 6)), XRErrors::IdentityStale);
+            RequireFailureIdentity(ValidateXRSessionObject(Identity{}, activeSession), XRErrors::IdentityInvalid);
+            RequireFailureIdentity(ValidateXRSessionObject(identity, {}), XRErrors::IdentityInvalid);
+            RequireFailureIdentity(ValidateXRSessionObject(identity, MakeSession(activeSession.system, 4, 6)), XRErrors::IdentityStale);
         }
 
         TEST_CASE("XR contract versions reject malformed and incompatible producers", "[unit][xr][contract]") {
             REQUIRE(RequireXRContractVersion(CurrentXRContractVersion, CurrentXRContractVersion).HasValue());
             REQUIRE(RequireXRContractVersion({1, 2, 9}, {1, 3, 0}).HasValue());
             REQUIRE(RequireXRContractVersion({1, 2, 9}, {1, 2, 0}).HasValue());
-            ExpectError(RequireXRContractVersion({}, CurrentXRContractVersion), XRErrors::ContractVersionInvalid);
-            ExpectError(RequireXRContractVersion(CurrentXRContractVersion, {}), XRErrors::ContractVersionInvalid);
-            ExpectError(RequireXRContractVersion({1, 0, 0}, {2, 0, 0}), XRErrors::ContractVersionIncompatible);
-            ExpectError(RequireXRContractVersion({1, 2, 0}, {1, 1, 99}), XRErrors::ContractVersionIncompatible);
+            RequireFailureIdentity(RequireXRContractVersion({}, CurrentXRContractVersion), XRErrors::ContractVersionInvalid);
+            RequireFailureIdentity(RequireXRContractVersion(CurrentXRContractVersion, {}), XRErrors::ContractVersionInvalid);
+            RequireFailureIdentity(RequireXRContractVersion({1, 0, 0}, {2, 0, 0}), XRErrors::ContractVersionIncompatible);
+            RequireFailureIdentity(RequireXRContractVersion({1, 2, 0}, {1, 1, 99}), XRErrors::ContractVersionIncompatible);
         }
 
         TEST_CASE("XR identities preserve exact owner generations and reject replacement", "[unit][xr][identity]") {
@@ -83,17 +78,17 @@ namespace Horo::XR {
             const auto system = MakeSystem();
             REQUIRE(system.IsValid());
             REQUIRE(ValidateXRSystem(system, system).HasValue());
-            ExpectError(ValidateXRSystem({}, system), XRErrors::IdentityInvalid);
-            ExpectError(ValidateXRSystem(system, {}), XRErrors::IdentityInvalid);
-            ExpectError(ValidateXRSystem(system, MakeSystem(2)), XRErrors::IdentityStale);
-            ExpectError(ValidateXRSystem(system, MakeSystem(1, 2, 4)), XRErrors::IdentityStale);
+            RequireFailureIdentity(ValidateXRSystem({}, system), XRErrors::IdentityInvalid);
+            RequireFailureIdentity(ValidateXRSystem(system, {}), XRErrors::IdentityInvalid);
+            RequireFailureIdentity(ValidateXRSystem(system, MakeSystem(2)), XRErrors::IdentityStale);
+            RequireFailureIdentity(ValidateXRSystem(system, MakeSystem(1, 2, 4)), XRErrors::IdentityStale);
 
             const auto session = MakeSession(system);
             REQUIRE(session.IsValid());
             REQUIRE(ValidateXRSession(session, session).HasValue());
-            ExpectError(ValidateXRSession({}, session), XRErrors::IdentityInvalid);
-            ExpectError(ValidateXRSession(session, {}), XRErrors::IdentityInvalid);
-            ExpectError(ValidateXRSession(session, MakeSession(system, 4, 6)), XRErrors::IdentityStale);
+            RequireFailureIdentity(ValidateXRSession({}, session), XRErrors::IdentityInvalid);
+            RequireFailureIdentity(ValidateXRSession(session, {}), XRErrors::IdentityInvalid);
+            RequireFailureIdentity(ValidateXRSession(session, MakeSession(system, 4, 6)), XRErrors::IdentityStale);
 
             VerifySessionObjectIdentity<XRSpaceId>(session);
             VerifySessionObjectIdentity<XRViewId>(session);
@@ -134,9 +129,9 @@ namespace Horo::XR {
         TEST_CASE("XR capability construction rejects invalid versions identities states and limits", "[unit][xr][capability]") {
             auto invalidVersion = MakeDescriptor();
             invalidVersion.contractVersion = {};
-            ExpectSnapshotError(XRCapabilitySnapshot::Create(invalidVersion), XRErrors::ContractVersionInvalid);
+            RequireFailureIdentity(XRCapabilitySnapshot::Create(invalidVersion), XRErrors::ContractVersionInvalid);
             invalidVersion.contractVersion = {2, 0, 0};
-            ExpectSnapshotError(XRCapabilitySnapshot::Create(invalidVersion), XRErrors::ContractVersionIncompatible);
+            RequireFailureIdentity(XRCapabilitySnapshot::Create(invalidVersion), XRErrors::ContractVersionIncompatible);
 
             using Mutation = void (*)(XRCapabilityDescriptor &);
             const std::array<Mutation, 11> mutations{
@@ -177,7 +172,7 @@ namespace Horo::XR {
             for (const auto mutate : mutations) {
                 auto descriptor = MakeDescriptor();
                 mutate(descriptor);
-                ExpectSnapshotError(XRCapabilitySnapshot::Create(descriptor), XRErrors::CapabilityDescriptorInvalid);
+                RequireFailureIdentity(XRCapabilitySnapshot::Create(descriptor), XRErrors::CapabilityDescriptorInvalid);
             }
         }
 
@@ -187,12 +182,13 @@ namespace Horo::XR {
             for (const auto state : {XRCapabilityState::Unavailable, XRCapabilityState::PermissionRequired, XRCapabilityState::Denied,
                                      XRCapabilityState::DependencyMissing, XRCapabilityState::TemporarilyUnavailable,
                                      XRCapabilityState::Lost, XRCapabilityState::DisabledByPolicy}) {
-                ExpectError(AdmitXRCapability(MakeSnapshot(state), MakeSystem(), revision, request), XRErrors::OperationUnavailable);
+                RequireFailureIdentity(AdmitXRCapability(MakeSnapshot(state), MakeSystem(), revision, request),
+                                       XRErrors::OperationUnavailable);
             }
-            ExpectError(AdmitXRCapability(MakeSnapshot(XRCapabilityState::Unsupported), MakeSystem(), revision, request),
-                        XRErrors::OperationUnsupported);
-            ExpectError(AdmitXRCapability(MakeSnapshot(XRCapabilityState::Incompatible), MakeSystem(), revision, request),
-                        XRErrors::OperationIncompatible);
+            RequireFailureIdentity(AdmitXRCapability(MakeSnapshot(XRCapabilityState::Unsupported), MakeSystem(), revision, request),
+                                   XRErrors::OperationUnsupported);
+            RequireFailureIdentity(AdmitXRCapability(MakeSnapshot(XRCapabilityState::Incompatible), MakeSystem(), revision, request),
+                                   XRErrors::OperationIncompatible);
             REQUIRE(AdmitXRCapability(MakeSnapshot(XRCapabilityState::Available), MakeSystem(), revision, request).HasValue());
         }
 
@@ -200,14 +196,14 @@ namespace Horo::XR {
             const auto snapshot = MakeSnapshot(XRCapabilityState::Available);
             const auto revision = snapshot.Revision();
             const XRCapabilityRequirement request{.capability = XRCapability::Projection};
-            ExpectError(AdmitXRCapability(snapshot, MakeSystem(), {}, request), XRErrors::OperationInvalid);
-            ExpectError(AdmitXRCapability(snapshot, MakeSystem(), revision, {.capability = XRCapability::Count}),
-                        XRErrors::OperationInvalid);
-            ExpectError(AdmitXRCapability(snapshot, {}, revision, request), XRErrors::IdentityInvalid);
-            ExpectError(AdmitXRCapability(snapshot, MakeSystem(2), revision, request), XRErrors::IdentityStale);
-            ExpectError(AdmitXRCapability(snapshot, MakeSystem(1, 2, 4), revision, request), XRErrors::IdentityStale);
-            ExpectError(AdmitXRCapability(snapshot, MakeSystem(), MakeGeneration<XRCapabilityRevision>(8), request),
-                        XRErrors::CapabilityStale);
+            RequireFailureIdentity(AdmitXRCapability(snapshot, MakeSystem(), {}, request), XRErrors::OperationInvalid);
+            RequireFailureIdentity(AdmitXRCapability(snapshot, MakeSystem(), revision, {.capability = XRCapability::Count}),
+                                   XRErrors::OperationInvalid);
+            RequireFailureIdentity(AdmitXRCapability(snapshot, {}, revision, request), XRErrors::IdentityInvalid);
+            RequireFailureIdentity(AdmitXRCapability(snapshot, MakeSystem(2), revision, request), XRErrors::IdentityStale);
+            RequireFailureIdentity(AdmitXRCapability(snapshot, MakeSystem(1, 2, 4), revision, request), XRErrors::IdentityStale);
+            RequireFailureIdentity(AdmitXRCapability(snapshot, MakeSystem(), MakeGeneration<XRCapabilityRevision>(8), request),
+                                   XRErrors::CapabilityStale);
 
             REQUIRE(snapshot.State(XRCapability::Projection) == XRCapabilityState::Available);
             REQUIRE(snapshot.System().IsValid());
@@ -229,7 +225,8 @@ namespace Horo::XR {
                 XRCapabilityRequirement{.capability = XRCapability::Projection, .devices = 9},
             };
             for (const auto &request : excessive)
-                ExpectError(AdmitXRCapability(snapshot, snapshot.System(), snapshot.Revision(), request), XRErrors::CapacityExceeded);
+                RequireFailureIdentity(AdmitXRCapability(snapshot, snapshot.System(), snapshot.Revision(), request),
+                                       XRErrors::CapacityExceeded);
         }
 
         TEST_CASE("XR error registry contribution is complete unique and actionable", "[unit][xr][errors]") {
