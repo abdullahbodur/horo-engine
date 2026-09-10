@@ -74,7 +74,7 @@ namespace Horo::AI {
             return Result<bool>::Success(true);
         }
 
-        /** @brief Publishes one completely validated candidate and advances its revision exactly once. */
+        /** @brief Publishes one changed, completely validated candidate and advances its revision exactly once. */
         [[nodiscard]] Result<BlackboardCommitResult> PublishChangedValues(BlackboardValueStorage &activeValues,
                                                                           BlackboardValueStorage &candidateValues,
                                                                           BlackboardCommitResult result, std::uint64_t &revision) {
