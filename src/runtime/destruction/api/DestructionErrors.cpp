@@ -86,4 +86,38 @@ namespace Horo::Destruction::DestructionErrors {
                                                  .defaultSeverity = ErrorSeverity::Warning,
                                                  .summary = "The destructible descriptor belongs to a replaced configuration revision.",
                                                  .remediationHint = "Resolve the current immutable descriptor before admitting work."};
+    const ErrorCodeDescriptor StateInvalid{.domain = DestructionDomain,
+                                           .code = ErrorCode{"destruction.state.invalid"},
+                                           .defaultSeverity = ErrorSeverity::Error,
+                                           .summary = "The destruction state candidate violates canonical state-machine invariants.",
+                                           .remediationHint =
+                                               "Discard the candidate and prepare it again from the current immutable snapshot."};
+    const ErrorCodeDescriptor InvalidDamage{.domain = DestructionDomain,
+                                            .code = ErrorCode{"destruction.command.invalid_damage"},
+                                            .defaultSeverity = ErrorSeverity::Error,
+                                            .summary = "The destruction damage command is zero, negative, or non-finite.",
+                                            .remediationHint = "Submit finite positive canonical health units."};
+    const ErrorCodeDescriptor DuplicateCommand{.domain = DestructionDomain,
+                                               .code = ErrorCode{"destruction.command.duplicate_conflict"},
+                                               .defaultSeverity = ErrorSeverity::Warning,
+                                               .summary = "A destruction command identity was reused with conflicting semantics.",
+                                               .remediationHint =
+                                                   "Retry the exact original command or issue a new identity for changed work."};
+    const ErrorCodeDescriptor StateTerminal{.domain = DestructionDomain,
+                                            .code = ErrorCode{"destruction.state.terminal"},
+                                            .defaultSeverity = ErrorSeverity::Warning,
+                                            .summary = "The destruction generation is already in its terminal Destroyed state.",
+                                            .remediationHint =
+                                                "Replace the destructible generation explicitly instead of mutating terminal state."};
+    const ErrorCodeDescriptor
+        CancelledBeforeCommit{.domain = DestructionDomain,
+                              .code = ErrorCode{"destruction.transition.cancelled_before_commit"},
+                              .defaultSeverity = ErrorSeverity::Info,
+                              .summary = "Detached destruction work was cancelled before owner-safe commit.",
+                              .remediationHint = "Discard its candidate resources; prepare new work from the current snapshot if needed."};
+    const ErrorCodeDescriptor ShutdownInProgress{.domain = DestructionDomain,
+                                                 .code = ErrorCode{"destruction.lifecycle.shutdown_in_progress"},
+                                                 .defaultSeverity = ErrorSeverity::Warning,
+                                                 .summary = "The destruction owner has closed mutation admission for shutdown.",
+                                                 .remediationHint = "Stop submitting work and allow exact-generation readers to drain."};
 }  // namespace Horo::Destruction::DestructionErrors

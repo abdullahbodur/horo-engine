@@ -429,7 +429,8 @@ adapters remain outside this public identity boundary.
 ## Destruction Identity Boundary
 
 `HoroEngine::DestructionApi` owns `Horo/Destruction/DestructibleDescriptor.h`,
-`Horo/Destruction/DestructionIdentity.h` and `Horo/Destruction/DestructionErrors.h`.
+`Horo/Destruction/DestructionIdentity.h`, `Horo/Destruction/DestructionStateMachine.h`
+and `Horo/Destruction/DestructionErrors.h`.
 Its public dependencies are limited to
 Foundation and Assets for typed results/errors, the shared SHA-256 value and the
 path-independent `AssetId`. Physics, Render, RuntimeScene and native provider headers
@@ -448,3 +449,13 @@ feature-tier and finite-limit descriptors plus allocation-free admission validat
 Consumers migrate from duplicated numeric limits or provider selection to the exact
 provider-neutral tier profile and typed failures. The header introduces no Physics,
 Render, RuntimeScene, platform or native provider dependency.
+
+The `[DFR-001.4]` slice adds `Horo/Destruction/DestructionStateMachine.h` to the same
+owner. DestructionRuntime composition creates the immutable state from an admitted
+descriptor and serializes candidate commits at its owner safe point. Producers prepare
+generation- and revision-fenced commands against immutable snapshots; they do not
+mutate scene components, retain backend handles or publish detached work directly.
+Exact retries are idempotent, conflicting command reuse is rejected, and replacement,
+cancellation and shutdown preserve the last published snapshot until a legal successor
+commits. Existing prototypes with mutable health/state fields must migrate to this
+single-owner contract rather than dual-write both representations.

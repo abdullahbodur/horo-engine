@@ -124,11 +124,25 @@ struct DestructibleSceneBinding {
 };
 ```
 
-`DestructionWorld` owns `Intact`, `Damaged` or `Fractured` semantic phase plus exact
-health, broken chunk set and support state under one monotonic state revision.
-`Fractured` means at least one cooked transition committed; exact membership cannot be
-inferred from the phase. The independent runtime lifecycle is `Absent`, `Preparing`,
-`Prepared`, `Active`, `Replacing`, `Suspended`, `Retiring` or `Failed`.
+`DestructionWorld` owns the foundational `Intact`, `Damaged` or terminal `Destroyed`
+health state plus exact health, broken chunk set and support state under one monotonic
+state revision. `Destroyed` records terminal semantic health only; exact broken,
+detached, dormant and supported chunk membership cannot be inferred from the phase.
+The independent runtime lifecycle is `Absent`, `Preparing`, `Prepared`, `Active`,
+`Replacing`, `Suspended`, `Retiring` or `Failed`.
+
+`Horo/Destruction/DestructionStateMachine.h` defines this narrow revisioned contract.
+Commands bind an idempotency value to the exact runtime generation and expected state
+revision. Preparation produces an immutable detached candidate, and the single
+DestructionRuntime owner compares generation and revision again at its safe-point
+commit. New command values advance monotonically within a generation, so bounded state
+retains a high-water mark instead of an unbounded command-ID set. Two candidates
+prepared from one revision therefore cannot both advance it; an exact latest-command
+retry is a no-op, while conflicting or older command reuse is typed failure. Cancelling
+or discarding a candidate is rollback because preparation never mutates the active
+snapshot. Replacement admits only the next generation and resets its state at revision
+one, invalidating all previous completions. Shutdown closes preparation, commit and
+replacement admission without discarding the last published snapshot.
 
 ## Pre-Fractured Geometry
 
