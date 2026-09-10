@@ -45,6 +45,27 @@ namespace Horo::Security {
                     MakeError(SecurityErrors::StaleEvidence, "Native artifact changed while it was being verified."));
             return Result<std::vector<std::byte>>::Success(std::move(bytes));
         }
+
+        [[nodiscard]] Result<void> ValidateEnvelope(const DetachedSignatureEnvelope &envelope) {
+            if (!ValidIdentity(envelope.publisherId) || !ValidIdentity(envelope.keyId) || envelope.signature.empty() ||
+                envelope.signature.size() > MaximumSignatureBytes)
+                return Result<void>::Failure(MakeError(SecurityErrors::InvalidInput, "Signature envelope is malformed."));
+            if (envelope.algorithm != SignatureAlgorithm::EcdsaP256Sha256)
+                return Result<void>::Failure(MakeError(SecurityErrors::UnsupportedAlgorithm));
+            return Result<void>::Success();
+        }
+
+        [[nodiscard]] Result<TrustedSigningKey> ResolveTrustedKey(const TrustedRootStore *trustedRoots,
+                                                                  const DetachedSignatureEnvelope &envelope) {
+            if (trustedRoots == nullptr)
+                return Result<TrustedSigningKey>::Failure(MakeError(SecurityErrors::UnknownSigningKey));
+            std::optional<TrustedSigningKey> key = trustedRoots->Find(envelope.publisherId, envelope.keyId);
+            if (!key)
+                return Result<TrustedSigningKey>::Failure(MakeError(SecurityErrors::UnknownSigningKey));
+            if (key->algorithm != envelope.algorithm)
+                return Result<TrustedSigningKey>::Failure(MakeError(SecurityErrors::UnsupportedAlgorithm));
+            return Result<TrustedSigningKey>::Success(std::move(*key));
+        }
     }  // namespace
 
     /** @copydoc TrustedRootStore::Add */
@@ -125,27 +146,20 @@ namespace Horo::Security {
     /** @copydoc ArtifactVerifier::Verify */
     Result<VerifiedArtifactEvidence> ArtifactVerifier::Verify(const std::span<const std::byte> artifact,
                                                               const DetachedSignatureEnvelope &envelope) const {
-        if (!ValidIdentity(envelope.publisherId) || !ValidIdentity(envelope.keyId) || envelope.signature.empty() ||
-            envelope.signature.size() > MaximumSignatureBytes)
-            return Result<VerifiedArtifactEvidence>::Failure(MakeError(SecurityErrors::InvalidInput, "Signature envelope is malformed."));
-        if (envelope.algorithm != SignatureAlgorithm::EcdsaP256Sha256)
-            return Result<VerifiedArtifactEvidence>::Failure(MakeError(SecurityErrors::UnsupportedAlgorithm));
+        if (auto valid = ValidateEnvelope(envelope); valid.HasError())
+            return Result<VerifiedArtifactEvidence>::Failure(valid.ErrorValue());
         const Sha256Digest actualDigest = ComputeSha256(artifact);
         if (actualDigest != envelope.artifactDigest)
             return Result<VerifiedArtifactEvidence>::Failure(MakeError(SecurityErrors::IntegrityMismatch));
-        if (!trustedRoots_)
-            return Result<VerifiedArtifactEvidence>::Failure(MakeError(SecurityErrors::UnknownSigningKey));
-        const std::optional<TrustedSigningKey> key = trustedRoots_->Find(envelope.publisherId, envelope.keyId);
-        if (!key)
-            return Result<VerifiedArtifactEvidence>::Failure(MakeError(SecurityErrors::UnknownSigningKey));
-        if (key->algorithm != envelope.algorithm)
-            return Result<VerifiedArtifactEvidence>::Failure(MakeError(SecurityErrors::UnsupportedAlgorithm));
+        auto key = ResolveTrustedKey(trustedRoots_.get(), envelope);
+        if (key.HasError())
+            return Result<VerifiedArtifactEvidence>::Failure(key.ErrorValue());
         if (!provider_)
             return Result<VerifiedArtifactEvidence>::Failure(MakeError(SecurityErrors::SignatureProviderUnavailable));
         if (!provider_->Supports(envelope.algorithm))
             return Result<VerifiedArtifactEvidence>::Failure(MakeError(SecurityErrors::UnsupportedAlgorithm));
         if (auto verified =
-                provider_->Verify(envelope.algorithm, key->publicKey, ComputeSignaturePayloadDigest(envelope), envelope.signature);
+                provider_->Verify(envelope.algorithm, key.Value().publicKey, ComputeSignaturePayloadDigest(envelope), envelope.signature);
             verified.HasError())
             return Result<VerifiedArtifactEvidence>::Failure(verified.ErrorValue());
         return Result<VerifiedArtifactEvidence>::Success(VerifiedArtifactEvidence{actualDigest, envelope.publisherId, envelope.keyId});

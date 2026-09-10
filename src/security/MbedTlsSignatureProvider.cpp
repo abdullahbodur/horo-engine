@@ -7,6 +7,36 @@
 
 namespace Horo::Security {
     namespace {
+        [[nodiscard]] int VerifyEcdsaP256(const std::span<const std::byte> publicKey, const Sha256Digest &payloadDigest,
+                                          const std::span<const std::byte> signature) {
+            mbedtls_ecp_group group;
+            mbedtls_ecp_point point;
+            mbedtls_mpi r;
+            mbedtls_mpi s;
+            mbedtls_ecp_group_init(&group);
+            mbedtls_ecp_point_init(&point);
+            mbedtls_mpi_init(&r);
+            mbedtls_mpi_init(&s);
+            const auto *keyBytes = reinterpret_cast<const unsigned char *>(publicKey.data());
+            const auto *signatureBytes = reinterpret_cast<const unsigned char *>(signature.data());
+            int status = mbedtls_ecp_group_load(&group, MBEDTLS_ECP_DP_SECP256R1);
+            if (status == 0)
+                status = mbedtls_ecp_point_read_binary(&group, &point, keyBytes, publicKey.size());
+            if (status == 0)
+                status = mbedtls_ecp_check_pubkey(&group, &point);
+            if (status == 0)
+                status = mbedtls_mpi_read_binary(&r, signatureBytes, 32U);
+            if (status == 0)
+                status = mbedtls_mpi_read_binary(&s, signatureBytes + 32U, 32U);
+            if (status == 0)
+                status = mbedtls_ecdsa_verify(&group, payloadDigest.bytes.data(), payloadDigest.bytes.size(), &point, &r, &s);
+            mbedtls_mpi_free(&s);
+            mbedtls_mpi_free(&r);
+            mbedtls_ecp_point_free(&point);
+            mbedtls_ecp_group_free(&group);
+            return status;
+        }
+
         class MbedTlsSignatureProvider final : public SignatureProvider {
         public:
             [[nodiscard]] bool Supports(const SignatureAlgorithm algorithm) const noexcept override {
@@ -20,32 +50,7 @@ namespace Horo::Security {
                     return Result<void>::Failure(MakeError(SecurityErrors::UnsupportedAlgorithm));
                 if (publicKey.size() != 65U || publicKey.front() != std::byte{0x04} || signature.size() != 64U)
                     return Result<void>::Failure(MakeError(SecurityErrors::InvalidSignature));
-
-                mbedtls_ecp_group group;
-                mbedtls_ecp_point point;
-                mbedtls_mpi r;
-                mbedtls_mpi s;
-                mbedtls_ecp_group_init(&group);
-                mbedtls_ecp_point_init(&point);
-                mbedtls_mpi_init(&r);
-                mbedtls_mpi_init(&s);
-                const auto *keyBytes = reinterpret_cast<const unsigned char *>(publicKey.data());
-                const auto *signatureBytes = reinterpret_cast<const unsigned char *>(signature.data());
-                int status = mbedtls_ecp_group_load(&group, MBEDTLS_ECP_DP_SECP256R1);
-                if (status == 0)
-                    status = mbedtls_ecp_point_read_binary(&group, &point, keyBytes, publicKey.size());
-                if (status == 0)
-                    status = mbedtls_ecp_check_pubkey(&group, &point);
-                if (status == 0)
-                    status = mbedtls_mpi_read_binary(&r, signatureBytes, 32U);
-                if (status == 0)
-                    status = mbedtls_mpi_read_binary(&s, signatureBytes + 32U, 32U);
-                if (status == 0)
-                    status = mbedtls_ecdsa_verify(&group, payloadDigest.bytes.data(), payloadDigest.bytes.size(), &point, &r, &s);
-                mbedtls_mpi_free(&s);
-                mbedtls_mpi_free(&r);
-                mbedtls_ecp_point_free(&point);
-                mbedtls_ecp_group_free(&group);
+                const int status = VerifyEcdsaP256(publicKey, payloadDigest, signature);
                 return status == 0 ? Result<void>::Success() : Result<void>::Failure(MakeError(SecurityErrors::InvalidSignature));
             }
         };
