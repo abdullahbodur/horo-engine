@@ -29,6 +29,10 @@ namespace Horo::Physics::PhysicsErrors {
     extern const ErrorCodeDescriptor SolverDeadlineExceeded;
     /** @brief Malformed or unsupported-version descriptor metadata. */
     extern const ErrorCodeDescriptor DescriptorInvalid;
+    /** @brief A command lacks complete canonical identity/order evidence or duplicates an admitted key. */
+    extern const ErrorCodeDescriptor CommandOrderInvalid;
+    /** @brief A seed policy, named stream or explicit consumption tuple is malformed or unsupported. */
+    extern const ErrorCodeDescriptor SeedPolicyInvalid;
     /** @brief Unknown or unsupported numerical/solver profile. */
     extern const ErrorCodeDescriptor ProfileUnsupported;
     /** @brief Requested capacity exceeds the bounded profile or lacks its required budget. */

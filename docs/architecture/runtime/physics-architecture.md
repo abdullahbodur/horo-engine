@@ -463,6 +463,25 @@ origin and command results compare exact canonical encodings. Raw callback, nati
 enumeration and broadphase query order are excluded; an authoritative Horo query
 must revalidate/canonicalize/sort results before it can influence simulation.
 
+`PhysicsCommandOrderKey` is the single structural-command ordering authority. Its
+version, simulation tick, Physics world generation, scene generation, semantic
+target class, stable Horo target identity, command kind, stable source identity and
+source-owned per-tick sequence form the canonical comparison tuple. The bounded
+world queue admits future tick-indexed commands in any producer insertion order and
+sorts in-place on the Physics owner thread before observation or native mutation.
+Duplicate source positions, missing source predecessors, completed ticks and stale
+world/scene generations reject the complete frame without changing the previously
+published tick. Native IDs, pointers, container iteration, worker completion and
+admission timing are not ordering inputs.
+
+`PhysicsSeedPolicy` records the exact algorithm and version, immutable policy
+revision, explicit root/session seeds and owning world generation. Randomness is
+derived purely from that policy plus a named `PhysicsRandomStreamId`, stable
+consumption owner and non-zero owner-controlled sequence. The policy has one fixed
+little-endian encoding for later build/session fingerprint composition. Physics
+does not read a process-global RNG, wall clock, process/thread identity or worker
+schedule, and the derivation API owns no mutable hidden consumption state.
+
 CanonicalV1 remains serial and uses the normal non-cross-platform build. Parallel
 stepping or a future `CrossPlatformDeterministicV1` profile needs a new fingerprint,
 performance/support matrix and qualification. Determinism alone does not authorize

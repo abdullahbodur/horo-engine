@@ -105,6 +105,24 @@ namespace Horo::Physics::PhysicsErrors {
         .retryable = false,
         .userActionable = true,
     };
+    const ErrorCodeDescriptor CommandOrderInvalid{
+        .domain = PhysicsDomain,
+        .code = ErrorCode{"physics.command_order.invalid"},
+        .defaultSeverity = ErrorSeverity::Error,
+        .summary = "A physics command lacks valid canonical ordering evidence.",
+        .remediationHint = "Provide the supported protocol and exact tick, generations, stable target, source and source sequence.",
+        .retryable = false,
+        .userActionable = false,
+    };
+    const ErrorCodeDescriptor SeedPolicyInvalid{
+        .domain = PhysicsDomain,
+        .code = ErrorCode{"physics.seed_policy.invalid"},
+        .defaultSeverity = ErrorSeverity::Error,
+        .summary = "A physics seed policy or consumption tuple is invalid.",
+        .remediationHint = "Use the supported algorithm/version and explicit world, stream, owner and consumption sequence.",
+        .retryable = false,
+        .userActionable = false,
+    };
     const ErrorCodeDescriptor ProfileUnsupported{
         .domain = PhysicsDomain,
         .code = ErrorCode{"physics.profile.unsupported"},

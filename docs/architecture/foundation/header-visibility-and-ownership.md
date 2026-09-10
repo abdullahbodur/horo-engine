@@ -36,6 +36,15 @@ composition consumes this contract while portable Runtime consumers remain free
 of Android SDK dependencies. The generated standalone Platform public-header
 consumer enforces that boundary.
 
+## Physics Determinism Boundary
+
+`Horo/Physics/PhysicsDeterminismPolicy.h` is owned by `HoroPhysics`. It introduces
+the first versioned canonical structural-command key and named seed-stream policy.
+Existing Physics structural-command callers migrate from one admission-ordered
+sequence to the complete tick/world/scene/target/source key; no second legacy
+ordering authority remains. Consumers continue linking `HoroEngine::Physics`, and
+native solver identities or random providers are not exposed.
+
 ## Build-Tree Contract
 
 `cmake/HoroPublicHeaderOwnership.cmake` assigns each public header to one real
