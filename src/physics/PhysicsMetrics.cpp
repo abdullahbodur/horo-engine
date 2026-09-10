@@ -2,6 +2,7 @@
 
 #include "Horo/Physics/PhysicsErrors.h"
 
+#include <algorithm>
 #include <cmath>
 #include <string>
 #include <utility>
@@ -46,11 +47,9 @@ namespace Horo::Physics {
 
         template <typename Handle, std::size_t Size>
         [[nodiscard]] bool AllHandlesAvailable(const std::array<Handle, Size> &handles) noexcept {
-            for (const Handle &handle : handles) {
-                if (!handle)
-                    return false;
-            }
-            return true;
+            return std::ranges::all_of(handles, [](const Handle &handle) {
+                return static_cast<bool>(handle);
+            });
         }
 
         [[nodiscard]] bool CoreHandlesAvailable(const PhysicsMetricHandles &handles) noexcept {
@@ -104,34 +103,34 @@ namespace Horo::Physics {
 
     /** @copydoc RegisterPhysicsMetricHandles */
     PhysicsMetricHandles RegisterPhysicsMetricHandles(const Telemetry::MetricCollectionLevel level) {
+        using enum Telemetry::MetricCollectionLevel;
         PhysicsMetricHandles handles;
-        if (level == Telemetry::MetricCollectionLevel::Off || level > Telemetry::MetricCollectionLevel::Detailed)
+        if (level == Off || level > Detailed)
             return handles;
 
         handles.fixedStepDuration = Telemetry::Runtime::RegisterHistogram(
             Descriptor(Telemetry::InstrumentKind::Histogram, "horo.physics.fixed_step.duration", "seconds",
-                       "Host-measured duration of one committed Physics fixed step.", Telemetry::MetricCollectionLevel::Core));
+                       "Host-measured duration of one committed Physics fixed step.", Core));
 
-        auto countRoot = Telemetry::Runtime::RegisterGauge(
-            Descriptor(Telemetry::InstrumentKind::Gauge, "horo.physics.count", "items", "Current bounded Physics item count.",
-                       Telemetry::MetricCollectionLevel::Core, {Dimension("kind", kCountValues)}));
+        auto countRoot =
+            Telemetry::Runtime::RegisterGauge(Descriptor(Telemetry::InstrumentKind::Gauge, "horo.physics.count", "items",
+                                                         "Current bounded Physics item count.", Core, {Dimension("kind", kCountValues)}));
         BindHandles(handles.counts, countRoot, "kind", kCountValues);
 
-        auto depthRoot = Telemetry::Runtime::RegisterGauge(
-            Descriptor(Telemetry::InstrumentKind::Gauge, "horo.physics.queue.depth", "items", "Current bounded Physics queue depth.",
-                       Telemetry::MetricCollectionLevel::Core, {Dimension("kind", kDepthValues)}));
+        auto depthRoot =
+            Telemetry::Runtime::RegisterGauge(Descriptor(Telemetry::InstrumentKind::Gauge, "horo.physics.queue.depth", "items",
+                                                         "Current bounded Physics queue depth.", Core, {Dimension("kind", kDepthValues)}));
         BindHandles(handles.depths, depthRoot, "kind", kDepthValues);
 
-        auto eventRoot = Telemetry::Runtime::RegisterCounter(
-            Descriptor(Telemetry::InstrumentKind::Counter, "horo.physics.event", "events", "Physics observation loss and overflow events.",
-                       Telemetry::MetricCollectionLevel::Core, {Dimension("kind", kEventValues)}));
+        auto eventRoot = Telemetry::Runtime::RegisterCounter(Descriptor(Telemetry::InstrumentKind::Counter, "horo.physics.event", "events",
+                                                                        "Physics observation loss and overflow events.", Core,
+                                                                        {Dimension("kind", kEventValues)}));
         BindHandles(handles.events, eventRoot, "kind", kEventValues);
 
-        if (level == Telemetry::MetricCollectionLevel::Detailed) {
+        if (level == Detailed) {
             auto stageRoot = Telemetry::Runtime::RegisterHistogram(
                 Descriptor(Telemetry::InstrumentKind::Histogram, "horo.physics.stage.duration", "seconds",
-                           "Host or adapter measured Physics pipeline stage duration.", Telemetry::MetricCollectionLevel::Detailed,
-                           {Dimension("stage", kStageValues)}));
+                           "Host or adapter measured Physics pipeline stage duration.", Detailed, {Dimension("stage", kStageValues)}));
             BindHandles(handles.stageDurations, stageRoot, "stage", kStageValues);
         }
         return handles;
@@ -139,13 +138,13 @@ namespace Horo::Physics {
 
     /** @copydoc PhysicsMetricBinding::Create */
     Result<PhysicsMetricBinding> PhysicsMetricBinding::Create(const PhysicsWorldId world, const std::uint64_t revision,
-                                                              const PhysicsMetricBounds bounds,
+                                                              const PhysicsMetricBounds &bounds,
                                                               const PhysicsMetricAvailability availability,
                                                               const PhysicsMetricRequirement requirement,
                                                               const Telemetry::MetricCollectionLevel level, PhysicsMetricHandles handles) {
-        const bool enumValid = availability <= PhysicsMetricAvailability::Available && requirement <= PhysicsMetricRequirement::Required &&
-                               level <= Telemetry::MetricCollectionLevel::Detailed;
-        if (!world.IsValid() || revision == 0 || !BoundsValid(bounds) || !enumValid)
+        if (const bool enumValid = availability <= PhysicsMetricAvailability::Available &&
+                                   requirement <= PhysicsMetricRequirement::Required && level <= Telemetry::MetricCollectionLevel::Detailed;
+            !world.IsValid() || revision == 0 || !BoundsValid(bounds) || !enumValid)
             return Result<PhysicsMetricBinding>::Failure(MakeError(PhysicsErrors::DescriptorInvalid));
         if (requirement == PhysicsMetricRequirement::Required && availability != PhysicsMetricAvailability::Available)
             return Result<PhysicsMetricBinding>::Failure(MakeError(PhysicsErrors::CapabilityUnavailable));
@@ -228,7 +227,7 @@ namespace Horo::Physics {
     }
 
     /** @copydoc PhysicsMetricBinding::PhysicsMetricBinding */
-    PhysicsMetricBinding::PhysicsMetricBinding(const PhysicsWorldId world, const std::uint64_t revision, const PhysicsMetricBounds bounds,
+    PhysicsMetricBinding::PhysicsMetricBinding(const PhysicsWorldId world, const std::uint64_t revision, const PhysicsMetricBounds &bounds,
                                                const PhysicsMetricAvailability availability, const Telemetry::MetricCollectionLevel level,
                                                PhysicsMetricHandles handles) noexcept
         : world_(world), revision_(revision), bounds_(bounds), availability_(availability), level_(level), handles_(std::move(handles)),

@@ -109,8 +109,8 @@ namespace Horo::Physics {
          * transfer affinity.
          * @post Failure retains no handles and publishes no metric record.
          */
-        [[nodiscard]] static Result<PhysicsMetricBinding> Create(PhysicsWorldId world, std::uint64_t revision, PhysicsMetricBounds bounds,
-                                                                 PhysicsMetricAvailability availability,
+        [[nodiscard]] static Result<PhysicsMetricBinding> Create(PhysicsWorldId world, std::uint64_t revision,
+                                                                 const PhysicsMetricBounds &bounds, PhysicsMetricAvailability availability,
                                                                  PhysicsMetricRequirement requirement,
                                                                  Telemetry::MetricCollectionLevel level, PhysicsMetricHandles handles);
 
@@ -150,7 +150,7 @@ namespace Horo::Physics {
          * @param level Selected collection detail.
          * @param handles Pre-bound process Telemetry handles.
          */
-        PhysicsMetricBinding(PhysicsWorldId world, std::uint64_t revision, PhysicsMetricBounds bounds,
+        PhysicsMetricBinding(PhysicsWorldId world, std::uint64_t revision, const PhysicsMetricBounds &bounds,
                              PhysicsMetricAvailability availability, Telemetry::MetricCollectionLevel level,
                              PhysicsMetricHandles handles) noexcept;
 
