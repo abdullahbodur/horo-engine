@@ -121,6 +121,15 @@ state with direct `Sample(time)` calls and choose explicit clamp, repeat, or
 ping-pong behavior for each boundary. Legacy non-finite values, duplicate times,
 and non-monotonic cubic tangents are rejected rather than normalized silently.
 
+## CIN-002.3 Migration Notes
+
+`HoroEngine::CinematicRuntime` owns `Horo/Cinematic/SequencePlayer.h` and
+`Horo/Cinematic/SequencePlayerErrors.h`. Runtime hosts that own sequence-player
+registries link this target directly. Model-only asset, cook and curve consumers keep
+linking `HoroEngine::CinematicModel`; the runtime state machine does not widen that
+lower-level public surface or introduce an Editor/GUI dependency. Detailed call-site
+migration is documented in `docs/guides/cinematic-sequence-player-migration.md`.
+
 ## CIN-001.5 Migration Notes
 
 `HoroEngine::CinematicModel` owns `Horo/Cinematic/TransformTrack.h`. Consumers
