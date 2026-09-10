@@ -154,4 +154,44 @@ namespace Horo::Animation::AnimationErrors {
     const ErrorCodeDescriptor PoseThreadViolation{AnimationDomain, ErrorCode{"animation.pose.thread_violation"}, ErrorSeverity::Error,
                                                   "A mutable pose operation ran outside the arena owner thread.",
                                                   "Route arena mutation through the animation runtime owner thread."};
+    const ErrorCodeDescriptor ClipVersionUnsupported{AnimationDomain, ErrorCode{"animation.clip.version_unsupported"}, ErrorSeverity::Error,
+                                                     "The animation clip contract version is unsupported.",
+                                                     "Migrate or recook the clip for the current animation contract."};
+    const ErrorCodeDescriptor ClipAdmissionRejected{AnimationDomain, ErrorCode{"animation.clip.admission_rejected"}, ErrorSeverity::Warning,
+                                                    "The animation owner is not accepting clip work.",
+                                                    "Submit work only while the current animation owner admits it."};
+    const ErrorCodeDescriptor ClipOperationCancelled{AnimationDomain, ErrorCode{"animation.clip.operation_cancelled"},
+                                                     ErrorSeverity::Warning, "Animation clip work was cancelled before publication.",
+                                                     "Submit a new operation against current immutable publications."};
+    const ErrorCodeDescriptor ClipReloadMismatch{AnimationDomain, ErrorCode{"animation.clip.reload_mismatch"}, ErrorSeverity::Error,
+                                                 "The animation clip reload candidate has a different stable identity.",
+                                                 "Publish different clip identities as separate assets instead of a reload."};
+    const ErrorCodeDescriptor ClipSkeletonMismatch{AnimationDomain, ErrorCode{"animation.clip.skeleton_mismatch"}, ErrorSeverity::Error,
+                                                   "The animation clip targets an incompatible skeleton.",
+                                                   "Bind the clip to the exact validated skeleton identity and contract."};
+    const ErrorCodeDescriptor ClipBindingStale{AnimationDomain, ErrorCode{"animation.clip.binding_stale"}, ErrorSeverity::Warning,
+                                               "The animation clip targets a retired immutable publication.",
+                                               "Resolve the current clip, skeleton, and additive reference generations."};
+    const ErrorCodeDescriptor ClipLimitExceeded{AnimationDomain, ErrorCode{"animation.clip.limit_exceeded"}, ErrorSeverity::Error,
+                                                "The animation clip or traversal exceeds a finite limit.",
+                                                "Reduce tracks, keys, duration, sample rate, or interval crossings."};
+    const ErrorCodeDescriptor ClipDuplicateIdentity{AnimationDomain, ErrorCode{"animation.clip.duplicate_identity"}, ErrorSeverity::Error,
+                                                    "The animation clip contains duplicate stable tracks or key times.",
+                                                    "Assign one track per joint and one key per exact local time."};
+    const ErrorCodeDescriptor ClipJointMissing{AnimationDomain, ErrorCode{"animation.clip.joint_missing"}, ErrorSeverity::Error,
+                                               "An animation clip track references a missing skeleton joint.",
+                                               "Reference only stable joints declared by the bound skeleton."};
+    const ErrorCodeDescriptor ClipMalformed{AnimationDomain, ErrorCode{"animation.clip.malformed"}, ErrorSeverity::Error,
+                                            "Animation clip time, transform, or typed metadata is malformed.",
+                                            "Provide canonical finite keys and known typed clip metadata."};
+    const ErrorCodeDescriptor ClipUnsupported{AnimationDomain, ErrorCode{"animation.clip.unsupported"}, ErrorSeverity::Error,
+                                              "The requested animation clip feature is unsupported.",
+                                              "Recook the clip with a supported interpolation, wrap, kind, and compression contract."};
+    const ErrorCodeDescriptor ClipTimeOverflow{AnimationDomain, ErrorCode{"animation.clip.time_overflow"}, ErrorSeverity::Error,
+                                               "Exact animation cursor advancement overflowed its portable time domain.",
+                                               "Reduce the player rate or traversal interval before retrying the tick."};
+    const ErrorCodeDescriptor ClipReferencePoseMismatch{AnimationDomain, ErrorCode{"animation.clip.reference_pose_mismatch"},
+                                                        ErrorSeverity::Error,
+                                                        "Additive sampling lacks the exact immutable reference-pose binding.",
+                                                        "Resolve the authored reference pose identity and current generation."};
 }  // namespace Horo::Animation::AnimationErrors

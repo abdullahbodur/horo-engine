@@ -98,6 +98,9 @@ namespace Horo::Animation {
     struct SkinningJointIdentityTag;
     struct SkeletalMeshSectionIdentityTag;
     struct SkeletonAssetGenerationIdentityTag;
+    struct AnimationClipGenerationIdentityTag;
+    struct AnimationReferencePoseIdentityTag;
+    struct AnimationReferencePoseGenerationIdentityTag;
     struct AnimationRuntimeIdentityTag;
     struct PoseGenerationIdentityTag;
     struct AnimationTickIdentityTag;
@@ -116,6 +119,12 @@ namespace Horo::Animation {
     using SkeletalMeshSectionId = AnimationStableIdentity<SkeletalMeshSectionIdentityTag>;
     /** @brief Non-reusable immutable skeleton publication generation used to reject stale bindings. */
     using SkeletonAssetGeneration = AnimationStableIdentity<SkeletonAssetGenerationIdentityTag>;
+    /** @brief Non-reusable immutable animation-clip publication generation. */
+    using AnimationClipGeneration = AnimationStableIdentity<AnimationClipGenerationIdentityTag>;
+    /** @brief Stable identity of an additive clip's authored reference pose. */
+    using AnimationReferencePoseId = AnimationStableIdentity<AnimationReferencePoseIdentityTag>;
+    /** @brief Non-reusable immutable additive-reference-pose publication generation. */
+    using AnimationReferencePoseGeneration = AnimationStableIdentity<AnimationReferencePoseGenerationIdentityTag>;
     /** @brief Process-local owner identity of one animation-runtime incarnation. */
     using AnimationRuntimeId = AnimationStableIdentity<AnimationRuntimeIdentityTag>;
     /** @brief Monotonic committed-pose generation within one runtime instance. */

@@ -115,6 +115,7 @@ namespace Horo::Animation {
         RequireCode(AdvanceAnimationGeneration(Id<PoseGeneration>(std::numeric_limits<std::uint64_t>::max())),
                     AnimationErrors::GenerationExhausted);
         CHECK(AdvanceAnimationGeneration(Id<RootMotionGeneration>(9)).Value() == Id<RootMotionGeneration>(10));
+        CHECK(AdvanceAnimationGeneration(Id<AnimationClipGeneration>(12)).Value() == Id<AnimationClipGeneration>(13));
     }
 
     TEST_CASE("Animation failures expose unique stable public identities", "[unit][animation][errors]") {
@@ -161,6 +162,19 @@ namespace Horo::Animation {
             &AnimationErrors::PoseNotEvaluated,
             &AnimationErrors::PoseFrameStale,
             &AnimationErrors::PoseThreadViolation,
+            &AnimationErrors::ClipVersionUnsupported,
+            &AnimationErrors::ClipAdmissionRejected,
+            &AnimationErrors::ClipOperationCancelled,
+            &AnimationErrors::ClipReloadMismatch,
+            &AnimationErrors::ClipSkeletonMismatch,
+            &AnimationErrors::ClipBindingStale,
+            &AnimationErrors::ClipLimitExceeded,
+            &AnimationErrors::ClipDuplicateIdentity,
+            &AnimationErrors::ClipJointMissing,
+            &AnimationErrors::ClipMalformed,
+            &AnimationErrors::ClipUnsupported,
+            &AnimationErrors::ClipTimeOverflow,
+            &AnimationErrors::ClipReferencePoseMismatch,
         };
         std::set<std::string_view> codes;
         for (const ErrorCodeDescriptor *descriptor : descriptors) {
