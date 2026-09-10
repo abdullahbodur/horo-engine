@@ -63,18 +63,18 @@ namespace Horo::PCG {
         source.splines[0].points.clear();
 
         const auto snapshot = captured.Value();
-        CHECK(snapshot->Id() == Id<SpatialSnapshotId>(1));
-        CHECK(snapshot->Provenance().provider == Id<SpatialProviderId>(2));
-        CHECK(snapshot->Coordinates().axes == PCGSpatialAxisConvention::RightHandedYUp);
-        REQUIRE(snapshot->Surfaces().size() == 3);
-        CHECK(snapshot->Surfaces()[0].id == Id<SpatialElementId>(4));
-        CHECK(snapshot->Surfaces()[0].vertices[0].x == 0.0F);
-        CHECK(snapshot->Surfaces()[1].id == Id<SpatialElementId>(9));
-        CHECK(snapshot->Volumes().size() == 2);
-        CHECK(snapshot->Splines()[0].points.size() == 2);
-        CHECK(snapshot->Grids().size() == 1);
-        CHECK(snapshot->ResidentBytes() > sizeof(PCGSpatialSnapshot));
-        CHECK(snapshot->Coverage() == PCGSpatialCoverage::Complete);
+        CHECK(snapshot.Id() == Id<SpatialSnapshotId>(1));
+        CHECK(snapshot.Provenance().provider == Id<SpatialProviderId>(2));
+        CHECK(snapshot.Coordinates().axes == PCGSpatialAxisConvention::RightHandedYUp);
+        REQUIRE(snapshot.Surfaces().size() == 3);
+        CHECK(snapshot.Surfaces()[0].id == Id<SpatialElementId>(4));
+        CHECK(snapshot.Surfaces()[0].vertices[0].x == 0.0F);
+        CHECK(snapshot.Surfaces()[1].id == Id<SpatialElementId>(9));
+        CHECK(snapshot.Volumes().size() == 2);
+        CHECK(snapshot.Splines()[0].points.size() == 2);
+        CHECK(snapshot.Grids().size() == 1);
+        CHECK(snapshot.ResidentBytes() > sizeof(PCGSpatialSnapshot));
+        CHECK(snapshot.Coverage() == PCGSpatialCoverage::Complete);
     }
 
     TEST_CASE("PCG complete empty spatial snapshot is distinct from unavailable coverage", "[unit][pcg][spatial]") {
@@ -85,7 +85,7 @@ namespace Horo::PCG {
         empty.grids.clear();
         auto captured = CapturePCGSpatialSnapshot(std::move(empty));
         REQUIRE(captured.HasValue());
-        CHECK(captured.Value()->Surfaces().empty());
+        CHECK(captured.Value().Surfaces().empty());
 
         for (const auto coverage : {PCGSpatialCoverage::Partial, PCGSpatialCoverage::Missing}) {
             auto unavailable = Candidate();
@@ -198,46 +198,40 @@ namespace Horo::PCG {
         CheckError(ValidatePCGSpatialSnapshotCurrent(snapshot, otherSource), PCGErrors::IdentityUnknown);
         CheckError(ValidatePCGSpatialSnapshotCurrent(snapshot, Current(2)), PCGErrors::SpatialSnapshotStale);
         CheckError(ValidatePCGSpatialSnapshotCurrent(snapshot, Current(1, 2)), PCGErrors::SpatialSnapshotStale);
-        CheckError(ValidatePCGSpatialSnapshotCurrent({}, Current()), PCGErrors::SpatialInputInvalid);
-        CHECK(snapshot->Surfaces().size() == 1);
+        CHECK(snapshot.Surfaces().size() == 1);
     }
 
     TEST_CASE("PCG spatial replacement retains old readers and enforces lineage", "[unit][pcg][spatial]") {
         auto old = CapturePCGSpatialSnapshot(Candidate()).Value();
-        std::weak_ptr<const PCGSpatialSnapshot> retired = old;
+        const auto retainedReader = old;
         auto replacement = ReplacePCGSpatialSnapshot(old, Candidate(2, 2));
         REQUIRE(replacement.HasValue());
-        CHECK(replacement.Value()->Id() == Id<SpatialSnapshotId>(2));
-        CHECK(old->Id() == Id<SpatialSnapshotId>(1));
+        CHECK(replacement.Value().Id() == Id<SpatialSnapshotId>(2));
+        CHECK(old.Id() == Id<SpatialSnapshotId>(1));
+        CHECK(retainedReader.Surfaces().size() == 1);
         CheckError(ReplacePCGSpatialSnapshot(old, Candidate(1, 2)), PCGErrors::SpatialReplacementInvalid);
         CheckError(ReplacePCGSpatialSnapshot(old, Candidate(2, 1)), PCGErrors::SpatialReplacementInvalid);
         auto foreign = Candidate(2, 2);
         foreign.provenance.source = Id<SpatialSourceId>(99);
         CheckError(ReplacePCGSpatialSnapshot(old, std::move(foreign)), PCGErrors::SpatialReplacementInvalid);
-        CheckError(ReplacePCGSpatialSnapshot({}, Candidate(2, 2)), PCGErrors::SpatialReplacementInvalid);
-        old.reset();
-        CHECK(retired.expired());
     }
 
-    TEST_CASE("PCG spatial replacement supports repeated publication and deterministic old-root retirement", "[unit][pcg][spatial]") {
+    TEST_CASE("PCG spatial replacement supports repeated publication and retained immutable readers", "[unit][pcg][spatial]") {
         auto current = CapturePCGSpatialSnapshot(Candidate()).Value();
-        std::vector<std::shared_ptr<const PCGSpatialSnapshot>> readers;
-        std::vector<std::weak_ptr<const PCGSpatialSnapshot>> retired;
+        std::vector<PCGSpatialSnapshot> readers;
         for (std::uint64_t generation = 2; generation <= 64; ++generation) {
-            retired.emplace_back(current);
             if (generation % 8 == 0)
                 readers.push_back(current);
             auto replacement = ReplacePCGSpatialSnapshot(current, Candidate(generation, generation));
             REQUIRE(replacement.HasValue());
             current = replacement.Value();
-            CHECK(current->Id() == Id<SpatialSnapshotId>(generation));
+            CHECK(current.Id() == Id<SpatialSnapshotId>(generation));
         }
-        CHECK_FALSE(retired.back().expired());
+        REQUIRE(readers.size() == 8);
+        CHECK(readers.front().Id() == Id<SpatialSnapshotId>(7));
+        CHECK(readers.back().Id() == Id<SpatialSnapshotId>(63));
         readers.clear();
-        CHECK(retired.front().expired());
-        CHECK(retired.back().expired());
-        current.reset();
-        CHECK(retired.back().expired());
+        CHECK(current.Id() == Id<SpatialSnapshotId>(64));
     }
 
     TEST_CASE("PCG spatial identities and errors remain distinct stable contracts", "[unit][pcg][spatial]") {

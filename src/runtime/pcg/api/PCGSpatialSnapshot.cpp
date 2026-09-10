@@ -115,10 +115,10 @@ namespace Horo::PCG {
                 return value == 0;
             }))
                 return Result<std::size_t>::Failure(Failure(PCGErrors::SpatialInputInvalid));
-            auto count = CheckedPCGMultiply(grid.dimensions[0], grid.dimensions[1]);
+            auto count = CheckedPCGMultiply(static_cast<std::size_t>(grid.dimensions[0]), static_cast<std::size_t>(grid.dimensions[1]));
             if (count.HasError())
                 return Result<std::size_t>::Failure(Failure(PCGErrors::SpatialCapacityExceeded));
-            count = CheckedPCGMultiply(count.Value(), grid.dimensions[2]);
+            count = CheckedPCGMultiply(count.Value(), static_cast<std::size_t>(grid.dimensions[2]));
             if (count.HasError())
                 return Result<std::size_t>::Failure(Failure(PCGErrors::SpatialCapacityExceeded));
             const auto endpoint = [&](const float origin, const float spacing, const std::uint32_t dimension) {
@@ -144,18 +144,18 @@ namespace Horo::PCG {
         }
 
         [[nodiscard]] Result<std::size_t> AccountBytes(const PCGSpatialSnapshotCandidate &candidate) {
-            auto surfaceBytes = CheckedPCGMultiply(candidate.surfaces.size(), sizeof(PCGSurfaceTriangle));
+            auto surfaceBytes = CheckedPCGMultiply(candidate.surfaces.capacity(), sizeof(PCGSurfaceTriangle));
             if (surfaceBytes.HasError())
                 return surfaceBytes;
             auto total = CheckedPCGAdd(sizeof(PCGSpatialSnapshot::State), surfaceBytes.Value());
             if (total.HasError())
                 return total;
-            const std::array counts{candidate.volumes.size(), candidate.splines.size(), candidate.grids.size()};
+            const std::array counts{candidate.volumes.capacity(), candidate.splines.capacity(), candidate.grids.capacity()};
             const std::array sizes{sizeof(PCGSpatialVolume), sizeof(PCGSpline), sizeof(PCGGrid)};
             for (std::size_t index = 0; index < counts.size(); ++index)
                 total = AccumulateBytes(std::move(total), counts[index], sizes[index]);
             for (const auto &spline : candidate.splines)
-                total = AccumulateBytes(std::move(total), spline.points.size(), sizeof(PCGSplineControlPoint));
+                total = AccumulateBytes(std::move(total), spline.points.capacity(), sizeof(PCGSplineControlPoint));
             return total;
         }
 
@@ -248,6 +248,12 @@ namespace Horo::PCG {
             SortByIdentity(candidate.volumes, VolumeId);
             SortByIdentity(candidate.splines, &PCGSpline::id);
             SortByIdentity(candidate.grids, &PCGGrid::id);
+            candidate.surfaces.shrink_to_fit();
+            candidate.volumes.shrink_to_fit();
+            candidate.grids.shrink_to_fit();
+            for (auto &spline : candidate.splines)
+                spline.points.shrink_to_fit();
+            candidate.splines.shrink_to_fit();
             auto residentBytes = AccountBytes(candidate);
             if (residentBytes.HasError() || residentBytes.Value() > tierLimits.Value().maximumInputSnapshotBytes)
                 return Result<std::size_t>::Failure(Failure(PCGErrors::SpatialCapacityExceeded));
@@ -306,40 +312,33 @@ namespace Horo::PCG {
     }
 
     /** @copydoc CapturePCGSpatialSnapshot */
-    Result<std::shared_ptr<const PCGSpatialSnapshot>> CapturePCGSpatialSnapshot(PCGSpatialSnapshotCandidate candidate) {
+    Result<PCGSpatialSnapshot> CapturePCGSpatialSnapshot(PCGSpatialSnapshotCandidate candidate) {
         try {
             auto bytes = ValidateAndCanonicalize(candidate);
             if (bytes.HasError())
-                return Result<std::shared_ptr<const PCGSpatialSnapshot>>::Failure(bytes.ErrorValue());
+                return Result<PCGSpatialSnapshot>::Failure(bytes.ErrorValue());
             auto state = std::make_shared<const PCGSpatialSnapshot::State>(std::move(candidate), bytes.Value());
-            return Result<std::shared_ptr<const PCGSpatialSnapshot>>::Success(
-                std::make_shared<const PCGSpatialSnapshot>(PCGSpatialSnapshot::ConstructionKey{}, std::move(state)));
+            return Result<PCGSpatialSnapshot>::Success(PCGSpatialSnapshot{PCGSpatialSnapshot::ConstructionKey{}, std::move(state)});
         } catch (const std::bad_alloc &) {
-            return Result<std::shared_ptr<const PCGSpatialSnapshot>>::Failure(Failure(PCGErrors::SpatialCapacityExceeded));
+            return Result<PCGSpatialSnapshot>::Failure(Failure(PCGErrors::SpatialCapacityExceeded));
         }
     }
 
     /** @copydoc ReplacePCGSpatialSnapshot */
-    Result<std::shared_ptr<const PCGSpatialSnapshot>> ReplacePCGSpatialSnapshot(const std::shared_ptr<const PCGSpatialSnapshot> &current,
-                                                                                PCGSpatialSnapshotCandidate candidate) {
-        if (!current)
-            return Result<std::shared_ptr<const PCGSpatialSnapshot>>::Failure(Failure(PCGErrors::SpatialReplacementInvalid));
-        if (candidate.provenance.provider != current->Provenance().provider ||
-            candidate.provenance.source != current->Provenance().source || candidate.snapshot == current->Id() ||
-            candidate.provenance.revision <= current->Provenance().revision)
-            return Result<std::shared_ptr<const PCGSpatialSnapshot>>::Failure(Failure(PCGErrors::SpatialReplacementInvalid));
+    Result<PCGSpatialSnapshot> ReplacePCGSpatialSnapshot(const PCGSpatialSnapshot &current, PCGSpatialSnapshotCandidate candidate) {
+        if (candidate.provenance.provider != current.Provenance().provider || candidate.provenance.source != current.Provenance().source ||
+            candidate.snapshot == current.Id() || candidate.provenance.revision <= current.Provenance().revision)
+            return Result<PCGSpatialSnapshot>::Failure(Failure(PCGErrors::SpatialReplacementInvalid));
         return CapturePCGSpatialSnapshot(std::move(candidate));
     }
 
     /** @copydoc ValidatePCGSpatialSnapshotCurrent */
-    Result<void> ValidatePCGSpatialSnapshotCurrent(const std::shared_ptr<const PCGSpatialSnapshot> &snapshot,
-                                                   const PCGSpatialCurrentness &current) {
-        if (!snapshot || !current.provider.IsValid() || !current.source.IsValid() || !current.revision.IsValid() ||
-            current.originEpoch == 0)
+    Result<void> ValidatePCGSpatialSnapshotCurrent(const PCGSpatialSnapshot &snapshot, const PCGSpatialCurrentness &current) {
+        if (!current.provider.IsValid() || !current.source.IsValid() || !current.revision.IsValid() || current.originEpoch == 0)
             return Result<void>::Failure(Failure(PCGErrors::SpatialInputInvalid));
-        if (snapshot->Provenance().provider != current.provider || snapshot->Provenance().source != current.source)
+        if (snapshot.Provenance().provider != current.provider || snapshot.Provenance().source != current.source)
             return Result<void>::Failure(Failure(PCGErrors::IdentityUnknown));
-        if (snapshot->Provenance().revision != current.revision || snapshot->Coordinates().originEpoch != current.originEpoch)
+        if (snapshot.Provenance().revision != current.revision || snapshot.Coordinates().originEpoch != current.originEpoch)
             return Result<void>::Failure(Failure(PCGErrors::SpatialSnapshotStale));
         return Result<void>::Success();
     }

@@ -127,7 +127,7 @@ namespace Horo::PCG {
 
         /** @brief Opaque construction gate restricted to validated capture. */
         class ConstructionKey final {
-            friend Result<std::shared_ptr<const PCGSpatialSnapshot>> CapturePCGSpatialSnapshot(PCGSpatialSnapshotCandidate candidate);
+            friend Result<PCGSpatialSnapshot> CapturePCGSpatialSnapshot(PCGSpatialSnapshotCandidate candidate);
             ConstructionKey() = default;
         };
 
@@ -166,7 +166,7 @@ namespace Horo::PCG {
      * @param candidate Complete owned candidate; missing/partial coverage is rejected rather than treated as empty.
      * @return Immutable snapshot or a typed validation/capacity failure.
      */
-    [[nodiscard]] Result<std::shared_ptr<const PCGSpatialSnapshot>> CapturePCGSpatialSnapshot(PCGSpatialSnapshotCandidate candidate);
+    [[nodiscard]] Result<PCGSpatialSnapshot> CapturePCGSpatialSnapshot(PCGSpatialSnapshotCandidate candidate);
 
     /**
      * @brief Validates a complete replacement without mutating the current immutable root.
@@ -174,8 +174,8 @@ namespace Horo::PCG {
      * @param candidate Detached candidate with a distinct snapshot ID and strictly newer revision.
      * @return New immutable root or a typed failure; existing readers remain valid in either case.
      */
-    [[nodiscard]] Result<std::shared_ptr<const PCGSpatialSnapshot>> ReplacePCGSpatialSnapshot(
-        const std::shared_ptr<const PCGSpatialSnapshot> &current, PCGSpatialSnapshotCandidate candidate);
+    [[nodiscard]] Result<PCGSpatialSnapshot> ReplacePCGSpatialSnapshot(const PCGSpatialSnapshot &current,
+                                                                       PCGSpatialSnapshotCandidate candidate);
 
     /**
      * @brief Revalidates logical currentness independently from snapshot memory lifetime.
@@ -183,6 +183,5 @@ namespace Horo::PCG {
      * @param current Exact provider/source/revision/origin tuple published by current owners.
      * @return Success only for an exact match, otherwise invalid/unknown/stale typed failure.
      */
-    [[nodiscard]] Result<void> ValidatePCGSpatialSnapshotCurrent(const std::shared_ptr<const PCGSpatialSnapshot> &snapshot,
-                                                                 const PCGSpatialCurrentness &current);
+    [[nodiscard]] Result<void> ValidatePCGSpatialSnapshotCurrent(const PCGSpatialSnapshot &snapshot, const PCGSpatialCurrentness &current);
 }  // namespace Horo::PCG

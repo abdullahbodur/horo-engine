@@ -69,7 +69,9 @@ one right-handed Y-up coordinate contract; a non-zero origin epoch; complete req
 bounds and coverage; and owned surface-triangle, box/sphere-volume, spline and grid
 values. Capture validates the complete candidate and sorts every element family by
 stable identity before publishing an immutable shared root. It retains no source
-container, mutable span, native handle, callback or service reference.
+container, mutable span, native handle, callback or service reference. The public
+snapshot is a cheap copyable value handle over that shared immutable state; callers do
+not add a second owning pointer around the handle.
 
 Schema 1 accepts an empty value set only with explicit `Complete` coverage. `Partial`
 and `Missing` fail with `pcg.spatial.coverage_unavailable`, so absent residency or
