@@ -4,7 +4,8 @@
 - **Date**: 2026-08-27
 - **Supersedes**: None
 - **Scope**: Foundation `Result<T,Error>`, `ErrorCode`/`Error`, diagnostics, registry and exception boundaries
-- **Issue**: [ERR-001.1](https://github.com/abdullahbodur/horo-engine/issues/1814)
+- **Issues**: [ERR-001.1](https://github.com/abdullahbodur/horo-engine/issues/1814),
+  [ERR-001.2](https://github.com/abdullahbodur/horo-engine/issues/1815)
 - **Normative document**: [Error And Diagnostics](../architecture/foundation/error-and-diagnostics.md)
 
 ## Context
@@ -45,7 +46,7 @@ Implementation audit (2026-08-27) found the baseline is structurally aligned but
 | Descriptor declarations as `const` globals per domain namespace | Present in `FoundationErrors.h` | **Ratified** |
 | Registry validation (duplicate detection, domain prefix, deprecation lifecycle, translation coverage) | Absent | **Revised — host-owned registry added** (immutable after activation, duplicate `(domain,code)` is composition failure, extension codes must nest under module's registered domain) |
 | `Error` fields `code/domain/severity/message/diagnostics` | Present | **Ratified** |
-| `Error.cause` chain and `ErrorMetadata` bounded fields per normative doc | Absent | **Revised-deferred: ratify minimal `Error` for M0**; `cause` and bounded `ErrorMetadata` are accepted as forward-compatible extensions in the normative doc but not required for M0 closure. Future ADR migrates `Error` to include `std::unique_ptr<const Error> cause` + `ErrorMetadata` without breaking `MakeError` callers (fields are additive, validated by registry). Metadata must remain bounded and redacted per `observability-logging.md`. |
+| `Error.cause` chain and `ErrorMetadata` bounded fields per normative doc | Cause chain implemented by ERR-001.2; metadata absent | **Cause implemented, metadata deferred.** `ErrorCause` is an immutable owned reference whose copies share const nodes, preserving aggregate initialization and value-copy `Result` callers. An empty cause does not allocate; each `WrapError` edge owns one node through `std::make_shared`, allowing standard-library implementations to co-allocate node and control-block storage. Bounded `ErrorMetadata` remains a future additive change and must follow `observability-logging.md`. |
 | Numeric interned IDs after validation | Not implemented | **Ratified as optional optimization** — serialized forms keep stable textual `domain`+`code`. |
 
 ### Result contract
@@ -74,7 +75,7 @@ Rules:
 - Exceptions may be used privately only when required by stdlib/third-party and must be caught at the adapter boundary (`try`/`catch(...)` → `MakeError(descriptor, context)`). The conversion chooses the nearest module-owned `ErrorCode` — never an ad-hoc string code.
 - Destructors are `noexcept`; out-of-memory / corrupted-process paths may enter the fatal path when recovery cannot be guaranteed, per normative doc.
 - Enforcement is by **code review + host adapter guards**: each boundary layer owns a `try`/`catch` at its entry point (e.g., `ModuleHost` activation, `JobSystem` dispatch, CLI `main`, MCP handler, render backend factory). A follow-up adds `clang-tidy`/`MSVC /EH` checks that flag `throw` across the listed boundaries, but the ADR does not rely on toolchain enforcement for M0 correctness.
-- Logging is supporting evidence, not the result. The failing operation's owner logs once at the actionable boundary; intermediate frames add context via `WithContext` (future `cause`/`metadata`) without re-logging.
+- Logging is supporting evidence, not the result. The failing operation's owner logs once at the actionable boundary; intermediate frames add typed context via `WrapError` without re-logging or concatenating inner messages.
 
 ### Validation surfacing multiple diagnostics
 
@@ -86,12 +87,12 @@ Rules:
 - `src/foundation/error/` becomes the discoverable owner for error types; `diagnostics/` no longer owns error construction, resolving the empty-directory anomaly without a header-visibility violation.
 - `Result<T,Error>` remains the sole expected-failure channel; validation does not fork the result model.
 - Exception safety is explicit and boundary-owned rather than relying on global `noexcept` propagation, preserving the concurrency and plugin ABI contracts.
-- Deferred `cause`/`metadata`/`notes` keep M0 scope bounded while leaving the normative shape forward-compatible — adapters that already expect those fields can be added without breaking `MakeError` callers.
+- The additive `ErrorCause` member keeps existing aggregate initializers and `MakeError` callers source-compatible; bounded metadata and diagnostic notes remain forward-compatible follow-ups.
 
 ## Rejected Alternatives
 
 - **Keep `MakeError` in `diagnostics/` and treat `error/` as documentation-only.** Rejected: splits error ownership across two foundation sub-targets and leaves the empty-directory anomaly as permanent tech debt; contradicts `header-visibility-and-ownership.md` locality.
 - **Make the registry a foundation-global singleton populated by static initializers.** Rejected: introduces ambient side effects, static-init ordering hazards, and violates the AGENTS.md rule that descriptor creation must be inert and registration lives in the host composition root.
-- **Add `cause`/`ErrorMetadata`/`Diagnostic` notes now as a breaking change.** Rejected: no current caller needs the richer payload; the bounded-revision path (ratify minimal for M0, additive migration next) avoids a cross-cutting refactor while keeping the normative doc as the target.
+- **Add `cause`, `ErrorMetadata`, and diagnostic notes in one cross-cutting change.** Rejected: ERR-001.2 adds the cause chain independently and source-compatibly; bounded metadata and notes remain focused follow-ups instead of coupling unrelated payload migrations.
 - **Enforce exception boundaries solely with `noexcept` on all public APIs.** Rejected: `noexcept` would terminate on any missed throw and hides the conversion-to-Error requirement; the adapter `try`/`catch` → `Error` preserves diagnostics and keeps the host in control of presentation.
 - **Return `vector<Error>` or `vector<Diagnostic>` as the primary result for validation.** Rejected: fragments the result contract into two success/failure channels; the single `Result` + `diagnostics` vector already satisfies multi-finding validation without a second authoritative store.

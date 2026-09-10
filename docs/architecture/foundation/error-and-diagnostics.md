@@ -97,10 +97,17 @@ struct Error {
     ErrorSeverity severity;
     std::string message;
     std::vector<Diagnostic> diagnostics;
-    std::unique_ptr<const Error> cause;
+    ErrorCause cause;
     ErrorMetadata metadata;
 };
 ```
+
+`ErrorCause` is an optional immutable owned reference. Creating a cause edge
+allocates one node; copying an `Error` or moving it through `Result` shares the
+immutable nodes and does not clone the chain. An error without a cause performs
+no cause-storage allocation. This preserves the existing value-copy and aggregate
+initialization contract used across module boundaries while preventing mutation
+or cycles after publication.
 
 `ErrorDomainId` is a stable namespaced identifier owned by a module, not a
 closed engine-wide enum. Built-in domains include:
@@ -320,15 +327,28 @@ Add context at ownership boundaries, not at every stack frame:
 ```cpp
 auto result = importer.Import(request);
 if (!result) {
-    return Unexpected(
-        result.error().WithContext("asset.import.failed")
-            .With("asset_id", request.assetId)
-            .With("source_path", request.projectRelativePath));
+    return Result<ImportedAsset>::Failure(
+        WrapError(AssetErrors::ImportFailed,
+                  result.ErrorValue(),
+                  "Could not import requested asset"));
 }
 ```
 
 Context wrapping preserves the original code or adds a new outer code with the
 original error as `cause`. It does not flatten the chain into one string.
+Callers inspect a chain with `ErrorChainContains` using exact `ErrorDomainId` and
+`ErrorCode` values; message parsing is never a branching contract.
+
+### Cause-Chain Migration
+
+ERR-001.2 adds the final `ErrorCause cause` member to `Error`. Existing aggregate
+initializers and `MakeError` callers remain source-compatible because an omitted
+cause defaults to empty. A boundary that previously replaced or concatenated an
+inner error message migrates to `WrapError(outerDescriptor, innerError, context)`.
+Consumers that need to classify nested failures use `ErrorChainContains`; host
+presentation adapters alone may flatten the chain for human output. Because the
+public `Error` layout changes, binary consumers must rebuild against the updated
+Foundation contract even though their source remains compatible.
 
 Background jobs store their terminal `Result` in the authoritative job record.
 Completion events carry job identity and terminal state; subscribers query the
