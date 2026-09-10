@@ -7,9 +7,9 @@
 namespace Horo::Platform::Android {
     namespace {
         [[nodiscard]] Result<std::uint64_t> ReserveGeneration(std::atomic<std::uint64_t> &next) {
-            std::uint64_t candidate = next.load(std::memory_order_relaxed);
+            std::uint64_t candidate = next.load();
             while (candidate != 0 && candidate != std::numeric_limits<std::uint64_t>::max()) {
-                if (next.compare_exchange_weak(candidate, candidate + 1, std::memory_order_relaxed))
+                if (next.compare_exchange_weak(candidate, candidate + 1))
                     return Result<std::uint64_t>::Success(candidate);
             }
             return Result<std::uint64_t>::Failure(MakeError(PlatformErrors::LifecycleGenerationExhausted));

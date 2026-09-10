@@ -103,6 +103,8 @@ namespace Horo::Platform {
      * the existing reverse-registered runtime teardown before calling CompleteShutdown.
      */
     class AndroidLifecycleController final {
+        struct ConstructionToken final {};
+
     public:
         static constexpr std::size_t MaximumQueueCapacity = 64;
 
@@ -123,7 +125,15 @@ namespace Horo::Platform {
          * @param event Portable observation with generation evidence.
          * @return Success, queue saturation, invalid generation, or closed-admission error.
          */
-        [[nodiscard]] Result<void> Enqueue(AndroidLifecycleEvent event);
+        [[nodiscard]] Result<void> Enqueue(const AndroidLifecycleEvent &event);
+
+        /**
+         * @brief Constructs through the private capability used by Create.
+         * @param token Unforgeable class-private construction capability.
+         * @param ownerThread Application owner thread.
+         * @param queueCapacity Validated bounded observation capacity.
+         */
+        AndroidLifecycleController(ConstructionToken, std::thread::id ownerThread, std::size_t queueCapacity) noexcept;
 
         /**
          * @brief Applies all observations present at the owner-thread cutoff.
@@ -144,8 +154,6 @@ namespace Horo::Platform {
         [[nodiscard]] Result<void> CompleteShutdown();
 
     private:
-        AndroidLifecycleController(std::thread::id ownerThread, std::size_t queueCapacity) noexcept;
-
         [[nodiscard]] Result<void> Apply(const AndroidLifecycleEvent &event);
         [[nodiscard]] Result<void> ApplyProcessCreated(const AndroidLifecycleEvent &event);
         [[nodiscard]] Result<void> ApplyActivityCreated(const AndroidLifecycleEvent &event);

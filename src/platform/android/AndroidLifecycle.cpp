@@ -28,7 +28,9 @@ namespace Horo::Platform {
         }
     }  // namespace
 
-    AndroidLifecycleController::AndroidLifecycleController(const std::thread::id ownerThread, const std::size_t queueCapacity) noexcept
+    /** @copydoc AndroidLifecycleController::AndroidLifecycleController */
+    AndroidLifecycleController::AndroidLifecycleController(ConstructionToken, const std::thread::id ownerThread,
+                                                           const std::size_t queueCapacity) noexcept
         : queueCapacity_(queueCapacity), ownerThread_(ownerThread) {}
 
     /** @copydoc AndroidLifecycleController::Create */
@@ -38,11 +40,11 @@ namespace Horo::Platform {
             return Result<std::unique_ptr<AndroidLifecycleController>>::Failure(MakeError(PlatformErrors::InvalidLifecycleConfiguration));
         }
         return Result<std::unique_ptr<AndroidLifecycleController>>::Success(
-            std::unique_ptr<AndroidLifecycleController>(new AndroidLifecycleController(ownerThread, queueCapacity)));
+            std::make_unique<AndroidLifecycleController>(ConstructionToken{}, ownerThread, queueCapacity));
     }
 
     /** @copydoc AndroidLifecycleController::Enqueue */
-    Result<void> AndroidLifecycleController::Enqueue(const AndroidLifecycleEvent event) {
+    Result<void> AndroidLifecycleController::Enqueue(const AndroidLifecycleEvent &event) {
         using enum AndroidLifecycleEvent::Kind;
         if ((RequiresActivity(event.kind) && event.activity.value == 0) || (RequiresWindow(event.kind) && event.window.value == 0) ||
             (RequiresPresentation(event.kind) && event.presentation.value == 0)) {
@@ -84,8 +86,7 @@ namespace Horo::Platform {
                 queueHead_ = (queueHead_ + 1) % queueCapacity_;
                 --queueSize_;
             }
-            Result<void> applied = Apply(event);
-            if (applied.HasError()) {
+            if (Result<void> applied = Apply(event); applied.HasError()) {
                 ++state_.rejectedObservationCount;
                 if (!firstError.has_value())
                     firstError = applied.ErrorValue();
@@ -134,7 +135,7 @@ namespace Horo::Platform {
             &AndroidLifecycleController::ApplyWindowLost,         &AndroidLifecycleController::ApplyPresentationAvailable,
             &AndroidLifecycleController::ApplyPresentationLost,   &AndroidLifecycleController::ApplyFinalShutdown,
         };
-        const std::size_t index = static_cast<std::size_t>(event.kind);
+        const auto index = static_cast<std::size_t>(event.kind);
         if (index >= handlers.size())
             return Failure(PlatformErrors::InvalidLifecycleTransition);
         return (this->*handlers[index])(event);
@@ -194,14 +195,15 @@ namespace Horo::Platform {
     }
 
     Result<void> AndroidLifecycleController::ApplyActivityDestroyed(const AndroidLifecycleEvent &event) {
+        using enum AndroidActivityState;
         if (event.activity != state_.activityGeneration)
             return Failure(PlatformErrors::StaleLifecycleGeneration);
-        if (state_.activity == AndroidActivityState::Destroyed)
+        if (state_.activity == Destroyed)
             return Duplicate();
-        if (state_.activity != AndroidActivityState::Stopped && state_.activity != AndroidActivityState::Created)
+        if (state_.activity != Stopped && state_.activity != Created)
             return Failure(PlatformErrors::InvalidLifecycleTransition);
         RetireWindowAndPresentation();
-        state_.activity = AndroidActivityState::Destroyed;
+        state_.activity = Destroyed;
         state_.process = AndroidProcessState::Suspended;
         return Commit();
     }
