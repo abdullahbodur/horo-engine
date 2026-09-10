@@ -188,6 +188,7 @@ to the replacement.
 | [174](174-render-adapter-and-device-discovery-contract.md) | Render Adapter and Device Discovery Contract | Proposed | 2026-09-06 |
 | [175](175-render-resource-state-and-barrier-model.md) | Render Resource State and Barrier Model | Proposed | 2026-09-08 |
 | [176](176-runtime-ui-element-and-control-taxonomy.md) | Runtime UI Element and Control Taxonomy | Accepted | 2026-09-07 |
+| [177](177-mcp-application-capability-and-host-boundary.md) | MCP Application Capability and Host Boundary | Accepted | 2026-09-10 |
 
 ## Conventions
 

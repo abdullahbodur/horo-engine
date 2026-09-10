@@ -8,6 +8,14 @@ add_test(NAME HoroDependencyDirectionNegativeConfigureTest
 set_tests_properties(HoroDependencyDirectionNegativeConfigureTest PROPERTIES
     LABELS "architecture;cmake")
 
+add_test(NAME HoroMcpBoundaryNegativeConfigureTest
+    COMMAND "${CMAKE_COMMAND}"
+        "-DHORO_ENGINE_SOURCE_DIR=${PROJECT_SOURCE_DIR}"
+        "-DHORO_TEST_BINARY_DIR=${CMAKE_CURRENT_BINARY_DIR}/mcp-boundary-negative"
+        -P "${PROJECT_SOURCE_DIR}/tests/cmake/RunMcpBoundaryNegativeTest.cmake")
+set_tests_properties(HoroMcpBoundaryNegativeConfigureTest PROPERTIES
+    LABELS "architecture;cmake;mcp")
+
 add_test(NAME HoroGameplayManifestRevisionValidationTest
     COMMAND "${CMAKE_COMMAND}"
         "-DHORO_ENGINE_SOURCE_DIR=${PROJECT_SOURCE_DIR}"

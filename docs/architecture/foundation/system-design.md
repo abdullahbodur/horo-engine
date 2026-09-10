@@ -514,6 +514,8 @@ Required rules:
 - Pipeline does not depend on GUI or a renderer backend.
 - MCP and GUI depend on application use cases; application use cases do not
   depend on MCP or ImGui.
+- Only `HoroMcp*` implementation targets and executable composition roots may
+  depend on `HoroMcp*`; CMake rejects a domain target that reverses this edge.
 - The `Application`, editor, scene, and runtime library targets do not link a
   concrete renderer, audio-device, or network-transport backend.
 - Executable application targets are composition roots and select concrete
@@ -637,6 +639,11 @@ MCP owns:
 
 MCP does not own engine business rules and must not mutate editor, scene,
 renderer, or asset state directly from a transport thread.
+
+[ADR-177](../../adr/177-mcp-application-capability-and-host-boundary.md)
+requires transport and in-process entry paths to share one controller/registry
+and separates query, presentation-side-effect, and mutation tools. Domain targets
+must not include or link MCP contracts.
 
 ## Scene Boundary
 
