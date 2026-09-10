@@ -143,6 +143,18 @@ Provider adapters validate mappings through opaque digests; concrete provider va
 SDK types and reverse maps remain private. The generated PlatformServices public-header
 consumer compiles the registry header through its sole owning target.
 
+## PLS-003.3 Migration Notes
+
+`HoroEngine::PlatformServices` additionally owns
+`Horo/PlatformServices/AchievementDefinitionRegistry.h`. Project and cook composition
+build a complete immutable definition snapshot against one captured ADR-132 project and registry
+fingerprint. Every active achievement stable ID requires exactly one typed definition;
+tombstoned, unknown, duplicate, malformed, incomplete, stale or unbounded candidates
+fail before publication with field-level diagnostics. Published authority and progress
+semantics are immutable across ordinary replacement, while localization keys and hidden
+presentation may change. Provider-native identifiers, SDK values and account identity
+remain outside this public definition contract.
+
 ## XRA-001.2 Migration Notes
 
 `HoroEngine::XRApi` owns the four public headers under `Horo/XR/` and depends
