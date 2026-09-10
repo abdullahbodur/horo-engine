@@ -120,4 +120,48 @@ namespace Horo::Cinematic::CinematicErrors {
                                                  .summary = "The cinematic curve exceeds its sampling capacity.",
                                                  .remediationHint = "Reduce the curve key count or split the authored track.",
                                                  .userActionable = true};
+    const ErrorCodeDescriptor TransformVersionUnsupported{.domain = CinematicDomain,
+                                                          .code = ErrorCode{"cinematic.transform.version_unsupported"},
+                                                          .defaultSeverity = ErrorSeverity::Error,
+                                                          .summary = "The transform-track version is unsupported.",
+                                                          .remediationHint =
+                                                              "Migrate or recook the transform track for this engine version.",
+                                                          .userActionable = true};
+    const ErrorCodeDescriptor TransformBindingStale{.domain = CinematicDomain,
+                                                    .code = ErrorCode{"cinematic.transform.binding_stale"},
+                                                    .defaultSeverity = ErrorSeverity::Warning,
+                                                    .summary = "The transform binding belongs to a retired scene generation.",
+                                                    .remediationHint = "Rebuild the evaluation plan from the active scene snapshot.",
+                                                    .retryable = true};
+    const ErrorCodeDescriptor TransformBindingMissing{.domain = CinematicDomain,
+                                                      .code = ErrorCode{"cinematic.transform.binding_missing"},
+                                                      .defaultSeverity = ErrorSeverity::Error,
+                                                      .summary = "A required transform binding is missing.",
+                                                      .remediationHint = "Restore the bound object or repair the track hierarchy.",
+                                                      .userActionable = true};
+    const ErrorCodeDescriptor TransformHierarchyCycle{.domain = CinematicDomain,
+                                                      .code = ErrorCode{"cinematic.transform.hierarchy_cycle"},
+                                                      .defaultSeverity = ErrorSeverity::Error,
+                                                      .summary = "The transform binding hierarchy contains a cycle.",
+                                                      .remediationHint = "Remove one parent edge from the reported hierarchy.",
+                                                      .userActionable = true};
+    const ErrorCodeDescriptor TransformMalformed{.domain = CinematicDomain,
+                                                 .code = ErrorCode{"cinematic.transform.malformed"},
+                                                 .defaultSeverity = ErrorSeverity::Error,
+                                                 .summary = "The transform-track contract is malformed.",
+                                                 .remediationHint =
+                                                     "Repair track identities, anchors, or binding relationships and recook.",
+                                                 .userActionable = true};
+    const ErrorCodeDescriptor TransformLimitExceeded{.domain = CinematicDomain,
+                                                     .code = ErrorCode{"cinematic.transform.limit_exceeded"},
+                                                     .defaultSeverity = ErrorSeverity::Error,
+                                                     .summary = "Transform evaluation exceeds a bounded capacity.",
+                                                     .remediationHint = "Reduce admitted tracks or provide the required output capacity."};
+    const ErrorCodeDescriptor TransformSampleInvalid{.domain = CinematicDomain,
+                                                     .code = ErrorCode{"cinematic.transform.sample_invalid"},
+                                                     .defaultSeverity = ErrorSeverity::Error,
+                                                     .summary = "Sampled transform channels do not form a finite transform.",
+                                                     .remediationHint =
+                                                         "Repair curve values, quaternion channels, or the active origin frame.",
+                                                     .userActionable = true};
 }  // namespace Horo::Cinematic::CinematicErrors
