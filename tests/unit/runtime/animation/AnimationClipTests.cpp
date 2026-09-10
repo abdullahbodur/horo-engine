@@ -16,6 +16,10 @@ namespace {
     std::atomic<std::size_t> ClipTestAllocations{};
 }
 
+std::size_t HoroAnimationTestAllocationCount() noexcept {
+    return ClipTestAllocations.load(std::memory_order_relaxed);
+}
+
 void *operator new(const std::size_t size) {
     ClipTestAllocations.fetch_add(1, std::memory_order_relaxed);
     if (void *memory = std::malloc(size))
