@@ -15,9 +15,10 @@ namespace {
 
 void *operator new(const std::size_t size) {
     snapshotAllocations.fetch_add(1, std::memory_order_relaxed);
-    if (void *memory = std::malloc(size))
-        return memory;
-    throw std::bad_alloc{};
+    void *memory = std::malloc(size);
+    if (memory == nullptr)
+        throw std::bad_alloc{};
+    return memory;
 }
 
 void operator delete(void *memory) noexcept {
@@ -25,7 +26,7 @@ void operator delete(void *memory) noexcept {
 }
 
 void operator delete(void *memory, std::size_t) noexcept {
-    std::free(memory);
+    operator delete(memory);
 }
 
 namespace Horo::Runtime::Ui {
@@ -74,13 +75,17 @@ namespace Horo::Runtime::Ui {
             return Assets::AssetId::FromBytes(bytes);
         }
 
+        UiElementTreeDescriptor TreeDescriptor(const std::uint32_t canvasSlot = 2) {
+            return {.instance = {Owner(), 1, 1},
+                    .canvas = {Owner(), canvasSlot, 1},
+                    .document = Document(1),
+                    .documentRevision = DocumentRevision(),
+                    .treeRevision = TreeRevision(),
+                    .limits = {4, 4, 4}};
+        }
+
         UiElementTree Tree() {
-            const UiElementTreeDescriptor descriptor{.instance = {Owner(), 1, 1},
-                                                     .canvas = {Owner(), 2, 1},
-                                                     .document = Document(1),
-                                                     .documentRevision = DocumentRevision(),
-                                                     .treeRevision = TreeRevision(),
-                                                     .limits = {4, 4, 4}};
+            const auto descriptor = TreeDescriptor();
             const std::array elements{UiElementDescriptor{Element(2), {}}, UiElementDescriptor{Element(3), Element(2)}};
             auto allocatorResult = UiElementSlotAllocator::Create(Owner());
             REQUIRE(allocatorResult.HasValue());
@@ -291,21 +296,11 @@ namespace Horo::Runtime::Ui {
             REQUIRE(allocatorResult.HasValue());
             auto allocator = std::move(allocatorResult).Value();
             const std::array elements{UiElementDescriptor{Element(2), {}}, UiElementDescriptor{Element(3), Element(2)}};
-            const UiElementTreeDescriptor firstDescriptor{.instance = {Owner(), 1, 1},
-                                                          .canvas = {Owner(), 2, 1},
-                                                          .document = Document(1),
-                                                          .documentRevision = DocumentRevision(),
-                                                          .treeRevision = TreeRevision(),
-                                                          .limits = {4, 4, 4}};
+            const auto firstDescriptor = TreeDescriptor();
             auto firstResult = UiElementTree::Create(allocator, firstDescriptor, elements);
             REQUIRE(firstResult.HasValue());
             auto first = std::move(firstResult).Value();
-            const UiElementTreeDescriptor secondDescriptor{.instance = first.Instance(),
-                                                           .canvas = {Owner(), 3, 1},
-                                                           .document = first.SourceDocument(),
-                                                           .documentRevision = first.SourceDocumentRevision(),
-                                                           .treeRevision = first.Revision(),
-                                                           .limits = {4, 4, 4}};
+            const auto secondDescriptor = TreeDescriptor(3);
             auto secondResult = UiElementTree::Create(allocator, secondDescriptor, elements);
             REQUIRE(secondResult.HasValue());
             auto second = std::move(secondResult).Value();
