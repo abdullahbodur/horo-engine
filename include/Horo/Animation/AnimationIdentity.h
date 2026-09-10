@@ -43,10 +43,28 @@ namespace Horo::Animation {
 
         /** @brief Checks representation. @return True when the asset identity is non-zero. */
         [[nodiscard]] bool IsValid() const noexcept {
-            return asset_.IsValid();
+            return Asset().IsValid();
         }
 
-        [[nodiscard]] auto operator<=>(const AnimationAssetIdentity &) const noexcept = default;
+        /**
+         * @brief Compares identities by canonical asset value.
+         * @param left First typed identity.
+         * @param right Second typed identity.
+         * @return True when both identities contain the same canonical asset value.
+         */
+        [[nodiscard]] friend bool operator==(const AnimationAssetIdentity &left, const AnimationAssetIdentity &right) noexcept {
+            return left.Asset() == right.Asset();
+        }
+
+        /**
+         * @brief Orders identities by canonical asset value.
+         * @param left First typed identity.
+         * @param right Second typed identity.
+         * @return Canonical asset-value ordering.
+         */
+        [[nodiscard]] friend auto operator<=>(const AnimationAssetIdentity &left, const AnimationAssetIdentity &right) noexcept {
+            return left.Asset() <=> right.Asset();
+        }
 
     private:
         explicit AnimationAssetIdentity(const Assets::AssetId &asset) : asset_(asset) {}

@@ -1,6 +1,16 @@
 #include "Horo/Animation/AnimationIdentity.h"
 
 namespace Horo::Animation {
+    namespace {
+        /** @brief Validates a nested value and its exact animation-instance association. */
+        [[nodiscard]] Result<void> ValidateInstanceBoundValue(const bool representationValid, const AnimationInstanceHandle &sourceInstance,
+                                                              const AnimationInstanceHandle &currentInstance) {
+            if (!representationValid)
+                return Result<void>::Failure(MakeError(AnimationErrors::HandleMalformed));
+            return ValidateAnimationInstanceAccess(sourceInstance, currentInstance);
+        }
+    }  // namespace
+
     /** @copydoc ValidateAnimationInstanceAccess */
     Result<void> ValidateAnimationInstanceAccess(const AnimationInstanceHandle &submitted, const AnimationInstanceHandle &current) {
         if (!submitted.IsValid() || !current.IsValid())
@@ -15,10 +25,10 @@ namespace Horo::Animation {
     /** @copydoc ValidatePoseAccess */
     Result<void> ValidatePoseAccess(const PoseHandle &submitted, const AnimationInstanceHandle &currentInstance,
                                     const PoseGeneration currentGeneration) {
-        if (!submitted.IsValid() || !currentGeneration.IsValid())
-            return Result<void>::Failure(MakeError(AnimationErrors::HandleMalformed));
-        if (auto instance = ValidateAnimationInstanceAccess(submitted.instance, currentInstance); instance.HasError())
-            return instance;
+        const auto association =
+            ValidateInstanceBoundValue(submitted.IsValid() && currentGeneration.IsValid(), submitted.instance, currentInstance);
+        if (association.HasError())
+            return association;
         if (submitted.generation != currentGeneration)
             return Result<void>::Failure(MakeError(AnimationErrors::HandleStale));
         return Result<void>::Success();
@@ -27,10 +37,10 @@ namespace Horo::Animation {
     /** @copydoc ValidateRootMotionRequestAccess */
     Result<void> ValidateRootMotionRequestAccess(const RootMotionRequestId &submitted, const AnimationInstanceHandle &currentInstance,
                                                  const AnimationTickId expectedTick, const RootMotionGeneration currentGeneration) {
-        if (!submitted.IsValid() || !expectedTick.IsValid() || !currentGeneration.IsValid())
-            return Result<void>::Failure(MakeError(AnimationErrors::HandleMalformed));
-        if (auto instance = ValidateAnimationInstanceAccess(submitted.instance, currentInstance); instance.HasError())
-            return instance;
+        const bool representationValid = submitted.IsValid() && expectedTick.IsValid() && currentGeneration.IsValid();
+        const auto association = ValidateInstanceBoundValue(representationValid, submitted.instance, currentInstance);
+        if (association.HasError())
+            return association;
         if (submitted.tick != expectedTick || submitted.generation != currentGeneration)
             return Result<void>::Failure(MakeError(AnimationErrors::HandleStale));
         return Result<void>::Success();
