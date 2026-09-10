@@ -308,10 +308,7 @@ namespace Horo::Runtime {
             }
 
             const std::array malformedUtf8{
-                std::string{"\x1b", 1},
-                std::string{"\xc0\x80", 2},
-                std::string{"\xed\xa0\x80", 3},
-                std::string{"\xf4\x90\x80\x80", 4},
+                std::string{"\x1b", 1},     std::string{"\xc0\x80", 2}, std::string{"\xed\xa0\x80", 3}, std::string{"\xf4\x90\x80\x80", 4},
                 std::string{"\xe2\x82", 2},
             };
             for (const auto &evidence : malformedUtf8) {
