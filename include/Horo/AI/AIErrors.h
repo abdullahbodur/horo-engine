@@ -28,6 +28,14 @@ namespace Horo::AI::AIErrors {
     extern const ErrorCodeDescriptor BlackboardValueInvalid;
     /** @brief An unavailable key or value type was supplied under a rejecting schema policy. */
     extern const ErrorCodeDescriptor BlackboardUnknownValueRejected;
-    /** @brief Immutable blackboard schema storage could not be allocated during capture. */
+    /** @brief Immutable blackboard schema or instance storage could not be allocated. */
     extern const ErrorCodeDescriptor BlackboardStorageUnavailable;
+    /** @brief Blackboard runtime/schema/agent generation is stale or foreign. */
+    extern const ErrorCodeDescriptor BlackboardInstanceStale;
+    /** @brief Blackboard instance binding or required default layout is invalid. */
+    extern const ErrorCodeDescriptor BlackboardInstanceInvalid;
+    /** @brief Blackboard write batch is duplicate, oversized, or revision-stale. */
+    extern const ErrorCodeDescriptor BlackboardBatchInvalid;
+    /** @brief Blackboard revision or instance generation cannot advance without wrapping. */
+    extern const ErrorCodeDescriptor BlackboardRevisionExhausted;
 }  // namespace Horo::AI::AIErrors
