@@ -80,6 +80,25 @@ namespace Horo::Terrain {
             return std::ranges::find(datasets, dataset) != datasets.end();
         }
 
+        /** @brief Checks every typed catalog domain for reserved identity representations. */
+        [[nodiscard]] bool CatalogContainsInvalidIdentity(const TerrainIdentityCatalog &catalog) noexcept {
+            return ContainsInvalid(catalog.datasets) || ContainsInvalid(catalog.tiles) || ContainsInvalid(catalog.foliageTypes) ||
+                   ContainsInvalid(catalog.clusters) || ContainsInvalid(catalog.bakedInstances);
+        }
+
+        /** @brief Checks every typed catalog domain for duplicate identities. */
+        [[nodiscard]] bool CatalogContainsDuplicateIdentity(const TerrainIdentityCatalog &catalog) noexcept {
+            return ContainsDuplicate(catalog.datasets) || ContainsDuplicate(catalog.tiles) || ContainsDuplicate(catalog.foliageTypes) ||
+                   ContainsDuplicate(catalog.clusters) || ContainsDuplicate(catalog.bakedInstances);
+        }
+
+        /** @brief Checks that each tile belongs to a dataset declared by the same catalog. */
+        [[nodiscard]] bool CatalogContainsForeignTile(const TerrainIdentityCatalog &catalog) noexcept {
+            return std::ranges::any_of(catalog.tiles, [&catalog](const TerrainTileId &tile) {
+                return !ContainsDataset(catalog.datasets, tile.dataset);
+            });
+        }
+
         template <typename Integer>
         void StoreNetworkOrder(const Integer value, const std::span<std::uint8_t, sizeof(Integer)> output) noexcept {
             using Unsigned = std::make_unsigned_t<Integer>;
@@ -196,16 +215,12 @@ namespace Horo::Terrain {
             return Result<void>::Failure(MakeError(TerrainErrors::IdentityInvalid));
         if (!CatalogSizeFits(catalog))
             return Result<void>::Failure(MakeError(TerrainErrors::CapacityExceeded));
-        if (ContainsInvalid(catalog.datasets) || ContainsInvalid(catalog.tiles) || ContainsInvalid(catalog.foliageTypes) ||
-            ContainsInvalid(catalog.clusters) || ContainsInvalid(catalog.bakedInstances))
+        if (CatalogContainsInvalidIdentity(catalog))
             return Result<void>::Failure(MakeError(TerrainErrors::IdentityInvalid));
-        if (ContainsDuplicate(catalog.datasets) || ContainsDuplicate(catalog.tiles) || ContainsDuplicate(catalog.foliageTypes) ||
-            ContainsDuplicate(catalog.clusters) || ContainsDuplicate(catalog.bakedInstances))
+        if (CatalogContainsDuplicateIdentity(catalog))
             return Result<void>::Failure(MakeError(TerrainErrors::IdentityConflict));
-        for (const TerrainTileId &tile : catalog.tiles) {
-            if (!ContainsDataset(catalog.datasets, tile.dataset))
-                return Result<void>::Failure(MakeError(TerrainErrors::IdentityUnknown));
-        }
+        if (CatalogContainsForeignTile(catalog))
+            return Result<void>::Failure(MakeError(TerrainErrors::IdentityUnknown));
         return Result<void>::Success();
     }
 }  // namespace Horo::Terrain
