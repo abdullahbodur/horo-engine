@@ -113,6 +113,11 @@ namespace Horo::Network {
             return static_cast<std::byte>(static_cast<unsigned char>(text[index]));
         }
 
+        /** @brief Allows printable ASCII and conventional diagnostic whitespace while rejecting the remaining controls. */
+        bool IsAllowedAsciiEvidenceByte(const std::uint8_t value) noexcept {
+            return value == 0x09U || value == 0x0aU || value == 0x0dU || (value >= 0x20U && value != 0x7fU);
+        }
+
         /** @brief Rejects overlong, surrogate, and out-of-range decoded Unicode scalars. */
         bool IsCanonicalUtf8Scalar(const std::uint32_t codepoint, const std::size_t continuationCount) noexcept {
             if (continuationCount == 2)
@@ -139,12 +144,12 @@ namespace Horo::Network {
             return decodedLead->continuationCount + 1;
         }
 
-        /** @brief Checks a bounded prefix for printable canonical UTF-8 without retaining it. */
-        bool IsPrintableUtf8(const std::string_view text) noexcept {
+        /** @brief Checks a bounded prefix for safe canonical UTF-8 diagnostic text without retaining it. */
+        bool IsSafeDiagnosticUtf8(const std::string_view text) noexcept {
             std::size_t index = 0;
             while (index < text.size()) {
                 if (const auto lead = std::to_integer<std::uint8_t>(ByteAt(text, index)); lead < 0x80U) {
-                    if (lead < 0x20U || lead == 0x7fU)
+                    if (!IsAllowedAsciiEvidenceByte(lead))
                         return false;
                     ++index;
                     continue;
@@ -230,7 +235,7 @@ namespace Horo::Network {
         const std::size_t inspectedSize = std::min(privateDetail.size(), MaximumPrivateBackendDetailBytes);
         record.backendEvidence_.observedBytes =
             static_cast<std::uint16_t>(std::min(privateDetail.size(), MaximumPrivateBackendDetailBytes + 1));
-        record.backendEvidence_.malformed = !IsPrintableUtf8(privateDetail.substr(0, inspectedSize));
+        record.backendEvidence_.malformed = !IsSafeDiagnosticUtf8(privateDetail.substr(0, inspectedSize));
         return Result<NetworkTerminalRecord>::Success(std::move(record));
     }
 
