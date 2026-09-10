@@ -38,4 +38,18 @@ namespace Horo::Cli::CliErrors {
     extern const ErrorCodeDescriptor InputCapacityExceeded;
     /** @brief Required interactive input is unavailable and its deterministic alternative was omitted. */
     extern const ErrorCodeDescriptor InteractiveInputUnavailable;
+    /** @brief Dispatcher registration metadata is malformed or inconsistent with the accepted registry. */
+    extern const ErrorCodeDescriptor DispatchRegistrationInvalid;
+    /** @brief No executable adapter is bound to the validated command path. */
+    extern const ErrorCodeDescriptor CommandUnavailable;
+    /** @brief Invocation authority does not admit the command's declared side effects. */
+    extern const ErrorCodeDescriptor SideEffectUnauthorized;
+    /** @brief Invocation correlation, timeout, or execution bounds are malformed. */
+    extern const ErrorCodeDescriptor ExecutionContextInvalid;
+    /** @brief Cooperative cancellation was requested before a terminal result was produced. */
+    extern const ErrorCodeDescriptor ExecutionCancelled;
+    /** @brief The command exceeded its declared execution deadline. */
+    extern const ErrorCodeDescriptor ExecutionTimedOut;
+    /** @brief Adapter progress or result data exceeded a dispatcher-owned bound. */
+    extern const ErrorCodeDescriptor ExecutionCapacityExceeded;
 }  // namespace Horo::Cli::CliErrors

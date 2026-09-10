@@ -125,4 +125,63 @@ namespace Horo::Cli::CliErrors {
                                                           .remediationHint = "Provide the command's deterministic option alternative.",
                                                           .retryable = false,
                                                           .userActionable = true};
+
+    const ErrorCodeDescriptor
+        DispatchRegistrationInvalid{.domain = CliDomain,
+                                    .code = ErrorCode{"cli.dispatch_registration_invalid"},
+                                    .defaultSeverity = ErrorSeverity::Error,
+                                    .summary = "CLI dispatch registration is invalid.",
+                                    .remediationHint = "Bind one matching adapter and the exact declared capabilities before activation.",
+                                    .retryable = false,
+                                    .userActionable = false};
+
+    const ErrorCodeDescriptor CommandUnavailable{.domain = CliDomain,
+                                                 .code = ErrorCode{"cli.command_unavailable"},
+                                                 .defaultSeverity = ErrorSeverity::Error,
+                                                 .summary = "CLI command has no active application adapter.",
+                                                 .remediationHint = "Install or activate the module that owns this command.",
+                                                 .retryable = false,
+                                                 .userActionable = true};
+
+    const ErrorCodeDescriptor SideEffectUnauthorized{.domain = CliDomain,
+                                                     .code = ErrorCode{"cli.side_effect_unauthorized"},
+                                                     .defaultSeverity = ErrorSeverity::Error,
+                                                     .summary = "CLI command side effects are not authorized.",
+                                                     .remediationHint =
+                                                         "Use an invocation policy that explicitly admits these side effects.",
+                                                     .retryable = false,
+                                                     .userActionable = true};
+
+    const ErrorCodeDescriptor ExecutionContextInvalid{.domain = CliDomain,
+                                                      .code = ErrorCode{"cli.execution_context_invalid"},
+                                                      .defaultSeverity = ErrorSeverity::Error,
+                                                      .summary = "CLI execution context is invalid.",
+                                                      .remediationHint =
+                                                          "Provide valid invocation identity, correlation, timeout, and bounds.",
+                                                      .retryable = false,
+                                                      .userActionable = false};
+
+    const ErrorCodeDescriptor ExecutionCancelled{.domain = CliDomain,
+                                                 .code = ErrorCode{"cli.execution_cancelled"},
+                                                 .defaultSeverity = ErrorSeverity::Warning,
+                                                 .summary = "CLI command execution was cancelled.",
+                                                 .remediationHint = "Retry the command when the operation should continue.",
+                                                 .retryable = true,
+                                                 .userActionable = true};
+
+    const ErrorCodeDescriptor ExecutionTimedOut{.domain = CliDomain,
+                                                .code = ErrorCode{"cli.execution_timed_out"},
+                                                .defaultSeverity = ErrorSeverity::Error,
+                                                .summary = "CLI command execution exceeded its deadline.",
+                                                .remediationHint = "Use an admitted timeout or reduce the requested work.",
+                                                .retryable = true,
+                                                .userActionable = true};
+
+    const ErrorCodeDescriptor ExecutionCapacityExceeded{.domain = CliDomain,
+                                                        .code = ErrorCode{"cli.execution_capacity_exceeded"},
+                                                        .defaultSeverity = ErrorSeverity::Error,
+                                                        .summary = "CLI command execution exceeded a bounded resource limit.",
+                                                        .remediationHint = "Reduce progress or result output to the documented limit.",
+                                                        .retryable = false,
+                                                        .userActionable = true};
 }  // namespace Horo::Cli::CliErrors

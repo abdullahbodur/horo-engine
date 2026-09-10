@@ -41,6 +41,7 @@ target_include_directories(HoroFoundation
 add_library(HoroCliHost STATIC
         cli/CliCommandRegistry.cpp
         cli/CliCommonOptions.cpp
+        cli/CliDispatcher.cpp
         cli/CliErrors.cpp
         cli/CliOptionParser.cpp
 )
