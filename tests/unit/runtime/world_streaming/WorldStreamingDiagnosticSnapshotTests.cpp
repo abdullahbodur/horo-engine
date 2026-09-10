@@ -312,8 +312,7 @@ namespace Horo::WorldStreaming {
                          WorldStreamingErrors::DiagnosticProjectionCapacityExceeded);
         }
 
-        TEST_CASE("World Streaming diagnostic events reject invalid stale duplicate unsupported and illegal facts",
-                  "[unit][world_streaming][diagnostics][events]") {
+        TEST_CASE("World Streaming diagnostic events reject invalid and stale identities", "[unit][world_streaming][diagnostics][events]") {
             const auto input = Input();
             const auto policy = Policy();
             const auto operation = Operation(5, 1);
@@ -341,6 +340,14 @@ namespace Horo::WorldStreaming {
             const std::array staleAttemptEvents{staleAttempt};
             RequireError(CreateSnapshot(input, policy, Sample(policy), {}, cells, {}, staleAttemptEvents),
                          WorldStreamingErrors::DiagnosticProjectionStale);
+        }
+
+        TEST_CASE("World Streaming diagnostic events reject duplicate unsupported and illegal facts",
+                  "[unit][world_streaming][diagnostics][events]") {
+            const auto input = Input();
+            const auto policy = Policy();
+            const auto operation = Operation(5, 1);
+            const std::array cells{StreamingCellStateRecord{operation, StreamingCellState::Loading}};
 
             auto unsupported = Event(3, 3, operation, StreamingDiagnosticEventCategory::Admission);
             unsupported.severity = static_cast<StreamingDiagnosticEventSeverity>(255);

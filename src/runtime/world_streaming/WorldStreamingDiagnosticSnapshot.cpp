@@ -46,25 +46,22 @@ namespace Horo::WorldStreaming {
             return state >= StreamingCellState::Unloaded && state <= StreamingCellState::Failed;
         }
 
+        /** @brief Verifies that one fence belongs to the captured mounted authority. */
+        bool MatchesOwner(const StreamingFence &fence, const StreamingRuntimeOwnerToken &owner) noexcept {
+            return fence.partition == owner.partition && fence.epoch == owner.epoch;
+        }
+
         bool IsLegalTransition(const StreamingDiagnosticCellTransition transition) noexcept {
             using enum StreamingCellState;
-            if (!IsKnownCellState(transition.previous) || !IsKnownCellState(transition.current))
-                return false;
-            switch (transition.previous) {
-                case Unloaded:
-                    return transition.current == Loading;
-                case Loading:
-                    return transition.current == Resident || transition.current == Evicting;
-                case Resident:
-                    return transition.current == Active || transition.current == Evicting;
-                case Active:
-                    return transition.current == Evicting;
-                case Evicting:
-                    return transition.current == Unloaded || transition.current == Failed;
-                case Failed:
-                    return transition.current == Loading;
-            }
-            return false;
+            static constexpr std::array allowed{
+                StreamingDiagnosticCellTransition{Unloaded, Loading},  StreamingDiagnosticCellTransition{Loading, Resident},
+                StreamingDiagnosticCellTransition{Loading, Evicting},  StreamingDiagnosticCellTransition{Resident, Active},
+                StreamingDiagnosticCellTransition{Resident, Evicting}, StreamingDiagnosticCellTransition{Active, Evicting},
+                StreamingDiagnosticCellTransition{Evicting, Unloaded}, StreamingDiagnosticCellTransition{Evicting, Failed},
+                StreamingDiagnosticCellTransition{Failed, Loading},
+            };
+            return IsKnownCellState(transition.previous) && IsKnownCellState(transition.current) &&
+                   std::ranges::find(allowed, transition) != allowed.end();
         }
 
         Result<void> ValidateEventContext(const StreamingDiagnosticDecisionEvent &event) {
@@ -77,33 +74,66 @@ namespace Horo::WorldStreaming {
             return Result<void>::Success();
         }
 
+        Result<void> ValidateLifecycleEvent(const StreamingDiagnosticDecisionEvent &event) {
+            if (!event.transition || event.admission || event.outcome != StreamingCellOperationOutcome::None)
+                return Internal::Failure<void>(WorldStreamingErrors::DiagnosticProjectionInvalid);
+            return Result<void>::Success();
+        }
+
+        Result<void> ValidateAdmissionEvent(const StreamingDiagnosticDecisionEvent &event) {
+            if (event.transition || !event.admission || event.outcome != StreamingCellOperationOutcome::None)
+                return Internal::Failure<void>(WorldStreamingErrors::DiagnosticProjectionInvalid);
+            if (!IsKnownAdmission(*event.admission))
+                return Internal::Failure<void>(WorldStreamingErrors::DiagnosticProjectionUnsupported);
+            return Result<void>::Success();
+        }
+
+        Result<void> ValidateRollbackEvent(const StreamingDiagnosticDecisionEvent &event) {
+            if (!event.transition || event.admission || !IsFailureReason(event.outcome))
+                return Internal::Failure<void>(WorldStreamingErrors::DiagnosticProjectionInvalid);
+            constexpr std::array terminalStates{StreamingCellState::Evicting, StreamingCellState::Unloaded, StreamingCellState::Failed};
+            if (std::ranges::find(terminalStates, event.transition->current) == terminalStates.end())
+                return Internal::Failure<void>(WorldStreamingErrors::DiagnosticProjectionInvalid);
+            return Result<void>::Success();
+        }
+
+        using EventValidator = Result<void> (*)(const StreamingDiagnosticDecisionEvent &);
+
         Result<void> ValidateEventSemantics(const StreamingDiagnosticDecisionEvent &event) {
-            using enum StreamingDiagnosticEventCategory;
+            static constexpr std::array<EventValidator, 3> validators{
+                ValidateLifecycleEvent,
+                ValidateAdmissionEvent,
+                ValidateRollbackEvent,
+            };
             if (!IsKnownCategory(event.category) || !IsKnownSeverity(event.severity))
                 return Internal::Failure<void>(WorldStreamingErrors::DiagnosticProjectionUnsupported);
-            switch (event.category) {
-                case CellLifecycle:
-                    if (!event.transition || event.admission || event.outcome != StreamingCellOperationOutcome::None)
-                        return Internal::Failure<void>(WorldStreamingErrors::DiagnosticProjectionInvalid);
-                    break;
-                case Admission:
-                    if (event.transition || !event.admission || event.outcome != StreamingCellOperationOutcome::None)
-                        return Internal::Failure<void>(WorldStreamingErrors::DiagnosticProjectionInvalid);
-                    if (!IsKnownAdmission(*event.admission))
-                        return Internal::Failure<void>(WorldStreamingErrors::DiagnosticProjectionUnsupported);
-                    break;
-                case Rollback:
-                    if (!event.transition || event.admission || !IsFailureReason(event.outcome))
-                        return Internal::Failure<void>(WorldStreamingErrors::DiagnosticProjectionInvalid);
-                    if (event.transition->current != StreamingCellState::Evicting &&
-                        event.transition->current != StreamingCellState::Unloaded &&
-                        event.transition->current != StreamingCellState::Failed)
-                        return Internal::Failure<void>(WorldStreamingErrors::DiagnosticProjectionInvalid);
-                    break;
-            }
+            if (const auto category = validators[static_cast<std::size_t>(event.category)](event); category.HasError())
+                return category;
             if (event.transition && !IsLegalTransition(*event.transition))
                 return Internal::Failure<void>(WorldStreamingErrors::CellStateTransitionInvalid);
             return ValidateEventContext(event);
+        }
+
+        Result<void> ValidateEventIdentity(const StreamingDiagnosticDecisionEvent &event,
+                                           const WorldStreamingDiagnosticSnapshotInput &input) {
+            if (!event.id.IsValid() || !event.sequence.IsValid() || !event.ownerRevision.IsValid() || !event.snapshotRevision.IsValid() ||
+                !event.operation.IsValid())
+                return Internal::Failure<void>(WorldStreamingErrors::DiagnosticProjectionInvalid);
+            if (event.ownerRevision != input.ownerRevision || event.snapshotRevision != input.revision ||
+                !MatchesOwner(event.operation.fence, input.owner))
+                return Internal::Failure<void>(WorldStreamingErrors::DiagnosticProjectionStale);
+            return Result<void>::Success();
+        }
+
+        Result<void> ValidateEventCellCorrelation(const StreamingDiagnosticDecisionEvent &event,
+                                                  const std::span<const StreamingCellStateRecord> cells) {
+            if (event.category == StreamingDiagnosticEventCategory::Admission)
+                return Result<void>::Success();
+            const auto matchingCell = std::ranges::find_if(cells, [&event](const StreamingCellStateRecord &cell) {
+                return cell.operation == event.operation;
+            });
+            return matchingCell != cells.end() ? Result<void>::Success()
+                                               : Internal::Failure<void>(WorldStreamingErrors::DiagnosticProjectionStale);
         }
 
         /** @brief Orders exact operation handles by persistent cell key, generation and operation identity. */
@@ -115,11 +145,6 @@ namespace Horo::WorldStreaming {
                 return false;
             return std::tuple{left.fence.generation.Value(), left.operation.Value()} <
                    std::tuple{right.fence.generation.Value(), right.operation.Value()};
-        }
-
-        /** @brief Verifies that one fence belongs to the captured mounted authority. */
-        bool MatchesOwner(const StreamingFence &fence, const StreamingRuntimeOwnerToken &owner) noexcept {
-            return fence.partition == owner.partition && fence.epoch == owner.epoch;
         }
 
         /** @brief Checks whether lifecycle and queue admission states describe one coherent safe point. */
@@ -181,19 +206,12 @@ namespace Horo::WorldStreaming {
             if (input.instrumentation == StreamingDiagnosticInstrumentation::Disabled)
                 return Result<void>::Success();
             for (const auto &event : events) {
-                if (!event.id.IsValid() || !event.sequence.IsValid() || !event.ownerRevision.IsValid() ||
-                    !event.snapshotRevision.IsValid() || !event.operation.IsValid())
-                    return Internal::Failure<void>(WorldStreamingErrors::DiagnosticProjectionInvalid);
-                if (event.ownerRevision != input.ownerRevision || event.snapshotRevision != input.revision ||
-                    !MatchesOwner(event.operation.fence, input.owner))
-                    return Internal::Failure<void>(WorldStreamingErrors::DiagnosticProjectionStale);
+                if (const auto identity = ValidateEventIdentity(event, input); identity.HasError())
+                    return identity;
                 if (const auto semantics = ValidateEventSemantics(event); semantics.HasError())
                     return semantics;
-                if (event.category != StreamingDiagnosticEventCategory::Admission &&
-                    std::ranges::find_if(cells, [&event](const StreamingCellStateRecord &cell) {
-                    return cell.operation == event.operation;
-                }) == cells.end())
-                    return Internal::Failure<void>(WorldStreamingErrors::DiagnosticProjectionStale);
+                if (const auto correlation = ValidateEventCellCorrelation(event, cells); correlation.HasError())
+                    return correlation;
             }
             return Result<void>::Success();
         }
