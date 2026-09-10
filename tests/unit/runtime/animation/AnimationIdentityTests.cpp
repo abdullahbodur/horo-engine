@@ -44,6 +44,7 @@ namespace Horo::Animation {
         CHECK(graph.Asset() == retarget.Asset());
         static_assert(!std::is_same_v<SkeletonId, AnimationClipId>);
         static_assert(!std::is_same_v<AnimationGraphId, RetargetProfileId>);
+        static_assert(!std::is_same_v<JointId, SkeletonSocketId>);
         static_assert(!std::is_convertible_v<Assets::AssetId, SkeletonId>);
         static_assert(std::is_trivially_copyable_v<AnimationComponentId>);
         REQUIRE(SkeletonId::Create({}).HasError());
@@ -117,10 +118,26 @@ namespace Horo::Animation {
     }
 
     TEST_CASE("Animation failures expose unique stable public identities", "[unit][animation][errors]") {
-        const std::array descriptors{&AnimationErrors::IdentityInvalid,          &AnimationErrors::HandleMalformed,
-                                     &AnimationErrors::HandleOwnerMismatch,      &AnimationErrors::HandleStale,
-                                     &AnimationErrors::GenerationExhausted,      &AnimationErrors::ComponentInvalid,
-                                     &AnimationErrors::ComponentBindingMismatch, &AnimationErrors::ContractVersionUnsupported};
+        const std::array descriptors{
+            &AnimationErrors::IdentityInvalid,
+            &AnimationErrors::HandleMalformed,
+            &AnimationErrors::HandleOwnerMismatch,
+            &AnimationErrors::HandleStale,
+            &AnimationErrors::GenerationExhausted,
+            &AnimationErrors::ComponentInvalid,
+            &AnimationErrors::ComponentBindingMismatch,
+            &AnimationErrors::ContractVersionUnsupported,
+            &AnimationErrors::SkeletonVersionUnsupported,
+            &AnimationErrors::SkeletonAdmissionRejected,
+            &AnimationErrors::SkeletonValidationCancelled,
+            &AnimationErrors::SkeletonReloadMismatch,
+            &AnimationErrors::SkeletonLimitExceeded,
+            &AnimationErrors::SkeletonDuplicateIdentity,
+            &AnimationErrors::SkeletonJointMissing,
+            &AnimationErrors::SkeletonHierarchyCycle,
+            &AnimationErrors::SkeletonTransformInvalid,
+            &AnimationErrors::SkeletonMetadataInvalid,
+        };
         std::set<std::string_view> codes;
         for (const ErrorCodeDescriptor *descriptor : descriptors) {
             CHECK(descriptor->domain.Value() == "horo.animation");

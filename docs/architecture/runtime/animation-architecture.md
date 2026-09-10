@@ -101,31 +101,48 @@ Scene unload and shutdown stop admission, cancel/join bounded work, revoke/drain
 leases, and retire generations before pose storage, assets, and dependencies are
 released. No fallback converts stale handles to a newly loaded instance.
 
-A skeleton is a hierarchy of joints. Each joint has:
+A skeleton is an immutable validated hierarchy owned by `AnimationApi`. Candidate
+assets are bounded before hierarchy work, then canonicalized with the
+lexicographically least stable-identity topological order. Every parent therefore
+precedes its children regardless of source container order, and disconnected roots
+are retained in stable identity order. Duplicate identities, missing parents,
+cycles, excessive depth/counts, malformed transforms, inconsistent inverse bind
+matrices, non-reciprocal mirror pairs and sockets targeting absent joints fail with
+stable typed results before publication.
 
-- stable name and index
-- parent index (`-1` for root)
+Each joint has:
+
+- stable typed identity and bounded advisory name
+- optional stable parent identity (empty for a root)
 - inverse bind matrix
-- local-space default transform
-- optional metadata (mirror joint, IK hint, retargeting bone type)
+- local-space reference transform
+- typed retarget role, side and optional reciprocal mirror identity
 
 ```cpp
-struct Joint {
-    JointName name;
-    JointIndex parent;
+struct SkeletonJoint {
+    JointId id;
+    std::optional<JointId> parent;
     Mat4 inverseBindMatrix;
-    Transform defaultLocalTransform;
+    Transform referenceLocalTransform;
+    SkeletonRetargetRole retargetRole;
+    SkeletonJointSide side;
+    std::optional<JointId> mirror;
 };
 
-struct Skeleton {
-    SkeletonId id;
-    std::vector<Joint> joints;
-    std::vector<JointIndex> rootJoints;
+struct SkeletonAssetData {
+    SkeletonId skeleton;
+    std::vector<SkeletonJoint> joints;
+    std::vector<SkeletonSocket> sockets;
 };
 ```
 
 Skeleton assets are shared. Multiple meshes and animation clips reference the
-same skeleton.
+same skeleton. `SkeletonAsset::Create` is a synchronous load/cook/control-boundary
+transaction and is not frame-hot. It owns only portable values and bounded dynamic
+storage; it performs no I/O, service lookup, callback, job scheduling or backend
+selection. Initial load and compatible reload use the same validator. A reload
+candidate must preserve the persistent `SkeletonId`; cancellation and shutdown fail
+closed without publishing partial state or replacing the last good snapshot.
 
 ## Pose
 

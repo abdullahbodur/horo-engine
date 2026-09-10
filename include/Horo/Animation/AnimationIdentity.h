@@ -91,6 +91,7 @@ namespace Horo::Animation {
 
     struct AnimationComponentIdentityTag;
     struct JointIdentityTag;
+    struct SkeletonSocketIdentityTag;
     struct AnimationRuntimeIdentityTag;
     struct PoseGenerationIdentityTag;
     struct AnimationTickIdentityTag;
@@ -101,6 +102,8 @@ namespace Horo::Animation {
     using AnimationComponentId = AnimationStableIdentity<AnimationComponentIdentityTag>;
     /** @brief Stable skeleton-local joint identity, independent of hierarchy array position or name. */
     using JointId = AnimationStableIdentity<JointIdentityTag>;
+    /** @brief Stable skeleton-local socket identity, independent of joint array position or display name. */
+    using SkeletonSocketId = AnimationStableIdentity<SkeletonSocketIdentityTag>;
     /** @brief Process-local owner identity of one animation-runtime incarnation. */
     using AnimationRuntimeId = AnimationStableIdentity<AnimationRuntimeIdentityTag>;
     /** @brief Monotonic committed-pose generation within one runtime instance. */
