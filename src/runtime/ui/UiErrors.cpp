@@ -194,6 +194,24 @@ namespace Horo::Runtime::Ui::UiErrors {
                                        "Provide a stable Horo asset with the exact nonzero revision and semantic role.",
                                        false,
                                        true};
+    /** @copydoc RenderSnapshotStorageExhausted */
+    const ErrorCodeDescriptor
+        RenderSnapshotStorageExhausted{UiDomain,
+                                       ErrorCode{"runtime_ui.render_snapshot.storage_exhausted"},
+                                       ErrorSeverity::Error,
+                                       "Every bounded Runtime UI render snapshot slot is still leased.",
+                                       "Retire an in-flight snapshot before retrying; never overwrite or allocate fallback storage.",
+                                       true,
+                                       false};
+    /** @copydoc RenderSnapshotLifecycleUnavailable */
+    const ErrorCodeDescriptor
+        RenderSnapshotLifecycleUnavailable{UiDomain,
+                                           ErrorCode{"runtime_ui.render_snapshot.lifecycle_unavailable"},
+                                           ErrorSeverity::Error,
+                                           "The Runtime UI render extractor is closed.",
+                                           "Create a new extractor for the active view generation before publishing another snapshot.",
+                                           false,
+                                           false};
     /** @copydoc DiagnosticInvalid */
     const ErrorCodeDescriptor
         DiagnosticInvalid{UiDomain,

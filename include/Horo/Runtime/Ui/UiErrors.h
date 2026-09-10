@@ -54,6 +54,10 @@ namespace Horo::Runtime::Ui::UiErrors {
     extern const ErrorCodeDescriptor RenderCommandInvalid;
     /** @brief A Runtime UI render resource identity, role, or revision is invalid. */
     extern const ErrorCodeDescriptor RenderResourceReferenceInvalid;
+    /** @brief Every preallocated Runtime UI render snapshot slot is still leased by an in-flight frame. */
+    extern const ErrorCodeDescriptor RenderSnapshotStorageExhausted;
+    /** @brief A Runtime UI render extractor is closed and no longer accepts snapshots. */
+    extern const ErrorCodeDescriptor RenderSnapshotLifecycleUnavailable;
     /** @brief Runtime UI diagnostic evidence is malformed or exceeds its fixed bounds. */
     extern const ErrorCodeDescriptor DiagnosticInvalid;
     /** @brief A Runtime UI diagnostic category or source error is not part of the declared contract. */

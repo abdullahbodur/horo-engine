@@ -3,9 +3,12 @@
 #include "Horo/Runtime/Ui/UiErrors.h"
 
 #include <algorithm>
+#include <array>
+#include <atomic>
 #include <cmath>
+#include <exception>
+#include <limits>
 #include <new>
-#include <type_traits>
 #include <utility>
 #include <vector>
 
@@ -52,23 +55,39 @@ namespace Horo::Runtime::Ui {
             return Result<void>::Success();
         }
 
-        Result<void> ValidateViewDescriptor(const UiRenderSnapshotDescriptor &descriptor) {
-            if (!descriptor.interactionRevision.IsValid() || !descriptor.snapshotRevision.IsValid())
-                return Failure(UiErrors::RevisionInvalid);
-            if (!descriptor.view.IsValid() || descriptor.view.ownership != descriptor.instance.ownership)
-                return Failure(UiErrors::HandleOwnerMismatch);
-            return descriptor.limits.IsValid() ? Result<void>::Success() : Failure(UiErrors::CapacityExceeded);
+        bool FitsWithin(const UiRenderSnapshotLimits &requested, const UiRenderSnapshotLimits &reserved) noexcept {
+            const std::array requestedCounts{requested.commands, requested.textRuns,   requested.glyphs,   requested.clips,
+                                             requested.masks,    requested.transforms, requested.resources};
+            const std::array reservedCounts{reserved.commands, reserved.textRuns,   reserved.glyphs,   reserved.clips,
+                                            reserved.masks,    reserved.transforms, reserved.resources};
+            for (std::size_t index = 0; index < requestedCounts.size(); ++index)
+                if (requestedCounts[index] > reservedCounts[index])
+                    return false;
+            return true;
         }
 
-        Result<void> ValidateCounts(const UiRenderSnapshotDescriptor &descriptor, const std::size_t commandCount,
-                                    const std::size_t textRunCount, const std::size_t glyphCount, const std::size_t clipCount,
-                                    const std::size_t maskCount, const std::size_t transformCount, const std::size_t resourceCount) {
-            const auto &limits = descriptor.limits;
-            if (commandCount > limits.commands || textRunCount > limits.textRuns || glyphCount > limits.glyphs)
-                return Failure(UiErrors::CapacityExceeded);
-            if (clipCount > limits.clips || maskCount > limits.masks || transformCount > limits.transforms)
-                return Failure(UiErrors::CapacityExceeded);
-            return resourceCount <= limits.resources ? Result<void>::Success() : Failure(UiErrors::CapacityExceeded);
+        Result<void> ValidateViewDescriptor(const UiRenderSnapshotDescriptor &descriptor, const UiRenderViewId expectedView,
+                                            const UiRenderSnapshotRevision lastRevision, const UiRenderSnapshotLimits &reservedLimits) {
+            if (!descriptor.interactionRevision.IsValid() || !descriptor.snapshotRevision.IsValid())
+                return Failure(UiErrors::RevisionInvalid);
+            if (!descriptor.view.IsValid() || descriptor.view.ownership != descriptor.instance.ownership || descriptor.view != expectedView)
+                return Failure(UiErrors::HandleOwnerMismatch);
+            if (lastRevision.IsValid() && descriptor.snapshotRevision.Compare(lastRevision) != UiRevisionRelation::Newer)
+                return Failure(UiErrors::RevisionStale);
+            return descriptor.limits.IsValid() && FitsWithin(descriptor.limits, reservedLimits) ? Result<void>::Success()
+                                                                                                : Failure(UiErrors::CapacityExceeded);
+        }
+
+        Result<void> ValidateCounts(const UiRenderSnapshotLimits &limits, const UiRenderProjection &projection) {
+            const std::array counts{projection.commands.size(), projection.textRuns.size(), projection.glyphs.size(),
+                                    projection.clips.size(),    projection.masks.size(),    projection.transforms.size(),
+                                    projection.resources.size()};
+            const std::array capacities{static_cast<std::size_t>(limits.commands), static_cast<std::size_t>(limits.textRuns),
+                                        static_cast<std::size_t>(limits.glyphs),   static_cast<std::size_t>(limits.clips),
+                                        static_cast<std::size_t>(limits.masks),    static_cast<std::size_t>(limits.transforms),
+                                        static_cast<std::size_t>(limits.resources)};
+            return std::ranges::equal(counts, capacities, std::less_equal{}) ? Result<void>::Success()
+                                                                             : Failure(UiErrors::CapacityExceeded);
         }
 
         Result<void> ValidateResources(const std::span<const UiRenderResourceReference> resources) {
@@ -148,6 +167,28 @@ namespace Horo::Runtime::Ui {
             }
             return Result<void>::Success();
         }
+
+        Result<void> ValidateProjectionTables(const UiRenderProjection &projection) {
+            if (const auto resources = ValidateResources(projection.resources); resources.HasError())
+                return resources;
+            if (!std::ranges::all_of(projection.transforms, &UiLogicalTransform::IsValid))
+                return Failure(UiErrors::RenderSnapshotInvalid);
+            return ValidateText(projection.textRuns, projection.glyphs, projection.resources);
+        }
+
+        Result<void> ValidateProjectionTopology(const UiElementTree &tree, const UiRenderProjection &projection) {
+            if (const auto clips = ValidateClips(projection.clips); clips.HasError())
+                return clips;
+            if (const auto masks = ValidateMasks(projection.masks, projection.transforms, projection.resources); masks.HasError())
+                return masks;
+            return ValidateCommands(tree, projection.commands, projection.textRuns, projection.clips, projection.masks,
+                                    projection.transforms, projection.resources);
+        }
+
+        template <typename Value> void CopyInto(std::vector<Value> &destination, const std::span<const Value> source) {
+            destination.resize(source.size());
+            std::ranges::copy(source, destination.begin());
+        }
     }  // namespace
 
     /** @copydoc UiLogicalExtent::IsValid */
@@ -172,8 +213,35 @@ namespace Horo::Runtime::Ui {
         return ValidPaintLimits(*this) && ValidProjectionLimits(*this);
     }
 
-    /** @brief Private immutable frame-owned storage. */
+    /** @copydoc UiRenderExtractorDescriptor::IsValid */
+    bool UiRenderExtractorDescriptor::IsValid() const noexcept {
+        return view.IsValid() && limits.IsValid() && concurrentSnapshots > 0 && concurrentSnapshots <= MaximumUiRenderSnapshotsInFlight;
+    }
+
+    /** @brief One preallocated frame-owned slot guarded by an explicit immutable lease count. */
     struct UiRenderSnapshot::Storage final {
+        /** @brief Releases an acquired slot unless publication commits it to a snapshot. */
+        class PublishLease final {
+        public:
+            explicit PublishLease(Storage &storage) noexcept : storage_(&storage) {}
+
+            PublishLease(const PublishLease &) = delete;
+            PublishLease &operator=(const PublishLease &) = delete;
+
+            ~PublishLease() {
+                if (storage_)
+                    storage_->leases.store(0);
+            }
+
+            void Commit() noexcept {
+                storage_ = nullptr;
+            }
+
+        private:
+            Storage *storage_;
+        };
+
+        mutable std::atomic<std::uint64_t> leases{};
         UiRenderSnapshotDescriptor descriptor;
         std::vector<UiDrawCommand> commands;
         std::vector<UiTextRun> textRuns;
@@ -182,50 +250,133 @@ namespace Horo::Runtime::Ui {
         std::vector<UiMask> masks;
         std::vector<UiLogicalTransform> transforms;
         std::vector<UiRenderResourceReference> resources;
+
+        explicit Storage(const UiRenderSnapshotLimits &limits) {
+            commands.reserve(limits.commands);
+            textRuns.reserve(limits.textRuns);
+            glyphs.reserve(limits.glyphs);
+            clips.reserve(limits.clips);
+            masks.reserve(limits.masks);
+            transforms.reserve(limits.transforms);
+            resources.reserve(limits.resources);
+        }
+
+        /** @brief Copies a validated projection without exceeding the capacities reserved during extractor creation. */
+        void Publish(const UiRenderSnapshotDescriptor &sourceDescriptor, const UiRenderProjection &projection) {
+            descriptor = sourceDescriptor;
+            CopyInto(commands, projection.commands);
+            CopyInto(textRuns, projection.textRuns);
+            CopyInto(glyphs, projection.glyphs);
+            CopyInto(clips, projection.clips);
+            CopyInto(masks, projection.masks);
+            CopyInto(transforms, projection.transforms);
+            CopyInto(resources, projection.resources);
+        }
     };
 
-    /** @copydoc UiRenderSnapshot::Extract */
-    Result<UiRenderSnapshot> UiRenderSnapshot::Extract(const UiElementTree &tree, const UiRenderSnapshotDescriptor &descriptor,
-                                                       const UiRenderProjection &projection) {
-        const auto &[commands, textRuns, glyphs, clips, masks, transforms, resources] = projection;
-        if (const auto validated = ValidateTreeDescriptor(tree, descriptor); validated.HasError())
-            return Result<UiRenderSnapshot>::Failure(validated.ErrorValue());
-        if (const auto validated = ValidateViewDescriptor(descriptor); validated.HasError())
-            return Result<UiRenderSnapshot>::Failure(validated.ErrorValue());
-        if (const auto bounded = ValidateCounts(descriptor, commands.size(), textRuns.size(), glyphs.size(), clips.size(), masks.size(),
-                                                transforms.size(), resources.size());
-            bounded.HasError())
-            return Result<UiRenderSnapshot>::Failure(bounded.ErrorValue());
-        if (const auto validResources = ValidateResources(resources); validResources.HasError())
-            return Result<UiRenderSnapshot>::Failure(validResources.ErrorValue());
-        if (!std::ranges::all_of(transforms, &UiLogicalTransform::IsValid))
-            return Failure<UiRenderSnapshot>(UiErrors::RenderSnapshotInvalid);
-        if (const auto validText = ValidateText(textRuns, glyphs, resources); validText.HasError())
-            return Result<UiRenderSnapshot>::Failure(validText.ErrorValue());
-        if (const auto validClips = ValidateClips(clips); validClips.HasError())
-            return Result<UiRenderSnapshot>::Failure(validClips.ErrorValue());
-        if (const auto validMasks = ValidateMasks(masks, transforms, resources); validMasks.HasError())
-            return Result<UiRenderSnapshot>::Failure(validMasks.ErrorValue());
-        if (const auto validCommands = ValidateCommands(tree, commands, textRuns, clips, masks, transforms, resources);
-            validCommands.HasError())
-            return Result<UiRenderSnapshot>::Failure(validCommands.ErrorValue());
-        try {
-            auto storage = std::make_shared<Storage>(Storage{descriptor,
-                                                             {commands.begin(), commands.end()},
-                                                             {textRuns.begin(), textRuns.end()},
-                                                             {glyphs.begin(), glyphs.end()},
-                                                             {clips.begin(), clips.end()},
-                                                             {masks.begin(), masks.end()},
-                                                             {transforms.begin(), transforms.end()},
-                                                             {resources.begin(), resources.end()}});
-            return Result<UiRenderSnapshot>::Success(UiRenderSnapshot{std::move(storage)});
-        } catch (const std::bad_alloc &) {
-            return Failure<UiRenderSnapshot>(UiErrors::CapacityExceeded);
+    /** @brief Preallocated snapshot slots and owner-thread admission state for one exact view. */
+    struct UiRenderExtractor::Storage final {
+        UiRenderExtractorDescriptor descriptor;
+        UiRenderExtractorState lifecycle{UiRenderExtractorState::Active};
+        std::vector<std::shared_ptr<UiRenderSnapshot::Storage>> slots;
+        std::size_t nextSlot{};
+        UiRenderSnapshotRevision lastRevision;
+
+        explicit Storage(const UiRenderExtractorDescriptor &source) : descriptor(source) {
+            slots.reserve(source.concurrentSnapshots);
+            for (std::uint32_t index = 0; index < source.concurrentSnapshots; ++index)
+                slots.push_back(std::make_shared<UiRenderSnapshot::Storage>(source.limits));
         }
+
+        /** @brief Validates one transaction against the exact tree, view, revision lineage, and reserved bounds. */
+        Result<void> Validate(const UiElementTree &tree, const UiRenderSnapshotDescriptor &snapshotDescriptor,
+                              const UiRenderProjection &projection) const {
+            if (const auto treeEvidence = ValidateTreeDescriptor(tree, snapshotDescriptor); treeEvidence.HasError())
+                return treeEvidence;
+            if (const auto viewEvidence = ValidateViewDescriptor(snapshotDescriptor, descriptor.view, lastRevision, descriptor.limits);
+                viewEvidence.HasError())
+                return viewEvidence;
+            if (const auto counts = ValidateCounts(snapshotDescriptor.limits, projection); counts.HasError())
+                return counts;
+            if (const auto tables = ValidateProjectionTables(projection); tables.HasError())
+                return tables;
+            return ValidateProjectionTopology(tree, projection);
+        }
+
+        /** @brief Acquires one free slot in deterministic round-robin order. */
+        std::shared_ptr<UiRenderSnapshot::Storage> TryAcquire() noexcept {
+            for (std::size_t offset = 0; offset < slots.size(); ++offset) {
+                const auto index = (nextSlot + offset) % slots.size();
+                std::uint64_t expected{};
+                if (slots[index]->leases.compare_exchange_strong(expected, 1)) {
+                    nextSlot = (index + 1) % slots.size();
+                    return slots[index];
+                }
+            }
+            return {};
+        }
+
+        /** @brief Reports whether every preallocated slot is no longer leased. */
+        bool IsDrained() const noexcept {
+            return std::ranges::all_of(slots, [](const auto &slot) {
+                return slot->leases.load() == 0;
+            });
+        }
+    };
+
+    /** @copydoc UiRenderSnapshot::UiRenderSnapshot(std::shared_ptr<const Storage>) */
+    UiRenderSnapshot::UiRenderSnapshot(std::shared_ptr<const Storage> storage) noexcept : storage_(std::move(storage)) {}
+
+    /** @copydoc UiRenderSnapshot::~UiRenderSnapshot */
+    UiRenderSnapshot::~UiRenderSnapshot() {
+        Release();
     }
 
-    /** @copydoc UiRenderSnapshot::UiRenderSnapshot */
-    UiRenderSnapshot::UiRenderSnapshot(std::shared_ptr<const Storage> storage) noexcept : storage_(std::move(storage)) {}
+    /** @copydoc UiRenderSnapshot::UiRenderSnapshot(const UiRenderSnapshot&) */
+    UiRenderSnapshot::UiRenderSnapshot(const UiRenderSnapshot &other) noexcept : storage_(other.storage_) {
+        Retain();
+    }
+
+    /** @copydoc UiRenderSnapshot::operator=(const UiRenderSnapshot&) */
+    UiRenderSnapshot &UiRenderSnapshot::operator=(const UiRenderSnapshot &other) noexcept {
+        if (this != &other) {
+            UiRenderSnapshot replacement{other};
+            *this = std::move(replacement);
+        }
+        return *this;
+    }
+
+    /** @copydoc UiRenderSnapshot::UiRenderSnapshot(UiRenderSnapshot&&) */
+    UiRenderSnapshot::UiRenderSnapshot(UiRenderSnapshot &&other) noexcept : storage_(std::move(other.storage_)) {}
+
+    /** @copydoc UiRenderSnapshot::operator=(UiRenderSnapshot&&) */
+    UiRenderSnapshot &UiRenderSnapshot::operator=(UiRenderSnapshot &&other) noexcept {
+        if (this != &other) {
+            Release();
+            storage_ = std::move(other.storage_);
+        }
+        return *this;
+    }
+
+    /** @copydoc UiRenderSnapshot::Retain */
+    void UiRenderSnapshot::Retain() const noexcept {
+        if (!storage_)
+            return;
+        auto current = storage_->leases.load();
+        while (current != std::numeric_limits<std::uint64_t>::max()) {
+            if (storage_->leases.compare_exchange_weak(current, current + 1))
+                return;
+        }
+        std::terminate();
+    }
+
+    /** @copydoc UiRenderSnapshot::Release */
+    void UiRenderSnapshot::Release() noexcept {
+        if (!storage_)
+            return;
+        storage_->leases.fetch_sub(1);
+        storage_.reset();
+    }
 
     /** @copydoc UiRenderSnapshot::Descriptor */
     const UiRenderSnapshotDescriptor &UiRenderSnapshot::Descriptor() const noexcept {
@@ -265,5 +416,69 @@ namespace Horo::Runtime::Ui {
     /** @copydoc UiRenderSnapshot::Resources */
     std::span<const UiRenderResourceReference> UiRenderSnapshot::Resources() const noexcept {
         return storage_->resources;
+    }
+
+    /** @copydoc UiRenderExtractor::Create */
+    Result<UiRenderExtractor> UiRenderExtractor::Create(const UiRenderExtractorDescriptor &descriptor) {
+        if (!descriptor.view.IsValid())
+            return Failure<UiRenderExtractor>(UiErrors::HandleMalformed);
+        if (!descriptor.IsValid())
+            return Failure<UiRenderExtractor>(UiErrors::CapacityExceeded);
+        try {
+            return Result<UiRenderExtractor>::Success(UiRenderExtractor{std::make_unique<Storage>(descriptor)});
+        } catch (const std::bad_alloc &) {
+            return Failure<UiRenderExtractor>(UiErrors::CapacityExceeded);
+        }
+    }
+
+    /** @copydoc UiRenderExtractor::UiRenderExtractor(std::unique_ptr<Storage>) */
+    UiRenderExtractor::UiRenderExtractor(std::unique_ptr<Storage> storage) noexcept : storage_(std::move(storage)) {}
+
+    /** @copydoc UiRenderExtractor::~UiRenderExtractor */
+    UiRenderExtractor::~UiRenderExtractor() {
+        Close();
+    }
+
+    /** @copydoc UiRenderExtractor::UiRenderExtractor(UiRenderExtractor&&) */
+    UiRenderExtractor::UiRenderExtractor(UiRenderExtractor &&) noexcept = default;
+
+    /** @copydoc UiRenderExtractor::operator=(UiRenderExtractor&&) */
+    UiRenderExtractor &UiRenderExtractor::operator=(UiRenderExtractor &&) noexcept = default;
+
+    /** @copydoc UiRenderExtractor::Extract */
+    Result<UiRenderSnapshot> UiRenderExtractor::Extract(const UiElementTree &tree, const UiRenderSnapshotDescriptor &descriptor,
+                                                        const UiRenderProjection &projection) {
+        if (!storage_ || storage_->lifecycle != UiRenderExtractorState::Active)
+            return Failure<UiRenderSnapshot>(UiErrors::RenderSnapshotLifecycleUnavailable);
+        if (const auto validated = storage_->Validate(tree, descriptor, projection); validated.HasError())
+            return Result<UiRenderSnapshot>::Failure(validated.ErrorValue());
+        auto slot = storage_->TryAcquire();
+        if (!slot)
+            return Failure<UiRenderSnapshot>(UiErrors::RenderSnapshotStorageExhausted);
+        UiRenderSnapshot::Storage::PublishLease publishLease{*slot};
+        try {
+            slot->Publish(descriptor, projection);
+        } catch (const std::bad_alloc &) {
+            return Failure<UiRenderSnapshot>(UiErrors::CapacityExceeded);
+        }
+        publishLease.Commit();
+        storage_->lastRevision = descriptor.snapshotRevision;
+        return Result<UiRenderSnapshot>::Success(UiRenderSnapshot{std::move(slot)});
+    }
+
+    /** @copydoc UiRenderExtractor::Close */
+    void UiRenderExtractor::Close() noexcept {
+        if (storage_)
+            storage_->lifecycle = UiRenderExtractorState::Closed;
+    }
+
+    /** @copydoc UiRenderExtractor::IsDrained */
+    bool UiRenderExtractor::IsDrained() const noexcept {
+        return !storage_ || storage_->IsDrained();
+    }
+
+    /** @copydoc UiRenderExtractor::State */
+    UiRenderExtractorState UiRenderExtractor::State() const noexcept {
+        return storage_ ? storage_->lifecycle : UiRenderExtractorState::Closed;
     }
 }  // namespace Horo::Runtime::Ui

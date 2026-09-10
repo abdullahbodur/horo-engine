@@ -35,6 +35,53 @@ namespace Horo::Runtime::Ui {
         [[nodiscard]] bool IsValid() const noexcept;
     };
 
+    /** @brief Opaque owner-issued non-reusable element-slot reservation for one exact retained tree. */
+    class UiElementSlotRange final {
+    public:
+        /** @brief Returns the first owner-wide element slot. @return Non-zero slot. */
+        [[nodiscard]] std::uint32_t FirstSlot() const noexcept;
+        /** @brief Returns the number of slots reserved for the tree. @return Positive capacity. */
+        [[nodiscard]] std::uint32_t SlotCount() const noexcept;
+
+    private:
+        friend class UiElementSlotAllocator;
+        UiElementSlotRange(std::uint32_t firstSlot, std::uint32_t slotCount) noexcept;
+        std::uint32_t firstSlot_{};
+        std::uint32_t slotCount_{};
+    };
+
+    /**
+     * @brief Move-only owner-wide allocator that monotonically reserves disjoint retained-tree element slots.
+     * @details The Runtime UI service owns exactly one allocator per UiOwnershipGeneration. Reserved ranges are burned even when
+     *          subsequent tree preparation fails and are never reused before that ownership generation ends.
+     */
+    class UiElementSlotAllocator final {
+    public:
+        /**
+         * @brief Creates the sole element-slot allocator for one exact owner generation.
+         * @param ownership Active owner.
+         * @return Allocator or error.
+         * @pre Called exactly once by the Runtime UI service that issued ownership.
+         */
+        [[nodiscard]] static Result<UiElementSlotAllocator> Create(UiOwnershipGeneration ownership);
+        /** @brief Transfers the remaining owner-wide slot namespace. @param other Allocator to invalidate and transfer. */
+        UiElementSlotAllocator(UiElementSlotAllocator &&other) noexcept;
+        UiElementSlotAllocator &operator=(UiElementSlotAllocator &&other) = delete;
+        UiElementSlotAllocator(const UiElementSlotAllocator &) = delete;
+        UiElementSlotAllocator &operator=(const UiElementSlotAllocator &) = delete;
+
+        /** @brief Returns the exact owner generation. @return Invalid only after move. */
+        [[nodiscard]] UiOwnershipGeneration Ownership() const noexcept;
+
+    private:
+        friend class UiElementTree;
+        explicit UiElementSlotAllocator(UiOwnershipGeneration ownership) noexcept;
+        /** @brief Burns one contiguous range or reports non-wrapping generation exhaustion. */
+        [[nodiscard]] Result<UiElementSlotRange> Reserve(std::uint32_t slotCount);
+        UiOwnershipGeneration ownership_;
+        std::uint64_t nextSlot_{1};
+    };
+
     /** @brief Exact immutable ownership and source-document evidence for one runtime canvas tree. */
     struct UiElementTreeDescriptor final {
         RuntimeUiInstanceId instance;        /**< Exact mutable runtime document instance. */
@@ -144,11 +191,12 @@ namespace Horo::Runtime::Ui {
     public:
         /**
          * @brief Builds a complete private tree candidate from authored descriptors.
+         * @param slotAllocator Exact-owner allocator that burns a disjoint element-slot range for this tree.
          * @param descriptor Exact runtime/canvas/document identity, initial revision and lifetime limits.
          * @param elements Non-empty descriptors; exactly one root and authored sibling order are required.
          * @return Owned active tree or a typed malformed/conflict/capacity failure.
          */
-        [[nodiscard]] static Result<UiElementTree> Create(const UiElementTreeDescriptor &descriptor,
+        [[nodiscard]] static Result<UiElementTree> Create(UiElementSlotAllocator &slotAllocator, const UiElementTreeDescriptor &descriptor,
                                                           std::span<const UiElementDescriptor> elements);
         ~UiElementTree();
         UiElementTree(UiElementTree &&) noexcept;

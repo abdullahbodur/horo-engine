@@ -31,6 +31,52 @@ namespace Horo::Runtime::Ui {
                commands <= MaximumUiStructuralCommands;
     }
 
+    /** @copydoc UiElementSlotRange::UiElementSlotRange */
+    UiElementSlotRange::UiElementSlotRange(const std::uint32_t firstSlot, const std::uint32_t slotCount) noexcept
+        : firstSlot_(firstSlot), slotCount_(slotCount) {}
+
+    /** @copydoc UiElementSlotRange::FirstSlot */
+    std::uint32_t UiElementSlotRange::FirstSlot() const noexcept {
+        return firstSlot_;
+    }
+
+    /** @copydoc UiElementSlotRange::SlotCount */
+    std::uint32_t UiElementSlotRange::SlotCount() const noexcept {
+        return slotCount_;
+    }
+
+    /** @copydoc UiElementSlotAllocator::Create */
+    Result<UiElementSlotAllocator> UiElementSlotAllocator::Create(const UiOwnershipGeneration ownership) {
+        return ownership.IsValid() ? Result<UiElementSlotAllocator>::Success(UiElementSlotAllocator{ownership})
+                                   : Failure<UiElementSlotAllocator>(UiErrors::OwnershipGenerationInvalid);
+    }
+
+    /** @copydoc UiElementSlotAllocator::UiElementSlotAllocator */
+    UiElementSlotAllocator::UiElementSlotAllocator(const UiOwnershipGeneration ownership) noexcept : ownership_(ownership) {}
+
+    /** @copydoc UiElementSlotAllocator::UiElementSlotAllocator */
+    UiElementSlotAllocator::UiElementSlotAllocator(UiElementSlotAllocator &&other) noexcept
+        : ownership_(std::exchange(other.ownership_, {})), nextSlot_(std::exchange(other.nextSlot_, 1)) {}
+
+    /** @copydoc UiElementSlotAllocator::Ownership */
+    UiOwnershipGeneration UiElementSlotAllocator::Ownership() const noexcept {
+        return ownership_;
+    }
+
+    /** @copydoc UiElementSlotAllocator::Reserve */
+    Result<UiElementSlotRange> UiElementSlotAllocator::Reserve(const std::uint32_t slotCount) {
+        if (!ownership_.IsValid())
+            return Failure<UiElementSlotRange>(UiErrors::OwnershipGenerationInvalid);
+        if (slotCount == 0)
+            return Failure<UiElementSlotRange>(UiErrors::CapacityExceeded);
+        if (constexpr auto MaximumSlot = static_cast<std::uint64_t>(std::numeric_limits<std::uint32_t>::max());
+            nextSlot_ > MaximumSlot - slotCount + 1)
+            return Failure<UiElementSlotRange>(UiErrors::GenerationExhausted);
+        const auto firstSlot = static_cast<std::uint32_t>(nextSlot_);
+        nextSlot_ += slotCount;
+        return Result<UiElementSlotRange>::Success(UiElementSlotRange{firstSlot, slotCount});
+    }
+
     /** @copydoc UiStructuralCommandBuffer::Create */
     Result<UiStructuralCommandBuffer> UiStructuralCommandBuffer::Create(const RuntimeUiInstanceId instance, const UiCanvasInstanceId canvas,
                                                                         const UiDocumentRevision documentRevision,
@@ -103,6 +149,7 @@ namespace Horo::Runtime::Ui {
         };
 
         UiElementTreeDescriptor descriptor;
+        UiElementSlotRange elementSlots;
         UiElementTreeState lifecycle{UiElementTreeState::Active};
         std::vector<Node> nodes;
         std::vector<std::uint32_t> stableIndex;
@@ -110,14 +157,15 @@ namespace Horo::Runtime::Ui {
         std::uint32_t rootSlot{};
         std::uint32_t size{};
 
-        explicit Storage(const UiElementTreeDescriptor &source) : descriptor(source), nodes(source.limits.elements) {
+        Storage(const UiElementTreeDescriptor &source, const UiElementSlotRange slots)
+            : descriptor(source), elementSlots(slots), nodes(source.limits.elements) {
             stableIndex.reserve(source.limits.elements);
             preorder.reserve(source.limits.elements);
         }
 
         /** @brief Returns the exact current handle for an occupied zero-based slot. */
         UiElementHandle Handle(const std::uint32_t slot) const noexcept {
-            return {descriptor.instance.ownership, slot + 1, nodes[slot].generation};
+            return {descriptor.instance.ownership, elementSlots.FirstSlot() + slot, nodes[slot].generation};
         }
 
         /** @brief Resolves stable identity through the sorted current index. */
@@ -132,12 +180,12 @@ namespace Horo::Runtime::Ui {
         Result<std::uint32_t> Slot(const UiElementHandle handle) const {
             if (const auto owner = ValidateUiHandleOwner(handle, descriptor.instance.ownership); owner.HasError())
                 return Result<std::uint32_t>::Failure(owner.ErrorValue());
-            if (handle.slot > nodes.size())
+            if (handle.slot < elementSlots.FirstSlot() || handle.slot - elementSlots.FirstSlot() >= elementSlots.SlotCount())
                 return Failure<std::uint32_t>(UiErrors::HandleStale);
-            const auto slot = handle.slot - 1;
+            const auto slot = handle.slot - elementSlots.FirstSlot();
             const auto &node = nodes[slot];
-            if (const auto resident =
-                    ValidateUiHandleResidency(handle, descriptor.instance.ownership, handle.slot, node.generation, node.occupied);
+            if (const auto resident = ValidateUiHandleResidency(handle, descriptor.instance.ownership, elementSlots.FirstSlot() + slot,
+                                                                node.generation, node.occupied);
                 resident.HasError())
                 return Result<std::uint32_t>::Failure(resident.ErrorValue());
             return Result<std::uint32_t>::Success(slot);
@@ -366,12 +414,17 @@ namespace Horo::Runtime::Ui {
     }  // namespace
 
     /** @copydoc UiElementTree::Create */
-    Result<UiElementTree> UiElementTree::Create(const UiElementTreeDescriptor &descriptor,
+    Result<UiElementTree> UiElementTree::Create(UiElementSlotAllocator &slotAllocator, const UiElementTreeDescriptor &descriptor,
                                                 const std::span<const UiElementDescriptor> elements) {
         if (const auto validated = ValidateTreeCreation(descriptor, elements); validated.HasError())
             return Result<UiElementTree>::Failure(validated.ErrorValue());
+        if (slotAllocator.Ownership() != descriptor.instance.ownership)
+            return Failure<UiElementTree>(UiErrors::HandleOwnerMismatch);
+        auto elementSlots = slotAllocator.Reserve(descriptor.limits.elements);
+        if (elementSlots.HasError())
+            return Result<UiElementTree>::Failure(elementSlots.ErrorValue());
         try {
-            auto state = std::make_unique<Storage>(descriptor);
+            auto state = std::make_unique<Storage>(descriptor, elementSlots.Value());
             if (const auto populated = state->Populate(elements); populated.HasError())
                 return Result<UiElementTree>::Failure(populated.ErrorValue());
             return Result<UiElementTree>::Success(UiElementTree{std::move(state)});
