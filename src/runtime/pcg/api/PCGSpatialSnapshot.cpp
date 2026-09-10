@@ -160,14 +160,15 @@ namespace Horo::PCG {
         }
 
         [[nodiscard]] Result<void> ValidateEnvelope(const PCGSpatialSnapshotCandidate &candidate) {
+            using enum PCGSpatialCoverage;
             if (!candidate.snapshot.IsValid() || !candidate.provenance.provider.IsValid() || !candidate.provenance.source.IsValid() ||
                 !candidate.provenance.revision.IsValid() || !StrictBounds(candidate.bounds))
                 return Result<void>::Failure(Failure(PCGErrors::SpatialInputInvalid));
             if (!ValidCoordinates(candidate.coordinates))
                 return Result<void>::Failure(Failure(PCGErrors::SpatialCoordinatesUnsupported));
-            if (candidate.coverage == PCGSpatialCoverage::Partial || candidate.coverage == PCGSpatialCoverage::Missing)
+            if (candidate.coverage == Partial || candidate.coverage == Missing)
                 return Result<void>::Failure(Failure(PCGErrors::SpatialCoverageUnavailable));
-            if (candidate.coverage != PCGSpatialCoverage::Complete)
+            if (candidate.coverage != Complete)
                 return Result<void>::Failure(Failure(PCGErrors::SpatialInputInvalid));
             return Result<void>::Success();
         }
@@ -233,8 +234,7 @@ namespace Horo::PCG {
             auto tierLimits = LimitsForTier(candidate.tier);
             if (tierLimits.HasError())
                 return Result<std::size_t>::Failure(Failure(PCGErrors::SpatialInputInvalid));
-            auto elementCount = CountElements(candidate, tierLimits.Value().maximumPointsPerNodeOutput);
-            if (elementCount.HasError())
+            if (auto elementCount = CountElements(candidate, tierLimits.Value().maximumPointsPerNodeOutput); elementCount.HasError())
                 return elementCount;
             auto collected = CollectIdentities(candidate, tierLimits.Value().maximumMaterializedPointRecords,
                                                tierLimits.Value().maximumPointsPerNodeOutput);
