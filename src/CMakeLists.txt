@@ -97,6 +97,7 @@ target_include_directories(HoroPlatform
 target_link_libraries(HoroPlatform PUBLIC HoroEngine::Foundation)
 
 add_library(HoroPlatformServices STATIC
+        platform_services/AchievementDefinitionRegistry.cpp
         platform_services/PlatformRequest.cpp
         platform_services/PlatformRequestErrors.cpp
         platform_services/PlatformServicesBackend.cpp

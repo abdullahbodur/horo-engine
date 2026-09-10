@@ -929,6 +929,7 @@ add_executable(HoroPlatformTests
 target_compile_features(HoroPlatformTests PRIVATE cxx_std_20)
 target_link_libraries(HoroPlatformTests PRIVATE HoroEngine::Platform)
 add_executable(HoroPlatformRequestTests
+        unit/platform_services/AchievementDefinitionRegistryTests.cpp
         unit/platform_services/PlatformRequestTests.cpp
         unit/platform_services/PlatformServicesBackendTests.cpp
         unit/platform_services/PlatformStableIdRegistryTests.cpp

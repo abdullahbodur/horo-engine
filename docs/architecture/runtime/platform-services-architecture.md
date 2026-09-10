@@ -451,6 +451,17 @@ using AchievementMutation =
     std::variant<UnlockOnce, SetProgressMaximum>;
 ```
 
+Implementation status on 10 September 2026: PLS-003.3 publishes the typed
+`AchievementDefinitionRegistry` contract in `HoroEngine::PlatformServices`. A detached
+complete candidate is bound to one ADR-132 project and registry fingerprint, validates every active
+achievement exactly once, canonicalizes by unsigned stable ID and publishes an immutable
+semantic fingerprint. Localization keys and progress totals are explicitly bounded and
+malformed fields carry document-path diagnostics. Ordinary replacement may change
+presentation but rejects authority/progress changes and definition removal until the
+stable ledger retains the corresponding tombstone. Provider mappings stay in the
+opaque ADR-132 mapping pipeline; SDK types and raw account identifiers do not enter the
+definition snapshot.
+
 Gameplay submits a committed typed fact through `IProgressionIntentSink`; it never
 calls a provider service. The product progression router validates the definition,
 value and authority. Server-mode clients send ordinary gameplay input/commands; the
@@ -1373,6 +1384,10 @@ Required tests cover:
   state only within one exact lane and never becomes history
 - request cancellation does not leak state
 - stable ID registries reject unregistered names
+- achievement definition candidates reject malformed localization/progress fields,
+  duplicate or incomplete active IDs, stale/cross-project ledger bindings and ordinary
+  authority/progress replacement; presentation-only replacement and tombstoned removal
+  preserve the prior immutable snapshot
 - stable ID golden vectors agree across hosts; malformed salts/encodings, stored/
   derived mismatches, collisions, duplicate aliases and zero IDs fail closed
 - display rename/reorder and identity-preserving clones retain IDs; tombstones cannot
