@@ -257,6 +257,10 @@ horo_configure_target_header_boundary(HoroXRApi PUBLIC_HEADERS
     Horo/XR/XRErrors.h
     Horo/XR/XRIdentity.h
 )
+horo_configure_target_header_boundary(HoroTerrainApi PUBLIC_HEADERS
+    Horo/Terrain/TerrainErrors.h
+    Horo/Terrain/TerrainIdentity.h
+)
 horo_configure_target_header_boundary(HoroNavigationNull PUBLIC_HEADERS
     Horo/Navigation/Backends/NullProvider.h
 )
