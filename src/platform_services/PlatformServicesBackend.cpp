@@ -75,8 +75,8 @@ namespace Horo::PlatformServices {
     /** @copydoc ValidatePlatformServiceCapabilitySnapshot */
     Result<void> ValidatePlatformServiceCapabilitySnapshot(const PlatformServiceCapabilitySnapshot &snapshot,
                                                            const PlatformServicesBackendConfig &config) {
-        if (snapshot.interfaceVersion.major != PlatformServicesBackendInterfaceMajor ||
-            snapshot.interfaceVersion.minor < PlatformServicesBackendInterfaceMinor)
+        if (snapshot.interfaceVersion !=
+            PlatformServicesBackendInterfaceVersion{PlatformServicesBackendInterfaceMajor, PlatformServicesBackendInterfaceMinor})
             return Result<void>::Failure(MakeError(BackendErrors::IncompatibleInterfaceVersion));
         if (!snapshot.provider.IsValid() || !snapshot.providerGeneration.IsValid())
             return Result<void>::Failure(MakeError(BackendErrors::InvalidCapabilitySnapshot));
@@ -103,11 +103,9 @@ namespace Horo::PlatformServices {
         if (inspected.HasError())
             return Result<PlatformServiceCapabilitySnapshot>::Failure(inspected.ErrorValue());
         auto snapshot = std::move(inspected).Value();
-        const auto validated = ValidatePlatformServiceCapabilitySnapshot(snapshot, config);
-        if (validated.HasError())
+        if (const auto validated = ValidatePlatformServiceCapabilitySnapshot(snapshot, config); validated.HasError())
             return Result<PlatformServiceCapabilitySnapshot>::Failure(validated.ErrorValue());
-        const auto activated = backend.Activate(config);
-        if (activated.HasError()) {
+        if (const auto activated = backend.Activate(config); activated.HasError()) {
             static_cast<void>(backend.Shutdown());
             return Result<PlatformServiceCapabilitySnapshot>::Failure(activated.ErrorValue());
         }

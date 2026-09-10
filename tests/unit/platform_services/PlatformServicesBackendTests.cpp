@@ -152,6 +152,10 @@ namespace Horo::PlatformServices {
         CHECK(ValidatePlatformServiceCapabilitySnapshot(snapshot, config).ErrorValue().code.Value() ==
               BackendErrors::IncompatibleInterfaceVersion.code.Value());
         snapshot = Snapshot();
+        snapshot.interfaceVersion.minor = PlatformServicesBackendInterfaceMinor + 1;
+        CHECK(ValidatePlatformServiceCapabilitySnapshot(snapshot, config).ErrorValue().code.Value() ==
+              BackendErrors::IncompatibleInterfaceVersion.code.Value());
+        snapshot = Snapshot();
         snapshot.provider = {};
         REQUIRE(ValidatePlatformServiceCapabilitySnapshot(snapshot, config).HasError());
         snapshot = Snapshot();

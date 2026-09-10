@@ -109,7 +109,7 @@ namespace Horo::PlatformServices {
     namespace BackendErrors {
         /** @brief The candidate omitted, duplicated, contradicted, or exceeded bounded capability evidence. */
         extern const ErrorCodeDescriptor InvalidCapabilitySnapshot;
-        /** @brief The provider interface major is incompatible or its minor is too old. */
+        /** @brief The provider interface version is not exactly supported by this host. */
         extern const ErrorCodeDescriptor IncompatibleInterfaceVersion;
         /** @brief Frozen product policy requires a service that the candidate marks unavailable. */
         extern const ErrorCodeDescriptor RequiredServiceUnavailable;
