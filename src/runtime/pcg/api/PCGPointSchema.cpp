@@ -3,6 +3,7 @@
 #include "Horo/PCG/PCGErrors.h"
 
 #include <algorithm>
+#include <bit>
 #include <cmath>
 #include <limits>
 #include <new>
@@ -10,6 +11,10 @@
 
 namespace Horo::PCG {
     struct PCGPointStorage::State final {
+        State(std::shared_ptr<const PCGPointSchema> schemaValue, PCGPointCoreColumns coreValue,
+              std::vector<PCGAttributeColumn> attributeValues)
+            : schema(std::move(schemaValue)), core(std::move(coreValue)), attributes(std::move(attributeValues)) {}
+
         std::shared_ptr<const PCGPointSchema> schema;
         PCGPointCoreColumns core;
         std::vector<PCGAttributeColumn> attributes;
@@ -22,43 +27,35 @@ namespace Horo::PCG {
             return MakeError(descriptor);
         }
 
-        [[nodiscard]] bool IsKnown(const PCGOperationalTier tier) noexcept {
-            switch (tier) {
-                case PCGOperationalTier::Baseline:
-                case PCGOperationalTier::Standard:
-                case PCGOperationalTier::High:
-                    return true;
-            }
-            return false;
-        }
-
         [[nodiscard]] bool IsKnown(const PCGAttributeType type) noexcept {
+            using enum PCGAttributeType;
             switch (type) {
-                case PCGAttributeType::Boolean:
-                case PCGAttributeType::SignedInteger:
-                case PCGAttributeType::UnsignedInteger:
-                case PCGAttributeType::Scalar:
-                case PCGAttributeType::Vector2:
-                case PCGAttributeType::Vector3:
-                case PCGAttributeType::Vector4:
+                case Boolean:
+                case SignedInteger:
+                case UnsignedInteger:
+                case Scalar:
+                case Vector2:
+                case Vector3:
+                case Vector4:
                     return true;
             }
             return false;
         }
 
         [[nodiscard]] std::size_t CanonicalBytes(const PCGAttributeType type) noexcept {
+            using enum PCGAttributeType;
             switch (type) {
-                case PCGAttributeType::Boolean:
+                case Boolean:
                     return 1;
-                case PCGAttributeType::SignedInteger:
-                case PCGAttributeType::UnsignedInteger:
-                case PCGAttributeType::Scalar:
+                case SignedInteger:
+                case UnsignedInteger:
+                case Scalar:
                     return 8;
-                case PCGAttributeType::Vector2:
+                case Vector2:
                     return 8;
-                case PCGAttributeType::Vector3:
+                case Vector3:
                     return 12;
-                case PCGAttributeType::Vector4:
+                case Vector4:
                     return 16;
             }
             return 0;
@@ -66,20 +63,21 @@ namespace Horo::PCG {
 
         [[nodiscard]] PCGAttributeType TypeOf(const PCGAttributeColumnValues &values) noexcept {
             return std::visit([]<typename Column>(const Column &) {
+                using enum PCGAttributeType;
                 using T = std::remove_cvref_t<Column>;
                 if constexpr (std::is_same_v<T, PCGBoolColumn>)
-                    return PCGAttributeType::Boolean;
+                    return Boolean;
                 if constexpr (std::is_same_v<T, PCGSignedIntegerColumn>)
-                    return PCGAttributeType::SignedInteger;
+                    return SignedInteger;
                 if constexpr (std::is_same_v<T, PCGUnsignedIntegerColumn>)
-                    return PCGAttributeType::UnsignedInteger;
+                    return UnsignedInteger;
                 if constexpr (std::is_same_v<T, PCGScalarColumn>)
-                    return PCGAttributeType::Scalar;
+                    return Scalar;
                 if constexpr (std::is_same_v<T, PCGVector2Column>)
-                    return PCGAttributeType::Vector2;
+                    return Vector2;
                 if constexpr (std::is_same_v<T, PCGVector3Column>)
-                    return PCGAttributeType::Vector3;
-                return PCGAttributeType::Vector4;
+                    return Vector3;
+                return Vector4;
             }, values);
         }
 
@@ -110,8 +108,8 @@ namespace Horo::PCG {
             std::size_t start{};
             while (start <= value.size()) {
                 const std::size_t separator = value.find('.', start);
-                const std::size_t end = separator == std::string_view::npos ? value.size() : separator;
-                if (!IsCanonicalSegment(value.substr(start, end - start)))
+                if (const std::size_t end = separator == std::string_view::npos ? value.size() : separator;
+                    !IsCanonicalSegment(value.substr(start, end - start)))
                     return false;
                 if (separator == std::string_view::npos)
                     return true;
@@ -195,14 +193,15 @@ namespace Horo::PCG {
 
     /** @copydoc LimitsForTier */
     Result<PCGTierLimits> LimitsForTier(const PCGOperationalTier tier) {
+        using enum PCGOperationalTier;
         switch (tier) {
-            case PCGOperationalTier::Baseline:
+            case Baseline:
                 return Result<PCGTierLimits>::Success({32, 64, 32, 64, 1, 16, 256, 16'384, 65'536, 16'384, 2 * MiB, 16 * MiB, 16 * MiB,
                                                        32 * MiB, 16 * MiB, 32 * MiB, 112 * MiB});
-            case PCGOperationalTier::Standard:
+            case Standard:
                 return Result<PCGTierLimits>::Success({256, 512, 128, 512, 1, 32, 512, 262'144, 1'048'576, 262'144, 16 * MiB, 128 * MiB,
                                                        128 * MiB, 256 * MiB, 256 * MiB, 256 * MiB, 1'024 * MiB});
-            case PCGOperationalTier::High:
+            case High:
                 return Result<PCGTierLimits>::Success({1'024, 2'048, 512, 2'048, 1, 64, 1'024, 2'097'152, 8'388'608, 2'097'152, 64 * MiB,
                                                        512 * MiB, 512 * MiB, 1'024 * MiB, 1'024 * MiB, 1'024 * MiB, 4'096ULL * MiB});
         }
@@ -215,7 +214,7 @@ namespace Horo::PCG {
             return Result<PCGAttributeKey>::Failure(Failure(PCGErrors::PointSchemaInvalid));
         try {
             return Result<PCGAttributeKey>::Success(PCGAttributeKey{std::string(value)});
-        } catch (...) {
+        } catch (const std::bad_alloc &) {
             return Result<PCGAttributeKey>::Failure(Failure(PCGErrors::PointCapacityExceeded));
         }
     }
@@ -241,12 +240,12 @@ namespace Horo::PCG {
             if (bytes > limits.Value().maximumAttributeValueBytesPerPoint)
                 return Result<PCGPointSchema>::Failure(Failure(PCGErrors::PointCapacityExceeded));
             std::ranges::sort(attributes, {}, &PCGAttributeDescriptor::key);
-            if (std::adjacent_find(attributes.begin(), attributes.end(), [](const auto &left, const auto &right) {
+            if (std::ranges::adjacent_find(attributes, [](const auto &left, const auto &right) {
                 return left.key == right.key;
             }) != attributes.end())
                 return Result<PCGPointSchema>::Failure(Failure(PCGErrors::PointAttributeDuplicate));
             return Result<PCGPointSchema>::Success(PCGPointSchema{descriptor.tier, std::move(attributes), bytes});
-        } catch (...) {
+        } catch (const std::bad_alloc &) {
             return Result<PCGPointSchema>::Failure(Failure(PCGErrors::PointCapacityExceeded));
         }
     }
@@ -256,7 +255,7 @@ namespace Horo::PCG {
         const auto found = std::ranges::lower_bound(attributes_, canonicalKey, {}, [](const auto &item) {
             return item.key.Value();
         });
-        return found != attributes_.end() && found->key.Value() == canonicalKey ? &*found : nullptr;
+        return found != attributes_.end() && found->key.Value() == canonicalKey ? std::to_address(found) : nullptr;
     }
 
     /** @copydoc PCGPointStorage::PointCount */
@@ -312,11 +311,11 @@ namespace Horo::PCG {
         if (bytes.Value() > limits.maximumCandidateBytes)
             return Result<std::shared_ptr<const PCGPointStorage>>::Failure(Failure(PCGErrors::PointCapacityExceeded));
         try {
-            auto state = std::make_shared<const PCGPointStorage::State>(
-                PCGPointStorage::State{std::move(candidate.schema), std::move(candidate.core), std::move(candidate.attributes)});
+            auto state = std::make_shared<const PCGPointStorage::State>(std::move(candidate.schema), std::move(candidate.core),
+                                                                        std::move(candidate.attributes));
             return Result<std::shared_ptr<const PCGPointStorage>>::Success(
-                std::shared_ptr<const PCGPointStorage>{new PCGPointStorage(std::move(state))});
-        } catch (...) {
+                std::make_shared<const PCGPointStorage>(PCGPointStorage::ConstructionKey{}, std::move(state)));
+        } catch (const std::bad_alloc &) {
             return Result<std::shared_ptr<const PCGPointStorage>>::Failure(Failure(PCGErrors::PointCapacityExceeded));
         }
     }
@@ -345,7 +344,7 @@ namespace Horo::PCG {
 
     /** @copydoc CheckedPCGAlignUp */
     Result<std::size_t> CheckedPCGAlignUp(const std::size_t value, const std::size_t alignment) {
-        if (alignment == 0 || (alignment & (alignment - 1)) != 0)
+        if (!std::has_single_bit(alignment))
             return Result<std::size_t>::Failure(Failure(PCGErrors::PointSizeOverflow));
         const std::size_t mask = alignment - 1;
         auto added = CheckedPCGAdd(value, mask);

@@ -166,7 +166,18 @@ namespace Horo::PCG {
     class PCGPointStorage final {
     public:
         struct State;
+
+        /** @brief Opaque construction gate restricted to validated capture. */
+        class ConstructionKey final {
+            friend Result<std::shared_ptr<const PCGPointStorage>> CapturePointStorage(PCGPointStorageCandidate candidate);
+            ConstructionKey() = default;
+        };
+
         PCGPointStorage() = delete;
+
+        /** @brief Adopts a fully validated immutable state through the capture-only construction gate. */
+        explicit PCGPointStorage(ConstructionKey, std::shared_ptr<const State> state) : state_(std::move(state)) {}
+
         [[nodiscard]] std::size_t PointCount() const noexcept;
         [[nodiscard]] const PCGPointSchema &Schema() const noexcept;
         [[nodiscard]] std::span<const Math::Transform> Transforms() const noexcept;
@@ -181,10 +192,6 @@ namespace Horo::PCG {
         }
 
     private:
-        friend Result<std::shared_ptr<const PCGPointStorage>> CapturePointStorage(PCGPointStorageCandidate candidate);
-
-        explicit PCGPointStorage(std::shared_ptr<const State> state) : state_(std::move(state)) {}
-
         [[nodiscard]] const PCGAttributeColumnValues *FindColumnValues(std::string_view key) const noexcept;
         std::shared_ptr<const State> state_;
     };

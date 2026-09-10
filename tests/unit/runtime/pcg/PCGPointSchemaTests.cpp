@@ -133,6 +133,10 @@ namespace Horo::PCG {
         auto captured = CapturePointStorage(Candidate(schema));
         REQUIRE(captured.HasValue());
         CHECK(captured.Value()->PointCount() == 2);
+        CHECK(captured.Value()->Schema().Tier() == PCGOperationalTier::Baseline);
+        CHECK(captured.Value()->Transforms().size() == 2);
+        CHECK(captured.Value()->Bounds().size() == 2);
+        CHECK(captured.Value()->Densities()[0] == 0.5F);
         REQUIRE(captured.Value()->FindColumn<PCGScalarColumn>("terrain.slope") != nullptr);
         CHECK(captured.Value()->FindColumn<PCGVector3Column>("terrain.slope") == nullptr);
         CHECK(captured.Value()->FindColumn<PCGScalarColumn>("terrain.missing") == nullptr);
@@ -150,6 +154,34 @@ namespace Horo::PCG {
         auto length = Candidate(schema);
         std::get<PCGVector3Column>(length.attributes[0].values).push_back({});
         CheckError(CapturePointStorage(std::move(length)), PCGErrors::PointDataInvalid);
+
+        auto duplicate = Candidate(schema);
+        duplicate.attributes[1].key = duplicate.attributes[0].key;
+        CheckError(CapturePointStorage(std::move(duplicate)), PCGErrors::PointAttributeDuplicate);
+
+        auto coreLength = Candidate(schema);
+        coreLength.core.seeds.pop_back();
+        CheckError(CapturePointStorage(std::move(coreLength)), PCGErrors::PointDataInvalid);
+        CheckError(CapturePointStorage({}), PCGErrors::PointSchemaInvalid);
+    }
+
+    TEST_CASE("PCG point storage supports every closed typed attribute column", "[unit][pcg][point]") {
+        auto schema = Schema({{Key("typed.boolean"), PCGAttributeType::Boolean},
+                              {Key("typed.signed"), PCGAttributeType::SignedInteger},
+                              {Key("typed.unsigned"), PCGAttributeType::UnsignedInteger},
+                              {Key("typed.scalar"), PCGAttributeType::Scalar},
+                              {Key("typed.vector2"), PCGAttributeType::Vector2},
+                              {Key("typed.vector3"), PCGAttributeType::Vector3},
+                              {Key("typed.vector4"), PCGAttributeType::Vector4}});
+        auto captured = CapturePointStorage(Candidate(schema));
+        REQUIRE(captured.HasValue());
+        CHECK(captured.Value()->FindColumn<PCGBoolColumn>("typed.boolean") != nullptr);
+        CHECK(captured.Value()->FindColumn<PCGSignedIntegerColumn>("typed.signed") != nullptr);
+        CHECK(captured.Value()->FindColumn<PCGUnsignedIntegerColumn>("typed.unsigned") != nullptr);
+        CHECK(captured.Value()->FindColumn<PCGScalarColumn>("typed.scalar") != nullptr);
+        CHECK(captured.Value()->FindColumn<PCGVector2Column>("typed.vector2") != nullptr);
+        CHECK(captured.Value()->FindColumn<PCGVector3Column>("typed.vector3") != nullptr);
+        CHECK(captured.Value()->FindColumn<PCGVector4Column>("typed.vector4") != nullptr);
     }
 
     TEST_CASE("PCG point storage rejects invalid core and attribute values", "[unit][pcg][point]") {
@@ -168,6 +200,16 @@ namespace Horo::PCG {
         auto invalidValue = Candidate(schema);
         std::get<PCGScalarColumn>(invalidValue.attributes[0].values)[0] = std::numeric_limits<double>::infinity();
         CheckError(CapturePointStorage(std::move(invalidValue)), PCGErrors::PointDataInvalid);
+
+        auto boolSchema = Schema({{Key("pcg.boolean"), PCGAttributeType::Boolean}});
+        auto invalidBoolean = Candidate(boolSchema);
+        std::get<PCGBoolColumn>(invalidBoolean.attributes[0].values)[0] = 2;
+        CheckError(CapturePointStorage(std::move(invalidBoolean)), PCGErrors::PointDataInvalid);
+
+        auto vectorSchema = Schema({{Key("pcg.vector"), PCGAttributeType::Vector4}});
+        auto invalidVector = Candidate(vectorSchema);
+        std::get<PCGVector4Column>(invalidVector.attributes[0].values)[0].w = std::numeric_limits<float>::infinity();
+        CheckError(CapturePointStorage(std::move(invalidVector)), PCGErrors::PointDataInvalid);
     }
 
     TEST_CASE("PCG point limit accepts exact boundary and rejects one over", "[unit][pcg][point]") {
