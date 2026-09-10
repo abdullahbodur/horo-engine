@@ -118,6 +118,24 @@ Marking a plain `std::string` as `SecretReference` does not make an arbitrary va
 
 No follow-up may introduce a host-local precedence list, direct module environment lookup, process-global schema registry or raw credential value in configuration as a compatibility shortcut.
 
+### CFG-001.2 implementation record
+
+[CFG-001.2] implements the decision through `ConfigurationResolver`, typed
+source maps, per-key source policies, safe provenance and reference-counted
+immutable snapshots in `HoroFoundation`. Environment capture is explicit and
+uses the injected `ProcessService`; snapshot readers have no environment or file
+handle. Until [CFG-001.6] supplies a typed credential-reference value, external
+values for `SecretReference` descriptors fail closed and secret-marked defaults
+are excluded from serialization.
+
+Versioned parsing is bounded and strict. Durable publication is implemented by
+the `HoroPlatform` `ConfigurationFileStore` over `DurableFileSystem`, preserving
+Foundation's dependency direction while providing same-filesystem preparation,
+required flushes, exclusive-writer protection and atomic replacement. The prior
+direct `ConfigurationService` file methods are fail-closed compatibility stubs;
+callers migrate to the composed store and pass its parsed source map to the one
+resolver.
+
 ## Consequences
 
 - The current schema and immutable snapshot code remain valid foundations rather than being replaced wholesale.

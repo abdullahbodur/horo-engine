@@ -67,6 +67,30 @@ namespace Horo {
                                                  .remediationHint = "Verify destination permissions and available storage.",
                                                  .retryable = true,
                                                  .userActionable = true};
+
+        const ErrorCodeDescriptor ResolutionFailed{.domain = ConfigurationDomain,
+                                                   .code = ErrorCode{"configuration.resolution_failed"},
+                                                   .defaultSeverity = ErrorSeverity::Error,
+                                                   .summary = "Configuration sources could not be resolved.",
+                                                   .remediationHint = "Correct every reported source finding and retry resolution.",
+                                                   .retryable = false,
+                                                   .userActionable = true};
+
+        const ErrorCodeDescriptor InputTooLarge{.domain = ConfigurationDomain,
+                                                .code = ErrorCode{"configuration.input_too_large"},
+                                                .defaultSeverity = ErrorSeverity::Error,
+                                                .summary = "Configuration input exceeds its resource limit.",
+                                                .remediationHint = "Reduce the configuration input to the documented limits.",
+                                                .retryable = false,
+                                                .userActionable = true};
+
+        const ErrorCodeDescriptor PersistenceUnavailable{.domain = ConfigurationDomain,
+                                                         .code = ErrorCode{"configuration.persistence_unavailable"},
+                                                         .defaultSeverity = ErrorSeverity::Error,
+                                                         .summary = "Durable configuration persistence is not composed.",
+                                                         .remediationHint = "Use the platform configuration file store.",
+                                                         .retryable = false,
+                                                         .userActionable = false};
     }  // namespace ConfigurationErrors
 
     namespace JobErrors {

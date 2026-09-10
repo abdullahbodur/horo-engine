@@ -146,6 +146,28 @@ struct ResolvedSetting {
 The Settings modal may show where a value came from and why a lower-precedence
 value is inactive.
 
+### Resolution pipeline contract
+
+`ConfigurationResolver` is the only Foundation implementation of source
+precedence. A composition root supplies one `ConfigurationResolutionRequest`
+containing already captured invocation, environment, session, project, user and
+packaged-profile maps. Resolution validates every supplied candidate before it
+publishes any value. Findings are stable and deterministic in source-precedence,
+key and diagnostic order; an invalid shadowed value still fails the complete
+candidate rather than being silently ignored.
+
+Each descriptor may provide an explicit `ConfigurationSourcePolicy`. Descriptors
+that predate the policy use the compatibility mapping derived from
+`SettingScope`; new module contributions must declare the exact legal source set.
+The schema default is always the final candidate and is not represented as an
+externally writable source bit. The `sessionOverridesEnvironment` flag affects
+only that pair and leaves every other precedence relationship unchanged.
+
+Resolver inputs are bounded before publication. The default limits admit at most
+1,024 keys per source, 256 bytes per key, 64 KiB per string value, 1,024 bytes of
+safe source-location text, a 4 MiB document and 256 environment bindings. Hosts
+may lower these limits but may not bypass them with an alternate resolver.
+
 ## Environment Variables
 
 Environment keys use the `HORO_` prefix and an explicit mapping declared by the
@@ -164,6 +186,12 @@ values fail validation with a source-specific diagnostic.
 
 The environment is read once by the host adapter and converted to a safe input
 map. Arbitrary environment access is not spread throughout engine modules.
+
+`ConfigurationResolver::CaptureEnvironment()` accepts explicit `HORO_` bindings
+and a borrowed `ProcessService`. It never calls process APIs directly. Missing
+variables are absent candidates; empty, malformed, duplicate, unbounded or
+secret-bearing values fail with safe diagnostics that contain the binding name,
+never the raw value.
 
 ## Module Settings Contributions
 
@@ -309,6 +337,22 @@ Configuration files are versioned structured documents. Writes are:
 
 Comments and unknown extension fields are preserved only when the selected
 format and schema explicitly support them.
+
+The current JSON contract is strict `schemaVersion: 1` plus one object-valued
+`values` member. Unknown document members, unsupported value kinds and oversized
+inputs fail before resolution. Unknown setting keys are retained only long
+enough for the resolver to report them; they are never activated.
+
+Native persistence is owned by `ConfigurationFileStore` in `HoroPlatform`, not
+by snapshot readers or `HoroFoundation`. The store acquires an exclusive lock
+beside the destination, writes and flushes a deterministic snapshot document to
+a fixed same-directory prepared path, and then requests an atomic replacement
+from `DurableFileSystem`. A write or replacement failure removes the prepared
+artifact without changing the last published document. Readers may observe the
+old or new complete file during replacement, never partial content. Direct
+`ConfigurationService::LoadFile()` and `SaveFile()` entry points now fail closed;
+host composition migrates by reading with `ConfigurationFileStore`, parsing with
+`ConfigurationResolver::ParseDocument()`, and resolving the returned source map.
 
 ## Threading
 

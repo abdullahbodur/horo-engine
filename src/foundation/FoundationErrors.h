@@ -10,6 +10,9 @@ namespace Horo::ConfigurationErrors {
     extern const ErrorCodeDescriptor JsonParseError;
     extern const ErrorCodeDescriptor FileNotFound;
     extern const ErrorCodeDescriptor FileWriteError;
+    extern const ErrorCodeDescriptor ResolutionFailed;
+    extern const ErrorCodeDescriptor InputTooLarge;
+    extern const ErrorCodeDescriptor PersistenceUnavailable;
 }  // namespace Horo::ConfigurationErrors
 
 namespace Horo::JobErrors {
