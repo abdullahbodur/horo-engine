@@ -360,11 +360,14 @@ namespace Horo::Cli {
 
     TEST_CASE("CLI validation failures retain unique stable typed identities", "[unit][cli][registry]") {
         const std::array
-            errors{&CliErrors::DescriptorInvalid,      &CliErrors::RegistryCapacityExceeded, &CliErrors::CommandPathDuplicate,
-                   &CliErrors::OptionNameDuplicate,    &CliErrors::OptionSchemaIncompatible, &CliErrors::OutputSchemaIncompatible,
-                   &CliErrors::CapabilityUnauthorized, &CliErrors::HostUnsupported,          &CliErrors::ContractVersionIncompatible,
-                   &CliErrors::ParserPolicyInvalid,    &CliErrors::CommandUnknown,           &CliErrors::ParseFailed,
-                   &CliErrors::InputModeUnsupported,   &CliErrors::InputCapacityExceeded,    &CliErrors::InteractiveInputUnavailable};
+            errors{&CliErrors::DescriptorInvalid,           &CliErrors::RegistryCapacityExceeded, &CliErrors::CommandPathDuplicate,
+                   &CliErrors::OptionNameDuplicate,         &CliErrors::OptionSchemaIncompatible, &CliErrors::OutputSchemaIncompatible,
+                   &CliErrors::CapabilityUnauthorized,      &CliErrors::HostUnsupported,          &CliErrors::ContractVersionIncompatible,
+                   &CliErrors::ParserPolicyInvalid,         &CliErrors::CommandUnknown,           &CliErrors::ParseFailed,
+                   &CliErrors::InputModeUnsupported,        &CliErrors::InputCapacityExceeded,    &CliErrors::InteractiveInputUnavailable,
+                   &CliErrors::DispatchRegistrationInvalid, &CliErrors::CommandUnavailable,       &CliErrors::SideEffectUnauthorized,
+                   &CliErrors::ExecutionContextInvalid,     &CliErrors::ExecutionCancelled,       &CliErrors::ExecutionTimedOut,
+                   &CliErrors::ExecutionCapacityExceeded};
         for (std::size_t current = 0; current < errors.size(); ++current) {
             REQUIRE(errors[current]->domain.Value() == "horo.cli");
             REQUIRE_FALSE(errors[current]->code.Value().empty());

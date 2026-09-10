@@ -623,6 +623,30 @@ publish command requests through `EngineDataBus`.
 
 One-shot commands stop subscriptions before application services shut down.
 
+### Capability-Scoped Dispatch Contract
+
+`CliDispatcher` owns accepted adapters and binds one `CliExecutionContext` per
+validated request. Activation is atomic: an adapter descriptor must exactly
+match the accepted registry descriptor, its constructor-bound capability list
+must exactly match the descriptor requirements, and every requirement must be
+present in the host grant set. Host availability and side-effect authority are
+also checked before an adapter can observe the request.
+
+The execution context exposes only the immutable configuration snapshot,
+cooperative cancellation/deadline observation, exact declared capability
+identities, bounded progress reporting, and invocation correlation. It does not
+expose `ApplicationServices`, a mutable engine object, `JobSystem`, an output
+writer, or a capability lookup returning service objects. Concrete adapters
+receive narrow application use-case interfaces through constructor injection;
+GUI and MCP adapters call those same interfaces.
+
+Invocation, operation, job, and application-approved safe project identities
+are copied into the terminal envelope on both success and failure. Progress and
+typed result fields have explicit count and byte bounds. An adapter invocation
+is a structured one-shot scope: it releases subscriptions and joins or cancels
+all child work before returning. The composition root destroys the dispatcher,
+and therefore its owned adapters, before the injected application services.
+
 ## Observability
 
 CLI logs use stderr and the common structured schema. Each command establishes
@@ -643,8 +667,9 @@ without maintaining competing sources of truth:
    parsing, configuration provenance, explicit input policies, and parser-level
    interactive admission portions are complete. Executable composition still
    uses the legacy entry point until the dispatch and presentation stages exist.
-2. **Dispatch & Adapters**: Introduce `CliDispatcher`, `CliExecutionContext`, and
-   migrate built-in commands (`--emit-observability-smoke`, `--diagnostic-bundle`)
+2. **Dispatch & Adapters**: `CliDispatcher`, `CliExecutionContext`, typed terminal
+   correlation, and the constructor-injected application adapter seam are implemented.
+   Migrate built-in commands (`--emit-observability-smoke`, `--diagnostic-bundle`)
    into typed `ICliCommandAdapter` registrations:
    `CommandPath{{"observability","smoke"}}`, `CommandPath{{"diagnostics","bundle"}}`.
    User-facing syntax: `horo-engine observability smoke`, `horo-engine diagnostics bundle`.
