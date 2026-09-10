@@ -454,6 +454,7 @@ add_library(HoroAnimationApi STATIC
         runtime/animation/api/AnimationComponents.cpp
         runtime/animation/api/AnimationErrors.cpp
         runtime/animation/api/AnimationIdentity.cpp
+        runtime/animation/api/SkeletonAsset.cpp
 )
 add_library(HoroEngine::AnimationApi ALIAS HoroAnimationApi)
 target_compile_features(HoroAnimationApi PUBLIC cxx_std_20)

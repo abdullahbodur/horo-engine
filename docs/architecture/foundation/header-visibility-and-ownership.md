@@ -299,6 +299,15 @@ explicitly instead of duplicating IDs or persisting process-local handles. The
 generated standalone public-header consumer verifies this staged dependency
 boundary.
 
+ANI-001.3 adds `Horo/Animation/SkeletonAsset.h` to the same owner. Import, cook,
+scene conversion and future runtime evaluators consume one immutable validated
+snapshot whose joint order is canonical and parent-before-child. Stable joint and
+socket identities remain independent of dense positions and advisory names. Reload
+validates the same persistent skeleton identity before publication; cancellation or
+shutdown rejects the detached candidate without replacing the last good snapshot.
+No Physics, Render, RuntimeScene, editor, filesystem, parser, or native animation
+dependency is added to the public boundary.
+
 ## Destruction Identity Boundary
 
 `HoroEngine::DestructionApi` owns `Horo/Destruction/DestructibleDescriptor.h`,
