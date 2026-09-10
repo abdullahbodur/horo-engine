@@ -11,6 +11,14 @@
 
 namespace Horo::PCG {
     struct PCGSpatialSnapshot::State final {
+        State(SpatialSnapshotId idValue, PCGSpatialProvenance provenanceValue, PCGSpatialCoordinateContract coordinatesValue,
+              Math::Aabb boundsValue, PCGSpatialCoverage coverageValue, std::vector<PCGSurfaceTriangle> surfacesValue,
+              std::vector<PCGSpatialVolume> volumesValue, std::vector<PCGSpline> splinesValue, std::vector<PCGGrid> gridsValue,
+              const std::size_t residentBytesValue)
+            : id(idValue), provenance(std::move(provenanceValue)), coordinates(std::move(coordinatesValue)), bounds(boundsValue),
+              coverage(coverageValue), surfaces(std::move(surfacesValue)), volumes(std::move(volumesValue)),
+              splines(std::move(splinesValue)), grids(std::move(gridsValue)), residentBytes(residentBytesValue) {}
+
         SpatialSnapshotId id;
         PCGSpatialProvenance provenance;
         PCGSpatialCoordinateContract coordinates;
@@ -66,8 +74,8 @@ namespace Horo::PCG {
             const Math::Vec3 geometricNormal =
                 Math::Cross(surface.vertices[1] - surface.vertices[0], surface.vertices[2] - surface.vertices[0]);
             const float geometricLengthSquared = Math::LengthSquared(geometricNormal);
-            const float declaredLengthSquared = Math::LengthSquared(surface.normal);
-            if (!std::isfinite(geometricLengthSquared) || geometricLengthSquared <= Math::DefaultEpsilon * Math::DefaultEpsilon ||
+            if (const float declaredLengthSquared = Math::LengthSquared(surface.normal);
+                !std::isfinite(geometricLengthSquared) || geometricLengthSquared <= Math::DefaultEpsilon * Math::DefaultEpsilon ||
                 !std::isfinite(declaredLengthSquared) || std::abs(declaredLengthSquared - 1.0F) > NormalTolerance)
                 return false;
             const float alignment = Math::Dot(geometricNormal, surface.normal) / std::sqrt(geometricLengthSquared);
@@ -75,8 +83,7 @@ namespace Horo::PCG {
         }
 
         [[nodiscard]] bool ValidVolume(const PCGSpatialVolume &volume, const Math::Aabb &bounds) noexcept {
-            return std::visit([&](const auto &value) {
-                using T = std::remove_cvref_t<decltype(value)>;
+            return std::visit([&]<typename T>(const T &value) {
                 if (!value.id.IsValid())
                     return false;
                 if constexpr (std::is_same_v<T, PCGBoxVolume>) {
@@ -92,8 +99,7 @@ namespace Horo::PCG {
         }
 
         [[nodiscard]] bool ValidSpline(const PCGSpline &spline, const Math::Aabb &bounds) noexcept {
-            const std::size_t minimumPoints = spline.closed ? 3U : 2U;
-            if (!spline.id.IsValid() || spline.points.size() < minimumPoints)
+            if (const std::size_t minimumPoints = spline.closed ? 3U : 2U; !spline.id.IsValid() || spline.points.size() < minimumPoints)
                 return false;
             for (std::size_t index = 0; index < spline.points.size(); ++index) {
                 const auto &point = spline.points[index];
@@ -122,8 +128,8 @@ namespace Horo::PCG {
             };
             const double maximumX = endpoint(grid.origin.x, grid.spacing.x, grid.dimensions[0]);
             const double maximumY = endpoint(grid.origin.y, grid.spacing.y, grid.dimensions[1]);
-            const double maximumZ = endpoint(grid.origin.z, grid.spacing.z, grid.dimensions[2]);
-            if (!std::isfinite(maximumX) || !std::isfinite(maximumY) || !std::isfinite(maximumZ) || maximumX > bounds.maximum.x ||
+            if (const double maximumZ = endpoint(grid.origin.z, grid.spacing.z, grid.dimensions[2]);
+                !std::isfinite(maximumX) || !std::isfinite(maximumY) || !std::isfinite(maximumZ) || maximumX > bounds.maximum.x ||
                 maximumY > bounds.maximum.y || maximumZ > bounds.maximum.z)
                 return Result<std::size_t>::Failure(Failure(PCGErrors::SpatialInputInvalid));
             return count;
@@ -157,67 +163,88 @@ namespace Horo::PCG {
             return total;
         }
 
-        template <typename Values, typename Projection> void SortByIdentity(Values &values, Projection projection) {
-            std::ranges::sort(values, {}, projection);
-        }
-
-        [[nodiscard]] Result<std::size_t> ValidateAndCanonicalize(PCGSpatialSnapshotCandidate &candidate) {
+        [[nodiscard]] Result<void> ValidateEnvelope(const PCGSpatialSnapshotCandidate &candidate) {
             if (!candidate.snapshot.IsValid() || !candidate.provenance.provider.IsValid() || !candidate.provenance.source.IsValid() ||
                 !candidate.provenance.revision.IsValid() || !StrictBounds(candidate.bounds))
-                return Result<std::size_t>::Failure(Failure(PCGErrors::SpatialInputInvalid));
+                return Result<void>::Failure(Failure(PCGErrors::SpatialInputInvalid));
             if (!ValidCoordinates(candidate.coordinates))
-                return Result<std::size_t>::Failure(Failure(PCGErrors::SpatialCoordinatesUnsupported));
-            if (candidate.coverage != PCGSpatialCoverage::Complete) {
-                if (candidate.coverage == PCGSpatialCoverage::Partial || candidate.coverage == PCGSpatialCoverage::Missing)
-                    return Result<std::size_t>::Failure(Failure(PCGErrors::SpatialCoverageUnavailable));
-                return Result<std::size_t>::Failure(Failure(PCGErrors::SpatialInputInvalid));
-            }
-            auto tierLimits = LimitsForTier(candidate.tier);
-            if (tierLimits.HasError())
-                return Result<std::size_t>::Failure(Failure(PCGErrors::SpatialInputInvalid));
-            auto elementCount = CheckedPCGAdd(candidate.surfaces.size(), candidate.volumes.size());
-            if (elementCount.HasError())
+                return Result<void>::Failure(Failure(PCGErrors::SpatialCoordinatesUnsupported));
+            if (candidate.coverage == PCGSpatialCoverage::Partial || candidate.coverage == PCGSpatialCoverage::Missing)
+                return Result<void>::Failure(Failure(PCGErrors::SpatialCoverageUnavailable));
+            if (candidate.coverage != PCGSpatialCoverage::Complete)
+                return Result<void>::Failure(Failure(PCGErrors::SpatialInputInvalid));
+            return Result<void>::Success();
+        }
+
+        [[nodiscard]] Result<std::size_t> CountElements(const PCGSpatialSnapshotCandidate &candidate, const std::size_t maximumElements) {
+            auto count = CheckedPCGAdd(candidate.surfaces.size(), candidate.volumes.size());
+            if (count.HasError())
                 return Result<std::size_t>::Failure(Failure(PCGErrors::SpatialCapacityExceeded));
-            elementCount = CheckedPCGAdd(elementCount.Value(), candidate.splines.size());
-            if (elementCount.HasError())
+            count = CheckedPCGAdd(count.Value(), candidate.splines.size());
+            if (count.HasError())
                 return Result<std::size_t>::Failure(Failure(PCGErrors::SpatialCapacityExceeded));
-            elementCount = CheckedPCGAdd(elementCount.Value(), candidate.grids.size());
-            if (elementCount.HasError())
+            count = CheckedPCGAdd(count.Value(), candidate.grids.size());
+            if (count.HasError() || count.Value() > maximumElements)
                 return Result<std::size_t>::Failure(Failure(PCGErrors::SpatialCapacityExceeded));
-            if (elementCount.Value() > tierLimits.Value().maximumPointsPerNodeOutput)
-                return Result<std::size_t>::Failure(Failure(PCGErrors::SpatialCapacityExceeded));
+            return count;
+        }
+
+        [[nodiscard]] Result<std::vector<SpatialElementId>> CollectIdentities(const PCGSpatialSnapshotCandidate &candidate,
+                                                                              const std::size_t maximumControlPoints,
+                                                                              const std::size_t maximumGridPoints) {
             std::vector<SpatialElementId> identities;
-            identities.reserve(elementCount.Value());
+            identities.reserve(candidate.surfaces.size() + candidate.volumes.size() + candidate.splines.size() + candidate.grids.size());
             for (const auto &surface : candidate.surfaces) {
                 if (!ValidSurface(surface, candidate.bounds))
-                    return Result<std::size_t>::Failure(Failure(PCGErrors::SpatialInputInvalid));
+                    return Result<std::vector<SpatialElementId>>::Failure(Failure(PCGErrors::SpatialInputInvalid));
                 identities.push_back(surface.id);
             }
             for (const auto &volume : candidate.volumes) {
                 if (!ValidVolume(volume, candidate.bounds))
-                    return Result<std::size_t>::Failure(Failure(PCGErrors::SpatialInputInvalid));
+                    return Result<std::vector<SpatialElementId>>::Failure(Failure(PCGErrors::SpatialInputInvalid));
                 identities.push_back(VolumeId(volume));
             }
             std::size_t controlPointCount{};
             for (const auto &spline : candidate.splines) {
                 if (!ValidSpline(spline, candidate.bounds))
-                    return Result<std::size_t>::Failure(Failure(PCGErrors::SpatialInputInvalid));
+                    return Result<std::vector<SpatialElementId>>::Failure(Failure(PCGErrors::SpatialInputInvalid));
                 identities.push_back(spline.id);
                 auto next = CheckedPCGAdd(controlPointCount, spline.points.size());
                 if (next.HasError())
-                    return Result<std::size_t>::Failure(Failure(PCGErrors::SpatialCapacityExceeded));
+                    return Result<std::vector<SpatialElementId>>::Failure(Failure(PCGErrors::SpatialCapacityExceeded));
                 controlPointCount = next.Value();
             }
+            if (controlPointCount > maximumControlPoints)
+                return Result<std::vector<SpatialElementId>>::Failure(Failure(PCGErrors::SpatialCapacityExceeded));
             for (const auto &grid : candidate.grids) {
                 auto points = GridPointCount(grid, candidate.bounds);
                 if (points.HasError())
-                    return points;
-                if (points.Value() > tierLimits.Value().maximumPointsPerNodeOutput)
-                    return Result<std::size_t>::Failure(Failure(PCGErrors::SpatialCapacityExceeded));
+                    return Result<std::vector<SpatialElementId>>::Failure(points.ErrorValue());
+                if (points.Value() > maximumGridPoints)
+                    return Result<std::vector<SpatialElementId>>::Failure(Failure(PCGErrors::SpatialCapacityExceeded));
                 identities.push_back(grid.id);
             }
-            if (controlPointCount > tierLimits.Value().maximumMaterializedPointRecords)
-                return Result<std::size_t>::Failure(Failure(PCGErrors::SpatialCapacityExceeded));
+            return Result<std::vector<SpatialElementId>>::Success(std::move(identities));
+        }
+
+        template <typename Values, typename Projection> void SortByIdentity(Values &values, Projection projection) {
+            std::ranges::sort(values, {}, projection);
+        }
+
+        [[nodiscard]] Result<std::size_t> ValidateAndCanonicalize(PCGSpatialSnapshotCandidate &candidate) {
+            if (auto envelope = ValidateEnvelope(candidate); envelope.HasError())
+                return Result<std::size_t>::Failure(envelope.ErrorValue());
+            auto tierLimits = LimitsForTier(candidate.tier);
+            if (tierLimits.HasError())
+                return Result<std::size_t>::Failure(Failure(PCGErrors::SpatialInputInvalid));
+            auto elementCount = CountElements(candidate, tierLimits.Value().maximumPointsPerNodeOutput);
+            if (elementCount.HasError())
+                return elementCount;
+            auto collected = CollectIdentities(candidate, tierLimits.Value().maximumMaterializedPointRecords,
+                                               tierLimits.Value().maximumPointsPerNodeOutput);
+            if (collected.HasError())
+                return Result<std::size_t>::Failure(collected.ErrorValue());
+            auto identities = std::move(collected).Value();
             std::ranges::sort(identities);
             if (std::ranges::adjacent_find(identities) != identities.end())
                 return Result<std::size_t>::Failure(Failure(PCGErrors::SpatialInputInvalid));
@@ -288,10 +315,11 @@ namespace Horo::PCG {
             auto bytes = ValidateAndCanonicalize(candidate);
             if (bytes.HasError())
                 return Result<std::shared_ptr<const PCGSpatialSnapshot>>::Failure(bytes.ErrorValue());
-            auto state = std::make_shared<const PCGSpatialSnapshot::State>(
-                PCGSpatialSnapshot::State{candidate.snapshot, candidate.provenance, candidate.coordinates, candidate.bounds,
-                                          candidate.coverage, std::move(candidate.surfaces), std::move(candidate.volumes),
-                                          std::move(candidate.splines), std::move(candidate.grids), bytes.Value()});
+            auto state =
+                std::make_shared<const PCGSpatialSnapshot::State>(candidate.snapshot, candidate.provenance, candidate.coordinates,
+                                                                  candidate.bounds, candidate.coverage, std::move(candidate.surfaces),
+                                                                  std::move(candidate.volumes), std::move(candidate.splines),
+                                                                  std::move(candidate.grids), bytes.Value());
             return Result<std::shared_ptr<const PCGSpatialSnapshot>>::Success(
                 std::make_shared<const PCGSpatialSnapshot>(PCGSpatialSnapshot::ConstructionKey{}, std::move(state)));
         } catch (const std::bad_alloc &) {
