@@ -1,0 +1,395 @@
+#include "Horo/Runtime/Save/SaveDiagnostics.h"
+
+#include "Horo/Runtime/Save/SaveErrors.h"
+
+#include <algorithm>
+#include <array>
+#include <cstddef>
+#include <optional>
+#include <tuple>
+#include <type_traits>
+#include <utility>
+
+namespace Horo::Runtime {
+    namespace {
+        constexpr std::string_view SaveErrorDomain = "horo.save";
+
+        struct DiagnosticPolicy final {
+            const ErrorCodeDescriptor *descriptor;
+            SaveFailureCategory category;
+        };
+
+        using enum SaveFailureCategory;
+        const std::array kPolicies{
+            DiagnosticPolicy{&SaveErrors::IdentityInvalid, Validation},
+            DiagnosticPolicy{&SaveErrors::IdentityMalformed, Validation},
+            DiagnosticPolicy{&SaveErrors::IdentityDuplicate, Validation},
+            DiagnosticPolicy{&SaveErrors::ParticipantIdInvalid, Validation},
+            DiagnosticPolicy{&SaveErrors::VersionInvalid, Validation},
+            DiagnosticPolicy{&SaveErrors::VersionUnsupportedNewer, Compatibility},
+            DiagnosticPolicy{&SaveErrors::ParticipantDescriptorInvalid, Participant},
+            DiagnosticPolicy{&SaveErrors::ParticipantAdapterMissing, Participant},
+            DiagnosticPolicy{&SaveErrors::ParticipantDuplicate, Participant},
+            DiagnosticPolicy{&SaveErrors::ParticipantRecordOwnershipDuplicate, Participant},
+            DiagnosticPolicy{&SaveErrors::ParticipantRegistryClosed, Lifecycle},
+            DiagnosticPolicy{&SaveErrors::ParticipantRegistryCapacityExceeded, Quota},
+            DiagnosticPolicy{&SaveErrors::ParticipantDependencyMissing, Participant},
+            DiagnosticPolicy{&SaveErrors::ParticipantDependencyCycle, Participant},
+            DiagnosticPolicy{&SaveErrors::ParticipantRegistryGenerationExhausted, Lifecycle},
+            DiagnosticPolicy{&SaveErrors::CaptureContextInvalid, Validation},
+            DiagnosticPolicy{&SaveErrors::CaptureRegistryStale, Lifecycle},
+            DiagnosticPolicy{&SaveErrors::CaptureRecordInvalid, Participant},
+            DiagnosticPolicy{&SaveErrors::CaptureBudgetExceeded, Quota},
+            DiagnosticPolicy{&SaveErrors::CaptureRecordDuplicate, Participant},
+            DiagnosticPolicy{&SaveErrors::CaptureIncomplete, Participant},
+            DiagnosticPolicy{&SaveErrors::CaptureAlreadySealed, Lifecycle},
+            DiagnosticPolicy{&SaveErrors::CaptureAllocationFailed, Quota},
+            DiagnosticPolicy{&SaveErrors::CaptureAdapterContractInvalid, Participant},
+            DiagnosticPolicy{&SaveErrors::ArchiveHeaderInvalid, Corruption},
+            DiagnosticPolicy{&SaveErrors::ArchiveManifestInvalid, Corruption},
+            DiagnosticPolicy{&SaveErrors::ArchiveMetadataLimitExceeded, Quota},
+            DiagnosticPolicy{&SaveErrors::ArchiveDirectoryInvalid, Corruption},
+            DiagnosticPolicy{&SaveErrors::ArchiveFramingLimitExceeded, Quota},
+            DiagnosticPolicy{&SaveErrors::ArchivePayloadTruncated, Corruption},
+            DiagnosticPolicy{&SaveErrors::ArchiveChunkHashMismatch, Corruption},
+            DiagnosticPolicy{&SaveErrors::SaveRootConfigurationInvalid, Storage},
+            DiagnosticPolicy{&SaveErrors::SaveRootPlatformUnsupported, Storage},
+            DiagnosticPolicy{&SaveErrors::SaveRootUnavailable, Storage},
+            DiagnosticPolicy{&SaveErrors::SaveRootContainmentViolation, Storage},
+            DiagnosticPolicy{&SaveErrors::NamespaceInvalid, Validation},
+            DiagnosticPolicy{&SaveErrors::NamespaceUnavailable, Lifecycle},
+            DiagnosticPolicy{&SaveErrors::NamespaceStale, Lifecycle},
+            DiagnosticPolicy{&SaveErrors::SlotMetadataInvalid, Validation},
+            DiagnosticPolicy{&SaveErrors::SlotMetadataLimitExceeded, Quota},
+            DiagnosticPolicy{&SaveErrors::SlotDisplayMetadataInvalid, Validation},
+            DiagnosticPolicy{&SaveErrors::SlotGenerationConflict, Lifecycle},
+            DiagnosticPolicy{&SaveErrors::CompositionUnsupported, Compatibility},
+            DiagnosticPolicy{&SaveErrors::CompositionInvalid, Validation},
+            DiagnosticPolicy{&SaveErrors::CompositionCapacityExceeded, Quota},
+            DiagnosticPolicy{&SaveErrors::CompositionCancelled, Cancellation},
+            DiagnosticPolicy{&SaveErrors::CompositionInjectedFailure, Lifecycle},
+            DiagnosticPolicy{&SaveErrors::CompositionObjectMissing, Storage},
+            DiagnosticPolicy{&SaveErrors::DiagnosticInvalid, Validation},
+            DiagnosticPolicy{&SaveErrors::DiagnosticUnsupported, Validation},
+            DiagnosticPolicy{&SaveErrors::DiagnosticCorrelationStale, Lifecycle},
+        };
+
+        const auto &Policies() noexcept {
+            return kPolicies;
+        }
+
+        std::optional<DiagnosticPolicy> PolicyFor(const Error &error) noexcept {
+            if (error.domain.Value() != SaveErrorDomain)
+                return std::nullopt;
+            for (const auto &policy : Policies()) {
+                if (error.code.Value() == policy.descriptor->code.Value())
+                    return policy;
+            }
+            return std::nullopt;
+        }
+
+        template <typename Identity> bool ValidIdentity(const SaveDiagnosticContextValue &value) noexcept {
+            const auto *identity = std::get_if<Identity>(&value);
+            return identity != nullptr && identity->IsValid();
+        }
+
+        bool ValidNonZeroScalar(const SaveDiagnosticContextValue &value) noexcept {
+            const auto *scalar = std::get_if<OperationId>(&value);
+            return scalar != nullptr && *scalar != 0;
+        }
+
+        bool ValidNamespace(const SaveDiagnosticContextValue &value) noexcept {
+            const auto *namespaceId = std::get_if<SaveNamespaceId>(&value);
+            return namespaceId != nullptr && namespaceId->IsValid();
+        }
+
+        bool ValidParticipant(const SaveDiagnosticContextValue &value) noexcept {
+            const auto *participant = std::get_if<SaveParticipantId>(&value);
+            return participant != nullptr && participant->IsValid();
+        }
+
+        using ContextValidator = bool (*)(const SaveDiagnosticContextValue &);
+
+        bool ContextValueIsValid(const SaveDiagnosticContextEntry &entry) noexcept {
+            static const std::array<ContextValidator, static_cast<std::size_t>(SaveDiagnosticContextKey::Count)> validators{
+                ValidNonZeroScalar, ValidNamespace,     ValidIdentity<SaveGameSlotId>,   ValidParticipant,
+                ValidNonZeroScalar, ValidNonZeroScalar, ValidIdentity<SlotGenerationId>, ValidNonZeroScalar,
+            };
+            const auto index = static_cast<std::size_t>(entry.key);
+            return index < validators.size() && validators[index](entry.value);
+        }
+
+        bool HasContextKey(const std::span<const SaveDiagnosticContextEntry> context, const SaveDiagnosticContextKey key) noexcept {
+            return std::ranges::any_of(context, [key](const SaveDiagnosticContextEntry &entry) {
+                return entry.key == key;
+            });
+        }
+
+        bool ContextEntriesAreCanonical(const std::span<const SaveDiagnosticContextEntry> context) noexcept {
+            for (std::size_t index = 0; index < context.size(); ++index) {
+                if (!ContextValueIsValid(context[index]))
+                    return false;
+                if (index != 0 && context[index].key <= context[index - 1].key)
+                    return false;
+            }
+            return true;
+        }
+
+        bool ContextIsValid(const std::span<const SaveDiagnosticContextEntry> context, const SaveDiagnosticOutcome outcome) noexcept {
+            if (context.size() > MaximumSaveDiagnosticContextEntries || !ContextEntriesAreCanonical(context))
+                return false;
+            const bool hasOperation = HasContextKey(context, SaveDiagnosticContextKey::Operation);
+            if (outcome == SaveDiagnosticOutcome::AdmissionRejected)
+                return !hasOperation;
+            return hasOperation && HasContextKey(context, SaveDiagnosticContextKey::Namespace) &&
+                   HasContextKey(context, SaveDiagnosticContextKey::Slot);
+        }
+
+        bool PartialFactIsValid(const SavePartialDataFact &fact) noexcept {
+            if (fact.kind >= SavePartialDataKind::Count || fact.requirement >= SaveDataRequirement::Count ||
+                fact.outcome >= SavePartialDataOutcome::Count)
+                return false;
+            if ((fact.kind == SavePartialDataKind::Participant) != fact.participant.IsValid())
+                return false;
+            if (fact.requirement == SaveDataRequirement::Required)
+                return fact.outcome == SavePartialDataOutcome::Present || fact.outcome == SavePartialDataOutcome::Rejected;
+            return fact.outcome != SavePartialDataOutcome::Rejected;
+        }
+
+        bool PartialFactsAreCanonical(const std::span<const SavePartialDataFact> facts) noexcept {
+            for (std::size_t index = 0; index < facts.size(); ++index) {
+                if (!PartialFactIsValid(facts[index]))
+                    return false;
+                if (index != 0) {
+                    const auto key = std::tuple{facts[index].kind, std::string_view{facts[index].participant.Value()}};
+                    const auto previous = std::tuple{facts[index - 1].kind, std::string_view{facts[index - 1].participant.Value()}};
+                    if (key <= previous)
+                        return false;
+                }
+            }
+            return true;
+        }
+
+        bool PartialDataIsValid(const std::span<const SavePartialDataFact> facts) noexcept {
+            return facts.size() <= MaximumSavePartialDataFacts && PartialFactsAreCanonical(facts);
+        }
+
+        bool OutcomeIsValid(const SaveDiagnosticOutcome outcome, const SaveDiagnosticCommitOutcome commit) noexcept {
+            if (outcome >= SaveDiagnosticOutcome::Count || commit >= SaveDiagnosticCommitOutcome::Count)
+                return false;
+            if (outcome == SaveDiagnosticOutcome::AdmissionRejected || outcome == SaveDiagnosticOutcome::Cancelled)
+                return commit == SaveDiagnosticCommitOutcome::NotCommitted;
+            if (outcome == SaveDiagnosticOutcome::Failed)
+                return commit != SaveDiagnosticCommitOutcome::Committed;
+            return true;
+        }
+
+        bool RequestEnumsAreKnown(const SaveFailureDisposition disposition, const SaveDiagnosticStage stage) noexcept {
+            return disposition < SaveFailureDisposition::Count && stage < SaveDiagnosticStage::Count;
+        }
+
+        bool DescriptorSummaryIsSafe(const ErrorCodeDescriptor &descriptor) noexcept {
+            return !descriptor.summary.empty() && descriptor.summary.size() <= MaximumSaveDiagnosticMessageBytes;
+        }
+
+        bool RequestIsValid(const DiagnosticPolicy &policy, const SaveFailureDisposition disposition, const SaveDiagnosticStage stage,
+                            const SaveDiagnosticOutcome outcome, const SaveDiagnosticCommitOutcome commitOutcome,
+                            const std::span<const SaveDiagnosticContextEntry> context,
+                            const std::span<const SavePartialDataFact> partialData) noexcept {
+            if (!RequestEnumsAreKnown(disposition, stage) || !OutcomeIsValid(outcome, commitOutcome))
+                return false;
+            if (!ContextIsValid(context, outcome) || !PartialDataIsValid(partialData))
+                return false;
+            return DescriptorSummaryIsSafe(*policy.descriptor);
+        }
+
+        struct Utf8Lead final {
+            std::size_t continuationCount;
+            std::uint32_t codepoint;
+        };
+
+        std::byte ByteAt(const std::string_view text, const std::size_t index) noexcept {
+            return static_cast<std::byte>(static_cast<unsigned char>(text[index]));
+        }
+
+        std::optional<Utf8Lead> DecodeUtf8Lead(const std::byte lead) noexcept {
+            const auto value = std::to_integer<std::uint8_t>(lead);
+            if (value >= 0xc2U && value <= 0xdfU)
+                return Utf8Lead{1, std::to_integer<std::uint8_t>(lead & std::byte{0x1f})};
+            if (value >= 0xe0U && value <= 0xefU)
+                return Utf8Lead{2, std::to_integer<std::uint8_t>(lead & std::byte{0x0f})};
+            if (value >= 0xf0U && value <= 0xf4U)
+                return Utf8Lead{3, std::to_integer<std::uint8_t>(lead & std::byte{0x07})};
+            return std::nullopt;
+        }
+
+        bool CanonicalScalar(const std::uint32_t codepoint, const std::size_t width) noexcept {
+            if (width == 2)
+                return codepoint >= 0x800U && !(codepoint >= 0xd800U && codepoint <= 0xdfffU);
+            if (width == 3)
+                return codepoint >= 0x10000U && codepoint <= 0x10ffffU;
+            return true;
+        }
+
+        std::optional<std::size_t> DecodeUtf8(const std::string_view text, const std::size_t index) noexcept {
+            const auto lead = DecodeUtf8Lead(ByteAt(text, index));
+            if (!lead.has_value() || index + lead->continuationCount >= text.size())
+                return std::nullopt;
+            std::uint32_t codepoint = lead->codepoint;
+            for (std::size_t offset = 1; offset <= lead->continuationCount; ++offset) {
+                const auto continuation = ByteAt(text, index + offset);
+                if ((continuation & std::byte{0xc0}) != std::byte{0x80})
+                    return std::nullopt;
+                codepoint = (codepoint << 6U) | std::to_integer<std::uint8_t>(continuation & std::byte{0x3f});
+            }
+            return CanonicalScalar(codepoint, lead->continuationCount) ? std::optional{lead->continuationCount + 1} : std::nullopt;
+        }
+
+        bool IsPrintableUtf8(const std::string_view text) noexcept {
+            std::size_t index = 0;
+            while (index < text.size()) {
+                if (const auto value = std::to_integer<std::uint8_t>(ByteAt(text, index)); value < 0x80U) {
+                    if (value < 0x20U || value == 0x7fU)
+                        return false;
+                    ++index;
+                } else if (const auto width = DecodeUtf8(text, index); width.has_value()) {
+                    index += *width;
+                } else {
+                    return false;
+                }
+            }
+            return true;
+        }
+
+        SavePrivateEvidenceSummary SummarizePrivateEvidence(const std::string_view privateEvidence) noexcept {
+            SavePrivateEvidenceSummary summary;
+            summary.observed = !privateEvidence.empty();
+            summary.truncated = privateEvidence.size() > MaximumPrivateSaveEvidenceBytes;
+            summary.observedBytes = static_cast<std::uint16_t>(std::min(privateEvidence.size(), MaximumPrivateSaveEvidenceBytes + 1));
+            const auto inspected = privateEvidence.substr(0, std::min(privateEvidence.size(), MaximumPrivateSaveEvidenceBytes));
+            summary.malformed = !IsPrintableUtf8(inspected);
+            return summary;
+        }
+
+        struct CauseProjection final {
+            std::array<SaveDiagnosticCause, MaximumSaveDiagnosticCauseDepth> values{};
+            std::size_t count{};
+        };
+
+        std::optional<CauseProjection> ProjectCauses(const Error &error) {
+            CauseProjection projection;
+            const Error *cause = error.cause.Get();
+            while (cause != nullptr) {
+                if (projection.count == MaximumSaveDiagnosticCauseDepth)
+                    return std::nullopt;
+                const auto policy = PolicyFor(*cause);
+                const auto severity = DiagnosticSeverityForError(cause->severity);
+                if (!policy.has_value() || !severity.has_value())
+                    return std::nullopt;
+                projection.values[projection.count++] = {DiagnosticCode{policy->descriptor->code.Value()}, *severity};
+                cause = cause->cause.Get();
+            }
+            return projection;
+        }
+
+        template <typename Value>
+        const Value *FindContext(const SaveDiagnosticRecord &record, const SaveDiagnosticContextKey key) noexcept {
+            for (const auto &entry : record.Context()) {
+                if (entry.key == key)
+                    return std::get_if<Value>(&entry.value);
+            }
+            return nullptr;
+        }
+
+        template <typename Value>
+        bool ContextMatches(const SaveDiagnosticRecord &record, const SaveDiagnosticContextKey key, const Value &expected) noexcept {
+            const auto *actual = FindContext<Value>(record, key);
+            return actual != nullptr && *actual == expected;
+        }
+
+        bool GenerationsAreValid(const std::uint64_t registryGeneration, const std::uint64_t namespaceRevision,
+                                 const SlotGenerationId &slotGeneration, const std::uint64_t archiveGeneration) noexcept {
+            return registryGeneration != 0 && namespaceRevision != 0 && slotGeneration.IsValid() && archiveGeneration != 0;
+        }
+
+        bool GenerationsMatch(const SaveDiagnosticRecord &record, const std::uint64_t registryGeneration,
+                              const std::uint64_t namespaceRevision, const SlotGenerationId &slotGeneration,
+                              const std::uint64_t archiveGeneration) noexcept {
+            if (!ContextMatches<OperationId>(record, SaveDiagnosticContextKey::RegistryGeneration, registryGeneration))
+                return false;
+            if (!ContextMatches<OperationId>(record, SaveDiagnosticContextKey::NamespaceRevision, namespaceRevision))
+                return false;
+            if (!ContextMatches<SlotGenerationId>(record, SaveDiagnosticContextKey::SlotGeneration, slotGeneration))
+                return false;
+            return ContextMatches<OperationId>(record, SaveDiagnosticContextKey::ArchiveGeneration, archiveGeneration);
+        }
+    }  // namespace
+
+    std::span<const SaveDiagnosticContextEntry> SaveDiagnosticRecord::Context() const noexcept {
+        return {context_.data(), contextCount_};
+    }
+
+    std::span<const SavePartialDataFact> SaveDiagnosticRecord::PartialData() const noexcept {
+        return {partialData_.data(), partialDataCount_};
+    }
+
+    std::span<const SaveDiagnosticCause> SaveDiagnosticRecord::Causes() const noexcept {
+        return {causes_.data(), causeCount_};
+    }
+
+    std::span<const ErrorCodeDescriptor *const> SaveDiagnosticErrorDescriptors() noexcept {
+        static const auto descriptors = [] {
+            std::array<const ErrorCodeDescriptor *, std::tuple_size_v<std::remove_reference_t<decltype(Policies())>>> values{};
+            std::ranges::transform(Policies(), values.begin(), [](const DiagnosticPolicy &policy) {
+                return policy.descriptor;
+            });
+            return values;
+        }();
+        return descriptors;
+    }
+
+    Result<SaveDiagnosticRecord> MakeSaveDiagnosticRecord(const Error &error, const SaveFailureDisposition disposition,
+                                                          const SaveDiagnosticStage stage, const SaveDiagnosticOutcome outcome,
+                                                          const SaveDiagnosticCommitOutcome commitOutcome,
+                                                          const std::span<const SaveDiagnosticContextEntry> context,
+                                                          const std::span<const SavePartialDataFact> partialData,
+                                                          const std::string_view privateEvidence) {
+        const auto policy = PolicyFor(error);
+        const auto severity = DiagnosticSeverityForError(error.severity);
+        if (!policy.has_value())
+            return Result<SaveDiagnosticRecord>::Failure(MakeError(SaveErrors::DiagnosticUnsupported));
+        if (!severity.has_value() || !RequestIsValid(*policy, disposition, stage, outcome, commitOutcome, context, partialData))
+            return Result<SaveDiagnosticRecord>::Failure(MakeError(SaveErrors::DiagnosticInvalid));
+
+        const auto causes = ProjectCauses(error);
+        if (!causes.has_value())
+            return Result<SaveDiagnosticRecord>::Failure(MakeError(SaveErrors::DiagnosticInvalid));
+
+        SaveDiagnosticRecord record;
+        record.category_ = policy->category;
+        record.disposition_ = disposition;
+        record.stage_ = stage;
+        record.outcome_ = outcome;
+        record.commitOutcome_ = commitOutcome;
+        record.code_ = DiagnosticCode{policy->descriptor->code.Value()};
+        record.severity_ = *severity;
+        record.message_ = policy->descriptor->summary;
+        record.contextCount_ = context.size();
+        std::ranges::copy(context, record.context_.begin());
+        record.partialDataCount_ = partialData.size();
+        std::ranges::copy(partialData, record.partialData_.begin());
+        record.privateEvidence_ = SummarizePrivateEvidence(privateEvidence);
+        record.causes_ = causes->values;
+        record.causeCount_ = causes->count;
+        return Result<SaveDiagnosticRecord>::Success(std::move(record));
+    }
+
+    Result<void> ValidateSaveDiagnosticGenerations(const SaveDiagnosticRecord &record, const std::uint64_t registryGeneration,
+                                                   const std::uint64_t namespaceRevision, const SlotGenerationId &slotGeneration,
+                                                   const std::uint64_t archiveGeneration) {
+        if (!GenerationsAreValid(registryGeneration, namespaceRevision, slotGeneration, archiveGeneration) ||
+            !GenerationsMatch(record, registryGeneration, namespaceRevision, slotGeneration, archiveGeneration))
+            return Result<void>::Failure(MakeError(SaveErrors::DiagnosticCorrelationStale));
+        return Result<void>::Success();
+    }
+}  // namespace Horo::Runtime
