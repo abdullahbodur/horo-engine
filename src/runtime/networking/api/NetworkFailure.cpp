@@ -100,11 +100,11 @@ namespace Horo::Network {
         std::optional<Utf8Lead> DecodeUtf8Lead(const std::byte lead) noexcept {
             const auto value = std::to_integer<std::uint8_t>(lead);
             if (value >= 0xc2U && value <= 0xdfU)
-                return Utf8Lead{1, value & 0x1fU};
+                return Utf8Lead{1, std::to_integer<std::uint8_t>(lead & std::byte{0x1f})};
             if (value >= 0xe0U && value <= 0xefU)
-                return Utf8Lead{2, value & 0x0fU};
+                return Utf8Lead{2, std::to_integer<std::uint8_t>(lead & std::byte{0x0f})};
             if (value >= 0xf0U && value <= 0xf4U)
-                return Utf8Lead{3, value & 0x07U};
+                return Utf8Lead{3, std::to_integer<std::uint8_t>(lead & std::byte{0x07})};
             return std::nullopt;
         }
 
