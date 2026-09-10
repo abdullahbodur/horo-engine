@@ -418,6 +418,17 @@ namespace Horo::Extensions {
             const auto found = std::ranges::find(entries, packageId, &ExtensionInventoryEntry::packageId);
             return found == entries.end() ? nullptr : &*found;
         }
+
+        /** @brief Applies common exact-entry transition admission for inventory mutations. */
+        [[nodiscard]] Result<ExtensionLifecycleTransition> PrepareEntryTransition(const ExtensionInventoryEntry &entry,
+                                                                                  const ExtensionLifecycleAction action,
+                                                                                  const ExtensionLifecycleOwner owner,
+                                                                                  std::string composition = {}) {
+            return TransitionExtensionActivation(entry.ActivationState(), {.action = action,
+                                                                           .owner = owner,
+                                                                           .expectedRevision = entry.stateRevision,
+                                                                           .composition = std::move(composition)});
+        }
     }  // namespace
 
     /** @copydoc ExtensionInventoryEntry::ActivationState */
@@ -528,10 +539,9 @@ namespace Horo::Extensions {
         if (entry == nullptr)
             return Result<void>::Failure(MakeError(ExtensionErrors::InvalidManifest, "Unknown extension package ID."));
         auto transition =
-            TransitionExtensionActivation(entry->ActivationState(), {.action = enabled ? ExtensionLifecycleAction::EnableForProject
-                                                                                       : ExtensionLifecycleAction::DisableForProject,
-                                                                     .owner = ExtensionLifecycleOwner::PackageLifecycleService,
-                                                                     .expectedRevision = entry->stateRevision});
+            PrepareEntryTransition(*entry,
+                                   enabled ? ExtensionLifecycleAction::EnableForProject : ExtensionLifecycleAction::DisableForProject,
+                                   ExtensionLifecycleOwner::PackageLifecycleService);
         if (transition.HasError())
             return Result<void>::Failure(transition.ErrorValue());
         const bool wasEnabled = enabled_.contains(entry->packageId);
@@ -556,11 +566,8 @@ namespace Horo::Extensions {
         ExtensionInventoryEntry *entry = FindEntry(entries_, packageId);
         if (entry == nullptr)
             return Result<void>::Failure(MakeError(ExtensionErrors::InvalidManifest, "Unknown extension package ID."));
-        auto transition =
-            TransitionExtensionActivation(entry->ActivationState(), {.action = action,
-                                                                     .owner = ExtensionLifecycleOwner::TrustService,
-                                                                     .expectedRevision = entry->stateRevision,
-                                                                     .composition = trusted ? entry->compositionVersion : std::string{}});
+        auto transition = PrepareEntryTransition(*entry, action, ExtensionLifecycleOwner::TrustService,
+                                                 trusted ? entry->compositionVersion : std::string{});
         if (transition.HasError())
             return Result<void>::Failure(transition.ErrorValue());
         const auto previous = trustedCompositions_.find(entry->packageId);

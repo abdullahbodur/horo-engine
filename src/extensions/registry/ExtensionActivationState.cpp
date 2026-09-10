@@ -64,19 +64,23 @@ namespace Horo::Extensions {
             return !value.empty() && value.size() <= 512;
         }
 
-        [[nodiscard]] Result<void> ApplyAction(ExtensionActivationProjection &next, const ExtensionLifecycleCommand &command) {
+        [[nodiscard]] Result<void> InvalidTransition() {
+            return Result<void>::Failure(MakeError(ExtensionErrors::LifecycleTransitionInvalid));
+        }
+
+        [[nodiscard]] Result<void> ApplyInstallation(ExtensionActivationProjection &next, const ExtensionLifecycleCommand &command) {
             using enum ExtensionLifecycleAction;
             switch (command.action) {
                 case PublishInstalledComposition:
                     if (next.installation != ExtensionInstallationState::NotInstalled || !ValidCompositionEvidence(command.composition))
-                        break;
+                        return InvalidTransition();
                     next.installation = ExtensionInstallationState::Installed;
                     next.installedComposition = command.composition;
                     return Result<void>::Success();
                 case RemoveInstalledComposition:
                     if (next.installation != ExtensionInstallationState::Installed ||
                         next.runtime != ExtensionRuntimeActivityState::Inactive)
-                        break;
+                        return InvalidTransition();
                     next.installation = ExtensionInstallationState::NotInstalled;
                     next.trust = ExtensionTrustState::Untrusted;
                     next.compatibility = ExtensionHostCompatibilityState::NotEvaluated;
@@ -85,49 +89,72 @@ namespace Horo::Extensions {
                     next.installedComposition.clear();
                     next.trustedComposition.clear();
                     return Result<void>::Success();
+                default:
+                    return InvalidTransition();
+            }
+        }
+
+        [[nodiscard]] Result<void> ApplyPolicy(ExtensionActivationProjection &next, const ExtensionLifecycleCommand &command) {
+            using enum ExtensionLifecycleAction;
+            switch (command.action) {
                 case GrantTrust:
                     if (next.HasCurrentTrust() || !ValidCompositionEvidence(command.composition) ||
                         command.composition != next.installedComposition)
-                        break;
+                        return InvalidTransition();
                     next.trust = ExtensionTrustState::Trusted;
                     next.trustedComposition = command.composition;
                     return Result<void>::Success();
                 case RevokeTrust:
                     if (next.trust == ExtensionTrustState::Untrusted)
-                        break;
+                        return InvalidTransition();
                     next.trust = ExtensionTrustState::Untrusted;
                     next.trustedComposition.clear();
                     return Result<void>::Success();
                 case EnableForProject:
                     if (next.enablement == ExtensionEnablementState::Enabled)
-                        break;
+                        return InvalidTransition();
                     next.enablement = ExtensionEnablementState::Enabled;
                     return Result<void>::Success();
                 case DisableForProject:
                     if (next.enablement == ExtensionEnablementState::Disabled)
-                        break;
+                        return InvalidTransition();
                     next.enablement = ExtensionEnablementState::Disabled;
                     return Result<void>::Success();
+                default:
+                    return InvalidTransition();
+            }
+        }
+
+        [[nodiscard]] Result<void> ApplyCompatibility(ExtensionActivationProjection &next, const ExtensionLifecycleAction action) {
+            ExtensionHostCompatibilityState compatibility;
+            using enum ExtensionLifecycleAction;
+            switch (action) {
                 case MarkCompatible:
-                    if (next.compatibility == ExtensionHostCompatibilityState::Compatible)
-                        break;
-                    next.compatibility = ExtensionHostCompatibilityState::Compatible;
-                    return Result<void>::Success();
+                    compatibility = ExtensionHostCompatibilityState::Compatible;
+                    break;
                 case MarkIncompatible:
-                    if (next.compatibility == ExtensionHostCompatibilityState::Incompatible)
-                        break;
-                    next.compatibility = ExtensionHostCompatibilityState::Incompatible;
-                    return Result<void>::Success();
+                    compatibility = ExtensionHostCompatibilityState::Incompatible;
+                    break;
                 case MarkUnsupportedInHostProfile:
-                    if (next.compatibility == ExtensionHostCompatibilityState::UnsupportedInHostProfile)
-                        break;
-                    next.compatibility = ExtensionHostCompatibilityState::UnsupportedInHostProfile;
-                    return Result<void>::Success();
+                    compatibility = ExtensionHostCompatibilityState::UnsupportedInHostProfile;
+                    break;
+                default:
+                    return InvalidTransition();
+            }
+            if (next.compatibility == compatibility)
+                return InvalidTransition();
+            next.compatibility = compatibility;
+            return Result<void>::Success();
+        }
+
+        [[nodiscard]] Result<void> ApplyRuntime(ExtensionActivationProjection &next, const ExtensionLifecycleCommand &command) {
+            using enum ExtensionLifecycleAction;
+            switch (command.action) {
                 case MarkLoaded:
                     if (next.DesiredActivation() != ExtensionDesiredActivation::Active || !next.HasCurrentTrust() ||
                         next.compatibility != ExtensionHostCompatibilityState::Compatible ||
                         next.runtime != ExtensionRuntimeActivityState::Inactive || command.composition != next.installedComposition)
-                        break;
+                        return InvalidTransition();
                     next.runtime = ExtensionRuntimeActivityState::Loaded;
                     next.runtimeComposition = command.composition;
                     next.outcome = ExtensionActivationOutcome::NotAttempted;
@@ -138,7 +165,7 @@ namespace Horo::Extensions {
                         next.compatibility != ExtensionHostCompatibilityState::Compatible ||
                         next.runtime != ExtensionRuntimeActivityState::Loaded || command.composition != next.installedComposition ||
                         command.composition != next.runtimeComposition || command.activationGeneration <= next.activationGeneration)
-                        break;
+                        return InvalidTransition();
                     next.runtime = ExtensionRuntimeActivityState::Active;
                     next.activationGeneration = command.activationGeneration;
                     next.outcome = ExtensionActivationOutcome::Succeeded;
@@ -146,15 +173,24 @@ namespace Horo::Extensions {
                     return Result<void>::Success();
                 case MarkInactive:
                     if (next.runtime == ExtensionRuntimeActivityState::Inactive)
-                        break;
+                        return InvalidTransition();
                     next.runtime = ExtensionRuntimeActivityState::Inactive;
                     next.runtimeComposition.clear();
                     return Result<void>::Success();
+                default:
+                    return InvalidTransition();
+            }
+        }
+
+        [[nodiscard]] Result<void> ApplyOutcomeOrReplacement(ExtensionActivationProjection &next,
+                                                             const ExtensionLifecycleCommand &command) {
+            using enum ExtensionLifecycleAction;
+            switch (command.action) {
                 case RecordActivationFailure:
                     if (next.DesiredActivation() != ExtensionDesiredActivation::Active || command.failure.Empty() ||
                         command.failure.message.size() > MaximumFailureMessageBytes ||
                         next.runtime == ExtensionRuntimeActivityState::Active)
-                        break;
+                        return InvalidTransition();
                     next.runtime = ExtensionRuntimeActivityState::Inactive;
                     next.runtimeComposition.clear();
                     next.outcome = ExtensionActivationOutcome::Failed;
@@ -162,7 +198,7 @@ namespace Horo::Extensions {
                     return Result<void>::Success();
                 case ReplaceInstalledComposition:
                     if (!ValidCompositionEvidence(command.composition) || command.composition == next.installedComposition)
-                        break;
+                        return InvalidTransition();
                     next.installedComposition = command.composition;
                     next.trust = ExtensionTrustState::Untrusted;
                     next.trustedComposition.clear();
@@ -170,8 +206,35 @@ namespace Horo::Extensions {
                     next.outcome = ExtensionActivationOutcome::NotAttempted;
                     next.failure = {};
                     return Result<void>::Success();
+                default:
+                    return InvalidTransition();
             }
-            return Result<void>::Failure(MakeError(ExtensionErrors::LifecycleTransitionInvalid));
+        }
+
+        [[nodiscard]] Result<void> ApplyAction(ExtensionActivationProjection &next, const ExtensionLifecycleCommand &command) {
+            using enum ExtensionLifecycleAction;
+            switch (command.action) {
+                case PublishInstalledComposition:
+                case RemoveInstalledComposition:
+                    return ApplyInstallation(next, command);
+                case GrantTrust:
+                case RevokeTrust:
+                case EnableForProject:
+                case DisableForProject:
+                    return ApplyPolicy(next, command);
+                case MarkCompatible:
+                case MarkIncompatible:
+                case MarkUnsupportedInHostProfile:
+                    return ApplyCompatibility(next, command.action);
+                case MarkLoaded:
+                case MarkActive:
+                case MarkInactive:
+                    return ApplyRuntime(next, command);
+                case RecordActivationFailure:
+                case ReplaceInstalledComposition:
+                    return ApplyOutcomeOrReplacement(next, command);
+            }
+            return InvalidTransition();
         }
     }  // namespace
 
