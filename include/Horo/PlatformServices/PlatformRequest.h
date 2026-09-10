@@ -342,6 +342,8 @@ namespace Horo::PlatformServices {
         };
         struct State;
 
+        [[nodiscard]] State &MutableState() noexcept;
+
         [[nodiscard]] Result<PlatformRequestId> AdmitErased(std::type_index type);
         [[nodiscard]] Result<PlatformRequestMutation> MarkRunningErased(PlatformRequestId id, PlatformRequestGeneration generation,
                                                                         std::type_index type);

@@ -13,10 +13,16 @@
 
 namespace Horo::PlatformServices {
     struct PlatformRequestSubscription::Slot final {
+        friend class PlatformRequestStore;
+
+    private:
         mutable std::mutex mutex;
         bool active{true};
         std::function<void(const PlatformRequestStore::ErasedSnapshot &)> observer;
         std::function<void()> release;
+
+    public:
+        Slot() = default;
 
         void Reset() noexcept {
             std::function<void()> releaseOwner;
@@ -66,10 +72,15 @@ namespace Horo::PlatformServices {
             ErasedSnapshot snapshot;
         };
 
-        explicit State(PlatformRequestStoreConfig requested) : config(requested) {}
+        explicit State(const PlatformRequestStoreConfig &requested) : config(requested) {}
 
         PlatformRequestStoreConfig config;
+
+    private:
+        friend class PlatformRequestStore;
         mutable std::mutex mutex;
+
+    public:
         std::unordered_map<std::uint64_t, Record> records;
         std::deque<std::uint64_t> terminalOrder;
         std::deque<Delivery> deliveries;
@@ -132,20 +143,20 @@ namespace Horo::PlatformServices {
     namespace {
         [[nodiscard]] bool CanComplete(const PlatformRequestState from, const PlatformRequestState to) noexcept {
             constexpr auto StateBit = [](const PlatformRequestState state) {
-                return static_cast<std::uint8_t>(1U << static_cast<std::uint8_t>(state));
+                return std::byte{static_cast<std::uint8_t>(1U << static_cast<std::uint8_t>(state))};
             };
-            constexpr std::array<std::uint8_t, 7> AllowedTerminalStates{
+            constexpr std::array<std::byte, 7> AllowedTerminalStates{
                 StateBit(PlatformRequestState::Failed) | StateBit(PlatformRequestState::TimedOut),
                 StateBit(PlatformRequestState::Succeeded) | StateBit(PlatformRequestState::Failed) |
                     StateBit(PlatformRequestState::TimedOut),
                 StateBit(PlatformRequestState::Succeeded) | StateBit(PlatformRequestState::Failed) |
                     StateBit(PlatformRequestState::Cancelled) | StateBit(PlatformRequestState::TimedOut),
-                0,
-                0,
-                0,
-                0,
+                std::byte{},
+                std::byte{},
+                std::byte{},
+                std::byte{},
             };
-            return (AllowedTerminalStates[static_cast<std::size_t>(from)] & StateBit(to)) != 0;
+            return (AllowedTerminalStates[static_cast<std::size_t>(from)] & StateBit(to)) != std::byte{};
         }
 
         [[nodiscard]] bool TerminalShapeIsValid(const PlatformRequestState state, const std::shared_ptr<const void> &value,
@@ -205,28 +216,34 @@ namespace Horo::PlatformServices {
         Shutdown();
     }
 
+    /** @brief Returns mutable request ownership state for state-changing frontend operations. */
+    PlatformRequestStore::State &PlatformRequestStore::MutableState() noexcept {
+        return *state_;
+    }
+
     /** @copydoc PlatformRequestStore::Admit */
     Result<PlatformRequestId> PlatformRequestStore::AdmitErased(const std::type_index type) {
+        auto &state = MutableState();
         const auto now = std::chrono::steady_clock::now();
-        std::lock_guard lock(state_->mutex);
-        if (state_->config.activeCapacity == 0 || state_->config.terminalCapacity == 0 || state_->config.observerCapacity == 0 ||
-            !state_->config.generation.IsValid())
+        std::lock_guard lock(state.mutex);
+        if (state.config.activeCapacity == 0 || state.config.terminalCapacity == 0 || state.config.observerCapacity == 0 ||
+            !state.config.generation.IsValid())
             return Result<PlatformRequestId>::Failure(MakeError(RequestErrors::InvalidConfiguration));
-        if (state_->closed)
+        if (state.closed)
             return Result<PlatformRequestId>::Failure(MakeError(RequestErrors::FrontendUnavailable));
-        if (state_->activeCount >= state_->config.activeCapacity)
+        if (state.activeCount >= state.config.activeCapacity)
             return Result<PlatformRequestId>::Failure(MakeError(RequestErrors::CapacityExceeded));
-        if (state_->nextId == 0)
+        if (state.nextId == 0)
             return Result<PlatformRequestId>::Failure(MakeError(RequestErrors::CapacityExceeded, "Request identity space is exhausted."));
 
-        const PlatformRequestId id{state_->nextId++};
+        const PlatformRequestId id{state.nextId++};
         State::Record record{.type = type,
                              .snapshot = ErasedSnapshot{.id = id,
-                                                        .generation = state_->config.generation,
+                                                        .generation = state.config.generation,
                                                         .state = PlatformRequestState::Queued,
                                                         .timing = PlatformRequestTiming{.admittedAt = now}}};
-        state_->records.emplace(id.value, std::move(record));
-        ++state_->activeCount;
+        state.records.try_emplace(id.value, std::move(record));
+        ++state.activeCount;
         return Result<PlatformRequestId>::Success(id);
     }
 
@@ -234,13 +251,15 @@ namespace Horo::PlatformServices {
     Result<PlatformRequestMutation> PlatformRequestStore::MarkRunningErased(const PlatformRequestId id,
                                                                             const PlatformRequestGeneration generation,
                                                                             const std::type_index type) {
-        return state_->MutateRecord(id, generation, type, [](State::Record &record) {
+        auto &state = MutableState();
+        return state.MutateRecord(id, generation, type, [](State::Record &record) {
+            using enum PlatformRequestState;
             auto &snapshot = record.snapshot;
-            if (snapshot.state == PlatformRequestState::Running)
+            if (snapshot.state == Running)
                 return Result<PlatformRequestMutation>::Success(PlatformRequestMutation::Unchanged);
-            if (snapshot.state != PlatformRequestState::Queued)
+            if (snapshot.state != Queued)
                 return Result<PlatformRequestMutation>::Failure(MakeError(RequestErrors::InvalidTransition));
-            snapshot.state = PlatformRequestState::Running;
+            snapshot.state = Running;
             snapshot.timing.startedAt = std::chrono::steady_clock::now();
             return Result<PlatformRequestMutation>::Success(PlatformRequestMutation::Applied);
         });
@@ -250,7 +269,8 @@ namespace Horo::PlatformServices {
     Result<PlatformRequestMutation> PlatformRequestStore::RequestCancelErased(const PlatformRequestId id,
                                                                               const PlatformRequestGeneration generation,
                                                                               const std::type_index type) {
-        return state_->MutateRecord(id, generation, type, [](State::Record &record) {
+        auto &state = MutableState();
+        return state.MutateRecord(id, generation, type, [](State::Record &record) {
             auto &snapshot = record.snapshot;
             if (IsTerminal(snapshot.state) || snapshot.cancellationRequested)
                 return Result<PlatformRequestMutation>::Success(PlatformRequestMutation::Unchanged);
@@ -272,9 +292,10 @@ namespace Horo::PlatformServices {
                                                                          const std::type_index type,
                                                                          const PlatformRequestState terminalState,
                                                                          std::shared_ptr<const void> value, std::optional<Error> error) {
-        return state_->MutateRecord(id, generation, type,
-                                    [this, id, terminalState, value = std::move(value),
-                                     error = std::move(error)](State::Record &record) mutable {
+        auto &state = MutableState();
+        return state.MutateRecord(id, generation, type,
+                                  [&state, id, terminalState, value = std::move(value),
+                                   error = std::move(error)](State::Record &record) mutable {
             if (IsTerminal(record.snapshot.state))
                 return Result<PlatformRequestMutation>::Success(PlatformRequestMutation::Unchanged);
             if (!CanComplete(record.snapshot.state, terminalState) || !TerminalShapeIsValid(terminalState, value, error))
@@ -285,10 +306,10 @@ namespace Horo::PlatformServices {
             record.snapshot.value = std::move(value);
             record.snapshot.error = std::move(error);
             record.snapshot.timing.terminalAt = std::chrono::steady_clock::now();
-            --state_->activeCount;
-            state_->terminalOrder.push_back(id.value);
-            state_->QueueObservers(record);
-            state_->ExpireTerminalRecords();
+            --state.activeCount;
+            state.terminalOrder.push_back(id.value);
+            state.QueueObservers(record);
+            state.ExpireTerminalRecords();
             return Result<PlatformRequestMutation>::Success(PlatformRequestMutation::Applied);
         });
     }
@@ -313,17 +334,18 @@ namespace Horo::PlatformServices {
                                                                               const PlatformRequestGeneration generation,
                                                                               const std::type_index type,
                                                                               std::function<void(const ErasedSnapshot &)> observer) {
-        std::lock_guard lock(state_->mutex);
-        if (state_->closed)
+        auto &state = MutableState();
+        std::lock_guard lock(state.mutex);
+        if (state.closed)
             return Result<PlatformRequestSubscription>::Failure(MakeError(RequestErrors::FrontendUnavailable));
-        if (!id.IsValid() || generation != state_->config.generation)
+        if (!id.IsValid() || generation != state.config.generation)
             return Result<PlatformRequestSubscription>::Failure(MakeError(RequestErrors::Stale));
-        const auto found = state_->records.find(id.value);
-        if (found == state_->records.end())
+        const auto found = state.records.find(id.value);
+        if (found == state.records.end())
             return Result<PlatformRequestSubscription>::Failure(MakeError(RequestErrors::Expired));
         if (found->second.type != type)
             return Result<PlatformRequestSubscription>::Failure(MakeError(RequestErrors::Stale));
-        if (!observer || state_->observerCount >= state_->config.observerCapacity)
+        if (!observer || state.observerCount >= state.config.observerCapacity)
             return Result<PlatformRequestSubscription>::Failure(MakeError(RequestErrors::CapacityExceeded));
 
         auto slot = std::make_shared<PlatformRequestSubscription::Slot>();
@@ -336,9 +358,9 @@ namespace Horo::PlatformServices {
                 state->ReleaseObserver(id, slotIdentity);
             }
         };
-        ++state_->observerCount;
+        ++state.observerCount;
         if (found->second.snapshot.terminal)
-            state_->deliveries.push_back(State::Delivery{.slot = slot, .snapshot = found->second.snapshot});
+            state.deliveries.push_back(State::Delivery{.slot = slot, .snapshot = found->second.snapshot});
         else
             found->second.observers.emplace_back(slot);
         return Result<PlatformRequestSubscription>::Success(PlatformRequestSubscription{std::move(slot)});
@@ -346,16 +368,25 @@ namespace Horo::PlatformServices {
 
     /** @copydoc PlatformRequestStore::DispatchCompletions */
     std::size_t PlatformRequestStore::DispatchCompletions(const std::size_t maxCount) noexcept {
-        if (maxCount == 0 || state_->dispatching.test_and_set(std::memory_order_acquire))
+        if (maxCount == 0 || state_->dispatching.test_and_set())
             return 0;
 
         struct DispatchGuard final {
             std::atomic_flag &flag;
 
+            explicit DispatchGuard(std::atomic_flag &flagToClear) noexcept : flag(flagToClear) {}
+
+            DispatchGuard(const DispatchGuard &) = delete;
+            DispatchGuard &operator=(const DispatchGuard &) = delete;
+            DispatchGuard(DispatchGuard &&) = delete;
+            DispatchGuard &operator=(DispatchGuard &&) = delete;
+
             ~DispatchGuard() {
-                flag.clear(std::memory_order_release);
+                flag.clear();
             }
-        } guard{state_->dispatching};
+        };
+
+        DispatchGuard guard{state_->dispatching};
 
         std::size_t delivered{};
         while (delivered < maxCount) {
@@ -385,30 +416,31 @@ namespace Horo::PlatformServices {
     void PlatformRequestStore::Shutdown() noexcept {
         if (!state_)
             return;
+        auto &state = MutableState();
         std::vector<std::shared_ptr<PlatformRequestSubscription::Slot>> observers;
         {
-            std::lock_guard lock(state_->mutex);
-            if (state_->closed)
+            std::lock_guard lock(state.mutex);
+            if (state.closed)
                 return;
-            state_->closed = true;
+            state.closed = true;
             const auto now = std::chrono::steady_clock::now();
-            for (auto &[id, record] : state_->records) {
+            for (auto &[id, record] : state.records) {
                 if (!IsTerminal(record.snapshot.state)) {
                     record.snapshot.state = PlatformRequestState::Failed;
                     record.snapshot.terminal = true;
                     record.snapshot.error = MakeError(RequestErrors::FrontendUnavailable);
                     record.snapshot.timing.terminalAt = now;
-                    state_->terminalOrder.push_back(id);
+                    state.terminalOrder.push_back(id);
                 }
                 for (const auto &weak : record.observers)
                     if (auto slot = weak.lock())
                         observers.push_back(std::move(slot));
             }
-            for (auto &delivery : state_->deliveries)
+            for (auto &delivery : state.deliveries)
                 observers.push_back(std::move(delivery.slot));
-            state_->deliveries.clear();
-            state_->activeCount = 0;
-            state_->ExpireTerminalRecords();
+            state.deliveries.clear();
+            state.activeCount = 0;
+            state.ExpireTerminalRecords();
         }
         for (const auto &observer : observers)
             observer->Reset();
