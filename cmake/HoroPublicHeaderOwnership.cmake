@@ -40,6 +40,13 @@ horo_configure_target_header_boundary(HoroFoundation PUBLIC_HEADERS
     Horo/Math/WorldCoordinate64.h
 )
 
+horo_configure_target_header_boundary(HoroSecurity PUBLIC_HEADERS
+    Horo/Security/ArtifactSignature.h
+    Horo/Security/CredentialStore.h
+    Horo/Security/SecureMemory.h
+    Horo/Security/SecurityErrors.h
+)
+
 horo_configure_target_header_boundary(HoroCliHost PUBLIC_HEADERS
     Horo/Cli/CliCommandDescriptor.h
     Horo/Cli/CliCommandRegistry.h
@@ -56,6 +63,7 @@ horo_configure_target_header_boundary(HoroPlatform PUBLIC_HEADERS
     Horo/Platform/DynamicLibrary.h
     Horo/Platform/ExternalProcess.h
     Horo/Platform/PlatformErrors.h
+    Horo/Platform/SecureRandom.h
 )
 
 horo_configure_target_header_boundary(HoroPlatformServices PUBLIC_HEADERS

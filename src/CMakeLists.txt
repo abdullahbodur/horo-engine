@@ -38,6 +38,17 @@ target_include_directories(HoroFoundation
         $<TARGET_PROPERTY:nlohmann_json::nlohmann_json,INTERFACE_INCLUDE_DIRECTORIES>
 )
 
+add_library(HoroSecurity STATIC
+        security/SecurityErrors.cpp
+        security/SecureMemory.cpp
+        security/CredentialStore.cpp
+        security/ArtifactSignature.cpp
+        security/MbedTlsSignatureProvider.cpp
+)
+add_library(HoroEngine::Security ALIAS HoroSecurity)
+target_compile_features(HoroSecurity PUBLIC cxx_std_20)
+target_link_libraries(HoroSecurity PUBLIC HoroEngine::Foundation PRIVATE MbedTLS::mbedcrypto)
+
 add_library(HoroCliHost STATIC
         cli/CliCommandRegistry.cpp
         cli/CliCommonOptions.cpp
@@ -80,12 +91,18 @@ add_library(HoroPlatform STATIC
 if (WIN32)
     target_sources(HoroPlatform PRIVATE
             platform/windows/DynamicLibrary_Windows.cpp
-            platform/windows/ExternalProcess_Windows.cpp)
+            platform/windows/ExternalProcess_Windows.cpp
+            platform/windows/SecureRandom_Windows.cpp)
+    target_link_libraries(HoroPlatform PRIVATE bcrypt)
 else ()
     target_sources(HoroPlatform PRIVATE
             platform/posix/DynamicLibrary_Posix.cpp
-            platform/posix/ExternalProcess_Posix.cpp)
+            platform/posix/ExternalProcess_Posix.cpp
+            platform/posix/SecureRandom_Posix.cpp)
     target_link_libraries(HoroPlatform PRIVATE dl)
+    if (APPLE)
+        target_link_libraries(HoroPlatform PRIVATE "-framework Security")
+    endif ()
 endif ()
 
 add_library(HoroEngine::Platform ALIAS HoroPlatform)
@@ -95,7 +112,7 @@ target_include_directories(HoroPlatform
         PUBLIC
         ${PROJECT_SOURCE_DIR}/include
 )
-target_link_libraries(HoroPlatform PUBLIC HoroEngine::Foundation)
+target_link_libraries(HoroPlatform PUBLIC HoroEngine::Foundation HoroEngine::Security)
 
 add_library(HoroPlatformServices STATIC
         platform_services/AchievementDefinitionRegistry.cpp
@@ -1086,7 +1103,7 @@ target_include_directories(HoroExtensions
         ${PROJECT_SOURCE_DIR}/include
 )
 target_link_libraries(HoroExtensions
-        PUBLIC HoroEngine::Foundation HoroEngine::Platform HoroEngine::Assets
+        PUBLIC HoroEngine::Foundation HoroEngine::Platform HoroEngine::Assets HoroEngine::Security
         PRIVATE nlohmann_json::nlohmann_json CURL::libcurl miniz
 )
 

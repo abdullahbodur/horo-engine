@@ -176,6 +176,13 @@ material never enters the archive builder, manifest, logs or diagnostic artifact
 
 ## Artifact Integrity And Signing
 
+The application-artifact verification primitive is defined by
+[ADR-178](../../adr/178-application-security-primitive-and-signature-baseline.md):
+ECDSA P-256 with SHA-256 behind a provider-neutral contract, with evidence bound
+to exact bytes and an explicit trusted signing root. Platform distribution
+signatures may additionally use store-required algorithms, but they do not
+replace this in-process native activation gate.
+
 Every published artifact has a cryptographic hash recorded in the release
 manifest and checksum file.
 

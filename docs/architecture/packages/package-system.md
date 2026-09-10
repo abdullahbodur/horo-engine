@@ -623,6 +623,12 @@ trust root by itself. Unknown publishers require explicit approval or policy.
 Signing key rotation and revocation are handled by the trusted publisher store or
 organization policy.
 
+[ADR-178](../../adr/178-application-security-primitive-and-signature-baseline.md)
+provides the executable exact-artifact verifier and unforgeable evidence type.
+Archive structure/hash success alone cannot construct that evidence; package
+composition must bind its manifest/file/archive claims to the selected native
+artifact before activation.
+
 ## Cache Model
 
 Package cache is a performance input, not a correctness input.

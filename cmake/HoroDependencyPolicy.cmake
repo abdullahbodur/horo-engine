@@ -3,9 +3,10 @@ include_guard(GLOBAL)
 # This manifest is intentionally explicit: changing a first-party link edge must
 # update the architecture policy in the same review.
 horo_allow_target_dependencies(TARGET HoroFoundation)
+horo_allow_target_dependencies(TARGET HoroSecurity DEPENDENCIES HoroFoundation)
 horo_allow_target_dependencies(TARGET HoroCliHost DEPENDENCIES HoroFoundation)
 horo_allow_target_dependencies(TARGET HoroOpenTelemetry DEPENDENCIES HoroFoundation)
-horo_allow_target_dependencies(TARGET HoroPlatform DEPENDENCIES HoroFoundation)
+horo_allow_target_dependencies(TARGET HoroPlatform DEPENDENCIES HoroFoundation HoroSecurity)
 horo_allow_target_dependencies(TARGET HoroPlatformServices DEPENDENCIES HoroFoundation)
 horo_allow_target_dependencies(TARGET HoroPackages DEPENDENCIES HoroFoundation)
 horo_allow_target_dependencies(TARGET HoroApplication DEPENDENCIES HoroFoundation)
@@ -83,7 +84,7 @@ horo_allow_target_dependencies(TARGET HoroEditorViewportMetal
 horo_allow_target_dependencies(TARGET HoroGui
     DEPENDENCIES HoroEditorServices HoroFoundation HoroEditorRenderExtraction HoroExtensions)
 horo_allow_target_dependencies(TARGET HoroExtensions
-    DEPENDENCIES HoroFoundation HoroPlatform HoroAssets)
+    DEPENDENCIES HoroFoundation HoroPlatform HoroAssets HoroSecurity)
 
 # Executables are composition roots and may select any production module.
 horo_allow_target_dependencies(TARGET HoroHostModuleComposition DEPENDENCIES HoroFoundation)

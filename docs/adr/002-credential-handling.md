@@ -1,6 +1,7 @@
 # ADR-002: Credential Handling Model
 
-- **Status**: Accepted
+- **Status**: Superseded
+- **Superseded by**: [ADR-178](178-application-security-primitive-and-signature-baseline.md) for credential storage and plaintext fallback semantics
 - **Date**: 2026-05-25
 - **Supersedes**: None
 - **Scope**: Secrets, signing keys, and archive passwords in the build/release pipeline

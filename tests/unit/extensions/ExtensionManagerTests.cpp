@@ -7,6 +7,8 @@
 #include "Horo/Extensions/ExtensionManifest.h"
 #include "Horo/Extensions/ExtensionMarketplace.h"
 #include "Horo/Foundation/Platform.h"
+#include "Horo/Security/SecurityErrors.h"
+#include "SecurityTestSupport.h"
 
 #include <catch2/catch_test_macros.hpp>
 #include <catch2/matchers/catch_matchers_string.hpp>
@@ -100,6 +102,66 @@ namespace Horo::Extensions::Tests {
             std::error_code ec;
             fs::remove_all(tempDir, ec);
         }
+
+#ifdef HORO_ABI_FIXTURE_0
+        [[nodiscard]] std::string PrepareMultiModuleLibraries() const {
+            const fs::path source = fs::absolute(HORO_ABI_FIXTURE_0);
+            const std::string extension = source.extension().string();
+            fs::copy_file(source, tempDir / ("backend" + extension), fs::copy_options::overwrite_existing);
+            fs::copy_file(source, tempDir / ("editor" + extension), fs::copy_options::overwrite_existing);
+            return extension;
+        }
+
+        void WriteMultiModuleManifest(const std::string &modules) const {
+            std::ofstream output{tempDir / "extension.json", std::ios::binary | std::ios::trunc};
+            output << "{\"id\":\"com.example.multi\",\"version\":\"1.0.0\",\"modules\":" << modules << '}';
+        }
+
+        [[nodiscard]] static std::string MissingPresentationModules(const std::string &extension) {
+            return "[{\"id\":\"com.example.multi.backend\",\"version\":\"1.0.0\",\"kind\":\"native\","
+                   "\"roles\":[\"backend-capability\"],\"entry\":\"backend" +
+                   extension +
+                   "\"},{\"id\":\"com.example.multi.editor\",\"version\":\"1.0.0\",\"kind\":\"native\","
+                   "\"roles\":[\"editor-presentation\"],\"dependencies\":[\"com.example.multi.backend\"],\"entry\":\"missing" +
+                   extension + "\"}]";
+        }
+
+        void RequireMultiModuleLoaded(const ExtensionHostProfile profile, std::vector<std::string> capabilities = {}) const {
+            ExtensionManager manager{nullptr, profile, std::move(capabilities), Horo::Tests::CreateAcceptingArtifactGate()};
+            REQUIRE(manager.LoadExtension(fs::absolute(tempDir).string()).HasValue());
+            CHECK(manager.GetLoadedExtensionIds() == std::vector<std::string>{"com.example.multi"});
+        }
+#endif
+    };
+
+    class RejectingArtifactGate final : public Security::NativeArtifactGate {
+    public:
+        explicit RejectingArtifactGate(const ErrorCodeDescriptor &error) : error_(error) {}
+
+        [[nodiscard]] Result<Security::VerifiedArtifactEvidence> Verify(const fs::path &) const override {
+            return Result<Security::VerifiedArtifactEvidence>::Failure(MakeError(error_));
+        }
+
+    private:
+        const ErrorCodeDescriptor &error_;
+    };
+
+    class MutatingArtifactGate final : public Security::NativeArtifactGate {
+    public:
+        explicit MutatingArtifactGate(std::shared_ptr<const Security::NativeArtifactGate> delegate) : delegate_(std::move(delegate)) {}
+
+        [[nodiscard]] Result<Security::VerifiedArtifactEvidence> Verify(const fs::path &path) const override {
+            auto evidence = delegate_->Verify(path);
+            if (evidence.HasError())
+                return evidence;
+            std::ofstream changed{path, std::ios::binary | std::ios::app};
+            changed.put('\0');
+            changed.close();
+            return evidence;
+        }
+
+    private:
+        std::shared_ptr<const Security::NativeArtifactGate> delegate_;
     };
 
     TEST_CASE_METHOD(ExtensionManagerTestFixture, "ExtensionManager Discovery", "[Extensions]") {
@@ -262,66 +324,101 @@ namespace Horo::Extensions::Tests {
     }
 
 #ifdef HORO_ABI_FIXTURE_0
-    TEST_CASE_METHOD(ExtensionManagerTestFixture, "Extension manager stages multi-module packages atomically", "[Extensions][Modules]") {
+    TEST_CASE_METHOD(ExtensionManagerTestFixture, "Security failures prevent native loading and extension callbacks",
+                     "[Extensions][Security]") {
         const fs::path source = fs::absolute(HORO_ABI_FIXTURE_0);
-        const std::string extension = source.extension().string();
-        fs::copy_file(source, tempDir / ("backend" + extension), fs::copy_options::overwrite_existing);
-        fs::copy_file(source, tempDir / ("editor" + extension), fs::copy_options::overwrite_existing);
-
-        const auto writeManifest = [this](const std::string &modules) {
-            std::ofstream output{tempDir / "extension.json", std::ios::binary | std::ios::trunc};
-            output << "{\"id\":\"com.example.multi\",\"version\":\"1.0.0\",\"modules\":" << modules << '}';
+        const fs::path library = tempDir / source.filename();
+        fs::copy_file(source, library, fs::copy_options::overwrite_existing);
+        {
+            std::ofstream manifest{tempDir / "extension.json", std::ios::binary | std::ios::trunc};
+            manifest
+                << R"({"id":"com.example.secure","version":"1.0.0","modules":[{"id":"com.example.secure.native","version":"1.0.0","kind":"native","roles":["backend-capability"],"entry":")"
+                << library.filename().generic_string() << R"("}]})";
+        }
+        const std::array<const ErrorCodeDescriptor *, 6> failures{
+            &SecurityErrors::MissingEvidence,   &SecurityErrors::IntegrityMismatch,    &SecurityErrors::InvalidSignature,
+            &SecurityErrors::UnknownSigningKey, &SecurityErrors::UnsupportedAlgorithm, &SecurityErrors::StaleEvidence,
         };
+        for (const ErrorCodeDescriptor *failure : failures) {
+            std::size_t loaderCalls{};
+            auto loader = [&loaderCalls](const std::string &) -> Result<std::unique_ptr<Platform::DynamicLibrary>> {
+                ++loaderCalls;
+                return Result<std::unique_ptr<Platform::DynamicLibrary>>::Failure(MakeError(ExtensionErrors::LoadFailed));
+            };
+            ExtensionManager manager{nullptr,
+                                     ExtensionHostProfile::Interactive,
+                                     {},
+                                     std::make_shared<RejectingArtifactGate>(*failure),
+                                     std::move(loader)};
+            const auto loaded = manager.LoadExtension(fs::absolute(tempDir).string());
+            REQUIRE(loaded.HasError());
+            CHECK(loaded.ErrorValue().code.Value() == failure->code.Value());
+            CHECK(loaderCalls == 0U);
+        }
 
+        std::size_t missingGateLoaderCalls{};
+        auto missingGateLoader = [&missingGateLoaderCalls](const std::string &) -> Result<std::unique_ptr<Platform::DynamicLibrary>> {
+            ++missingGateLoaderCalls;
+            return Result<std::unique_ptr<Platform::DynamicLibrary>>::Failure(MakeError(ExtensionErrors::LoadFailed));
+        };
+        ExtensionManager missingGateManager{nullptr, ExtensionHostProfile::Interactive, {}, nullptr, std::move(missingGateLoader)};
+        const auto missingGate = missingGateManager.LoadExtension(fs::absolute(tempDir).string());
+        REQUIRE(missingGate.HasError());
+        CHECK(missingGate.ErrorValue().code.Value() == SecurityErrors::MissingEvidence.code.Value());
+        CHECK(missingGateLoaderCalls == 0U);
+
+        std::size_t staleLoaderCalls{};
+        auto staleLoader = [&staleLoaderCalls](const std::string &) -> Result<std::unique_ptr<Platform::DynamicLibrary>> {
+            ++staleLoaderCalls;
+            return Result<std::unique_ptr<Platform::DynamicLibrary>>::Failure(MakeError(ExtensionErrors::LoadFailed));
+        };
+        ExtensionManager staleManager{
+            nullptr,
+            ExtensionHostProfile::Interactive,
+            {},
+            std::make_shared<MutatingArtifactGate>(Horo::Tests::CreateAcceptingArtifactGate()),
+            std::move(staleLoader),
+        };
+        const auto stale = staleManager.LoadExtension(fs::absolute(tempDir).string());
+        REQUIRE(stale.HasError());
+        CHECK(stale.ErrorValue().code.Value() == SecurityErrors::StaleEvidence.code.Value());
+        CHECK(staleLoaderCalls == 0U);
+    }
+
+    TEST_CASE_METHOD(ExtensionManagerTestFixture, "Extension manager stages selected modules atomically", "[Extensions][Modules]") {
+        const std::string extension = PrepareMultiModuleLibraries();
         SECTION("all selected siblings publish as one loaded package") {
-            writeManifest("[{\"id\":\"com.example.multi.backend\",\"version\":\"1.0.0\",\"kind\":\"native\","
-                          "\"roles\":[\"backend-capability\"],\"entry\":\"backend" +
-                          extension +
-                          "\"},"
-                          "{\"id\":\"com.example.multi.editor\",\"version\":\"1.0.0\",\"kind\":\"native\","
-                          "\"roles\":[\"editor-presentation\"],\"dependencies\":[\"com.example.multi.backend\"],"
-                          "\"entry\":\"editor" +
-                          extension + "\"}]");
-            ExtensionManager manager;
-            REQUIRE(manager.LoadExtension(fs::absolute(tempDir).string()).HasValue());
-            CHECK(manager.GetLoadedExtensionIds() == std::vector<std::string>{"com.example.multi"});
+            WriteMultiModuleManifest(
+                "[{\"id\":\"com.example.multi.backend\",\"version\":\"1.0.0\",\"kind\":\"native\","
+                "\"roles\":[\"backend-capability\"],\"entry\":\"backend" +
+                extension +
+                "\"},{\"id\":\"com.example.multi.editor\",\"version\":\"1.0.0\",\"kind\":\"native\","
+                "\"roles\":[\"editor-presentation\"],\"dependencies\":[\"com.example.multi.backend\"],\"entry\":\"editor" +
+                extension + "\"}]");
+            RequireMultiModuleLoaded(ExtensionHostProfile::Interactive);
         }
 
         SECTION("explicit host capabilities admit a required module before activation") {
-            writeManifest("[{\"id\":\"com.example.multi.backend\",\"version\":\"1.0.0\",\"kind\":\"native\","
-                          "\"roles\":[\"backend-capability\"],\"entry\":\"backend" +
-                          extension + "\",\"requiredCapabilities\":[\"com.horo.assets\"]}]");
-            ExtensionManager manager{nullptr, ExtensionHostProfile::Interactive, {"com.horo.assets", "com.horo.assets", ""}};
-            REQUIRE(manager.LoadExtension(fs::absolute(tempDir).string()).HasValue());
-            CHECK(manager.GetLoadedExtensionIds() == std::vector<std::string>{"com.example.multi"});
+            WriteMultiModuleManifest("[{\"id\":\"com.example.multi.backend\",\"version\":\"1.0.0\",\"kind\":\"native\","
+                                     "\"roles\":[\"backend-capability\"],\"entry\":\"backend" +
+                                     extension + "\",\"requiredCapabilities\":[\"com.horo.assets\"]}]");
+            RequireMultiModuleLoaded(ExtensionHostProfile::Interactive, {"com.horo.assets", "com.horo.assets", ""});
         }
+    }
 
+    TEST_CASE_METHOD(ExtensionManagerTestFixture, "Extension manager rolls back or omits invalid presentation siblings",
+                     "[Extensions][Modules]") {
+        const std::string extension = PrepareMultiModuleLibraries();
         SECTION("a failing sibling rolls back the complete activation attempt") {
-            writeManifest("[{\"id\":\"com.example.multi.backend\",\"version\":\"1.0.0\",\"kind\":\"native\","
-                          "\"roles\":[\"backend-capability\"],\"entry\":\"backend" +
-                          extension +
-                          "\"},"
-                          "{\"id\":\"com.example.multi.editor\",\"version\":\"1.0.0\",\"kind\":\"native\","
-                          "\"roles\":[\"editor-presentation\"],\"dependencies\":[\"com.example.multi.backend\"],"
-                          "\"entry\":\"missing" +
-                          extension + "\"}]");
-            ExtensionManager manager;
+            WriteMultiModuleManifest(MissingPresentationModules(extension));
+            ExtensionManager manager{nullptr, ExtensionHostProfile::Interactive, {}, Horo::Tests::CreateAcceptingArtifactGate()};
             REQUIRE(manager.LoadExtension(fs::absolute(tempDir).string()).HasError());
             CHECK(manager.GetLoadedExtensionIds().empty());
         }
 
         SECTION("headless activation does not construct an optional presentation sibling") {
-            writeManifest("[{\"id\":\"com.example.multi.backend\",\"version\":\"1.0.0\",\"kind\":\"native\","
-                          "\"roles\":[\"backend-capability\"],\"entry\":\"backend" +
-                          extension +
-                          "\"},"
-                          "{\"id\":\"com.example.multi.editor\",\"version\":\"1.0.0\",\"kind\":\"native\","
-                          "\"roles\":[\"editor-presentation\"],\"dependencies\":[\"com.example.multi.backend\"],"
-                          "\"entry\":\"missing" +
-                          extension + "\"}]");
-            ExtensionManager manager{nullptr, ExtensionHostProfile::Headless};
-            REQUIRE(manager.LoadExtension(fs::absolute(tempDir).string()).HasValue());
-            CHECK(manager.GetLoadedExtensionIds() == std::vector<std::string>{"com.example.multi"});
+            WriteMultiModuleManifest(MissingPresentationModules(extension));
+            RequireMultiModuleLoaded(ExtensionHostProfile::Headless);
         }
     }
 #endif
@@ -381,7 +478,7 @@ namespace Horo::Extensions::Tests {
         AssetImporterCatalog catalog;
         REQUIRE(catalog.Register(MakeExistingImporterContribution("com.horo.examples.asset-importer-basic.raw")).HasValue());
 
-        ExtensionManager manager{&catalog};
+        ExtensionManager manager{&catalog, ExtensionHostProfile::Interactive, {}, Horo::Tests::CreateAcceptingArtifactGate()};
         auto loaded = manager.LoadExtension(fs::absolute(HORO_BASIC_EXTENSION_DIR).string());
         REQUIRE(loaded.HasError());
         REQUIRE(manager.GetLoadedExtensionIds().empty());
@@ -401,7 +498,7 @@ namespace Horo::Extensions::Tests {
         REQUIRE(published.HasValue());
         const auto previous = published.Value();
 
-        ExtensionManager manager{&catalog};
+        ExtensionManager manager{&catalog, ExtensionHostProfile::Interactive, {}, Horo::Tests::CreateAcceptingArtifactGate()};
         const auto loaded = manager.LoadExtension(fs::absolute(HORO_BASIC_EXTENSION_DIR).string());
 
         REQUIRE(loaded.HasError());
@@ -454,7 +551,7 @@ namespace Horo::Extensions::Tests {
         manifest.close();
 
         Assets::AssetImporterCatalog catalog;
-        ExtensionManager manager{&catalog};
+        ExtensionManager manager{&catalog, ExtensionHostProfile::Interactive, {}, Horo::Tests::CreateAcceptingArtifactGate()};
         REQUIRE(manager.LoadExtension(fs::absolute(tempDir).string()).HasError());
         CHECK(manager.GetLoadedExtensionIds().empty());
         auto published = catalog.Publish();
@@ -524,7 +621,7 @@ namespace Horo::Extensions::Tests {
         using namespace Horo::Assets;
 
         AssetImporterCatalog catalog;
-        ExtensionManager manager{&catalog};
+        ExtensionManager manager{&catalog, ExtensionHostProfile::Interactive, {}, Horo::Tests::CreateAcceptingArtifactGate()};
         const fs::path packagePath = fs::absolute(HORO_BASIC_EXTENSION_DIR);
         auto loaded = manager.LoadExtension(packagePath.string());
         REQUIRE(loaded.HasValue());
