@@ -5,6 +5,7 @@
 #include <array>
 #include <catch2/catch_test_macros.hpp>
 #include <string>
+#include <string_view>
 #include <utility>
 
 namespace {
@@ -50,6 +51,20 @@ namespace {
     }
 
     void IgnoreDeactivation(ModuleActivationContext &) noexcept {}
+
+    void RequireHostRejectsBeforeActivation(ModuleDescriptor module, const std::string_view expectedCode) {
+        g_activationCount = 0;
+        module.lifecycle = {.activate = &CountActivation, .deactivate = &IgnoreDeactivation};
+
+        ModuleHost host;
+        REQUIRE(host.Register(module).HasValue());
+        const Result<std::size_t> activated = host.ActivateRegistered(nullptr);
+        REQUIRE(activated.HasError());
+        REQUIRE(activated.ErrorValue().code.Value() == expectedCode);
+        REQUIRE(g_activationCount == 0);
+        REQUIRE(host.StateOf(module.id) == ModuleLifecycleState::Registered);
+        REQUIRE(host.ErrorCodes() == nullptr);
+    }
 }  // namespace
 
 TEST_CASE("Error code registry owns and resolves stable textual descriptors", "[unit][foundation][errors][registry]") {
@@ -178,37 +193,17 @@ TEST_CASE("Registry validates deprecation replacements within the same domain", 
 
 TEST_CASE("Module graph and host reject invalid registries before activation", "[unit][foundation][errors][registry][composition]") {
     SECTION("duplicate code") {
-        g_activationCount = 0;
         ModuleDescriptor module = ModuleWithDomain("horo.assets", "horo.asset", {&kAssetMissing, &kAssetMissing});
-        module.lifecycle = {.activate = &CountActivation, .deactivate = &IgnoreDeactivation};
 
         const Result<ValidatedModuleGraph> graph = ValidateModuleGraph(std::span{&module, 1});
         REQUIRE(graph.HasError());
         REQUIRE(graph.ErrorValue().code.Value() == "foundation.error_registry.duplicate_code");
-
-        ModuleHost host;
-        REQUIRE(host.Register(module).HasValue());
-        const Result<std::size_t> activated = host.ActivateRegistered(nullptr);
-        REQUIRE(activated.HasError());
-        REQUIRE(activated.ErrorValue().code.Value() == "foundation.error_registry.duplicate_code");
-        REQUIRE(g_activationCount == 0);
-        REQUIRE(host.StateOf(module.id) == ModuleLifecycleState::Registered);
-        REQUIRE(host.ErrorCodes() == nullptr);
+        RequireHostRejectsBeforeActivation(std::move(module), "foundation.error_registry.duplicate_code");
     }
 
     SECTION("module namespace escape") {
-        g_activationCount = 0;
         ModuleDescriptor module = ModuleWithDomain("extension.mesh_optimizer", "extension.other", {});
-        module.lifecycle = {.activate = &CountActivation, .deactivate = &IgnoreDeactivation};
-
-        ModuleHost host;
-        REQUIRE(host.Register(module).HasValue());
-        const Result<std::size_t> activated = host.ActivateRegistered(nullptr);
-        REQUIRE(activated.HasError());
-        REQUIRE(activated.ErrorValue().code.Value() == "foundation.error_registry.invalid_namespace");
-        REQUIRE(g_activationCount == 0);
-        REQUIRE(host.StateOf(module.id) == ModuleLifecycleState::Registered);
-        REQUIRE(host.ErrorCodes() == nullptr);
+        RequireHostRejectsBeforeActivation(std::move(module), "foundation.error_registry.invalid_namespace");
     }
 }
 

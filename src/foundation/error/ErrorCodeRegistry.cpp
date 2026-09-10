@@ -49,28 +49,21 @@ namespace Horo {
     namespace {
         using TextPair = std::pair<std::string, std::string>;
 
-        [[nodiscard]] bool IsSeparator(const unsigned char ch) noexcept {
-            return ch == '.' || ch == '-' || ch == '_';
-        }
-
-        [[nodiscard]] bool IsLowercaseAlphanumeric(const unsigned char ch) noexcept {
-            return (ch >= 'a' && ch <= 'z') || (ch >= '0' && ch <= '9');
-        }
-
         /** @brief Returns whether a stable identity is canonical and contains a namespace separator. */
         [[nodiscard]] bool IsCanonicalNamespacedId(const std::string_view value) noexcept {
             if (value.empty() || value.find('.') == std::string_view::npos)
                 return false;
             bool previousWasSeparator = true;
             for (const unsigned char ch : value) {
-                if (IsSeparator(ch)) {
+                constexpr std::string_view kIdentityCharacters = "abcdefghijklmnopqrstuvwxyz0123456789.-_";
+                if (kIdentityCharacters.find(static_cast<char>(ch)) == std::string_view::npos)
+                    return false;
+                if (ch == '.' || ch == '-' || ch == '_') {
                     if (previousWasSeparator)
                         return false;
                     previousWasSeparator = true;
                     continue;
                 }
-                if (!IsLowercaseAlphanumeric(ch))
-                    return false;
                 previousWasSeparator = false;
             }
             return !previousWasSeparator;
@@ -127,52 +120,9 @@ namespace Horo {
                 CopyBase(*base->storage_, *storage, domainOwners, registeredCodes);
 
             for (const ModuleDescriptor &module : descriptors) {
-                for (const ModuleErrorDomainDescriptor &domain : module.errorDomains) {
-                    const std::string &domainId = domain.id.Value();
-                    if (!IsCanonicalNamespacedId(domainId) || !IsDomainAllowedForModule(domainId, module.id.value)) {
-                        return RegistryFailure<
-                            ErrorCodeRegistry>(ErrorCodeRegistryErrors::InvalidNamespace,
-                                               std::format("Module '{}' cannot own non-canonical or escaped error domain '{}'.",
-                                                           module.id.value, domainId));
-                    }
-
-                    const auto [owner, inserted] = domainOwners.try_emplace(domainId, module.id.value);
-                    if (!inserted) {
-                        const ErrorCodeDescriptor &failure = owner->second == module.id.value
-                                                                 ? ErrorCodeRegistryErrors::InvalidNamespace
-                                                                 : ErrorCodeRegistryErrors::DomainOwnershipConflict;
-                        return RegistryFailure<ErrorCodeRegistry>(failure,
-                                                                  std::format("Error domain '{}' is already claimed by module '{}'.",
-                                                                              domainId, owner->second));
-                    }
-                    storage->domains.push_back({.id = domain.id, .owner = module.id});
-
-                    for (const ErrorCodeDescriptor *descriptor : domain.descriptors) {
-                        if (descriptor == nullptr)
-                            return RegistryFailure<ErrorCodeRegistry>(ErrorCodeRegistryErrors::InvalidDescriptor,
-                                                                      std::format("Error domain '{}' contains a null descriptor.",
-                                                                                  domainId));
-                        if (descriptor->summary.empty() || !IsKnownSeverity(descriptor->defaultSeverity)) {
-                            return RegistryFailure<
-                                ErrorCodeRegistry>(ErrorCodeRegistryErrors::InvalidDescriptor,
-                                                   std::format("Error code '{}' under domain '{}' has incomplete or unsupported metadata.",
-                                                               descriptor->code.Value(), domainId));
-                        }
-                        if (descriptor->domain.Value() != domainId || !IsCanonicalNamespacedId(descriptor->code.Value())) {
-                            return RegistryFailure<
-                                ErrorCodeRegistry>(ErrorCodeRegistryErrors::InvalidNamespace,
-                                                   std::format("Error code '{}' escapes or has an invalid namespace under domain '{}'.",
-                                                               descriptor->code.Value(), domainId));
-                        }
-                        const TextPair key{domainId, descriptor->code.Value()};
-                        if (!registeredCodes.emplace(key).second) {
-                            return RegistryFailure<ErrorCodeRegistry>(ErrorCodeRegistryErrors::DuplicateCode,
-                                                                      std::format("Duplicate error identity ('{}', '{}').", domainId,
-                                                                                  descriptor->code.Value()));
-                        }
-                        storage->codes.push_back(std::make_unique<ErrorCodeRegistry::Storage::Code>(*descriptor, module.id));
-                    }
-                }
+                const Result<void> added = AddModule(module, *storage, domainOwners, registeredCodes);
+                if (added.HasError())
+                    return Result<ErrorCodeRegistry>::Failure(added.ErrorValue());
             }
 
             if (auto ownershipFailure = ValidateNamespaceOwnership(storage->domains); ownershipFailure.has_value())
@@ -180,16 +130,84 @@ namespace Horo {
             if (auto deprecationFailure = ValidateDeprecations(*storage, registeredCodes); deprecationFailure.has_value())
                 return Result<ErrorCodeRegistry>::Failure(std::move(*deprecationFailure));
 
-            storage->orderedCodes.reserve(storage->codes.size());
-            for (const std::unique_ptr<ErrorCodeRegistry::Storage::Code> &code : storage->codes)
-                storage->orderedCodes.push_back(code.get());
-            std::ranges::sort(storage->orderedCodes, {}, [](const ErrorCodeRegistry::Storage::Code *entry) {
-                return std::pair{entry->descriptor.domain.Value(), entry->descriptor.code.Value()};
-            });
+            IndexCodes(*storage);
             return Result<ErrorCodeRegistry>::Success(ErrorCodeRegistry{std::move(storage)});
         }
 
     private:
+        [[nodiscard]] static Result<void> AddModule(const ModuleDescriptor &module, ErrorCodeRegistry::Storage &storage,
+                                                    std::map<std::string, std::string, std::less<>> &domainOwners,
+                                                    std::set<TextPair> &registeredCodes) {
+            for (const ModuleErrorDomainDescriptor &domain : module.errorDomains) {
+                const Result<void> added = AddDomain(module, domain, storage, domainOwners, registeredCodes);
+                if (added.HasError())
+                    return added;
+            }
+            return Result<void>::Success();
+        }
+
+        [[nodiscard]] static Result<void> AddDomain(const ModuleDescriptor &module, const ModuleErrorDomainDescriptor &domain,
+                                                    ErrorCodeRegistry::Storage &storage,
+                                                    std::map<std::string, std::string, std::less<>> &domainOwners,
+                                                    std::set<TextPair> &registeredCodes) {
+            const std::string &domainId = domain.id.Value();
+            if (!IsCanonicalNamespacedId(domainId) || !IsDomainAllowedForModule(domainId, module.id.value)) {
+                return RegistryFailure<void>(ErrorCodeRegistryErrors::InvalidNamespace,
+                                             std::format("Module '{}' cannot own non-canonical or escaped error domain '{}'.",
+                                                         module.id.value, domainId));
+            }
+
+            const auto [owner, inserted] = domainOwners.try_emplace(domainId, module.id.value);
+            if (!inserted) {
+                const ErrorCodeDescriptor &failure = owner->second == module.id.value ? ErrorCodeRegistryErrors::InvalidNamespace
+                                                                                      : ErrorCodeRegistryErrors::DomainOwnershipConflict;
+                return RegistryFailure<void>(failure,
+                                             std::format("Error domain '{}' is already claimed by module '{}'.", domainId, owner->second));
+            }
+            storage.domains.push_back({.id = domain.id, .owner = module.id});
+
+            for (const ErrorCodeDescriptor *descriptor : domain.descriptors) {
+                const Result<void> added = AddCode(module.id, domainId, descriptor, storage, registeredCodes);
+                if (added.HasError())
+                    return added;
+            }
+            return Result<void>::Success();
+        }
+
+        [[nodiscard]] static Result<void> AddCode(const ModuleId &owner, const std::string &domainId, const ErrorCodeDescriptor *descriptor,
+                                                  ErrorCodeRegistry::Storage &storage, std::set<TextPair> &registeredCodes) {
+            if (descriptor == nullptr) {
+                return RegistryFailure<void>(ErrorCodeRegistryErrors::InvalidDescriptor,
+                                             std::format("Error domain '{}' contains a null descriptor.", domainId));
+            }
+            if (descriptor->summary.empty() || !IsKnownSeverity(descriptor->defaultSeverity)) {
+                return RegistryFailure<void>(ErrorCodeRegistryErrors::InvalidDescriptor,
+                                             std::format("Error code '{}' under domain '{}' has incomplete or unsupported metadata.",
+                                                         descriptor->code.Value(), domainId));
+            }
+            if (descriptor->domain.Value() != domainId || !IsCanonicalNamespacedId(descriptor->code.Value())) {
+                return RegistryFailure<void>(ErrorCodeRegistryErrors::InvalidNamespace,
+                                             std::format("Error code '{}' escapes or has an invalid namespace under domain '{}'.",
+                                                         descriptor->code.Value(), domainId));
+            }
+            const TextPair key{domainId, descriptor->code.Value()};
+            if (!registeredCodes.emplace(key).second) {
+                return RegistryFailure<void>(ErrorCodeRegistryErrors::DuplicateCode,
+                                             std::format("Duplicate error identity ('{}', '{}').", domainId, descriptor->code.Value()));
+            }
+            storage.codes.push_back(std::make_unique<ErrorCodeRegistry::Storage::Code>(*descriptor, owner));
+            return Result<void>::Success();
+        }
+
+        static void IndexCodes(ErrorCodeRegistry::Storage &storage) {
+            storage.orderedCodes.reserve(storage.codes.size());
+            for (const std::unique_ptr<ErrorCodeRegistry::Storage::Code> &code : storage.codes)
+                storage.orderedCodes.push_back(code.get());
+            std::ranges::sort(storage.orderedCodes, {}, [](const ErrorCodeRegistry::Storage::Code *entry) {
+                return std::pair{entry->descriptor.domain.Value(), entry->descriptor.code.Value()};
+            });
+        }
+
         static void CopyBase(const ErrorCodeRegistry::Storage &base, ErrorCodeRegistry::Storage &target,
                              std::map<std::string, std::string, std::less<>> &domainOwners, std::set<TextPair> &registeredCodes) {
             target.domains = base.domains;
