@@ -6,8 +6,6 @@
 
 namespace Horo::PlatformServices {
     namespace {
-        constexpr std::size_t ServiceCount = static_cast<std::size_t>(PlatformServiceKind::Count);
-
         [[nodiscard]] constexpr bool IsKnown(const PlatformServiceKind value) noexcept {
             return value < PlatformServiceKind::Count;
         }
@@ -308,8 +306,7 @@ namespace Horo::PlatformServices {
             return Result<void>::Failure(MakeError(PlatformSessionErrors::StaleSession));
         if (accessRevision != snapshot.AccessRevision())
             return Result<void>::Failure(MakeError(PlatformSessionErrors::StaleAccessPolicy));
-        const auto access = snapshot.Capabilities().Access(service);
-        if (access != PlatformSessionAccessState::Granted)
+        if (const auto access = snapshot.Capabilities().Access(service); access != PlatformSessionAccessState::Granted)
             return Result<void>::Failure(AccessError(access));
         return Result<void>::Success();
     }
