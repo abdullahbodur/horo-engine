@@ -80,4 +80,39 @@ namespace Horo::Animation::AnimationErrors {
                                                       ErrorSeverity::Error,
                                                       "Skeleton joint, mirror, retarget, or socket metadata is invalid.",
                                                       "Correct typed metadata and bounded advisory names."};
+    const ErrorCodeDescriptor SkinningVersionUnsupported{AnimationDomain, ErrorCode{"animation.skinning.version_unsupported"},
+                                                         ErrorSeverity::Error,
+                                                         "The skeletal-mesh skinning contract version is unsupported.",
+                                                         "Migrate or recook the mesh for the current skinning contract."};
+    const ErrorCodeDescriptor SkinningAdmissionRejected{AnimationDomain, ErrorCode{"animation.skinning.admission_rejected"},
+                                                        ErrorSeverity::Warning, "The skinning owner is not accepting validation work.",
+                                                        "Retry only after a current asset owner resumes admission."};
+    const ErrorCodeDescriptor SkinningValidationCancelled{AnimationDomain, ErrorCode{"animation.skinning.validation_cancelled"},
+                                                          ErrorSeverity::Warning, "Skinning validation was cancelled before publication.",
+                                                          "Submit a new candidate under a current owner operation."};
+    const ErrorCodeDescriptor SkinningReloadMismatch{AnimationDomain, ErrorCode{"animation.skinning.reload_mismatch"}, ErrorSeverity::Error,
+                                                     "The reload candidate has a different skeletal-mesh identity.",
+                                                     "Publish different mesh identities as separate assets instead of a reload."};
+    const ErrorCodeDescriptor SkinningSkeletonMismatch{AnimationDomain, ErrorCode{"animation.skinning.skeleton_mismatch"},
+                                                       ErrorSeverity::Error, "The skinning binding targets an incompatible skeleton.",
+                                                       "Bind the mesh to the exact validated skeleton identity and contract version."};
+    const ErrorCodeDescriptor SkinningBindingStale{AnimationDomain, ErrorCode{"animation.skinning.binding_stale"}, ErrorSeverity::Warning,
+                                                   "The skinning binding targets a retired skeleton generation.",
+                                                   "Rebuild the binding against the current immutable skeleton publication."};
+    const ErrorCodeDescriptor
+        SkinningLimitExceeded{AnimationDomain, ErrorCode{"animation.skinning.limit_exceeded"}, ErrorSeverity::Error,
+                              "The skinning asset exceeds a finite validation limit.",
+                              "Reduce LODs, vertices, sections, joints, palettes, or influences to the captured limits."};
+    const ErrorCodeDescriptor SkinningDuplicateIdentity{AnimationDomain, ErrorCode{"animation.skinning.duplicate_identity"},
+                                                        ErrorSeverity::Error, "The skinning asset contains a duplicate stable identity.",
+                                                        "Assign unique mesh joints, skeleton targets, sections, and LOD levels."};
+    const ErrorCodeDescriptor SkinningJointMissing{AnimationDomain, ErrorCode{"animation.skinning.joint_missing"}, ErrorSeverity::Error,
+                                                   "A skinning remap, palette, or influence references an absent joint.",
+                                                   "Reference only joints declared by the binding and target skeleton."};
+    const ErrorCodeDescriptor SkinningInfluenceInvalid{AnimationDomain, ErrorCode{"animation.skinning.influence_invalid"},
+                                                       ErrorSeverity::Error, "A vertex influence set is malformed or cannot be normalized.",
+                                                       "Provide unique finite positive weights for bounded palette joints."};
+    const ErrorCodeDescriptor SkinningLayoutInvalid{AnimationDomain, ErrorCode{"animation.skinning.layout_invalid"}, ErrorSeverity::Error,
+                                                    "Skeletal-mesh LOD, section, range, or bounds metadata is invalid.",
+                                                    "Provide contiguous sections, valid bounds, and canonical LOD levels."};
 }  // namespace Horo::Animation::AnimationErrors

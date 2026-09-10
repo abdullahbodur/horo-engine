@@ -44,4 +44,26 @@ namespace Horo::Animation::AnimationErrors {
     extern const ErrorCodeDescriptor SkeletonTransformInvalid;
     /** @brief Retarget, mirror, side, name, or socket metadata is malformed or contradictory. */
     extern const ErrorCodeDescriptor SkeletonMetadataInvalid;
+    /** @brief Skeletal-mesh skinning data was produced for an unsupported contract version. */
+    extern const ErrorCodeDescriptor SkinningVersionUnsupported;
+    /** @brief Skinning validation is closed because the owning boundary is unavailable or shutting down. */
+    extern const ErrorCodeDescriptor SkinningAdmissionRejected;
+    /** @brief Skinning validation was cancelled before immutable publication. */
+    extern const ErrorCodeDescriptor SkinningValidationCancelled;
+    /** @brief A reload candidate does not replace the declared stable skeletal-mesh identity. */
+    extern const ErrorCodeDescriptor SkinningReloadMismatch;
+    /** @brief A binding targets another skeleton identity or unsupported skeleton contract. */
+    extern const ErrorCodeDescriptor SkinningSkeletonMismatch;
+    /** @brief A binding targets a retired skeleton publication generation. */
+    extern const ErrorCodeDescriptor SkinningBindingStale;
+    /** @brief Skinning counts, ranges, influences, or palettes exceed finite limits. */
+    extern const ErrorCodeDescriptor SkinningLimitExceeded;
+    /** @brief A mesh-local joint, target joint, section, or LOD identity is duplicated. */
+    extern const ErrorCodeDescriptor SkinningDuplicateIdentity;
+    /** @brief A remap, palette, or influence references an absent joint. */
+    extern const ErrorCodeDescriptor SkinningJointMissing;
+    /** @brief A vertex influence is non-finite, non-positive, duplicated, or cannot be normalized. */
+    extern const ErrorCodeDescriptor SkinningInfluenceInvalid;
+    /** @brief LOD, section, range, or bounds metadata is malformed or contradictory. */
+    extern const ErrorCodeDescriptor SkinningLayoutInvalid;
 }  // namespace Horo::Animation::AnimationErrors

@@ -76,6 +76,7 @@ namespace Horo::Animation {
     struct AnimationClipIdentityTag;
     struct AnimationGraphIdentityTag;
     struct RetargetProfileIdentityTag;
+    struct SkeletalMeshIdentityTag;
 
     /** @brief Persistent skeleton asset identity, independent of path, name, and load instance. */
     using SkeletonId = AnimationAssetIdentity<SkeletonIdentityTag>;
@@ -85,6 +86,8 @@ namespace Horo::Animation {
     using AnimationGraphId = AnimationAssetIdentity<AnimationGraphIdentityTag>;
     /** @brief Persistent retarget-profile asset identity; the invalid value explicitly means no retargeting. */
     using RetargetProfileId = AnimationAssetIdentity<RetargetProfileIdentityTag>;
+    /** @brief Persistent skeletal-mesh asset identity, distinct from skeleton and resident renderer resources. */
+    using SkeletalMeshId = AnimationAssetIdentity<SkeletalMeshIdentityTag>;
 
     /** @brief Strong non-zero animation identity in one tag-defined authored or runtime domain. */
     template <typename Tag> using AnimationStableIdentity = Foundation::Detail::NonZeroId64<Tag, AnimationErrors::IdentityInvalid>;
@@ -92,6 +95,9 @@ namespace Horo::Animation {
     struct AnimationComponentIdentityTag;
     struct JointIdentityTag;
     struct SkeletonSocketIdentityTag;
+    struct SkinningJointIdentityTag;
+    struct SkeletalMeshSectionIdentityTag;
+    struct SkeletonAssetGenerationIdentityTag;
     struct AnimationRuntimeIdentityTag;
     struct PoseGenerationIdentityTag;
     struct AnimationTickIdentityTag;
@@ -104,6 +110,12 @@ namespace Horo::Animation {
     using JointId = AnimationStableIdentity<JointIdentityTag>;
     /** @brief Stable skeleton-local socket identity, independent of joint array position or display name. */
     using SkeletonSocketId = AnimationStableIdentity<SkeletonSocketIdentityTag>;
+    /** @brief Stable mesh-local skinning-joint identity resolved through an explicit skeleton remap. */
+    using SkinningJointId = AnimationStableIdentity<SkinningJointIdentityTag>;
+    /** @brief Stable section identity within one skeletal-mesh asset. */
+    using SkeletalMeshSectionId = AnimationStableIdentity<SkeletalMeshSectionIdentityTag>;
+    /** @brief Non-reusable immutable skeleton publication generation used to reject stale bindings. */
+    using SkeletonAssetGeneration = AnimationStableIdentity<SkeletonAssetGenerationIdentityTag>;
     /** @brief Process-local owner identity of one animation-runtime incarnation. */
     using AnimationRuntimeId = AnimationStableIdentity<AnimationRuntimeIdentityTag>;
     /** @brief Monotonic committed-pose generation within one runtime instance. */

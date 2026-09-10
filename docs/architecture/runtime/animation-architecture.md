@@ -461,6 +461,31 @@ timing, and stale/missing support evidence suppresses presentation.
 
 Skinning transforms mesh vertices by joint matrices.
 
+`Horo/Animation/SkeletalMeshSkinning.h` is the backend-neutral ANI-001.4
+asset boundary. A `SkeletalMeshId` identifies the persistent mesh independently
+of a resident vertex buffer. Each immutable publication binds to one exact
+`SkeletonId`, skeleton contract version, and non-reusable
+`SkeletonAssetGeneration`; an older generation fails closed instead of silently
+remapping to a reloaded hierarchy.
+
+Vertices and section palettes use stable mesh-local `SkinningJointId` values.
+The binding owns an explicit one-to-one remap to stable skeleton `JointId`
+values, so neither names nor dense hierarchy positions become identity. Load or
+cook validation sorts remaps, LODs, sections, palettes, and influences into one
+canonical form. Influences must be finite and positive, are normalized in
+double precision, and are ordered by descending normalized weight with stable
+joint identity as the tie-breaker. Sections form a complete non-overlapping
+vertex partition and every influence must belong to its section palette.
+
+All LOD, vertex, section, remap, palette, and influence counts are bounded by a
+captured policy and immutable hard ceilings. Validation is transactional at a
+load, cook, or owner control boundary: cancellation, shutdown, version skew,
+reload identity mismatch, stale skeleton generation, or malformed input
+publishes no partial replacement. A successful `SkeletalMeshSkinningAsset`
+owns its canonical snapshot independently of candidate and skeleton object
+lifetimes. Animation runtime storage, pose palettes, renderer resources, and
+backend-native handles remain outside this contract.
+
 ### GPU Skinning
 
 Default path. The animation system uploads:
