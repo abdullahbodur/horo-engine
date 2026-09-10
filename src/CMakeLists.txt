@@ -448,6 +448,15 @@ add_library(HoroEngine::AI ALIAS HoroAI)
 target_compile_features(HoroAI PUBLIC cxx_std_20)
 target_link_libraries(HoroAI PUBLIC HoroEngine::Foundation)
 
+add_library(HoroAnimationApi STATIC
+        runtime/animation/api/AnimationComponents.cpp
+        runtime/animation/api/AnimationErrors.cpp
+        runtime/animation/api/AnimationIdentity.cpp
+)
+add_library(HoroEngine::AnimationApi ALIAS HoroAnimationApi)
+target_compile_features(HoroAnimationApi PUBLIC cxx_std_20)
+target_link_libraries(HoroAnimationApi PUBLIC HoroEngine::Foundation HoroEngine::Assets)
+
 add_library(HoroPCG STATIC
         runtime/pcg/api/PCGErrors.cpp
         runtime/pcg/api/PCGIdentity.cpp
