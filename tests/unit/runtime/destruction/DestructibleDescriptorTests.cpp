@@ -64,8 +64,8 @@ namespace Horo::Destruction {
 
         template <typename Value> void CheckError(const Result<Value> &result, const ErrorCodeDescriptor &expected) {
             REQUIRE(result.HasError());
-            CHECK(result.ErrorValue().domain.Value() == expected.domain.Value());
-            CHECK(result.ErrorValue().code.Value() == expected.code.Value());
+            const auto &error = result.ErrorValue();
+            CHECK((error.domain.Value() == expected.domain.Value() && error.code.Value() == expected.code.Value()));
         }
     }  // namespace
 

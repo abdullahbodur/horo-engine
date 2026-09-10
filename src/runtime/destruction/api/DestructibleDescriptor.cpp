@@ -72,6 +72,24 @@ namespace Horo::Destruction {
                    limits.maximumChunksPerDestructible <= limits.maximumWorkItemsPerTransition;
         }
 
+        [[nodiscard]] constexpr bool HasValidDescriptorIdentity(const DestructibleDescriptorData &data) noexcept {
+            return data.contractVersion == CurrentDestructibleDescriptorContractVersion && data.destructible.IsValid() &&
+                   data.content.IsValid() && data.configurationRevision.IsValid();
+        }
+
+        [[nodiscard]] constexpr bool HasValidLimits(const DestructionLimits &limits, const DestructionLimits &ceiling) noexcept {
+            return IsPositive(limits) && IsInternallyConsistent(limits) && FitsWithin(limits, ceiling);
+        }
+
+        [[nodiscard]] bool HasValidHealthPolicy(const DestructionHealthPolicy &health) noexcept {
+            const std::array values{health.maximumHealth, health.damagedHealthThreshold, health.fractureHealthThreshold};
+            const bool finite = std::ranges::all_of(values, [](const float value) {
+                return std::isfinite(value);
+            });
+            return finite && health.maximumHealth > 0.0F && health.fractureHealthThreshold >= 0.0F &&
+                   health.fractureHealthThreshold < health.damagedHealthThreshold && health.damagedHealthThreshold < health.maximumHealth;
+        }
+
         [[nodiscard]] constexpr bool Requires(const DestructibleDescriptorData &data, const DestructionFeature feature) noexcept {
             return data.features.required.Contains(feature);
         }
@@ -126,12 +144,23 @@ namespace Horo::Destruction {
             return Result<void>::Success();
         }
 
+        [[nodiscard]] constexpr bool IsPopulated(const DestructionArtifactFootprint &footprint) noexcept {
+            const std::array<std::uint64_t, 6> required{footprint.chunkCount,        footprint.hierarchyDepth,
+                                                        footprint.artifactBytes,     footprint.peakTransitionBytes,
+                                                        footprint.peakResidentBytes, footprint.peakWorkItemsPerTransition};
+            return std::ranges::all_of(required, [](const std::uint64_t value) {
+                return value > 0;
+            });
+        }
+
+        [[nodiscard]] constexpr bool IsInternallyConsistent(const DestructionArtifactFootprint &footprint) noexcept {
+            return footprint.peakActiveChunkBodies <= footprint.chunkCount &&
+                   footprint.peakEventsPerTransition <= footprint.requestedEventJournalEntries &&
+                   footprint.artifactBytes <= footprint.peakTransitionBytes && footprint.peakTransitionBytes <= footprint.peakResidentBytes;
+        }
+
         [[nodiscard]] Result<void> ValidateFootprint(const DestructionArtifactFootprint &footprint, const DestructionLimits &limits) {
-            if (footprint.chunkCount == 0 || footprint.hierarchyDepth == 0 || footprint.artifactBytes == 0 ||
-                footprint.peakTransitionBytes == 0 || footprint.peakResidentBytes == 0 || footprint.peakWorkItemsPerTransition == 0 ||
-                footprint.peakActiveChunkBodies > footprint.chunkCount ||
-                footprint.peakEventsPerTransition > footprint.requestedEventJournalEntries ||
-                footprint.artifactBytes > footprint.peakTransitionBytes || footprint.peakTransitionBytes > footprint.peakResidentBytes)
+            if (!IsPopulated(footprint) || !IsInternallyConsistent(footprint))
                 return Result<void>::Failure(MakeError(DestructionErrors::DescriptorInvalid));
 
             const DestructionLimits actual{footprint.chunkCount,
@@ -167,8 +196,7 @@ namespace Horo::Destruction {
 
     /** @copydoc DestructibleDescriptor::Create */
     Result<DestructibleDescriptor> DestructibleDescriptor::Create(const DestructibleDescriptorData &data) {
-        if (data.contractVersion != CurrentDestructibleDescriptorContractVersion || !data.destructible.IsValid() ||
-            !data.content.IsValid() || !data.configurationRevision.IsValid())
+        if (!HasValidDescriptorIdentity(data))
             return Result<DestructibleDescriptor>::Failure(MakeError(DestructionErrors::DescriptorInvalid));
 
         auto profile = GetDestructionTierProfile(data.tier);
@@ -176,12 +204,9 @@ namespace Horo::Destruction {
             return Result<DestructibleDescriptor>::Failure(profile.ErrorValue());
         if (auto features = ValidateFeaturePolicy(data, profile.Value()); features.HasError())
             return Result<DestructibleDescriptor>::Failure(features.ErrorValue());
-        if (!IsPositive(data.limits) || !IsInternallyConsistent(data.limits) || !FitsWithin(data.limits, profile.Value().limits))
+        if (!HasValidLimits(data.limits, profile.Value().limits))
             return Result<DestructibleDescriptor>::Failure(MakeError(DestructionErrors::LimitProfileInvalid));
-        if (!std::isfinite(data.health.maximumHealth) || !std::isfinite(data.health.damagedHealthThreshold) ||
-            !std::isfinite(data.health.fractureHealthThreshold) || data.health.maximumHealth <= 0.0F ||
-            data.health.fractureHealthThreshold < 0.0F || data.health.fractureHealthThreshold >= data.health.damagedHealthThreshold ||
-            data.health.damagedHealthThreshold >= data.health.maximumHealth)
+        if (!HasValidHealthPolicy(data.health))
             return Result<DestructibleDescriptor>::Failure(MakeError(DestructionErrors::DescriptorInvalid));
         if (auto policies = ValidatePolicies(data); policies.HasError())
             return Result<DestructibleDescriptor>::Failure(policies.ErrorValue());
