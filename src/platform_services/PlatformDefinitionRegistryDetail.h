@@ -12,6 +12,12 @@
 #include <vector>
 
 namespace Horo::PlatformServices::DefinitionRegistryDetail {
+    [[nodiscard]] inline ErrorCodeDescriptor MakeDescriptor(const ErrorDomainId &domain, const std::string_view code,
+                                                            const std::string_view summary, const std::string_view remediation,
+                                                            const bool userActionable) {
+        return {domain, ErrorCode{std::string{code}}, ErrorSeverity::Error, summary, remediation, false, userActionable};
+    }
+
     [[nodiscard]] inline bool IsZero(const Sha256Digest &digest) noexcept {
         return std::ranges::all_of(digest.bytes, [](const std::uint8_t byte) {
             return byte == 0;

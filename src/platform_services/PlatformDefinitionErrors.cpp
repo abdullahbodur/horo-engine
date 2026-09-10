@@ -1,71 +1,36 @@
 #include "Horo/PlatformServices/PlatformDefinitionRegistries.h"
+#include "PlatformDefinitionRegistryDetail.h"
 
 namespace Horo::PlatformServices::PlatformDefinitionErrors {
+    using DefinitionRegistryDetail::MakeDescriptor;
+
     namespace {
         const ErrorDomainId Domain{"horo.platform.definition"};
     }
 
-    const ErrorCodeDescriptor UnsupportedVersion{Domain,
-                                                 ErrorCode{"platform.definition.version_unsupported"},
-                                                 ErrorSeverity::Error,
-                                                 "Definition schema version is unsupported.",
-                                                 "Migrate to the supported schema.",
-                                                 false,
-                                                 true};
-    const ErrorCodeDescriptor CapacityExceeded{Domain,
-                                               ErrorCode{"platform.definition.capacity_exceeded"},
-                                               ErrorSeverity::Error,
-                                               "Definition bounds were exceeded.",
-                                               "Reduce the document or bounds.",
-                                               false,
-                                               true};
-    const ErrorCodeDescriptor InvalidDefinition{Domain,
-                                                ErrorCode{"platform.definition.invalid"},
-                                                ErrorSeverity::Error,
-                                                "Definition is malformed.",
-                                                "Correct the diagnosed field.",
-                                                false,
-                                                true};
-    const ErrorCodeDescriptor DuplicateDefinition{Domain,
-                                                  ErrorCode{"platform.definition.duplicate"},
-                                                  ErrorSeverity::Error,
-                                                  "Stable identity is defined more than once.",
-                                                  "Retain exactly one definition.",
-                                                  false,
-                                                  true};
-    const ErrorCodeDescriptor UnknownIdentity{Domain,
-                                              ErrorCode{"platform.definition.identity_unknown"},
-                                              ErrorSeverity::Error,
-                                              "Definition references no active stable identity.",
-                                              "Use an active identity of the right kind.",
-                                              false,
-                                              true};
-    const ErrorCodeDescriptor IncompleteRegistry{Domain,
-                                                 ErrorCode{"platform.definition.registry_incomplete"},
-                                                 ErrorSeverity::Error,
-                                                 "An active identity has no definition.",
-                                                 "Define every active identity.",
-                                                 false,
-                                                 true};
-    const ErrorCodeDescriptor InvalidCrossReference{Domain,
-                                                    ErrorCode{"platform.definition.cross_reference_invalid"},
-                                                    ErrorSeverity::Error,
-                                                    "Definition cross-reference is missing or incompatible.",
-                                                    "Reference a compatible definition in the captured registry.",
-                                                    false,
-                                                    true};
-    const ErrorCodeDescriptor StaleIdentityRegistry{Domain,
-                                                    ErrorCode{"platform.definition.identity_registry_stale"},
-                                                    ErrorSeverity::Error,
-                                                    "Definitions target another identity generation.",
-                                                    "Rebuild against the captured stable-ID registry.",
-                                                    false,
-                                                    false};
-    const ErrorCodeDescriptor ImmutableContractChanged{Domain,
-                                                       ErrorCode{"platform.definition.immutable_contract_changed"},
-                                                       ErrorSeverity::Error,
-                                                       "Published semantic fields changed without migration.",
-                                                       "Create an explicit product migration.",
-                                                       false,
-                                                       true};
+    const ErrorCodeDescriptor UnsupportedVersion =
+        MakeDescriptor(Domain, "platform.definition.version_unsupported", "Definition schema version is unsupported.",
+                       "Migrate to the supported schema.", true);
+    const ErrorCodeDescriptor CapacityExceeded = MakeDescriptor(Domain, "platform.definition.capacity_exceeded",
+                                                                "Definition bounds were exceeded.", "Reduce the document or bounds.", true);
+    const ErrorCodeDescriptor InvalidDefinition =
+        MakeDescriptor(Domain, "platform.definition.invalid", "Definition is malformed.", "Correct the diagnosed field.", true);
+    const ErrorCodeDescriptor DuplicateDefinition =
+        MakeDescriptor(Domain, "platform.definition.duplicate", "Stable identity is defined more than once.",
+                       "Retain exactly one definition.", true);
+    const ErrorCodeDescriptor UnknownIdentity =
+        MakeDescriptor(Domain, "platform.definition.identity_unknown", "Definition references no active stable identity.",
+                       "Use an active identity of the right kind.", true);
+    const ErrorCodeDescriptor IncompleteRegistry =
+        MakeDescriptor(Domain, "platform.definition.registry_incomplete", "An active identity has no definition.",
+                       "Define every active identity.", true);
+    const ErrorCodeDescriptor InvalidCrossReference =
+        MakeDescriptor(Domain, "platform.definition.cross_reference_invalid", "Definition cross-reference is missing or incompatible.",
+                       "Reference a compatible definition in the captured registry.", true);
+    const ErrorCodeDescriptor StaleIdentityRegistry =
+        MakeDescriptor(Domain, "platform.definition.identity_registry_stale", "Definitions target another identity generation.",
+                       "Rebuild against the captured stable-ID registry.", false);
+    const ErrorCodeDescriptor ImmutableContractChanged =
+        MakeDescriptor(Domain, "platform.definition.immutable_contract_changed", "Published semantic fields changed without migration.",
+                       "Create an explicit product migration.", true);
 }  // namespace Horo::PlatformServices::PlatformDefinitionErrors

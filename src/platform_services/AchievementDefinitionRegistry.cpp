@@ -13,6 +13,7 @@ namespace Horo::PlatformServices {
     using DefinitionRegistryDetail::FingerprintWriter;
     using DefinitionRegistryDetail::IsLocalizationKey;
     using DefinitionRegistryDetail::IsZero;
+    using DefinitionRegistryDetail::MakeDescriptor;
 
     namespace {
         constexpr std::string_view FingerprintDomain = "horo.platform-services.achievement-definitions.v1";
@@ -161,62 +162,32 @@ namespace Horo::PlatformServices {
             const ErrorDomainId Domain{"horo.platform.achievement-definition"};
         }
 
-        const ErrorCodeDescriptor UnsupportedVersion{Domain,
-                                                     ErrorCode{"platform.achievement.version_unsupported"},
-                                                     ErrorSeverity::Error,
-                                                     "Achievement definition schema version is unsupported.",
-                                                     "Migrate the document to the supported schema.",
-                                                     false,
-                                                     true};
-        const ErrorCodeDescriptor CapacityExceeded{Domain,
-                                                   ErrorCode{"platform.achievement.capacity_exceeded"},
-                                                   ErrorSeverity::Error,
-                                                   "Achievement definition bounds were exceeded.",
-                                                   "Reduce the definition document or use supported finite limits.",
-                                                   false,
-                                                   true};
-        const ErrorCodeDescriptor InvalidDefinition{Domain,
-                                                    ErrorCode{"platform.achievement.definition_invalid"},
-                                                    ErrorSeverity::Error,
-                                                    "Achievement definition is malformed or incomplete.",
-                                                    "Correct the field identified by the diagnostic.",
-                                                    false,
-                                                    true};
-        const ErrorCodeDescriptor DuplicateDefinition{Domain,
-                                                      ErrorCode{"platform.achievement.definition_duplicate"},
-                                                      ErrorSeverity::Error,
-                                                      "Achievement stable ID is defined more than once.",
-                                                      "Retain exactly one definition for the stable ID.",
-                                                      false,
-                                                      true};
-        const ErrorCodeDescriptor UnknownIdentity{Domain,
-                                                  ErrorCode{"platform.achievement.identity_unknown"},
-                                                  ErrorSeverity::Error,
-                                                  "Achievement definition references no active stable identity.",
-                                                  "Use one active achievement ID from the captured ledger.",
-                                                  false,
-                                                  true};
-        const ErrorCodeDescriptor IncompleteRegistry{Domain,
-                                                     ErrorCode{"platform.achievement.registry_incomplete"},
-                                                     ErrorSeverity::Error,
-                                                     "An active achievement has no definition.",
-                                                     "Define every active achievement before publication.",
-                                                     false,
-                                                     true};
-        const ErrorCodeDescriptor StaleIdentityRegistry{Domain,
-                                                        ErrorCode{"platform.achievement.identity_registry_stale"},
-                                                        ErrorSeverity::Error,
-                                                        "Achievement definitions target a different stable-ID registry generation.",
-                                                        "Rebuild definitions against the captured stable-ID fingerprint.",
-                                                        false,
-                                                        false};
-        const ErrorCodeDescriptor ImmutableContractChanged{Domain,
-                                                           ErrorCode{"platform.achievement.immutable_contract_changed"},
-                                                           ErrorSeverity::Error,
-                                                           "Published achievement authority or progress semantics changed.",
-                                                           "Create an explicit product migration instead of live replacement.",
-                                                           false,
-                                                           true};
+        const ErrorCodeDescriptor UnsupportedVersion =
+            MakeDescriptor(Domain, "platform.achievement.version_unsupported", "Achievement definition schema version is unsupported.",
+                           "Migrate the document to the supported schema.", true);
+        const ErrorCodeDescriptor CapacityExceeded =
+            MakeDescriptor(Domain, "platform.achievement.capacity_exceeded", "Achievement definition bounds were exceeded.",
+                           "Reduce the definition document or use supported finite limits.", true);
+        const ErrorCodeDescriptor InvalidDefinition =
+            MakeDescriptor(Domain, "platform.achievement.definition_invalid", "Achievement definition is malformed or incomplete.",
+                           "Correct the field identified by the diagnostic.", true);
+        const ErrorCodeDescriptor DuplicateDefinition =
+            MakeDescriptor(Domain, "platform.achievement.definition_duplicate", "Achievement stable ID is defined more than once.",
+                           "Retain exactly one definition for the stable ID.", true);
+        const ErrorCodeDescriptor UnknownIdentity =
+            MakeDescriptor(Domain, "platform.achievement.identity_unknown", "Achievement definition references no active stable identity.",
+                           "Use one active achievement ID from the captured ledger.", true);
+        const ErrorCodeDescriptor IncompleteRegistry =
+            MakeDescriptor(Domain, "platform.achievement.registry_incomplete", "An active achievement has no definition.",
+                           "Define every active achievement before publication.", true);
+        const ErrorCodeDescriptor StaleIdentityRegistry =
+            MakeDescriptor(Domain, "platform.achievement.identity_registry_stale",
+                           "Achievement definitions target a different stable-ID registry generation.",
+                           "Rebuild definitions against the captured stable-ID fingerprint.", false);
+        const ErrorCodeDescriptor ImmutableContractChanged =
+            MakeDescriptor(Domain, "platform.achievement.immutable_contract_changed",
+                           "Published achievement authority or progress semantics changed.",
+                           "Create an explicit product migration instead of live replacement.", true);
     }  // namespace AchievementDefinitionErrors
 
     /** @copydoc AchievementDefinitionRegistry::StableIdProjectId */
