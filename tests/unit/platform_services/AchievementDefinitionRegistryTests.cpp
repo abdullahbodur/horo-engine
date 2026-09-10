@@ -11,8 +11,10 @@ namespace Horo::PlatformServices {
     namespace {
         [[nodiscard]] PlatformServicesIdSalt TestSalt() {
             PlatformServicesIdSalt salt;
-            for (std::size_t index = 0; index < salt.bytes.size(); ++index)
-                salt.bytes[index] = static_cast<std::byte>(index + 31U);
+            std::uint8_t nextByte = 31;
+            std::ranges::generate(salt.bytes, [&nextByte] {
+                return static_cast<std::byte>(nextByte++);
+            });
             return salt;
         }
 
@@ -61,6 +63,12 @@ namespace Horo::PlatformServices {
             REQUIRE(result.ErrorValue().diagnostics.size() == 1);
             CHECK(result.ErrorValue().diagnostics.front().location.source == field);
         }
+
+        void CheckEquivalentFingerprints(const auto &first, const auto &second) {
+            REQUIRE(first.HasValue());
+            REQUIRE(second.HasValue());
+            CHECK(first.Value().Fingerprint() == second.Value().Fingerprint());
+        }
     }  // namespace
 
     static_assert(!std::same_as<AchievementId, PlatformServiceStableIdValue>);
@@ -79,9 +87,7 @@ namespace Horo::PlatformServices {
 
         const auto first = BuildAchievementDefinitionRegistry(stableIds, Candidate(stableIds, {veteranDefinition, firstDefinition}));
         const auto second = BuildAchievementDefinitionRegistry(stableIds, Candidate(stableIds, {firstDefinition, veteranDefinition}));
-        REQUIRE(first.HasValue());
-        REQUIRE(second.HasValue());
-        CHECK(first.Value().Fingerprint() == second.Value().Fingerprint());
+        CheckEquivalentFingerprints(first, second);
         CHECK(first.Value().StableIdProjectId() == "project.achievement-registry");
         CHECK(first.Value().StableIdRegistryFingerprint() == stableIds.Fingerprint());
         REQUIRE(first.Value().Definitions().size() == 2);

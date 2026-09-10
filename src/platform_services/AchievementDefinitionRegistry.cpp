@@ -37,24 +37,23 @@ namespace Horo::PlatformServices {
             return kind == AchievementProgressKind::UnlockOnce || kind == AchievementProgressKind::SetProgressMaximum;
         }
 
-        [[nodiscard]] Error FieldError(const ErrorCodeDescriptor &descriptor, const std::size_t index, const std::string_view field,
-                                       const std::string_view message) {
+        [[nodiscard]] Error DiagnosticError(const ErrorCodeDescriptor &descriptor, std::string source, const std::string_view message) {
             Error error = MakeError(descriptor);
             error.diagnostics.push_back({.code = DiagnosticCode{descriptor.code.Value()},
                                          .severity = DiagnosticSeverity::Error,
                                          .message = std::string{message},
-                                         .location = {.source = "definitions[" + std::to_string(index) + "]." + std::string{field}}});
+                                         .location = {.source = std::move(source)}});
             return error;
+        }
+
+        [[nodiscard]] Error FieldError(const ErrorCodeDescriptor &descriptor, const std::size_t index, const std::string_view field,
+                                       const std::string_view message) {
+            return DiagnosticError(descriptor, "definitions[" + std::to_string(index) + "]." + std::string{field}, message);
         }
 
         [[nodiscard]] Error DocumentError(const ErrorCodeDescriptor &descriptor, const std::string_view field,
                                           const std::string_view message) {
-            Error error = MakeError(descriptor);
-            error.diagnostics.push_back({.code = DiagnosticCode{descriptor.code.Value()},
-                                         .severity = DiagnosticSeverity::Error,
-                                         .message = std::string{message},
-                                         .location = {.source = std::string{field}}});
-            return error;
+            return DiagnosticError(descriptor, std::string{field}, message);
         }
 
         void AppendU8(std::vector<std::byte> &bytes, const std::uint8_t value) {
