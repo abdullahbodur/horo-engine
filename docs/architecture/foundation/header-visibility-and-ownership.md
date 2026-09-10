@@ -118,6 +118,20 @@ Future frontend/provider targets consume this boundary by linking PlatformServic
 they must not duplicate request state, retain a provider object in the handle, or rely
 on repository-wide include visibility.
 
+## XRA-001.2 Migration Notes
+
+`HoroEngine::XRApi` owns the four public headers under `Horo/XR/` and depends
+publicly only on Foundation. Consumers of typed XR identities, capability evidence,
+contract versions, admission results, or error descriptors must link XRApi directly;
+linking Runtime, RenderApi, Platform, Input, or a future concrete XR backend does not
+implicitly publish this contract. Public-header consumer coverage compiles every XR
+header through the staged owner boundary.
+
+There is no production XR caller to migrate. Future XRRuntime and XROpenXR targets
+must consume these Horo types without duplicating them, serializing process-local
+identity values, or exposing OpenXR headers, handles, result integers, extension
+names, or platform-native types through the public boundary.
+
 ## Audio Backend Contract Boundary
 
 `HoroEngine::AudioApi` owns the public discovery, format, capability, timing and

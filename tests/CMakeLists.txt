@@ -285,6 +285,13 @@ target_include_directories(HoroNavigationApiTests PRIVATE ${CMAKE_CURRENT_SOURCE
 target_link_libraries(HoroNavigationApiTests PRIVATE HoroEngine::NavigationApi HoroEngine::NavigationNull)
 horo_register_catch_test(HoroNavigationApiTests LABELS "unit;navigation;headless")
 
+add_executable(HoroXRApiTests
+        unit/runtime/xr/XRApiContractTests.cpp
+)
+target_compile_features(HoroXRApiTests PRIVATE cxx_std_20)
+target_link_libraries(HoroXRApiTests PRIVATE HoroEngine::XRApi)
+horo_register_catch_test(HoroXRApiTests LABELS "unit;xr;headless")
+
 add_executable(HoroWorldStreamingTests
         unit/runtime/world_streaming/CookedWorldIndexManifestTests.cpp
         unit/runtime/world_streaming/FallbackStreamingProviderTests.cpp
