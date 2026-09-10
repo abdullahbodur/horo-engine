@@ -67,10 +67,9 @@ namespace Horo::Destruction {
     [[nodiscard]] constexpr SerializedDestructionStableIdentity SerializeDestructionStableIdentity(
         const DestructionStableIdentity<Tag> identity) noexcept {
         SerializedDestructionStableIdentity bytes{};
-        std::uint64_t remaining = identity.Value();
-        for (auto iterator = bytes.rbegin(); iterator != bytes.rend(); ++iterator) {
-            *iterator = static_cast<std::uint8_t>(remaining & 0xffU);
-            remaining >>= 8U;
+        for (std::size_t index = 0; index < bytes.size(); ++index) {
+            const std::size_t shift = (bytes.size() - index - 1U) * 8U;
+            bytes[index] = static_cast<std::uint8_t>(identity.Value() >> shift);
         }
         return bytes;
     }
@@ -84,8 +83,9 @@ namespace Horo::Destruction {
     [[nodiscard]] Result<DestructionStableIdentity<Tag>> DeserializeDestructionStableIdentity(
         const SerializedDestructionStableIdentity &bytes) {
         std::uint64_t value{};
-        for (const std::uint8_t byte : bytes)
-            value = (value << 8U) | byte;
+        std::size_t shift{};
+        for (auto iterator = bytes.rbegin(); iterator != bytes.rend(); ++iterator, shift += 8U)
+            value |= static_cast<std::uint64_t>(*iterator) << shift;
         auto identity = DestructionStableIdentity<Tag>::Create(value);
         if (identity.HasError())
             return Result<DestructionStableIdentity<Tag>>::Failure(MakeError(DestructionErrors::SerializedIdentityInvalid));

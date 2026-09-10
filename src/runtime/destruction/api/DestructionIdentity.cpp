@@ -2,31 +2,33 @@
 
 #include <algorithm>
 #include <limits>
+#include <numeric>
 
 namespace Horo::Destruction {
     namespace {
         template <std::size_t Size>
-        void WriteNetworkValue(std::array<std::uint8_t, Size> &bytes, const std::size_t offset, const std::uint64_t value,
+        void WriteNetworkValue(std::array<std::uint8_t, Size> &bytes, const std::size_t offset, std::uint64_t value,
                                const std::size_t width) noexcept {
-            for (std::size_t byte = 0; byte < width; ++byte) {
-                const std::size_t shift = (width - byte - 1U) * 8U;
-                bytes[offset + byte] = static_cast<std::uint8_t>(value >> shift);
+            for (std::size_t remaining = width; remaining > 0; --remaining) {
+                bytes[offset + remaining - 1U] = static_cast<std::uint8_t>(value);
+                value >>= 8U;
             }
         }
 
         template <std::size_t Size>
         [[nodiscard]] std::uint64_t ReadNetworkValue(const std::array<std::uint8_t, Size> &bytes, const std::size_t offset,
                                                      const std::size_t width) noexcept {
-            std::uint64_t value{};
-            for (std::size_t byte = 0; byte < width; ++byte)
-                value = (value << 8U) | bytes[offset + byte];
-            return value;
+            const auto first = bytes.begin() + static_cast<std::ptrdiff_t>(offset);
+            const auto last = first + static_cast<std::ptrdiff_t>(width);
+            return std::accumulate(first, last, std::uint64_t{}, [](const std::uint64_t accumulated, const std::uint8_t byte) {
+                return (accumulated << 8U) | byte;
+            });
         }
 
         template <typename Identity, std::size_t Size>
         [[nodiscard]] Result<Identity> DecodeIdentity(const std::array<std::uint8_t, Size> &bytes, const std::size_t offset) {
-            auto decoded = Identity::Create(ReadNetworkValue(bytes, offset, sizeof(std::uint64_t)));
-            if (decoded.HasError())
+            const auto decoded = Identity::Create(ReadNetworkValue(bytes, offset, sizeof(std::uint64_t)));
+            if (!decoded.HasValue())
                 return Result<Identity>::Failure(MakeError(DestructionErrors::SerializedIdentityInvalid));
             return decoded;
         }
