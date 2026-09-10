@@ -61,6 +61,31 @@ schema, determinism class, capability declaration and complete cost function. Th
 publishes one immutable catalog generation; unknown nodes and untrusted on-demand code
 loading fail explicitly.
 
+### Spatial Snapshot Schema 1
+
+`PCGSpatialSnapshot` is the implemented provider-neutral input boundary. A detached
+candidate carries stable snapshot, provider, source, revision and element identities;
+one right-handed Y-up coordinate contract; a non-zero origin epoch; complete requested
+bounds and coverage; and owned surface-triangle, box/sphere-volume, spline and grid
+values. Capture validates the complete candidate and sorts every element family by
+stable identity before publishing an immutable shared root. It retains no source
+container, mutable span, native handle, callback or service reference.
+
+Schema 1 accepts an empty value set only with explicit `Complete` coverage. `Partial`
+and `Missing` fail with `pcg.spatial.coverage_unavailable`, so absent residency or
+provider data cannot become a false negative query result. Non-finite coordinates,
+unsupported axes/precision, zero origin epochs, invalid transforms/bounds, degenerate
+triangles/splines/volumes, overflowing grids, duplicate identities and tier/byte
+excesses fail before publication.
+
+Replacement preserves provider/source lineage, requires a distinct snapshot identity
+and strictly newer source revision, and publishes a new immutable root without
+mutating old readers. `ValidatePCGSpatialSnapshotCurrent` compares the captured
+provider/source/revision/origin tuple with current owner evidence. A retained old root
+therefore remains memory-valid while failing current-at-commit validation. Schema 1
+copies canonical Horo values; provider read-lease and multi-provider coordinator
+semantics remain later integration work and cannot be inferred from this value model.
+
 ## PCG Model
 
 PCG is expressed as a directed acyclic graph (DAG) of nodes:

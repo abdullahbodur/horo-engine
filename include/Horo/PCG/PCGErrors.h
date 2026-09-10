@@ -32,4 +32,16 @@ namespace Horo::PCG::PCGErrors {
     extern const ErrorCodeDescriptor PointCapacityExceeded;
     /** @brief Checked PCG size arithmetic overflowed or used invalid alignment. */
     extern const ErrorCodeDescriptor PointSizeOverflow;
+    /** @brief A spatial snapshot, descriptor, transform, bound, or provenance value is malformed. */
+    extern const ErrorCodeDescriptor SpatialInputInvalid;
+    /** @brief The declared coordinate convention or precision is unsupported. */
+    extern const ErrorCodeDescriptor SpatialCoordinatesUnsupported;
+    /** @brief Required spatial coverage is missing or partial and therefore cannot prove an empty result. */
+    extern const ErrorCodeDescriptor SpatialCoverageUnavailable;
+    /** @brief A spatial element, grid, control-point, or byte ceiling was exceeded. */
+    extern const ErrorCodeDescriptor SpatialCapacityExceeded;
+    /** @brief A captured spatial revision or origin epoch is no longer current. */
+    extern const ErrorCodeDescriptor SpatialSnapshotStale;
+    /** @brief A replacement changes provider/source identity or fails to advance revision and snapshot identity. */
+    extern const ErrorCodeDescriptor SpatialReplacementInvalid;
 }  // namespace Horo::PCG::PCGErrors

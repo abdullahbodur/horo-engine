@@ -68,4 +68,43 @@ namespace Horo::PCG::PCGErrors {
                                                 .summary = "PCG point byte accounting overflowed.",
                                                 .remediationHint =
                                                     "Reject the candidate and compute all byte envelopes with checked arithmetic."};
+    const ErrorCodeDescriptor
+        SpatialInputInvalid{.domain = PcgDomain,
+                            .code = ErrorCode{"pcg.spatial.input_invalid"},
+                            .defaultSeverity = ErrorSeverity::Error,
+                            .summary = "The PCG spatial snapshot or descriptor is invalid.",
+                            .remediationHint =
+                                "Provide finite canonical values, valid bounds, stable identities, and non-degenerate primitives."};
+    const ErrorCodeDescriptor SpatialCoordinatesUnsupported{.domain = PcgDomain,
+                                                            .code = ErrorCode{"pcg.spatial.coordinates_unsupported"},
+                                                            .defaultSeverity = ErrorSeverity::Error,
+                                                            .summary = "The PCG spatial coordinate contract is unsupported.",
+                                                            .remediationHint = "Use the declared Horo axis convention, finite unit scale, "
+                                                                               "supported precision, and a valid origin epoch."};
+    const ErrorCodeDescriptor
+        SpatialCoverageUnavailable{.domain = PcgDomain,
+                                   .code = ErrorCode{"pcg.spatial.coverage_unavailable"},
+                                   .defaultSeverity = ErrorSeverity::Warning,
+                                   .summary = "Required PCG spatial coverage is missing or partial.",
+                                   .remediationHint =
+                                       "Capture complete committed coverage; never reinterpret unavailable coverage as an empty result."};
+    const ErrorCodeDescriptor
+        SpatialCapacityExceeded{.domain = PcgDomain,
+                                .code = ErrorCode{"pcg.spatial.capacity_exceeded"},
+                                .defaultSeverity = ErrorSeverity::Error,
+                                .summary = "A PCG spatial snapshot capacity was exceeded.",
+                                .remediationHint = "Reduce primitive, control-point, grid-point, or resident-byte demand before capture."};
+    const ErrorCodeDescriptor
+        SpatialSnapshotStale{.domain = PcgDomain,
+                             .code = ErrorCode{"pcg.spatial.snapshot_stale"},
+                             .defaultSeverity = ErrorSeverity::Warning,
+                             .summary = "The PCG spatial snapshot is no longer logically current.",
+                             .remediationHint = "Reject the candidate or explicitly recapture within the caller's bounded retry policy."};
+    const ErrorCodeDescriptor
+        SpatialReplacementInvalid{.domain = PcgDomain,
+                                  .code = ErrorCode{"pcg.spatial.replacement_invalid"},
+                                  .defaultSeverity = ErrorSeverity::Error,
+                                  .summary = "The PCG spatial replacement does not preserve and advance its lineage.",
+                                  .remediationHint =
+                                      "Keep provider/source identity and publish a distinct snapshot with a strictly newer revision."};
 }  // namespace Horo::PCG::PCGErrors
