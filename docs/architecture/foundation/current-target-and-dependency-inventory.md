@@ -64,7 +64,7 @@ device backend.
 
 | Real target (alias) | Availability | Owner and public/private boundary | Direct first-party dependencies |
 |---|---|---|---|
-| `HoroFoundation` (`HoroEngine::Foundation`) | Always | Owns Foundation primitives, diagnostics, logging, telemetry facade, jobs, configuration, paths, hashing, strings, and `Math/SceneMath.h`. Implementation is under `src/foundation/`. | None |
+| `HoroFoundation` (`HoroEngine::Foundation`) | Always | Owns Foundation primitives, immutable host-published error-code registry snapshots, diagnostics, logging, telemetry facade, jobs, configuration, paths, hashing, strings, and `Math/SceneMath.h`. Implementation is under `src/foundation/`. | None |
 | `HoroCliHost` (`HoroEngine::CliHost`) | Always | Owns inert CLI descriptors plus bounded host-policy validation, immutable command registration, deterministic discovery, and generated help under `Cli/**`. Parsing, dispatch, presentation, and adapter execution are not yet part of this target. | Foundation (public) |
 | `HoroOpenTelemetry` (`HoroEngine::OpenTelemetry`) | `HORO_ENABLE_OPENTELEMETRY` | Owns the optional OTLP sink and `Foundation/Telemetry/OpenTelemetrySink.h`; the concrete exporter dependencies are private. | Foundation (public) |
 | `HoroPlatform` (`HoroEngine::Platform`) | Always | Owns `Platform/**` dynamic-library and process contracts plus POSIX/Windows implementations. OS headers and `dl` are private. | Foundation (public) |

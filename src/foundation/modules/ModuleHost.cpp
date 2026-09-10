@@ -36,7 +36,12 @@ namespace Horo {
 
     /** @copydoc ModuleHost::ActivateRegistered */
     Result<std::size_t> ModuleHost::ActivateRegistered(const ModuleActivationContext::DependencyBindings bindings) {
-        // Graph validation runs before any callback: a rejected set leaves the host untouched.
+        // Registry and graph validation run before any callback: a rejected set leaves
+        // both lifecycle state and the last published registry snapshot untouched.
+        Result<ErrorCodeRegistry> registry =
+            m_errorCodes == nullptr ? BuildErrorCodeRegistry(m_registered) : ExtendErrorCodeRegistry(*m_errorCodes, m_registered);
+        if (registry.HasError())
+            return Result<std::size_t>::Failure(registry.ErrorValue());
         auto validated = ValidateModuleGraph(m_registered);
         if (validated.HasError())
             return Result<std::size_t>::Failure(validated.ErrorValue());
@@ -65,6 +70,7 @@ namespace Horo {
             Transition(descriptor->id, ModuleLifecycleState::Active);
         }
         m_registered.clear();
+        m_errorCodes = std::make_shared<const ErrorCodeRegistry>(std::move(registry).Value());
         return Result<std::size_t>::Success(m_active.size() - base);
     }
 
@@ -78,5 +84,10 @@ namespace Horo {
     /** @copydoc ModuleHost::HasActiveModules */
     bool ModuleHost::HasActiveModules() const noexcept {
         return !m_active.empty();
+    }
+
+    /** @copydoc ModuleHost::ErrorCodes */
+    std::shared_ptr<const ErrorCodeRegistry> ModuleHost::ErrorCodes() const noexcept {
+        return m_errorCodes;
     }
 }  // namespace Horo

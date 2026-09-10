@@ -6,6 +6,7 @@ add_library(HoroFoundation STATIC
         foundation/modules/ModuleHostLifecycle.cpp
         foundation/modules/ModuleHostRegistration.cpp
         foundation/error/ErrorCode.cpp
+        foundation/error/ErrorCodeRegistry.cpp
         foundation/diagnostics/DiagnosticBundle.cpp
         foundation/hashing/Sha256.cpp
         foundation/math/SceneMath.cpp
