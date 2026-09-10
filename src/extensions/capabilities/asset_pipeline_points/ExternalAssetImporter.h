@@ -6,6 +6,7 @@
 #include "Horo/Platform/DynamicLibrary.h"
 
 #include <memory>
+#include <string>
 #include <vector>
 
 namespace Horo::Extensions {
@@ -17,12 +18,13 @@ namespace Horo::Extensions {
         ExtensionModuleLifetime &operator=(const ExtensionModuleLifetime &) = delete;
 
         ExtensionModuleLifetime(ExtensionModuleLifetime &&other) noexcept
-            : library(std::move(other.library)), moduleApi(std::exchange(other.moduleApi, {})),
+            : library(std::move(other.library)), moduleId(std::move(other.moduleId)), moduleApi(std::exchange(other.moduleApi, {})),
               unload(std::exchange(other.unload, nullptr)), loaded(std::exchange(other.loaded, false)) {}
 
         ExtensionModuleLifetime &operator=(ExtensionModuleLifetime &&other) noexcept {
             if (this != &other) {
                 library = std::move(other.library);
+                moduleId = std::move(other.moduleId);
                 moduleApi = std::exchange(other.moduleApi, {});
                 unload = std::exchange(other.unload, nullptr);
                 loaded = std::exchange(other.loaded, false);
@@ -30,7 +32,14 @@ namespace Horo::Extensions {
             return *this;
         }
 
+        /**
+         * @brief Invokes the module unload callback at most once.
+         * @return True when no callback was required or the callback completed without throwing.
+         */
+        [[nodiscard]] bool UnloadNow() noexcept;
+
         std::shared_ptr<Platform::DynamicLibrary> library;
+        std::string moduleId;
         HoroExtensionModuleApi moduleApi{};
         HoroExtensionUnloadFunc unload{};
         bool loaded{};

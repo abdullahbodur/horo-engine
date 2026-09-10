@@ -390,6 +390,35 @@ namespace Horo::Extensions::Tests {
         REQUIRE(retained->packageId == "existing.package");
     }
 
+    TEST_CASE("Failed activation preserves the exact published importer registry snapshot", "[Extensions][Assets]") {
+        using namespace Horo::Assets;
+        AssetImporterCatalog catalog;
+        REQUIRE(catalog
+                    .Register(AssetImporterContribution{
+                        .contributionId = "com.example.existing.raw",
+                        .packageId = "existing.package",
+                        .moduleId = "existing.module",
+                        .moduleVersion = "1.0.0",
+                        .version = "1.0.0",
+                        .fileExtensions = {"existing"},
+                        .assetTypes = {AssetTypeId::Parse("example.raw").Value()},
+                        .strategy = std::make_shared<const ExistingImporter>(),
+                    })
+                    .HasValue());
+        auto published = catalog.Publish();
+        REQUIRE(published.HasValue());
+        const auto previous = published.Value();
+
+        ExtensionManager manager{&catalog};
+        const auto loaded = manager.LoadExtension(fs::absolute(HORO_BASIC_EXTENSION_DIR).string());
+
+        REQUIRE(loaded.HasError());
+        CHECK(manager.GetLoadedExtensionIds().empty());
+        CHECK(catalog.Snapshot() == previous);
+        CHECK(catalog.Snapshot()->FindById("com.example.existing.raw") != nullptr);
+        CHECK(catalog.Snapshot()->FindById("com.horo.examples.asset-importer-basic.raw") == nullptr);
+    }
+
     TEST_CASE_METHOD(ExtensionManagerTestFixture, "A failed sibling cannot publish an earlier module contribution",
                      "[Extensions][Assets][Modules]") {
         const fs::path sourceRoot = fs::absolute(HORO_BASIC_EXTENSION_DIR);

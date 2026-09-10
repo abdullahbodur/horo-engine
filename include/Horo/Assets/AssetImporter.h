@@ -210,6 +210,13 @@ namespace Horo::Assets {
         [[nodiscard]] Result<void> Register(AssetImporterContribution entry);
 
         /**
+         * @brief Validates a complete contribution batch without mutating the catalog candidate.
+         * @param entries Borrowed candidate entries.
+         * @return Success when RegisterBatch can admit the batch against the current catalog state.
+         */
+        [[nodiscard]] Result<void> ValidateBatch(std::span<const AssetImporterContribution> entries) const;
+
+        /**
          * @brief Registers a complete contribution batch atomically.
          * @param entries Candidate entries copied into the catalog only when every entry validates.
          * @return Success, or the first typed validation/conflict error with the catalog unchanged.
