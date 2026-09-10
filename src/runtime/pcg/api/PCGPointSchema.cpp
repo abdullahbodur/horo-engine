@@ -89,6 +89,30 @@ namespace Horo::PCG {
             }, values);
         }
 
+        [[nodiscard]] bool IsCanonicalKey(const std::string_view value) noexcept {
+            if (value.empty() || value.size() > MaximumAttributeKeyBytes)
+                return false;
+            bool sawSeparator = false;
+            bool atSegmentStart = true;
+            for (const unsigned char byte : value) {
+                if (byte >= 0x80U)
+                    return false;
+                if (byte == '.') {
+                    if (atSegmentStart)
+                        return false;
+                    sawSeparator = true;
+                    atSegmentStart = true;
+                    continue;
+                }
+                const bool lower = byte >= 'a' && byte <= 'z';
+                const bool digit = byte >= '0' && byte <= '9';
+                if ((atSegmentStart && !lower) || (!atSegmentStart && !lower && !digit && byte != '_'))
+                    return false;
+                atSegmentStart = false;
+            }
+            return sawSeparator && !atSegmentStart;
+        }
+
         [[nodiscard]] bool ValuesAreValid(const PCGAttributeColumnValues &values) noexcept {
             return std::visit([]<typename Column>(const Column &column) {
                 using T = typename Column::value_type;
@@ -128,6 +152,38 @@ namespace Horo::PCG {
             }
             return total;
         }
+
+        [[nodiscard]] Result<void> ValidateCore(const PCGPointCoreColumns &core) {
+            const std::size_t count = core.transforms.size();
+            if (core.bounds.size() != count || core.densities.size() != count || core.seeds.size() != count)
+                return Result<void>::Failure(Failure(PCGErrors::PointDataInvalid));
+            for (std::size_t index = 0; index < count; ++index) {
+                if (core.transforms[index].TryToMatrix().HasError() || !core.bounds[index].IsValid() ||
+                    !std::isfinite(core.densities[index]) || core.densities[index] < 0.0F || core.densities[index] > 1.0F)
+                    return Result<void>::Failure(Failure(PCGErrors::PointDataInvalid));
+            }
+            return Result<void>::Success();
+        }
+
+        [[nodiscard]] Result<void> ValidateColumns(const PCGPointSchema &schema, std::vector<PCGAttributeColumn> &columns,
+                                                   const std::size_t count) {
+            if (columns.size() != schema.Attributes().size())
+                return Result<void>::Failure(Failure(PCGErrors::PointDataInvalid));
+            std::ranges::sort(columns, {}, &PCGAttributeColumn::key);
+            for (std::size_t index = 0; index < columns.size(); ++index) {
+                const auto &column = columns[index];
+                if (index > 0 && columns[index - 1].key == column.key)
+                    return Result<void>::Failure(Failure(PCGErrors::PointAttributeDuplicate));
+                const auto *field = schema.Find(column.key);
+                if (field == nullptr)
+                    return Result<void>::Failure(Failure(PCGErrors::PointAttributeUnknown));
+                if (field->type != TypeOf(column.values))
+                    return Result<void>::Failure(Failure(PCGErrors::PointAttributeTypeMismatch));
+                if (CountOf(column.values) != count || !ValuesAreValid(column.values))
+                    return Result<void>::Failure(Failure(PCGErrors::PointDataInvalid));
+            }
+            return Result<void>::Success();
+        }
     }  // namespace
 
     /** @copydoc LimitsForTier */
@@ -148,27 +204,7 @@ namespace Horo::PCG {
 
     /** @copydoc PCGAttributeKey::Create */
     Result<PCGAttributeKey> PCGAttributeKey::Create(const std::string_view value) {
-        if (value.empty() || value.size() > MaximumAttributeKeyBytes)
-            return Result<PCGAttributeKey>::Failure(Failure(PCGErrors::PointSchemaInvalid));
-        bool sawSeparator = false;
-        bool atSegmentStart = true;
-        for (const unsigned char byte : value) {
-            if (byte >= 0x80U)
-                return Result<PCGAttributeKey>::Failure(Failure(PCGErrors::PointSchemaInvalid));
-            if (byte == '.') {
-                if (atSegmentStart)
-                    return Result<PCGAttributeKey>::Failure(Failure(PCGErrors::PointSchemaInvalid));
-                sawSeparator = true;
-                atSegmentStart = true;
-                continue;
-            }
-            const bool lower = byte >= 'a' && byte <= 'z';
-            const bool digit = byte >= '0' && byte <= '9';
-            if ((atSegmentStart && !lower) || (!atSegmentStart && !lower && !digit && byte != '_'))
-                return Result<PCGAttributeKey>::Failure(Failure(PCGErrors::PointSchemaInvalid));
-            atSegmentStart = false;
-        }
-        if (!sawSeparator || atSegmentStart)
+        if (!IsCanonicalKey(value))
             return Result<PCGAttributeKey>::Failure(Failure(PCGErrors::PointSchemaInvalid));
         try {
             return Result<PCGAttributeKey>::Success(PCGAttributeKey{std::string(value)});
@@ -259,29 +295,10 @@ namespace Horo::PCG {
         const auto limits = LimitsForTier(candidate.schema->Tier()).Value();
         if (count > limits.maximumPointsPerNodeOutput)
             return Result<std::shared_ptr<const PCGPointStorage>>::Failure(Failure(PCGErrors::PointCapacityExceeded));
-        if (candidate.core.bounds.size() != count || candidate.core.densities.size() != count || candidate.core.seeds.size() != count)
-            return Result<std::shared_ptr<const PCGPointStorage>>::Failure(Failure(PCGErrors::PointDataInvalid));
-        if (candidate.attributes.size() != candidate.schema->Attributes().size())
-            return Result<std::shared_ptr<const PCGPointStorage>>::Failure(Failure(PCGErrors::PointDataInvalid));
-        for (std::size_t index = 0; index < count; ++index) {
-            if (candidate.core.transforms[index].TryToMatrix().HasError() || !candidate.core.bounds[index].IsValid() ||
-                !std::isfinite(candidate.core.densities[index]) || candidate.core.densities[index] < 0.0F ||
-                candidate.core.densities[index] > 1.0F)
-                return Result<std::shared_ptr<const PCGPointStorage>>::Failure(Failure(PCGErrors::PointDataInvalid));
-        }
-        std::ranges::sort(candidate.attributes, {}, &PCGAttributeColumn::key);
-        for (std::size_t index = 0; index < candidate.attributes.size(); ++index) {
-            const auto &column = candidate.attributes[index];
-            if (index > 0 && candidate.attributes[index - 1].key == column.key)
-                return Result<std::shared_ptr<const PCGPointStorage>>::Failure(Failure(PCGErrors::PointAttributeDuplicate));
-            const auto *field = candidate.schema->Find(column.key);
-            if (field == nullptr)
-                return Result<std::shared_ptr<const PCGPointStorage>>::Failure(Failure(PCGErrors::PointAttributeUnknown));
-            if (field->type != TypeOf(column.values))
-                return Result<std::shared_ptr<const PCGPointStorage>>::Failure(Failure(PCGErrors::PointAttributeTypeMismatch));
-            if (CountOf(column.values) != count || !ValuesAreValid(column.values))
-                return Result<std::shared_ptr<const PCGPointStorage>>::Failure(Failure(PCGErrors::PointDataInvalid));
-        }
+        if (const auto core = ValidateCore(candidate.core); core.HasError())
+            return Result<std::shared_ptr<const PCGPointStorage>>::Failure(core.ErrorValue());
+        if (const auto columns = ValidateColumns(*candidate.schema, candidate.attributes, count); columns.HasError())
+            return Result<std::shared_ptr<const PCGPointStorage>>::Failure(columns.ErrorValue());
         const auto bytes = AccountBytes(candidate, count);
         if (bytes.HasError())
             return Result<std::shared_ptr<const PCGPointStorage>>::Failure(bytes.ErrorValue());

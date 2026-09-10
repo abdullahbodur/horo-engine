@@ -62,8 +62,10 @@ namespace Horo::PCG {
 
         void CheckError(const auto &result, const ErrorCodeDescriptor &descriptor) {
             REQUIRE(result.HasError());
-            CHECK(result.ErrorValue().domain.Value() == descriptor.domain.Value());
-            CHECK(result.ErrorValue().code.Value() == descriptor.code.Value());
+            const auto &error = result.ErrorValue();
+            CAPTURE(error.domain.Value(), error.code.Value());
+            CHECK(error.domain.Value() == "horo.pcg");
+            CHECK(error.code.Value() == descriptor.code.Value());
         }
     }  // namespace
 
