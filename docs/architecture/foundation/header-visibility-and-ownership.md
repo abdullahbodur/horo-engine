@@ -451,6 +451,15 @@ frame lease semantics; it has no Scene Runtime, renderer, physics, native,
 editor, or GUI dependency. Trigger policy, participant coordination, and backend
 adapters remain outside this public identity boundary.
 
+ANI-001.6 adds `Horo/Animation/AnimationClip.h` to the same owner. Asset and runtime
+composition replace ad hoc floating-point cursors and untyped wrap flags with exact
+nanosecond-tick time, reduced sample-rate metadata, stable generation-fenced clip and
+additive-reference identities, and immutable canonical joint tracks. Load/cook may
+allocate while validation and canonicalization run; directed traversal and sampling
+are bounded, allocation-free, and write only caller-owned pose storage after complete
+preflight. The public boundary adds no RuntimeScene, renderer, physics, filesystem,
+job-system, codec, middleware, callback, or backend-native dependency.
+
 ## Destruction Identity Boundary
 
 `HoroEngine::DestructionApi` owns `Horo/Destruction/DestructibleDescriptor.h`,

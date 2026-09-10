@@ -244,6 +244,7 @@ horo_configure_target_header_boundary(HoroAI PUBLIC_HEADERS
     Horo/AI/BlackboardSchema.h
 )
 horo_configure_target_header_boundary(HoroAnimationApi PUBLIC_HEADERS
+    Horo/Animation/AnimationClip.h
     Horo/Animation/AnimationComponents.h
     Horo/Animation/AnimationErrors.h
     Horo/Animation/AnimationIdentity.h
