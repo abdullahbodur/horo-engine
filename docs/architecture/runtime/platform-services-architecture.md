@@ -196,6 +196,15 @@ platform and available packages.
 All platform service calls are asynchronous. The frontend never blocks the
 calling thread on network I/O.
 
+Implementation status on 10 September 2026: PLS-001.2 provides the standalone
+`HoroEngine::PlatformServices` target and the typed `PlatformRequestStore` foundation.
+It owns bounded active/terminal records, generation-fenced move-only handles, immutable
+typed terminal snapshots, idempotent cancellation intent, and deferred at-most-once
+`OnComplete` subscriptions. Provider routing, the SDK evidence queue, timeout policy,
+provider cancellation, normalized provider errors, and host-wide frontend composition
+remain the later PLS-001.3 through PLS-001.8 slices; callers must not treat the request
+store as a provider backend or bypass those owners.
+
 ```cpp
 template <typename T>
 class PlatformRequestHandle {
