@@ -8,6 +8,7 @@
 #include <deque>
 #include <format>
 #include <limits>
+#include <memory>
 #include <string_view>
 #include <type_traits>
 #include <unordered_set>
@@ -866,7 +867,7 @@ namespace Horo::Editor {
             index = 0;
             for (const ScenePrefabInstance &instance : prefabInstances) {
                 if (instance.parent.has_value() && removedIds.contains(instance.parent->value))
-                    deleted.prefabInstances.push_back(IndexedPrefabInstance{instance, index});
+                    deleted.prefabInstances.emplace_back(instance, index);
                 ++index;
             }
             return deleted;
@@ -948,7 +949,7 @@ namespace Horo::Editor {
             return Result<void>::Success();
         }
 
-        [[nodiscard]] Result<ScenePrefabInstance *> FindEditablePrefabInstance(std::vector<SceneObjectSnapshot> &objects,
+        [[nodiscard]] Result<ScenePrefabInstance *> FindEditablePrefabInstance(const std::vector<SceneObjectSnapshot> &objects,
                                                                                std::vector<ScenePrefabInstance> &instances,
                                                                                const Prefab::PrefabInstanceId id) {
             const auto instance = FindPrefabInstance(instances, id);
@@ -958,7 +959,7 @@ namespace Horo::Editor {
             }
             if (IsPrefabInstanceLocked(objects, *instance))
                 return Result<ScenePrefabInstance *>::Failure(LockedObjectError());
-            return Result<ScenePrefabInstance *>::Success(&*instance);
+            return Result<ScenePrefabInstance *>::Success(std::to_address(instance));
         }
 
         [[nodiscard]] Result<Prefab::PrefabInstanceId> AllocatePrefabInstanceId(const std::uint64_t nextInstanceId) {
@@ -1776,7 +1777,7 @@ namespace Horo::Editor {
         auto instance = FindEditablePrefabInstance(m_document.m_objects, m_document.m_prefabInstances, command.instance);
         if (instance.HasError())
             return Result<SceneCommandResult>::Failure(instance.ErrorValue());
-        const std::size_t index = static_cast<std::size_t>(instance.Value() - m_document.m_prefabInstances.data());
+        const auto index = static_cast<std::size_t>(instance.Value() - m_document.m_prefabInstances.data());
         SceneCommandDelta delta = DeletedPrefabInstancesDelta{{IndexedPrefabInstance{*instance.Value(), index}}};
         return CommitPrefab(PrefabCommitContext{std::move(delta), command.instance, DocumentChangeKind::PrefabInstanceDeleted});
     }
