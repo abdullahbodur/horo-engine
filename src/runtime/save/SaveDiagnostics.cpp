@@ -136,13 +136,13 @@ namespace Horo::Runtime {
         }
 
         bool ContextIsValid(const std::span<const SaveDiagnosticContextEntry> context, const SaveDiagnosticOutcome outcome) noexcept {
-            using enum SaveDiagnosticContextKey;
+            using Key = SaveDiagnosticContextKey;
             if (context.size() > MaximumSaveDiagnosticContextEntries || !ContextEntriesAreCanonical(context))
                 return false;
-            const bool hasOperation = HasContextKey(context, Operation);
+            const bool hasOperation = HasContextKey(context, Key::Operation);
             if (outcome == SaveDiagnosticOutcome::AdmissionRejected)
                 return !hasOperation;
-            return hasOperation && HasContextKey(context, Namespace) && HasContextKey(context, Slot);
+            return hasOperation && HasContextKey(context, Key::Namespace) && HasContextKey(context, Key::Slot);
         }
 
         bool PartialFactIsValid(const SavePartialDataFact &fact) noexcept {
@@ -315,14 +315,14 @@ namespace Horo::Runtime {
         bool GenerationsMatch(const SaveDiagnosticRecord &record, const std::uint64_t registryGeneration,
                               const std::uint64_t namespaceRevision, const SlotGenerationId &slotGeneration,
                               const std::uint64_t archiveGeneration) noexcept {
-            using enum SaveDiagnosticContextKey;
-            if (!ContextMatches<OperationId>(record, RegistryGeneration, registryGeneration))
+            using Key = SaveDiagnosticContextKey;
+            if (!ContextMatches<OperationId>(record, Key::RegistryGeneration, registryGeneration))
                 return false;
-            if (!ContextMatches<OperationId>(record, NamespaceRevision, namespaceRevision))
+            if (!ContextMatches<OperationId>(record, Key::NamespaceRevision, namespaceRevision))
                 return false;
-            if (!ContextMatches<SlotGenerationId>(record, SlotGeneration, slotGeneration))
+            if (!ContextMatches<SlotGenerationId>(record, Key::SlotGeneration, slotGeneration))
                 return false;
-            return ContextMatches<OperationId>(record, ArchiveGeneration, archiveGeneration);
+            return ContextMatches<OperationId>(record, Key::ArchiveGeneration, archiveGeneration);
         }
     }  // namespace
 
