@@ -37,8 +37,8 @@ namespace Horo::Platform {
     /** @brief Process-level state owned by the Android application host. */
     enum class AndroidProcessState : std::uint8_t {
         Created,
-        Running,
-        Suspended,
+        Running,   /**< Application work is admitted; a paused Activity returns here only after ActivityResumed. */
+        Suspended, /**< Background/paused state; ActivityStarted visibility alone does not resume application work. */
         ShuttingDown,
         Stopped
     };

@@ -29,7 +29,7 @@ namespace Horo::Platform {
     }  // namespace
 
     /** @copydoc AndroidLifecycleController::AndroidLifecycleController */
-    AndroidLifecycleController::AndroidLifecycleController(ConstructionToken, const std::thread::id ownerThread,
+    AndroidLifecycleController::AndroidLifecycleController(ConstructionToken, std::thread::id ownerThread,
                                                            const std::size_t queueCapacity) noexcept
         : queueCapacity_(queueCapacity), ownerThread_(ownerThread) {}
 
@@ -70,23 +70,22 @@ namespace Horo::Platform {
             return Result<std::size_t>::Failure(MakeError(PlatformErrors::LifecycleOwnerThreadRequired));
         }
 
+        std::array<AndroidLifecycleEvent, MaximumQueueCapacity> events;
         std::size_t cutoff{};
         {
             std::lock_guard lock(queueMutex_);
             cutoff = queueSize_;
+            for (std::size_t index = 0; index < cutoff; ++index) {
+                events[index] = queue_[queueHead_];
+                queueHead_ = (queueHead_ + 1) % queueCapacity_;
+            }
+            queueSize_ -= cutoff;
         }
 
         std::size_t consumed{};
         std::optional<Error> firstError;
         while (consumed < cutoff) {
-            AndroidLifecycleEvent event;
-            {
-                std::lock_guard lock(queueMutex_);
-                event = queue_[queueHead_];
-                queueHead_ = (queueHead_ + 1) % queueCapacity_;
-                --queueSize_;
-            }
-            if (Result<void> applied = Apply(event); applied.HasError()) {
+            if (Result<void> applied = Apply(events[consumed]); applied.HasError()) {
                 ++state_.rejectedObservationCount;
                 if (!firstError.has_value())
                     firstError = applied.ErrorValue();

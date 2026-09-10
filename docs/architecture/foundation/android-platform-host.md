@@ -99,8 +99,10 @@ renderer resources from Java/native callbacks.
 
 Backgrounding is not shutdown. Producers pause or neutralize according to their
 runtime contracts while durable application state remains owned by the
-application. Final destruction cancels owned work and releases services in
-reverse dependency order.
+application. `ActivityPaused` enters suspension; a later `ActivityStarted`
+observation makes the Activity visible but does not resume application work until
+`ActivityResumed` commits. Final destruction cancels owned work and releases
+services in reverse dependency order.
 
 ## Native Window And Presentation
 
