@@ -185,6 +185,23 @@ namespace Horo::PlatformServices {
             return range.minimum <= range.maximum && (kind != ProgressionValueKind::UnsignedInteger64 || range.minimum >= 0);
         }
 
+        [[nodiscard]] bool HasValidLeaderboardSemantics(const LeaderboardDefinition &definition) noexcept {
+            return IsKnown(definition.authority) && IsKnown(definition.valueKind) &&
+                   HasValidRange(definition.valueKind, definition.range) && IsKnown(definition.ordering);
+        }
+
+        [[nodiscard]] Result<void> ValidateSourceStat(const StatDefinitionRegistry &stats, const LeaderboardDefinition &definition,
+                                                      const std::size_t index) {
+            if (!definition.sourceStat)
+                return Result<void>::Success();
+            const auto source = stats.Find(*definition.sourceStat);
+            if (source.HasError() || source.Value()->valueKind != definition.valueKind ||
+                source.Value()->range.minimum > definition.range.minimum || source.Value()->range.maximum < definition.range.maximum)
+                return Result<void>::Failure(FieldError(PlatformDefinitionErrors::InvalidCrossReference, index, "sourceStat",
+                                                        "Source stat must exist with a compatible kind and covering range."));
+            return Result<void>::Success();
+        }
+
         [[nodiscard]] Result<void> ValidateDefinition(const PlatformStableIdRegistry &stableIds,
                                                       const PlatformDefinitionRegistryLimits &limits, const StatDefinition &definition,
                                                       const std::size_t index) {
@@ -211,21 +228,13 @@ namespace Horo::PlatformServices {
             if (const auto identity = ValidateIdentity(stableIds, PlatformServiceIdKind::Leaderboard, definition, index);
                 identity.HasError())
                 return identity;
-            if (!IsKnown(definition.authority) || !IsKnown(definition.valueKind) ||
-                !HasValidRange(definition.valueKind, definition.range) || !IsKnown(definition.ordering))
+            if (!HasValidLeaderboardSemantics(definition))
                 return Result<void>::Failure(FieldError(PlatformDefinitionErrors::InvalidDefinition, index, "semantics",
                                                         "Leaderboard authority, numeric range, or ordering is invalid."));
             if (!IsLocalizationKey(definition.localizationKey, limits.maximumLocalizationKeyBytes))
                 return Result<void>::Failure(FieldError(PlatformDefinitionErrors::InvalidDefinition, index, "localizationKey",
                                                         "Leaderboard localization key is malformed or unbounded."));
-            if (definition.sourceStat) {
-                const auto source = stats.Find(*definition.sourceStat);
-                if (source.HasError() || source.Value()->valueKind != definition.valueKind ||
-                    source.Value()->range.minimum > definition.range.minimum || source.Value()->range.maximum < definition.range.maximum)
-                    return Result<void>::Failure(FieldError(PlatformDefinitionErrors::InvalidCrossReference, index, "sourceStat",
-                                                            "Source stat must exist with a compatible kind and covering range."));
-            }
-            return Result<void>::Success();
+            return ValidateSourceStat(stats, definition, index);
         }
 
         [[nodiscard]] Result<void> ValidateDefinition(const PlatformStableIdRegistry &stableIds,
@@ -362,76 +371,6 @@ namespace Horo::PlatformServices {
             return Result<void>::Success();
         }
     }  // namespace
-
-    namespace PlatformDefinitionErrors {
-        namespace {
-            const ErrorDomainId Domain{"horo.platform.definition"};
-        }
-
-        const ErrorCodeDescriptor UnsupportedVersion{Domain,
-                                                     ErrorCode{"platform.definition.version_unsupported"},
-                                                     ErrorSeverity::Error,
-                                                     "Definition schema version is unsupported.",
-                                                     "Migrate to the supported schema.",
-                                                     false,
-                                                     true};
-        const ErrorCodeDescriptor CapacityExceeded{Domain,
-                                                   ErrorCode{"platform.definition.capacity_exceeded"},
-                                                   ErrorSeverity::Error,
-                                                   "Definition bounds were exceeded.",
-                                                   "Reduce the document or bounds.",
-                                                   false,
-                                                   true};
-        const ErrorCodeDescriptor InvalidDefinition{Domain,
-                                                    ErrorCode{"platform.definition.invalid"},
-                                                    ErrorSeverity::Error,
-                                                    "Definition is malformed.",
-                                                    "Correct the diagnosed field.",
-                                                    false,
-                                                    true};
-        const ErrorCodeDescriptor DuplicateDefinition{Domain,
-                                                      ErrorCode{"platform.definition.duplicate"},
-                                                      ErrorSeverity::Error,
-                                                      "Stable identity is defined more than once.",
-                                                      "Retain exactly one definition.",
-                                                      false,
-                                                      true};
-        const ErrorCodeDescriptor UnknownIdentity{Domain,
-                                                  ErrorCode{"platform.definition.identity_unknown"},
-                                                  ErrorSeverity::Error,
-                                                  "Definition references no active stable identity.",
-                                                  "Use an active identity of the right kind.",
-                                                  false,
-                                                  true};
-        const ErrorCodeDescriptor IncompleteRegistry{Domain,
-                                                     ErrorCode{"platform.definition.registry_incomplete"},
-                                                     ErrorSeverity::Error,
-                                                     "An active identity has no definition.",
-                                                     "Define every active identity.",
-                                                     false,
-                                                     true};
-        const ErrorCodeDescriptor InvalidCrossReference{Domain,
-                                                        ErrorCode{"platform.definition.cross_reference_invalid"},
-                                                        ErrorSeverity::Error,
-                                                        "Definition cross-reference is missing or incompatible.",
-                                                        "Reference a compatible definition in the captured registry.",
-                                                        false,
-                                                        true};
-        const ErrorCodeDescriptor StaleIdentityRegistry{Domain,
-                                                        ErrorCode{"platform.definition.identity_registry_stale"},
-                                                        ErrorSeverity::Error,
-                                                        "Definitions target another identity generation.",
-                                                        "Rebuild against the captured stable-ID registry.",
-                                                        false,
-                                                        false};
-        const ErrorCodeDescriptor ImmutableContractChanged{Domain,
-                                                           ErrorCode{"platform.definition.immutable_contract_changed"},
-                                                           ErrorSeverity::Error,
-                                                           "Published semantic fields changed without migration.",
-                                                           "Create an explicit product migration.",
-                                                           false,
-                                                           true};
-    }  // namespace PlatformDefinitionErrors
 
     /** @copydoc StatDefinitionRegistry::StableIdProjectId */
     std::string_view StatDefinitionRegistry::StableIdProjectId() const noexcept {
