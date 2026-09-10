@@ -136,7 +136,9 @@ namespace Horo::Runtime {
         }
 
         bool ContextIsValid(const std::span<const SaveDiagnosticContextEntry> context, const SaveDiagnosticOutcome outcome) noexcept {
-            using enum SaveDiagnosticContextKey;
+            using SaveDiagnosticContextKey::Namespace;
+            using SaveDiagnosticContextKey::Operation;
+            using SaveDiagnosticContextKey::Slot;
             if (context.size() > MaximumSaveDiagnosticContextEntries || !ContextEntriesAreCanonical(context))
                 return false;
             const bool hasOperation = HasContextKey(context, Operation);
@@ -213,12 +215,11 @@ namespace Horo::Runtime {
         }
 
         std::optional<Utf8Lead> DecodeUtf8Lead(const std::byte lead) noexcept {
-            const auto value = std::to_integer<std::uint8_t>(lead);
-            if ((value & 0xe0U) == 0xc0U && value >= 0xc2U)
+            if ((lead & std::byte{0xe0}) == std::byte{0xc0} && lead >= std::byte{0xc2})
                 return Utf8Lead{1, std::to_integer<std::uint8_t>(lead & std::byte{0x1f})};
-            if ((value & 0xf0U) == 0xe0U)
+            if ((lead & std::byte{0xf0}) == std::byte{0xe0})
                 return Utf8Lead{2, std::to_integer<std::uint8_t>(lead & std::byte{0x0f})};
-            if ((value & 0xf8U) == 0xf0U && value <= 0xf4U)
+            if ((lead & std::byte{0xf8}) == std::byte{0xf0} && lead <= std::byte{0xf4})
                 return Utf8Lead{3, std::to_integer<std::uint8_t>(lead & std::byte{0x07})};
             return std::nullopt;
         }
@@ -315,7 +316,10 @@ namespace Horo::Runtime {
         bool GenerationsMatch(const SaveDiagnosticRecord &record, const std::uint64_t registryGeneration,
                               const std::uint64_t namespaceRevision, const SlotGenerationId &slotGeneration,
                               const std::uint64_t archiveGeneration) noexcept {
-            using enum SaveDiagnosticContextKey;
+            using SaveDiagnosticContextKey::ArchiveGeneration;
+            using SaveDiagnosticContextKey::NamespaceRevision;
+            using SaveDiagnosticContextKey::RegistryGeneration;
+            using SaveDiagnosticContextKey::SlotGeneration;
             if (!ContextMatches<OperationId>(record, RegistryGeneration, registryGeneration))
                 return false;
             if (!ContextMatches<OperationId>(record, NamespaceRevision, namespaceRevision))
