@@ -589,7 +589,9 @@ supplied durations, coherent counts and admitted world limits before invoking an
 pre-bound Telemetry handle. Process composition registers the closed metric
 vocabulary and selects `Off`, `Core` or `Detailed`; an unavailable required binding
 rejects explicitly, while optional unavailable and policy-off bindings remain
-distinct from a zero measurement. The fixed-step path performs no string lookup,
+distinct from a zero measurement. World activation creates the binding on the
+Physics owner thread; moving the binding never transfers that affinity. The
+fixed-step path performs no string lookup,
 dimension binding, clock read or heap growth. Telemetry contention, saturation,
 shutdown and stale internal handles may lose observations but cannot influence
 simulation admission, order, state or determinism. Detailed stage timings are

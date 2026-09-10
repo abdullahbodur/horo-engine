@@ -105,6 +105,8 @@ namespace Horo::Physics {
          * @param level Host-selected collection detail when available.
          * @param handles Pre-registered and pre-bound process Telemetry handles.
          * @return Binding or a typed Physics descriptor/capability error.
+         * @pre Called on the Physics owner thread that will publish and close the binding; moving the value does not
+         * transfer affinity.
          * @post Failure retains no handles and publishes no metric record.
          */
         [[nodiscard]] static Result<PhysicsMetricBinding> Create(PhysicsWorldId world, std::uint64_t revision, PhysicsMetricBounds bounds,

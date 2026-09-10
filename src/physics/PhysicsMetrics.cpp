@@ -14,6 +14,13 @@ namespace Horo::Physics {
                                                                "broadphase_pairs", "contacts",        "queries"};
         constexpr std::array<std::string_view, 2> kDepthValues{"commands", "events"};
         constexpr std::array<std::string_view, 2> kEventValues{"dropped_events", "overflow"};
+        constexpr std::size_t kBroadphaseStageIndex = 0;
+        constexpr std::size_t kNarrowphaseStageIndex = 1;
+        constexpr std::size_t kSolverStageIndex = 2;
+        constexpr std::size_t kCommandDepthIndex = 0;
+        constexpr std::size_t kEventDepthIndex = 1;
+        constexpr std::size_t kDroppedEventIndex = 0;
+        constexpr std::size_t kOverflowEventIndex = 1;
 
         [[nodiscard]] Telemetry::DimensionDescriptor Dimension(std::string key, const auto &values) {
             Telemetry::DimensionDescriptor result{.key = std::move(key)};
@@ -147,7 +154,7 @@ namespace Horo::Physics {
         if (availability == PhysicsMetricAvailability::Available) {
             const bool detailedAvailable =
                 level != Telemetry::MetricCollectionLevel::Detailed || AllHandlesAvailable(handles.stageDurations);
-            if (level == Telemetry::MetricCollectionLevel::Off || !CoreHandlesAvailable(handles) || !detailedAvailable)
+            if (!CoreHandlesAvailable(handles) || !detailedAvailable)
                 return Result<PhysicsMetricBinding>::Failure(MakeError(PhysicsErrors::CapabilityUnavailable));
         }
         return Result<PhysicsMetricBinding>::Success(
@@ -175,9 +182,9 @@ namespace Horo::Physics {
 
         handles_.fixedStepDuration.Observe(snapshot.fixedStepSeconds);
         if (level_ == Telemetry::MetricCollectionLevel::Detailed) {
-            handles_.stageDurations[0].Observe(snapshot.broadphaseSeconds);
-            handles_.stageDurations[1].Observe(snapshot.narrowphaseSeconds);
-            handles_.stageDurations[2].Observe(snapshot.solverSeconds);
+            handles_.stageDurations[kBroadphaseStageIndex].Observe(snapshot.broadphaseSeconds);
+            handles_.stageDurations[kNarrowphaseStageIndex].Observe(snapshot.narrowphaseSeconds);
+            handles_.stageDurations[kSolverStageIndex].Observe(snapshot.solverSeconds);
         }
         const std::array<double, 7> counts{static_cast<double>(snapshot.bodyCount),
                                            static_cast<double>(snapshot.sleepingBodyCount),
@@ -188,12 +195,12 @@ namespace Horo::Physics {
                                            static_cast<double>(snapshot.queryCount)};
         for (std::size_t index = 0; index < counts.size(); ++index)
             handles_.counts[index].Set(counts[index]);
-        handles_.depths[0].Set(static_cast<double>(snapshot.commandDepth));
-        handles_.depths[1].Set(static_cast<double>(snapshot.eventDepth));
+        handles_.depths[kCommandDepthIndex].Set(static_cast<double>(snapshot.commandDepth));
+        handles_.depths[kEventDepthIndex].Set(static_cast<double>(snapshot.eventDepth));
         if (snapshot.droppedEventCount != 0)
-            handles_.events[0].Add(snapshot.droppedEventCount);
+            handles_.events[kDroppedEventIndex].Add(snapshot.droppedEventCount);
         if (snapshot.overflowCount != 0)
-            handles_.events[1].Add(snapshot.overflowCount);
+            handles_.events[kOverflowEventIndex].Add(snapshot.overflowCount);
         return Result<PhysicsMetricPublishDisposition>::Success(PhysicsMetricPublishDisposition::Submitted);
     }
 
