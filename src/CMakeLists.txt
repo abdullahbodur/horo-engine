@@ -86,6 +86,8 @@ add_library(HoroPlatform STATIC
         platform/Platform.cpp
         platform/PlatformErrors.cpp
         platform/ConfigurationFileStore.cpp
+        platform/android/AndroidLifecycle.cpp
+        platform/android/AndroidLifecycleAdapter.cpp
 )
 
 if (WIN32)
