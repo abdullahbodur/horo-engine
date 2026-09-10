@@ -125,6 +125,12 @@ namespace Horo::Extensions::Tests {
                    "\"roles\":[\"editor-presentation\"],\"dependencies\":[\"com.example.multi.backend\"],\"entry\":\"missing" +
                    extension + "\"}]";
         }
+
+        void RequireMultiModuleLoaded(const ExtensionHostProfile profile, std::vector<std::string> capabilities = {}) const {
+            ExtensionManager manager{nullptr, profile, std::move(capabilities), Horo::Tests::CreateAcceptingArtifactGate()};
+            REQUIRE(manager.LoadExtension(fs::absolute(tempDir).string()).HasValue());
+            CHECK(manager.GetLoadedExtensionIds() == std::vector<std::string>{"com.example.multi"});
+        }
 #endif
     };
 
@@ -389,21 +395,14 @@ namespace Horo::Extensions::Tests {
                 "\"},{\"id\":\"com.example.multi.editor\",\"version\":\"1.0.0\",\"kind\":\"native\","
                 "\"roles\":[\"editor-presentation\"],\"dependencies\":[\"com.example.multi.backend\"],\"entry\":\"editor" +
                 extension + "\"}]");
-            ExtensionManager manager{nullptr, ExtensionHostProfile::Interactive, {}, Horo::Tests::CreateAcceptingArtifactGate()};
-            REQUIRE(manager.LoadExtension(fs::absolute(tempDir).string()).HasValue());
-            CHECK(manager.GetLoadedExtensionIds() == std::vector<std::string>{"com.example.multi"});
+            RequireMultiModuleLoaded(ExtensionHostProfile::Interactive);
         }
 
         SECTION("explicit host capabilities admit a required module before activation") {
             WriteMultiModuleManifest("[{\"id\":\"com.example.multi.backend\",\"version\":\"1.0.0\",\"kind\":\"native\","
                                      "\"roles\":[\"backend-capability\"],\"entry\":\"backend" +
                                      extension + "\",\"requiredCapabilities\":[\"com.horo.assets\"]}]");
-            ExtensionManager manager{nullptr,
-                                     ExtensionHostProfile::Interactive,
-                                     {"com.horo.assets", "com.horo.assets", ""},
-                                     Horo::Tests::CreateAcceptingArtifactGate()};
-            REQUIRE(manager.LoadExtension(fs::absolute(tempDir).string()).HasValue());
-            CHECK(manager.GetLoadedExtensionIds() == std::vector<std::string>{"com.example.multi"});
+            RequireMultiModuleLoaded(ExtensionHostProfile::Interactive, {"com.horo.assets", "com.horo.assets", ""});
         }
     }
 
@@ -419,9 +418,7 @@ namespace Horo::Extensions::Tests {
 
         SECTION("headless activation does not construct an optional presentation sibling") {
             WriteMultiModuleManifest(MissingPresentationModules(extension));
-            ExtensionManager manager{nullptr, ExtensionHostProfile::Headless, {}, Horo::Tests::CreateAcceptingArtifactGate()};
-            REQUIRE(manager.LoadExtension(fs::absolute(tempDir).string()).HasValue());
-            CHECK(manager.GetLoadedExtensionIds() == std::vector<std::string>{"com.example.multi"});
+            RequireMultiModuleLoaded(ExtensionHostProfile::Headless);
         }
     }
 #endif
