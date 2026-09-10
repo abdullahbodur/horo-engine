@@ -277,6 +277,7 @@ horo_register_catch_test(HoroPCGTests LABELS "unit;pcg;headless")
 
 add_executable(HoroVfxApiTests
         unit/runtime/vfx/VfxIdentityTests.cpp
+        unit/runtime/vfx/VfxQualityPolicyTests.cpp
 )
 target_compile_features(HoroVfxApiTests PRIVATE cxx_std_20)
 target_link_libraries(HoroVfxApiTests PRIVATE HoroEngine::VfxApi)

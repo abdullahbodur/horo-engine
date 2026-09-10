@@ -250,6 +250,7 @@ horo_configure_target_header_boundary(HoroPCG PUBLIC_HEADERS
 horo_configure_target_header_boundary(HoroVfxApi PUBLIC_HEADERS
     Horo/Vfx/VfxErrors.h
     Horo/Vfx/VfxIdentity.h
+    Horo/Vfx/VfxQualityPolicy.h
 )
 horo_configure_target_header_boundary(HoroDestructionApi PUBLIC_HEADERS
     Horo/Destruction/DestructibleDescriptor.h
