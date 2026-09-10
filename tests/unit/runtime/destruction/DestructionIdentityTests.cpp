@@ -220,10 +220,14 @@ namespace Horo::Destruction {
     }
 
     TEST_CASE("Destruction identity errors are stable and unique", "[unit][destruction][identity]") {
-        const std::array errors{DestructionErrors::IdentityInvalid,   DestructionErrors::IdentityUnknown,
-                                DestructionErrors::StaleGeneration,   DestructionErrors::StaleContent,
-                                DestructionErrors::StaleRevision,     DestructionErrors::GenerationExhausted,
-                                DestructionErrors::RevisionExhausted, DestructionErrors::SerializedIdentityInvalid};
+        const std::array errors{DestructionErrors::IdentityInvalid,     DestructionErrors::IdentityUnknown,
+                                DestructionErrors::StaleGeneration,     DestructionErrors::StaleContent,
+                                DestructionErrors::StaleRevision,       DestructionErrors::GenerationExhausted,
+                                DestructionErrors::RevisionExhausted,   DestructionErrors::SerializedIdentityInvalid,
+                                DestructionErrors::DescriptorInvalid,   DestructionErrors::TierInvalid,
+                                DestructionErrors::FeatureUnsatisfied,  DestructionErrors::RuntimeGeometryUnsupported,
+                                DestructionErrors::LimitProfileInvalid, DestructionErrors::LimitExceeded,
+                                DestructionErrors::StaleConfiguration};
         std::set<std::string_view> codes;
         for (const auto &error : errors) {
             CHECK(error.domain.Value() == std::string_view{"horo.destruction"});

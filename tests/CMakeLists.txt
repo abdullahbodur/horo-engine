@@ -271,6 +271,7 @@ target_link_libraries(HoroVfxApiTests PRIVATE HoroEngine::VfxApi)
 horo_register_catch_test(HoroVfxApiTests LABELS "unit;vfx;headless")
 
 add_executable(HoroDestructionApiTests
+        unit/runtime/destruction/DestructibleDescriptorTests.cpp
         unit/runtime/destruction/DestructionIdentityTests.cpp
 )
 target_compile_features(HoroDestructionApiTests PRIVATE cxx_std_20)

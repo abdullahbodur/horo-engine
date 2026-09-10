@@ -257,8 +257,9 @@ because this is the first published PCG API slice.
 
 ## Destruction Identity Boundary
 
-`HoroEngine::DestructionApi` owns `Horo/Destruction/DestructionIdentity.h` and
-`Horo/Destruction/DestructionErrors.h`. Its public dependencies are limited to
+`HoroEngine::DestructionApi` owns `Horo/Destruction/DestructibleDescriptor.h`,
+`Horo/Destruction/DestructionIdentity.h` and `Horo/Destruction/DestructionErrors.h`.
+Its public dependencies are limited to
 Foundation and Assets for typed results/errors, the shared SHA-256 value and the
 path-independent `AssetId`. Physics, Render, RuntimeScene and native provider headers
 remain outside the public boundary.
@@ -270,3 +271,9 @@ previously exist. Future cook/runtime targets must consume this owner rather tha
 duplicate identities, expose native handles or infer stable identity from names, paths
 or table positions. The standalone Destruction API test consumer verifies the staged
 header dependency boundary.
+
+The `[DFR-001.3]` slice adds immutable typed health, behavior, cleanup, replication,
+feature-tier and finite-limit descriptors plus allocation-free admission validation.
+Consumers migrate from duplicated numeric limits or provider selection to the exact
+provider-neutral tier profile and typed failures. The header introduces no Physics,
+Render, RuntimeScene, platform or native provider dependency.

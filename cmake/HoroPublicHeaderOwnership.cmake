@@ -236,6 +236,7 @@ horo_configure_target_header_boundary(HoroVfxApi PUBLIC_HEADERS
     Horo/Vfx/VfxIdentity.h
 )
 horo_configure_target_header_boundary(HoroDestructionApi PUBLIC_HEADERS
+    Horo/Destruction/DestructibleDescriptor.h
     Horo/Destruction/DestructionErrors.h
     Horo/Destruction/DestructionIdentity.h
 )

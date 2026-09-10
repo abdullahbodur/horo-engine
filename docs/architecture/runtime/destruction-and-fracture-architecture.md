@@ -92,6 +92,25 @@ outlive runtime owners but become unusable when later owner validation reports a
 generation/content/revision. Live registry mutation, bounded work, synchronization and
 shutdown draining remain the DestructionRuntime owner's responsibility.
 
+## Descriptor Contract
+
+`Horo/Destruction/DestructibleDescriptor.h` is the canonical, immutable core-1.0
+configuration boundary. A descriptor captures the exact authored destructible and
+fracture-content identities, a non-zero configuration publication revision, health
+thresholds, typed trigger/support/repair/cleanup/replication intent, required and
+optional feature sets, and finite limits. Creation copies fixed-size data only; it
+does not load content, discover a provider, allocate runtime state, register a callback
+or grant mutation authority. The value is thread-compatible and may be dropped on any
+thread without shutdown work.
+
+Runtime admission rechecks the submitted/current handle generation, authored owner,
+configuration revision and content identity before validating decoded artifact counts
+and peak bytes/work. Invalid or over-limit content fails before allocation or partial
+publication. Required features must exist in the exact selected tier. Optional features
+are intersected with tier support and remain absent when unsupported; there is no
+substitution or tier fallback. Runtime geometry generation is a typed unsupported
+request in every core-1.0 tier.
+
 ## Destruction Model
 
 Scene components carry stable binding and authored policy, not live mutable state:
@@ -339,17 +358,20 @@ platform, solver or device and do not grant capability:
 
 | Feature family | `Baseline` | `Standard` | `High` |
 |---|---|---|---|
-| Pre-cooked fracture | Bounded one-level | Larger staged graph | Larger qualified hierarchy |
-| Support/collapse | Minimal cooked policy | Richer cooked policy | Hierarchical cooked policy |
-| Physics | Pre-cooked dynamic convex chunks | Same ownership, larger limits | Same ownership, qualified larger limits |
-| Presentation effects | Optional bounded cosmetic requests | Increased declared limits | Highest qualified declared limits |
+| Pre-cooked fracture | 64 chunks, depth 1 | 256 chunks, depth 4, staged activation | 1,024 chunks, depth 8, staged hierarchical fracture |
+| Active chunk bodies | 64 | 256 | 1,024 |
+| Events / retained journal | 128 / 512 | 1,024 / 4,096 | 4,096 / 16,384 |
+| Cosmetic debris particles | 256 | 1,024 | 4,096 |
+| Artifact / transition / resident bytes | 16 / 32 / 64 MiB | 64 / 128 / 256 MiB | 256 / 512 / 1,024 MiB |
+| Work items per transition | 8,192 | 65,536 | 524,288 |
 | Runtime geometry generation | Unavailable in core 1.0 | Unavailable in core 1.0 | Unavailable in core 1.0 |
 
-DFR-001.3 freezes exact chunk/depth/body/event/byte/work limits. Resolution intersects
-product request, cooked variants, runtime, World Streaming, Physics, Render and host
-capabilities. Required unsupported content fails; fallback is only an explicitly ordered
-product choice with a typed reason. Runtime geometry is a separate post-1.0 capability,
-not an automatic `High` feature.
+These are hard upper profiles, not reservations or inferred platform capability. A
+descriptor may lower every value while preserving internal consistency. Resolution
+intersects product request, cooked variants, runtime, World Streaming, Physics, Render
+and host capabilities. Required unsupported content fails; fallback is only an
+explicitly ordered product choice with a typed reason. Runtime geometry is a separate
+post-1.0 capability, not an automatic `High` feature.
 
 ## Lifecycle, Persistence And Shutdown
 

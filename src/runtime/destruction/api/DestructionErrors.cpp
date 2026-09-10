@@ -47,4 +47,43 @@ namespace Horo::Destruction::DestructionErrors {
                                                         .defaultSeverity = ErrorSeverity::Error,
                                                         .summary = "Serialized destruction identity bytes are malformed.",
                                                         .remediationHint = "Reject or recook the malformed identity payload."};
+    const ErrorCodeDescriptor DescriptorInvalid{.domain = DestructionDomain,
+                                                .code = ErrorCode{"destruction.descriptor.invalid"},
+                                                .defaultSeverity = ErrorSeverity::Error,
+                                                .summary = "The destructible descriptor contains malformed or contradictory policy.",
+                                                .remediationHint = "Correct the typed policy and exact identity fields."};
+    const ErrorCodeDescriptor TierInvalid{.domain = DestructionDomain,
+                                          .code = ErrorCode{"destruction.tier.invalid"},
+                                          .defaultSeverity = ErrorSeverity::Error,
+                                          .summary = "The destruction feature tier is unknown.",
+                                          .remediationHint = "Select an exact provider-neutral tier defined by the current contract."};
+    const ErrorCodeDescriptor FeatureUnsatisfied{.domain = DestructionDomain,
+                                                 .code = ErrorCode{"destruction.feature.unsatisfied"},
+                                                 .defaultSeverity = ErrorSeverity::Error,
+                                                 .summary = "The exact selected tier does not satisfy a required destruction feature.",
+                                                 .remediationHint =
+                                                     "Select an explicitly allowed compatible profile or revise the requirement."};
+    const ErrorCodeDescriptor
+        RuntimeGeometryUnsupported{.domain = DestructionDomain,
+                                   .code = ErrorCode{"destruction.feature.runtime_geometry_unsupported"},
+                                   .defaultSeverity = ErrorSeverity::Error,
+                                   .summary = "Runtime geometry generation is unavailable in the core pre-cooked destruction contract.",
+                                   .remediationHint =
+                                       "Provide compatible pre-cooked fracture content; do not request runtime cutting as fallback."};
+    const ErrorCodeDescriptor LimitProfileInvalid{.domain = DestructionDomain,
+                                                  .code = ErrorCode{"destruction.limits.profile_invalid"},
+                                                  .defaultSeverity = ErrorSeverity::Error,
+                                                  .summary = "The destruction limit profile is empty, contradictory, or above its ceiling.",
+                                                  .remediationHint = "Use positive limits no wider than the exact selected tier."};
+    const ErrorCodeDescriptor LimitExceeded{.domain = DestructionDomain,
+                                            .code = ErrorCode{"destruction.limits.exceeded"},
+                                            .defaultSeverity = ErrorSeverity::Error,
+                                            .summary = "The destruction artifact or peak work exceeds the admitted finite limits.",
+                                            .remediationHint =
+                                                "Reject or recook the content for a compatible explicitly selected profile."};
+    const ErrorCodeDescriptor StaleConfiguration{.domain = DestructionDomain,
+                                                 .code = ErrorCode{"destruction.configuration.stale"},
+                                                 .defaultSeverity = ErrorSeverity::Warning,
+                                                 .summary = "The destructible descriptor belongs to a replaced configuration revision.",
+                                                 .remediationHint = "Resolve the current immutable descriptor before admitting work."};
 }  // namespace Horo::Destruction::DestructionErrors
