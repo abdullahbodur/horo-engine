@@ -201,6 +201,14 @@ namespace Horo::Animation {
             return slot;
         }
 
+        Result<std::uint32_t> ResolveActiveMutablePose(Detail::PoseArenaState &state, const PoseHandle &pose) {
+            if (const auto owner = OwnerThreadResult(state); owner.HasError())
+                return Result<std::uint32_t>::Failure(owner.ErrorValue());
+            if (const auto active = ActiveResult(state); active.HasError())
+                return Result<std::uint32_t>::Failure(active.ErrorValue());
+            return ResolveMutablePoseSlot(state, pose);
+        }
+
         Result<void> PrepareEvaluationMask(Detail::PoseArenaState &state, const std::span<const JointId> requestedJoints) {
             std::fill(state.evaluationScratch.begin(), state.evaluationScratch.end(), requestedJoints.empty() ? 1U : 0U);
             for (const JointId joint : requestedJoints) {
@@ -376,11 +384,7 @@ namespace Horo::Animation {
 
     /** @copydoc PoseFrameArena::SetLocalTransform */
     Result<void> PoseFrameArena::SetLocalTransform(const PoseHandle &pose, const JointId joint, const Math::Transform &transform) {
-        if (const auto owner = OwnerThreadResult(*state_); owner.HasError())
-            return owner;
-        if (const auto active = ActiveResult(*state_); active.HasError())
-            return active;
-        const auto slotResult = ResolveMutablePoseSlot(*state_, pose);
+        const auto slotResult = ResolveActiveMutablePose(*state_, pose);
         if (slotResult.HasError())
             return Result<void>::Failure(slotResult.ErrorValue());
         const std::uint32_t slotIndex = slotResult.Value();
@@ -403,11 +407,7 @@ namespace Horo::Animation {
 
     /** @copydoc PoseFrameArena::EvaluateModelSpace */
     Result<void> PoseFrameArena::EvaluateModelSpace(const PoseHandle &pose, const std::span<const JointId> requestedJoints) {
-        if (const auto owner = OwnerThreadResult(*state_); owner.HasError())
-            return owner;
-        if (const auto active = ActiveResult(*state_); active.HasError())
-            return active;
-        const auto slotResult = ResolveMutablePoseSlot(*state_, pose);
+        const auto slotResult = ResolveActiveMutablePose(*state_, pose);
         if (slotResult.HasError())
             return Result<void>::Failure(slotResult.ErrorValue());
         const std::uint32_t slotIndex = slotResult.Value();

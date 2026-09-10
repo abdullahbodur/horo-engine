@@ -53,9 +53,22 @@ namespace Horo::Animation {
             return allocated.Value();
         }
 
+        PoseReadLease LeasePose(PoseFrameArena &arena, const PoseHandle &pose) {
+            auto acquired = arena.AcquireReadLease(pose);
+            REQUIRE(acquired.HasValue());
+            return std::move(acquired).Value();
+        }
+
+        PoseReadLease AddEvaluateAndLease(PoseFrameArena &arena) {
+            const PoseHandle pose = AddPose(arena);
+            REQUIRE(arena.EvaluateModelSpace(pose).HasValue());
+            return LeasePose(arena, pose);
+        }
+
         template <typename Value> void CheckPoseFailure(const Result<Value> &result, const ErrorCodeDescriptor &expected) {
-            REQUIRE(result.HasError());
-            CHECK(result.ErrorValue().code.Value() == expected.code.Value());
+            REQUIRE_FALSE(result.HasValue());
+            const Error error = result.ErrorValue();
+            CHECK(error.code.Value() == expected.code.Value());
         }
     }  // namespace
 
@@ -69,9 +82,7 @@ namespace Horo::Animation {
         const PoseHandle pose = AddPose(arena, local);
         REQUIRE(arena.EvaluateModelSpace(pose).HasValue());
 
-        auto leased = arena.AcquireReadLease(pose);
-        REQUIRE(leased.HasValue());
-        const PoseReadLease &lease = leased.Value();
+        const PoseReadLease lease = LeasePose(arena, pose);
         CHECK(lease.IsValid());
         CHECK(lease.Handle() == pose);
         CHECK(lease.Frame() == Id<AnimationFrameId>(1));
@@ -92,9 +103,7 @@ namespace Horo::Animation {
         const JointId requested[]{Id<JointId>(20)};
         REQUIRE(arena.EvaluateModelSpace(pose, requested).HasValue());
 
-        auto result = arena.AcquireReadLease(pose);
-        REQUIRE(result.HasValue());
-        const PoseReadLease &lease = result.Value();
+        const PoseReadLease lease = LeasePose(arena, pose);
         REQUIRE(lease.ModelSpace(Id<JointId>(10)).HasValue());
         REQUIRE(lease.ModelSpace(Id<JointId>(20)).HasValue());
         CheckPoseFailure(lease.ModelSpace(Id<JointId>(30)), AnimationErrors::PoseNotEvaluated);
@@ -112,9 +121,7 @@ namespace Horo::Animation {
         REQUIRE(arena.SetLocalTransform(pose, Id<JointId>(20), replacement).HasValue());
         const JointId requested[]{Id<JointId>(20)};
         REQUIRE(arena.EvaluateModelSpace(pose, requested).HasValue());
-        auto result = arena.AcquireReadLease(pose);
-        REQUIRE(result.HasValue());
-        const PoseReadLease &lease = result.Value();
+        const PoseReadLease lease = LeasePose(arena, pose);
         CHECK(lease.ModelSpace(Id<JointId>(20)).Value().At(1, 3) == 5.0F);
         CheckPoseFailure(lease.ModelSpace(Id<JointId>(30)), AnimationErrors::PoseNotEvaluated);
         REQUIRE(lease.ModelSpace(Id<JointId>(40)).HasValue());
@@ -142,9 +149,7 @@ namespace Horo::Animation {
         const SkeletonAsset skeleton = PoseSkeleton();
         PoseFrameArena arena = ReadyArena(skeleton);
         const PoseHandle pose = AddPose(arena);
-        auto result = arena.AcquireReadLease(pose);
-        REQUIRE(result.HasValue());
-        PoseReadLease lease = std::move(result).Value();
+        PoseReadLease lease = LeasePose(arena, pose);
         CHECK(arena.Statistics().activeLeases == 1);
 
         CheckPoseFailure(arena.SetLocalTransform(pose, Id<JointId>(10), {}), AnimationErrors::PoseLeaseConflict);
@@ -242,9 +247,8 @@ namespace Horo::Animation {
         CheckPoseFailure(arena.SetLocalTransform(pose, Id<JointId>(999), {}), AnimationErrors::PoseJointMissing);
         const JointId unknown[]{Id<JointId>(999)};
         CheckPoseFailure(arena.EvaluateModelSpace(pose, unknown), AnimationErrors::PoseJointMissing);
-        auto leaseResult = arena.AcquireReadLease(pose);
-        REQUIRE(leaseResult.HasValue());
-        CheckPoseFailure(leaseResult.Value().ModelSpace(Id<JointId>(999)), AnimationErrors::PoseJointMissing);
+        const PoseReadLease lease = LeasePose(arena, pose);
+        CheckPoseFailure(lease.ModelSpace(Id<JointId>(999)), AnimationErrors::PoseJointMissing);
     }
 
     TEST_CASE("Cancellation and shutdown are explicit idempotent lifecycle boundaries", "[unit][animation][pose][lifecycle]") {
@@ -269,9 +273,7 @@ namespace Horo::Animation {
         PoseFrameArena arena = ReadyArena(skeleton);
         const PoseHandle pose = AddPose(arena);
         REQUIRE(arena.EvaluateModelSpace(pose).HasValue());
-        auto result = arena.AcquireReadLease(pose);
-        REQUIRE(result.HasValue());
-        PoseReadLease lease = std::move(result).Value();
+        PoseReadLease lease = LeasePose(arena, pose);
         std::atomic<bool> leaseRead{false};
         std::thread consumer([moved = std::move(lease), &leaseRead]() mutable {
             leaseRead.store(moved.IsValid() && moved.LocalTransforms().size() == 4 && moved.ModelSpace(Id<JointId>(30)).HasValue(),
@@ -297,11 +299,7 @@ namespace Horo::Animation {
         {
             const SkeletonAsset skeleton = PoseSkeleton();
             PoseFrameArena arena = ReadyArena(skeleton);
-            const PoseHandle pose = AddPose(arena);
-            REQUIRE(arena.EvaluateModelSpace(pose).HasValue());
-            auto result = arena.AcquireReadLease(pose);
-            REQUIRE(result.HasValue());
-            retained = std::move(result).Value();
+            retained = AddEvaluateAndLease(arena);
         }
         CHECK(retained.IsValid());
         CHECK(retained.LocalTransforms().size() == 4);
@@ -322,11 +320,9 @@ namespace Horo::Animation {
         const PoseHandle secondPose = AddPose(secondArena, local);
         REQUIRE(firstArena.EvaluateModelSpace(firstPose).HasValue());
         REQUIRE(secondArena.EvaluateModelSpace(secondPose).HasValue());
-        auto firstLease = firstArena.AcquireReadLease(firstPose);
-        auto secondLease = secondArena.AcquireReadLease(secondPose);
-        REQUIRE(firstLease.HasValue());
-        REQUIRE(secondLease.HasValue());
+        const PoseReadLease firstLease = LeasePose(firstArena, firstPose);
+        const PoseReadLease secondLease = LeasePose(secondArena, secondPose);
         for (const SkeletonJoint &joint : first.Data().joints)
-            CHECK(firstLease.Value().ModelSpace(joint.id).Value() == secondLease.Value().ModelSpace(joint.id).Value());
+            CHECK(firstLease.ModelSpace(joint.id).Value() == secondLease.ModelSpace(joint.id).Value());
     }
 }  // namespace Horo::Animation
