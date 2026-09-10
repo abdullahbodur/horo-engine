@@ -12,6 +12,7 @@
 #include <span>
 #include <string>
 #include <string_view>
+#include <utility>
 #include <vector>
 
 namespace Horo::PlatformServices {
@@ -123,18 +124,52 @@ namespace Horo::PlatformServices {
         extern const ErrorCodeDescriptor ImmutableContractChanged;
     }  // namespace PlatformDefinitionErrors
 
-    /** @brief Immutable identity-sorted stat definition snapshot. */
-    class StatDefinitionRegistry final {
+    /**
+     * @brief Shared immutable storage for one typed platform-definition snapshot.
+     * @tparam Definition Provider-neutral definition value stored by the snapshot.
+     */
+    template <typename Definition> class PlatformDefinitionRegistrySnapshot {
     public:
         /** @brief Returns the project identity captured by this snapshot. @return Non-owning project identity view valid for this
          * snapshot's lifetime. */
-        [[nodiscard]] std::string_view StableIdProjectId() const noexcept;
+        [[nodiscard]] std::string_view StableIdProjectId() const noexcept {
+            return projectId_;
+        }
+
         /** @brief Returns the stable-ID registry fingerprint captured by this snapshot. @return Immutable fingerprint reference. */
-        [[nodiscard]] const Sha256Digest &StableIdRegistryFingerprint() const noexcept;
+        [[nodiscard]] const Sha256Digest &StableIdRegistryFingerprint() const noexcept {
+            return stableFingerprint_;
+        }
+
         /** @brief Returns the deterministic semantic fingerprint. @return Immutable fingerprint reference. */
-        [[nodiscard]] const Sha256Digest &Fingerprint() const noexcept;
+        [[nodiscard]] const Sha256Digest &Fingerprint() const noexcept {
+            return fingerprint_;
+        }
+
         /** @brief Returns definitions in stable-ID order. @return Non-owning immutable span valid for this snapshot's lifetime. */
-        [[nodiscard]] std::span<const StatDefinition> Definitions() const noexcept;
+        [[nodiscard]] std::span<const Definition> Definitions() const noexcept {
+            return definitions_;
+        }
+
+    protected:
+        PlatformDefinitionRegistrySnapshot() = default;
+
+        PlatformDefinitionRegistrySnapshot(std::string projectId, const Sha256Digest stableFingerprint, const Sha256Digest fingerprint,
+                                           std::vector<Definition> definitions)
+            : projectId_(std::move(projectId)), stableFingerprint_(stableFingerprint), fingerprint_(fingerprint),
+              definitions_(std::move(definitions)) {}
+
+        std::vector<Definition> definitions_;
+
+    private:
+        std::string projectId_;
+        Sha256Digest stableFingerprint_{};
+        Sha256Digest fingerprint_{};
+    };
+
+    /** @brief Immutable identity-sorted stat definition snapshot. */
+    class StatDefinitionRegistry final : public PlatformDefinitionRegistrySnapshot<StatDefinition> {
+    public:
         /** @brief Finds an exact stat without fallback. @param id Stable stat identity. @return Snapshot-owned definition or failure. */
         [[nodiscard]] Result<const StatDefinition *> Find(StatId id) const;
 
@@ -142,24 +177,12 @@ namespace Horo::PlatformServices {
         friend Result<StatDefinitionRegistry> BuildStatDefinitionRegistry(const PlatformStableIdRegistry &,
                                                                           const StatDefinitionRegistryCandidate &,
                                                                           const PlatformDefinitionRegistryLimits &);
-        std::string projectId_;
-        Sha256Digest stableFingerprint_{};
-        Sha256Digest fingerprint_{};
-        std::vector<StatDefinition> definitions_;
+        using PlatformDefinitionRegistrySnapshot::PlatformDefinitionRegistrySnapshot;
     };
 
     /** @brief Immutable identity-sorted leaderboard definition snapshot. */
-    class LeaderboardDefinitionRegistry final {
+    class LeaderboardDefinitionRegistry final : public PlatformDefinitionRegistrySnapshot<LeaderboardDefinition> {
     public:
-        /** @brief Returns the project identity captured by this snapshot. @return Non-owning project identity view valid for this
-         * snapshot's lifetime. */
-        [[nodiscard]] std::string_view StableIdProjectId() const noexcept;
-        /** @brief Returns the stable-ID registry fingerprint captured by this snapshot. @return Immutable fingerprint reference. */
-        [[nodiscard]] const Sha256Digest &StableIdRegistryFingerprint() const noexcept;
-        /** @brief Returns the deterministic semantic fingerprint. @return Immutable fingerprint reference. */
-        [[nodiscard]] const Sha256Digest &Fingerprint() const noexcept;
-        /** @brief Returns definitions in stable-ID order. @return Non-owning immutable span valid for this snapshot's lifetime. */
-        [[nodiscard]] std::span<const LeaderboardDefinition> Definitions() const noexcept;
         /** @brief Finds an exact leaderboard. @param id Stable leaderboard identity. @return Snapshot-owned definition or failure. */
         [[nodiscard]] Result<const LeaderboardDefinition *> Find(LeaderboardId id) const;
 
@@ -168,24 +191,12 @@ namespace Horo::PlatformServices {
                                                                                         const StatDefinitionRegistry &,
                                                                                         const LeaderboardDefinitionRegistryCandidate &,
                                                                                         const PlatformDefinitionRegistryLimits &);
-        std::string projectId_;
-        Sha256Digest stableFingerprint_{};
-        Sha256Digest fingerprint_{};
-        std::vector<LeaderboardDefinition> definitions_;
+        using PlatformDefinitionRegistrySnapshot::PlatformDefinitionRegistrySnapshot;
     };
 
     /** @brief Immutable identity-sorted presence definition snapshot. */
-    class PresenceDefinitionRegistry final {
+    class PresenceDefinitionRegistry final : public PlatformDefinitionRegistrySnapshot<PresenceDefinition> {
     public:
-        /** @brief Returns the project identity captured by this snapshot. @return Non-owning project identity view valid for this
-         * snapshot's lifetime. */
-        [[nodiscard]] std::string_view StableIdProjectId() const noexcept;
-        /** @brief Returns the stable-ID registry fingerprint captured by this snapshot. @return Immutable fingerprint reference. */
-        [[nodiscard]] const Sha256Digest &StableIdRegistryFingerprint() const noexcept;
-        /** @brief Returns the deterministic semantic fingerprint. @return Immutable fingerprint reference. */
-        [[nodiscard]] const Sha256Digest &Fingerprint() const noexcept;
-        /** @brief Returns definitions in stable-ID order. @return Non-owning immutable span valid for this snapshot's lifetime. */
-        [[nodiscard]] std::span<const PresenceDefinition> Definitions() const noexcept;
         /** @brief Finds an exact status. @param id Stable presence identity. @return Snapshot-owned definition or failure. */
         [[nodiscard]] Result<const PresenceDefinition *> Find(PresenceStatusId id) const;
 
@@ -193,10 +204,7 @@ namespace Horo::PlatformServices {
         friend Result<PresenceDefinitionRegistry> BuildPresenceDefinitionRegistry(const PlatformStableIdRegistry &,
                                                                                   const PresenceDefinitionRegistryCandidate &,
                                                                                   const PlatformDefinitionRegistryLimits &);
-        std::string projectId_;
-        Sha256Digest stableFingerprint_{};
-        Sha256Digest fingerprint_{};
-        std::vector<PresenceDefinition> definitions_;
+        using PlatformDefinitionRegistrySnapshot::PlatformDefinitionRegistrySnapshot;
     };
 
     /**

@@ -1,32 +1,23 @@
 #include "Horo/PlatformServices/PlatformDefinitionRegistries.h"
 
+#include "PlatformDefinitionRegistryDetail.h"
+
 #include <algorithm>
-#include <format>
 #include <memory>
 #include <new>
 #include <utility>
 
 namespace Horo::PlatformServices {
+    using DefinitionRegistryDetail::DocumentError;
+    using DefinitionRegistryDetail::FieldError;
+    using DefinitionRegistryDetail::FingerprintWriter;
+    using DefinitionRegistryDetail::IsLocalizationKey;
+    using DefinitionRegistryDetail::IsZero;
+
     namespace {
         constexpr std::uint32_t HardMaximumDefinitions = 4096;
         constexpr std::uint32_t HardMaximumLocalizationKeyBytes = 512;
         constexpr std::uint32_t HardMaximumPresenceDetailBytes = 4096;
-
-        [[nodiscard]] bool IsZero(const Sha256Digest &digest) noexcept {
-            return std::ranges::all_of(digest.bytes, [](const std::uint8_t byte) {
-                return byte == 0;
-            });
-        }
-
-        [[nodiscard]] bool IsLocalizationCharacter(const char value) noexcept {
-            return (value >= 'a' && value <= 'z') || (value >= '0' && value <= '9') || value == '_' || value == '.' || value == '-';
-        }
-
-        [[nodiscard]] bool IsLocalizationKey(const std::string_view key, const std::uint32_t maximumBytes) noexcept {
-            if (key.empty() || key.size() > maximumBytes || key.front() < 'a' || key.front() > 'z')
-                return false;
-            return std::ranges::all_of(key.substr(1), IsLocalizationCharacter);
-        }
 
         [[nodiscard]] bool HasValidLimits(const PlatformDefinitionRegistryLimits &limits) noexcept {
             return limits.maximumDefinitions > 0 && limits.maximumDefinitions <= HardMaximumDefinitions &&
@@ -54,108 +45,61 @@ namespace Horo::PlatformServices {
             return value == PresenceDetailPolicy::Forbidden || value == PresenceDetailPolicy::Optional;
         }
 
-        [[nodiscard]] Error DiagnosticError(const ErrorCodeDescriptor &descriptor, std::string source, const std::string_view message) {
-            Error error = MakeError(descriptor);
-            error.diagnostics.push_back({.code = DiagnosticCode{descriptor.code.Value()},
-                                         .severity = DiagnosticSeverity::Error,
-                                         .message = std::string{message},
-                                         .location = {.source = std::move(source)}});
-            return error;
-        }
-
-        [[nodiscard]] Error FieldError(const ErrorCodeDescriptor &descriptor, const std::size_t index, const std::string_view field,
-                                       const std::string_view message) {
-            return DiagnosticError(descriptor, std::format("definitions[{}].{}", index, field), message);
-        }
-
-        [[nodiscard]] Error DocumentError(const ErrorCodeDescriptor &descriptor, const std::string_view field,
-                                          const std::string_view message) {
-            return DiagnosticError(descriptor, std::string{field}, message);
-        }
-
-        void AppendU8(std::vector<std::byte> &bytes, const std::uint8_t value) {
-            bytes.push_back(static_cast<std::byte>(value));
-        }
-
-        void AppendU32(std::vector<std::byte> &bytes, const std::uint32_t value) {
-            for (int shift = 24; shift >= 0; shift -= 8)
-                AppendU8(bytes, static_cast<std::uint8_t>(value >> static_cast<unsigned>(shift)));
-        }
-
-        void AppendU64(std::vector<std::byte> &bytes, const std::uint64_t value) {
-            for (int shift = 56; shift >= 0; shift -= 8)
-                AppendU8(bytes, static_cast<std::uint8_t>(value >> static_cast<unsigned>(shift)));
-        }
-
-        void AppendText(std::vector<std::byte> &bytes, const std::string_view value) {
-            AppendU32(bytes, static_cast<std::uint32_t>(value.size()));
-            for (const char character : value)
-                AppendU8(bytes, static_cast<std::uint8_t>(character));
-        }
-
-        void AppendDigest(std::vector<std::byte> &bytes, const Sha256Digest &digest) {
-            for (const std::uint8_t byte : digest.bytes)
-                AppendU8(bytes, byte);
-        }
-
-        void AppendRange(std::vector<std::byte> &bytes, const ProgressionNumericRange &range) {
-            AppendU64(bytes, static_cast<std::uint64_t>(range.minimum));
-            AppendU64(bytes, static_cast<std::uint64_t>(range.maximum));
+        void AddRange(FingerprintWriter &writer, const ProgressionNumericRange &range) {
+            writer.AddU64(static_cast<std::uint64_t>(range.minimum));
+            writer.AddU64(static_cast<std::uint64_t>(range.maximum));
         }
 
         [[nodiscard]] Sha256Digest Fingerprint(const Sha256Digest &stableIds, const std::span<const StatDefinition> definitions) {
-            std::vector<std::byte> bytes;
-            bytes.reserve(64U + definitions.size() * 48U);
-            AppendText(bytes, "horo.platform-services.stat-definitions.v1");
-            AppendDigest(bytes, stableIds);
-            AppendU32(bytes, static_cast<std::uint32_t>(definitions.size()));
+            FingerprintWriter writer{64U + definitions.size() * 48U};
+            writer.AddText("horo.platform-services.stat-definitions.v1");
+            writer.AddDigest(stableIds);
+            writer.AddU32(static_cast<std::uint32_t>(definitions.size()));
             for (const StatDefinition &definition : definitions) {
-                AppendU64(bytes, definition.id.value);
-                AppendU8(bytes, static_cast<std::uint8_t>(definition.authority));
-                AppendU8(bytes, static_cast<std::uint8_t>(definition.valueKind));
-                AppendRange(bytes, definition.range);
-                AppendU8(bytes, static_cast<std::uint8_t>(definition.mutation));
-                AppendText(bytes, definition.localizationKey);
-                AppendU8(bytes, definition.hidden ? 1U : 0U);
+                writer.AddU64(definition.id.value);
+                writer.AddByte(static_cast<std::uint8_t>(definition.authority));
+                writer.AddByte(static_cast<std::uint8_t>(definition.valueKind));
+                AddRange(writer, definition.range);
+                writer.AddByte(static_cast<std::uint8_t>(definition.mutation));
+                writer.AddText(definition.localizationKey);
+                writer.AddByte(definition.hidden ? 1U : 0U);
             }
-            return ComputeSha256(bytes);
+            return writer.Finish();
         }
 
         [[nodiscard]] Sha256Digest Fingerprint(const Sha256Digest &stableIds, const std::span<const LeaderboardDefinition> definitions) {
-            std::vector<std::byte> bytes;
-            bytes.reserve(64U + definitions.size() * 56U);
-            AppendText(bytes, "horo.platform-services.leaderboard-definitions.v1");
-            AppendDigest(bytes, stableIds);
-            AppendU32(bytes, static_cast<std::uint32_t>(definitions.size()));
+            FingerprintWriter writer{64U + definitions.size() * 56U};
+            writer.AddText("horo.platform-services.leaderboard-definitions.v1");
+            writer.AddDigest(stableIds);
+            writer.AddU32(static_cast<std::uint32_t>(definitions.size()));
             for (const LeaderboardDefinition &definition : definitions) {
-                AppendU64(bytes, definition.id.value);
-                AppendU8(bytes, static_cast<std::uint8_t>(definition.authority));
-                AppendU8(bytes, static_cast<std::uint8_t>(definition.valueKind));
-                AppendRange(bytes, definition.range);
-                AppendU8(bytes, static_cast<std::uint8_t>(definition.ordering));
-                AppendU8(bytes, definition.sourceStat.has_value() ? 1U : 0U);
+                writer.AddU64(definition.id.value);
+                writer.AddByte(static_cast<std::uint8_t>(definition.authority));
+                writer.AddByte(static_cast<std::uint8_t>(definition.valueKind));
+                AddRange(writer, definition.range);
+                writer.AddByte(static_cast<std::uint8_t>(definition.ordering));
+                writer.AddByte(definition.sourceStat.has_value() ? 1U : 0U);
                 if (definition.sourceStat)
-                    AppendU64(bytes, definition.sourceStat->value);
-                AppendText(bytes, definition.localizationKey);
-                AppendU8(bytes, definition.hidden ? 1U : 0U);
+                    writer.AddU64(definition.sourceStat->value);
+                writer.AddText(definition.localizationKey);
+                writer.AddByte(definition.hidden ? 1U : 0U);
             }
-            return ComputeSha256(bytes);
+            return writer.Finish();
         }
 
         [[nodiscard]] Sha256Digest Fingerprint(const Sha256Digest &stableIds, const std::span<const PresenceDefinition> definitions) {
-            std::vector<std::byte> bytes;
-            bytes.reserve(64U + definitions.size() * 32U);
-            AppendText(bytes, "horo.platform-services.presence-definitions.v1");
-            AppendDigest(bytes, stableIds);
-            AppendU32(bytes, static_cast<std::uint32_t>(definitions.size()));
+            FingerprintWriter writer{64U + definitions.size() * 32U};
+            writer.AddText("horo.platform-services.presence-definitions.v1");
+            writer.AddDigest(stableIds);
+            writer.AddU32(static_cast<std::uint32_t>(definitions.size()));
             for (const PresenceDefinition &definition : definitions) {
-                AppendU64(bytes, definition.id.value);
-                AppendU8(bytes, static_cast<std::uint8_t>(definition.detailPolicy));
-                AppendU32(bytes, definition.maximumDetailUtf8Bytes);
-                AppendText(bytes, definition.localizationKey);
-                AppendU8(bytes, definition.hidden ? 1U : 0U);
+                writer.AddU64(definition.id.value);
+                writer.AddByte(static_cast<std::uint8_t>(definition.detailPolicy));
+                writer.AddU32(definition.maximumDetailUtf8Bytes);
+                writer.AddText(definition.localizationKey);
+                writer.AddByte(definition.hidden ? 1U : 0U);
             }
-            return ComputeSha256(bytes);
+            return writer.Finish();
         }
 
         [[nodiscard]] const PlatformStableIdDeclaration *FindLedgerEntry(const PlatformStableIdRegistry &stableIds,
@@ -194,8 +138,8 @@ namespace Horo::PlatformServices {
                                                       const std::size_t index) {
             if (!definition.sourceStat)
                 return Result<void>::Success();
-            const auto source = stats.Find(*definition.sourceStat);
-            if (source.HasError() || source.Value()->valueKind != definition.valueKind ||
+            if (const auto source = stats.Find(*definition.sourceStat);
+                source.HasError() || source.Value()->valueKind != definition.valueKind ||
                 source.Value()->range.minimum > definition.range.minimum || source.Value()->range.maximum < definition.range.maximum)
                 return Result<void>::Failure(FieldError(PlatformDefinitionErrors::InvalidCrossReference, index, "sourceStat",
                                                         "Source stat must exist with a compatible kind and covering range."));
@@ -372,74 +316,14 @@ namespace Horo::PlatformServices {
         }
     }  // namespace
 
-    /** @copydoc StatDefinitionRegistry::StableIdProjectId */
-    std::string_view StatDefinitionRegistry::StableIdProjectId() const noexcept {
-        return projectId_;
-    }
-
-    /** @copydoc StatDefinitionRegistry::StableIdRegistryFingerprint */
-    const Sha256Digest &StatDefinitionRegistry::StableIdRegistryFingerprint() const noexcept {
-        return stableFingerprint_;
-    }
-
-    /** @copydoc StatDefinitionRegistry::Fingerprint */
-    const Sha256Digest &StatDefinitionRegistry::Fingerprint() const noexcept {
-        return fingerprint_;
-    }
-
-    /** @copydoc StatDefinitionRegistry::Definitions */
-    std::span<const StatDefinition> StatDefinitionRegistry::Definitions() const noexcept {
-        return definitions_;
-    }
-
     /** @copydoc StatDefinitionRegistry::Find */
     Result<const StatDefinition *> StatDefinitionRegistry::Find(const StatId id) const {
         return FindDefinition(std::span<const StatDefinition>{definitions_}, id);
     }
 
-    /** @copydoc LeaderboardDefinitionRegistry::StableIdProjectId */
-    std::string_view LeaderboardDefinitionRegistry::StableIdProjectId() const noexcept {
-        return projectId_;
-    }
-
-    /** @copydoc LeaderboardDefinitionRegistry::StableIdRegistryFingerprint */
-    const Sha256Digest &LeaderboardDefinitionRegistry::StableIdRegistryFingerprint() const noexcept {
-        return stableFingerprint_;
-    }
-
-    /** @copydoc LeaderboardDefinitionRegistry::Fingerprint */
-    const Sha256Digest &LeaderboardDefinitionRegistry::Fingerprint() const noexcept {
-        return fingerprint_;
-    }
-
-    /** @copydoc LeaderboardDefinitionRegistry::Definitions */
-    std::span<const LeaderboardDefinition> LeaderboardDefinitionRegistry::Definitions() const noexcept {
-        return definitions_;
-    }
-
     /** @copydoc LeaderboardDefinitionRegistry::Find */
     Result<const LeaderboardDefinition *> LeaderboardDefinitionRegistry::Find(const LeaderboardId id) const {
         return FindDefinition(std::span<const LeaderboardDefinition>{definitions_}, id);
-    }
-
-    /** @copydoc PresenceDefinitionRegistry::StableIdProjectId */
-    std::string_view PresenceDefinitionRegistry::StableIdProjectId() const noexcept {
-        return projectId_;
-    }
-
-    /** @copydoc PresenceDefinitionRegistry::StableIdRegistryFingerprint */
-    const Sha256Digest &PresenceDefinitionRegistry::StableIdRegistryFingerprint() const noexcept {
-        return stableFingerprint_;
-    }
-
-    /** @copydoc PresenceDefinitionRegistry::Fingerprint */
-    const Sha256Digest &PresenceDefinitionRegistry::Fingerprint() const noexcept {
-        return fingerprint_;
-    }
-
-    /** @copydoc PresenceDefinitionRegistry::Definitions */
-    std::span<const PresenceDefinition> PresenceDefinitionRegistry::Definitions() const noexcept {
-        return definitions_;
     }
 
     /** @copydoc PresenceDefinitionRegistry::Find */
@@ -451,18 +335,16 @@ namespace Horo::PlatformServices {
     Result<StatDefinitionRegistry> BuildStatDefinitionRegistry(const PlatformStableIdRegistry &stableIds,
                                                                const StatDefinitionRegistryCandidate &candidate,
                                                                const PlatformDefinitionRegistryLimits &limits) {
-        auto snapshot = BuildCanonicalSnapshot<StatDefinition>(stableIds, candidate, limits, PlatformServiceIdKind::Stat,
-                                                               [&](const StatDefinition &definition, const std::size_t index) {
+        auto snapshot =
+            BuildCanonicalSnapshot<StatDefinition>(stableIds, candidate, limits, PlatformServiceIdKind::Stat,
+                                                   [&stableIds, &limits](const StatDefinition &definition, const std::size_t index) {
             return ValidateDefinition(stableIds, limits, definition, index);
         });
         if (snapshot.HasError())
             return Result<StatDefinitionRegistry>::Failure(snapshot.ErrorValue());
-        StatDefinitionRegistry registry;
-        registry.projectId_ = std::move(snapshot.Value().projectId);
-        registry.stableFingerprint_ = snapshot.Value().stableFingerprint;
-        registry.fingerprint_ = snapshot.Value().fingerprint;
-        registry.definitions_ = std::move(snapshot.Value().definitions);
-        return Result<StatDefinitionRegistry>::Success(std::move(registry));
+        auto value = std::move(snapshot).Value();
+        return Result<StatDefinitionRegistry>::Success(
+            StatDefinitionRegistry{std::move(value.projectId), value.stableFingerprint, value.fingerprint, std::move(value.definitions)});
     }
 
     /** @copydoc BuildLeaderboardDefinitionRegistry */
@@ -474,19 +356,17 @@ namespace Horo::PlatformServices {
             return Result<LeaderboardDefinitionRegistry>::Failure(DocumentError(PlatformDefinitionErrors::InvalidCrossReference,
                                                                                 "statRegistry",
                                                                                 "Stat registry does not match the identity snapshot."));
-        auto snapshot =
-            BuildCanonicalSnapshot<LeaderboardDefinition>(stableIds, candidate, limits, PlatformServiceIdKind::Leaderboard,
-                                                          [&](const LeaderboardDefinition &definition, const std::size_t index) {
+        auto snapshot = BuildCanonicalSnapshot<LeaderboardDefinition>(stableIds, candidate, limits, PlatformServiceIdKind::Leaderboard,
+                                                                      [&stableIds, &stats, &limits](const LeaderboardDefinition &definition,
+                                                                                                    const std::size_t index) {
             return ValidateDefinition(stableIds, stats, limits, definition, index);
         });
         if (snapshot.HasError())
             return Result<LeaderboardDefinitionRegistry>::Failure(snapshot.ErrorValue());
-        LeaderboardDefinitionRegistry registry;
-        registry.projectId_ = std::move(snapshot.Value().projectId);
-        registry.stableFingerprint_ = snapshot.Value().stableFingerprint;
-        registry.fingerprint_ = snapshot.Value().fingerprint;
-        registry.definitions_ = std::move(snapshot.Value().definitions);
-        return Result<LeaderboardDefinitionRegistry>::Success(std::move(registry));
+        auto value = std::move(snapshot).Value();
+        return Result<LeaderboardDefinitionRegistry>::Success(LeaderboardDefinitionRegistry{std::move(value.projectId),
+                                                                                            value.stableFingerprint, value.fingerprint,
+                                                                                            std::move(value.definitions)});
     }
 
     /** @copydoc BuildPresenceDefinitionRegistry */
@@ -494,17 +374,15 @@ namespace Horo::PlatformServices {
                                                                        const PresenceDefinitionRegistryCandidate &candidate,
                                                                        const PlatformDefinitionRegistryLimits &limits) {
         auto snapshot = BuildCanonicalSnapshot<PresenceDefinition>(stableIds, candidate, limits, PlatformServiceIdKind::PresenceStatus,
-                                                                   [&](const PresenceDefinition &definition, const std::size_t index) {
+                                                                   [&stableIds, &limits](const PresenceDefinition &definition,
+                                                                                         const std::size_t index) {
             return ValidateDefinition(stableIds, limits, definition, index);
         });
         if (snapshot.HasError())
             return Result<PresenceDefinitionRegistry>::Failure(snapshot.ErrorValue());
-        PresenceDefinitionRegistry registry;
-        registry.projectId_ = std::move(snapshot.Value().projectId);
-        registry.stableFingerprint_ = snapshot.Value().stableFingerprint;
-        registry.fingerprint_ = snapshot.Value().fingerprint;
-        registry.definitions_ = std::move(snapshot.Value().definitions);
-        return Result<PresenceDefinitionRegistry>::Success(std::move(registry));
+        auto value = std::move(snapshot).Value();
+        return Result<PresenceDefinitionRegistry>::Success(PresenceDefinitionRegistry{std::move(value.projectId), value.stableFingerprint,
+                                                                                      value.fingerprint, std::move(value.definitions)});
     }
 
     /** @copydoc BuildStatDefinitionRegistryReplacement */
@@ -517,12 +395,12 @@ namespace Horo::PlatformServices {
         auto replacement = BuildStatDefinitionRegistry(stableIds, candidate, limits);
         if (replacement.HasError())
             return replacement;
-        const auto compatible = ValidateReplacement(previous.Definitions(), replacement.Value(), stableIds, PlatformServiceIdKind::Stat,
-                                                    [](const StatDefinition &prior, const StatDefinition &current) {
+        if (const auto compatible = ValidateReplacement(previous.Definitions(), replacement.Value(), stableIds, PlatformServiceIdKind::Stat,
+                                                        [](const StatDefinition &prior, const StatDefinition &current) {
             return prior.authority == current.authority && prior.valueKind == current.valueKind && prior.range == current.range &&
                    prior.mutation == current.mutation;
         });
-        if (compatible.HasError())
+            compatible.HasError())
             return Result<StatDefinitionRegistry>::Failure(compatible.ErrorValue());
         return replacement;
     }
@@ -536,13 +414,13 @@ namespace Horo::PlatformServices {
         auto replacement = BuildLeaderboardDefinitionRegistry(stableIds, stats, candidate, limits);
         if (replacement.HasError())
             return replacement;
-        const auto compatible =
-            ValidateReplacement(previous.Definitions(), replacement.Value(), stableIds, PlatformServiceIdKind::Leaderboard,
-                                [](const LeaderboardDefinition &prior, const LeaderboardDefinition &current) {
+        if (const auto compatible =
+                ValidateReplacement(previous.Definitions(), replacement.Value(), stableIds, PlatformServiceIdKind::Leaderboard,
+                                    [](const LeaderboardDefinition &prior, const LeaderboardDefinition &current) {
             return prior.authority == current.authority && prior.valueKind == current.valueKind && prior.range == current.range &&
                    prior.ordering == current.ordering && prior.sourceStat == current.sourceStat;
         });
-        if (compatible.HasError())
+            compatible.HasError())
             return Result<LeaderboardDefinitionRegistry>::Failure(compatible.ErrorValue());
         return replacement;
     }
@@ -557,12 +435,12 @@ namespace Horo::PlatformServices {
         auto replacement = BuildPresenceDefinitionRegistry(stableIds, candidate, limits);
         if (replacement.HasError())
             return replacement;
-        const auto compatible =
-            ValidateReplacement(previous.Definitions(), replacement.Value(), stableIds, PlatformServiceIdKind::PresenceStatus,
-                                [](const PresenceDefinition &prior, const PresenceDefinition &current) {
+        if (const auto compatible =
+                ValidateReplacement(previous.Definitions(), replacement.Value(), stableIds, PlatformServiceIdKind::PresenceStatus,
+                                    [](const PresenceDefinition &prior, const PresenceDefinition &current) {
             return prior.detailPolicy == current.detailPolicy && prior.maximumDetailUtf8Bytes == current.maximumDetailUtf8Bytes;
         });
-        if (compatible.HasError())
+            compatible.HasError())
             return Result<PresenceDefinitionRegistry>::Failure(compatible.ErrorValue());
         return replacement;
     }

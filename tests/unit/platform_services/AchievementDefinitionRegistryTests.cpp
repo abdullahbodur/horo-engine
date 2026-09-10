@@ -1,4 +1,5 @@
 #include "Horo/PlatformServices/AchievementDefinitionRegistry.h"
+#include "PlatformDefinitionTestAssertions.h"
 
 #include <algorithm>
 #include <array>
@@ -8,6 +9,9 @@
 #include <utility>
 
 namespace Horo::PlatformServices {
+    using TestAssertions::CheckError;
+    using TestAssertions::CheckFieldError;
+
     namespace {
         [[nodiscard]] PlatformServicesIdSalt TestSalt() {
             PlatformServicesIdSalt salt;
@@ -51,17 +55,6 @@ namespace Horo::PlatformServices {
         [[nodiscard]] AchievementDefinitionRegistryCandidate Candidate(const PlatformStableIdRegistry &stableIds,
                                                                        std::vector<AchievementDefinition> definitions) {
             return {.stableIdRegistryFingerprint = stableIds.Fingerprint(), .definitions = std::move(definitions)};
-        }
-
-        void CheckError(const auto &result, const ErrorCodeDescriptor &descriptor) {
-            REQUIRE(result.HasError());
-            CHECK(result.ErrorValue().code.Value() == descriptor.code.Value());
-        }
-
-        void CheckFieldError(const auto &result, const ErrorCodeDescriptor &descriptor, const std::string_view field) {
-            CheckError(result, descriptor);
-            REQUIRE(result.ErrorValue().diagnostics.size() == 1);
-            CHECK(result.ErrorValue().diagnostics.front().location.source == field);
         }
 
         void CheckEquivalentFingerprints(const auto &first, const auto &second) {

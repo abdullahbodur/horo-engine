@@ -1,4 +1,5 @@
 #include "Horo/PlatformServices/PlatformDefinitionRegistries.h"
+#include "PlatformDefinitionTestAssertions.h"
 
 #include <algorithm>
 #include <catch2/catch_test_macros.hpp>
@@ -7,6 +8,9 @@
 #include <utility>
 
 namespace Horo::PlatformServices {
+    using TestAssertions::CheckError;
+    using TestAssertions::CheckFieldError;
+
     namespace {
         [[nodiscard]] PlatformServicesIdSalt TestSalt() {
             PlatformServicesIdSalt salt;
@@ -76,16 +80,24 @@ namespace Horo::PlatformServices {
                                                            .definitions = std::move(definitions)};
         }
 
-        void CheckError(const auto &result, const ErrorCodeDescriptor &descriptor) {
-            REQUIRE(result.HasError());
-            CHECK(result.ErrorValue().code.Value() == descriptor.code.Value());
-        }
+        struct DefinitionFixture final {
+            PlatformStableIdDeclaration statEntry{Declaration(PlatformServiceIdKind::Stat, "stats.score")};
+            PlatformStableIdDeclaration boardEntry{Declaration(PlatformServiceIdKind::Leaderboard, "leaderboards.score")};
+            PlatformStableIdDeclaration presenceEntry{Declaration(PlatformServiceIdKind::PresenceStatus, "presence.playing")};
+            PlatformStableIdRegistry stableIds{StableRegistry({statEntry, boardEntry, presenceEntry})};
 
-        void CheckFieldError(const auto &result, const ErrorCodeDescriptor &descriptor, const std::string_view field) {
-            CheckError(result, descriptor);
-            REQUIRE(result.ErrorValue().diagnostics.size() == 1);
-            CHECK(result.ErrorValue().diagnostics.front().location.source == field);
-        }
+            [[nodiscard]] Result<StatDefinitionRegistry> BuildStats() const {
+                return BuildStatDefinitionRegistry(stableIds, Candidate(stableIds, std::vector{Stat(statEntry)}));
+            }
+
+            [[nodiscard]] Result<LeaderboardDefinitionRegistry> BuildBoards(const StatDefinitionRegistry &stats) const {
+                return BuildLeaderboardDefinitionRegistry(stableIds, stats, Candidate(stableIds, std::vector{Leaderboard(boardEntry)}));
+            }
+
+            [[nodiscard]] Result<PresenceDefinitionRegistry> BuildPresence() const {
+                return BuildPresenceDefinitionRegistry(stableIds, Candidate(stableIds, std::vector{Presence(presenceEntry)}));
+            }
+        };
     }  // namespace
 
     static_assert(!std::same_as<LeaderboardId, StatId>);
@@ -93,10 +105,11 @@ namespace Horo::PlatformServices {
     static_assert(std::is_copy_constructible_v<LeaderboardDefinition>);
 
     TEST_CASE("Platform definition registries are typed deterministic immutable snapshots", "[platform-services][platform-definitions]") {
-        const auto statEntry = Declaration(PlatformServiceIdKind::Stat, "stats.player_score");
-        const auto boardEntry = Declaration(PlatformServiceIdKind::Leaderboard, "leaderboards.ranked_score");
-        const auto presenceEntry = Declaration(PlatformServiceIdKind::PresenceStatus, "presence.in_match");
-        const auto stableIds = StableRegistry({presenceEntry, boardEntry, statEntry});
+        const DefinitionFixture fixture;
+        const auto &statEntry = fixture.statEntry;
+        const auto &boardEntry = fixture.boardEntry;
+        const auto &presenceEntry = fixture.presenceEntry;
+        const auto &stableIds = fixture.stableIds;
 
         const auto stats = BuildStatDefinitionRegistry(stableIds, Candidate(stableIds, std::vector{Stat(statEntry)}));
         REQUIRE(stats.HasValue());
@@ -282,16 +295,17 @@ namespace Horo::PlatformServices {
     }
 
     TEST_CASE("Unknown enums and bounded document fields fail before publication", "[platform-services][platform-definitions]") {
-        const auto statEntry = Declaration(PlatformServiceIdKind::Stat, "stats.score");
-        const auto boardEntry = Declaration(PlatformServiceIdKind::Leaderboard, "leaderboards.score");
-        const auto presenceEntry = Declaration(PlatformServiceIdKind::PresenceStatus, "presence.playing");
-        const auto stableIds = StableRegistry({statEntry, boardEntry, presenceEntry});
+        const DefinitionFixture fixture;
+        const auto &statEntry = fixture.statEntry;
+        const auto &boardEntry = fixture.boardEntry;
+        const auto &presenceEntry = fixture.presenceEntry;
+        const auto &stableIds = fixture.stableIds;
         auto stat = Stat(statEntry);
         stat.authority = static_cast<ProgressionAuthorityMode>(99);
         CheckFieldError(BuildStatDefinitionRegistry(stableIds, Candidate(stableIds, std::vector{stat})),
                         PlatformDefinitionErrors::InvalidDefinition, "definitions[0].authority");
 
-        const auto stats = BuildStatDefinitionRegistry(stableIds, Candidate(stableIds, std::vector{Stat(statEntry)}));
+        const auto stats = fixture.BuildStats();
         REQUIRE(stats.HasValue());
         auto board = Leaderboard(boardEntry);
         board.ordering = static_cast<LeaderboardOrdering>(99);
@@ -318,15 +332,15 @@ namespace Horo::PlatformServices {
 
     TEST_CASE("Leaderboard and presence replacement preserve semantic contracts transactionally",
               "[platform-services][platform-definitions]") {
-        const auto statEntry = Declaration(PlatformServiceIdKind::Stat, "stats.score");
-        const auto boardEntry = Declaration(PlatformServiceIdKind::Leaderboard, "leaderboards.score");
-        const auto presenceEntry = Declaration(PlatformServiceIdKind::PresenceStatus, "presence.playing");
-        const auto stableIds = StableRegistry({statEntry, boardEntry, presenceEntry});
-        const auto stats = BuildStatDefinitionRegistry(stableIds, Candidate(stableIds, std::vector{Stat(statEntry)}));
+        const DefinitionFixture fixture;
+        const auto &statEntry = fixture.statEntry;
+        const auto &boardEntry = fixture.boardEntry;
+        const auto &presenceEntry = fixture.presenceEntry;
+        const auto &stableIds = fixture.stableIds;
+        const auto stats = fixture.BuildStats();
         REQUIRE(stats.HasValue());
-        const auto boards =
-            BuildLeaderboardDefinitionRegistry(stableIds, stats.Value(), Candidate(stableIds, std::vector{Leaderboard(boardEntry)}));
-        const auto presence = BuildPresenceDefinitionRegistry(stableIds, Candidate(stableIds, std::vector{Presence(presenceEntry)}));
+        const auto boards = fixture.BuildBoards(stats.Value());
+        const auto presence = fixture.BuildPresence();
         REQUIRE(boards.HasValue());
         REQUIRE(presence.HasValue());
 
