@@ -5,9 +5,9 @@
 #include <catch2/catch_test_macros.hpp>
 #include <limits>
 #include <memory>
-#include <set>
 #include <string_view>
 #include <type_traits>
+#include <utility>
 #include <vector>
 
 namespace Horo::PCG {
@@ -20,8 +20,8 @@ namespace Horo::PCG {
 
         template <typename T> void CheckError(const Result<T> &result, const ErrorCodeDescriptor &expected) {
             REQUIRE(result.HasError());
-            CHECK(result.ErrorValue().domain.Value() == expected.domain.Value());
-            CHECK(result.ErrorValue().code.Value() == expected.code.Value());
+            const Error &actual = result.ErrorValue();
+            CHECK(std::pair{actual.domain.Value(), actual.code.Value()} == std::pair{expected.domain.Value(), expected.code.Value()});
         }
 
         [[nodiscard]] Math::Aabb Bounds(const float extent = 10.0F) {
@@ -247,12 +247,14 @@ namespace Horo::PCG {
         const std::array descriptors{&PCGErrors::SpatialInputInvalid,        &PCGErrors::SpatialCoordinatesUnsupported,
                                      &PCGErrors::SpatialCoverageUnavailable, &PCGErrors::SpatialCapacityExceeded,
                                      &PCGErrors::SpatialSnapshotStale,       &PCGErrors::SpatialReplacementInvalid};
-        std::set<std::string_view> codes;
-        for (const auto *descriptor : descriptors) {
-            CHECK(descriptor->domain.Value() == "horo.pcg");
-            CHECK(codes.insert(descriptor->code.Value()).second);
-            CHECK_FALSE(descriptor->summary.empty());
-            CHECK_FALSE(descriptor->remediationHint.empty());
-        }
+        CHECK(std::ranges::all_of(descriptors, [](const ErrorCodeDescriptor *descriptor) {
+            return descriptor->domain.Value() == "horo.pcg" && !descriptor->summary.empty() && !descriptor->remediationHint.empty();
+        }));
+        std::array<std::string_view, descriptors.size()> codes{};
+        std::ranges::transform(descriptors, codes.begin(), [](const ErrorCodeDescriptor *descriptor) {
+            return descriptor->code.Value();
+        });
+        std::ranges::sort(codes);
+        CHECK(std::ranges::adjacent_find(codes) == codes.end());
     }
 }  // namespace Horo::PCG
