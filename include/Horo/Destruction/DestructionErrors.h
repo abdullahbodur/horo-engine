@@ -38,4 +38,16 @@ namespace Horo::Destruction::DestructionErrors {
     extern const ErrorCodeDescriptor LimitExceeded;
     /** @brief A descriptor belongs to a replaced immutable configuration publication. */
     extern const ErrorCodeDescriptor StaleConfiguration;
+    /** @brief A state snapshot or detached successor violates the canonical state-machine invariants. */
+    extern const ErrorCodeDescriptor StateInvalid;
+    /** @brief A damage command contains a zero, negative, or non-finite amount. */
+    extern const ErrorCodeDescriptor InvalidDamage;
+    /** @brief A reused command identity carries different revision, kind, or payload semantics. */
+    extern const ErrorCodeDescriptor DuplicateCommand;
+    /** @brief A command attempted to mutate the terminal Destroyed state. */
+    extern const ErrorCodeDescriptor StateTerminal;
+    /** @brief Detached transition work was cancelled before owner-safe publication. */
+    extern const ErrorCodeDescriptor CancelledBeforeCommit;
+    /** @brief The state owner has closed mutation and replacement admission for shutdown. */
+    extern const ErrorCodeDescriptor ShutdownInProgress;
 }  // namespace Horo::Destruction::DestructionErrors

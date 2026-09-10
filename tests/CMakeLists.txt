@@ -284,11 +284,14 @@ target_link_libraries(HoroVfxApiTests PRIVATE HoroEngine::VfxApi)
 horo_register_catch_test(HoroVfxApiTests LABELS "unit;vfx;headless")
 
 add_executable(HoroDestructionApiTests
+        support/AllocationProbe.cpp
         unit/runtime/destruction/DestructibleDescriptorTests.cpp
         unit/runtime/destruction/DestructionIdentityTests.cpp
+        unit/runtime/destruction/DestructionStateMachineTests.cpp
 )
 target_compile_features(HoroDestructionApiTests PRIVATE cxx_std_20)
 target_link_libraries(HoroDestructionApiTests PRIVATE HoroEngine::DestructionApi)
+target_include_directories(HoroDestructionApiTests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
 horo_register_catch_test(HoroDestructionApiTests LABELS "unit;destruction;headless")
 
 add_executable(HoroCinematicModelTests

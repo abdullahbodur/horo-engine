@@ -227,7 +227,10 @@ namespace Horo::Destruction {
                                 DestructionErrors::DescriptorInvalid,   DestructionErrors::TierInvalid,
                                 DestructionErrors::FeatureUnsatisfied,  DestructionErrors::RuntimeGeometryUnsupported,
                                 DestructionErrors::LimitProfileInvalid, DestructionErrors::LimitExceeded,
-                                DestructionErrors::StaleConfiguration};
+                                DestructionErrors::StaleConfiguration,  DestructionErrors::StateInvalid,
+                                DestructionErrors::InvalidDamage,       DestructionErrors::DuplicateCommand,
+                                DestructionErrors::StateTerminal,       DestructionErrors::CancelledBeforeCommit,
+                                DestructionErrors::ShutdownInProgress};
         std::set<std::string_view> codes;
         for (const auto &error : errors) {
             CHECK(error.domain.Value() == std::string_view{"horo.destruction"});
