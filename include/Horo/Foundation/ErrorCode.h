@@ -8,6 +8,7 @@
 #include "Horo/Foundation/Diagnostics.h"
 
 #include <cstdint>
+#include <memory>
 #include <optional>
 #include <span>
 #include <string>
@@ -15,6 +16,8 @@
 #include <vector>
 
 namespace Horo {
+    struct Error;
+
     /** @brief Stable machine-readable error code. Callers branch on this value, never message text. */
     class ErrorCode {
     public:
@@ -52,13 +55,40 @@ namespace Horo {
         Critical
     };
 
-    /** @brief Typed expected failure with human-facing diagnostic detail. */
+    /** @brief Immutable optional reference to an owned typed error cause. */
+    class ErrorCause {
+    public:
+        /** @brief Creates an empty cause reference without allocating storage. */
+        ErrorCause() noexcept = default;
+
+        /**
+         * @brief Reports whether this reference owns a cause.
+         * @return True when Get() returns a typed cause.
+         */
+        [[nodiscard]] explicit operator bool() const noexcept;
+
+        /**
+         * @brief Returns the immutable typed cause.
+         * @return Borrowed cause pointer, or nullptr when this reference is empty.
+         */
+        [[nodiscard]] const Error *Get() const noexcept;
+
+    private:
+        explicit ErrorCause(std::shared_ptr<const Error> cause) noexcept;
+
+        std::shared_ptr<const Error> cause_;
+
+        friend Error WithCause(Error outer, Error cause);
+    };
+
+    /** @brief Typed expected failure with human-facing diagnostic detail and an immutable cause chain. */
     struct Error {
         ErrorCode code;
         ErrorDomainId domain;
         ErrorSeverity severity = ErrorSeverity::Error;
         std::string message;
         std::vector<Diagnostic> diagnostics;
+        ErrorCause cause;
     };
 
     /** @brief Immutable declaration of one stable module-owned error identity and its presentation defaults. */
@@ -80,6 +110,35 @@ namespace Horo {
      * @return Error carrying the descriptor identity and default severity.
      */
     [[nodiscard]] Error MakeError(const ErrorCodeDescriptor &descriptor, std::string message = {});
+
+    /**
+     * @brief Attaches one immutable typed cause to an outer error.
+     * @param outer Context error that remains the operation's returned identity.
+     * @param cause Original typed failure preserved as the next chain node.
+     * @return Outer error owning the immutable cause chain.
+     * @note Allocates exactly one cause node. Copying the returned Error shares immutable cause nodes without cloning them.
+     * @throws std::bad_alloc When storage for the cause node cannot be allocated.
+     */
+    [[nodiscard]] Error WithCause(Error outer, Error cause);
+
+    /**
+     * @brief Creates a declared context error around an existing typed failure.
+     * @param descriptor Stable descriptor for the outer operation boundary.
+     * @param cause Original typed failure preserved without flattening.
+     * @param message Optional boundary context; the descriptor summary is used when empty.
+     * @return Declared outer error owning the immutable cause chain.
+     * @throws std::bad_alloc When storage for the error text or cause node cannot be allocated.
+     */
+    [[nodiscard]] Error WrapError(const ErrorCodeDescriptor &descriptor, Error cause, std::string message = {});
+
+    /**
+     * @brief Finds an exact typed identity anywhere in an error cause chain.
+     * @param error Outermost error to inspect.
+     * @param domain Exact stable domain identity.
+     * @param code Exact stable error code identity.
+     * @return True when the outer error or one of its causes matches both values.
+     */
+    [[nodiscard]] bool ErrorChainContains(const Error &error, const ErrorDomainId &domain, const ErrorCode &code) noexcept;
 
     /**
      * @brief Maps one error to diagnostic identity only when it matches an explicitly declared descriptor.
