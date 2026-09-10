@@ -137,8 +137,8 @@ namespace Horo::Destruction {
             if (!HasCoherentFeaturePolicies(data))
                 return Result<void>::Failure(MakeError(DestructionErrors::DescriptorInvalid));
 
-            const bool finiteLifetime = std::isfinite(data.cleanup.debrisLifetimeSeconds);
-            if (!finiteLifetime || (data.cleanup.debris == DestructionDebrisPolicy::Disabled ? data.cleanup.debrisLifetimeSeconds != 0.0F
+            if (const bool finiteLifetime = std::isfinite(data.cleanup.debrisLifetimeSeconds);
+                !finiteLifetime || (data.cleanup.debris == DestructionDebrisPolicy::Disabled ? data.cleanup.debrisLifetimeSeconds != 0.0F
                                                                                              : data.cleanup.debrisLifetimeSeconds <= 0.0F))
                 return Result<void>::Failure(MakeError(DestructionErrors::DescriptorInvalid));
             return Result<void>::Success();
@@ -163,17 +163,12 @@ namespace Horo::Destruction {
             if (!IsPopulated(footprint) || !IsInternallyConsistent(footprint))
                 return Result<void>::Failure(MakeError(DestructionErrors::DescriptorInvalid));
 
-            const DestructionLimits actual{footprint.chunkCount,
-                                           footprint.hierarchyDepth,
-                                           footprint.peakActiveChunkBodies,
-                                           footprint.peakEventsPerTransition,
-                                           footprint.requestedEventJournalEntries,
-                                           footprint.peakCosmeticDebrisParticles,
-                                           footprint.artifactBytes,
-                                           footprint.peakTransitionBytes,
-                                           footprint.peakResidentBytes,
-                                           footprint.peakWorkItemsPerTransition};
-            if (!FitsWithin(actual, limits))
+            if (const DestructionLimits actual{footprint.chunkCount, footprint.hierarchyDepth, footprint.peakActiveChunkBodies,
+                                               footprint.peakEventsPerTransition, footprint.requestedEventJournalEntries,
+                                               footprint.peakCosmeticDebrisParticles, footprint.artifactBytes,
+                                               footprint.peakTransitionBytes, footprint.peakResidentBytes,
+                                               footprint.peakWorkItemsPerTransition};
+                !FitsWithin(actual, limits))
                 return Result<void>::Failure(MakeError(DestructionErrors::LimitExceeded));
             return Result<void>::Success();
         }
@@ -181,14 +176,15 @@ namespace Horo::Destruction {
 
     /** @copydoc GetDestructionTierProfile */
     Result<DestructionTierProfile> GetDestructionTierProfile(const DestructionFeatureTier tier) {
+        using enum DestructionFeatureTier;
         switch (tier) {
-            case DestructionFeatureTier::Baseline:
+            case Baseline:
                 return Result<DestructionTierProfile>::Success({tier, BaselineFeatures, BaselineLimits});
-            case DestructionFeatureTier::Standard:
+            case Standard:
                 return Result<DestructionTierProfile>::Success({tier, StandardFeatures, StandardLimits});
-            case DestructionFeatureTier::High:
+            case High:
                 return Result<DestructionTierProfile>::Success({tier, HighFeatures, HighLimits});
-            case DestructionFeatureTier::Count:
+            case Count:
                 break;
         }
         return Result<DestructionTierProfile>::Failure(MakeError(DestructionErrors::TierInvalid));
