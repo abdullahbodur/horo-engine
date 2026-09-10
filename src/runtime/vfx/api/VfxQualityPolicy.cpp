@@ -107,6 +107,60 @@ namespace Horo::Vfx {
             return std::find(required.begin(), required.end(), true) != required.end();
         }
 
+        [[nodiscard]] bool ValidateRequestIdentity(const VfxResolutionRequest &request) noexcept {
+            return IsKnown(request.hostMode) && IsKnown(request.requestedProfile) && request.expectedCapabilityRevision.IsValid() &&
+                   request.expectedPolicyRevision.IsValid();
+        }
+
+        [[nodiscard]] bool ValidateRequirementShape(const VfxEffectRequirements &requirements) noexcept {
+            return IsKnown(requirements.category) && IsKnown(requirements.preference) && IsKnown(requirements.requirementClass) &&
+                   requirements.requestedCount > 0 && requirements.minimumAuthoredCount > 0 &&
+                   requirements.minimumAuthoredCount <= requirements.requestedCount && requirements.bytesPerElement > 0;
+        }
+
+        [[nodiscard]] bool ValidateRequirementWork(const VfxEffectRequirements &requirements) noexcept {
+            return IsFiniteNonNegative(requirements.cpuWorkMilliseconds) && IsFiniteNonNegative(requirements.gpuWorkMilliseconds) &&
+                   (!requirements.hasCpuKernel || IsFinitePositive(requirements.cpuWorkMilliseconds)) &&
+                   (!requirements.hasGpuKernel || IsFinitePositive(requirements.gpuWorkMilliseconds));
+        }
+
+        [[nodiscard]] bool ValidateVariantIdentity(const VfxEffectRequirements &requirements, const VfxFallbackVariant &variant) noexcept {
+            return variant.stableId != 0 && variant.category == requirements.category && IsKnown(variant.degradation) &&
+                   variant.degradation != VfxDegradation::None && IsKnown(variant.domain) && IsFiniteNonNegative(variant.workMilliseconds);
+        }
+
+        [[nodiscard]] bool ValidateNullVariant(const VfxFallbackVariant &variant) noexcept {
+            return variant.degradation == VfxDegradation::NullSuppression && variant.selectedCount == 0 && variant.bytesPerElement == 0 &&
+                   variant.workMilliseconds == 0.0 && !variant.gameplayCompatible && !HasAnyCapability(variant.requiredGpuCapabilities);
+        }
+
+        [[nodiscard]] bool ValidateActiveVariant(const VfxEffectRequirements &requirements, const VfxFallbackVariant &variant) noexcept {
+            return variant.selectedCount >= requirements.minimumAuthoredCount && variant.selectedCount <= requirements.requestedCount &&
+                   variant.bytesPerElement > 0 && IsFinitePositive(variant.workMilliseconds);
+        }
+
+        [[nodiscard]] bool ValidateVariantPayload(const VfxEffectRequirements &requirements, const VfxFallbackVariant &variant) noexcept {
+            return variant.domain == ResolvedSimulationDomain::Null ? ValidateNullVariant(variant)
+                                                                    : ValidateActiveVariant(requirements, variant);
+        }
+
+        [[nodiscard]] bool ValidateVariantSemantics(const VfxEffectRequirements &requirements, const VfxFallbackVariant &variant) noexcept {
+            if (variant.domain == ResolvedSimulationDomain::CPU && HasAnyCapability(variant.requiredGpuCapabilities))
+                return false;
+            if (variant.degradation == VfxDegradation::ReducedCount && variant.selectedCount >= requirements.requestedCount)
+                return false;
+            return variant.degradation != VfxDegradation::CompatibleCpu || variant.domain == ResolvedSimulationDomain::CPU;
+        }
+
+        [[nodiscard]] bool InsertUniqueVariantId(const std::uint32_t id, std::array<std::uint32_t, MaximumVfxFallbackVariants> &ids,
+                                                 std::size_t &idCount) noexcept {
+            const auto end = ids.begin() + static_cast<std::ptrdiff_t>(idCount);
+            if (std::find(ids.begin(), end, id) != end)
+                return false;
+            ids[idCount++] = id;
+            return true;
+        }
+
         [[nodiscard]] Fit FitsLimits(const VfxCapabilities &capabilities, const VfxQualityPolicy &policy, const VfxEffectCategory category,
                                      const ResolvedSimulationDomain domain, const std::uint32_t count, const std::uint64_t bytesPerElement,
                                      const double workMilliseconds, std::uint64_t &memoryBytes) noexcept {
@@ -149,63 +203,42 @@ namespace Horo::Vfx {
 
         [[nodiscard]] bool ValidateRequirements(const VfxResolutionRequest &request) noexcept {
             const auto &requirements = request.requirements;
-            if (!IsKnown(request.hostMode) || !IsKnown(request.requestedProfile) || !request.expectedCapabilityRevision.IsValid() ||
-                !request.expectedPolicyRevision.IsValid() || !IsKnown(requirements.category) || !IsKnown(requirements.preference) ||
-                !IsKnown(requirements.requirementClass) || requirements.requestedCount == 0 || requirements.minimumAuthoredCount == 0 ||
-                requirements.minimumAuthoredCount > requirements.requestedCount || requirements.bytesPerElement == 0 ||
-                !IsFiniteNonNegative(requirements.cpuWorkMilliseconds) || !IsFiniteNonNegative(requirements.gpuWorkMilliseconds) ||
-                (requirements.hasCpuKernel && !IsFinitePositive(requirements.cpuWorkMilliseconds)) ||
-                (requirements.hasGpuKernel && !IsFinitePositive(requirements.gpuWorkMilliseconds)) ||
+            if (!ValidateRequestIdentity(request) || !ValidateRequirementShape(requirements) || !ValidateRequirementWork(requirements) ||
                 request.fallbackVariants.size() > MaximumVfxFallbackVariants)
                 return false;
 
             std::array<std::uint32_t, MaximumVfxFallbackVariants> ids{};
             std::size_t idCount{};
             for (const auto &variant : request.fallbackVariants) {
-                if (variant.stableId == 0 || variant.category != requirements.category || !IsKnown(variant.degradation) ||
-                    variant.degradation == VfxDegradation::None || !IsKnown(variant.domain) ||
-                    !IsFiniteNonNegative(variant.workMilliseconds))
-                    return false;
-                if (std::find(ids.begin(), ids.begin() + static_cast<std::ptrdiff_t>(idCount), variant.stableId) !=
-                    ids.begin() + static_cast<std::ptrdiff_t>(idCount))
-                    return false;
-                ids[idCount++] = variant.stableId;
-
-                if (variant.domain == ResolvedSimulationDomain::Null) {
-                    if (variant.degradation != VfxDegradation::NullSuppression || variant.selectedCount != 0 ||
-                        variant.bytesPerElement != 0 || variant.workMilliseconds != 0.0 || variant.gameplayCompatible ||
-                        HasAnyCapability(variant.requiredGpuCapabilities))
-                        return false;
-                } else if (variant.selectedCount < requirements.minimumAuthoredCount ||
-                           variant.selectedCount > requirements.requestedCount || variant.bytesPerElement == 0 ||
-                           !IsFinitePositive(variant.workMilliseconds)) {
-                    return false;
-                }
-                if (variant.domain == ResolvedSimulationDomain::CPU && HasAnyCapability(variant.requiredGpuCapabilities))
-                    return false;
-                if (variant.degradation == VfxDegradation::ReducedCount && variant.selectedCount >= requirements.requestedCount)
-                    return false;
-                if (variant.degradation == VfxDegradation::CompatibleCpu && variant.domain != ResolvedSimulationDomain::CPU)
+                if (!ValidateVariantIdentity(requirements, variant) || !ValidateVariantPayload(requirements, variant) ||
+                    !ValidateVariantSemantics(requirements, variant) || !InsertUniqueVariantId(variant.stableId, ids, idCount))
                     return false;
             }
             return true;
         }
 
+        [[nodiscard]] bool HostAllowsDomain(const VfxResolutionRequest &request, const ResolvedSimulationDomain domain) noexcept {
+            return request.hostMode != VfxHostMode::Headless || domain != ResolvedSimulationDomain::GPU;
+        }
+
+        [[nodiscard]] bool RequirementAllowsDomain(const VfxEffectRequirements &requirements,
+                                                   const ResolvedSimulationDomain domain) noexcept {
+            if (requirements.cpuMandatory && domain != ResolvedSimulationDomain::CPU)
+                return false;
+            if (requirements.preference == SimulationPreference::RequireCPU && domain != ResolvedSimulationDomain::CPU)
+                return false;
+            return requirements.preference != SimulationPreference::RequireGPU || domain == ResolvedSimulationDomain::GPU;
+        }
+
+        [[nodiscard]] bool ClassAllowsVariant(const VfxResolutionRequest &request, const VfxFallbackVariant &variant) noexcept {
+            if (request.requirements.requirementClass == VfxRequirementClass::GameplayRequired)
+                return variant.gameplayCompatible && variant.domain != ResolvedSimulationDomain::Null;
+            return variant.domain != ResolvedSimulationDomain::Null || request.hostMode == VfxHostMode::Headless;
+        }
+
         [[nodiscard]] bool DomainAllowedForVariant(const VfxResolutionRequest &request, const VfxFallbackVariant &variant) noexcept {
-            const auto &requirements = request.requirements;
-            if (request.hostMode == VfxHostMode::Headless && variant.domain == ResolvedSimulationDomain::GPU)
-                return false;
-            if (requirements.cpuMandatory && variant.domain != ResolvedSimulationDomain::CPU)
-                return false;
-            if (requirements.requirementClass == VfxRequirementClass::GameplayRequired && !variant.gameplayCompatible)
-                return false;
-            if (requirements.preference == SimulationPreference::RequireCPU && variant.domain != ResolvedSimulationDomain::CPU)
-                return false;
-            if (requirements.preference == SimulationPreference::RequireGPU && variant.domain != ResolvedSimulationDomain::GPU)
-                return false;
-            if (variant.domain == ResolvedSimulationDomain::Null)
-                return request.hostMode == VfxHostMode::Headless && requirements.requirementClass == VfxRequirementClass::Cosmetic;
-            return true;
+            return HostAllowsDomain(request, variant.domain) && RequirementAllowsDomain(request.requirements, variant.domain) &&
+                   ClassAllowsVariant(request, variant);
         }
 
         [[nodiscard]] Fit TryVariant(const VfxCapabilities &capabilities, const VfxQualityPolicy &policy,
@@ -242,6 +275,155 @@ namespace Horo::Vfx {
                                                    .capabilityRevision = capabilities.Revision(),
                                                    .policyRevision = policy.Revision()});
         }
+
+        [[nodiscard]] bool CanonicalizeCapabilityFacts(const std::span<const VfxCapabilityFact> facts,
+                                                       std::array<VfxCapabilitySupport, VfxCapabilityCount> &canonical) noexcept {
+            std::array<bool, VfxCapabilityCount> present{};
+            for (const auto &fact : facts) {
+                if (!IsKnown(fact.capability) || !IsKnown(fact.support))
+                    return false;
+                const auto index = static_cast<std::size_t>(fact.capability);
+                if (present[index])
+                    return false;
+                present[index] = true;
+                canonical[index] = fact.support;
+            }
+            return std::find(present.begin(), present.end(), false) == present.end();
+        }
+
+        [[nodiscard]] bool GpuFactsAreConsistent(const std::array<VfxCapabilitySupport, VfxCapabilityCount> &canonical) noexcept {
+            const auto available = [&canonical](const VfxCapability capability) {
+                return canonical[static_cast<std::size_t>(capability)] == VfxCapabilitySupport::Available;
+            };
+            const bool requiresGpuSimulation = available(VfxCapability::IndirectDraw) || available(VfxCapability::GpuSorting) ||
+                                               available(VfxCapability::VolumeTextures) || available(VfxCapability::VectorFields);
+            return !requiresGpuSimulation || available(VfxCapability::GpuSimulation);
+        }
+
+        [[nodiscard]] bool WorkLimitsAreConsistent(const std::array<VfxCapabilitySupport, VfxCapabilityCount> &canonical,
+                                                   const VfxResourceLimits &limits) noexcept {
+            const auto available = [&canonical](const VfxCapability capability) {
+                return canonical[static_cast<std::size_t>(capability)] == VfxCapabilitySupport::Available;
+            };
+            return (!available(VfxCapability::CpuSimulation) || limits.maximumCpuWorkMilliseconds > 0.0) &&
+                   (!available(VfxCapability::GpuSimulation) || limits.maximumGpuWorkMilliseconds > 0.0);
+        }
+
+        struct PrimaryOrder {
+            std::array<ResolvedSimulationDomain, 2> domains{};
+            std::size_t count{};
+        };
+
+        void AppendPrimary(PrimaryOrder &order, const VfxHostMode hostMode, const ResolvedSimulationDomain domain) noexcept {
+            if (hostMode != VfxHostMode::Headless || domain != ResolvedSimulationDomain::GPU)
+                order.domains[order.count++] = domain;
+        }
+
+        [[nodiscard]] PrimaryOrder AutomaticPrimaryOrder(const VfxQualityPolicy &policy, const VfxResolutionRequest &request) noexcept {
+            PrimaryOrder order{};
+            const bool preferGpu = request.requirements.category == VfxEffectCategory::Particle &&
+                                   request.requirements.requestedCount > policy.AutoGpuParticleThreshold();
+            AppendPrimary(order, request.hostMode, preferGpu ? ResolvedSimulationDomain::GPU : ResolvedSimulationDomain::CPU);
+            AppendPrimary(order, request.hostMode, preferGpu ? ResolvedSimulationDomain::CPU : ResolvedSimulationDomain::GPU);
+            return order;
+        }
+
+        [[nodiscard]] PrimaryOrder PreferredPrimaryOrder(const VfxQualityPolicy &policy, const VfxResolutionRequest &request) noexcept {
+            PrimaryOrder order{};
+            switch (request.requirements.preference) {
+                case SimulationPreference::RequireCPU:
+                    AppendPrimary(order, request.hostMode, ResolvedSimulationDomain::CPU);
+                    break;
+                case SimulationPreference::RequireGPU:
+                    AppendPrimary(order, request.hostMode, ResolvedSimulationDomain::GPU);
+                    break;
+                case SimulationPreference::PreferCPU:
+                    AppendPrimary(order, request.hostMode, ResolvedSimulationDomain::CPU);
+                    AppendPrimary(order, request.hostMode, ResolvedSimulationDomain::GPU);
+                    break;
+                case SimulationPreference::PreferGPU:
+                    AppendPrimary(order, request.hostMode, ResolvedSimulationDomain::GPU);
+                    AppendPrimary(order, request.hostMode, ResolvedSimulationDomain::CPU);
+                    break;
+                case SimulationPreference::Automatic:
+                    return AutomaticPrimaryOrder(policy, request);
+                case SimulationPreference::Count:
+                    break;
+            }
+            return order;
+        }
+
+        [[nodiscard]] PrimaryOrder BuildPrimaryOrder(const VfxQualityPolicy &policy, const VfxResolutionRequest &request) noexcept {
+            if (request.requirements.cpuMandatory || request.requirements.requirementClass == VfxRequirementClass::GameplayRequired) {
+                PrimaryOrder order{};
+                AppendPrimary(order, request.hostMode, ResolvedSimulationDomain::CPU);
+                return order;
+            }
+            return PreferredPrimaryOrder(policy, request);
+        }
+
+        struct ResolutionCandidate {
+            const VfxFallbackVariant *variant{};
+            ResolvedSimulationDomain domain{ResolvedSimulationDomain::CPU};
+            std::uint64_t memoryBytes{};
+            bool found{};
+        };
+
+        struct PrimaryEvaluation {
+            ResolutionCandidate candidate{};
+            Fit strongestFailure{Fit::Unsupported};
+        };
+
+        [[nodiscard]] PrimaryEvaluation EvaluatePrimaries(const VfxCapabilities &capabilities, const VfxQualityPolicy &policy,
+                                                          const VfxResolutionRequest &request, const PrimaryOrder &order) noexcept {
+            PrimaryEvaluation evaluation{};
+            for (std::size_t index = 0; index < order.count; ++index) {
+                std::uint64_t memoryBytes{};
+                const auto fit = TryPrimary(capabilities, policy, request.requirements, order.domains[index], memoryBytes);
+                if (fit == Fit::Accepted)
+                    return {.candidate = {.domain = order.domains[index], .memoryBytes = memoryBytes, .found = true},
+                            .strongestFailure = evaluation.strongestFailure};
+                if (fit == Fit::Limit || (fit == Fit::MissingKernel && evaluation.strongestFailure == Fit::Unsupported))
+                    evaluation.strongestFailure = fit;
+            }
+            return evaluation;
+        }
+
+        [[nodiscard]] ResolutionCandidate FindVariantAtRank(const VfxCapabilities &capabilities, const VfxQualityPolicy &policy,
+                                                            const VfxResolutionRequest &request, const std::uint8_t rank) noexcept {
+            ResolutionCandidate selected{};
+            for (const auto &variant : request.fallbackVariants) {
+                if (static_cast<std::uint8_t>(variant.degradation) != rank)
+                    continue;
+                std::uint64_t memoryBytes{};
+                if (TryVariant(capabilities, policy, request, variant, memoryBytes) != Fit::Accepted)
+                    continue;
+                if (!selected.found || variant.stableId < selected.variant->stableId)
+                    selected = {.variant = &variant, .domain = variant.domain, .memoryBytes = memoryBytes, .found = true};
+            }
+            return selected;
+        }
+
+        [[nodiscard]] ResolutionCandidate EvaluateFallbacks(const VfxCapabilities &capabilities, const VfxQualityPolicy &policy,
+                                                            const VfxResolutionRequest &request) noexcept {
+            for (std::uint8_t rank = static_cast<std::uint8_t>(VfxDegradation::ReducedCount);
+                 rank < static_cast<std::uint8_t>(VfxDegradation::Count); ++rank) {
+                auto selected = FindVariantAtRank(capabilities, policy, request, rank);
+                if (selected.found)
+                    return selected;
+            }
+            return {};
+        }
+
+        [[nodiscard]] Result<VfxResolution> ResolveFailure(const VfxResolutionRequest &request, const Fit strongestFailure) {
+            if (!request.fallbackVariants.empty())
+                return Failure<VfxResolution>(VfxErrors::MissingVariant);
+            if (strongestFailure == Fit::Limit)
+                return Failure<VfxResolution>(VfxErrors::LimitExceeded);
+            if (strongestFailure == Fit::MissingKernel)
+                return Failure<VfxResolution>(VfxErrors::MissingKernel);
+            return Failure<VfxResolution>(VfxErrors::UnsupportedCapability);
+        }
     }  // namespace
 
     /** @copydoc VfxCapabilities::Create */
@@ -251,28 +433,8 @@ namespace Horo::Vfx {
             return Failure<VfxCapabilities>(VfxErrors::CapabilityDataInvalid);
 
         std::array<VfxCapabilitySupport, VfxCapabilityCount> canonical{};
-        std::array<bool, VfxCapabilityCount> present{};
-        for (const auto &fact : facts) {
-            if (!IsKnown(fact.capability) || !IsKnown(fact.support))
-                return Failure<VfxCapabilities>(VfxErrors::CapabilityDataInvalid);
-            const auto index = static_cast<std::size_t>(fact.capability);
-            if (present[index])
-                return Failure<VfxCapabilities>(VfxErrors::CapabilityDataInvalid);
-            present[index] = true;
-            canonical[index] = fact.support;
-        }
-        if (std::find(present.begin(), present.end(), false) != present.end())
-            return Failure<VfxCapabilities>(VfxErrors::CapabilityDataInvalid);
-
-        const auto available = [&canonical](const VfxCapability capability) {
-            return canonical[static_cast<std::size_t>(capability)] == VfxCapabilitySupport::Available;
-        };
-        if ((available(VfxCapability::IndirectDraw) || available(VfxCapability::GpuSorting) || available(VfxCapability::VolumeTextures) ||
-             available(VfxCapability::VectorFields)) &&
-            !available(VfxCapability::GpuSimulation))
-            return Failure<VfxCapabilities>(VfxErrors::CapabilityDataInvalid);
-        if ((available(VfxCapability::CpuSimulation) && limits.maximumCpuWorkMilliseconds <= 0.0) ||
-            (available(VfxCapability::GpuSimulation) && limits.maximumGpuWorkMilliseconds <= 0.0))
+        if (!CanonicalizeCapabilityFacts(facts, canonical) || !GpuFactsAreConsistent(canonical) ||
+            !WorkLimitsAreConsistent(canonical, limits))
             return Failure<VfxCapabilities>(VfxErrors::CapabilityDataInvalid);
         return Result<VfxCapabilities>::Success(VfxCapabilities{revision, canonical, limits});
     }
@@ -342,82 +504,16 @@ namespace Horo::Vfx {
         if (request.requirements.cpuMandatory && request.requirements.preference == SimulationPreference::RequireGPU)
             return Failure<VfxResolution>(VfxErrors::DomainConflict);
 
-        std::array<ResolvedSimulationDomain, 2> primaryOrder{};
-        std::size_t primaryCount{};
-        const auto addPrimary = [&](const ResolvedSimulationDomain domain) {
-            if (request.hostMode != VfxHostMode::Headless || domain != ResolvedSimulationDomain::GPU)
-                primaryOrder[primaryCount++] = domain;
-        };
-        if (request.requirements.cpuMandatory || request.requirements.requirementClass == VfxRequirementClass::GameplayRequired) {
-            addPrimary(ResolvedSimulationDomain::CPU);
-        } else {
-            switch (request.requirements.preference) {
-                case SimulationPreference::RequireCPU:
-                    addPrimary(ResolvedSimulationDomain::CPU);
-                    break;
-                case SimulationPreference::RequireGPU:
-                    addPrimary(ResolvedSimulationDomain::GPU);
-                    break;
-                case SimulationPreference::PreferCPU:
-                    addPrimary(ResolvedSimulationDomain::CPU);
-                    addPrimary(ResolvedSimulationDomain::GPU);
-                    break;
-                case SimulationPreference::PreferGPU:
-                    addPrimary(ResolvedSimulationDomain::GPU);
-                    addPrimary(ResolvedSimulationDomain::CPU);
-                    break;
-                case SimulationPreference::Automatic:
-                    if (request.requirements.category == VfxEffectCategory::Particle &&
-                        request.requirements.requestedCount > policy.AutoGpuParticleThreshold()) {
-                        addPrimary(ResolvedSimulationDomain::GPU);
-                        addPrimary(ResolvedSimulationDomain::CPU);
-                    } else {
-                        addPrimary(ResolvedSimulationDomain::CPU);
-                        addPrimary(ResolvedSimulationDomain::GPU);
-                    }
-                    break;
-                case SimulationPreference::Count:
-                    break;
-            }
-        }
+        const auto primaryEvaluation = EvaluatePrimaries(capabilities, policy, request, BuildPrimaryOrder(policy, request));
+        if (primaryEvaluation.candidate.found)
+            return MakeResolution(capabilities, policy, request, primaryEvaluation.candidate.domain, VfxDegradation::None, 0,
+                                  request.requirements.requestedCount, primaryEvaluation.candidate.memoryBytes);
 
-        Fit strongestFailure = Fit::Unsupported;
-        for (std::size_t index = 0; index < primaryCount; ++index) {
-            std::uint64_t memoryBytes{};
-            const auto fit = TryPrimary(capabilities, policy, request.requirements, primaryOrder[index], memoryBytes);
-            if (fit == Fit::Accepted)
-                return MakeResolution(capabilities, policy, request, primaryOrder[index], VfxDegradation::None, 0,
-                                      request.requirements.requestedCount, memoryBytes);
-            if (fit == Fit::Limit || (fit == Fit::MissingKernel && strongestFailure == Fit::Unsupported))
-                strongestFailure = fit;
-        }
-
-        for (std::uint8_t rank = static_cast<std::uint8_t>(VfxDegradation::ReducedCount);
-             rank < static_cast<std::uint8_t>(VfxDegradation::Count); ++rank) {
-            const VfxFallbackVariant *selected{};
-            std::uint64_t selectedMemory{};
-            for (const auto &variant : request.fallbackVariants) {
-                if (static_cast<std::uint8_t>(variant.degradation) != rank)
-                    continue;
-                std::uint64_t memoryBytes{};
-                const auto fit = TryVariant(capabilities, policy, request, variant, memoryBytes);
-                if (fit == Fit::Accepted && (selected == nullptr || variant.stableId < selected->stableId)) {
-                    selected = &variant;
-                    selectedMemory = memoryBytes;
-                }
-            }
-            if (selected != nullptr)
-                return MakeResolution(capabilities, policy, request, selected->domain, selected->degradation, selected->stableId,
-                                      selected->selectedCount, selectedMemory);
-        }
-
-        if (!request.fallbackVariants.empty())
-            return Failure<VfxResolution>(VfxErrors::MissingVariant);
-        if (strongestFailure == Fit::Limit)
-            return Failure<VfxResolution>(VfxErrors::LimitExceeded);
-        if (strongestFailure == Fit::MissingKernel)
-            return Failure<VfxResolution>(VfxErrors::MissingKernel);
-        return Failure<VfxResolution>(VfxErrors::UnsupportedCapability);
+        const auto fallback = EvaluateFallbacks(capabilities, policy, request);
+        if (fallback.found)
+            return MakeResolution(capabilities, policy, request, fallback.domain, fallback.variant->degradation, fallback.variant->stableId,
+                                  fallback.variant->selectedCount, fallback.memoryBytes);
+        return ResolveFailure(request, primaryEvaluation.strongestFailure);
     }
 
     /** @copydoc ValidateVfxResolutionFreshness */
