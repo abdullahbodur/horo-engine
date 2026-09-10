@@ -301,6 +301,14 @@ target_compile_features(HoroCinematicModelTests PRIVATE cxx_std_20)
 target_include_directories(HoroCinematicModelTests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
 target_link_libraries(HoroCinematicModelTests PRIVATE HoroEngine::CinematicModel)
 horo_register_catch_test(HoroCinematicModelTests LABELS "unit;cinematic;headless")
+add_executable(HoroCinematicRuntimeTests
+        support/AllocationProbe.cpp
+        unit/runtime/cinematic/SequencePlayerTests.cpp
+)
+target_compile_features(HoroCinematicRuntimeTests PRIVATE cxx_std_20)
+target_include_directories(HoroCinematicRuntimeTests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+target_link_libraries(HoroCinematicRuntimeTests PRIVATE HoroEngine::CinematicRuntime)
+horo_register_catch_test(HoroCinematicRuntimeTests LABELS "unit;cinematic;headless")
 add_executable(HoroCinematicCurveSamplingBenchmark EXCLUDE_FROM_ALL
         benchmarks/cinematic/CurveSamplingBenchmark.cpp
 )

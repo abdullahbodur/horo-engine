@@ -136,6 +136,35 @@ gameplay command/event occurrence or a recorded application operation identity.
 Allocation order, pointers, thread arrival, worker completion, unordered-map order and
 process-random hash seeds are never player identity or tie-breakers.
 
+### Implemented Playback State Contract
+
+`Horo/Cinematic/SequencePlayer.h` is the implemented owner-side control state machine.
+`CinematicRuntimeService` creates and stores each value; application, scene and tool
+callers retain only `SequencePlayerHandle`. Every command validates the exact runtime
+session and player generations. `SequencePlayerOperationFence` additionally captures
+the monotonically increasing control revision so a completion prepared before play,
+pause, seek, rate, stop, failure or close cannot commit into newer state.
+
+The implemented transitions are `Ready -> Playing <-> Paused`, any controllable state
+to `Stopping -> Stopped`, and every non-terminal state to `Closing -> Stopped` or
+`Failed`. `Stopped` and `Failed` are terminal; replay requires a newly registry-issued
+player generation. Repeating an already-satisfied Play, Pause, Stop, Close or Fail is
+an explicit no-change result and emits no signal. Invalid transitions fail without
+changing state or control revision.
+
+Stop and close deliberately differ. Stop closes future evaluation/event admission and
+drains occurrences already admitted by the owning boundary. Close is cancellation,
+scene/session loss or shutdown: it closes admission immediately and discards pending,
+not-yet-admitted work. Neither transition synchronously destroys leases or provider
+payloads. Their owning registry publishes the terminal state only after retained work
+retires.
+
+Seek accepts any exact target in the inclusive sequence range and publishes the target
+directly; it never advances from the prior cursor. Its signal resets event traversal
+without dispatching the crossed interval. Playback rate is a bounded exact rational.
+Zero rate leaves a player `Playing` with a frozen clock and is observably different
+from `Paused`; negative rate remains available for reverse-capable clocks.
+
 ## Trigger Sources And Admission
 
 Gameplay scripts/native behaviors, scene-load autoplay descriptors, committed

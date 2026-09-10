@@ -263,6 +263,10 @@ horo_configure_target_header_boundary(HoroCinematicModel PUBLIC_HEADERS
     Horo/Cinematic/SequenceAsset.h
     Horo/Cinematic/TransformTrack.h
 )
+horo_configure_target_header_boundary(HoroCinematicRuntime PUBLIC_HEADERS
+    Horo/Cinematic/SequencePlayer.h
+    Horo/Cinematic/SequencePlayerErrors.h
+)
 horo_configure_target_header_boundary(HoroNavigationApi PUBLIC_HEADERS
     Horo/Navigation/NavigationAreas.h
     Horo/Navigation/NavigationAgentProfiles.h

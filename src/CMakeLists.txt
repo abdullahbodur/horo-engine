@@ -507,6 +507,14 @@ target_link_libraries(HoroCinematicModel
         PRIVATE nlohmann_json::nlohmann_json
 )
 
+add_library(HoroCinematicRuntime STATIC
+        runtime/cinematic/player/SequencePlayer.cpp
+        runtime/cinematic/player/SequencePlayerErrors.cpp
+)
+add_library(HoroEngine::CinematicRuntime ALIAS HoroCinematicRuntime)
+target_compile_features(HoroCinematicRuntime PUBLIC cxx_std_20)
+target_link_libraries(HoroCinematicRuntime PUBLIC HoroEngine::CinematicModel)
+
 add_library(HoroNavigationApi STATIC
         runtime/navigation/api/NavigationAreas.cpp
         runtime/navigation/api/NavigationAgentProfiles.cpp
