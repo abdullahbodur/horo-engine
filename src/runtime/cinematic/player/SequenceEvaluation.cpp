@@ -40,9 +40,19 @@ namespace Horo::Cinematic {
             return IdentityLess(left.track, right.track);
         }
 
+        [[nodiscard]] bool TrackIdentityLess(const SequenceFrameTrackDescriptor &left, const SequenceFrameTrackDescriptor &right) noexcept {
+            return IdentityLess(left.track, right.track);
+        }
+
         template <typename Key> [[nodiscard]] bool TimedKeyLess(const Key &left, const Key &right) noexcept {
             if (left.time != right.time)
                 return left.time < right.time;
+            if (left.track != right.track)
+                return IdentityLess(left.track, right.track);
+            return IdentityLess(left.key, right.key);
+        }
+
+        template <typename Key> [[nodiscard]] bool KeyIdentityLess(const Key &left, const Key &right) noexcept {
             if (left.track != right.track)
                 return IdentityLess(left.track, right.track);
             return IdentityLess(left.key, right.key);
@@ -69,11 +79,21 @@ namespace Horo::Cinematic {
             return cut.track.IsValid() && cut.key.IsValid() && cut.camera.IsValid() && cut.time >= 0 && cut.time <= duration;
         }
 
-        template <typename Value, typename SameIdentity>
-        [[nodiscard]] bool HasIdentityCollision(const std::span<const Value> values, SameIdentity sameIdentity) noexcept {
-            for (std::size_t left = 0; left < values.size(); ++left)
-                for (std::size_t right = left + 1; right < values.size(); ++right)
-                    if (sameIdentity(values[left], values[right]))
+        template <typename Value, typename IdentityLess, typename SameIdentity, typename CanonicalLess>
+        [[nodiscard]] bool CanonicalizeUnique(std::vector<Value> &values, IdentityLess identityLess, SameIdentity sameIdentity,
+                                              CanonicalLess canonicalLess) {
+            std::ranges::sort(values, identityLess);
+            const auto collision = std::ranges::adjacent_find(values, sameIdentity);
+            if (collision != values.end())
+                return false;
+            std::ranges::sort(values, canonicalLess);
+            return true;
+        }
+
+        [[nodiscard]] bool HasPlayerIdentityCollision(const std::span<const SequenceFramePlayerOrder> players) noexcept {
+            for (std::size_t left = 0; left < players.size(); ++left)
+                for (std::size_t right = left + 1; right < players.size(); ++right)
+                    if (players[left].player == players[right].player)
                         return true;
             return false;
         }
@@ -227,48 +247,66 @@ namespace Horo::Cinematic {
             return Result<AdvanceResult>::Success(result);
         }
 
-        template <typename Key> [[nodiscard]] bool Crossed(const Key &key, const TraversalSegment &segment) noexcept {
-            if (segment.from == segment.to)
-                return segment.includeFrom && key.time == segment.from;
-            if (segment.direction == SequenceTraversalDirection::Forward)
-                return (segment.includeFrom ? key.time >= segment.from : key.time > segment.from) && key.time <= segment.to;
-            return key.time >= segment.to && (segment.includeFrom ? key.time <= segment.from : key.time < segment.from);
+        template <typename Key>
+        [[nodiscard]] std::size_t LowerTimeBound(const std::span<const Key> keys, const SequenceTime time) noexcept {
+            const auto found = std::ranges::lower_bound(keys, time, {}, &Key::time);
+            return static_cast<std::size_t>(found - keys.begin());
+        }
+
+        template <typename Key>
+        [[nodiscard]] std::size_t UpperTimeBound(const std::span<const Key> keys, const SequenceTime time) noexcept {
+            const auto found = std::ranges::upper_bound(keys, time, {}, &Key::time);
+            return static_cast<std::size_t>(found - keys.begin());
         }
 
         template <typename Key, typename Emit>
         void EmitCrossedRange(const std::span<const Key> keys, const std::size_t begin, const std::size_t end,
                               const TraversalSegment &segment, Emit &emit) {
             for (std::size_t index = begin; index < end; ++index)
-                if (Crossed(keys[index], segment))
-                    emit(keys[index], segment);
+                emit(keys[index], segment);
         }
 
         template <typename Key>
-        [[nodiscard]] std::size_t EqualTimeGroupBegin(const std::span<const Key> keys, const std::size_t end) noexcept {
+        [[nodiscard]] std::size_t EqualTimeGroupBegin(const std::span<const Key> keys, const std::size_t lowerBound,
+                                                      const std::size_t end) noexcept {
             std::size_t begin = end - 1;
-            while (begin != 0 && keys[begin - 1].time == keys[end - 1].time)
+            while (begin > lowerBound && keys[begin - 1].time == keys[end - 1].time)
                 --begin;
             return begin;
         }
 
         template <typename Key, typename Emit>
-        void VisitReverseCrossings(const std::span<const Key> keys, const TraversalSegment &segment, Emit &emit) {
-            std::size_t end = keys.size();
-            while (end != 0) {
-                const std::size_t begin = EqualTimeGroupBegin(keys, end);
+        void VisitReverseCrossings(const std::span<const Key> keys, const std::size_t lowerBound, std::size_t end,
+                                   const TraversalSegment &segment, Emit &emit) {
+            while (end > lowerBound) {
+                const std::size_t begin = EqualTimeGroupBegin(keys, lowerBound, end);
                 EmitCrossedRange(keys, begin, end, segment, emit);
                 end = begin;
             }
         }
 
         template <typename Key, typename Emit>
-        void VisitCrossed(const std::span<const Key> keys, const std::span<const TraversalSegment> segments, Emit emit) {
-            for (const TraversalSegment &segment : segments) {
-                if (segment.direction == SequenceTraversalDirection::Reverse)
-                    VisitReverseCrossings(keys, segment, emit);
-                else
-                    EmitCrossedRange(keys, 0, keys.size(), segment, emit);
+        void VisitSegmentCrossings(const std::span<const Key> keys, const TraversalSegment &segment, Emit &emit) {
+            if (segment.from == segment.to) {
+                if (segment.includeFrom) {
+                    const std::size_t begin = LowerTimeBound(keys, segment.from);
+                    EmitCrossedRange(keys, begin, UpperTimeBound(keys, segment.from), segment, emit);
+                }
+                return;
             }
+            if (segment.direction == SequenceTraversalDirection::Forward) {
+                const std::size_t begin = segment.includeFrom ? LowerTimeBound(keys, segment.from) : UpperTimeBound(keys, segment.from);
+                EmitCrossedRange(keys, begin, UpperTimeBound(keys, segment.to), segment, emit);
+                return;
+            }
+            const std::size_t end = segment.includeFrom ? UpperTimeBound(keys, segment.from) : LowerTimeBound(keys, segment.from);
+            VisitReverseCrossings(keys, LowerTimeBound(keys, segment.to), end, segment, emit);
+        }
+
+        template <typename Key, typename Emit>
+        void VisitCrossed(const std::span<const Key> keys, const std::span<const TraversalSegment> segments, Emit emit) {
+            for (const TraversalSegment &segment : segments)
+                VisitSegmentCrossings(keys, segment, emit);
         }
 
         struct StagedOccurrenceCounts final {
@@ -324,6 +362,16 @@ namespace Horo::Cinematic {
             }
             return Result<void>::Success();
         }
+
+        void ApplyAndDispatch(const std::span<const SequenceFrameTrackDescriptor> tracks, const SequenceFrameScratch &scratch,
+                              const SequenceFrameHooks &hooks, const StagedOccurrenceCounts &counts) noexcept {
+            for (std::size_t index = 0; index < tracks.size(); ++index)
+                tracks[index].apply(tracks[index].context, scratch.values[index].value);
+            for (std::size_t index = 0; index < counts.events; ++index)
+                hooks.eventHook(hooks.eventContext, scratch.events[index]);
+            for (std::size_t index = 0; index < counts.cameraCuts; ++index)
+                hooks.cameraHook(hooks.cameraContext, scratch.cameraCuts[index]);
+        }
     }  // namespace
 
     /** @copydoc MakeSequenceFrameCursor */
@@ -345,9 +393,7 @@ namespace Horo::Cinematic {
                                                   const std::span<SequenceFramePlayerOrder> ordered) {
         if (unordered.size() > MaximumFramePlayers || ordered.size() < unordered.size())
             return Failed<std::size_t>(SequenceEvaluationErrors::CapacityExceeded);
-        if (HasIdentityCollision<SequenceFramePlayerOrder>(unordered, [](const auto &left, const auto &right) {
-            return left.player == right.player;
-        }))
+        if (HasPlayerIdentityCollision(unordered))
             return Failed<std::size_t>(SequenceEvaluationErrors::Malformed);
         for (std::size_t index = 0; index < unordered.size(); ++index) {
             if (!unordered[index].player.IsValid())
@@ -386,20 +432,15 @@ namespace Horo::Cinematic {
         std::vector<SequenceFrameTrackDescriptor> orderedTracks(tracks.begin(), tracks.end());
         std::vector<SequenceFrameEventKey> orderedEvents(events.begin(), events.end());
         std::vector<SequenceFrameCameraCutKey> orderedCuts(cameraCuts.begin(), cameraCuts.end());
-        std::ranges::sort(orderedTracks, TrackLess);
-        std::ranges::sort(orderedEvents, TimedKeyLess<SequenceFrameEventKey>);
-        std::ranges::sort(orderedCuts, TimedKeyLess<SequenceFrameCameraCutKey>);
-        if (HasIdentityCollision<SequenceFrameTrackDescriptor>(orderedTracks,
-                                                               [](const auto &left, const auto &right) {
+        const auto sameTrack = [](const auto &left, const auto &right) {
             return left.track == right.track;
-        }) ||
-            HasIdentityCollision<SequenceFrameEventKey>(orderedEvents,
-                                                        [](const auto &left, const auto &right) {
+        };
+        const auto sameKey = [](const auto &left, const auto &right) {
             return left.track == right.track && left.key == right.key;
-        }) ||
-            HasIdentityCollision<SequenceFrameCameraCutKey>(orderedCuts, [](const auto &left, const auto &right) {
-            return left.track == right.track && left.key == right.key;
-        }))
+        };
+        if (!CanonicalizeUnique(orderedTracks, TrackIdentityLess, sameTrack, TrackLess) ||
+            !CanonicalizeUnique(orderedEvents, KeyIdentityLess<SequenceFrameEventKey>, sameKey, TimedKeyLess<SequenceFrameEventKey>) ||
+            !CanonicalizeUnique(orderedCuts, KeyIdentityLess<SequenceFrameCameraCutKey>, sameKey, TimedKeyLess<SequenceFrameCameraCutKey>))
             return Failed<SequenceFrameEvaluationPlan>(SequenceEvaluationErrors::Malformed);
         return Result<SequenceFrameEvaluationPlan>::Success(SequenceFrameEvaluationPlan{duration, loopMode, maximumLoopCrossings,
                                                                                         std::move(orderedTracks), std::move(orderedEvents),
@@ -439,12 +480,7 @@ namespace Horo::Cinematic {
         SequenceFrameCursor committed = advanced.Value().cursor;
         ++committed.evaluationRevision;
         cursor = committed;
-        for (std::size_t index = 0; index < tracks_.size(); ++index)
-            tracks_[index].apply(tracks_[index].context, scratch.values[index].value);
-        for (std::size_t index = 0; index < staged.Value().events; ++index)
-            hooks.eventHook(hooks.eventContext, scratch.events[index]);
-        for (std::size_t index = 0; index < staged.Value().cameraCuts; ++index)
-            hooks.cameraHook(hooks.cameraContext, scratch.cameraCuts[index]);
+        ApplyAndDispatch(tracks_, scratch, hooks, staged.Value());
         return Result<SequenceFrameEvaluationResult>::Success({previousPosition, cursor.position, cursor.traversal,
                                                                cursor.evaluationRevision, tracks_.size(), staged.Value().events,
                                                                staged.Value().cameraCuts});
