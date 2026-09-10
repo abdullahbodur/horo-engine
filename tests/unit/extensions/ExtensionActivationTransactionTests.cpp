@@ -1,6 +1,7 @@
 #include "ExtensionActivationTransaction.h"
 #include "Horo/Extensions/ExtensionErrors.h"
 
+#include <array>
 #include <catch2/catch_test_macros.hpp>
 #include <memory>
 #include <stdexcept>
@@ -104,5 +105,32 @@ namespace Horo::Extensions::Tests {
         }
 
         CHECK(order == std::vector<int>{2, 1, -2, -1});
+    }
+
+    TEST_CASE("Module lifetime reports every contained unload exception category", "[Extensions][Registration][Rollback]") {
+        const std::array<HoroExtensionUnloadFunc, 4> unloaders{
+            +[](HoroExtensionModuleApi *) {
+            throw std::logic_error{"fixture logic failure"};
+        },
+            +[](HoroExtensionModuleApi *) {
+            throw std::bad_alloc{};
+        },
+            +[](HoroExtensionModuleApi *) {
+            throw std::exception{};
+        },
+            +[](HoroExtensionModuleApi *) {
+            throw 42;
+        },
+        };
+        int context{};
+        for (const HoroExtensionUnloadFunc unload : unloaders) {
+            ExtensionModuleLifetime lifetime;
+            lifetime.moduleApi.moduleContext = &context;
+            lifetime.unload = unload;
+            lifetime.loaded = true;
+
+            CHECK_FALSE(lifetime.UnloadNow());
+            CHECK(lifetime.UnloadNow());
+        }
     }
 }  // namespace Horo::Extensions::Tests
