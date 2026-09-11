@@ -1,6 +1,7 @@
 #include "Horo/PlatformServices/PlatformServicesFrontend.h"
 
 #include <algorithm>
+#include <memory>
 #include <utility>
 
 namespace Horo::PlatformServices {
@@ -14,7 +15,7 @@ namespace Horo::PlatformServices {
             const auto found = std::ranges::find_if(snapshot.services, [service](const PlatformServiceCapability &entry) {
                 return entry.service == service;
             });
-            return found == snapshot.services.end() ? nullptr : &*found;
+            return found == snapshot.services.end() ? nullptr : std::to_address(found);
         }
 
         [[nodiscard]] bool SameLimits(const PlatformServiceLimits &left, const PlatformServiceLimits &right) noexcept {
@@ -116,7 +117,11 @@ namespace Horo::PlatformServices {
     }
 
     PlatformServicesFrontend::~PlatformServicesFrontend() {
-        static_cast<void>(Close());
+        try {
+            static_cast<void>(Close());
+        } catch (...) {
+            // Destruction cannot surface allocation failure while preserving a typed shutdown error.
+        }
     }
 
     PlatformServicesFrontend::PlatformServicesFrontend(PlatformServicesFrontend &&other) noexcept
@@ -127,7 +132,7 @@ namespace Horo::PlatformServices {
     }
 
     /** @copydoc PlatformServicesFrontend::UnlockAchievement */
-    Result<PlatformRequestHandle<void>> PlatformServicesFrontend::UnlockAchievement(AchievementUnlockRequest request) {
+    Result<PlatformRequestHandle<void>> PlatformServicesFrontend::UnlockAchievement(AchievementUnlockRequest request) const {
         if (!request.achievement.IsValid())
             return Failure<PlatformRequestHandle<void>>(FrontendErrors::InvalidRequest);
         if (const auto valid = ValidateSubjectService(PlatformServiceKind::Achievements, request.subject); valid.HasError())
@@ -136,21 +141,21 @@ namespace Horo::PlatformServices {
     }
 
     /** @copydoc PlatformServicesFrontend::SubmitScore */
-    Result<PlatformRequestHandle<void>> PlatformServicesFrontend::SubmitScore(LeaderboardScoreRequest request) {
+    Result<PlatformRequestHandle<void>> PlatformServicesFrontend::SubmitScore(LeaderboardScoreRequest request) const {
         if (const auto valid = ValidateLeaderboardOrStat(request.leaderboard.IsValid(), request.subject); valid.HasError())
             return Result<PlatformRequestHandle<void>>::Failure(valid.ErrorValue());
         return ValidatedDispatch(backend_->SubmitScore(std::move(request)));
     }
 
     /** @copydoc PlatformServicesFrontend::WriteStat */
-    Result<PlatformRequestHandle<void>> PlatformServicesFrontend::WriteStat(StatWriteRequest request) {
+    Result<PlatformRequestHandle<void>> PlatformServicesFrontend::WriteStat(StatWriteRequest request) const {
         if (const auto valid = ValidateLeaderboardOrStat(request.stat.IsValid(), request.subject); valid.HasError())
             return Result<PlatformRequestHandle<void>>::Failure(valid.ErrorValue());
         return ValidatedDispatch(backend_->WriteStat(std::move(request)));
     }
 
     /** @copydoc PlatformServicesFrontend::ReadCloudObject */
-    Result<PlatformRequestHandle<CloudReadResult>> PlatformServicesFrontend::ReadCloudObject(CloudReadRequest request) {
+    Result<PlatformRequestHandle<CloudReadResult>> PlatformServicesFrontend::ReadCloudObject(CloudReadRequest request) const {
         if (!request.object.IsValid())
             return Failure<PlatformRequestHandle<CloudReadResult>>(FrontendErrors::InvalidRequest);
         if (const auto valid = ValidateSubjectService(PlatformServiceKind::Cloud, request.subject); valid.HasError())
@@ -159,7 +164,7 @@ namespace Horo::PlatformServices {
     }
 
     /** @copydoc PlatformServicesFrontend::WriteCloudObject */
-    Result<PlatformRequestHandle<void>> PlatformServicesFrontend::WriteCloudObject(CloudWriteRequest request) {
+    Result<PlatformRequestHandle<void>> PlatformServicesFrontend::WriteCloudObject(CloudWriteRequest request) const {
         if (!request.object.IsValid())
             return Failure<PlatformRequestHandle<void>>(FrontendErrors::InvalidRequest);
         const auto valid = ValidateSubjectService(PlatformServiceKind::Cloud, request.subject);
@@ -171,7 +176,7 @@ namespace Horo::PlatformServices {
     }
 
     /** @copydoc PlatformServicesFrontend::SetPresence */
-    Result<PlatformRequestHandle<void>> PlatformServicesFrontend::SetPresence(PresenceUpdateRequest request) {
+    Result<PlatformRequestHandle<void>> PlatformServicesFrontend::SetPresence(PresenceUpdateRequest request) const {
         if (!request.status.IsValid())
             return Failure<PlatformRequestHandle<void>>(FrontendErrors::InvalidRequest);
         const auto valid = ValidateSubjectService(PlatformServiceKind::Presence, request.subject);
@@ -183,14 +188,14 @@ namespace Horo::PlatformServices {
     }
 
     /** @copydoc PlatformServicesFrontend::ClearPresence */
-    Result<PlatformRequestHandle<void>> PlatformServicesFrontend::ClearPresence(PlatformSubjectHandle subject) {
+    Result<PlatformRequestHandle<void>> PlatformServicesFrontend::ClearPresence(PlatformSubjectHandle subject) const {
         if (const auto valid = ValidateSubjectService(PlatformServiceKind::Presence, subject); valid.HasError())
             return Result<PlatformRequestHandle<void>>::Failure(valid.ErrorValue());
         return ValidatedDispatch(backend_->ClearPresence(std::move(subject)));
     }
 
     /** @copydoc PlatformServicesFrontend::QueryFriends */
-    Result<PlatformRequestHandle<FriendsPage>> PlatformServicesFrontend::QueryFriends(FriendsQuery query) {
+    Result<PlatformRequestHandle<FriendsPage>> PlatformServicesFrontend::QueryFriends(FriendsQuery query) const {
         const auto valid = ValidateSubjectService(PlatformServiceKind::Friends, query.subject);
         if (valid.HasError())
             return Result<PlatformRequestHandle<FriendsPage>>::Failure(valid.ErrorValue());
@@ -200,7 +205,7 @@ namespace Horo::PlatformServices {
     }
 
     /** @copydoc PlatformServicesFrontend::QueryCurrentSession */
-    Result<PlatformRequestHandle<PlatformSessionSnapshot>> PlatformServicesFrontend::QueryCurrentSession() {
+    Result<PlatformRequestHandle<PlatformSessionSnapshot>> PlatformServicesFrontend::QueryCurrentSession() const {
         if (const auto valid = ValidateService(PlatformServiceKind::Session); valid.HasError())
             return Result<PlatformRequestHandle<PlatformSessionSnapshot>>::Failure(valid.ErrorValue());
         return ValidatedDispatch(backend_->QueryCurrentSession());
@@ -220,7 +225,13 @@ namespace Horo::PlatformServices {
         if (shutdownInvoked_)
             return closeError_ ? Result<void>::Failure(*closeError_) : Result<void>::Success();
         shutdownInvoked_ = true;
-        auto result = backend_->Shutdown();
+        auto result = [&]() -> Result<void> {
+            try {
+                return backend_->Shutdown();
+            } catch (...) {
+                return Failure<void>(BackendErrors::ServiceUnavailable);
+            }
+        }();
         if (result.HasError())
             closeError_ = result.ErrorValue();
         return result;
@@ -241,8 +252,7 @@ namespace Horo::PlatformServices {
             return Failure<const PlatformServiceCapability *>(FrontendErrors::Unavailable);
         if (service >= PlatformServiceKind::Count)
             return Failure<const PlatformServiceCapability *>(FrontendErrors::InvalidRequest);
-        const auto index = static_cast<std::size_t>(service);
-        if (policy_.deniedServices[index])
+        if (const auto index = static_cast<std::size_t>(service); policy_.deniedServices[index])
             return Failure<const PlatformServiceCapability *>(FrontendErrors::OperationDenied);
         const auto *capability = FindCapability(capabilities_, service);
         if (capability == nullptr || capability->availability != PlatformServiceAvailability::Available) {

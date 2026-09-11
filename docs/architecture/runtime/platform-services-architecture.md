@@ -235,15 +235,15 @@ public:
 
 class PlatformServicesFrontend {
 public:
-    Result<PlatformRequestHandle<void>> UnlockAchievement(AchievementUnlockRequest request);
-    Result<PlatformRequestHandle<void>> SubmitScore(LeaderboardScoreRequest request);
-    Result<PlatformRequestHandle<void>> WriteStat(StatWriteRequest request);
-    Result<PlatformRequestHandle<CloudReadResult>> ReadCloudObject(CloudReadRequest request);
-    Result<PlatformRequestHandle<void>> WriteCloudObject(CloudWriteRequest request);
-    Result<PlatformRequestHandle<void>> SetPresence(PresenceUpdateRequest request);
-    Result<PlatformRequestHandle<void>> ClearPresence(PlatformSubjectHandle subject);
-    Result<PlatformRequestHandle<FriendsPage>> QueryFriends(FriendsQuery query);
-    Result<PlatformRequestHandle<PlatformSessionSnapshot>> QueryCurrentSession();
+    Result<PlatformRequestHandle<void>> UnlockAchievement(AchievementUnlockRequest request) const;
+    Result<PlatformRequestHandle<void>> SubmitScore(LeaderboardScoreRequest request) const;
+    Result<PlatformRequestHandle<void>> WriteStat(StatWriteRequest request) const;
+    Result<PlatformRequestHandle<CloudReadResult>> ReadCloudObject(CloudReadRequest request) const;
+    Result<PlatformRequestHandle<void>> WriteCloudObject(CloudWriteRequest request) const;
+    Result<PlatformRequestHandle<void>> SetPresence(PresenceUpdateRequest request) const;
+    Result<PlatformRequestHandle<void>> ClearPresence(PlatformSubjectHandle subject) const;
+    Result<PlatformRequestHandle<FriendsPage>> QueryFriends(FriendsQuery query) const;
+    Result<PlatformRequestHandle<PlatformSessionSnapshot>> QueryCurrentSession() const;
     Result<PlatformServiceLimits> ServiceLimits(PlatformServiceKind service) const;
     Result<void> Close();
 };

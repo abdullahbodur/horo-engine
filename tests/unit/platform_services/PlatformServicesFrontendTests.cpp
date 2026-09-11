@@ -4,6 +4,7 @@
 #include <algorithm>
 #include <catch2/catch_test_macros.hpp>
 #include <memory>
+#include <stdexcept>
 
 namespace Horo::PlatformServices {
     using TestSupport::AvailableCapabilities;
@@ -20,6 +21,7 @@ namespace Horo::PlatformServices {
             mutable std::uint32_t inspectCalls{};
             std::uint32_t shutdownCalls{};
             bool shutdownFails{};
+            bool shutdownThrows{};
             bool malformedHandle{};
 
             Result<PlatformServiceCapabilitySnapshot> InspectCapabilities() const override {
@@ -37,6 +39,8 @@ namespace Horo::PlatformServices {
 
             Result<void> Shutdown() override {
                 ++shutdownCalls;
+                if (shutdownThrows)
+                    throw std::runtime_error("test backend shutdown failure");
                 if (shutdownFails)
                     return Result<void>::Failure(MakeError(BackendErrors::ServiceUnavailable));
                 return Result<void>::Success();
@@ -294,6 +298,18 @@ namespace Horo::PlatformServices {
         auto failingFrontend = Frontend(backend, session);
         RequireError(failingFrontend.Close(), BackendErrors::ServiceUnavailable);
         RequireError(failingFrontend.Close(), BackendErrors::ServiceUnavailable);
+        CHECK(backend->shutdownCalls == 1);
+
+        backend = std::make_shared<RoutingBackend>();
+        backend->shutdownThrows = true;
+        auto throwingFrontend = Frontend(backend, session);
+        RequireError(throwingFrontend.Close(), BackendErrors::ServiceUnavailable);
+        RequireError(throwingFrontend.Close(), BackendErrors::ServiceUnavailable);
+        CHECK(backend->shutdownCalls == 1);
+
+        backend = std::make_shared<RoutingBackend>();
+        backend->shutdownThrows = true;
+        CHECK_NOTHROW(Frontend(backend, session));
         CHECK(backend->shutdownCalls == 1);
     }
 

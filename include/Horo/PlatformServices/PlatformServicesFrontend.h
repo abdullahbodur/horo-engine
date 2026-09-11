@@ -62,31 +62,31 @@ namespace Horo::PlatformServices {
 
         /** @brief Validates and routes one achievement unlock. @param request Owned typed intent. @return Backend request handle or
          * pre-admission failure. */
-        [[nodiscard]] Result<PlatformRequestHandle<void>> UnlockAchievement(AchievementUnlockRequest request);
+        [[nodiscard]] Result<PlatformRequestHandle<void>> UnlockAchievement(AchievementUnlockRequest request) const;
         /** @brief Validates and routes one leaderboard score submission. @param request Owned typed intent. @return Backend request
          * handle or pre-admission failure. */
-        [[nodiscard]] Result<PlatformRequestHandle<void>> SubmitScore(LeaderboardScoreRequest request);
+        [[nodiscard]] Result<PlatformRequestHandle<void>> SubmitScore(LeaderboardScoreRequest request) const;
         /** @brief Validates and routes one persistent-stat write. @param request Owned typed intent. @return Backend request handle or
          * pre-admission failure. */
-        [[nodiscard]] Result<PlatformRequestHandle<void>> WriteStat(StatWriteRequest request);
+        [[nodiscard]] Result<PlatformRequestHandle<void>> WriteStat(StatWriteRequest request) const;
         /** @brief Validates and routes one cloud object read. @param request Owned typed address. @return Backend request handle or
          * pre-admission failure. */
-        [[nodiscard]] Result<PlatformRequestHandle<CloudReadResult>> ReadCloudObject(CloudReadRequest request);
+        [[nodiscard]] Result<PlatformRequestHandle<CloudReadResult>> ReadCloudObject(CloudReadRequest request) const;
         /** @brief Validates and routes one bounded cloud object write. @param request Owned typed payload. @return Backend request handle
          * or pre-admission failure. */
-        [[nodiscard]] Result<PlatformRequestHandle<void>> WriteCloudObject(CloudWriteRequest request);
+        [[nodiscard]] Result<PlatformRequestHandle<void>> WriteCloudObject(CloudWriteRequest request) const;
         /** @brief Validates and routes one bounded presence update. @param request Owned typed presence. @return Backend request handle
          * or pre-admission failure. */
-        [[nodiscard]] Result<PlatformRequestHandle<void>> SetPresence(PresenceUpdateRequest request);
+        [[nodiscard]] Result<PlatformRequestHandle<void>> SetPresence(PresenceUpdateRequest request) const;
         /** @brief Validates and routes one presence clear. @param subject Current opaque subject capability. @return Backend request
          * handle or pre-admission failure. */
-        [[nodiscard]] Result<PlatformRequestHandle<void>> ClearPresence(PlatformSubjectHandle subject);
+        [[nodiscard]] Result<PlatformRequestHandle<void>> ClearPresence(PlatformSubjectHandle subject) const;
         /** @brief Validates and routes one bounded friends query. @param query Owned typed page query. @return Backend request handle or
          * pre-admission failure. */
-        [[nodiscard]] Result<PlatformRequestHandle<FriendsPage>> QueryFriends(FriendsQuery query);
+        [[nodiscard]] Result<PlatformRequestHandle<FriendsPage>> QueryFriends(FriendsQuery query) const;
         /** @brief Routes one current-session query without requiring an already active subject. @return Backend request handle or
          * pre-admission failure. */
-        [[nodiscard]] Result<PlatformRequestHandle<PlatformSessionSnapshot>> QueryCurrentSession();
+        [[nodiscard]] Result<PlatformRequestHandle<PlatformSessionSnapshot>> QueryCurrentSession() const;
 
         /**
          * @brief Returns public finite limits for one available policy-admitted service without exposing its private binding.
