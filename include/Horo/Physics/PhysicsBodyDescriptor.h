@@ -7,6 +7,7 @@
 #include "Horo/Physics/PhysicsIdentity.h"
 #include "Horo/Physics/PhysicsPose.h"
 
+#include <cstdint>
 #include <variant>
 
 namespace Horo::Physics {
@@ -43,6 +44,55 @@ namespace Horo::Physics {
     inline constexpr float MaximumPhysicsDensity = 1.0e7F;
     /** @brief Normative Physics architecture's maximum ordinary linear speed in m/s. */
     inline constexpr double MaximumPhysicsLinearSpeed = 500.0;
+    /** @brief CanonicalV1 maximum angular speed in radians/s. */
+    inline constexpr float MaximumPhysicsAngularSpeed = 100.0F;
+    /** @brief CanonicalV1 maximum depenetration correction speed in m/s. */
+    inline constexpr float MaximumPhysicsDepenetrationSpeed = 100.0F;
+    /** @brief CanonicalV1 maximum exponential damping coefficient in inverse seconds. */
+    inline constexpr float MaximumPhysicsDampingPerSecond = 100.0F;
+
+    /** @brief Independently lockable translation and rotation degrees of freedom. */
+    enum class PhysicsAxisLock : std::uint8_t {
+        None = 0,
+        TranslationX = 1U << 0U,
+        TranslationY = 1U << 1U,
+        TranslationZ = 1U << 2U,
+        RotationX = 1U << 3U,
+        RotationY = 1U << 4U,
+        RotationZ = 1U << 5U,
+        All = 0x3FU
+    };
+
+    /** @brief Combines independent axis-lock bits without exposing native solver flags. */
+    [[nodiscard]] constexpr PhysicsAxisLock operator|(const PhysicsAxisLock left, const PhysicsAxisLock right) noexcept {
+        return static_cast<PhysicsAxisLock>(static_cast<unsigned int>(left) | static_cast<unsigned int>(right));
+    }
+
+    /** @brief Intersects independent axis-lock bits without exposing native solver flags. */
+    [[nodiscard]] constexpr PhysicsAxisLock operator&(const PhysicsAxisLock left, const PhysicsAxisLock right) noexcept {
+        return static_cast<PhysicsAxisLock>(static_cast<unsigned int>(left) & static_cast<unsigned int>(right));
+    }
+
+    /** @brief Adds axis-lock bits while preserving the strongly typed public representation. */
+    constexpr PhysicsAxisLock &operator|=(PhysicsAxisLock &left, const PhysicsAxisLock right) noexcept {
+        left = left | right;
+        return left;
+    }
+
+    /** @brief Reports whether every requested degree-of-freedom lock is present. */
+    [[nodiscard]] constexpr bool HasPhysicsAxisLock(const PhysicsAxisLock value, const PhysicsAxisLock requested) noexcept {
+        return (value & requested) == requested;
+    }
+
+    /** @brief Frame-rate-independent damping, degree-of-freedom locks and explicit motion ceilings. */
+    struct PhysicsMotionSafety final {
+        float linearDampingPerSecond{};
+        float angularDampingPerSecond{};
+        PhysicsAxisLock lockedAxes{PhysicsAxisLock::None};
+        float maximumLinearSpeed{static_cast<float>(MaximumPhysicsLinearSpeed)};
+        float maximumAngularSpeed{MaximumPhysicsAngularSpeed};
+        float maximumDepenetrationSpeed{MaximumPhysicsDepenetrationSpeed};
+    };
 
     /**
      * @brief Portable rigid-body intent without runtime identity, world pose or native state.
@@ -56,6 +106,7 @@ namespace Horo::Physics {
         PhysicsMassPolicy mass;
         Math::Vec3 initialLinearVelocity{};
         Math::Vec3 initialAngularVelocity{};
+        PhysicsMotionSafety motionSafety;
     };
 
     /**
@@ -79,6 +130,7 @@ namespace Horo::Physics {
         PhysicsMassPolicy mass;
         Math::Vec3 linearVelocity;
         Math::Vec3 angularVelocity;
+        PhysicsMotionSafety motionSafety;
     };
 
     /** @brief Observable body activity; this is state evidence, not a wake/sleep command. */
@@ -147,4 +199,13 @@ namespace Horo::Physics {
      * @post The state is unchanged. Success grants no mutation authority and extends no body lifetime.
      */
     [[nodiscard]] Result<void> ValidatePhysicsBodyState(const PhysicsBodyState &state, PhysicsWorldId expectedWorld);
+
+    /**
+     * @brief Computes the multiplicative exponential damping retained over an exact fixed-step duration.
+     * @param dampingPerSecond Non-negative damping coefficient in inverse seconds.
+     * @param deltaSeconds Finite non-negative fixed-step duration in seconds.
+     * @return Scale in `[0, 1]`, or PhysicsErrors::DescriptorInvalid for malformed values.
+     * @post The result depends only on elapsed time, not on how that duration is subdivided into ticks.
+     */
+    [[nodiscard]] Result<float> ComputePhysicsDampingScale(float dampingPerSecond, double deltaSeconds);
 }  // namespace Horo::Physics
