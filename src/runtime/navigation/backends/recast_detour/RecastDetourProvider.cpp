@@ -111,10 +111,6 @@ namespace Horo::Navigation {
             QuerySlot *slot_{};
         };
 
-        [[nodiscard]] bool IsFinite(const Math::Vec3 value) noexcept {
-            return std::isfinite(value.x) && std::isfinite(value.y) && std::isfinite(value.z);
-        }
-
         [[nodiscard]] bool IsPositiveFinite(const float value) noexcept {
             return std::isfinite(value) && value > 0.0F;
         }
@@ -155,7 +151,7 @@ namespace Horo::Navigation {
         [[nodiscard]] Result<void> ValidateCreateInfo(const RecastDetourProviderCreateInfo &info) {
             if (!info.world.IsValid() || !info.topology.IsValid() || info.vertices.size() < 3 || info.polygons.empty() ||
                 info.vertices.size() > RecastDetourProviderHardLimits::Vertices ||
-                info.polygons.size() > RecastDetourProviderHardLimits::Polygons || !IsFinite(info.nearestPointHalfExtents) ||
+                info.polygons.size() > RecastDetourProviderHardLimits::Polygons || !Math::IsFinite(info.nearestPointHalfExtents) ||
                 info.nearestPointHalfExtents.x <= 0.0F || info.nearestPointHalfExtents.y <= 0.0F ||
                 info.nearestPointHalfExtents.z <= 0.0F || !IsPositiveFinite(info.cellSizeMeters) ||
                 !IsPositiveFinite(info.cellHeightMeters) || !IsPositiveFinite(info.walkableHeightMeters) ||
@@ -170,7 +166,9 @@ namespace Horo::Navigation {
                 return Failure<void>(NavigationErrors::CapabilityDescriptorInvalid);
             if (!FitsOwnedBudget(info))
                 return Failure<void>(NavigationErrors::CapacityExceeded);
-            if (!std::ranges::all_of(info.vertices, IsFinite))
+            if (!std::ranges::all_of(info.vertices, [](const Math::Vec3 vertex) {
+                return Math::IsFinite(vertex);
+            }))
                 return Failure<void>(NavigationErrors::ProviderFailed);
             return Result<void>::Success();
         }
@@ -373,7 +371,7 @@ namespace Horo::Navigation {
                 return Failure<void>(NavigationErrors::InvalidWorld);
             if (!request.topology.IsValid() || request.topology != topology)
                 return Failure<void>(NavigationErrors::StaleSnapshot);
-            if (!IsFinite(request.start) || !IsFinite(request.destination))
+            if (!Math::IsFinite(request.start) || !Math::IsFinite(request.destination))
                 return Failure<void>(NavigationErrors::CapabilityDescriptorInvalid);
             if (const auto admitted = AdmitNavigationQuery(capabilities, capabilities.revision, request.requirement); admitted.HasError())
                 return admitted;
