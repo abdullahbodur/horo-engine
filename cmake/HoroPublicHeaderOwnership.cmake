@@ -272,6 +272,7 @@ horo_configure_target_header_boundary(HoroVfxApi PUBLIC_HEADERS
 horo_configure_target_header_boundary(HoroDestructionApi PUBLIC_HEADERS
     Horo/Destruction/DestructibleDescriptor.h
     Horo/Destruction/DestructionCommand.h
+    Horo/Destruction/DestructionComposition.h
     Horo/Destruction/DestructionErrors.h
     Horo/Destruction/DestructionIdentity.h
     Horo/Destruction/DestructionRegistry.h

@@ -513,6 +513,7 @@ target_link_libraries(HoroVfxApi PUBLIC HoroEngine::Foundation)
 
 add_library(HoroDestructionApi STATIC
         runtime/destruction/api/DestructionCommand.cpp
+        runtime/destruction/api/DestructionComposition.cpp
         runtime/destruction/api/DestructionErrors.cpp
         runtime/destruction/api/DestructionIdentity.cpp
         runtime/destruction/api/DestructionRegistry.cpp

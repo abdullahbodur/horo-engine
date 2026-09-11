@@ -424,6 +424,24 @@ and host capabilities. Required unsupported content fails; fallback is only an
 explicitly ordered product choice with a typed reason. Runtime geometry is a separate
 post-1.0 capability, not an automatic `High` feature.
 
+### Product-profile composition
+
+The application composition root selects exactly one backend-neutral destruction
+product profile: `Null`, `Headless`, `Editor`, `Standalone`, `Client` or `Server`.
+It publishes an exact immutable availability fact for Physics, VFX, Audio and
+Networking, then resolves the profile through `DestructionComposition`. The result
+contains fixed-size decisions and evidence revisions only; it owns no service,
+callback, native handle or mutable registry.
+
+Required unavailable capabilities reject the exact profile. Optional unavailable
+capabilities remain explicitly `Unavailable`, and capabilities excluded by a profile
+remain `Omitted` even when their implementation exists in the host. Resolution never
+installs a provider, upgrades or downgrades a tier, substitutes another profile, or
+discovers ambient state. `Null` disables destruction explicitly. Headless/server
+profiles omit presentation-only VFX and Audio, while client/server profiles require
+Networking. Admission revalidates the complete composition revision and active
+lifecycle, so replacement, cancellation and shutdown fence captured work.
+
 ## Lifecycle, Persistence And Shutdown
 
 Destruction builds transitions as detached candidates with exact affected chunks,
@@ -469,6 +487,7 @@ work, preview isolation, cancellation and repeated shutdown.
 ## Related Documents
 
 - [Destruction Setup UI Reference](./destruction-setup.html)
+- [Destruction Product Composition Migration](../../guides/destruction-product-composition-migration.md)
 
 - [Physics Architecture](./physics-architecture.md): fracture chunk physics
 - [VFX And Particles Architecture](./vfx-and-particles-architecture.md): debris particle spawning
