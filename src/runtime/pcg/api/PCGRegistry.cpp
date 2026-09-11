@@ -141,10 +141,10 @@ namespace Horo::PCG {
         if (!IsKnown(profile))
             return Result<PCGCapabilityProjection>::Failure(MakeError(PCGErrors::RegistryDescriptorInvalid));
 
-        const bool unsupported = (profile == PCGHostProfile::Headless &&
-                                  (granted.Contains(PCGCapability::EditorPreview) || granted.Contains(PCGCapability::RenderOutput))) ||
-                                 (profile == PCGHostProfile::Null && !granted.IsEmpty());
-        if (unsupported)
+        if (const bool unsupported = (profile == PCGHostProfile::Headless &&
+                                      (granted.Contains(PCGCapability::EditorPreview) || granted.Contains(PCGCapability::RenderOutput))) ||
+                                     (profile == PCGHostProfile::Null && !granted.IsEmpty());
+            unsupported)
             return Result<PCGCapabilityProjection>::Failure(MakeError(PCGErrors::UnsupportedCapability));
         return Result<PCGCapabilityProjection>::Success({profile, granted});
     }
@@ -219,7 +219,7 @@ namespace Horo::PCG {
     }
 
     /** @copydoc PCGRegistrySnapshot::Resolve(PCGGraphHandle) const */
-    Result<const PCGGraphDescriptor *> PCGRegistrySnapshot::Resolve(const PCGGraphHandle handle) const {
+    Result<const PCGGraphDescriptor *> PCGRegistrySnapshot::Resolve(const PCGGraphHandle &handle) const {
         if (!IsValid() || !handle.IsValid() || handle.slot >= Graphs().size())
             return Result<const PCGGraphDescriptor *>::Failure(MakeError(PCGErrors::RegistryHandleInvalid));
         if (handle.registry != RegistryInstance() || handle.registryGeneration != Generation())
@@ -245,7 +245,7 @@ namespace Horo::PCG {
     }
 
     /** @copydoc PCGRegistrySnapshot::Resolve(PCGNodeRuntimeHandle) const */
-    Result<const PCGNodeRuntimeDescriptor *> PCGRegistrySnapshot::Resolve(const PCGNodeRuntimeHandle handle) const {
+    Result<const PCGNodeRuntimeDescriptor *> PCGRegistrySnapshot::Resolve(const PCGNodeRuntimeHandle &handle) const {
         if (!IsValid() || !handle.IsValid() || handle.slot >= NodeRuntimes().size())
             return Result<const PCGNodeRuntimeDescriptor *>::Failure(MakeError(PCGErrors::RegistryHandleInvalid));
         if (handle.registry != RegistryInstance() || handle.registryGeneration != Generation())
@@ -267,8 +267,8 @@ namespace Horo::PCG {
     /** @copydoc PCGRegistry::Create */
     Result<PCGRegistry> PCGRegistry::Create(const PCGRegistryInstanceId instance, PCGCapabilityProjection capabilities,
                                             const PCGRegistryLimits limits) {
-        const auto validated = ProjectPCGCapabilities(capabilities.profile, capabilities.granted);
-        if (!instance.IsValid() || validated.HasError() || !HasValidLimits(limits))
+        if (const auto validated = ProjectPCGCapabilities(capabilities.profile, capabilities.granted);
+            !instance.IsValid() || validated.HasError() || !HasValidLimits(limits))
             return Result<PCGRegistry>::Failure(validated.HasError() ? validated.ErrorValue()
                                                                      : MakeError(PCGErrors::RegistryDescriptorInvalid));
         auto state = std::make_shared<PCGRegistrySnapshot::State>();

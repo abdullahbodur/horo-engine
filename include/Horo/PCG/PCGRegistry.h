@@ -191,7 +191,7 @@ namespace Horo::PCG {
         /** @brief Resolves one graph handle against this exact snapshot. @param handle Issued handle.
          * @return Borrowed descriptor or typed invalid/stale failure.
          */
-        [[nodiscard]] Result<const PCGGraphDescriptor *> Resolve(PCGGraphHandle handle) const;
+        [[nodiscard]] Result<const PCGGraphDescriptor *> Resolve(const PCGGraphHandle &handle) const;
 
         /** @brief Finds one exact node runtime without fallback. @param type Stable semantic node type.
          * @param required Exact caller-required capabilities.
@@ -201,7 +201,7 @@ namespace Horo::PCG {
         /** @brief Resolves one runtime handle against this exact snapshot. @param handle Issued handle.
          * @return Borrowed descriptor or typed invalid/stale failure.
          */
-        [[nodiscard]] Result<const PCGNodeRuntimeDescriptor *> Resolve(PCGNodeRuntimeHandle handle) const;
+        [[nodiscard]] Result<const PCGNodeRuntimeDescriptor *> Resolve(const PCGNodeRuntimeHandle &handle) const;
 
     private:
         friend class PCGRegistry;
