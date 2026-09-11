@@ -24,8 +24,8 @@ namespace Horo::Render {
         }
 
         [[nodiscard]] constexpr bool IsDepthFormat(const RenderTextureFormat format) noexcept {
-            return format == RenderTextureFormat::Depth16Unorm || format == RenderTextureFormat::Depth24Stencil8 ||
-                   format == RenderTextureFormat::Depth32Float || format == RenderTextureFormat::Depth32FloatStencil8;
+            using enum RenderTextureFormat;
+            return format == Depth16Unorm || format == Depth24Stencil8 || format == Depth32Float || format == Depth32FloatStencil8;
         }
 
         [[nodiscard]] bool MatchesOutput(const RenderTextureDescriptor &texture, const FramebufferExtent extent) noexcept {
@@ -113,15 +113,14 @@ namespace Horo::Render {
                 !IsKnown(entry.band) || !ValidSpacePolicy(entry))
                 return Failure(Runtime::Ui::UiErrors::RenderCompositionInvalid);
 
-            const auto &snapshot = entry.snapshot->Descriptor();
-            if (snapshot.view != request.view)
+            if (const auto &snapshot = entry.snapshot->Descriptor(); snapshot.view != request.view)
                 return Failure(Runtime::Ui::UiErrors::HandleOwnerMismatch);
             if (entry.pass.owner != request.graphOwner || entry.colorInput.resource.owner != request.graphOwner ||
                 entry.colorOutput.resource.owner != request.graphOwner)
                 return Failure(Runtime::Ui::UiErrors::HandleOwnerMismatch);
 
-            const bool distinctColorTargets = entry.colorInput.resource != entry.colorOutput.resource;
-            if (!ValidColorTarget(entry.colorInput, request.outputExtent, distinctColorTargets) ||
+            if (const bool distinctColorTargets = entry.colorInput.resource != entry.colorOutput.resource;
+                !ValidColorTarget(entry.colorInput, request.outputExtent, distinctColorTargets) ||
                 !ValidColorTarget(entry.colorOutput, request.outputExtent, false) ||
                 !CompatibleColorTargets(entry.colorInput.texture, entry.colorOutput.texture))
                 return Failure(Runtime::Ui::UiErrors::RenderCompositionInvalid);
@@ -144,13 +143,15 @@ namespace Horo::Render {
             return Failure(Runtime::Ui::UiErrors::RenderCompositionInvalid);
 
         std::array<SnapshotKeySlot, SnapshotKeySlotCount> snapshotKeys{};
-        for (std::size_t index = 0; index < request.passes.size(); ++index) {
-            if (const auto valid = ValidateEntry(request, request.passes[index]); valid.HasError())
+        const UiRenderCompositionPass *previous{};
+        for (const auto &pass : request.passes) {
+            if (const auto valid = ValidateEntry(request, pass); valid.HasError())
                 return valid;
-            if (index > 0 && !Before(request.passes[index - 1], request.passes[index]))
+            if (previous != nullptr && !Before(*previous, pass))
                 return Failure(Runtime::Ui::UiErrors::RenderCompositionInvalid);
-            if (!InsertSnapshotKey(snapshotKeys, request.passes[index]))
+            if (!InsertSnapshotKey(snapshotKeys, pass))
                 return Failure(Runtime::Ui::UiErrors::RenderCompositionInvalid);
+            previous = &pass;
         }
         return Result<void>::Success();
     }

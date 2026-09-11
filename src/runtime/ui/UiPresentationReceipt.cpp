@@ -11,14 +11,15 @@ namespace Horo::Runtime::Ui {
 
     /** @copydoc UiPresentationReceipt::IsValid */
     bool UiPresentationReceipt::IsValid() const noexcept {
+        using enum UiPresentationOutcome;
+        using enum UiPresentationReason;
         if (!view.IsValid() || !canvas.IsValid() || !interactionRevision.IsValid() || !snapshotRevision.IsValid())
             return false;
-        if (outcome == UiPresentationOutcome::Presented)
-            return reason == UiPresentationReason::None;
-        if (outcome == UiPresentationOutcome::Skipped)
-            return reason >= UiPresentationReason::Suppressed && reason <= UiPresentationReason::ViewReplaced;
-        return outcome == UiPresentationOutcome::Failed && reason >= UiPresentationReason::ResourceUnavailable &&
-               reason <= UiPresentationReason::ExecutionFailure;
+        if (outcome == Presented)
+            return reason == None;
+        if (outcome == Skipped)
+            return reason >= Suppressed && reason <= ViewReplaced;
+        return outcome == Failed && reason >= ResourceUnavailable && reason <= ExecutionFailure;
     }
 
     /** @copydoc UiPresentedInteractionState::Create */
