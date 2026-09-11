@@ -510,6 +510,7 @@ add_library(HoroDestructionApi STATIC
         runtime/destruction/api/DestructionCommand.cpp
         runtime/destruction/api/DestructionErrors.cpp
         runtime/destruction/api/DestructionIdentity.cpp
+        runtime/destruction/api/DestructionRegistry.cpp
         runtime/destruction/api/DestructionStateMachine.cpp
         runtime/destruction/api/DestructibleDescriptor.cpp
 )

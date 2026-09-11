@@ -293,6 +293,7 @@ add_executable(HoroDestructionApiTests
         unit/runtime/destruction/DestructibleDescriptorTests.cpp
         unit/runtime/destruction/DestructionCommandTests.cpp
         unit/runtime/destruction/DestructionIdentityTests.cpp
+        unit/runtime/destruction/DestructionRegistryTests.cpp
         unit/runtime/destruction/DestructionStateMachineTests.cpp
 )
 target_compile_features(HoroDestructionApiTests PRIVATE cxx_std_20)

@@ -60,4 +60,10 @@ namespace Horo::Destruction::DestructionErrors {
     extern const ErrorCodeDescriptor CommandUnsupported;
     /** @brief A durable command terminal result contains an impossible outcome/reason/revision combination. */
     extern const ErrorCodeDescriptor CommandResultInvalid;
+    /** @brief Registry limits, records, query filters, or capability projections are malformed. */
+    extern const ErrorCodeDescriptor RegistryInvalid;
+    /** @brief A registry already contains the exact target or authored owner. */
+    extern const ErrorCodeDescriptor RegistryDuplicate;
+    /** @brief A registry or query would exceed its explicit finite capacity. */
+    extern const ErrorCodeDescriptor RegistryCapacityExceeded;
 }  // namespace Horo::Destruction::DestructionErrors

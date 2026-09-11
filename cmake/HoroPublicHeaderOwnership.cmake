@@ -270,6 +270,7 @@ horo_configure_target_header_boundary(HoroDestructionApi PUBLIC_HEADERS
     Horo/Destruction/DestructionCommand.h
     Horo/Destruction/DestructionErrors.h
     Horo/Destruction/DestructionIdentity.h
+    Horo/Destruction/DestructionRegistry.h
     Horo/Destruction/DestructionStateMachine.h
 )
 horo_configure_target_header_boundary(HoroCinematicModel PUBLIC_HEADERS
