@@ -1048,6 +1048,23 @@ All failures follow ADR-008 Result/Error, retaining operation, `SaveAddress`, so
 `SlotGenerationId`/`ArchiveContentHash` when available and nested asset/provider/
 filesystem cause. Admission errors are distinct from later operation outcomes.
 
+`SaveDiagnosticRecord` is the bounded backend-neutral projection of that failure
+evidence. It maps the existing `horo.save` descriptors to a closed typed category,
+retains an explicit owner disposition, operation stage, admission-or-terminal result,
+commit knowledge, canonical typed correlation and required/optional partial-data
+facts. Admitted terminal records require `OperationId`, namespace and logical-slot
+correlation; immediate admission rejection has no operation identity. Generation
+evidence can be checked against the current registry, namespace, slot-publication and
+archive observations before use.
+
+The projection never becomes an operation store, scheduler, result channel, logging
+sink or retry policy. It retains only allowlisted Horo identities and scalars. Cause
+chains retain bounded typed Runtime Save identities, while operation messages and
+provider, filesystem, path, archive-content or credential text are discarded in
+favor of the canonical descriptor summary. Optional private evidence contributes
+only bounded observed/truncated/malformed flags. Required and optional data outcomes
+are recorded explicitly; consumers never infer partial success from a missing row.
+
 | Failure | Observable result |
 |---|---|
 | Busy / invalid slot / invalid scope | Immediate typed rejection; no admitted mutation |

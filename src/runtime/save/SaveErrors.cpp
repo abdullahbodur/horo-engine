@@ -158,4 +158,13 @@ namespace Horo::Runtime::SaveErrors {
     const ErrorCodeDescriptor CompositionObjectMissing{kDomain, ErrorCode{"save.composition.object_missing"}, kError,
                                                        "No deterministic save object exists at the requested address.",
                                                        "Store the object before loading or removing it."};
+    const ErrorCodeDescriptor DiagnosticInvalid{kDomain, ErrorCode{"save.diagnostic.invalid"}, kError,
+                                                "Runtime Save diagnostic evidence is invalid.",
+                                                "Supply canonical bounded typed evidence from the owning operation."};
+    const ErrorCodeDescriptor DiagnosticUnsupported{kDomain, ErrorCode{"save.diagnostic.unsupported"}, kError,
+                                                    "Runtime Save cannot classify the diagnostic source error.",
+                                                    "Map the source to an explicitly declared Runtime Save error first."};
+    const ErrorCodeDescriptor DiagnosticCorrelationStale{kDomain, ErrorCode{"save.diagnostic.correlation_stale"}, kError,
+                                                         "Runtime Save diagnostic generation evidence is stale.",
+                                                         "Use the exact retained owner generations for this observation."};
 }  // namespace Horo::Runtime::SaveErrors

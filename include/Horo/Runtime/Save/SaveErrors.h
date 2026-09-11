@@ -104,4 +104,10 @@ namespace Horo::Runtime::SaveErrors {
     extern const ErrorCodeDescriptor CompositionInjectedFailure;
     /** @brief A deterministic load or remove addressed no committed object. */
     extern const ErrorCodeDescriptor CompositionObjectMissing;
+    /** @brief Save diagnostic input is malformed, unordered, contradictory, or over capacity. */
+    extern const ErrorCodeDescriptor DiagnosticInvalid;
+    /** @brief A diagnostic source error is foreign, unknown, or not declared by Runtime Save. */
+    extern const ErrorCodeDescriptor DiagnosticUnsupported;
+    /** @brief Diagnostic correlation does not match the expected active save generations. */
+    extern const ErrorCodeDescriptor DiagnosticCorrelationStale;
 }  // namespace Horo::Runtime::SaveErrors
