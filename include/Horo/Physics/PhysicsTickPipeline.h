@@ -7,6 +7,7 @@
 #include "Horo/Foundation/CancellationToken.h"
 #include "Horo/Foundation/Result.h"
 #include "Horo/Foundation/Time.h"
+#include "Horo/Physics/PhysicsDeterminismPolicy.h"
 
 #include <cstdint>
 
@@ -43,13 +44,6 @@ namespace Horo::Physics {
         PublishCompletedTick
     };
 
-    /** @brief Structural intent category; payload interpretation remains owned by the later body/constraint adapters. */
-    enum class PhysicsStructuralCommandKind : std::uint8_t {
-        Create,
-        Change,
-        Destroy
-    };
-
     /** @brief Safe point selected from command semantics, never from producer timing. */
     enum class PhysicsCommandSafePoint : std::uint8_t {
         PreStep,
@@ -59,17 +53,13 @@ namespace Horo::Physics {
     /**
      * @brief Bounded structural-command envelope retained by value until one fixed-tick safe point.
      *
-     * Sequence is producer-assigned deterministic order evidence and must increase for every admitted
-     * command in a world generation. Scene generation and subject are
-     * opaque Horo identities interpreted by the owning scene-to-Physics adapter; neither is a native
-     * solver ID. Create/change apply before the solver step and destruction applies after all solver
-     * work completes but before publication.
+     * The complete key is producer-assigned deterministic evidence. Admission order is deliberately
+     * irrelevant: Physics sorts the bounded eligible frame by the canonical version-one comparator.
+     * Create/change apply before the solver step and destruction applies after all solver work completes
+     * but before publication.
      */
     struct PhysicsStructuralCommand final {
-        std::uint64_t sequence{};        /**< Non-zero strictly increasing admission order. */
-        std::uint64_t sceneGeneration{}; /**< Non-zero stable scene generation carried through deferral. */
-        std::uint64_t subject{};         /**< Non-zero stable object/operation identity, never a native solver ID. */
-        PhysicsStructuralCommandKind kind{PhysicsStructuralCommandKind::Create}; /**< Semantic safe-point classification. */
+        PhysicsCommandOrderKey order; /**< Complete tick/world/scene/target/source canonical key. */
     };
 
     /** @brief Non-throwing command admission result; rejected work remains owned by the caller. */
@@ -104,6 +94,7 @@ namespace Horo::Physics {
     /** @brief Exact host-owned fixed-tick attempt; Physics never samples or accumulates wall time. */
     struct PhysicsFixedTickInput final {
         std::uint64_t simulationTick{};   /**< One-based next tick supplied by Runtime. */
+        std::uint64_t sceneGeneration{};  /**< Non-zero scene generation owning this exact command frame. */
         Duration fixedDelta{};            /**< Exact configured host quantum, never a measured frame delta. */
         PhysicsTickObserver observer;     /**< Optional synchronous observation only. */
         PhysicsSolverJobBatch solverJobs; /**< Optional child work joined before native integration and publication. */

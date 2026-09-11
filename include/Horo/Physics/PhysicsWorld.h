@@ -129,7 +129,8 @@ namespace Horo::Physics {
          * @param command Owned command envelope copied into bounded world storage.
          * @return Admission status, or a typed malformed/state/affinity error. Rejected work remains caller-owned.
          * Destruction may consume the reserved final slot; if completely full it returns DestructionRetryRequired
-         * and is never silently dropped. Commands admitted during a tick become eligible on the next tick.
+         * and is never silently dropped. Commands carry their exact future tick and are canonically sorted at that tick;
+         * admission or worker completion order has no semantic authority.
          */
         [[nodiscard]] Result<PhysicsCommandAdmission> QueueStructuralCommand(const PhysicsStructuralCommand &command);
         /** @brief Executes one exact host-issued fixed tick and publishes its results atomically.

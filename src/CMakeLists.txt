@@ -434,6 +434,7 @@ add_library(HoroPhysics STATIC
         physics/PhysicsConstraintDescriptor.cpp
         physics/PhysicsCookedShapeDescriptor.cpp
         physics/PhysicsDiagnostics.cpp
+        physics/PhysicsDeterminismPolicy.cpp
         physics/PhysicsErrors.cpp
         physics/PhysicsFilterIdentity.cpp
         physics/PhysicsHandleRegistry.h
