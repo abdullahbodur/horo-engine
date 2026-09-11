@@ -24,11 +24,16 @@ durable asset format and must not be serialized as one.
 2. Call `CreateRecastDetourNavigationQueryBackend`. The call validates and copies all
    input, creates native topology and fixed query scratch transactionally, then returns
    the neutral `INavigationQueryBackend` interface.
-3. Inject the owned interface from the host composition root. Every request must carry
-   the same world and topology generation. Foreign and replacement-world requests fail
-   before native work.
-4. Stop admission and drain/cancel runtime work before destroying the provider. Destruction
-   releases query objects before their immutable mesh and publishes no callbacks.
+3. Create a bounded `NavigationWorldLifecycle`, then `Stage` the owned interface with the
+   exact Scene incarnation, Scene generation, world, and topology identities. Publish it
+   only through `CommitAtSafePoint` during `CommitDeferredLifecycleChanges`. A stale Scene
+   generation or saturated retirement bound leaves the previously active world untouched.
+4. Acquire a `NavigationWorldReadLease` on the lifecycle owner thread before dispatching
+   worker work. The lease pins the provider and exposes cooperative cancellation; workers
+   must reject result publication when `IsRevoked()` becomes true.
+5. Use `Pause`/`Resume` only for unchanged-world admission. Replacement, `Unload`, and
+   `BeginShutdown` revoke admission and cancel outstanding leases. Call `CollectRetired`
+   at owner safe points until shutdown reaches `Closed`; it never blocks for a worker.
 
 ## Troubleshooting
 
@@ -44,10 +49,10 @@ durable asset format and must not be serialized as one.
 
 ## Limitations
 
-This delivery provides immutable grounded path queries only. Durable tiled artifact
-serialization, runtime tile streaming, Recast bake/cook, dynamic carving, crowd behavior,
-and world activation/publication are owned by their focused NAV tickets. Provider hot
-swap is unsupported.
+This delivery provides immutable grounded path queries plus transactional per-Scene provider
+publication and retirement. Durable tiled artifact serialization, runtime tile streaming,
+Recast bake/cook, dynamic carving, and crowd behavior remain owned by their focused NAV
+tickets.
 
 ## Validation Record
 

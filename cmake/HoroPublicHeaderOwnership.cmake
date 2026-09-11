@@ -319,6 +319,9 @@ horo_configure_target_header_boundary(HoroNavigationApi PUBLIC_HEADERS
     Horo/Navigation/NavigationProjectProfiles.h
     Horo/Navigation/NavigationSourceGeometry.h
 )
+horo_configure_target_header_boundary(HoroNavigationRuntime PUBLIC_HEADERS
+    Horo/Navigation/NavigationWorldLifecycle.h
+)
 horo_configure_target_header_boundary(HoroXRApi PUBLIC_HEADERS
     Horo/XR/XRCapabilities.h
     Horo/XR/XRContract.h
