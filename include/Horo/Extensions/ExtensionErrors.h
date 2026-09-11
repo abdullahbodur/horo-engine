@@ -23,4 +23,14 @@ namespace Horo::Extensions::ExtensionErrors {
     extern const ErrorCodeDescriptor CapabilityUnavailable;
     /** @brief A retained capability handle outlived its activation admission. */
     extern const ErrorCodeDescriptor CapabilityRevoked;
+    /** @brief Application capability registry input is malformed. */
+    extern const ErrorCodeDescriptor CapabilityRegistryInvalid;
+    /** @brief A provider already owns the exact capability contract version. */
+    extern const ErrorCodeDescriptor CapabilityRegistryDuplicate;
+    /** @brief No compatible provider contract version exists. */
+    extern const ErrorCodeDescriptor CapabilityVersionIncompatible;
+    /** @brief The bounded application capability registry is full. */
+    extern const ErrorCodeDescriptor CapabilityRegistryCapacityExceeded;
+    /** @brief The application capability registry is shutting down. */
+    extern const ErrorCodeDescriptor CapabilityRegistryShutdown;
 }  // namespace Horo::Extensions::ExtensionErrors

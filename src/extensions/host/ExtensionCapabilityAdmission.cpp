@@ -1,5 +1,6 @@
 #include "Horo/Extensions/ExtensionCapabilityAdmission.h"
 
+#include "../ExtensionAuthorityIdentityValidation.h"
 #include "Horo/Extensions/ExtensionErrors.h"
 
 #include <algorithm>
@@ -18,30 +19,7 @@ namespace Horo::Extensions {
     };
 
     namespace {
-        constexpr std::size_t MaximumIdentityBytes = 256;
         constexpr std::size_t MaximumAdmissionEntries = 256;
-
-        [[nodiscard]] bool IsCanonicalSegment(const std::string_view segment) noexcept {
-            if (segment.empty() || segment.front() < 'a' || segment.front() > 'z' || segment.back() == '-')
-                return false;
-            return std::ranges::all_of(segment, [](const char value) {
-                return (value >= 'a' && value <= 'z') || (value >= '0' && value <= '9') || value == '-';
-            });
-        }
-
-        [[nodiscard]] bool IsCanonicalId(const std::string_view value) noexcept {
-            if (value.empty() || value.size() > MaximumIdentityBytes || value.front() == '.' || value.back() == '.')
-                return false;
-            std::size_t start = 0;
-            while (start < value.size()) {
-                const std::size_t separator = value.find('.', start);
-                const std::size_t end = separator == std::string_view::npos ? value.size() : separator;
-                if (!IsCanonicalSegment(value.substr(start, end - start)))
-                    return false;
-                start = end + 1;
-            }
-            return true;
-        }
 
         template <typename Identity> [[nodiscard]] bool Contains(const std::vector<Identity> &identities, const Identity &identity) {
             return std::ranges::find(identities, identity) != identities.end();
@@ -53,7 +31,7 @@ namespace Horo::Extensions {
             std::vector<std::string_view> values;
             values.reserve(identities.size());
             for (const Identity &identity : identities) {
-                if (!IsCanonicalId(identity.value))
+                if (!Detail::IsCanonicalExtensionAuthorityId(identity.value))
                     return false;
                 values.push_back(identity.value);
             }
@@ -77,7 +55,8 @@ namespace Horo::Extensions {
         }
 
         [[nodiscard]] Result<void> ValidateRequest(const ExtensionAdmissionRequest &request) {
-            if (!IsCanonicalId(request.extensionId) || !IsCanonicalId(request.moduleId) || request.activationGeneration == 0 ||
+            if (!Detail::IsCanonicalExtensionAuthorityId(request.extensionId) ||
+                !Detail::IsCanonicalExtensionAuthorityId(request.moduleId) || request.activationGeneration == 0 ||
                 request.capabilities.size() > MaximumAdmissionEntries) {
                 return Result<void>::Failure(MakeError(ExtensionErrors::CapabilityAdmissionInvalid,
                                                        "Capability admission request has invalid owner, generation, or bounds."));
@@ -85,7 +64,7 @@ namespace Horo::Extensions {
             std::vector<ExtensionCapabilityId> capabilities;
             capabilities.reserve(request.capabilities.size());
             for (const ExtensionCapabilityRequest &entry : request.capabilities) {
-                if (!IsCanonicalId(entry.capability.value) || !IsValidUniqueSet(entry.requiredPermissions)) {
+                if (!Detail::IsCanonicalExtensionAuthorityId(entry.capability.value) || !IsValidUniqueSet(entry.requiredPermissions)) {
                     return Result<void>::Failure(MakeError(ExtensionErrors::CapabilityAdmissionInvalid,
                                                            "Capability admission request contains invalid or duplicate identities."));
                 }
