@@ -8,6 +8,7 @@
 
 namespace Horo::PCG {
     struct PCGRegistrySnapshot::State final {
+        PCGRegistryInstanceId instance{};
         std::uint64_t generation{};
         PCGCapabilityProjection capabilities{};
         std::vector<PCGGraphDescriptor> graphs;
@@ -128,6 +129,11 @@ namespace Horo::PCG {
         return state_ == nullptr ? 0 : state_->generation;
     }
 
+    /** @copydoc PCGRegistrySnapshot::RegistryInstance */
+    PCGRegistryInstanceId PCGRegistrySnapshot::RegistryInstance() const noexcept {
+        return state_ == nullptr ? PCGRegistryInstanceId{} : state_->instance;
+    }
+
     /** @copydoc PCGRegistrySnapshot::Capabilities */
     const PCGCapabilityProjection &PCGRegistrySnapshot::Capabilities() const noexcept {
         static const PCGCapabilityProjection InvalidProjection{};
@@ -154,7 +160,7 @@ namespace Horo::PCG {
         if (found == graphs.end() || found->generation.graph != graph)
             return Result<PCGGraphHandle>::Failure(MakeError(PCGErrors::IdentityUnknown));
         const auto slot = static_cast<std::uint32_t>(std::distance(graphs.begin(), found));
-        return Result<PCGGraphHandle>::Success({Generation(), slot, found->generation});
+        return Result<PCGGraphHandle>::Success({RegistryInstance(), Generation(), slot, found->generation});
     }
 
     /** @copydoc PCGRegistrySnapshot::QueryGraph */
@@ -186,7 +192,7 @@ namespace Horo::PCG {
     Result<const PCGGraphDescriptor *> PCGRegistrySnapshot::Resolve(const PCGGraphHandle handle) const {
         if (!IsValid() || !handle.IsValid() || handle.slot >= Graphs().size())
             return Result<const PCGGraphDescriptor *>::Failure(MakeError(PCGErrors::RegistryHandleInvalid));
-        if (handle.registryGeneration != Generation())
+        if (handle.registry != RegistryInstance() || handle.registryGeneration != Generation())
             return Result<const PCGGraphDescriptor *>::Failure(MakeError(PCGErrors::RegistryHandleStale));
         const PCGGraphDescriptor &descriptor = Graphs()[handle.slot];
         if (descriptor.generation != handle.graph)
@@ -205,14 +211,14 @@ namespace Horo::PCG {
         if (const auto supported = ValidateCapabilities(Capabilities(), required, found->requiredCapabilities); supported.HasError())
             return Result<PCGNodeRuntimeHandle>::Failure(supported.ErrorValue());
         const auto slot = static_cast<std::uint32_t>(std::distance(runtimes.begin(), found));
-        return Result<PCGNodeRuntimeHandle>::Success({Generation(), slot, found->type, found->contractVersion});
+        return Result<PCGNodeRuntimeHandle>::Success({RegistryInstance(), Generation(), slot, found->type, found->contractVersion});
     }
 
     /** @copydoc PCGRegistrySnapshot::Resolve(PCGNodeRuntimeHandle) const */
     Result<const PCGNodeRuntimeDescriptor *> PCGRegistrySnapshot::Resolve(const PCGNodeRuntimeHandle handle) const {
         if (!IsValid() || !handle.IsValid() || handle.slot >= NodeRuntimes().size())
             return Result<const PCGNodeRuntimeDescriptor *>::Failure(MakeError(PCGErrors::RegistryHandleInvalid));
-        if (handle.registryGeneration != Generation())
+        if (handle.registry != RegistryInstance() || handle.registryGeneration != Generation())
             return Result<const PCGNodeRuntimeDescriptor *>::Failure(MakeError(PCGErrors::RegistryHandleStale));
         const PCGNodeRuntimeDescriptor &descriptor = NodeRuntimes()[handle.slot];
         if (descriptor.type != handle.type || descriptor.contractVersion != handle.contractVersion)
@@ -220,24 +226,26 @@ namespace Horo::PCG {
         return Result<const PCGNodeRuntimeDescriptor *>::Success(&descriptor);
     }
 
-    PCGRegistry::PCGRegistry(PCGCapabilityProjection capabilities, const PCGRegistryLimits limits,
+    PCGRegistry::PCGRegistry(const PCGRegistryInstanceId instance, PCGCapabilityProjection capabilities, const PCGRegistryLimits limits,
                              std::shared_ptr<const PCGRegistrySnapshot::State> state) noexcept
-        : capabilities_(capabilities), limits_(limits), state_(std::move(state)) {}
+        : instance_(instance), capabilities_(capabilities), limits_(limits), state_(std::move(state)) {}
 
     PCGRegistry::~PCGRegistry() {
         Close();
     }
 
     /** @copydoc PCGRegistry::Create */
-    Result<PCGRegistry> PCGRegistry::Create(PCGCapabilityProjection capabilities, const PCGRegistryLimits limits) {
+    Result<PCGRegistry> PCGRegistry::Create(const PCGRegistryInstanceId instance, PCGCapabilityProjection capabilities,
+                                            const PCGRegistryLimits limits) {
         const auto validated = ProjectPCGCapabilities(capabilities.profile, capabilities.granted);
-        if (validated.HasError() || !HasValidLimits(limits))
+        if (!instance.IsValid() || validated.HasError() || !HasValidLimits(limits))
             return Result<PCGRegistry>::Failure(validated.HasError() ? validated.ErrorValue()
                                                                      : MakeError(PCGErrors::RegistryDescriptorInvalid));
         auto state = std::make_shared<PCGRegistrySnapshot::State>();
+        state->instance = instance;
         state->generation = 1;
         state->capabilities = capabilities;
-        return Result<PCGRegistry>::Success(PCGRegistry{capabilities, limits, std::move(state)});
+        return Result<PCGRegistry>::Success(PCGRegistry{instance, capabilities, limits, std::move(state)});
     }
 
     /** @copydoc PCGRegistry::RegisterGraph */
@@ -357,6 +365,7 @@ namespace Horo::PCG {
         if (state_->generation == std::numeric_limits<std::uint64_t>::max())
             return Result<std::uint64_t>::Failure(MakeError(PCGErrors::RegistryGenerationExhausted));
         auto state = std::make_shared<PCGRegistrySnapshot::State>();
+        state->instance = instance_;
         state->generation = state_->generation + 1;
         state->capabilities = capabilities_;
         state->graphs = std::move(graphs);

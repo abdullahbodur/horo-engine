@@ -19,6 +19,8 @@
 namespace Horo::PCG {
     /** @brief Stable semantic identity of one host-composed PCG node type. */
     using NodeTypeId = PcgStableIdentity<struct NodeTypeIdentityTag>;
+    /** @brief Host-issued process-local identity of one PCG registry incarnation. */
+    using PCGRegistryInstanceId = PcgStableIdentity<struct PCGRegistryInstanceIdentityTag>;
 
     /** @brief Closed host composition selected before any PCG registry publication. */
     enum class PCGHostProfile : std::uint8_t {
@@ -131,12 +133,13 @@ namespace Horo::PCG {
 
     /** @brief Process-local graph handle valid only in its issuing immutable snapshot generation. */
     struct PCGGraphHandle final {
+        PCGRegistryInstanceId registry{};   /**< Exact host-issued registry incarnation. */
         std::uint64_t registryGeneration{}; /**< Exact snapshot generation. */
         std::uint32_t slot{};               /**< Dense immutable snapshot slot. */
         GraphGeneration graph{};            /**< Exact durable graph generation occupying the slot. */
 
         [[nodiscard]] constexpr bool IsValid() const noexcept {
-            return registryGeneration != 0 && graph.IsValid();
+            return registry.IsValid() && registryGeneration != 0 && graph.IsValid();
         }
 
         [[nodiscard]] constexpr auto operator<=>(const PCGGraphHandle &) const noexcept = default;
@@ -144,13 +147,14 @@ namespace Horo::PCG {
 
     /** @brief Process-local node-runtime handle valid only in its issuing immutable snapshot generation. */
     struct PCGNodeRuntimeHandle final {
+        PCGRegistryInstanceId registry{};   /**< Exact host-issued registry incarnation. */
         std::uint64_t registryGeneration{}; /**< Exact snapshot generation. */
         std::uint32_t slot{};               /**< Dense immutable snapshot slot. */
         NodeTypeId type{};                  /**< Exact semantic node type occupying the slot. */
         std::uint32_t contractVersion{};    /**< Exact runtime contract occupying the slot. */
 
         [[nodiscard]] constexpr bool IsValid() const noexcept {
-            return registryGeneration != 0 && type.IsValid() && contractVersion != 0;
+            return registry.IsValid() && registryGeneration != 0 && type.IsValid() && contractVersion != 0;
         }
 
         [[nodiscard]] constexpr auto operator<=>(const PCGNodeRuntimeHandle &) const noexcept = default;
@@ -166,6 +170,8 @@ namespace Horo::PCG {
         [[nodiscard]] bool IsValid() const noexcept;
         /** @brief Returns the exact registry publication generation. @return Zero for a default snapshot. */
         [[nodiscard]] std::uint64_t Generation() const noexcept;
+        /** @brief Returns the host-issued registry incarnation. @return Invalid identity for a default snapshot. */
+        [[nodiscard]] PCGRegistryInstanceId RegistryInstance() const noexcept;
         /** @brief Returns the immutable host capability projection. @return Snapshot-owned projection. */
         [[nodiscard]] const PCGCapabilityProjection &Capabilities() const noexcept;
         /** @brief Returns graphs in stable graph-identity order. @return Borrowed immutable descriptors. */
@@ -216,11 +222,13 @@ namespace Horo::PCG {
         PCGRegistry &operator=(const PCGRegistry &) = delete;
 
         /** @brief Creates an empty registry without discovering services or starting work.
+         * @param instance Host-unique process-local registry incarnation; never inferred globally.
          * @param capabilities Validated explicit host projection.
          * @param limits Independent finite registry bounds.
          * @return Registry or RegistryDescriptorInvalid.
          */
-        [[nodiscard]] static Result<PCGRegistry> Create(PCGCapabilityProjection capabilities, PCGRegistryLimits limits = {});
+        [[nodiscard]] static Result<PCGRegistry> Create(PCGRegistryInstanceId instance, PCGCapabilityProjection capabilities,
+                                                        PCGRegistryLimits limits = {});
 
         /** @brief Registers one detached graph descriptor. @param descriptor Inert graph metadata.
          * @return New generation or typed validation/duplicate/capacity/lifecycle failure.
@@ -263,10 +271,11 @@ namespace Horo::PCG {
         }
 
     private:
-        PCGRegistry(PCGCapabilityProjection capabilities, PCGRegistryLimits limits,
+        PCGRegistry(PCGRegistryInstanceId instance, PCGCapabilityProjection capabilities, PCGRegistryLimits limits,
                     std::shared_ptr<const PCGRegistrySnapshot::State> state) noexcept;
         [[nodiscard]] Result<std::uint64_t> Publish(std::vector<PCGGraphDescriptor> graphs, std::vector<PCGNodeRuntimeDescriptor> runtimes);
 
+        PCGRegistryInstanceId instance_;
         PCGCapabilityProjection capabilities_;
         PCGRegistryLimits limits_;
         std::shared_ptr<const PCGRegistrySnapshot::State> state_;

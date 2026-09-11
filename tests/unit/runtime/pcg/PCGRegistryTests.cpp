@@ -28,6 +28,10 @@ namespace Horo::PCG {
             return projection.Value();
         }
 
+        PCGRegistryInstanceId RegistryId(const std::uint64_t value = 9'001) {
+            return Id<PCGRegistryInstanceId>(value);
+        }
+
         PCGGraphDescriptor Graph(const std::uint64_t graphValue, const std::uint64_t revision, const std::uint64_t nodeValue = 1,
                                  const std::uint64_t typeValue = 11, const PCGCapabilitySet required = PCGCapabilitySet::Empty()) {
             return {{Id<GraphId>(graphValue), Id<GraphRevision>(revision)}, {{Id<NodeId>(nodeValue), Id<NodeTypeId>(typeValue)}}, required};
@@ -70,7 +74,7 @@ namespace Horo::PCG {
         const auto nullProjection = ProjectPCGCapabilities(PCGHostProfile::Null, PCGCapabilitySet::Empty());
         REQUIRE(nullProjection.HasValue());
         CheckError(ProjectPCGCapabilities(PCGHostProfile::Null, Capabilities({Validation})), PCGErrors::UnsupportedCapability);
-        auto registry = PCGRegistry::Create(nullProjection.Value()).Value();
+        auto registry = PCGRegistry::Create(RegistryId(), nullProjection.Value()).Value();
         REQUIRE(registry.RegisterNodeRuntime(Runtime(11)).HasValue());
         REQUIRE(registry.RegisterGraph(Graph(1, 1)).HasValue());
         const auto snapshot = registry.Snapshot().Value();
@@ -84,8 +88,9 @@ namespace Horo::PCG {
 
     TEST_CASE("PCG registry publishes canonical immutable graph and runtime queries", "[unit][pcg][registry]") {
         using enum PCGCapability;
-        auto registry =
-            PCGRegistry::Create(Projection(PCGHostProfile::Interactive, {Validation, OfflineBake, RuntimeEvaluation, SceneOutput})).Value();
+        auto registry = PCGRegistry::Create(RegistryId(), Projection(PCGHostProfile::Interactive,
+                                                                     {Validation, OfflineBake, RuntimeEvaluation, SceneOutput}))
+                            .Value();
         REQUIRE(registry.RegisterNodeRuntime(Runtime(22, 1, Capabilities({RuntimeEvaluation}))).HasValue());
         REQUIRE(registry.RegisterNodeRuntime(Runtime(11)).HasValue());
         REQUIRE(registry.RegisterGraph(Graph(20, 4, 2, 22, Capabilities({SceneOutput}))).HasValue());
@@ -106,7 +111,8 @@ namespace Horo::PCG {
 
     TEST_CASE("PCG query rejects missing capability runtime and stale graph without fallback", "[unit][pcg][registry]") {
         using enum PCGCapability;
-        auto registry = PCGRegistry::Create(Projection(PCGHostProfile::Headless, {Validation, RuntimeEvaluation, SceneOutput})).Value();
+        auto registry =
+            PCGRegistry::Create(RegistryId(), Projection(PCGHostProfile::Headless, {Validation, RuntimeEvaluation, SceneOutput})).Value();
         REQUIRE(registry.RegisterGraph(Graph(1, 5, 7, 70, Capabilities({SceneOutput}))).HasValue());
         auto snapshot = registry.Snapshot().Value();
         CheckError(snapshot.QueryGraph({Id<GraphId>(1), Id<GraphRevision>(5)}, Capabilities({RuntimeEvaluation})),
@@ -123,7 +129,7 @@ namespace Horo::PCG {
     }
 
     TEST_CASE("PCG replacement preserves old snapshots and rejects stale handles", "[unit][pcg][registry][lifecycle]") {
-        auto registry = PCGRegistry::Create(Projection(PCGHostProfile::Interactive, {PCGCapability::Validation})).Value();
+        auto registry = PCGRegistry::Create(RegistryId(), Projection(PCGHostProfile::Interactive, {PCGCapability::Validation})).Value();
         REQUIRE(registry.RegisterNodeRuntime(Runtime(11)).HasValue());
         REQUIRE(registry.RegisterGraph(Graph(1, 1)).HasValue());
         const auto oldSnapshot = registry.Snapshot().Value();
@@ -144,7 +150,7 @@ namespace Horo::PCG {
 
     TEST_CASE("PCG registration validates ordering and independent hard bounds", "[unit][pcg][registry][boundary]") {
         const PCGRegistryLimits limits{2, 2, 2};
-        auto registry = PCGRegistry::Create(Projection(PCGHostProfile::Interactive, {}), limits).Value();
+        auto registry = PCGRegistry::Create(RegistryId(), Projection(PCGHostProfile::Interactive, {}), limits).Value();
         REQUIRE(registry.RegisterNodeRuntime(Runtime(1)).HasValue());
         REQUIRE(registry.RegisterNodeRuntime(Runtime(2)).HasValue());
         CheckError(registry.RegisterNodeRuntime(Runtime(3)), PCGErrors::RegistryCapacityExceeded);
@@ -155,17 +161,20 @@ namespace Horo::PCG {
         REQUIRE(registry.RegisterGraph(Graph(2, 1, 1, 1)).HasValue());
         CheckError(registry.RegisterGraph(Graph(3, 1)), PCGErrors::RegistryCapacityExceeded);
 
-        CheckError(PCGRegistry::Create(Projection(PCGHostProfile::Interactive, {}), {0, 1, 1}), PCGErrors::RegistryDescriptorInvalid);
+        CheckError(PCGRegistry::Create(RegistryId(), Projection(PCGHostProfile::Interactive, {}), {0, 1, 1}),
+                   PCGErrors::RegistryDescriptorInvalid);
+        CheckError(PCGRegistry::Create(PCGRegistryInstanceId{}, Projection(PCGHostProfile::Interactive, {})),
+                   PCGErrors::RegistryDescriptorInvalid);
         auto invalidGraph = Graph(9, 1);
         invalidGraph.nodes.push_back(invalidGraph.nodes.front());
-        auto graphRegistry = PCGRegistry::Create(Projection(PCGHostProfile::Interactive, {}), {1, 1, 2}).Value();
+        auto graphRegistry = PCGRegistry::Create(RegistryId(), Projection(PCGHostProfile::Interactive, {}), {1, 1, 2}).Value();
         CheckError(graphRegistry.RegisterGraph(std::move(invalidGraph)), PCGErrors::RegistryDescriptorInvalid);
-        auto runtimeRegistry = PCGRegistry::Create(Projection(PCGHostProfile::Interactive, {})).Value();
+        auto runtimeRegistry = PCGRegistry::Create(RegistryId(), Projection(PCGHostProfile::Interactive, {})).Value();
         CheckError(runtimeRegistry.RegisterNodeRuntime(Runtime(1, 0)), PCGErrors::RegistryDescriptorInvalid);
     }
 
     TEST_CASE("PCG duplicates fail without mutating the published generation", "[unit][pcg][registry][failure]") {
-        auto registry = PCGRegistry::Create(Projection(PCGHostProfile::Interactive, {})).Value();
+        auto registry = PCGRegistry::Create(RegistryId(), Projection(PCGHostProfile::Interactive, {})).Value();
         REQUIRE(registry.RegisterNodeRuntime(Runtime(11)).HasValue());
         REQUIRE(registry.RegisterGraph(Graph(1, 1)).HasValue());
         const auto before = registry.Snapshot().Value();
@@ -178,7 +187,7 @@ namespace Horo::PCG {
     }
 
     TEST_CASE("PCG unregister and shutdown preserve issued snapshots", "[unit][pcg][registry][lifecycle]") {
-        auto registry = PCGRegistry::Create(Projection(PCGHostProfile::Interactive, {})).Value();
+        auto registry = PCGRegistry::Create(RegistryId(), Projection(PCGHostProfile::Interactive, {})).Value();
         REQUIRE(registry.RegisterNodeRuntime(Runtime(11)).HasValue());
         REQUIRE(registry.RegisterGraph(Graph(1, 1)).HasValue());
         const auto pinned = registry.Snapshot().Value();
@@ -200,7 +209,7 @@ namespace Horo::PCG {
     }
 
     TEST_CASE("PCG registry handles reject malformed slots and wrong snapshot generations", "[unit][pcg][registry]") {
-        auto registry = PCGRegistry::Create(Projection(PCGHostProfile::Interactive, {})).Value();
+        auto registry = PCGRegistry::Create(RegistryId(), Projection(PCGHostProfile::Interactive, {})).Value();
         REQUIRE(registry.RegisterNodeRuntime(Runtime(11)).HasValue());
         REQUIRE(registry.RegisterGraph(Graph(1, 1)).HasValue());
         const auto snapshot = registry.Snapshot().Value();
@@ -213,6 +222,14 @@ namespace Horo::PCG {
         runtimeHandle.contractVersion = 2;
         CheckError(snapshot.Resolve(runtimeHandle), PCGErrors::RegistryHandleStale);
         CheckError(PCGRegistrySnapshot{}.FindGraph(Id<GraphId>(1)), PCGErrors::IdentityInvalid);
+
+        auto other = PCGRegistry::Create(RegistryId(9'002), Projection(PCGHostProfile::Interactive, {})).Value();
+        REQUIRE(other.RegisterNodeRuntime(Runtime(11)).HasValue());
+        REQUIRE(other.RegisterGraph(Graph(1, 1)).HasValue());
+        const auto otherSnapshot = other.Snapshot().Value();
+        CheckError(otherSnapshot.Resolve(snapshot.FindGraph(Id<GraphId>(1)).Value()), PCGErrors::RegistryHandleStale);
+        CheckError(otherSnapshot.Resolve(snapshot.QueryNodeRuntime(Id<NodeTypeId>(11), PCGCapabilitySet::Empty()).Value()),
+                   PCGErrors::RegistryHandleStale);
     }
 
     TEST_CASE("PCG registry errors remain stable unique public descriptors", "[unit][pcg][registry][errors]") {

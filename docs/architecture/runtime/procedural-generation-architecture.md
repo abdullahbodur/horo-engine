@@ -397,14 +397,15 @@ durable contract and are rebuilt by their owners after load.
 ## Registry And Host Composition Contract
 
 `Horo/PCG/PCGRegistry.h` is the bounded PCG-1.4 composition and query surface. The
-application host explicitly creates one `PCGRegistry`, projects an exact interactive,
+application host explicitly creates one `PCGRegistry` with a host-unique process-local
+incarnation identity, projects an exact interactive,
 headless or null capability set, and contributes inert graph and node-runtime
 descriptors. Registration performs no static initialization, service discovery, source
 scan, asset load, worker start, callback invocation or target mutation.
 
 Each successful mutation publishes a new registry generation. `PCGRegistrySnapshot`
 owns immutable, stable-ID-sorted graph and node-runtime arrays. Its process-local graph
-and runtime handles contain the issuing registry generation, dense slot and exact
+and runtime handles contain the issuing registry incarnation and generation, dense slot and exact
 durable graph or semantic runtime association. A handle resolves only through that
 issuing snapshot. Replacement and unregister leave older snapshots readable; resolving
 their handles through a newer snapshot returns a typed stale-handle failure.
