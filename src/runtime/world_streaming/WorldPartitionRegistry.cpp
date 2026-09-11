@@ -230,7 +230,7 @@ namespace Horo::WorldStreaming {
             return Failure<void>(WorldStreamingErrors::PartitionRegistryInvalid);
         auto cellBounds = BuildCellBounds(descriptor, limits_);
         if (cellBounds.HasError())
-            return Result<void>::Failure(cellBounds.Error());
+            return Result<void>::Failure(cellBounds.ErrorValue());
 
         const auto current = state_.load();
         if (current != nullptr && current->binding.revision.Value() == std::numeric_limits<std::uint64_t>::max())
@@ -242,7 +242,7 @@ namespace Horo::WorldStreaming {
         try {
             auto next =
                 std::make_shared<WorldPartitionRegistrySnapshot::State>(WorldPartitionRegistryBinding{registry_, revision, owner_}, limits_,
-                                                                        std::move(descriptor), std::move(cellBounds.Value()));
+                                                                        std::move(descriptor), std::move(cellBounds).Value());
             state_.store(std::shared_ptr<const WorldPartitionRegistrySnapshot::State>{std::move(next)});
             return Result<void>::Success();
         } catch (const std::bad_alloc &) {
