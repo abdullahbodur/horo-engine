@@ -345,9 +345,8 @@ namespace Horo::Runtime {
             std::optional<Assets::AssetLoadHandle> load;
         };
 
-        Preparation(const RuntimeSceneDefinition &source, const RuntimeSceneConfig sceneConfig,
-                    Assets::AssetRegistrySnapshot registrySnapshot)
-            : definition(source), config(sceneConfig), snapshot(std::move(registrySnapshot)) {}
+        Preparation(RuntimeSceneDefinition source, const RuntimeSceneConfig sceneConfig, Assets::AssetRegistrySnapshot registrySnapshot)
+            : definition(std::move(source)), config(sceneConfig), snapshot(std::move(registrySnapshot)) {}
 
         RuntimeSceneDefinition definition;
         RuntimeSceneConfig config;
@@ -368,13 +367,13 @@ namespace Horo::Runtime {
     }
 
     /** @copydoc RuntimeSceneService::QueuePreparation */
-    Result<void> RuntimeSceneService::QueuePreparation(const RuntimeSceneDefinition &definition, const RuntimeSceneConfig config) {
+    Result<void> RuntimeSceneService::QueuePreparation(RuntimeSceneDefinition definition, const RuntimeSceneConfig config) {
         if (shutdown_)
             return Result<void>::Failure(MakeError(SceneErrors::ServiceShutdown));
         if (transition_ != TransitionKind::None || structuralCommands_ || preparation_)
             return Result<void>::Failure(MakeError(SceneErrors::OperationInProgress));
         operationError_.reset();
-        return BeginPreparation(definition, config);
+        return BeginPreparation(std::move(definition), config);
     }
 
     Result<void> RuntimeSceneService::PopulatePreparationEntries(Preparation &prep, const RuntimeSceneDefinition &definition) const {
@@ -400,7 +399,7 @@ namespace Horo::Runtime {
         return Result<void>::Success();
     }
 
-    Result<void> RuntimeSceneService::BeginPreparation(const RuntimeSceneDefinition &definition, const RuntimeSceneConfig config) {
+    Result<void> RuntimeSceneService::BeginPreparation(RuntimeSceneDefinition definition, const RuntimeSceneConfig config) {
         if (const auto validation = ValidatePreparation(definition, config, assetLimits_, nextRuntimeId_); validation.HasError())
             return validation;
 
@@ -421,8 +420,8 @@ namespace Horo::Runtime {
         if (const auto checked = CheckDependenciesExist(definition, snapshot); checked.HasError())
             return checked;
 
-        auto prep = std::make_unique<Preparation>(definition, config, std::move(snapshot));
-        if (const auto populated = PopulatePreparationEntries(*prep, definition); populated.HasError())
+        auto prep = std::make_unique<Preparation>(std::move(definition), config, std::move(snapshot));
+        if (const auto populated = PopulatePreparationEntries(*prep, prep->definition); populated.HasError())
             return populated;
 
         preparation_ = std::move(prep);

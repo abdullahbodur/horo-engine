@@ -109,6 +109,20 @@ Durable runtime spawns carry `PersistentEntityId`, declared archetype/prefab/def
 identity and canonical owned values. A changed base requires declared migration or a
 typed incompatibility. Runtime state never writes back to SceneDocument/cooked assets.
 
+`SavedSceneBootstrapDescriptor` is the typed admission record for that first step. It
+binds logical world/base-scene identity, persisted cooked asset type evidence, exact scene
+definition/revision/content digest, an optional stable authored spawn anchor, and
+slot-generation/source-world transition provenance. Preparation converts the saved
+base-scene UUID bytes directly to `AssetId`, resolves only an immutable
+`AssetRegistrySnapshot`, and returns an owned `PreparedSavedSceneBootstrap`; source
+or metadata paths are not accepted as inputs. The host supplies the authoritative
+scene asset type separately, so an untrusted save cannot approve a different registry
+record by changing its own expected-type field. Missing content, type/revision/digest
+changes, and missing spawn anchors reject before the existing
+`RuntimeSceneService::QueuePreparation` path receives work. Successful preparation
+owns the immutable authored defaults that later participant restore applies overrides
+to; publication remains at the normal scene lifecycle commit boundary.
+
 The Horo Scene adapter owns persistent entity existence, authored/spawn identity,
 tombstones, hierarchy/ownership, stable reference remaps and explicitly assigned core
 component fields. It does not walk arbitrary component memory or own gameplay,

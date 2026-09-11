@@ -272,10 +272,10 @@ namespace Horo::Runtime {
         RuntimeSceneService(Assets::AssetRegistry &registry, Assets::AssetLoadService &loads, RuntimeSceneAssetLimits limits = {});
         ~RuntimeSceneService() override;
         /** @brief Queues validated preparation and later safe-point activation. Asset-bearing definitions pin the current
-         * registry snapshot and load through the injected service. @param definition Immutable scene definition copied by
-         * the operation. @param config Generation retirement policy. @return Success when accepted, or a typed immediate
-         * validation/admission error. */
-        [[nodiscard]] Result<void> QueuePreparation(const RuntimeSceneDefinition &definition, RuntimeSceneConfig config = {});
+         * registry snapshot and load through the injected service. @param definition Immutable scene definition consumed by
+         * the operation; lvalue callers retain source compatibility through a boundary copy. @param config Generation retirement policy.
+         * @return Success when accepted, or a typed immediate validation/admission error. */
+        [[nodiscard]] Result<void> QueuePreparation(RuntimeSceneDefinition definition, RuntimeSceneConfig config = {});
         /** @brief Queues active-scene unload; repeated unload with no pending transition is harmless. */
         [[nodiscard]] Result<void> QueueUnload();
         /** @brief Queues one structural batch against the current active scene. @param commands Batch consumed on success.
@@ -307,7 +307,7 @@ namespace Horo::Runtime {
         };
 
         struct Preparation;
-        [[nodiscard]] Result<void> BeginPreparation(const RuntimeSceneDefinition &definition, RuntimeSceneConfig config);
+        [[nodiscard]] Result<void> BeginPreparation(RuntimeSceneDefinition definition, RuntimeSceneConfig config);
         [[nodiscard]] Result<void> PopulatePreparationEntries(Preparation &prep, const RuntimeSceneDefinition &definition) const;
         void AdvancePreparation();
         void CancelPreparation(bool waitForCompletion) noexcept;
