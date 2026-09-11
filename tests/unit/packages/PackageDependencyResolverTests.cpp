@@ -47,6 +47,13 @@ namespace {
             result.push_back(package.package.Value() + "@" + package.version.ToString() + "#" + package.sourceId);
         return result;
     }
+
+    void CheckFailure(const Horo::Result<PackageResolutionPlan> &result, const std::string_view code, const std::string_view message = {}) {
+        REQUIRE(result.HasError());
+        CHECK(result.ErrorValue().code.Value() == code);
+        if (!message.empty())
+            CHECK(result.ErrorValue().message == message);
+    }
 }  // namespace
 
 TEST_CASE("Package resolver produces the same transitive plan for every candidate order", "[packages][resolver]") {
@@ -110,9 +117,7 @@ TEST_CASE("Package resolver reports stable constraint conflicts", "[packages][re
                            Candidate("com.shared", "2.5.0", "public", 10, "sha256:shared-2")},
         };
         const auto result = PackageDependencyResolver::Resolve(request);
-        REQUIRE(result.HasError());
-        CHECK(result.ErrorValue().code.Value() == "packages.resolver.conflict");
-        CHECK(result.ErrorValue().message == "Conflicting constraints for com.shared");
+        CheckFailure(result, "packages.resolver.conflict", "Conflicting constraints for com.shared");
     }
 
     SECTION("a later edge can conflict with an already selected package") {
@@ -122,9 +127,7 @@ TEST_CASE("Package resolver reports stable constraint conflicts", "[packages][re
                            Candidate("com.z.root", "1.0.0", "public", 10, "sha256:root", {Dependency("com.a.shared", Caret("2.0.0"))})},
         };
         const auto result = PackageDependencyResolver::Resolve(request);
-        REQUIRE(result.HasError());
-        CHECK(result.ErrorValue().code.Value() == "packages.resolver.conflict");
-        CHECK(result.ErrorValue().message == "Conflicting constraints for com.a.shared");
+        CheckFailure(result, "packages.resolver.conflict", "Conflicting constraints for com.a.shared");
     }
 }
 
@@ -136,9 +139,7 @@ TEST_CASE("Package resolver reports stable cycles and source ambiguity", "[packa
                            Candidate("com.cycle.b", "1.0.0", "public", 10, "sha256:b", {Dependency("com.cycle.a", Exact("1.0.0"))})},
         };
         const auto result = PackageDependencyResolver::Resolve(request);
-        REQUIRE(result.HasError());
-        CHECK(result.ErrorValue().code.Value() == "packages.resolver.cycle");
-        CHECK(result.ErrorValue().message == "Dependency cycle: com.cycle.a -> com.cycle.b -> com.cycle.a");
+        CheckFailure(result, "packages.resolver.cycle", "Dependency cycle: com.cycle.a -> com.cycle.b -> com.cycle.a");
     }
 
     SECTION("same package version has conflicting source digests") {
@@ -148,9 +149,7 @@ TEST_CASE("Package resolver reports stable cycles and source ambiguity", "[packa
                            Candidate("com.ambiguous", "1.0.0", "vendor", 10, "sha256:two")},
         };
         const auto result = PackageDependencyResolver::Resolve(request);
-        REQUIRE(result.HasError());
-        CHECK(result.ErrorValue().code.Value() == "packages.resolver.source_ambiguity");
-        CHECK(result.ErrorValue().message == "Source ambiguity for com.ambiguous@1.0.0");
+        CheckFailure(result, "packages.resolver.source_ambiguity", "Source ambiguity for com.ambiguous@1.0.0");
     }
 }
 
@@ -172,8 +171,15 @@ TEST_CASE("Package resolver backtracks and enforces input limits", "[packages][r
                                          .candidates = {Candidate("com.root", "1.0.0", "public", 10, "sha256:root")},
                                          .limits = {.candidates = 0}};
         const auto result = PackageDependencyResolver::Resolve(request);
-        REQUIRE(result.HasError());
-        CHECK(result.ErrorValue().code.Value() == "packages.resolver.limit");
+        CheckFailure(result, "packages.resolver.limit");
+    }
+
+    SECTION("search exploration is bounded independently of graph depth") {
+        PackageResolutionRequest request{.roots = {Dependency("com.root", Exact("1.0.0"))},
+                                         .candidates = {Candidate("com.root", "1.0.0", "public", 10, "sha256:root")},
+                                         .limits = {.searchSteps = 0}};
+        const auto result = PackageDependencyResolver::Resolve(request);
+        CheckFailure(result, "packages.resolver.limit", "Dependency search exceeds its exploration-step limit.");
     }
 }
 
@@ -184,14 +190,14 @@ TEST_CASE("Package semantic versions follow prerelease precedence", "[packages][
     CHECK(PackageVersion::Parse("1.0.0-alpha.01").HasError());
     CHECK(PackageVersion::Parse("1.0").HasError());
     CHECK(PackageVersion::Parse("01.0.0").HasError());
+    CHECK(HoroPackageId::Parse("com..horo").HasError());
 }
 
 TEST_CASE("Package resolver distinguishes unsatisfied and malformed input", "[packages][resolver]") {
     SECTION("a valid request without a compatible candidate is unsatisfied") {
         PackageResolutionRequest request{.roots = {Dependency("com.missing", Exact("1.0.0"))}};
         const auto result = PackageDependencyResolver::Resolve(request);
-        REQUIRE(result.HasError());
-        CHECK(result.ErrorValue().code.Value() == "packages.resolver.unsatisfied");
+        CheckFailure(result, "packages.resolver.unsatisfied");
     }
 
     SECTION("aggregate inputs cannot bypass canonical range validation") {
@@ -199,8 +205,7 @@ TEST_CASE("Package resolver distinguishes unsatisfied and malformed input", "[pa
                                          .candidates = {Candidate("com.root", "1.0.0", "public", 10, "sha256:root")}};
         request.roots.front().versions.kind = static_cast<PackageVersionRange::Kind>(255);
         const auto result = PackageDependencyResolver::Resolve(request);
-        REQUIRE(result.HasError());
-        CHECK(result.ErrorValue().code.Value() == "packages.resolver.invalid_input");
+        CheckFailure(result, "packages.resolver.invalid_input");
     }
 
     SECTION("candidate platform tuples are canonical") {
@@ -209,7 +214,6 @@ TEST_CASE("Package resolver distinguishes unsatisfied and malformed input", "[pa
                                                                   {{"Linux", "x64", "horo-sdk-2"}})},
                                          .host = {"linux", "x64", "horo-sdk-2"}};
         const auto result = PackageDependencyResolver::Resolve(request);
-        REQUIRE(result.HasError());
-        CHECK(result.ErrorValue().code.Value() == "packages.resolver.invalid_input");
+        CheckFailure(result, "packages.resolver.invalid_input");
     }
 }

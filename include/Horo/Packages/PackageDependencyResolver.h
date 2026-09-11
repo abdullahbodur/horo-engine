@@ -125,6 +125,7 @@ namespace Horo::Packages {
         std::size_t dependenciesPerCandidate{128};
         std::size_t featuresPerCandidate{128};
         std::size_t graphDepth{128};
+        std::size_t searchSteps{10000}; /**< Maximum explored partial plans, including the initial state. */
     };
 
     /** @brief Complete immutable input snapshot for one deterministic resolution. */

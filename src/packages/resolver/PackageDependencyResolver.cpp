@@ -15,7 +15,7 @@ namespace Horo::Packages {
                                                "Provide canonical bounded package candidates and requests."};
         const ErrorCodeDescriptor ResourceLimit{ResolverDomain, ErrorCode{"packages.resolver.limit"}, ErrorSeverity::Error,
                                                 "Package resolver input exceeds its resource policy.",
-                                                "Reduce candidate, dependency, feature, package, or graph depth counts."};
+                                                "Reduce candidate, dependency, feature, package, graph depth, or search-step counts."};
         const ErrorCodeDescriptor Unsatisfied{ResolverDomain, ErrorCode{"packages.resolver.unsatisfied"}, ErrorSeverity::Error,
                                               "No package candidate satisfies the request.",
                                               "Add a compatible package version or revise the dependency request."};
@@ -28,7 +28,8 @@ namespace Horo::Packages {
                                         "Package dependency graph contains a cycle.", "Remove the reported circular dependency."};
 
         [[nodiscard]] bool CanonicalToken(const std::string_view text, const std::size_t maximum) noexcept {
-            if (text.empty() || text.size() > maximum || text.front() == '.' || text.back() == '.')
+            if (text.empty() || text.size() > maximum || text.front() == '.' || text.back() == '.' ||
+                text.find("..") != std::string_view::npos)
                 return false;
             return std::ranges::all_of(text, [](const unsigned char value) {
                 return (value >= 'a' && value <= 'z') || (value >= '0' && value <= '9') || value == '.' || value == '-' || value == '_';
@@ -259,11 +260,11 @@ namespace Horo::Packages {
         }
 
         [[nodiscard]] bool ResolveNext(const PackageResolutionRequest &request, SearchState state, SearchState &solution, Failure &failure,
-                                       std::size_t depth);
+                                       std::size_t depth, std::size_t &searchSteps);
 
         [[nodiscard]] bool TryCandidates(const PackageResolutionRequest &request, const SearchState &state, SearchState &solution,
                                          Failure &failure, const std::string &unresolved, const std::vector<std::size_t> &matches,
-                                         const std::size_t depth) {
+                                         const std::size_t depth, std::size_t &searchSteps) {
             for (const std::size_t candidateIndex : matches) {
                 const PackageResolutionCandidate &candidate = request.candidates[candidateIndex];
                 if (HasSourceAmbiguity(request, matches, candidateIndex)) {
@@ -273,14 +274,19 @@ namespace Horo::Packages {
                 SearchState branch = state;
                 branch.selected[unresolved] = candidateIndex;
                 if (AddDependencies(request, candidate, branch, failure) &&
-                    ResolveNext(request, std::move(branch), solution, failure, depth + 1U))
+                    ResolveNext(request, std::move(branch), solution, failure, depth + 1U, searchSteps))
                     return true;
             }
             return false;
         }
 
         [[nodiscard]] bool ResolveNext(const PackageResolutionRequest &request, SearchState state, SearchState &solution, Failure &failure,
-                                       const std::size_t depth) {
+                                       const std::size_t depth, std::size_t &searchSteps) {
+            if (searchSteps >= request.limits.searchSteps) {
+                KeepFailure(failure, ResourceLimit, "Dependency search exceeds its exploration-step limit.", 5);
+                return false;
+            }
+            ++searchSteps;
             if (depth > request.limits.graphDepth) {
                 KeepFailure(failure, ResourceLimit, "Dependency graph exceeds maximum depth.", 5);
                 return false;
@@ -299,7 +305,7 @@ namespace Horo::Packages {
             }
             const std::vector<std::size_t> matches = MatchingCandidates(request, state, unresolved->first);
             if (!matches.empty())
-                return TryCandidates(request, state, solution, failure, unresolved->first, matches, depth);
+                return TryCandidates(request, state, solution, failure, unresolved->first, matches, depth, searchSteps);
             const bool conflicting = unresolved->second.ranges.size() > 1U;
             KeepFailure(failure, conflicting ? Conflict : Unsatisfied,
                         std::string{conflicting ? "Conflicting constraints for " : "No compatible candidate for "} + unresolved->first,
@@ -430,7 +436,8 @@ namespace Horo::Packages {
         }
         SearchState solution;
         Failure failure;
-        if (!ResolveNext(request, std::move(initial), solution, failure, 0U))
+        std::size_t searchSteps{};
+        if (!ResolveNext(request, std::move(initial), solution, failure, 0U, searchSteps))
             return Result<PackageResolutionPlan>::Failure(MakeError(*failure.descriptor, std::move(failure.message)));
 
         PackageResolutionPlan plan;
