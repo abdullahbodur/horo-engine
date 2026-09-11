@@ -32,7 +32,7 @@ namespace Horo::WorldStreaming {
                 return Failure<void>(WorldStreamingErrors::SpatialObjectDescriptorInvalid);
             if (context.currentDescriptor.has_value()) {
                 if (const auto valid = ValidateWorldSpatialObjectDescriptor(*context.currentDescriptor); valid.HasError())
-                    return Failure<void>(WorldStreamingErrors::SpatialObjectDescriptorInvalid);
+                    return valid;
             }
             return Result<void>::Success();
         }
@@ -71,7 +71,7 @@ namespace Horo::WorldStreaming {
         if (!descriptor.IsValid())
             return Failure<void>(WorldStreamingErrors::SpatialObjectDescriptorInvalid);
         if (descriptor.version.major != WorldSpatialObjectSchemaVersion::CurrentMajor ||
-            descriptor.version.minor != WorldSpatialObjectSchemaVersion::CurrentMinor)
+            descriptor.version.minor > WorldSpatialObjectSchemaVersion::CurrentMinor)
             return Failure<void>(WorldStreamingErrors::SpatialObjectVersionUnsupported);
         if (!IsSupported(descriptor.placement))
             return Failure<void>(WorldStreamingErrors::SpatialObjectPlacementUnsupported);

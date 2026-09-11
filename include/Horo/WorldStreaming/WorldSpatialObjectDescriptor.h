@@ -6,6 +6,7 @@
  */
 
 #include "Horo/Assets/AssetId.h"
+#include "Horo/Foundation/Result.h"
 #include "Horo/WorldStreaming/WorldPartitionDescriptor.h"
 
 #include <compare>

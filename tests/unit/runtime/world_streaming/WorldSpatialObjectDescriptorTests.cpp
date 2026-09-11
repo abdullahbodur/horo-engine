@@ -141,6 +141,12 @@ namespace Horo::WorldStreaming {
             context.currentDescriptor->sourceAsset = {};
             RequireError(ValidateWorldSpatialObjectAdmission({Descriptor(), std::nullopt}, context),
                          WorldStreamingErrors::SpatialObjectDescriptorInvalid);
+
+            context = Context();
+            context.currentDescriptor = Descriptor();
+            context.currentDescriptor->version.major = WorldSpatialObjectSchemaVersion::CurrentMajor + 1;
+            RequireError(ValidateWorldSpatialObjectAdmission({Descriptor(), std::nullopt}, context),
+                         WorldStreamingErrors::SpatialObjectVersionUnsupported);
         }
 
         TEST_CASE("Cancelling and closed spatial object owners reject new and replacement admission",
