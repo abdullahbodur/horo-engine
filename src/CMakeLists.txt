@@ -500,6 +500,7 @@ target_link_libraries(HoroAnimationApi PUBLIC HoroEngine::Foundation HoroEngine:
 
 add_library(HoroPCG STATIC
         runtime/pcg/api/PCGErrors.cpp
+        runtime/pcg/api/PCGGenerationPlan.cpp
         runtime/pcg/api/PCGGraphAsset.cpp
         runtime/pcg/api/PCGGraphAssetSerialization.cpp
         runtime/pcg/api/PCGGraphAssetValidation.cpp

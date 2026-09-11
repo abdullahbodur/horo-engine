@@ -84,4 +84,14 @@ namespace Horo::PCG::PCGErrors {
     extern const ErrorCodeDescriptor GraphValidationFailed;
     /** @brief Pre-compile graph validation exceeded a finite work or diagnostic ceiling. */
     extern const ErrorCodeDescriptor GraphValidationCapacityExceeded;
+    /** @brief A generation plan, output operation, receipt, or provenance tuple is malformed. */
+    extern const ErrorCodeDescriptor GenerationPlanInvalid;
+    /** @brief A generation plan exceeds its finite operation, dependency, or resource envelope. */
+    extern const ErrorCodeDescriptor GenerationPlanCapacityExceeded;
+    /** @brief A target generation or retained ownership record is no longer current. */
+    extern const ErrorCodeDescriptor GenerationPlanStale;
+    /** @brief An update or removal lacks an exact target-owned provenance authorization. */
+    extern const ErrorCodeDescriptor GenerationOwnershipMismatch;
+    /** @brief Generation-plan admission is closed by cancellation or shutdown. */
+    extern const ErrorCodeDescriptor GenerationPlanLifecycleUnavailable;
 }  // namespace Horo::PCG::PCGErrors

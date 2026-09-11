@@ -64,6 +64,31 @@ coordinator revalidates authority and target revisions, while RuntimeScene,
 Terrain/Foliage, Physics, Navigation and Render each prepare and own their committed
 state. Successful evaluation alone never grants publication authority.
 
+### Generation Plan And Output Delta Contract
+
+`Horo/PCG/PCGGenerationPlan.h` is the implemented PCG-4.2 boundary between pure
+evaluation and target preparation. A detached candidate binds one exact graph
+generation and execution, deterministic seed, stable replacement lineage and
+generated set, monotonically advancing set revision, explicit cell, target owner,
+required capability set, and target-issued validation receipt. Dependencies and
+create/update/remove operations carry typed stable identities, fixed content
+fingerprints, and complete work/resident/preparation/retirement estimates.
+
+`CreatePCGGenerationPlan` validates and sorts the detached dependency and output
+containers before publishing a shared immutable root. The validation context supplies
+the current exact target receipt and a bounded immutable snapshot of target-owned
+output provenance. Create fails on an existing logical output. Update and removal
+require the same logical output, lineage, generated set, cell, target owner, ownership
+generation, and prior content fingerprint from that snapshot, plus a newer set
+revision. A graph/name/tag/folder/spatial scan therefore cannot authorize deletion.
+
+Capabilities are explicit Horo-owned `PCGCapabilitySet` values. A missing capability
+returns `pcg.capability.unsupported`; an old receipt or target/capability generation
+returns a typed stale failure. Cancellation and shutdown close plan admission before
+allocation. Count, reference, work, and lifecycle-byte bounds use checked arithmetic,
+and failure publishes no plan or target mutation. Replacement creates a detached new
+root while retained readers continue observing the old immutable plan.
+
 ## Spatial Input And Node Catalog
 
 [ADR-152](../../adr/152-pcg-spatial-input-snapshot-and-node-library-ownership.md)
