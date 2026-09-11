@@ -7,6 +7,11 @@ if(HORO_BUILD_PHYSICS_NATIVE)
     horo_add_canonical_physics_dependency()
 endif()
 
+if(HORO_BUILD_NAVIGATION_RECAST_DETOUR)
+    include(HoroNavigationDependency)
+    horo_add_navigation_runtime_dependency()
+endif()
+
 set(HORO_NLOHMANN_JSON_REVISION "9cca280a4d0ccf0c08f47a99aa71d1b0e52f8d03")
 set(JSON_BuildTests OFF CACHE BOOL "" FORCE)
 set(JSON_Install OFF CACHE BOOL "" FORCE)
