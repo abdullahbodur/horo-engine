@@ -226,8 +226,8 @@ namespace Horo::PCG {
             return Result<PCGPointSchema>::Failure(limits.ErrorValue());
         if (descriptor.attributes.size() > limits.Value().maximumAttributesPerPoint)
             return Result<PCGPointSchema>::Failure(Failure(PCGErrors::PointCapacityExceeded));
-        std::size_t bytes{};
         try {
+            std::size_t bytes{};
             std::vector<PCGAttributeDescriptor> attributes(descriptor.attributes.begin(), descriptor.attributes.end());
             for (const auto &attribute : attributes) {
                 if (!IsKnown(attribute.type))
