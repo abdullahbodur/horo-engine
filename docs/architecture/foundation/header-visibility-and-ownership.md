@@ -437,6 +437,14 @@ The contract uses only Foundation and Horo Scene Math values; Scene, target-owne
 renderer, editor, platform and native backend authority remain outside HoroPCG.
 Rejected replacement candidates do not mutate or invalidate the last good snapshot.
 
+`[PCG-1.4]` adds `Horo/PCG/PCGRegistry.h` to `HoroEngine::PCG`. The header publishes
+only inert descriptors, closed Horo capability/profile values, bounded host-owned
+registry mutation and immutable generation-fenced queries. It does not publish
+RuntimeScene, Editor, Render, Platform, service-locator, callback, filesystem or native
+backend types. Existing consumers require no migration because no earlier PCG registry
+surface existed. Future PCG hosts must compose this registry explicitly instead of
+using static registration, ambient discovery or backend-name fallback.
+
 ## Animation Identity And Component Boundary
 
 `HoroEngine::AnimationApi` owns `Horo/Animation/AnimationErrors.h`,

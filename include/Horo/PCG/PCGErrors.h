@@ -44,4 +44,22 @@ namespace Horo::PCG::PCGErrors {
     extern const ErrorCodeDescriptor SpatialSnapshotStale;
     /** @brief A replacement changes provider/source identity or fails to advance revision and snapshot identity. */
     extern const ErrorCodeDescriptor SpatialReplacementInvalid;
+    /** @brief A PCG registry configuration, graph, or node-runtime descriptor is malformed. */
+    extern const ErrorCodeDescriptor RegistryDescriptorInvalid;
+    /** @brief A stable graph or node-runtime identity is already registered. */
+    extern const ErrorCodeDescriptor RegistryDuplicate;
+    /** @brief A bounded graph or node-runtime registry is full. */
+    extern const ErrorCodeDescriptor RegistryCapacityExceeded;
+    /** @brief A registry operation was attempted after composition shutdown. */
+    extern const ErrorCodeDescriptor RegistryClosed;
+    /** @brief A registry publication generation cannot advance without wrapping. */
+    extern const ErrorCodeDescriptor RegistryGenerationExhausted;
+    /** @brief A process-local registry handle is malformed. */
+    extern const ErrorCodeDescriptor RegistryHandleInvalid;
+    /** @brief A process-local registry handle belongs to another immutable snapshot generation. */
+    extern const ErrorCodeDescriptor RegistryHandleStale;
+    /** @brief The exact capability requested by a graph or runtime is not projected by the host. */
+    extern const ErrorCodeDescriptor UnsupportedCapability;
+    /** @brief An exact node runtime required by a registered graph is unavailable. */
+    extern const ErrorCodeDescriptor RuntimeUnavailable;
 }  // namespace Horo::PCG::PCGErrors
