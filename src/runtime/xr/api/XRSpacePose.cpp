@@ -7,10 +7,12 @@
 
 namespace Horo::XR {
     namespace {
+        /** @brief Creates a typed failed result from a stable XR descriptor. */
         template <typename T> [[nodiscard]] Result<T> Reject(const ErrorCodeDescriptor &descriptor) {
             return Result<T>::Failure(MakeError(descriptor));
         }
 
+        /** @brief Validates a semantic space against current session and origin ownership. */
         [[nodiscard]] bool ValidSpace(const XRCoordinateSpace &space, const XRSessionId &activeSession,
                                       const XRWorldOriginRevision activeOriginRevision, Error &failure) {
             auto identity = ValidateXRSessionObject(space.id, activeSession);
@@ -37,6 +39,7 @@ namespace Horo::XR {
             return true;
         }
 
+        /** @brief Validates the presence and representation of one independently tagged component. */
         template <typename Value, typename IsValid>
         [[nodiscard]] bool ValidComponent(const XRPoseComponent<Value> &component, IsValid &&isValid) {
             if (component.validity >= XRPoseComponentValidity::Count)
@@ -46,6 +49,7 @@ namespace Horo::XR {
             return component.value.has_value() && isValid(*component.value);
         }
 
+        /** @brief Checks that an orientation is finite and normalized within the contract tolerance. */
         [[nodiscard]] bool UnitQuaternion(const Math::Quaternion value) noexcept {
             if (!Math::IsFinite(value))
                 return false;
@@ -53,6 +57,7 @@ namespace Horo::XR {
             return std::abs(lengthSquared - 1.0F) <= 0.0001F;
         }
 
+        /** @brief Checks that exactly the time domain required by the pose purpose is present. */
         [[nodiscard]] bool ValidTime(const XRPoseDescriptor &descriptor) noexcept {
             if (!descriptor.time.runtimeSample.IsValid())
                 return false;
@@ -70,6 +75,7 @@ namespace Horo::XR {
             return false;
         }
 
+        /** @brief Checks aggregate tracking loss against independently available components. */
         [[nodiscard]] bool ValidLoss(const XRPoseComponents &components) noexcept {
             const bool positionPresent = components.positionMeters.validity != XRPoseComponentValidity::Invalid;
             const bool orientationPresent = components.orientation.validity != XRPoseComponentValidity::Invalid;
@@ -94,6 +100,7 @@ namespace Horo::XR {
             return false;
         }
 
+        /** @brief Validates every pose component and its aggregate confidence and loss evidence. */
         [[nodiscard]] bool ValidComponents(const XRPoseComponents &components) {
             if (components.confidence >= XRTrackingConfidence::Count)
                 return false;
@@ -105,6 +112,7 @@ namespace Horo::XR {
                    ValidComponent(components.angularVelocityRadiansPerSecond, finiteVector) && ValidLoss(components);
         }
 
+        /** @brief Conservatively combines two component-validity provenances. */
         [[nodiscard]] XRPoseComponentValidity CombinedValidity(const XRPoseComponentValidity first,
                                                                const XRPoseComponentValidity second) noexcept {
             if (first == XRPoseComponentValidity::Invalid || second == XRPoseComponentValidity::Invalid)
@@ -114,6 +122,7 @@ namespace Horo::XR {
                        : XRPoseComponentValidity::Inferred;
         }
 
+        /** @brief Conservatively combines two tracking-confidence categories. */
         [[nodiscard]] XRTrackingConfidence CombinedConfidence(const XRTrackingConfidence first,
                                                               const XRTrackingConfidence second) noexcept {
             if (first == XRTrackingConfidence::None || second == XRTrackingConfidence::None)
@@ -122,6 +131,7 @@ namespace Horo::XR {
                                                                                              : XRTrackingConfidence::High;
         }
 
+        /** @brief Combines tracking-loss categories without restoring missing evidence. */
         [[nodiscard]] XRTrackingLossState CombinedLoss(const XRTrackingLossState first, const XRTrackingLossState second) noexcept {
             if (first == XRTrackingLossState::FullyLost || second == XRTrackingLossState::FullyLost)
                 return XRTrackingLossState::FullyLost;
@@ -132,6 +142,7 @@ namespace Horo::XR {
             return XRTrackingLossState::FullyLost;
         }
 
+        /** @brief Rotates and adds two vector components while retaining weakest validity. */
         [[nodiscard]] XRPoseComponent<Math::Vec3> ComposeVector(const XRPoseComponent<Math::Vec3> &first,
                                                                 const XRPoseComponent<Math::Vec3> &second,
                                                                 const XRPoseComponent<Math::Quaternion> &rotation) {
@@ -141,6 +152,7 @@ namespace Horo::XR {
             return {.value = rotation.value->Rotate(*first.value) + *second.value, .validity = validity};
         }
 
+        /** @brief Composes linear velocities including moving-reference angular motion. */
         [[nodiscard]] XRPoseComponent<Math::Vec3> ComposeLinearVelocity(const XRPoseComponents &first, const XRPoseComponents &second) {
             auto validity = CombinedValidity(first.linearVelocityMetersPerSecond.validity, second.linearVelocityMetersPerSecond.validity);
             validity = CombinedValidity(validity, second.orientation.validity);
@@ -156,6 +168,7 @@ namespace Horo::XR {
                     .validity = validity};
         }
 
+        /** @brief Composes two validated component sets without allocating or fabricating values. */
         [[nodiscard]] XRPoseComponents ComposeComponents(const XRPoseComponents &first, const XRPoseComponents &second) {
             XRPoseComponents composed;
             composed.positionMeters = ComposeVector(first.positionMeters, second.positionMeters, second.orientation);
@@ -171,6 +184,7 @@ namespace Horo::XR {
             return composed;
         }
 
+        /** @brief Composes one contiguous pair and revalidates the produced ownership evidence. */
         [[nodiscard]] Result<XRPoseSample> ComposePair(const XRPoseSample &first, const XRPoseSample &second,
                                                        const XRSessionId &activeSession, const XRWorldOriginRevision activeOriginRevision) {
             if (first.Target() != second.Source())
@@ -183,6 +197,18 @@ namespace Horo::XR {
                                          .purpose = first.Purpose(),
                                          .time = first.Time(),
                                          .components = ComposeComponents(first.Components(), second.Components())},
+                                        activeSession, activeOriginRevision);
+        }
+
+        /** @brief Revalidates an immutable sample against current replacement and shutdown fences. */
+        [[nodiscard]] Result<XRPoseSample> Revalidate(const XRPoseSample &sample, const XRSessionId &activeSession,
+                                                      const XRWorldOriginRevision activeOriginRevision) {
+            return XRPoseSample::Create({.session = sample.Session(),
+                                         .source = sample.Source(),
+                                         .target = sample.Target(),
+                                         .purpose = sample.Purpose(),
+                                         .time = sample.Time(),
+                                         .components = sample.Components()},
                                         activeSession, activeOriginRevision);
         }
     }  // namespace
@@ -248,20 +274,10 @@ namespace Horo::XR {
             return Reject<XRPoseSample>(XRErrors::OperationInvalid);
         if (transforms.size() > XRCoordinateHardLimits::MaximumTransformHops)
             return Reject<XRPoseSample>(XRErrors::CapacityExceeded);
+        if (transforms.size() == 1)
+            return Revalidate(transforms.front(), activeSession, activeOriginRevision);
 
         XRPoseSample composed = transforms.front();
-        for (const auto &transform : transforms) {
-            auto source = ValidateXRSessionObject(transform.Source().id, activeSession);
-            auto target = ValidateXRSessionObject(transform.Target().id, activeSession);
-            if (source.HasError())
-                return Result<XRPoseSample>::Failure(source.ErrorValue());
-            if (target.HasError())
-                return Result<XRPoseSample>::Failure(target.ErrorValue());
-            if (transform.Source().worldOriginRevision != activeOriginRevision ||
-                transform.Target().worldOriginRevision != activeOriginRevision) {
-                return Reject<XRPoseSample>(XRErrors::OriginRevisionStale);
-            }
-        }
         for (std::size_t index = 1; index < transforms.size(); ++index) {
             auto next = ComposePair(composed, transforms[index], activeSession, activeOriginRevision);
             if (next.HasError())

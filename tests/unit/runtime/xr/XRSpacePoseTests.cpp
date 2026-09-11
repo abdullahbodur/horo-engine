@@ -6,6 +6,7 @@
 #include <limits>
 #include <span>
 #include <type_traits>
+#include <utility>
 
 namespace Horo::XR {
     namespace {
@@ -52,8 +53,9 @@ namespace Horo::XR {
 
         template <typename Value> void RequireFailure(const Result<Value> &result, const ErrorCodeDescriptor &expected) {
             REQUIRE(result.HasError());
-            REQUIRE(result.ErrorValue().domain.Value() == expected.domain.Value());
-            REQUIRE(result.ErrorValue().code.Value() == expected.code.Value());
+            const std::pair actualIdentity{result.ErrorValue().domain.Value(), result.ErrorValue().code.Value()};
+            const std::pair expectedIdentity{expected.domain.Value(), expected.code.Value()};
+            REQUIRE(actualIdentity == expectedIdentity);
         }
     }  // namespace
 
@@ -238,5 +240,18 @@ namespace Horo::XR {
         REQUIRE(composed.HasValue());
         REQUIRE(composed.Value().Source() == chain.front().Source());
         REQUIRE(composed.Value().Target() == chain.back().Target());
+    }
+
+    TEST_CASE("XR single-transform composition revalidates replacement shutdown and origin fences", "[unit][xr][space-pose]") {
+        const auto session = Session();
+        const auto origin = MakeGeneration<XRWorldOriginRevision>(9);
+        auto sample = XRPoseSample::Create(Descriptor(session), session, origin);
+        REQUIRE(sample.HasValue());
+        const std::array chain{sample.Value()};
+
+        REQUIRE(ComposeXRSpaceTransforms(chain, session, origin).HasValue());
+        RequireFailure(ComposeXRSpaceTransforms(chain, {}, origin), XRErrors::IdentityInvalid);
+        RequireFailure(ComposeXRSpaceTransforms(chain, Session(6), origin), XRErrors::IdentityStale);
+        RequireFailure(ComposeXRSpaceTransforms(chain, session, MakeGeneration<XRWorldOriginRevision>(10)), XRErrors::OriginRevisionStale);
     }
 }  // namespace Horo::XR
