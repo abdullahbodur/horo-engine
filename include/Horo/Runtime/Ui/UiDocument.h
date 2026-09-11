@@ -5,7 +5,7 @@
  */
 
 #include "Horo/Assets/AssetId.h"
-#include "Horo/Runtime/Ui/UiIdentity.h"
+#include "Horo/Runtime/Ui/UiCanvasSpace.h"
 
 #include <compare>
 #include <cstddef>
@@ -28,14 +28,6 @@ namespace Horo::Runtime::Ui {
         bool required{true};              /**< Whether missing residency prevents instance activation. */
         /** @brief Compares canonical dependency evidence. @return Structural ordering and equality. */
         [[nodiscard]] auto operator<=>(const UiAssetDependency &) const noexcept = default;
-    };
-
-    /** @brief Authored canvas identity and its stable root element. */
-    struct UiCanvasDescriptor final {
-        UiCanvasId id;           /**< Stable identity of the canvas within the document. */
-        UiElementId rootElement; /**< Stable identity of the canvas root element. */
-        /** @brief Compares authored canvas evidence. @return Structural ordering and equality. */
-        [[nodiscard]] auto operator<=>(const UiCanvasDescriptor &) const noexcept = default;
     };
 
     /** @brief Immutable validated authoring model stored by a `.uicanvas` document owner. */

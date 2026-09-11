@@ -69,7 +69,7 @@ namespace Horo::Runtime::Ui {
             return Failure<UiDocument>(UiErrors::DocumentInvalid);
         for (std::size_t index = 0; index < canvases_.size(); ++index) {
             const auto &canvas = canvases_[index];
-            if (!canvas.id.IsValid() || !canvas.rootElement.IsValid())
+            if (!canvas.IsValid())
                 return Failure<UiDocument>(UiErrors::DocumentInvalid);
             for (std::size_t previous = 0; previous < index; ++previous)
                 if (canvases_[previous].id == canvas.id || canvases_[previous].rootElement == canvas.rootElement)

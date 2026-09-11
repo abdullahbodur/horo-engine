@@ -223,6 +223,7 @@ target_link_libraries(HoroNetworkApi PUBLIC HoroEngine::Foundation)
 add_library(HoroRuntimeUi STATIC
         runtime/ui/UiErrors.cpp
         runtime/ui/UiIdentity.cpp
+        runtime/ui/UiCanvasSpace.cpp
         runtime/ui/UiDocument.cpp
         runtime/ui/UiDiagnostics.cpp
         runtime/ui/UiElementTree.cpp

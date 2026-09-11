@@ -117,6 +117,32 @@ namespace Horo::Runtime::Ui::UiErrors {
                                                      "Provide complete asset, document, canvas, and minimum revision evidence.",
                                                      false,
                                                      true};
+    /** @copydoc CanvasSpaceInvalid */
+    const ErrorCodeDescriptor
+        CanvasSpaceInvalid{UiDomain,
+                           ErrorCode{"runtime_ui.canvas_space.invalid"},
+                           ErrorSeverity::Error,
+                           "The Runtime UI canvas-space input is invalid.",
+                           "Provide known modes, bounded reference dimensions, a non-zero viewport, and valid caller-owned scale evidence.",
+                           false,
+                           true};
+    /** @copydoc CanvasSpaceModeMismatch */
+    const ErrorCodeDescriptor
+        CanvasSpaceModeMismatch{UiDomain,
+                                ErrorCode{"runtime_ui.canvas_space.mode_mismatch"},
+                                ErrorSeverity::Error,
+                                "The Runtime UI canvas resolver does not match the canvas projection mode.",
+                                "Use screen resolution for overlay/camera canvases and logical world resolution for world-space canvases.",
+                                false,
+                                true};
+    /** @copydoc CanvasSpaceOverflow */
+    const ErrorCodeDescriptor CanvasSpaceOverflow{UiDomain,
+                                                  ErrorCode{"runtime_ui.canvas_space.overflow"},
+                                                  ErrorSeverity::Error,
+                                                  "The resolved Runtime UI canvas extent exceeds the logical geometry domain.",
+                                                  "Reduce the viewport extent or provide a larger valid pixels-per-DIP scale.",
+                                                  false,
+                                                  true};
     /** @copydoc InstanceStateInvalid */
     const ErrorCodeDescriptor InstanceStateInvalid{UiDomain,
                                                    ErrorCode{"runtime_ui.instance.state_invalid"},
