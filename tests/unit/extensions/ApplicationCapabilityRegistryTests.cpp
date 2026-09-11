@@ -3,6 +3,7 @@
 #include <catch2/catch_test_macros.hpp>
 #include <string>
 #include <utility>
+#include <vector>
 
 namespace Horo::Extensions::Tests {
     namespace {
@@ -118,5 +119,28 @@ namespace Horo::Extensions::Tests {
         CHECK(registry.IsShutdown());
         CHECK_FALSE(ownedRegistration.IsRegistered());
         RequireErrorCode(registry.Register(Provider({1, 1, 0}, 2)), "capability_registry_shutdown");
+    }
+
+    TEST_CASE("Application capability registry rejects malformed canonical identities", "[Extensions][ApplicationCapabilities]") {
+        for (const std::string &invalid :
+             std::vector<std::string>{"invalid.", "invalid.2segment", "invalid_under", std::string(257, 'a')}) {
+            ApplicationCapabilityRegistry registry;
+            auto provider = Provider();
+            provider.providerId = invalid;
+            RequireErrorCode(registry.Register(std::move(provider)), "capability_registry_invalid");
+        }
+    }
+
+    TEST_CASE("Application capability registry enforces its provider bound", "[Extensions][ApplicationCapabilities]") {
+        ApplicationCapabilityRegistry registry;
+        std::vector<ApplicationCapabilityProviderRegistration> registrations;
+        registrations.reserve(ApplicationCapabilityRegistry::MaximumProviders);
+        for (std::size_t index = 0; index < ApplicationCapabilityRegistry::MaximumProviders; ++index) {
+            auto registration =
+                registry.Register(Provider({1, static_cast<std::uint16_t>(index), 0}, static_cast<std::uint64_t>(index + 1)));
+            REQUIRE(registration.HasValue());
+            registrations.push_back(std::move(registration).Value());
+        }
+        RequireErrorCode(registry.Register(Provider({2, 0, 0}, 257)), "capability_registry_capacity_exceeded");
     }
 }  // namespace Horo::Extensions::Tests

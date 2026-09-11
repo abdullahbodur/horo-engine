@@ -1,11 +1,13 @@
 #include "Horo/Extensions/ApplicationCapabilityRegistry.h"
 
+#include "../ExtensionAuthorityIdentityValidation.h"
 #include "Horo/Extensions/ExtensionErrors.h"
 
 #include <algorithm>
 #include <atomic>
 #include <mutex>
 #include <ranges>
+#include <tuple>
 #include <utility>
 #include <vector>
 
@@ -24,30 +26,10 @@ namespace Horo::Extensions {
     };
 
     namespace {
-        constexpr std::size_t MaximumIdentityBytes = 256;
-
-        [[nodiscard]] bool IsCanonicalId(const std::string_view value) noexcept {
-            if (value.empty() || value.size() > MaximumIdentityBytes || value.front() == '.' || value.back() == '.')
-                return false;
-            std::size_t start = 0;
-            while (start < value.size()) {
-                const std::size_t separator = value.find('.', start);
-                const std::size_t end = separator == std::string_view::npos ? value.size() : separator;
-                const std::string_view segment = value.substr(start, end - start);
-                if (segment.empty() || segment.front() < 'a' || segment.front() > 'z' || segment.back() == '-' ||
-                    !std::ranges::all_of(segment, [](const char character) {
-                    return (character >= 'a' && character <= 'z') || (character >= '0' && character <= '9') || character == '-';
-                })) {
-                    return false;
-                }
-                start = end + 1;
-            }
-            return true;
-        }
-
         [[nodiscard]] bool IsValid(const ApplicationCapabilityProviderDescriptor &descriptor) noexcept {
-            return IsCanonicalId(descriptor.capability.value) && IsCanonicalId(descriptor.providerId) &&
-                   descriptor.version != ApplicationCapabilityVersion{} && descriptor.providerGeneration != 0;
+            return Detail::IsCanonicalExtensionAuthorityId(descriptor.capability.value) &&
+                   Detail::IsCanonicalExtensionAuthorityId(descriptor.providerId) && descriptor.version != ApplicationCapabilityVersion{} &&
+                   descriptor.providerGeneration != 0;
         }
 
         [[nodiscard]] bool IsValid(const ApplicationCapabilityVersionRange &versions) noexcept {
@@ -147,8 +129,8 @@ namespace Horo::Extensions {
         provider->descriptor = std::move(descriptor);
         state_->providers.push_back(provider);
         std::ranges::sort(state_->providers, [](const auto &left, const auto &right) {
-            return std::pair{left->descriptor.capability.value, left->descriptor.version} <
-                   std::pair{right->descriptor.capability.value, right->descriptor.version};
+            return std::tie(left->descriptor.capability.value, left->descriptor.version) <
+                   std::tie(right->descriptor.capability.value, right->descriptor.version);
         });
         return Result<ApplicationCapabilityProviderRegistration>::Success(
             ApplicationCapabilityProviderRegistration{state_, std::move(provider)});
