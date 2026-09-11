@@ -33,6 +33,66 @@ namespace Horo::WorldStreaming {
                 return state == Active;
             return intent == RequireLoaded && (state == Resident || state == Active);
         }
+
+        [[nodiscard]] Result<void> ValidateSequence(const std::optional<NetworkStreamingCommandSequence> current,
+                                                    const NetworkStreamingCommandSequence candidate) {
+            if (!current)
+                return candidate.Value() == 1 ? Result<void>::Success()
+                                              : Failure<void>(WorldStreamingErrors::NetworkStreamingAuthorityStale);
+            const auto next = NextNetworkStreamingCommandSequence(*current);
+            if (next.HasError())
+                return Result<void>::Failure(next.ErrorValue());
+            return candidate == next.Value() ? Result<void>::Success()
+                                             : Failure<void>(WorldStreamingErrors::NetworkStreamingAuthorityStale);
+        }
+
+        [[nodiscard]] Result<void> ValidateServerCommand(const NetworkStreamingAuthorityConfig &config,
+                                                         const NetworkStreamingAuthorityLifecycle lifecycle,
+                                                         const std::optional<NetworkStreamingCommandSequence> lastSequence,
+                                                         const NetworkStreamingIntentCommand &command) {
+            if (!command.IsValid()) {
+                return Failure<void>(KnownIntent(command.intent) ? WorldStreamingErrors::NetworkStreamingAuthorityInvalid
+                                                                 : WorldStreamingErrors::NetworkStreamingAuthorityUnsupported);
+            }
+            if (lifecycle != NetworkStreamingAuthorityLifecycle::Active)
+                return Failure<void>(WorldStreamingErrors::NetworkStreamingAuthorityLifecycleUnavailable);
+            if (command.session != config.session || command.partition != config.localOwner.partition)
+                return Failure<void>(WorldStreamingErrors::NetworkStreamingAuthorityStale);
+            return ValidateSequence(lastSequence, command.sequence);
+        }
+
+        [[nodiscard]] Result<void> ValidateReadinessScope(const NetworkStreamingAuthorityConfig &config,
+                                                          const NetworkStreamingAuthorityLifecycle lifecycle,
+                                                          const StreamingRuntimeOwnerToken &localOwner,
+                                                          const NetworkStreamingReadinessReport &report) {
+            if (!localOwner.IsValid() || !report.session.IsValid() || !report.sequence.IsValid() || !report.partition.IsValid() ||
+                !report.cell.IsValid())
+                return Failure<void>(WorldStreamingErrors::NetworkStreamingAuthorityInvalid);
+            if (!KnownReadiness(report.readiness) || report.readiness == NetworkStreamingClientReadiness::Pending)
+                return Failure<void>(WorldStreamingErrors::NetworkStreamingAuthorityUnsupported);
+            if (lifecycle == NetworkStreamingAuthorityLifecycle::Closed)
+                return Failure<void>(WorldStreamingErrors::NetworkStreamingAuthorityLifecycleUnavailable);
+            if (localOwner != config.localOwner || report.session != config.session || report.partition != localOwner.partition)
+                return Failure<void>(WorldStreamingErrors::NetworkStreamingAuthorityStale);
+            return Result<void>::Success();
+        }
+
+        [[nodiscard]] Result<void> ValidateReadyProof(const NetworkStreamingIntentCommand &command,
+                                                      const StreamingRuntimeOwnerToken &localOwner,
+                                                      const NetworkStreamingReadinessReport &report) {
+            const bool ready = report.readiness == NetworkStreamingClientReadiness::Ready;
+            if (!ready)
+                return report.localFence || report.localState ? Failure<void>(WorldStreamingErrors::NetworkStreamingReadinessInvalid)
+                                                              : Result<void>::Success();
+            if (!report.localFence || !report.localState || !report.localFence->IsValid())
+                return Failure<void>(WorldStreamingErrors::NetworkStreamingReadinessInvalid);
+            if (report.localFence->partition != localOwner.partition || report.localFence->epoch != localOwner.epoch ||
+                report.localFence->cell != report.cell)
+                return Failure<void>(WorldStreamingErrors::NetworkStreamingAuthorityStale);
+            return ReadyStateSatisfies(command.intent, *report.localState)
+                       ? Result<void>::Success()
+                       : Failure<void>(WorldStreamingErrors::NetworkStreamingReadinessInvalid);
+        }
     }  // namespace
 
     /** @copydoc NextNetworkStreamingCommandSequence */
@@ -83,26 +143,8 @@ namespace Horo::WorldStreaming {
     /** @copydoc NetworkStreamingAuthority::ApplyServerIntent */
     Result<std::optional<NetworkStreamingAuthorityRecord>> NetworkStreamingAuthority::ApplyServerIntent(
         const NetworkStreamingIntentCommand &command) {
-        if (!command.IsValid()) {
-            return Failure<std::optional<NetworkStreamingAuthorityRecord>>(
-                KnownIntent(command.intent) ? WorldStreamingErrors::NetworkStreamingAuthorityInvalid
-                                            : WorldStreamingErrors::NetworkStreamingAuthorityUnsupported);
-        }
-        if (lifecycle_ != NetworkStreamingAuthorityLifecycle::Active)
-            return Failure<std::optional<NetworkStreamingAuthorityRecord>>(
-                WorldStreamingErrors::NetworkStreamingAuthorityLifecycleUnavailable);
-        if (command.session != config_.session || command.partition != config_.localOwner.partition)
-            return Failure<std::optional<NetworkStreamingAuthorityRecord>>(WorldStreamingErrors::NetworkStreamingAuthorityStale);
-        if (!lastSequence_) {
-            if (command.sequence.Value() != 1)
-                return Failure<std::optional<NetworkStreamingAuthorityRecord>>(WorldStreamingErrors::NetworkStreamingAuthorityStale);
-        } else {
-            const auto next = NextNetworkStreamingCommandSequence(*lastSequence_);
-            if (next.HasError())
-                return Result<std::optional<NetworkStreamingAuthorityRecord>>::Failure(next.ErrorValue());
-            if (command.sequence != next.Value())
-                return Failure<std::optional<NetworkStreamingAuthorityRecord>>(WorldStreamingErrors::NetworkStreamingAuthorityStale);
-        }
+        if (const auto valid = ValidateServerCommand(config_, lifecycle_, lastSequence_, command); valid.HasError())
+            return Result<std::optional<NetworkStreamingAuthorityRecord>>::Failure(valid.ErrorValue());
 
         auto found = FindCell(records_, command.cell);
         const bool exists = found != records_.end() && found->command.cell == command.cell;
@@ -127,31 +169,14 @@ namespace Horo::WorldStreaming {
     /** @copydoc NetworkStreamingAuthority::ApplyClientReadiness */
     Result<NetworkStreamingAuthorityRecord> NetworkStreamingAuthority::ApplyClientReadiness(const StreamingRuntimeOwnerToken &localOwner,
                                                                                             const NetworkStreamingReadinessReport &report) {
-        if (!localOwner.IsValid() || !report.session.IsValid() || !report.sequence.IsValid() || !report.partition.IsValid() ||
-            !report.cell.IsValid())
-            return Failure<NetworkStreamingAuthorityRecord>(WorldStreamingErrors::NetworkStreamingAuthorityInvalid);
-        if (!KnownReadiness(report.readiness) || report.readiness == NetworkStreamingClientReadiness::Pending)
-            return Failure<NetworkStreamingAuthorityRecord>(WorldStreamingErrors::NetworkStreamingAuthorityUnsupported);
-        if (lifecycle_ == NetworkStreamingAuthorityLifecycle::Closed)
-            return Failure<NetworkStreamingAuthorityRecord>(WorldStreamingErrors::NetworkStreamingAuthorityLifecycleUnavailable);
-        if (localOwner != config_.localOwner || report.session != config_.session || report.partition != localOwner.partition)
-            return Failure<NetworkStreamingAuthorityRecord>(WorldStreamingErrors::NetworkStreamingAuthorityStale);
+        if (const auto valid = ValidateReadinessScope(config_, lifecycle_, localOwner, report); valid.HasError())
+            return Result<NetworkStreamingAuthorityRecord>::Failure(valid.ErrorValue());
 
         auto found = FindCell(records_, report.cell);
         if (found == records_.end() || found->command.cell != report.cell || found->command.sequence != report.sequence)
             return Failure<NetworkStreamingAuthorityRecord>(WorldStreamingErrors::NetworkStreamingAuthorityStale);
-
-        if (report.readiness == NetworkStreamingClientReadiness::Ready) {
-            if (!report.localFence || !report.localState || !report.localFence->IsValid())
-                return Failure<NetworkStreamingAuthorityRecord>(WorldStreamingErrors::NetworkStreamingReadinessInvalid);
-            if (report.localFence->partition != localOwner.partition || report.localFence->epoch != localOwner.epoch ||
-                report.localFence->cell != report.cell)
-                return Failure<NetworkStreamingAuthorityRecord>(WorldStreamingErrors::NetworkStreamingAuthorityStale);
-            if (!ReadyStateSatisfies(found->command.intent, *report.localState))
-                return Failure<NetworkStreamingAuthorityRecord>(WorldStreamingErrors::NetworkStreamingReadinessInvalid);
-        } else if (report.localFence || report.localState) {
-            return Failure<NetworkStreamingAuthorityRecord>(WorldStreamingErrors::NetworkStreamingReadinessInvalid);
-        }
+        if (const auto valid = ValidateReadyProof(found->command, localOwner, report); valid.HasError())
+            return Result<NetworkStreamingAuthorityRecord>::Failure(valid.ErrorValue());
 
         found->readiness = report.readiness;
         found->localFence = report.localFence;
