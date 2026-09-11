@@ -65,9 +65,15 @@ namespace Horo::WorldStreaming {
         };
 
         struct PlanStorage final {
+            struct SoftReferenceResolution final {
+                std::size_t source{};
+                std::optional<std::size_t> target{};
+            };
+
             std::vector<WorldDependencyBundleEntry> bundles;
             std::vector<WorldDependencyEndpoint> members;
             std::vector<WorldDependencyCandidate> softReferences;
+            std::vector<SoftReferenceResolution> softResolutions;
         };
 
         struct HardGraphState final {
@@ -88,7 +94,7 @@ namespace Horo::WorldStreaming {
         }
 
         [[nodiscard]] Result<void> ProcessSoftEdge(const WorldDependencyCandidate &edge,
-                                                   const std::span<const WorldSpatialAssignmentEntry> objects,
+                                                   const std::span<const WorldSpatialAssignmentEntry> objects, const std::size_t source,
                                                    const std::optional<std::size_t> target, const WorldDependencyPlanLimits limits,
                                                    PlanStorage &storage) {
             if (target.has_value()) {
@@ -98,6 +104,7 @@ namespace Horo::WorldStreaming {
             if (storage.softReferences.size() >= limits.maximumSoftReferences)
                 return Result<void>::Failure(MakeError(WorldStreamingErrors::DependencyPlanCapacityExceeded));
             storage.softReferences.emplace_back(edge);
+            storage.softResolutions.emplace_back(source, target);
             return Result<void>::Success();
         }
 
@@ -133,7 +140,7 @@ namespace Horo::WorldStreaming {
 
             const auto target = FindObject(objects, edge.target.address);
             if (edge.kind == WorldDependencyKind::Soft)
-                return ProcessSoftEdge(edge, objects, target, limits, storage);
+                return ProcessSoftEdge(edge, objects, *source, target, limits, storage);
             return ProcessHardEdge(edge, objects, *source, target, limits, {sets, hardCounts, hardMembers});
         }
 
@@ -155,6 +162,17 @@ namespace Horo::WorldStreaming {
                 const auto offset = static_cast<std::uint32_t>(storage.members.size());
                 storage.members.insert(storage.members.end(), component.begin(), component.end());
                 storage.bundles.emplace_back(offset, static_cast<std::uint32_t>(component.size()));
+            }
+            return Result<void>::Success();
+        }
+
+        [[nodiscard]] Result<void> ValidateSoftReferencePolicy(DisjointSets &sets,
+                                                               const std::span<const PlanStorage::SoftReferenceResolution> resolutions) {
+            for (const auto &resolution : resolutions) {
+                if (!resolution.target.has_value())
+                    continue;
+                if (sets.Root(resolution.source) == sets.Root(*resolution.target))
+                    return Result<void>::Failure(MakeError(WorldStreamingErrors::DependencyPlanAmbiguous));
             }
             return Result<void>::Success();
         }
@@ -190,6 +208,8 @@ namespace Horo::WorldStreaming {
             if (const auto processed = ProcessEdge(edge, objects, limits, sets, hardCounts, hardMembers, storage); processed.HasError())
                 return Result<WorldDependencyPlan>::Failure(processed.ErrorValue());
         }
+        if (const auto policy = ValidateSoftReferencePolicy(sets, storage.softResolutions); policy.HasError())
+            return Result<WorldDependencyPlan>::Failure(policy.ErrorValue());
         if (const auto bundles = BuildBundles(objects, limits, sets, hardMembers, storage); bundles.HasError())
             return Result<WorldDependencyPlan>::Failure(bundles.ErrorValue());
         return Result<WorldDependencyPlan>::Success(WorldDependencyPlan{assignments.Partition(), std::move(storage.bundles),

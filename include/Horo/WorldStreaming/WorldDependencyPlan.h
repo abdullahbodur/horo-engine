@@ -70,7 +70,8 @@ namespace Horo::WorldStreaming {
          * @param assignments Immutable spatial cook output defining the admitted object revisions.
          * @param dependencies Directed authored edges; input storage is never retained or modified.
          * @param limits Mandatory non-zero count ceilings applied before result publication.
-         * @return Owned in-memory plan, or a stable typed error with no partial result.
+         * @return Owned in-memory plan, or a stable typed error for invalid, stale, over-capacity, missing-hard-target, or
+         *         mixed hard/soft policy input with no partial result.
          */
         [[nodiscard]] static Result<WorldDependencyPlan> Create(const WorldSpatialAssignment &assignments,
                                                                 std::span<const WorldDependencyCandidate> dependencies,

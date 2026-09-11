@@ -64,6 +64,11 @@ namespace Horo::WorldStreaming {
 
         constexpr WorldDependencyPlanLimits Limits{16, 8, 8, 8};
 
+        void RequirePlanShape(const WorldDependencyPlan &plan, const std::size_t bundleCount, const std::size_t softReferenceCount) {
+            REQUIRE(plan.Bundles().size() == bundleCount);
+            REQUIRE(plan.SoftReferences().size() == softReferenceCount);
+        }
+
         TEST_CASE("Dependency plan collapses hard chains diamonds and cycles into one canonical bundle",
                   "[unit][world_streaming][dependency_plan]") {
             const auto assignments = Assignments();
@@ -105,15 +110,35 @@ namespace Horo::WorldStreaming {
 
             auto result = WorldDependencyPlan::Create(assignments, dependencies, Limits);
             REQUIRE(result.HasValue());
-            REQUIRE(result.Value().Bundles().empty());
-            REQUIRE(result.Value().SoftReferences().size() == 2);
+            RequirePlanShape(result.Value(), 0, 2);
             REQUIRE(result.Value().SoftReferences()[0].source.address.object == 1);
             REQUIRE(result.Value().SoftReferences()[1].target.address.object == 9);
 
             auto empty = WorldDependencyPlan::Create(assignments, {}, Limits);
             REQUIRE(empty.HasValue());
-            REQUIRE(empty.Value().Bundles().empty());
-            REQUIRE(empty.Value().SoftReferences().empty());
+            RequirePlanShape(empty.Value(), 0, 0);
+        }
+
+        TEST_CASE("Dependency plan rejects soft references inside transitive hard co-load bundles",
+                  "[unit][world_streaming][dependency_plan][policy]") {
+            const auto assignments = Assignments();
+
+            const std::array directConflict{Edge(1, 2), Edge(1, 2, WorldDependencyKind::Soft)};
+            RequireError(WorldDependencyPlan::Create(assignments, directConflict, Limits), WorldStreamingErrors::DependencyPlanAmbiguous);
+
+            const std::array transitiveConflict{Edge(1, 2), Edge(2, 3), Edge(3, 1, WorldDependencyKind::Soft)};
+            RequireError(WorldDependencyPlan::Create(assignments, transitiveConflict, Limits),
+                         WorldStreamingErrors::DependencyPlanAmbiguous);
+        }
+
+        TEST_CASE("Dependency plan permits soft-only cycles because resolution remains deferred",
+                  "[unit][world_streaming][dependency_plan][policy]") {
+            const auto assignments = Assignments();
+            const std::array dependencies{Edge(1, 2, WorldDependencyKind::Soft), Edge(2, 1, WorldDependencyKind::Soft)};
+
+            auto result = WorldDependencyPlan::Create(assignments, dependencies, Limits);
+            REQUIRE(result.HasValue());
+            RequirePlanShape(result.Value(), 0, 2);
         }
 
         TEST_CASE("Dependency plan rejects malformed self and duplicate edges", "[unit][world_streaming][dependency_plan]") {

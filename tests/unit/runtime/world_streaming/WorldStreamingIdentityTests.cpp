@@ -208,6 +208,7 @@ namespace Horo::WorldStreaming {
                 &WorldStreamingErrors::DependencyPlanRevisionStale,
                 &WorldStreamingErrors::DependencyPlanCapacityExceeded,
                 &WorldStreamingErrors::DependencyPlanHardTargetMissing,
+                &WorldStreamingErrors::DependencyPlanAmbiguous,
                 &WorldStreamingErrors::SourceDescriptorInvalid,
                 &WorldStreamingErrors::SourceIntentUnsupported,
                 &WorldStreamingErrors::SourceOwnerStale,
