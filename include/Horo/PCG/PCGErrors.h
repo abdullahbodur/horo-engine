@@ -2,7 +2,7 @@
 
 /**
  * @file PCGErrors.h
- * @brief Stable procedural-generation identity failures independent of runtime and target backends.
+ * @brief Stable procedural-generation contract failures independent of runtime and target backends.
  */
 
 #include "Horo/Foundation/ErrorCode.h"
@@ -62,4 +62,22 @@ namespace Horo::PCG::PCGErrors {
     extern const ErrorCodeDescriptor UnsupportedCapability;
     /** @brief An exact node runtime required by a registered graph is unavailable. */
     extern const ErrorCodeDescriptor RuntimeUnavailable;
+    /** @brief A graph source envelope, field, value, or topology endpoint is malformed. */
+    extern const ErrorCodeDescriptor GraphSourceMalformed;
+    /** @brief A stable graph, node, pin, edge, exposed-input, or key identity is duplicated. */
+    extern const ErrorCodeDescriptor GraphSourceDuplicate;
+    /** @brief The graph source schema cannot be consumed by this implementation. */
+    extern const ErrorCodeDescriptor GraphSourceVersionUnsupported;
+    /** @brief The graph source exceeds a caller-selected or compiled safety ceiling. */
+    extern const ErrorCodeDescriptor GraphSourceCapacityExceeded;
+    /** @brief The graph has an illegal edge, pin association, cardinality, or cycle. */
+    extern const ErrorCodeDescriptor GraphTopologyInvalid;
+    /** @brief A node type is unavailable under the selected unknown-node policy. */
+    extern const ErrorCodeDescriptor GraphNodeTypeUnknown;
+    /** @brief A graph source migration was required but unavailable or invalid. */
+    extern const ErrorCodeDescriptor GraphMigrationFailed;
+    /** @brief A replacement changes graph identity or fails to advance its durable revision. */
+    extern const ErrorCodeDescriptor GraphReplacementInvalid;
+    /** @brief Graph-source work was rejected because cancellation or shutdown closed admission. */
+    extern const ErrorCodeDescriptor GraphLifecycleUnavailable;
 }  // namespace Horo::PCG::PCGErrors
