@@ -56,7 +56,7 @@ namespace Horo::WorldStreaming {
     };
 
     /** @brief Bitset of exact package modes supported by one host/product artifact. */
-    enum class WorldPartitionPackageCapabilities : std::uint8_t {
+    enum class WorldPartitionPackageCapabilities : std::uint32_t {
         None = 0,
         StandaloneCellFile = 1U << 0U,
         ArchiveChunk = 1U << 1U,
@@ -65,7 +65,7 @@ namespace Horo::WorldStreaming {
     /** @brief Combines declared package capabilities. */
     [[nodiscard]] constexpr WorldPartitionPackageCapabilities operator|(const WorldPartitionPackageCapabilities left,
                                                                         const WorldPartitionPackageCapabilities right) noexcept {
-        return static_cast<WorldPartitionPackageCapabilities>(static_cast<std::uint8_t>(left) | static_cast<std::uint8_t>(right));
+        return static_cast<WorldPartitionPackageCapabilities>(static_cast<std::uint32_t>(left) | static_cast<std::uint32_t>(right));
     }
 
     /** @brief Explicit settings-admission lifecycle state. */

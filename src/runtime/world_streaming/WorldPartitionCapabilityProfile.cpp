@@ -2,8 +2,8 @@
 
 namespace Horo::WorldStreaming {
     namespace {
-        constexpr std::uint8_t AllPackageBits = static_cast<std::uint8_t>(WorldPartitionPackageCapabilities::StandaloneCellFile) |
-                                                static_cast<std::uint8_t>(WorldPartitionPackageCapabilities::ArchiveChunk);
+        constexpr std::uint32_t AllPackageBits = static_cast<std::uint32_t>(WorldPartitionPackageCapabilities::StandaloneCellFile) |
+                                                 static_cast<std::uint32_t>(WorldPartitionPackageCapabilities::ArchiveChunk);
 
         [[nodiscard]] constexpr bool IsKnown(const WorldPartitionProjectProfile value) noexcept {
             using enum WorldPartitionProjectProfile;
@@ -26,8 +26,8 @@ namespace Horo::WorldStreaming {
         }
 
         [[nodiscard]] constexpr bool IsValid(const WorldPartitionPackageCapabilities value) noexcept {
-            const auto bits = static_cast<std::uint8_t>(value);
-            return bits != 0 && (bits & static_cast<std::uint8_t>(~AllPackageBits)) == 0;
+            const auto bits = static_cast<std::uint32_t>(value);
+            return bits != 0 && (bits & ~AllPackageBits) == 0;
         }
 
         [[nodiscard]] constexpr WorldPartitionPackageCapabilities CapabilityFor(const WorldPartitionPackageMode mode) noexcept {
@@ -45,7 +45,7 @@ namespace Horo::WorldStreaming {
 
         [[nodiscard]] constexpr bool Contains(const WorldPartitionPackageCapabilities set,
                                               const WorldPartitionPackageCapabilities capability) noexcept {
-            return (static_cast<std::uint8_t>(set) & static_cast<std::uint8_t>(capability)) != 0;
+            return (static_cast<std::uint32_t>(set) & static_cast<std::uint32_t>(capability)) != 0;
         }
 
         [[nodiscard]] bool ValidCapabilityGrid(const WorldPartitionCapabilitySnapshot &capabilities) noexcept {
@@ -131,8 +131,8 @@ namespace Horo::WorldStreaming {
         auto policy = GetWorldPartitionProjectProfilePolicy(request.profile);
         if (policy.HasError())
             return Result<WorldPartitionProjectSettings>::Failure(policy.ErrorValue());
-        const auto requestedPackage = CapabilityFor(request.packageMode);
-        if (!Contains(policy.Value().packages, requestedPackage) || !Contains(capabilities.packages, requestedPackage))
+        if (const auto requestedPackage = CapabilityFor(request.packageMode);
+            !Contains(policy.Value().packages, requestedPackage) || !Contains(capabilities.packages, requestedPackage))
             return Result<WorldPartitionProjectSettings>::Failure(MakeError(WorldStreamingErrors::PartitionSettingsUnsupported));
 
         if (ExceedsGridCapabilities(request, capabilities) || ExceedsStorageCapabilities(request, capabilities))
