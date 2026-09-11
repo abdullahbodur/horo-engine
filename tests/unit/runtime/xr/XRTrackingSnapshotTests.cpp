@@ -101,6 +101,11 @@ namespace Horo::XR {
             return result.HasError() && result.ErrorValue().domain.Value() == descriptor.domain.Value() &&
                    result.ErrorValue().code.Value() == descriptor.code.Value();
         }
+
+        void RequireInvalidSnapshot(const TrackingFixture &fixture) {
+            REQUIRE(HasErrorIdentity(XRTrackingSnapshot::Create(fixture.Descriptor(), fixture.session, fixture.origin),
+                                     XRErrors::TrackingSnapshotInvalid));
+        }
     }  // namespace
 
     TEST_CASE("XR tracking snapshots own bounded canonical evidence", "[unit][xr][tracking-snapshot]") {
@@ -161,29 +166,21 @@ namespace Horo::XR {
 
         fixture.devices = {fixture.head, fixture.controller};
         fixture.devices.push_back(fixture.controller);
-        descriptor = fixture.Descriptor();
-        REQUIRE(
-            HasErrorIdentity(XRTrackingSnapshot::Create(descriptor, fixture.session, fixture.origin), XRErrors::TrackingSnapshotInvalid));
+        RequireInvalidSnapshot(fixture);
 
         fixture.devices = {fixture.head, fixture.controller};
         auto duplicateHead = fixture.head;
         duplicateHead.id.slot.index = 22;
         fixture.devices.push_back(duplicateHead);
-        descriptor = fixture.Descriptor();
-        REQUIRE(
-            HasErrorIdentity(XRTrackingSnapshot::Create(descriptor, fixture.session, fixture.origin), XRErrors::TrackingSnapshotInvalid));
+        RequireInvalidSnapshot(fixture);
 
         fixture.devices = {fixture.head, fixture.controller};
         fixture.devices[1].capabilities.values[static_cast<std::size_t>(XRTrackedDeviceCapability::HeadPose)] = true;
-        descriptor = fixture.Descriptor();
-        REQUIRE(
-            HasErrorIdentity(XRTrackingSnapshot::Create(descriptor, fixture.session, fixture.origin), XRErrors::TrackingSnapshotInvalid));
+        RequireInvalidSnapshot(fixture);
 
         fixture.devices = {fixture.head, fixture.controller};
         fixture.devices[1].role = XRTrackedDeviceRole::Count;
-        descriptor = fixture.Descriptor();
-        REQUIRE(
-            HasErrorIdentity(XRTrackingSnapshot::Create(descriptor, fixture.session, fixture.origin), XRErrors::TrackingSnapshotInvalid));
+        RequireInvalidSnapshot(fixture);
     }
 
     TEST_CASE("XR tracking snapshots reject contradictory device and pose evidence", "[unit][xr][tracking-snapshot]") {
