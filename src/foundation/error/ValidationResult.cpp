@@ -104,17 +104,18 @@ namespace Horo {
 
     /** @copydoc ValidationResultBuilder::Complete */
     Result<ValidationResult> ValidationResultBuilder::Complete() {
-        if (state_ == State::Failed) {
-            state_ = State::Completed;
+        using enum State;
+        if (state_ == Failed) {
+            state_ = Completed;
             return Result<ValidationResult>::Failure(std::move(failure_));
         }
-        if (state_ == State::Completed)
+        if (state_ == Completed)
             return Result<ValidationResult>::Failure(MakeError(ValidationErrors::PassClosed));
 
-        state_ = State::Completed;
+        state_ = Completed;
         std::ranges::sort(diagnostics_, {}, &SortKey);
         const auto uniqueEnd = std::ranges::unique(diagnostics_, IsExactDuplicate).begin();
-        const std::size_t duplicateCount = static_cast<std::size_t>(diagnostics_.end() - uniqueEnd);
+        const auto duplicateCount = static_cast<std::size_t>(diagnostics_.end() - uniqueEnd);
         diagnostics_.erase(uniqueEnd, diagnostics_.end());
         return Result<ValidationResult>::Success(ValidationResult{std::move(diagnostics_), duplicateCount});
     }
