@@ -125,6 +125,7 @@ add_library(HoroPlatformServices STATIC
         platform_services/PlatformRequest.cpp
         platform_services/PlatformRequestErrors.cpp
         platform_services/PlatformServicesBackend.cpp
+        platform_services/PlatformServicesFrontend.cpp
         platform_services/PlatformStableIdRegistry.cpp
         platform_services/PlatformUserSession.cpp
 )

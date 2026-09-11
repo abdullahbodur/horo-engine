@@ -216,6 +216,14 @@ provider cancellation, normalized provider errors, and host-wide frontend compos
 remain the later PLS-001.3 through PLS-001.8 slices; callers must not treat the request
 store as a provider backend or bypass those owners.
 
+PLS-001.3 adds the generation-fenced `PlatformServicesFrontend` routing boundary.
+It retains a strong backend lease plus copied capability/session snapshots, exposes
+only Horo request types and public finite limits, and rejects closed, policy-denied,
+unavailable/Null, stale-session, malformed-ID and over-bound requests before backend
+invocation. Routing and idempotent `Close` are serialized by the composition owner;
+`Close` publishes closed admission before invoking backend shutdown. The completion
+queue and provider-to-frontend request-store handoff remain PLS-001.4 scope.
+
 ```cpp
 template <typename T>
 class PlatformRequestHandle {
