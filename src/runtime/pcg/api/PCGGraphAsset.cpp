@@ -249,9 +249,18 @@ namespace Horo::PCG {
             return Result<PCGExposedInput>::Success({*id, std::move(*key), *node, *pin, std::move(*value)});
         }
 
-        [[nodiscard]] Result<PCGGraphAsset> DecodeCurrent(const std::span<const std::uint8_t> source, const PCGGraphSourceContext &context,
-                                                          const PCGGraphSourceLimits &limits) {
-            ByteReader reader{source};
+        struct EncodedGraphHeader final {
+            PCGGraphSchemaVersion version;
+            GraphGeneration generation;
+            PCGOperationalTier tier;
+            PCGGenerationMode mode;
+            std::uint64_t seed;
+            std::uint32_t nodeCount;
+            std::uint32_t edgeCount;
+            std::uint32_t inputCount;
+        };
+
+        [[nodiscard]] Result<EncodedGraphHeader> ReadGraphHeader(ByteReader &reader) {
             const auto magic = reader.ReadBytes(GraphMagic.size());
             const auto major = reader.ReadInteger<std::uint16_t>();
             const auto minor = reader.ReadInteger<std::uint16_t>();
@@ -266,32 +275,46 @@ namespace Horo::PCG {
             if (!magic.has_value() || !std::ranges::equal(*magic, GraphMagic) || !major.has_value() || !minor.has_value() ||
                 !graph.has_value() || !revision.has_value() || !tier.has_value() || !mode.has_value() || !seed.has_value() ||
                 !nodeCount.has_value() || !edgeCount.has_value() || !inputCount.has_value())
-                return Failed<PCGGraphAsset>(PCGErrors::GraphSourceMalformed);
-            if (*nodeCount > limits.maximumNodes || *edgeCount > limits.maximumEdges || *inputCount > limits.maximumExposedInputs)
+                return Failed<EncodedGraphHeader>(PCGErrors::GraphSourceMalformed);
+            return Result<EncodedGraphHeader>::Success({{*major, *minor},
+                                                        {*graph, *revision},
+                                                        static_cast<PCGOperationalTier>(*tier),
+                                                        static_cast<PCGGenerationMode>(*mode),
+                                                        *seed,
+                                                        *nodeCount,
+                                                        *edgeCount,
+                                                        *inputCount});
+        }
+
+        [[nodiscard]] Result<PCGGraphAsset> DecodeCurrent(const std::span<const std::uint8_t> source, const PCGGraphSourceContext &context,
+                                                          const PCGGraphSourceLimits &limits) {
+            ByteReader reader{source};
+            auto header = ReadGraphHeader(reader);
+            if (header.HasError())
+                return Result<PCGGraphAsset>::Failure(header.ErrorValue());
+            const EncodedGraphHeader &decoded = header.Value();
+            if (decoded.nodeCount > limits.maximumNodes || decoded.edgeCount > limits.maximumEdges ||
+                decoded.inputCount > limits.maximumExposedInputs)
                 return Failed<PCGGraphAsset>(PCGErrors::GraphSourceCapacityExceeded);
 
-            PCGGraphSourceData data{{*major, *minor},
-                                    {*graph, *revision},
-                                    static_cast<PCGOperationalTier>(*tier),
-                                    static_cast<PCGGenerationMode>(*mode),
-                                    *seed};
-            data.nodes.reserve(*nodeCount);
+            PCGGraphSourceData data{decoded.version, decoded.generation, decoded.tier, decoded.mode, decoded.seed};
+            data.nodes.reserve(decoded.nodeCount);
             std::size_t totalPins{};
-            for (std::uint32_t nodeIndex = 0; nodeIndex < *nodeCount; ++nodeIndex) {
+            for (std::uint32_t nodeIndex = 0; nodeIndex < decoded.nodeCount; ++nodeIndex) {
                 auto node = ReadNode(reader, limits, totalPins);
                 if (node.HasError())
                     return Result<PCGGraphAsset>::Failure(node.ErrorValue());
                 data.nodes.push_back(std::move(node).Value());
             }
-            data.edges.reserve(*edgeCount);
-            for (std::uint32_t index = 0; index < *edgeCount; ++index) {
+            data.edges.reserve(decoded.edgeCount);
+            for (std::uint32_t index = 0; index < decoded.edgeCount; ++index) {
                 auto edge = ReadEdge(reader);
                 if (edge.HasError())
                     return Result<PCGGraphAsset>::Failure(edge.ErrorValue());
                 data.edges.push_back(std::move(edge).Value());
             }
-            data.exposedInputs.reserve(*inputCount);
-            for (std::uint32_t index = 0; index < *inputCount; ++index) {
+            data.exposedInputs.reserve(decoded.inputCount);
+            for (std::uint32_t index = 0; index < decoded.inputCount; ++index) {
                 auto input = ReadExposedInput(reader, limits.maximumIdentifierBytes);
                 if (input.HasError())
                     return Result<PCGGraphAsset>::Failure(input.ErrorValue());
