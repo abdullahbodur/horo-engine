@@ -67,4 +67,33 @@ namespace Horo::Release::ReleaseErrors {
                                                "Select an explicit package format admitted by the release or distribution profile.",
                                            .retryable = false,
                                            .userActionable = true};
+    const ErrorCodeDescriptor ProfileInvalid{.domain = Domain,
+                                             .code = ErrorCode{"release.profile.invalid"},
+                                             .defaultSeverity = ErrorSeverity::Error,
+                                             .summary = "The release profile catalog is invalid or incomplete.",
+                                             .remediationHint = "Correct the named preset fields and resolve it again.",
+                                             .retryable = false,
+                                             .userActionable = true};
+    const ErrorCodeDescriptor ProfileConflict{.domain = Domain,
+                                              .code = ErrorCode{"release.profile.conflict"},
+                                              .defaultSeverity = ErrorSeverity::Error,
+                                              .summary = "Release profile inheritance or overrides conflict.",
+                                              .remediationHint = "Remove the cycle or align inherited product and package policy.",
+                                              .retryable = false,
+                                              .userActionable = true};
+    const ErrorCodeDescriptor ProfileCapabilityUnsupported{.domain = Domain,
+                                                           .code = ErrorCode{"release.profile.capability_unsupported"},
+                                                           .defaultSeverity = ErrorSeverity::Error,
+                                                           .summary = "A required release capability is unavailable.",
+                                                           .remediationHint =
+                                                               "Choose a supported profile or provide the named host capability.",
+                                                           .retryable = false,
+                                                           .userActionable = true};
+    const ErrorCodeDescriptor ProfileLimitExceeded{.domain = Domain,
+                                                   .code = ErrorCode{"release.profile.limit"},
+                                                   .defaultSeverity = ErrorSeverity::Error,
+                                                   .summary = "The release profile catalog exceeds its resource policy.",
+                                                   .remediationHint = "Reduce the catalog size, inheritance depth, or policy list sizes.",
+                                                   .retryable = false,
+                                                   .userActionable = true};
 }  // namespace Horo::Release::ReleaseErrors

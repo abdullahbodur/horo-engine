@@ -125,6 +125,7 @@ add_library(HoroPlatformServices STATIC
         platform_services/PlatformRequest.cpp
         platform_services/PlatformRequestErrors.cpp
         platform_services/PlatformServicesBackend.cpp
+        platform_services/PlatformServicesFrontend.cpp
         platform_services/PlatformStableIdRegistry.cpp
         platform_services/PlatformUserSession.cpp
 )
@@ -153,6 +154,7 @@ add_library(HoroApplication STATIC
         application/project_migration/ProjectMigrationExecution.cpp
         application/release/DistributionModel.cpp
         application/release/ReleaseErrors.cpp
+        application/release/ReleaseProfile.cpp
         application/release/ReleaseVersion.cpp
 )
 add_library(HoroEngine::Application ALIAS HoroApplication)
@@ -586,6 +588,7 @@ add_library(HoroXRApi STATIC
         runtime/xr/api/XRErrors.cpp
         runtime/xr/api/XRIdentity.cpp
         runtime/xr/api/XRSpacePose.cpp
+        runtime/xr/api/XRTrackingSnapshot.cpp
 )
 add_library(HoroEngine::XRApi ALIAS HoroXRApi)
 target_compile_features(HoroXRApi PUBLIC cxx_std_20)
@@ -608,6 +611,7 @@ target_compile_features(HoroNavigationNull PUBLIC cxx_std_20)
 target_link_libraries(HoroNavigationNull PUBLIC HoroEngine::NavigationApi)
 
 add_library(HoroWorldStreaming STATIC
+        runtime/world_streaming/NetworkStreamingAuthority.cpp
         runtime/world_streaming/OriginFrame.cpp
         runtime/world_streaming/CookedWorldIndexManifest.cpp
         runtime/world_streaming/FallbackStreamingProvider.cpp
@@ -1143,6 +1147,7 @@ add_library(HoroExtensions STATIC
         extensions/registry/ExtensionInventory.cpp
         extensions/marketplace/ExtensionMarketplace.cpp
         extensions/capabilities/asset_pipeline_points/ExternalAssetImporter.cpp
+        extensions/capabilities/project_validator/ProjectValidatorRegistry.cpp
 )
 
 add_library(HoroEngine::Extensions ALIAS HoroExtensions)

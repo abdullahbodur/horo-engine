@@ -1264,9 +1264,25 @@ It materializes schema-sized active and scratch value stores at activation; deta
 write batches and commit change facts use fixed-capacity storage, so ordinary
 `BlackboardSync` commits do not grow containers or allocate. A batch captures the binding and revision,
 is validated completely, and is applied only by the owning `BlackboardSync` safe point.
-Unknown, duplicate, read-only, type-invalid, or stale writes reject the whole batch.
+Repeated staging of one key coalesces in place with deterministic last-write-wins
+semantics and counts once against the unique-key limit. Unknown, read-only,
+type-invalid, or stale writes reject the whole batch.
 Changed-key facts are emitted in stable `BlackboardKeyId` order and the monotonic
 revision advances only when stored values change.
+
+Each instance owns a fixed-capacity observer registry scoped to its exact agent and
+instance generation. Registrations bind one stable key and one generation-checked
+task handle to a borrowed, non-throwing owner-thread callback; callback context must
+remain alive until removal, task cancellation, instance replacement, or teardown.
+One immutable key-sorted notification batch is assembled per changed revision, and
+matching callbacks execute in deterministic registry-slot order without a generic
+event-bus scan. Notification storage and spans are callback-scoped and cannot be
+retained. Publication first freezes the matching callback/context pairs so it never
+holds a mutable registry or blackboard iterator across user code. Every blackboard
+or observer-registry mutation entry point rejects reentrant callback mutation with a
+typed error; callers stage follow-up work for the next `BlackboardSync`. Removal and
+task cancellation guarantee no later callbacks, while replacement and teardown
+invalidate all registrations before releasing their borrowed contexts.
 
 `BlackboardSnapshot` owns an immutable value copy rather than a pointer to mutable
 instance storage, so workers cannot mutate or retain the Scene-owned store. Ordinary

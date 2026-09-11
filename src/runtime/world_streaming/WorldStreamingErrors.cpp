@@ -19,6 +19,31 @@ namespace Horo::WorldStreaming::WorldStreamingErrors {
         }
     }  // namespace
 
+    const ErrorCodeDescriptor NetworkStreamingAuthorityInvalid =
+        Describe("world_streaming.network_authority.invalid", ErrorSeverity::Error,
+                 "A network-streaming authority configuration, command, report, or readiness proof is malformed.",
+                 "Provide complete typed peer, partition, cell, sequence, local-owner and readiness evidence.", true);
+    const ErrorCodeDescriptor NetworkStreamingAuthorityUnsupported =
+        Describe("world_streaming.network_authority.unsupported", ErrorSeverity::Error,
+                 "A network-streaming intent, readiness disposition, or local residency proof is unsupported.",
+                 "Use a supported server intent and a terminal client readiness result satisfying the current requirement.", true);
+    const ErrorCodeDescriptor NetworkStreamingAuthorityStale =
+        Describe("world_streaming.network_authority.stale", ErrorSeverity::Warning,
+                 "A network-streaming command or report no longer names the current peer, sequence, partition, cell, or local epoch.",
+                 "Refresh the peer intent snapshot and local residency proof before retrying.", false);
+    const ErrorCodeDescriptor NetworkStreamingAuthorityCapacityExceeded =
+        Describe("world_streaming.network_authority.capacity_exceeded", ErrorSeverity::Error,
+                 "The bounded client relevance snapshot cannot admit another cell.",
+                 "Release an obsolete relevance command or select a supported larger host ceiling.", false);
+    const ErrorCodeDescriptor NetworkStreamingAuthorityLifecycleUnavailable =
+        Describe("world_streaming.network_authority.lifecycle_unavailable", ErrorSeverity::Warning,
+                 "Network-streaming server-intent admission is cancelled or protocol admission is shut down.",
+                 "Use an active peer and mounted client-partition owner lifetime.", false);
+    const ErrorCodeDescriptor NetworkStreamingReadinessInvalid =
+        Describe("world_streaming.network_authority.readiness_invalid", ErrorSeverity::Error,
+                 "The client readiness result does not carry a current local residency proof satisfying server intent.",
+                 "Report Ready only with the exact local cell fence and sufficient Resident or Active state.", false);
+
     const ErrorCodeDescriptor OriginFrameInvalid =
         Describe("world_streaming.origin_frame.invalid", ErrorSeverity::Error,
                  "An origin-frame binding or externally supplied local coordinate is malformed.",

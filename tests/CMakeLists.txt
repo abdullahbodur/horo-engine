@@ -354,10 +354,13 @@ target_link_libraries(HoroNavigationApiTests PRIVATE HoroEngine::NavigationApi H
 horo_register_catch_test(HoroNavigationApiTests LABELS "unit;navigation;headless")
 
 add_executable(HoroXRApiTests
+        support/AllocationProbe.cpp
         unit/runtime/xr/XRApiContractTests.cpp
         unit/runtime/xr/XRSpacePoseTests.cpp
+        unit/runtime/xr/XRTrackingSnapshotTests.cpp
 )
 target_compile_features(HoroXRApiTests PRIVATE cxx_std_20)
+target_include_directories(HoroXRApiTests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
 target_link_libraries(HoroXRApiTests PRIVATE HoroEngine::XRApi)
 horo_register_catch_test(HoroXRApiTests LABELS "unit;xr;headless")
 
@@ -370,6 +373,7 @@ target_link_libraries(HoroTerrainApiTests PRIVATE HoroEngine::TerrainApi)
 horo_register_catch_test(HoroTerrainApiTests LABELS "unit;terrain;headless")
 
 add_executable(HoroWorldStreamingTests
+        unit/runtime/world_streaming/NetworkStreamingAuthorityTests.cpp
         unit/runtime/world_streaming/OriginFrameTests.cpp
         unit/runtime/world_streaming/CookedWorldIndexManifestTests.cpp
         unit/runtime/world_streaming/FallbackStreamingProviderTests.cpp
@@ -646,6 +650,11 @@ add_executable(HoroDistributionModelTests
 )
 target_compile_features(HoroDistributionModelTests PRIVATE cxx_std_20)
 target_link_libraries(HoroDistributionModelTests PRIVATE HoroEngine::Application)
+add_executable(HoroReleaseProfileTests
+        unit/application/ReleaseProfileTests.cpp
+)
+target_compile_features(HoroReleaseProfileTests PRIVATE cxx_std_20)
+target_link_libraries(HoroReleaseProfileTests PRIVATE HoroEngine::Application nlohmann_json::nlohmann_json)
 add_executable(HoroProjectMigrationTests
         unit/application/ProjectMigrationTests.cpp
 )
@@ -990,6 +999,7 @@ add_executable(HoroPlatformRequestTests
         unit/platform_services/PlatformProjectConfigurationTests.cpp
         unit/platform_services/PlatformRequestTests.cpp
         unit/platform_services/PlatformServicesBackendTests.cpp
+        unit/platform_services/PlatformServicesFrontendTests.cpp
         unit/platform_services/PlatformStableIdRegistryTests.cpp
         unit/platform_services/PlatformUserSessionTests.cpp
 )
@@ -1408,6 +1418,13 @@ if(TARGET HoroAssetImporterBasicExample)
 endif()
 add_test(NAME HoroExtensionManagerTests COMMAND HoroExtensionManagerTests)
 
+add_executable(HoroProjectValidatorRegistryTests
+        unit/extensions/ProjectValidatorRegistryTests.cpp
+)
+target_compile_features(HoroProjectValidatorRegistryTests PRIVATE cxx_std_20)
+target_link_libraries(HoroProjectValidatorRegistryTests PRIVATE HoroEngine::Extensions Catch2::Catch2WithMain)
+add_test(NAME HoroProjectValidatorRegistryTests COMMAND HoroProjectValidatorRegistryTests)
+
 add_executable(HoroSecurityBaselineTests unit/security/SecurityBaselineTests.cpp)
 target_compile_features(HoroSecurityBaselineTests PRIVATE cxx_std_20)
 target_link_libraries(HoroSecurityBaselineTests PRIVATE
@@ -1540,6 +1557,7 @@ set(HORO_CATCH_TEST_TARGETS
         HoroProjectCompatibilityTests
         HoroReleaseVersionTests
         HoroDistributionModelTests
+        HoroReleaseProfileTests
         HoroProjectMigrationTests
         HoroProjectMigrationTransactionTests
         HoroProjectOpenServiceTests

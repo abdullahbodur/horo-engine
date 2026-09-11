@@ -24,4 +24,12 @@ namespace Horo::Release::ReleaseErrors {
     extern const ErrorCodeDescriptor DistributionIdentityInvalid;
     /** @brief A product, platform, artifact class, and package format combination is unsupported. */
     extern const ErrorCodeDescriptor DistributionCombinationUnsupported;
+    /** @brief A release profile catalog or preset contains malformed or incomplete policy. */
+    extern const ErrorCodeDescriptor ProfileInvalid;
+    /** @brief Release profile inheritance or overrides produce a deterministic conflict. */
+    extern const ErrorCodeDescriptor ProfileConflict;
+    /** @brief A release profile requires a capability unavailable to the resolving host. */
+    extern const ErrorCodeDescriptor ProfileCapabilityUnsupported;
+    /** @brief A release profile catalog exceeds an explicit resource ceiling. */
+    extern const ErrorCodeDescriptor ProfileLimitExceeded;
 }  // namespace Horo::Release::ReleaseErrors

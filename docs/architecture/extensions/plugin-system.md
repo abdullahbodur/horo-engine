@@ -302,6 +302,19 @@ Initial editor and tool extension points:
 | `project.browser_action` | Add project-browser actions. | Host owns selected project context and confirmation UI. |
 | `mcp.tool` | Add MCP tools subject to permission policy. | MCP host owns transport, schema, and authorization. |
 
+`ProjectValidatorRegistry` is the synchronous typed host boundary for
+`project.validator`. Registration publishes inert provider metadata only. At
+validation admission, the registry takes strong provider leases in canonical
+validator-identity order and releases its registry lock before invoking any
+provider. Each callback receives only a project ID, operation mode, normalized
+project-relative resource identities, immutable borrowed bytes, a host-bounded
+finding sink, and cooperative cancellation. It receives no project root,
+filesystem writer, mutation service, scheduler, or operation store. The host
+validates findings through its immutable error registry and publishes results
+only after every provider completes; each result retains the exact provider ID
+and activation generation. Cancellation, provider failure, invalid findings,
+unregistration, and shutdown cannot publish a partial unattributed result.
+
 `editor.status_item` contributions are declarative bounded snapshots; they do
 not receive ImGui callbacks. The shell owns validation, active-panel visibility,
 width admission, overflow, localization, modal input exclusion, and typed

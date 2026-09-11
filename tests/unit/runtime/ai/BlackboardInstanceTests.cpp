@@ -57,6 +57,53 @@ namespace Horo::AI {
             return std::move(instance).Value();
         }
 
+        [[nodiscard]] TaskHandle Task(const std::uint64_t runtime = 7, const std::uint32_t slot = 8, const std::uint32_t generation = 1) {
+            auto incarnation = AiRuntimeIncarnation::Create(runtime);
+            REQUIRE(incarnation.HasValue());
+            return {incarnation.Value(), {slot, generation}};
+        }
+
+        struct ObserverProbe final {
+            BlackboardInstance *instance{};
+            BlackboardObserverRegistration registration{};
+            BlackboardObserverToken token{};
+            std::optional<BlackboardWriteBatch> pendingBatch;
+            std::array<BlackboardKeyId, MaximumBlackboardKeys> changes{};
+            std::size_t changedCount{};
+            std::uint64_t revision{};
+            std::size_t calls{};
+            bool beginRejected{};
+            bool commitRejected{};
+            bool resetRejected{};
+            bool registrationRejected{};
+            bool removalRejected{};
+            bool cancellationRejected{};
+            bool replacementRejected{};
+            bool teardownRejected{};
+        };
+
+        void Observe(void *context, const BlackboardNotificationBatch &notification) noexcept {
+            auto &probe = *static_cast<ObserverProbe *>(context);
+            ++probe.calls;
+            probe.revision = notification.Revision();
+            probe.changedCount = notification.Changes().size();
+            std::ranges::copy(notification.Changes(), probe.changes.begin());
+            if (probe.instance == nullptr)
+                return;
+            const auto isReentrant = [](const auto &result) {
+                return result.HasError() && result.ErrorValue().code.Value() == AIErrors::BlackboardReentrantMutation.code.Value();
+            };
+            probe.beginRejected = isReentrant(probe.instance->BeginWriteBatch());
+            if (probe.pendingBatch.has_value())
+                probe.commitRejected = isReentrant(probe.instance->CommitAtBlackboardSync(std::move(*probe.pendingBatch)));
+            probe.resetRejected = isReentrant(probe.instance->ResetAtBlackboardSync());
+            probe.registrationRejected = isReentrant(probe.instance->RegisterObserverAtBlackboardSync(probe.registration));
+            probe.removalRejected = isReentrant(probe.instance->RemoveObserverAtBlackboardSync(probe.token));
+            probe.cancellationRejected = isReentrant(probe.instance->CancelTaskObserversAtBlackboardSync(probe.registration.task));
+            probe.replacementRejected = isReentrant(probe.instance->ReplaceAtBlackboardSync({}, {}));
+            probe.teardownRejected = isReentrant(probe.instance->TeardownAtBlackboardSync());
+        }
+
         /** @brief Stages and commits true values for the requested test keys. */
         void CommitTrueValues(BlackboardInstance &instance, std::initializer_list<std::uint64_t> keyIds) {
             auto batch = instance.BeginWriteBatch().Value();
@@ -79,6 +126,13 @@ namespace Horo::AI {
         static_assert(std::is_same_v<decltype(std::declval<const BlackboardWriteBatch>().Writes()), std::span<const BlackboardWrite>>);
         static_assert(std::is_same_v<decltype(std::declval<const BlackboardSnapshot>().Read(BlackboardKeyId{})),
                                      Result<std::optional<BlackboardValue>>>);
+        static_assert(!std::is_default_constructible_v<BlackboardNotificationBatch>);
+        static_assert(!std::is_aggregate_v<BlackboardNotificationBatch>);
+        static_assert(std::is_same_v<BlackboardObserverCallback, void (*)(void *, const BlackboardNotificationBatch &) noexcept>);
+        static_assert(
+            std::is_same_v<decltype(std::declval<const BlackboardNotificationBatch>().Changes()), std::span<const BlackboardKeyId>>);
+        static_assert(sizeof(BlackboardNotificationBatch) <= 2048,
+                      "Callback-scoped blackboard notifications must stay within the owner-thread stack budget");
         static_assert(sizeof(Result<BlackboardWriteBatch>) <= 4096, "Bounded batch storage must not consume the Windows caller stack");
         static_assert(sizeof(Result<BlackboardSnapshot>) <= 4096, "Immutable snapshot storage must not consume the Windows caller stack");
     }
@@ -118,18 +172,25 @@ namespace Horo::AI {
         CHECK(before.Read(MakeIdentity<BlackboardKeyId>(1)).Value() == std::optional{Bool(false)});
     }
 
-    TEST_CASE("Blackboard batches reject duplicate unknown and stale writes", "[unit][ai][blackboard-instance]") {
+    TEST_CASE("Blackboard batches coalesce duplicate writes and reject unknown and stale writes", "[unit][ai][blackboard-instance]") {
         auto schema = Schema({Key(1, BlackboardValueKind::Boolean)});
         auto instance = Instance(schema);
         auto duplicate = instance->BeginWriteBatch().Value();
         REQUIRE(duplicate.Stage({MakeIdentity<BlackboardKeyId>(1), Bool(true)}).HasValue());
-        ExpectError(duplicate.Stage({MakeIdentity<BlackboardKeyId>(1), Bool(false)}), AIErrors::BlackboardBatchInvalid);
+        REQUIRE(duplicate.Stage({MakeIdentity<BlackboardKeyId>(1), Bool(false)}).HasValue());
+        REQUIRE(duplicate.Stage({MakeIdentity<BlackboardKeyId>(1), Bool(true)}).HasValue());
+        CHECK(duplicate.Writes().size() == 1);
+        auto duplicateCommit = instance->CommitAtBlackboardSync(std::move(duplicate));
+        REQUIRE(duplicateCommit.HasValue());
+        CHECK(duplicateCommit.Value().revision == 2);
+        CHECK(instance->Snapshot().Value().Read(MakeIdentity<BlackboardKeyId>(1)).Value() == std::optional{Bool(true)});
         auto unknown = instance->BeginWriteBatch().Value();
         REQUIRE(unknown.Stage({MakeIdentity<BlackboardKeyId>(99), Bool(true)}).HasValue());
         ExpectError(instance->CommitAtBlackboardSync(std::move(unknown)), AIErrors::BlackboardUnknownValueRejected);
         auto stale = instance->BeginWriteBatch().Value();
         auto winner = instance->BeginWriteBatch().Value();
         REQUIRE(winner.Stage({MakeIdentity<BlackboardKeyId>(1), Bool(true)}).HasValue());
+        REQUIRE(winner.Stage({MakeIdentity<BlackboardKeyId>(1), Bool(false)}).HasValue());
         REQUIRE(instance->CommitAtBlackboardSync(std::move(winner)).HasValue());
         ExpectError(instance->CommitAtBlackboardSync(std::move(stale)), AIErrors::BlackboardInstanceStale);
     }
@@ -142,6 +203,8 @@ namespace Horo::AI {
         auto batch = instance->BeginWriteBatch().Value();
         for (std::uint64_t id = 1; id <= MaximumBlackboardWritesPerBatch; ++id)
             REQUIRE(batch.Stage({MakeIdentity<BlackboardKeyId>(id), Bool(true)}).HasValue());
+        REQUIRE(batch.Stage({MakeIdentity<BlackboardKeyId>(1), Bool(false)}).HasValue());
+        CHECK(batch.Writes().size() == MaximumBlackboardWritesPerBatch);
         ExpectError(batch.Stage({MakeIdentity<BlackboardKeyId>(MaximumBlackboardWritesPerBatch + 1), Bool(true)}),
                     AIErrors::BlackboardLimitExceeded);
         REQUIRE(instance->CommitAtBlackboardSync(std::move(batch)).HasValue());
@@ -232,8 +295,8 @@ namespace Horo::AI {
         CHECK(std::ranges::equal(reset.Changes(), std::array{MakeIdentity<BlackboardKeyId>(1), MakeIdentity<BlackboardKeyId>(2)}));
         CHECK(instance->Snapshot().Value().Read(MakeIdentity<BlackboardKeyId>(2)).Value() == std::nullopt);
         auto snapshot = instance->Snapshot().Value();
-        instance->TeardownAtBlackboardSync();
-        instance->TeardownAtBlackboardSync();
+        REQUIRE(instance->TeardownAtBlackboardSync().HasValue());
+        REQUIRE(instance->TeardownAtBlackboardSync().HasValue());
         CHECK_FALSE(instance->IsActive());
         ExpectError(snapshot.Read(MakeIdentity<BlackboardKeyId>(1)), AIErrors::BlackboardInstanceStale);
         ExpectError(instance->BeginWriteBatch(), AIErrors::BlackboardInstanceStale);
@@ -246,5 +309,150 @@ namespace Horo::AI {
         CHECK(reset.Value().revision == 1);
         CHECK(reset.Value().Changes().empty());
         CHECK(instance->Snapshot().Value().Revision().Value() == 1);
+    }
+
+    TEST_CASE("Blackboard observers receive one key-sorted revisioned batch at commit", "[unit][ai][blackboard-observer]") {
+        auto schema =
+            Schema({Key(3, BlackboardValueKind::Boolean), Key(1, BlackboardValueKind::Boolean), Key(2, BlackboardValueKind::Boolean)});
+        auto instance = Instance(schema);
+        std::array<ObserverProbe, 3> probes{};
+        for (std::size_t index = 0; index < probes.size(); ++index) {
+            const auto key = MakeIdentity<BlackboardKeyId>(index + 1);
+            const BlackboardObserverRegistration registration{instance->Snapshot().Value().Binding().agent, Task(), key, Observe,
+                                                              &probes[index]};
+            REQUIRE(instance->RegisterObserverAtBlackboardSync(registration).HasValue());
+        }
+        auto batch = instance->BeginWriteBatch().Value();
+        REQUIRE(batch.Stage({MakeIdentity<BlackboardKeyId>(2), Bool(true)}).HasValue());
+        REQUIRE(batch.Stage({MakeIdentity<BlackboardKeyId>(1), Bool(true)}).HasValue());
+        REQUIRE(instance->CommitAtBlackboardSync(std::move(batch)).HasValue());
+        for (std::size_t index = 0; index < 2; ++index) {
+            CHECK(probes[index].calls == 1);
+            CHECK(probes[index].revision == 2);
+            CHECK(std::ranges::equal(std::span{probes[index].changes}.first(probes[index].changedCount),
+                                     std::array{MakeIdentity<BlackboardKeyId>(1), MakeIdentity<BlackboardKeyId>(2)}));
+        }
+        CHECK(probes[2].calls == 0);
+
+        auto noOp = instance->BeginWriteBatch().Value();
+        REQUIRE(noOp.Stage({MakeIdentity<BlackboardKeyId>(1), Bool(true)}).HasValue());
+        REQUIRE(instance->CommitAtBlackboardSync(std::move(noOp)).HasValue());
+        CHECK(probes[0].calls == 1);
+    }
+
+    TEST_CASE("Blackboard observer removal and task cancellation prevent later callbacks", "[unit][ai][blackboard-observer]") {
+        auto schema =
+            Schema({Key(1, BlackboardValueKind::Boolean), Key(2, BlackboardValueKind::Boolean), Key(3, BlackboardValueKind::Boolean)});
+        auto instance = Instance(schema);
+        const auto agent = instance->Snapshot().Value().Binding().agent;
+        const auto firstTask = Task();
+        const auto secondTask = Task(7, 9);
+        std::array<ObserverProbe, 3> probes{};
+        const auto first =
+            instance->RegisterObserverAtBlackboardSync({agent, firstTask, MakeIdentity<BlackboardKeyId>(1), Observe, &probes[0]});
+        const auto cancelled =
+            instance->RegisterObserverAtBlackboardSync({agent, firstTask, MakeIdentity<BlackboardKeyId>(2), Observe, &probes[1]});
+        REQUIRE(first.HasValue());
+        REQUIRE(cancelled.HasValue());
+        REQUIRE(instance->RegisterObserverAtBlackboardSync({agent, secondTask, MakeIdentity<BlackboardKeyId>(3), Observe, &probes[2]})
+                    .HasValue());
+        CHECK(instance->RemoveObserverAtBlackboardSync(first.Value()).Value());
+        CHECK_FALSE(instance->RemoveObserverAtBlackboardSync(first.Value()).Value());
+        const auto reused =
+            instance->RegisterObserverAtBlackboardSync({agent, secondTask, MakeIdentity<BlackboardKeyId>(1), Observe, &probes[0]});
+        REQUIRE(reused.HasValue());
+        CHECK(reused.Value().slot == first.Value().slot);
+        CHECK(reused.Value().generation != first.Value().generation);
+        CHECK(instance->CancelTaskObserversAtBlackboardSync(firstTask).Value() == 1);
+        CHECK(instance->CancelTaskObserversAtBlackboardSync(firstTask).Value() == 0);
+        CommitTrueValues(*instance, {1, 2, 3});
+        CHECK(probes[0].calls == 1);
+        CHECK(probes[1].calls == 0);
+        CHECK(probes[2].calls == 1);
+    }
+
+    TEST_CASE("Blackboard observer registration is validated and strictly bounded", "[unit][ai][blackboard-observer]") {
+        auto schema = Schema({Key(1, BlackboardValueKind::Boolean)});
+        auto instance = Instance(schema);
+        const auto agent = instance->Snapshot().Value().Binding().agent;
+        std::array<ObserverProbe, MaximumBlackboardObservers + 1> probes{};
+        for (std::size_t index = 0; index < MaximumBlackboardObservers; ++index)
+            REQUIRE(instance->RegisterObserverAtBlackboardSync({agent, Task(), MakeIdentity<BlackboardKeyId>(1), Observe, &probes[index]})
+                        .HasValue());
+        ExpectError(instance->RegisterObserverAtBlackboardSync({agent, Task(), MakeIdentity<BlackboardKeyId>(1), Observe, &probes.back()}),
+                    AIErrors::BlackboardObserverLimitExceeded);
+        ExpectError(instance->RegisterObserverAtBlackboardSync({agent, Task(), MakeIdentity<BlackboardKeyId>(99), Observe, &probes.back()}),
+                    AIErrors::BlackboardObserverInvalid);
+        auto foreignAgent = agent;
+        foreignAgent.incarnation = AiRuntimeIncarnation::Create(99).Value();
+        ExpectError(instance->RegisterObserverAtBlackboardSync(
+                        {foreignAgent, Task(), MakeIdentity<BlackboardKeyId>(1), Observe, &probes.back()}),
+                    AIErrors::BlackboardObserverInvalid);
+        ExpectError(instance->RegisterObserverAtBlackboardSync(
+                        {agent, Task(99), MakeIdentity<BlackboardKeyId>(1), Observe, &probes.back()}),
+                    AIErrors::BlackboardObserverInvalid);
+        ExpectError(instance->RegisterObserverAtBlackboardSync({agent, Task(), MakeIdentity<BlackboardKeyId>(1), nullptr, &probes.back()}),
+                    AIErrors::BlackboardObserverInvalid);
+    }
+
+    TEST_CASE("Blackboard publication rejects every reentrant mutation entry point", "[unit][ai][blackboard-observer]") {
+        auto schema = Schema({Key(1, BlackboardValueKind::Boolean)});
+        auto instance = Instance(schema);
+        const auto agent = instance->Snapshot().Value().Binding().agent;
+        ObserverProbe probe{};
+        probe.instance = instance.get();
+        probe.registration = {agent, Task(), MakeIdentity<BlackboardKeyId>(1), Observe, &probe};
+        auto token = instance->RegisterObserverAtBlackboardSync(probe.registration);
+        REQUIRE(token.HasValue());
+        probe.token = token.Value();
+        probe.pendingBatch.emplace(instance->BeginWriteBatch().Value());
+        REQUIRE(probe.pendingBatch->Stage({MakeIdentity<BlackboardKeyId>(1), Bool(true)}).HasValue());
+        auto trigger = instance->BeginWriteBatch().Value();
+        REQUIRE(trigger.Stage({MakeIdentity<BlackboardKeyId>(1), Bool(true)}).HasValue());
+        REQUIRE(instance->CommitAtBlackboardSync(std::move(trigger)).HasValue());
+        CHECK(probe.calls == 1);
+        CHECK(probe.beginRejected);
+        CHECK(probe.commitRejected);
+        CHECK(probe.resetRejected);
+        CHECK(probe.registrationRejected);
+        CHECK(probe.removalRejected);
+        CHECK(probe.cancellationRejected);
+        CHECK(probe.replacementRejected);
+        CHECK(probe.teardownRejected);
+        CHECK(instance->IsActive());
+    }
+
+    TEST_CASE("Blackboard replacement invalidates observers and teardown releases their borrowed contexts",
+              "[unit][ai][blackboard-observer]") {
+        auto schema = Schema({Key(1, BlackboardValueKind::Boolean)});
+        auto instance = Instance(schema);
+        ObserverProbe probe{};
+        const auto token = instance->RegisterObserverAtBlackboardSync(
+            {instance->Snapshot().Value().Binding().agent, Task(), MakeIdentity<BlackboardKeyId>(1), Observe, &probe});
+        REQUIRE(token.HasValue());
+        auto replacement = Schema({Key(1, BlackboardValueKind::Boolean)}, 20, 2);
+        REQUIRE(instance->ReplaceAtBlackboardSync(Binding(replacement, 7, 2, 2), replacement).HasValue());
+        ExpectError(instance->RemoveObserverAtBlackboardSync(token.Value()), AIErrors::BlackboardObserverInvalid);
+        CommitTrueValues(*instance, {1});
+        CHECK(probe.calls == 0);
+        REQUIRE(instance->TeardownAtBlackboardSync().HasValue());
+    }
+
+    TEST_CASE("Blackboard reset publishes one revisioned observer batch only when defaults change", "[unit][ai][blackboard-observer]") {
+        auto schema = Schema({Key(1, BlackboardValueKind::Boolean)});
+        auto instance = Instance(schema);
+        CommitTrueValues(*instance, {1});
+        ObserverProbe probe{};
+        REQUIRE(instance
+                    ->RegisterObserverAtBlackboardSync(
+                        {instance->Snapshot().Value().Binding().agent, Task(), MakeIdentity<BlackboardKeyId>(1), Observe, &probe})
+                    .HasValue());
+        auto reset = instance->ResetAtBlackboardSync();
+        REQUIRE(reset.HasValue());
+        CHECK(probe.calls == 1);
+        CHECK(probe.revision == reset.Value().revision);
+        CHECK(probe.changedCount == 1);
+        REQUIRE(instance->ResetAtBlackboardSync().HasValue());
+        CHECK(probe.calls == 1);
     }
 }  // namespace Horo::AI

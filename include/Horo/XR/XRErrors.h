@@ -40,6 +40,10 @@ namespace Horo::XR::XRErrors {
     extern const ErrorCodeDescriptor PoseInvalid;
     /** @brief An XR space or pose references a retired world-origin revision. */
     extern const ErrorCodeDescriptor OriginRevisionStale;
+    /** @brief An XR tracking snapshot contains malformed, contradictory, or non-canonical evidence. */
+    extern const ErrorCodeDescriptor TrackingSnapshotInvalid;
+    /** @brief An XR tracking snapshot revision no longer matches the consumer's retained revision. */
+    extern const ErrorCodeDescriptor TrackingSnapshotStale;
 
     /**
      * @brief Returns every stable XRApi descriptor for module-registry contribution.

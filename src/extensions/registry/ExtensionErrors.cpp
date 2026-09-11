@@ -182,4 +182,64 @@ namespace Horo::Extensions::ExtensionErrors {
         .retryable = false,
         .userActionable = false,
     };
+
+    const ErrorCodeDescriptor ProjectValidatorRegistryInvalid{
+        .domain = Domain,
+        .code = ErrorCode{"project_validator_registry_invalid"},
+        .defaultSeverity = ErrorSeverity::Error,
+        .summary = "The project-validator registry input is invalid.",
+        .remediationHint = "Provide canonical provider identities, bounded project-relative inputs, and declared findings.",
+        .retryable = false,
+        .userActionable = false,
+    };
+
+    const ErrorCodeDescriptor ProjectValidatorRegistryDuplicate{
+        .domain = Domain,
+        .code = ErrorCode{"project_validator_registry_duplicate"},
+        .defaultSeverity = ErrorSeverity::Error,
+        .summary = "The project-validator identity is already registered.",
+        .remediationHint = "Publish only one provider generation for each validator identity.",
+        .retryable = false,
+        .userActionable = false,
+    };
+
+    const ErrorCodeDescriptor ProjectValidatorRegistryCapacityExceeded{
+        .domain = Domain,
+        .code = ErrorCode{"project_validator_registry_capacity_exceeded"},
+        .defaultSeverity = ErrorSeverity::Error,
+        .summary = "The project-validator provider capacity was exceeded.",
+        .remediationHint = "Reduce the explicitly composed validator provider set.",
+        .retryable = false,
+        .userActionable = false,
+    };
+
+    const ErrorCodeDescriptor ProjectValidatorRegistryShutdown{
+        .domain = Domain,
+        .code = ErrorCode{"project_validator_registry_shutdown"},
+        .defaultSeverity = ErrorSeverity::Error,
+        .summary = "The project-validator registry is shutting down.",
+        .remediationHint = "Do not register or begin validation after host shutdown starts.",
+        .retryable = false,
+        .userActionable = false,
+    };
+
+    const ErrorCodeDescriptor ProjectValidatorInvocationFailed{
+        .domain = Domain,
+        .code = ErrorCode{"project_validator_invocation_failed"},
+        .defaultSeverity = ErrorSeverity::Error,
+        .summary = "An attributed project-validator callback failed.",
+        .remediationHint = "Inspect the provider identity and its declared validation error.",
+        .retryable = false,
+        .userActionable = false,
+    };
+
+    const ErrorCodeDescriptor ProjectValidationCancelled{
+        .domain = Domain,
+        .code = ErrorCode{"project_validation_cancelled"},
+        .defaultSeverity = ErrorSeverity::Warning,
+        .summary = "Project validation was cancelled.",
+        .remediationHint = "Retry validation when the project operation is active.",
+        .retryable = true,
+        .userActionable = false,
+    };
 }  // namespace Horo::Extensions::ExtensionErrors

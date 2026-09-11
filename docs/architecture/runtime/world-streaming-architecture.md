@@ -678,6 +678,34 @@ actors materialize through the replication owner, not duplicate local prefab spa
 Server and client Active need not occur in the same frame; local residency is not a
 network authority grant. Server-only/client-only layer flags remain enforced.
 
+`NetworkStreamingAuthority` is the bounded client-owned projection of this seam for
+one admitted peer session and one mounted local partition incarnation. Server commands
+carry stable partition/cell identity, desired Loaded/Active intent, and a strictly
+increasing peer-session-global sequence beginning at one. They never carry or select
+the client's `PartitionEpoch` or `StreamingGeneration`. The client records current
+intent without touching the scheduler or cell-state ledger, independently admits local
+residency, and may report Ready only with an exact local fence and a Resident/Active
+state satisfying that intent. Unavailable and Failed remain client-owned terminal
+facts for server fallback/relevance policy; they do not fabricate local fence evidence.
+
+The projection preallocates a mandatory bounded current-cell snapshot. A same-cell
+successor atomically replaces intent and resets readiness to Pending; Release removes
+the current record. Invalid, skipped/replayed sequence, foreign session/world/epoch,
+unsupported result, insufficient readiness, and capacity denial leave both sequence
+and snapshot unchanged. Sequence exhaustion never wraps and requires a new admitted
+peer-session lifetime. Cancellation closes new server-intent admission while retaining
+the snapshot for observation; terminal shutdown clears protocol facts without claiming
+that separately owned cell resources retired.
+
+### Rejected: server-authoritative client residency
+
+The server cannot directly drive the client's scheduler/ledger, assign its local epoch
+or generation, bypass local budgets, or treat a relevance command as Ready. That model
+would create a second residency authority and allow network timing or server pressure
+to violate client capacity and provider retirement invariants. The accepted contract
+keeps server gameplay relevance and client residency/readiness as related but distinct
+authorities.
+
 ADR-018 NET administration and wst.* mutations use the same permission/server-authority
 checks and state machine. Forced eviction is an authorized demand-policy override,
 not a way to skip provider retirement, budget accounting or generation checks.

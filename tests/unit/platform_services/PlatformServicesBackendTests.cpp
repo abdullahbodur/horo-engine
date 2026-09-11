@@ -1,9 +1,12 @@
 #include "Horo/PlatformServices/PlatformServicesBackend.h"
+#include "PlatformServicesTestSupport.h"
 
 #include <catch2/catch_test_macros.hpp>
 #include <type_traits>
 
 namespace Horo::PlatformServices {
+    using TestSupport::AvailableCapabilities;
+
     namespace {
         template <typename T> Result<PlatformRequestHandle<T>> Unavailable() {
             return Result<PlatformRequestHandle<T>>::Failure(MakeError(BackendErrors::ServiceUnavailable));
@@ -77,17 +80,7 @@ namespace Horo::PlatformServices {
         };
 
         PlatformServiceCapabilitySnapshot Snapshot() {
-            PlatformServiceCapabilitySnapshot snapshot{.interfaceVersion = {PlatformServicesBackendInterfaceMajor,
-                                                                            PlatformServicesBackendInterfaceMinor},
-                                                       .provider = {41},
-                                                       .providerGeneration = {7}};
-            for (std::size_t index = 0; index < snapshot.services.size(); ++index) {
-                snapshot.services[index] = {.service = static_cast<PlatformServiceKind>(index),
-                                            .availability = PlatformServiceAvailability::Available,
-                                            .limits = {.maxConcurrentRequests = 8, .maxPageEntries = 64, .maxPayloadBytes = 4096},
-                                            .binding = PlatformServiceBindingId{index + 1}};
-            }
-            return snapshot;
+            return AvailableCapabilities();
         }
     }  // namespace
 

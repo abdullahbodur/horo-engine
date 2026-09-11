@@ -54,6 +54,14 @@ namespace {
         CHECK(store.Value().updates == DistributionCapability::Required);
     }
 
+    TEST_CASE("Distribution identities use one canonical bounded grammar", "[unit][application][release][distribution][headless]") {
+        CHECK(IsValidDistributionIdentity("release.profile-1"));
+        CHECK(IsValidDistributionIdentity(std::string(MaximumDistributionIdentityBytes, 'a')));
+        CHECK_FALSE(IsValidDistributionIdentity("Release.Profile"));
+        CHECK_FALSE(IsValidDistributionIdentity("release/profile"));
+        CHECK_FALSE(IsValidDistributionIdentity(std::string(MaximumDistributionIdentityBytes + 1U, 'a')));
+    }
+
     TEST_CASE("Package format is never inferred from the target platform", "[unit][application][release][distribution][headless]") {
         const std::array supported{std::pair{DistributionPackageFormat::WindowsMsi, DistributionPlatform::Windows},
                                    std::pair{DistributionPackageFormat::WindowsExeInstaller, DistributionPlatform::Windows},

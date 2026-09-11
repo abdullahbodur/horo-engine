@@ -8,6 +8,18 @@
 #include "Horo/Foundation/ErrorCode.h"
 
 namespace Horo::WorldStreaming::WorldStreamingErrors {
+    /** @brief A network-streaming authority config, command, report, or proof is malformed. */
+    extern const ErrorCodeDescriptor NetworkStreamingAuthorityInvalid;
+    /** @brief A network-streaming intent, readiness value, or state proof is unsupported. */
+    extern const ErrorCodeDescriptor NetworkStreamingAuthorityUnsupported;
+    /** @brief A network-streaming command, report, session, partition, sequence, or local fence is stale. */
+    extern const ErrorCodeDescriptor NetworkStreamingAuthorityStale;
+    /** @brief The client snapshot cannot admit another server-relevant cell within its mandatory bound. */
+    extern const ErrorCodeDescriptor NetworkStreamingAuthorityCapacityExceeded;
+    /** @brief Server-intent admission is cancelled, or all protocol admission is closed by shutdown. */
+    extern const ErrorCodeDescriptor NetworkStreamingAuthorityLifecycleUnavailable;
+    /** @brief A Ready report lacks a current satisfying local residency fence, or terminal failure carries one. */
+    extern const ErrorCodeDescriptor NetworkStreamingReadinessInvalid;
     /** @brief An origin-frame binding or externally supplied local coordinate is malformed. */
     extern const ErrorCodeDescriptor OriginFrameInvalid;
     /** @brief A local coordinate, candidate, or lease belongs to a non-active origin generation. */

@@ -19,6 +19,9 @@ workflows.
 - [XR Coordinate and Pose Contract Migration](./xr-coordinate-pose-migration.md):
   publish generation-fenced coordinate, validity, and time evidence without native
   backend leakage or implicit clock conversion.
+- [XR Tracking Snapshot Migration](./xr-tracking-snapshot-migration.md):
+  publish immutable, bounded device and pose snapshots with stable identity,
+  capability, confidence, and loss-state semantics.
 
 ## Writing a Guide
 
