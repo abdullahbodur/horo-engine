@@ -63,7 +63,7 @@ namespace Horo::Release {
                     valid = false;
                     return false;
                 }
-                const std::size_t index = static_cast<std::size_t>(depth);
+                const auto index = static_cast<std::size_t>(depth);
                 if (event == Json::parse_event_t::object_start)
                     keys[index + 1U].clear();
                 else if (event == Json::parse_event_t::key)
@@ -133,44 +133,48 @@ namespace Horo::Release {
         }
 
         [[nodiscard]] std::optional<DistributionArtifactClass> ArtifactClassFromString(const std::string_view value) noexcept {
+            using enum DistributionArtifactClass;
             if (value == "installable")
-                return DistributionArtifactClass::InstallableProduct;
+                return InstallableProduct;
             if (value == "symbols")
-                return DistributionArtifactClass::Symbols;
+                return Symbols;
             if (value == "developer-diagnostics")
-                return DistributionArtifactClass::Diagnostics;
+                return Diagnostics;
             return std::nullopt;
         }
 
         [[nodiscard]] std::string_view ArtifactClassToString(const DistributionArtifactClass value) noexcept {
+            using enum DistributionArtifactClass;
             switch (value) {
-                case DistributionArtifactClass::InstallableProduct:
+                case InstallableProduct:
                     return "installable";
-                case DistributionArtifactClass::Symbols:
+                case Symbols:
                     return "symbols";
-                case DistributionArtifactClass::Diagnostics:
+                case Diagnostics:
                     return "developer-diagnostics";
             }
             return {};
         }
 
         [[nodiscard]] std::optional<DistributionPlatform> PlatformFromString(const std::string_view value) noexcept {
+            using enum DistributionPlatform;
             if (value == "windows")
-                return DistributionPlatform::Windows;
+                return Windows;
             if (value == "macos")
-                return DistributionPlatform::MacOS;
+                return MacOS;
             if (value == "linux")
-                return DistributionPlatform::Linux;
+                return Linux;
             return std::nullopt;
         }
 
         [[nodiscard]] std::string_view PlatformToString(const DistributionPlatform value) noexcept {
+            using enum DistributionPlatform;
             switch (value) {
-                case DistributionPlatform::Windows:
+                case Windows:
                     return "windows";
-                case DistributionPlatform::MacOS:
+                case MacOS:
                     return "macos";
-                case DistributionPlatform::Linux:
+                case Linux:
                     return "linux";
             }
             return {};
@@ -204,66 +208,72 @@ namespace Horo::Release {
         }
 
         [[nodiscard]] std::optional<ReleaseSymbolPolicy> SymbolsFromString(const std::string_view value) noexcept {
+            using enum ReleaseSymbolPolicy;
             if (value == "omit")
-                return ReleaseSymbolPolicy::Omit;
+                return Omit;
             if (value == "separate")
-                return ReleaseSymbolPolicy::SeparateArtifact;
+                return SeparateArtifact;
             if (value == "required-separate")
-                return ReleaseSymbolPolicy::RequiredSeparateArtifact;
+                return RequiredSeparateArtifact;
             return std::nullopt;
         }
 
         [[nodiscard]] std::string_view SymbolsToString(const ReleaseSymbolPolicy value) noexcept {
+            using enum ReleaseSymbolPolicy;
             switch (value) {
-                case ReleaseSymbolPolicy::Omit:
+                case Omit:
                     return "omit";
-                case ReleaseSymbolPolicy::SeparateArtifact:
+                case SeparateArtifact:
                     return "separate";
-                case ReleaseSymbolPolicy::RequiredSeparateArtifact:
+                case RequiredSeparateArtifact:
                     return "required-separate";
             }
             return {};
         }
 
         [[nodiscard]] std::optional<ReleaseSigningPolicy> SigningFromString(const std::string_view value) noexcept {
+            using enum ReleaseSigningPolicy;
             if (value == "disabled")
-                return ReleaseSigningPolicy::Disabled;
+                return Disabled;
             if (value == "when-supported")
-                return ReleaseSigningPolicy::WhenSupported;
+                return WhenSupported;
             if (value == "required")
-                return ReleaseSigningPolicy::Required;
+                return Required;
             return std::nullopt;
         }
 
         [[nodiscard]] std::string_view SigningToString(const ReleaseSigningPolicy value) noexcept {
+            using enum ReleaseSigningPolicy;
             switch (value) {
-                case ReleaseSigningPolicy::Disabled:
+                case Disabled:
                     return "disabled";
-                case ReleaseSigningPolicy::WhenSupported:
+                case WhenSupported:
                     return "when-supported";
-                case ReleaseSigningPolicy::Required:
+                case Required:
                     return "required";
             }
             return {};
         }
 
         [[nodiscard]] std::optional<ReleaseAssetPolicy> AssetsFromString(const std::string_view value) noexcept {
+            using enum ReleaseAssetPolicy;
             if (value == "omit")
-                return ReleaseAssetPolicy::Omit;
+                return Omit;
             if (value == "single-package")
-                return ReleaseAssetPolicy::SinglePackage;
+                return SinglePackage;
             if (value == "chunked")
-                return ReleaseAssetPolicy::Chunked;
+                return Chunked;
             return std::nullopt;
         }
 
         [[nodiscard]] std::string_view AssetsToString(const ReleaseAssetPolicy value) noexcept {
+            using enum ReleaseAssetPolicy;
             switch (value) {
-                case ReleaseAssetPolicy::Omit:
+                case Omit:
                     return "omit";
-                case ReleaseAssetPolicy::SinglePackage:
+                case SinglePackage:
                     return "single-package";
-                case ReleaseAssetPolicy::Chunked:
+                case Chunked:
                     return "chunked";
             }
             return {};
@@ -318,18 +328,18 @@ namespace Horo::Release {
                     return Result<void>::Failure(product.ErrorValue());
                 preset.product = std::move(product).Value();
             }
-            const auto decode = [&](const std::string_view key, auto &target, auto parser) -> Result<void> {
+            const auto decode = [&]<typename Value, typename Parser>(const std::string_view key, std::optional<Value> &target,
+                                                                     Parser parser) -> Result<void> {
                 if (!value.contains(key))
                     return Result<void>::Success();
-                using Value = typename std::remove_reference_t<decltype(target)>::value_type;
                 auto decoded = DecodeEnum<Value>(value.at(key), parser);
                 if (decoded.HasError())
                     return Result<void>::Failure(decoded.ErrorValue());
                 target = decoded.Value();
                 return Result<void>::Success();
             };
-            if (decode("artifactClass", preset.artifactClass, ArtifactClassFromString).HasError() ||
-                decode("platform", preset.platform, PlatformFromString).HasError() ||
+            if (const auto decoded = decode("artifactClass", preset.artifactClass, ArtifactClassFromString);
+                decoded.HasError() || decode("platform", preset.platform, PlatformFromString).HasError() ||
                 decode("packageFormat", preset.packageFormat, FormatFromString).HasError() ||
                 decode("symbols", preset.symbols, SymbolsFromString).HasError() ||
                 decode("signing", preset.signing, SigningFromString).HasError())
@@ -377,34 +387,20 @@ namespace Horo::Release {
         }
 
         [[nodiscard]] Result<ReleaseProfilePreset> DecodePreset(const Json &value, const ReleaseProfileLimits &limits) {
-            const std::initializer_list<std::string_view> optional{"parent",
-                                                                   "product",
-                                                                   "artifactClass",
-                                                                   "platform",
-                                                                   "packageFormat",
-                                                                   "content",
-                                                                   "symbols",
-                                                                   "signing",
-                                                                   "notarizationRequired",
-                                                                   "includeLicensesAndNotices",
-                                                                   "includeReleaseNotes",
-                                                                   "updateEligible",
-                                                                   "patchEligible",
-                                                                   "eligibleDestinations",
-                                                                   "requiredCapabilities"};
-            if (!HasExactKeys(value, {"id"}, optional) || !value.at("id").is_string())
+            if (const std::initializer_list<std::string_view> optional{"parent", "product", "artifactClass", "platform", "packageFormat",
+                                                                       "content", "symbols", "signing", "notarizationRequired",
+                                                                       "includeLicensesAndNotices", "includeReleaseNotes", "updateEligible",
+                                                                       "patchEligible", "eligibleDestinations", "requiredCapabilities"};
+                !HasExactKeys(value, {"id"}, optional) || !value.at("id").is_string())
                 return Result<ReleaseProfilePreset>::Failure(ProfileError(ReleaseErrors::ProfileInvalid));
             ReleaseProfilePreset preset{{value.at("id").get<std::string>()}};
             if (value.contains("parent"))
                 preset.parent = ReleaseProfileId{value.at("parent").is_string() ? value.at("parent").get<std::string>() : std::string{}};
-            const auto policies = DecodePresetPolicies(value, preset, limits);
-            if (policies.HasError())
+            if (const auto policies = DecodePresetPolicies(value, preset, limits); policies.HasError())
                 return Result<ReleaseProfilePreset>::Failure(policies.ErrorValue());
-            const auto booleans = DecodePresetBooleans(value, preset);
-            if (booleans.HasError())
+            if (const auto booleans = DecodePresetBooleans(value, preset); booleans.HasError())
                 return Result<ReleaseProfilePreset>::Failure(booleans.ErrorValue());
-            const auto lists = DecodePresetLists(value, preset, limits);
-            if (lists.HasError())
+            if (const auto lists = DecodePresetLists(value, preset, limits); lists.HasError())
                 return Result<ReleaseProfilePreset>::Failure(lists.ErrorValue());
             return Result<ReleaseProfilePreset>::Success(std::move(preset));
         }
@@ -449,15 +445,15 @@ namespace Horo::Release {
                 result["symbols"] = SymbolsToString(*preset.symbols);
             if (preset.signing)
                 result["signing"] = SigningToString(*preset.signing);
-            if (preset.notarizationRequired)
+            if (preset.notarizationRequired.has_value())
                 result["notarizationRequired"] = *preset.notarizationRequired;
-            if (preset.includeLicensesAndNotices)
+            if (preset.includeLicensesAndNotices.has_value())
                 result["includeLicensesAndNotices"] = *preset.includeLicensesAndNotices;
-            if (preset.includeReleaseNotes)
+            if (preset.includeReleaseNotes.has_value())
                 result["includeReleaseNotes"] = *preset.includeReleaseNotes;
-            if (preset.updateEligible)
+            if (preset.updateEligible.has_value())
                 result["updateEligible"] = *preset.updateEligible;
-            if (preset.patchEligible)
+            if (preset.patchEligible.has_value())
                 result["patchEligible"] = *preset.patchEligible;
         }
 
@@ -599,14 +595,16 @@ namespace Horo::Release {
         }
 
         [[nodiscard]] bool Complete(const EffectiveFields &fields) noexcept {
-            return fields.product && fields.artifactClass && fields.platform && fields.packageFormat && fields.content && fields.symbols &&
-                   fields.signing && fields.notarizationRequired && fields.includeLicensesAndNotices && fields.includeReleaseNotes &&
-                   fields.updateEligible && fields.patchEligible && fields.destinations && fields.capabilities;
+            return fields.product.has_value() && fields.artifactClass.has_value() && fields.platform.has_value() &&
+                   fields.packageFormat.has_value() && fields.content.has_value() && fields.symbols.has_value() &&
+                   fields.signing.has_value() && fields.notarizationRequired.has_value() && fields.includeLicensesAndNotices.has_value() &&
+                   fields.includeReleaseNotes.has_value() && fields.updateEligible.has_value() && fields.patchEligible.has_value() &&
+                   fields.destinations.has_value() && fields.capabilities.has_value();
         }
 
         [[nodiscard]] bool NotarizationFormat(const DistributionPackageFormat format) noexcept {
-            return format == DistributionPackageFormat::MacDmg || format == DistributionPackageFormat::MacPkg ||
-                   format == DistributionPackageFormat::MacAppBundle;
+            using enum DistributionPackageFormat;
+            return format == MacDmg || format == MacPkg || format == MacAppBundle;
         }
 
         [[nodiscard]] Result<void> ValidateEffectiveContent(const EffectiveFields &fields) {
@@ -650,29 +648,21 @@ namespace Horo::Release {
 
         [[nodiscard]] Result<void> ValidateEffective(const EffectiveFields &fields,
                                                      const std::span<const ReleaseCapabilityId> availableCapabilities) {
-            const auto content = ValidateEffectiveContent(fields);
-            if (content.HasError())
+            if (const auto content = ValidateEffectiveContent(fields); content.HasError())
                 return content;
-            const auto signing = ValidateEffectiveSigning(fields);
-            if (signing.HasError())
+            if (const auto signing = ValidateEffectiveSigning(fields); signing.HasError())
                 return signing;
             return ValidateEffectiveCapabilities(fields, availableCapabilities);
         }
     }  // namespace
 
-    EffectiveReleaseProfile::EffectiveReleaseProfile(ReleaseProfileId id, DistributionProductIdentity product,
-                                                     const DistributionArtifactClass artifactClass, const DistributionPlatform platform,
-                                                     const DistributionPackageFormat packageFormat, ReleaseContentPolicy content,
-                                                     const ReleaseSymbolPolicy symbols, const ReleaseSigningPolicy signing,
-                                                     const bool notarizationRequired, const bool includeLicensesAndNotices,
-                                                     const bool includeReleaseNotes, const bool updateEligible, const bool patchEligible,
-                                                     std::vector<ReleaseDestinationId> destinations,
-                                                     std::vector<ReleaseCapabilityId> capabilities)
-        : m_id(std::move(id)), m_product(std::move(product)), m_artifactClass(artifactClass), m_platform(platform),
-          m_packageFormat(packageFormat), m_content(content), m_symbols(symbols), m_signing(signing),
-          m_notarizationRequired(notarizationRequired), m_includeLicensesAndNotices(includeLicensesAndNotices),
-          m_includeReleaseNotes(includeReleaseNotes), m_updateEligible(updateEligible), m_patchEligible(patchEligible),
-          m_destinations(std::move(destinations)), m_capabilities(std::move(capabilities)) {}
+    EffectiveReleaseProfile::EffectiveReleaseProfile(ReleaseProfileId id, ReleaseProfilePreset resolved)
+        : m_id(std::move(id)), m_product(std::move(*resolved.product)), m_artifactClass(*resolved.artifactClass),
+          m_platform(*resolved.platform), m_packageFormat(*resolved.packageFormat), m_content(*resolved.content),
+          m_symbols(*resolved.symbols), m_signing(*resolved.signing), m_notarizationRequired(*resolved.notarizationRequired),
+          m_includeLicensesAndNotices(*resolved.includeLicensesAndNotices), m_includeReleaseNotes(*resolved.includeReleaseNotes),
+          m_updateEligible(*resolved.updateEligible), m_patchEligible(*resolved.patchEligible),
+          m_destinations(std::move(*resolved.eligibleDestinations)), m_capabilities(std::move(*resolved.requiredCapabilities)) {}
 
     /** @copydoc EffectiveReleaseProfile::Id */
     const ReleaseProfileId &EffectiveReleaseProfile::Id() const noexcept {
@@ -770,7 +760,7 @@ namespace Horo::Release {
         return result.dump(2) + '\n';
     }
 
-    ReleaseProfileCatalog::ReleaseProfileCatalog(std::vector<ReleaseProfilePreset> presets, ReleaseProfileLimits limits)
+    ReleaseProfileCatalog::ReleaseProfileCatalog(std::vector<ReleaseProfilePreset> presets, const ReleaseProfileLimits &limits)
         : m_presets(std::move(presets)), m_limits(limits) {}
 
     /** @copydoc ReleaseProfileCatalog::Create */
@@ -793,8 +783,7 @@ namespace Horo::Release {
             return preset.id.value;
         }) != presets.end())
             return Result<ReleaseProfileCatalog>::Failure(ProfileError(ReleaseErrors::ProfileConflict, "Preset IDs must be unique."));
-        const auto inheritance = ValidateInheritance(presets, limits);
-        if (inheritance.HasError())
+        if (const auto inheritance = ValidateInheritance(presets, limits); inheritance.HasError())
             return Result<ReleaseProfileCatalog>::Failure(inheritance.ErrorValue());
         return Result<ReleaseProfileCatalog>::Success(ReleaseProfileCatalog{std::move(presets), limits});
     }
@@ -859,14 +848,23 @@ namespace Horo::Release {
         EffectiveFields fields;
         for (auto preset = lineage.rbegin(); preset != lineage.rend(); ++preset)
             ApplyPreset(fields, **preset);
-        auto validation = ValidateEffective(fields, availableCapabilities);
-        if (validation.HasError())
+        if (auto validation = ValidateEffective(fields, availableCapabilities); validation.HasError())
             return Result<EffectiveReleaseProfile>::Failure(validation.ErrorValue());
-        return Result<EffectiveReleaseProfile>::Success(
-            EffectiveReleaseProfile{lineage.front()->id, *fields.product, *fields.artifactClass, *fields.platform, *fields.packageFormat,
-                                    *fields.content, *fields.symbols, *fields.signing, *fields.notarizationRequired,
-                                    *fields.includeLicensesAndNotices, *fields.includeReleaseNotes, *fields.updateEligible,
-                                    *fields.patchEligible, std::move(*fields.destinations), std::move(*fields.capabilities)});
+        ReleaseProfilePreset resolved{.product = std::move(fields.product),
+                                      .artifactClass = fields.artifactClass,
+                                      .platform = fields.platform,
+                                      .packageFormat = fields.packageFormat,
+                                      .content = fields.content,
+                                      .symbols = fields.symbols,
+                                      .signing = fields.signing,
+                                      .notarizationRequired = fields.notarizationRequired,
+                                      .includeLicensesAndNotices = fields.includeLicensesAndNotices,
+                                      .includeReleaseNotes = fields.includeReleaseNotes,
+                                      .updateEligible = fields.updateEligible,
+                                      .patchEligible = fields.patchEligible,
+                                      .eligibleDestinations = std::move(fields.destinations),
+                                      .requiredCapabilities = std::move(fields.capabilities)};
+        return Result<EffectiveReleaseProfile>::Success(EffectiveReleaseProfile{lineage.front()->id, std::move(resolved)});
     }
 
     /** @copydoc ReleaseProfileCatalog::SerializeCanonical */

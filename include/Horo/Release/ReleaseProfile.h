@@ -134,11 +134,7 @@ namespace Horo::Release {
 
     private:
         friend class ReleaseProfileCatalog;
-        EffectiveReleaseProfile(ReleaseProfileId id, DistributionProductIdentity product, DistributionArtifactClass artifactClass,
-                                DistributionPlatform platform, DistributionPackageFormat packageFormat, ReleaseContentPolicy content,
-                                ReleaseSymbolPolicy symbols, ReleaseSigningPolicy signing, bool notarizationRequired,
-                                bool includeLicensesAndNotices, bool includeReleaseNotes, bool updateEligible, bool patchEligible,
-                                std::vector<ReleaseDestinationId> destinations, std::vector<ReleaseCapabilityId> capabilities);
+        EffectiveReleaseProfile(ReleaseProfileId id, ReleaseProfilePreset resolved);
 
         ReleaseProfileId m_id;
         DistributionProductIdentity m_product;
@@ -189,7 +185,7 @@ namespace Horo::Release {
         [[nodiscard]] std::span<const ReleaseProfilePreset> Presets() const noexcept;
 
     private:
-        ReleaseProfileCatalog(std::vector<ReleaseProfilePreset> presets, ReleaseProfileLimits limits);
+        ReleaseProfileCatalog(std::vector<ReleaseProfilePreset> presets, const ReleaseProfileLimits &limits);
         std::vector<ReleaseProfilePreset> m_presets;
         ReleaseProfileLimits m_limits;
     };

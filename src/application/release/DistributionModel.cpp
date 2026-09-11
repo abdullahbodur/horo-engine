@@ -159,8 +159,8 @@ namespace Horo::Release {
             !IsKnownArtifactClass(artifact.artifactClass) || !IsValidDistributionIdentity(artifact.build.value) ||
             !IsValidDistributionIdentity(artifact.package.value) || !ProductVersionMatches(artifact))
             return Result<DistributionPackageSelection>::Failure(MakeError(ReleaseErrors::DistributionIdentityInvalid));
-        const bool installable = artifact.artifactClass == DistributionArtifactClass::InstallableProduct;
-        if (installable != artifact.installation.has_value() ||
+        if (const bool installable = artifact.artifactClass == DistributionArtifactClass::InstallableProduct;
+            installable != artifact.installation.has_value() ||
             (artifact.installation.has_value() && !IsValidDistributionIdentity(artifact.installation->value)))
             return Result<DistributionPackageSelection>::Failure(MakeError(ReleaseErrors::DistributionCombinationUnsupported));
         auto capabilities = ValidateDistributionProductPackageFormat(artifact.product, artifact.artifactClass, artifact.platform, format);
