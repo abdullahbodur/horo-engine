@@ -267,6 +267,34 @@ namespace Horo::WorldStreaming::WorldStreamingErrors {
         Describe("world_streaming.partition.identity_conflict", ErrorSeverity::Error,
                  "The world-partition descriptor repeats a layer or exact cell identity.",
                  "Remove duplicate identities and regenerate the canonical world index.", true);
+    const ErrorCodeDescriptor PartitionRegistryInvalid =
+        Describe("world_streaming.partition_registry.invalid", ErrorSeverity::Error,
+                 "A partition-registry identity, binding, query, handle, or limit is malformed.",
+                 "Provide valid typed registry and owner identities, ordered bounds, and positive bounded limits.", true);
+    const ErrorCodeDescriptor PartitionRegistryUnavailable =
+        Describe("world_streaming.partition_registry.unavailable", ErrorSeverity::Info,
+                 "No current partition-registry publication or requested manifest cell is available.",
+                 "Publish a complete partition descriptor or query a cell declared by the pinned snapshot.", false);
+    const ErrorCodeDescriptor PartitionRegistryStale =
+        Describe("world_streaming.partition_registry.stale", ErrorSeverity::Warning,
+                 "A partition-registry revision or cell handle names an obsolete immutable publication.",
+                 "Capture the current snapshot and repeat lookup against its exact registry revision and partition epoch.", false);
+    const ErrorCodeDescriptor PartitionRegistryCapacityExceeded =
+        Describe("world_streaming.partition_registry.capacity_exceeded", ErrorSeverity::Error,
+                 "A partition publication or spatial query exceeds its mandatory bounded ceiling.",
+                 "Reduce indexed cells or query scope, or select explicitly larger supported limits before publication.", true);
+    const ErrorCodeDescriptor PartitionRegistryUnsupported =
+        Describe("world_streaming.partition_registry.unsupported", ErrorSeverity::Error,
+                 "A partition query filter or indexed cell extent is unsupported by this registry contract.",
+                 "Use a declared layer and LOD whose canonical millimeter cell extent is representable.", true);
+    const ErrorCodeDescriptor PartitionRegistryLifecycleUnavailable =
+        Describe("world_streaming.partition_registry.lifecycle_unavailable", ErrorSeverity::Warning,
+                 "Partition-registry publication and new snapshot capture are cancelling or closed.",
+                 "Retain an already issued immutable snapshot or create a registry for the next mounted owner lifetime.", false);
+    const ErrorCodeDescriptor PartitionRegistryStorageUnavailable =
+        Describe("world_streaming.partition_registry.storage_unavailable", ErrorSeverity::Error,
+                 "Storage required for an immutable partition-registry publication is unavailable.",
+                 "Release retained snapshots or retry publication at a later owner safe point.", false);
     const ErrorCodeDescriptor CookedManifestInvalid =
         Describe("world_streaming.cooked_manifest.invalid", ErrorSeverity::Error,
                  "A cooked world-index manifest is incomplete or contains malformed cell metadata.",

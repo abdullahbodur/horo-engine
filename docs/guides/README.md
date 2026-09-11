@@ -22,6 +22,8 @@ workflows.
   classify hard co-load and soft deferred references without mixed-policy ambiguity.
 - [World Object Ownership Migration](./world-object-ownership-migration.md): adopt explicit
   authored, persistent, cell-bound, and runtime-spawned ownership admission.
+- [World Partition Registry Snapshot Migration](./world-partition-registry-migration.md):
+  publish immutable generation-pinned indices and run bounded allocation-free queries.
 - [XR Coordinate and Pose Contract Migration](./xr-coordinate-pose-migration.md):
   publish generation-fenced coordinate, validity, and time evidence without native
   backend leakage or implicit clock conversion.

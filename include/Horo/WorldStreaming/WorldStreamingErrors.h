@@ -130,6 +130,20 @@ namespace Horo::WorldStreaming::WorldStreamingErrors {
     extern const ErrorCodeDescriptor PartitionCapacityExceeded;
     /** @brief A partition descriptor repeats a layer or exact cell identity. */
     extern const ErrorCodeDescriptor PartitionIdentityConflict;
+    /** @brief A partition-registry identity, binding, query, handle, or limit is malformed. */
+    extern const ErrorCodeDescriptor PartitionRegistryInvalid;
+    /** @brief No current partition publication or requested cell is available. */
+    extern const ErrorCodeDescriptor PartitionRegistryUnavailable;
+    /** @brief A partition-registry revision or cell handle names an obsolete publication. */
+    extern const ErrorCodeDescriptor PartitionRegistryStale;
+    /** @brief A partition publication or query exceeds its mandatory bounded ceiling. */
+    extern const ErrorCodeDescriptor PartitionRegistryCapacityExceeded;
+    /** @brief A partition query filter or indexed cell representation is unsupported. */
+    extern const ErrorCodeDescriptor PartitionRegistryUnsupported;
+    /** @brief New partition publication or snapshot capture is cancelling or closed. */
+    extern const ErrorCodeDescriptor PartitionRegistryLifecycleUnavailable;
+    /** @brief Immutable partition-registry publication storage could not be allocated. */
+    extern const ErrorCodeDescriptor PartitionRegistryStorageUnavailable;
     /** @brief A cooked world-index manifest is incomplete or contains malformed metadata. */
     extern const ErrorCodeDescriptor CookedManifestInvalid;
     /** @brief A cooked world-index manifest exceeds a mandatory count or byte ceiling. */
