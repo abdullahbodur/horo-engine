@@ -44,6 +44,7 @@ namespace Horo::PCG {
         static constexpr std::size_t PinsPerNode = 128;
         static constexpr std::size_t TotalPins = 131'072;
         static constexpr std::size_t NodePayloadBytes = 1U * 1024U * 1024U;
+        static constexpr std::size_t NodeTypes = 4'096;
     };
 
     /** @brief Project-lowerable limits applied before source allocation or publication. */

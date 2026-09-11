@@ -72,8 +72,11 @@ namespace Horo::PCG {
 
         template <typename T> void RequireError(const Result<T> &result, const ErrorCodeDescriptor &descriptor) {
             REQUIRE(result.HasError());
-            CHECK(result.ErrorValue().domain.Value() == descriptor.domain.Value());
-            CHECK(result.ErrorValue().code.Value() == descriptor.code.Value());
+            const Error &actual = result.ErrorValue();
+            INFO("PCG error: " << actual.domain.Value() << '/' << actual.code.Value());
+            const bool matchesDescriptor =
+                actual.domain.Value() == descriptor.domain.Value() && actual.code.Value() == descriptor.code.Value();
+            CHECK(matchesDescriptor);
         }
 
         class UpgradeMinorVersion final : public IPCGGraphSourceMigrator {
@@ -127,6 +130,21 @@ namespace Horo::PCG {
         const PCGGraphAsset asset = ValidAsset(std::move(data));
         const double exposed = std::get<double>(asset.Data().exposedInputs.front().defaultValue);
         CHECK_FALSE(std::signbit(exposed));
+        auto bytes = SerializePCGGraphAsset(asset);
+        REQUIRE(bytes.HasValue());
+        auto roundTrip = DeserializePCGGraphAsset(bytes.Value(), Context());
+        REQUIRE(roundTrip.HasValue());
+        CHECK(roundTrip.Value().Data() == asset.Data());
+    }
+
+    TEST_CASE("PCG graph source uses explicit binary32 vectors and binary64 scalars", "[unit][pcg][graph][values]") {
+        auto data = ValidData();
+        data.nodes.back().pins.push_back(InputPin(102, PCGPinType::Vector2, PCGPinCardinality::Single, Math::Vec2{1.25F, -2.5F}));
+        data.nodes.back().pins.push_back(InputPin(103, PCGPinType::Vector3, PCGPinCardinality::Single, Math::Vec3{3.0F, 4.5F, -6.0F}));
+        data.nodes.back().pins.push_back(
+            InputPin(104, PCGPinType::Vector4, PCGPinCardinality::Single, Math::Vec4{7.0F, -8.0F, 9.5F, 10.0F}));
+        data.exposedInputs.push_back({Id<ExposedInputId>(71), "world.offset", Id<NodeId>(10), Id<PinId>(102), Math::Vec2{1.25F, -2.5F}});
+        const PCGGraphAsset asset = ValidAsset(std::move(data));
         auto bytes = SerializePCGGraphAsset(asset);
         REQUIRE(bytes.HasValue());
         auto roundTrip = DeserializePCGGraphAsset(bytes.Value(), Context());
@@ -293,6 +311,14 @@ namespace Horo::PCG {
         context.limits.maximumNodePayloadBytes = 2;
         RequireError(PCGGraphAsset::Create(ValidData(), context), PCGErrors::GraphSourceCapacityExceeded);
 
+        const std::size_t exactSourceBytes = SerializePCGGraphAsset(ValidAsset()).Value().size();
+        context = Context();
+        context.limits = GraphSourceLimitsForTier(PCGOperationalTier::Baseline).Value();
+        context.limits.maximumSourceBytes = exactSourceBytes;
+        REQUIRE(PCGGraphAsset::Create(ValidData(), context).HasValue());
+        context.limits.maximumSourceBytes = exactSourceBytes - 1;
+        RequireError(PCGGraphAsset::Create(ValidData(), context), PCGErrors::GraphSourceCapacityExceeded);
+
         context = Context();
         context.limits = GraphSourceLimitsForTier(PCGOperationalTier::Baseline).Value();
         context.limits.maximumEdges = 1;
@@ -372,6 +398,15 @@ namespace Horo::PCG {
         const std::array invalidSupport{PCGNodeTypeSupport{Id<NodeTypeId>(1), {2, 0}, {1, 0}}};
         invalidCatalog.supportedNodeTypes = invalidSupport;
         RequireError(PCGGraphAsset::Create(ValidData(), invalidCatalog), PCGErrors::GraphSourceMalformed);
+
+        const std::array unsortedSupport{SupportedTypes()[1], SupportedTypes()[0]};
+        auto unsortedCatalog = Context();
+        unsortedCatalog.supportedNodeTypes = unsortedSupport;
+        REQUIRE(PCGGraphAsset::Create(ValidData(), unsortedCatalog).HasValue());
+
+        std::vector<PCGNodeTypeSupport> oversizedCatalog(PCGGraphSourceHardLimits::NodeTypes + 1, SupportedTypes()[0]);
+        invalidCatalog.supportedNodeTypes = oversizedCatalog;
+        RequireError(PCGGraphAsset::Create(ValidData(), invalidCatalog), PCGErrors::GraphSourceCapacityExceeded);
 
         data = ValidData();
         data.nodes.front().type = {};

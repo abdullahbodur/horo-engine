@@ -15,7 +15,11 @@
 namespace Horo::PCG {
     namespace {
         constexpr std::array<std::uint8_t, 4> GraphMagic{'H', 'P', 'C', 'G'};
-        constexpr std::size_t FixedHeaderBytes = 46;
+        constexpr std::size_t GraphEnvelopeBytes = 46;
+        constexpr std::size_t EncodedNodeHeaderBytes = 26;
+        constexpr std::size_t EncodedPinHeaderBytes = 12;
+        constexpr std::size_t EncodedEdgeBytes = 40;
+        constexpr std::size_t EncodedInputHeaderBytes = 26;
 
         [[nodiscard]] Error Failure(const ErrorCodeDescriptor &descriptor) {
             return MakeError(descriptor);
@@ -158,17 +162,52 @@ namespace Horo::PCG {
             }, value);
         }
 
-        [[nodiscard]] bool HasDuplicateNodeSupport(std::span<const PCGNodeTypeSupport> support) {
-            for (std::size_t index = 0; index < support.size(); ++index) {
-                if (!support[index].type.IsValid() || !support[index].minimumVersion.IsValid() ||
-                    !support[index].maximumVersion.IsValid() || support[index].minimumVersion > support[index].maximumVersion)
-                    return true;
-                if (std::ranges::any_of(support.first(index), [&support, index](const PCGNodeTypeSupport &candidate) {
-                    return candidate.type == support[index].type;
-                }))
-                    return true;
+        [[nodiscard]] constexpr std::size_t EncodedValueBytes(const PCGGraphValue &value) noexcept {
+            switch (value.index()) {
+                case 1:
+                    return 2;
+                case 2:
+                case 3:
+                case 4:
+                case 5:
+                    return 9;
+                case 6:
+                    return 13;
+                case 7:
+                    return 17;
+                default:
+                    return 0;
             }
-            return false;
+        }
+
+        [[nodiscard]] bool ConsumeEncodedBytes(std::size_t &remaining, const std::size_t count) noexcept {
+            if (count > remaining)
+                return false;
+            remaining -= count;
+            return true;
+        }
+
+        [[nodiscard]] bool FitsEncodedSource(const PCGGraphSourceData &data, const std::size_t maximumBytes) noexcept {
+            std::size_t remaining = maximumBytes;
+            if (!ConsumeEncodedBytes(remaining, GraphEnvelopeBytes))
+                return false;
+            for (const PCGGraphNode &node : data.nodes) {
+                if (!ConsumeEncodedBytes(remaining, EncodedNodeHeaderBytes) || !ConsumeEncodedBytes(remaining, node.payload.size()))
+                    return false;
+                for (const PCGGraphPin &pin : node.pins) {
+                    const std::size_t defaultBytes = pin.defaultValue ? EncodedValueBytes(*pin.defaultValue) : 0;
+                    if (!ConsumeEncodedBytes(remaining, EncodedPinHeaderBytes + defaultBytes))
+                        return false;
+                }
+            }
+            if (data.edges.size() > remaining / EncodedEdgeBytes || !ConsumeEncodedBytes(remaining, data.edges.size() * EncodedEdgeBytes))
+                return false;
+            for (const PCGExposedInput &input : data.exposedInputs) {
+                const std::size_t valueBytes = EncodedValueBytes(input.defaultValue);
+                if (!ConsumeEncodedBytes(remaining, EncodedInputHeaderBytes + input.key.size() + valueBytes))
+                    return false;
+            }
+            return true;
         }
 
         enum class NodeSupportState : std::uint8_t {
@@ -177,9 +216,24 @@ namespace Horo::PCG {
             VersionUnsupported
         };
 
+        [[nodiscard]] Result<std::vector<PCGNodeTypeSupport>> PrepareNodeSupport(const std::span<const PCGNodeTypeSupport> support) {
+            if (support.size() > PCGGraphSourceHardLimits::NodeTypes)
+                return Failed<std::vector<PCGNodeTypeSupport>>(PCGErrors::GraphSourceCapacityExceeded);
+            std::vector<PCGNodeTypeSupport> sorted{support.begin(), support.end()};
+            std::ranges::sort(sorted, {}, &PCGNodeTypeSupport::type);
+            for (const PCGNodeTypeSupport &entry : sorted) {
+                if (!entry.type.IsValid() || !entry.minimumVersion.IsValid() || !entry.maximumVersion.IsValid() ||
+                    entry.minimumVersion > entry.maximumVersion)
+                    return Failed<std::vector<PCGNodeTypeSupport>>(PCGErrors::GraphSourceMalformed);
+            }
+            if (std::ranges::adjacent_find(sorted, {}, &PCGNodeTypeSupport::type) != sorted.end())
+                return Failed<std::vector<PCGNodeTypeSupport>>(PCGErrors::GraphSourceMalformed);
+            return Result<std::vector<PCGNodeTypeSupport>>::Success(std::move(sorted));
+        }
+
         [[nodiscard]] NodeSupportState FindNodeSupport(const PCGGraphNode &node, std::span<const PCGNodeTypeSupport> support) {
-            const auto found = std::ranges::find(support, node.type, &PCGNodeTypeSupport::type);
-            if (found == support.end())
+            const auto found = std::ranges::lower_bound(support, node.type, {}, &PCGNodeTypeSupport::type);
+            if (found == support.end() || found->type != node.type)
                 return NodeSupportState::Unknown;
             return node.version >= found->minimumVersion && node.version <= found->maximumVersion ? NodeSupportState::Supported
                                                                                                   : NodeSupportState::VersionUnsupported;
@@ -198,18 +252,19 @@ namespace Horo::PCG {
             return found == pins.end() || found->pin != id ? nullptr : &*found;
         }
 
-        [[nodiscard]] Result<void> ValidateNodeContract(const PCGGraphNode &node, const PCGGraphSourceContext &context,
+        [[nodiscard]] Result<void> ValidateNodeContract(const PCGGraphNode &node, const PCGUnknownNodePolicy unknownNodePolicy,
+                                                        const std::span<const PCGNodeTypeSupport> nodeSupport,
                                                         const PCGGraphSourceLimits &limits, std::size_t &unknownNodeCount) {
             if (node.pins.size() > limits.maximumPinsPerNode || node.payload.size() > limits.maximumNodePayloadBytes)
                 return Result<void>::Failure(Failure(PCGErrors::GraphSourceCapacityExceeded));
             if (!node.id.IsValid() || !node.type.IsValid() || !node.version.IsValid())
                 return Result<void>::Failure(Failure(PCGErrors::GraphSourceMalformed));
 
-            const NodeSupportState support = FindNodeSupport(node, context.supportedNodeTypes);
+            const NodeSupportState support = FindNodeSupport(node, nodeSupport);
             if (support == NodeSupportState::VersionUnsupported)
                 return Result<void>::Failure(Failure(PCGErrors::GraphSourceVersionUnsupported));
             if (support == NodeSupportState::Unknown) {
-                if (context.unknownNodePolicy == PCGUnknownNodePolicy::Reject)
+                if (unknownNodePolicy == PCGUnknownNodePolicy::Reject)
                     return Result<void>::Failure(Failure(PCGErrors::GraphNodeTypeUnknown));
                 ++unknownNodeCount;
             }
@@ -249,8 +304,9 @@ namespace Horo::PCG {
                                                                       const PCGGraphSourceLimits &limits, std::size_t &unknownNodeCount) {
             if (data.nodes.size() > limits.maximumNodes)
                 return Failed<std::vector<PinReference>>(PCGErrors::GraphSourceCapacityExceeded);
-            if (HasDuplicateNodeSupport(context.supportedNodeTypes))
-                return Failed<std::vector<PinReference>>(PCGErrors::GraphSourceMalformed);
+            auto nodeSupport = PrepareNodeSupport(context.supportedNodeTypes);
+            if (nodeSupport.HasError())
+                return Result<std::vector<PinReference>>::Failure(nodeSupport.ErrorValue());
 
             std::ranges::sort(data.nodes, {}, &PCGGraphNode::id);
             if (std::ranges::adjacent_find(data.nodes, {}, &PCGGraphNode::id) != data.nodes.end())
@@ -258,7 +314,8 @@ namespace Horo::PCG {
             std::vector<PinReference> references;
             references.reserve(std::min(limits.maximumTotalPins, data.nodes.size() * std::min(limits.maximumPinsPerNode, std::size_t{4})));
             for (PCGGraphNode &node : data.nodes) {
-                if (auto valid = ValidateNodeContract(node, context, limits, unknownNodeCount); valid.HasError())
+                if (auto valid = ValidateNodeContract(node, context.unknownNodePolicy, nodeSupport.Value(), limits, unknownNodeCount);
+                    valid.HasError())
                     return Result<std::vector<PinReference>>::Failure(valid.ErrorValue());
                 if (auto appended = AppendNodePins(node, limits, references); appended.HasError())
                     return Result<std::vector<PinReference>>::Failure(appended.ErrorValue());
@@ -286,8 +343,6 @@ namespace Horo::PCG {
                 if (index > 0 && data.edges[index - 1].id == edge.id)
                     return Result<void>::Failure(Failure(PCGErrors::GraphSourceDuplicate));
                 const std::array endpoint{edge.sourceNode.Value(), edge.sourcePin.Value(), edge.targetNode.Value(), edge.targetPin.Value()};
-                if (std::ranges::find(endpoints, endpoint) != endpoints.end())
-                    return Result<void>::Failure(Failure(PCGErrors::GraphSourceDuplicate));
                 endpoints.push_back(endpoint);
                 const PinReference *source = FindPin(pins, edge.sourcePin);
                 const PinReference *target = FindPin(pins, edge.targetPin);
@@ -296,11 +351,15 @@ namespace Horo::PCG {
                     source->type != target->type || edge.sourceNode == edge.targetNode)
                     return Result<void>::Failure(Failure(PCGErrors::GraphTopologyInvalid));
                 if (target->cardinality == PCGPinCardinality::Single) {
-                    if (std::ranges::find(singleInputs, edge.targetPin) != singleInputs.end())
-                        return Result<void>::Failure(Failure(PCGErrors::GraphTopologyInvalid));
                     singleInputs.push_back(edge.targetPin);
                 }
             }
+            std::ranges::sort(endpoints);
+            if (std::ranges::adjacent_find(endpoints) != endpoints.end())
+                return Result<void>::Failure(Failure(PCGErrors::GraphSourceDuplicate));
+            std::ranges::sort(singleInputs);
+            if (std::ranges::adjacent_find(singleInputs) != singleInputs.end())
+                return Result<void>::Failure(Failure(PCGErrors::GraphTopologyInvalid));
             return Result<void>::Success();
         }
 
@@ -369,49 +428,6 @@ namespace Horo::PCG {
             return Result<void>::Success();
         }
 
-        class ByteWriter final {
-        public:
-            explicit ByteWriter(const std::size_t maximum) : maximum_(maximum) {
-                bytes_.reserve(std::min(maximum, std::size_t{4096}));
-            }
-
-            template <typename Integer> bool WriteInteger(const Integer value) {
-                static_assert(std::is_integral_v<Integer>);
-                if (!CanWrite(sizeof(Integer)))
-                    return false;
-                using Unsigned = std::make_unsigned_t<Integer>;
-                Unsigned remaining = static_cast<Unsigned>(value);
-                for (std::size_t shift = sizeof(Integer); shift > 0; --shift)
-                    bytes_.push_back(static_cast<std::uint8_t>(remaining >> ((shift - 1U) * 8U)));
-                return true;
-            }
-
-            bool WriteBytes(const std::span<const std::uint8_t> values) {
-                if (!CanWrite(values.size()))
-                    return false;
-                bytes_.insert(bytes_.end(), values.begin(), values.end());
-                return true;
-            }
-
-            bool WriteString(const std::string_view value) {
-                return value.size() <= std::numeric_limits<std::uint16_t>::max() &&
-                       WriteInteger(static_cast<std::uint16_t>(value.size())) &&
-                       WriteBytes({reinterpret_cast<const std::uint8_t *>(value.data()), value.size()});
-            }
-
-            [[nodiscard]] std::vector<std::uint8_t> Take() && {
-                return std::move(bytes_);
-            }
-
-        private:
-            [[nodiscard]] bool CanWrite(const std::size_t count) const noexcept {
-                return count <= maximum_ - std::min(maximum_, bytes_.size());
-            }
-
-            std::size_t maximum_{};
-            std::vector<std::uint8_t> bytes_;
-        };
-
         class ByteReader final {
         public:
             explicit ByteReader(const std::span<const std::uint8_t> bytes) : bytes_(bytes) {}
@@ -454,10 +470,6 @@ namespace Horo::PCG {
             std::size_t offset_{};
         };
 
-        template <typename Identity> bool WriteIdentity(ByteWriter &writer, const Identity id) {
-            return writer.WriteInteger(id.Value());
-        }
-
         template <typename Identity> [[nodiscard]] std::optional<Identity> ReadIdentity(ByteReader &reader) {
             const auto value = reader.ReadInteger<std::uint64_t>();
             if (!value)
@@ -466,41 +478,14 @@ namespace Horo::PCG {
             return identity.HasValue() ? std::optional<Identity>{identity.Value()} : std::nullopt;
         }
 
-        template <typename Float> bool WriteFloat(ByteWriter &writer, const Float value) {
-            using Integer = std::conditional_t<sizeof(Float) == 4, std::uint32_t, std::uint64_t>;
-            return writer.WriteInteger(std::bit_cast<Integer>(value));
+        [[nodiscard]] std::optional<float> ReadBinary32(ByteReader &reader) {
+            const auto bits = reader.ReadInteger<std::uint32_t>();
+            return bits ? std::optional<float>{std::bit_cast<float>(*bits)} : std::nullopt;
         }
 
-        template <typename Float> [[nodiscard]] std::optional<Float> ReadFloat(ByteReader &reader) {
-            using Integer = std::conditional_t<sizeof(Float) == 4, std::uint32_t, std::uint64_t>;
-            const auto bits = reader.ReadInteger<Integer>();
-            return bits ? std::optional<Float>{std::bit_cast<Float>(*bits)} : std::nullopt;
-        }
-
-        bool WriteValue(ByteWriter &writer, const PCGGraphValue &value) {
-            if (!writer.WriteInteger(static_cast<std::uint8_t>(value.index())))
-                return false;
-            return std::visit([&writer]<typename Value>(const Value &item) {
-                using T = std::remove_cvref_t<Value>;
-                if constexpr (std::is_same_v<T, std::monostate>) {
-                    return false;
-                } else if constexpr (std::is_same_v<T, bool>) {
-                    return writer.WriteInteger(static_cast<std::uint8_t>(item));
-                } else if constexpr (std::is_integral_v<T>) {
-                    return writer.WriteInteger(item);
-                } else if constexpr (std::is_same_v<T, double>) {
-                    return WriteFloat(writer, item);
-                } else if constexpr (std::is_same_v<T, Math::Vec2>) {
-                    return WriteFloat(writer, item.x) && WriteFloat(writer, item.y);
-                } else if constexpr (std::is_same_v<T, Math::Vec3>) {
-                    return WriteFloat(writer, item.x) && WriteFloat(writer, item.y) && WriteFloat(writer, item.z);
-                } else if constexpr (std::is_same_v<T, Math::Vec4>) {
-                    return WriteFloat(writer, item.x) && WriteFloat(writer, item.y) && WriteFloat(writer, item.z) &&
-                           WriteFloat(writer, item.w);
-                } else {
-                    return false;
-                }
-            }, value);
+        [[nodiscard]] std::optional<double> ReadBinary64(ByteReader &reader) {
+            const auto bits = reader.ReadInteger<std::uint64_t>();
+            return bits ? std::optional<double>{std::bit_cast<double>(*bits)} : std::nullopt;
         }
 
         [[nodiscard]] std::optional<PCGGraphValue> ReadValue(ByteReader &reader) {
@@ -521,57 +506,30 @@ namespace Horo::PCG {
                     return value ? std::optional<PCGGraphValue>{*value} : std::nullopt;
                 }
                 case 4: {
-                    const auto value = ReadFloat<double>(reader);
+                    const auto value = ReadBinary64(reader);
                     return value ? std::optional<PCGGraphValue>{*value} : std::nullopt;
                 }
                 case 5: {
-                    const auto x = ReadFloat<float>(reader);
-                    const auto y = ReadFloat<float>(reader);
+                    const auto x = ReadBinary32(reader);
+                    const auto y = ReadBinary32(reader);
                     return x && y ? std::optional<PCGGraphValue>{Math::Vec2{*x, *y}} : std::nullopt;
                 }
                 case 6: {
-                    const auto x = ReadFloat<float>(reader);
-                    const auto y = ReadFloat<float>(reader);
-                    const auto z = ReadFloat<float>(reader);
+                    const auto x = ReadBinary32(reader);
+                    const auto y = ReadBinary32(reader);
+                    const auto z = ReadBinary32(reader);
                     return x && y && z ? std::optional<PCGGraphValue>{Math::Vec3{*x, *y, *z}} : std::nullopt;
                 }
                 case 7: {
-                    const auto x = ReadFloat<float>(reader);
-                    const auto y = ReadFloat<float>(reader);
-                    const auto z = ReadFloat<float>(reader);
-                    const auto w = ReadFloat<float>(reader);
+                    const auto x = ReadBinary32(reader);
+                    const auto y = ReadBinary32(reader);
+                    const auto z = ReadBinary32(reader);
+                    const auto w = ReadBinary32(reader);
                     return x && y && z && w ? std::optional<PCGGraphValue>{Math::Vec4{*x, *y, *z, *w}} : std::nullopt;
                 }
                 default:
                     return std::nullopt;
             }
-        }
-
-        bool WritePin(ByteWriter &writer, const PCGGraphPin &pin) {
-            const bool headerWritten = WriteIdentity(writer, pin.id) && writer.WriteInteger(static_cast<std::uint8_t>(pin.direction)) &&
-                                       writer.WriteInteger(static_cast<std::uint8_t>(pin.type)) &&
-                                       writer.WriteInteger(static_cast<std::uint8_t>(pin.cardinality)) &&
-                                       writer.WriteInteger(static_cast<std::uint8_t>(pin.defaultValue.has_value()));
-            return headerWritten && (!pin.defaultValue || WriteValue(writer, *pin.defaultValue));
-        }
-
-        bool WriteNode(ByteWriter &writer, const PCGGraphNode &node) {
-            bool written = WriteIdentity(writer, node.id) && WriteIdentity(writer, node.type) && writer.WriteInteger(node.version.major) &&
-                           writer.WriteInteger(node.version.minor) && writer.WriteInteger(static_cast<std::uint16_t>(node.pins.size())) &&
-                           writer.WriteInteger(static_cast<std::uint32_t>(node.payload.size()));
-            for (const PCGGraphPin &pin : node.pins)
-                written = written && WritePin(writer, pin);
-            return written && writer.WriteBytes(node.payload);
-        }
-
-        bool WriteEdge(ByteWriter &writer, const PCGGraphEdge &edge) {
-            return WriteIdentity(writer, edge.id) && WriteIdentity(writer, edge.sourceNode) && WriteIdentity(writer, edge.sourcePin) &&
-                   WriteIdentity(writer, edge.targetNode) && WriteIdentity(writer, edge.targetPin);
-        }
-
-        bool WriteExposedInput(ByteWriter &writer, const PCGExposedInput &input) {
-            return WriteIdentity(writer, input.id) && writer.WriteString(input.key) && WriteIdentity(writer, input.node) &&
-                   WriteIdentity(writer, input.pin) && WriteValue(writer, input.defaultValue);
         }
 
         [[nodiscard]] Result<PCGGraphPin> ReadPin(ByteReader &reader) {
@@ -738,9 +696,9 @@ namespace Horo::PCG {
             return Result<PCGGraphAsset>::Failure(acyclic.ErrorValue());
         if (auto inputs = ValidateExposedInputs(candidate, limits.Value(), pins.Value()); inputs.HasError())
             return Result<PCGGraphAsset>::Failure(inputs.ErrorValue());
-        PCGGraphAsset asset{std::move(candidate), unknownNodeCount};
-        if (SerializePCGGraphAsset(asset, limits.Value().maximumSourceBytes).HasError())
+        if (!FitsEncodedSource(candidate, limits.Value().maximumSourceBytes))
             return Failed<PCGGraphAsset>(PCGErrors::GraphSourceCapacityExceeded);
+        PCGGraphAsset asset{std::move(candidate), unknownNodeCount};
         return Result<PCGGraphAsset>::Success(std::move(asset));
     }
 
@@ -768,29 +726,6 @@ namespace Horo::PCG {
         const auto minor = reader.ReadInteger<std::uint16_t>();
         return major && minor ? Result<PCGGraphSchemaVersion>::Success({*major, *minor})
                               : Failed<PCGGraphSchemaVersion>(PCGErrors::GraphSourceMalformed);
-    }
-
-    /** @copydoc SerializePCGGraphAsset */
-    Result<std::vector<std::uint8_t>> SerializePCGGraphAsset(const PCGGraphAsset &asset, const std::size_t maximumOutputBytes) {
-        if (maximumOutputBytes < FixedHeaderBytes || maximumOutputBytes > PCGGraphSourceHardLimits::SourceBytes)
-            return Failed<std::vector<std::uint8_t>>(PCGErrors::GraphSourceCapacityExceeded);
-        const PCGGraphSourceData &data = asset.Data();
-        ByteWriter writer{maximumOutputBytes};
-        bool encoded = writer.WriteBytes(GraphMagic) && writer.WriteInteger(data.version.major) &&
-                       writer.WriteInteger(data.version.minor) && WriteIdentity(writer, data.generation.graph) &&
-                       WriteIdentity(writer, data.generation.revision) && writer.WriteInteger(static_cast<std::uint8_t>(data.tier)) &&
-                       writer.WriteInteger(static_cast<std::uint8_t>(data.mode)) && writer.WriteInteger(data.deterministicSeed) &&
-                       writer.WriteInteger(static_cast<std::uint32_t>(data.nodes.size())) &&
-                       writer.WriteInteger(static_cast<std::uint32_t>(data.edges.size())) &&
-                       writer.WriteInteger(static_cast<std::uint32_t>(data.exposedInputs.size()));
-        for (const PCGGraphNode &node : data.nodes)
-            encoded = encoded && WriteNode(writer, node);
-        for (const PCGGraphEdge &edge : data.edges)
-            encoded = encoded && WriteEdge(writer, edge);
-        for (const PCGExposedInput &input : data.exposedInputs)
-            encoded = encoded && WriteExposedInput(writer, input);
-        return encoded ? Result<std::vector<std::uint8_t>>::Success(std::move(writer).Take())
-                       : Failed<std::vector<std::uint8_t>>(PCGErrors::GraphSourceCapacityExceeded);
     }
 
     /** @copydoc DeserializePCGGraphAsset */
