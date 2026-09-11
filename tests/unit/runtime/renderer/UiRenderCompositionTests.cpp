@@ -125,6 +125,12 @@ namespace Horo::Render {
                     reason};
         }
 
+        UiPresentedInteractionState PresentationState(const UiCanvasInstanceId canvas) {
+            auto result = UiPresentedInteractionState::Create(View(), canvas);
+            REQUIRE(result.HasValue());
+            return std::move(result).Value();
+        }
+
         TEST_CASE("UI composition admits ordered world camera and screen passes", "[renderer][runtime_ui][composition]") {
             const auto world = Snapshot(2, 2, 2);
             const auto camera = Snapshot(3, 3, 3);
@@ -196,9 +202,7 @@ namespace Horo::Render {
 
         TEST_CASE("only presented UI receipts advance interaction eligibility", "[renderer][runtime_ui][presentation]") {
             const auto canvas = UiCanvasInstanceId{Owner(), 2, 1};
-            auto stateResult = UiPresentedInteractionState::Create(View(), canvas);
-            REQUIRE(stateResult.HasValue());
-            auto state = std::move(stateResult).Value();
+            auto state = PresentationState(canvas);
             const auto skipped = Receipt(canvas, 2, 2, UiPresentationOutcome::Skipped, UiPresentationReason::Suppressed);
             auto applied = state.Apply(skipped);
             REQUIRE(applied.HasValue());
@@ -232,9 +236,7 @@ namespace Horo::Render {
 
         TEST_CASE("UI presentation receipts require consistent terminal reasons", "[renderer][runtime_ui][presentation]") {
             const auto canvas = UiCanvasInstanceId{Owner(), 2, 1};
-            auto stateResult = UiPresentedInteractionState::Create(View(), canvas);
-            REQUIRE(stateResult.HasValue());
-            auto state = std::move(stateResult).Value();
+            auto state = PresentationState(canvas);
             auto invalid = Receipt(canvas, 2, 2, UiPresentationOutcome::Presented, UiPresentationReason::ExecutionFailure);
             RequireError(state.Apply(invalid), UiErrors::RenderPresentationInvalid);
             invalid.outcome = static_cast<UiPresentationOutcome>(99);
