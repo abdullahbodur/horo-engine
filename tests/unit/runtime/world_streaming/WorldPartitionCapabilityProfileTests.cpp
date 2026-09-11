@@ -180,30 +180,26 @@ namespace Horo::WorldStreaming {
 
     TEST_CASE("Partition settings admission fences replacement cancellation and shutdown", "[unit][world_streaming][partition_settings]") {
         const auto settings = WorldPartitionProjectSettings::Create(Request(), Capabilities()).Value();
+        const auto requireStale = [&](const WorldPartitionSettingsId settingsId, const WorldPartitionSettingsRevision settingsRevision,
+                                      const WorldPartitionCapabilityId capabilityId,
+                                      const WorldPartitionCapabilityRevision capabilityRevision) {
+            const auto result = ValidateWorldPartitionSettingsAdmission(settings, settingsId, settingsRevision, capabilityId,
+                                                                        capabilityRevision, WorldPartitionSettingsLifecycle::Active);
+            REQUIRE(result.HasError());
+            REQUIRE(ErrorCode(result.ErrorValue()) == WorldStreamingErrors::PartitionSettingsStale.code.Value());
+        };
         REQUIRE(ValidateWorldPartitionSettingsAdmission(settings, Id<WorldPartitionSettingsId>(2), Id<WorldPartitionSettingsRevision>(3),
                                                         Id<WorldPartitionCapabilityId>(5), Id<WorldPartitionCapabilityRevision>(7),
                                                         WorldPartitionSettingsLifecycle::Active)
                     .HasValue());
-        REQUIRE(ErrorCode(ValidateWorldPartitionSettingsAdmission(settings, Id<WorldPartitionSettingsId>(2),
-                                                                  Id<WorldPartitionSettingsRevision>(4), Id<WorldPartitionCapabilityId>(5),
-                                                                  Id<WorldPartitionCapabilityRevision>(7),
-                                                                  WorldPartitionSettingsLifecycle::Active)
-                              .ErrorValue()) == WorldStreamingErrors::PartitionSettingsStale.code.Value());
-        REQUIRE(ErrorCode(ValidateWorldPartitionSettingsAdmission(settings, Id<WorldPartitionSettingsId>(9),
-                                                                  Id<WorldPartitionSettingsRevision>(3), Id<WorldPartitionCapabilityId>(5),
-                                                                  Id<WorldPartitionCapabilityRevision>(7),
-                                                                  WorldPartitionSettingsLifecycle::Active)
-                              .ErrorValue()) == WorldStreamingErrors::PartitionSettingsStale.code.Value());
-        REQUIRE(ErrorCode(ValidateWorldPartitionSettingsAdmission(settings, Id<WorldPartitionSettingsId>(2),
-                                                                  Id<WorldPartitionSettingsRevision>(3), Id<WorldPartitionCapabilityId>(5),
-                                                                  Id<WorldPartitionCapabilityRevision>(8),
-                                                                  WorldPartitionSettingsLifecycle::Active)
-                              .ErrorValue()) == WorldStreamingErrors::PartitionSettingsStale.code.Value());
-        REQUIRE(ErrorCode(ValidateWorldPartitionSettingsAdmission(settings, Id<WorldPartitionSettingsId>(2),
-                                                                  Id<WorldPartitionSettingsRevision>(3), Id<WorldPartitionCapabilityId>(9),
-                                                                  Id<WorldPartitionCapabilityRevision>(7),
-                                                                  WorldPartitionSettingsLifecycle::Active)
-                              .ErrorValue()) == WorldStreamingErrors::PartitionSettingsStale.code.Value());
+        requireStale(Id<WorldPartitionSettingsId>(2), Id<WorldPartitionSettingsRevision>(4), Id<WorldPartitionCapabilityId>(5),
+                     Id<WorldPartitionCapabilityRevision>(7));
+        requireStale(Id<WorldPartitionSettingsId>(9), Id<WorldPartitionSettingsRevision>(3), Id<WorldPartitionCapabilityId>(5),
+                     Id<WorldPartitionCapabilityRevision>(7));
+        requireStale(Id<WorldPartitionSettingsId>(2), Id<WorldPartitionSettingsRevision>(3), Id<WorldPartitionCapabilityId>(5),
+                     Id<WorldPartitionCapabilityRevision>(8));
+        requireStale(Id<WorldPartitionSettingsId>(2), Id<WorldPartitionSettingsRevision>(3), Id<WorldPartitionCapabilityId>(9),
+                     Id<WorldPartitionCapabilityRevision>(7));
         for (const auto lifecycle : {WorldPartitionSettingsLifecycle::Cancelling, WorldPartitionSettingsLifecycle::Closed}) {
             REQUIRE(
                 ErrorCode(ValidateWorldPartitionSettingsAdmission(settings, Id<WorldPartitionSettingsId>(2),
