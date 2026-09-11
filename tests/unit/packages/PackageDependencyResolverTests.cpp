@@ -146,6 +146,19 @@ TEST_CASE("Package resolver reports stable cycles and source ambiguity", "[packa
         CheckFailure(result, "packages.resolver.cycle", "Dependency cycle: com.cycle.a -> com.cycle.b -> com.cycle.a");
     }
 
+    SECTION("shared transitive dependencies are not cycles") {
+        PackageResolutionRequest request{
+            .roots = {Dependency("com.root", Exact("1.0.0"))},
+            .candidates = {Candidate("com.root", "1.0.0", "public", 10, "sha256:root",
+                                     {Dependency("com.left", Exact("1.0.0")), Dependency("com.right", Exact("1.0.0"))}),
+                           Candidate("com.left", "1.0.0", "public", 10, "sha256:left", {Dependency("com.shared", Exact("1.0.0"))}),
+                           Candidate("com.right", "1.0.0", "public", 10, "sha256:right", {Dependency("com.shared", Exact("1.0.0"))}),
+                           Candidate("com.shared", "1.0.0", "public", 10, "sha256:shared")},
+        };
+        const auto result = PackageDependencyResolver::Resolve(request);
+        CheckPlan(result, {"com.left@1.0.0#public", "com.right@1.0.0#public", "com.root@1.0.0#public", "com.shared@1.0.0#public"});
+    }
+
     SECTION("same package version has conflicting source digests") {
         PackageResolutionRequest request{
             .roots = {Dependency("com.ambiguous", Exact("1.0.0"))},

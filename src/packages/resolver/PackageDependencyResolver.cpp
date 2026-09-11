@@ -201,18 +201,21 @@ namespace Horo::Packages {
             std::map<std::string, VisitMark, std::less<>> marks;
             std::vector<std::string> path;
 
-            [[nodiscard]] bool RecordCycle(const std::string &id) {
+            void RecordCycle(const std::string &id) {
                 const auto begin = std::ranges::find(path, id);
                 explanation = "Dependency cycle: ";
                 for (auto it = begin; it != path.end(); ++it)
                     explanation += (it == begin ? "" : " -> ") + *it;
                 explanation += " -> " + id;
-                return true;
             }
 
             [[nodiscard]] bool Visit(const std::string &id) {
-                if (const auto mark = marks.find(id); mark != marks.end())
-                    return mark->second == VisitMark::Visiting && RecordCycle(id);
+                if (const auto mark = marks.find(id); mark != marks.end()) {
+                    if (mark->second != VisitMark::Visiting)
+                        return false;
+                    RecordCycle(id);
+                    return true;
+                }
                 marks.try_emplace(id, VisitMark::Visiting);
                 path.push_back(id);
                 bool found{};
