@@ -427,6 +427,26 @@ namespace Horo::WorldStreaming::WorldStreamingErrors {
         Describe("world_streaming.source_reduction.capacity_exceeded", ErrorSeverity::Error,
                  "A desired-state reduction exceeds its bounded contributor ceiling.",
                  "Reduce overlapping source demand or increase the host-configured per-cell contributor limit.", false);
+    const ErrorCodeDescriptor PriorityPolicyInvalid =
+        Describe("world_streaming.priority_policy.invalid", ErrorSeverity::Error,
+                 "A streaming priority policy, evaluation context, or candidate is malformed.",
+                 "Provide finite bounded policy factors, valid identities, canonical cells, and an override in [0.5, 2.0].", true);
+    const ErrorCodeDescriptor PriorityPolicyUnsupported =
+        Describe("world_streaming.priority_policy.unsupported", ErrorSeverity::Error,
+                 "A streaming priority policy contract version is unsupported.",
+                 "Migrate the project policy to the current typed priority contract version.", true);
+    const ErrorCodeDescriptor PriorityPolicyCapacityExceeded =
+        Describe("world_streaming.priority_policy.capacity_exceeded", ErrorSeverity::Error,
+                 "A streaming priority ranking request exceeds its immutable row or output ceiling.",
+                 "Reduce the candidate snapshot or provide storage up to the configured bounded ceiling.", false);
+    const ErrorCodeDescriptor PriorityPolicyStale =
+        Describe("world_streaming.priority_policy.stale", ErrorSeverity::Warning,
+                 "A ranking pass references a replaced streaming priority policy publication.",
+                 "Capture the current policy identity and revision before evaluating the next immutable candidate snapshot.", true);
+    const ErrorCodeDescriptor PriorityPolicyLifecycleUnavailable =
+        Describe("world_streaming.priority_policy.lifecycle_unavailable", ErrorSeverity::Warning,
+                 "Streaming priority ranking is unavailable during cancellation or after shutdown.",
+                 "Stop producing ranking snapshots and retain already admitted work until canonical retirement completes.", true);
     const ErrorCodeDescriptor AuthoringContractInvalid =
         Describe("world_streaming.authoring.contract_invalid", ErrorSeverity::Error,
                  "A world-authoring contract, page request, or authority snapshot is malformed.",

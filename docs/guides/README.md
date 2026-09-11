@@ -26,6 +26,8 @@ workflows.
   validate project grid, precision, capacity, and package settings without fallback.
 - [World Partition Registry Snapshot Migration](./world-partition-registry-migration.md):
   publish immutable generation-pinned indices and run bounded allocation-free queries.
+- [World Streaming Priority Policy Migration](./world-streaming-priority-policy-migration.md):
+  rank bounded cell-work snapshots with revision fences, stable ties, and capped age.
 - [XR Coordinate and Pose Contract Migration](./xr-coordinate-pose-migration.md):
   publish generation-fenced coordinate, validity, and time evidence without native
   backend leakage or implicit clock conversion.

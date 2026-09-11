@@ -560,6 +560,22 @@ Stable cell tuple order breaks ties. The boost only changes priority: it cannot
 promise admission for an oversized cell or override pins/required-content policy.
 Queue age uses clamped monotonic service time, not gameplay time dilation.
 
+`StreamingPriorityPolicy` is the inert WST-002.5 publication of those numerical
+rules. A stable policy identity plus an exact non-wrapping revision fences every
+ranking pass; replacement never lets work evaluated under the old coefficients
+masquerade as current. Each candidate owns the exact source descriptor, cell tuple,
+distance, override and enqueue service timestamp used by the decision. Evaluation
+validates the complete immutable snapshot before writing caller-owned output, then
+sorts by descending score, canonical cell tuple and complete source/value evidence.
+It performs no allocation, registration, reservation, admission or cell-state
+mutation. Cancellation and shutdown close new evaluation explicitly.
+
+Queue age is clamped to zero if a sampled service time precedes the enqueue sample
+and is capped by the policy. This provides bounded priority recovery for feasible
+waiting work, not a budget bypass or an unconditional admission deadline. Hosts pass
+the ranked prefix to the separate scheduler/budget authority, which remains
+responsible for capacity, pins, required content and retirement.
+
 Loss of all demands starts the configured linger timer; new demand cancels linger.
 CellBudgetExceeded leaves an unadmitted request pending and re-evaluated under queue
 and byte caps; it does not put an unallocated cell into Failed. Preflight reports
