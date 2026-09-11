@@ -85,12 +85,12 @@ namespace Horo::Terrain {
         }
 
         [[nodiscard]] bool WindIsValid(const FoliageWindDefinition &wind) noexcept {
-            if (wind.model >= FoliageWindModel::Count || wind.primaryStrengthPermille > MaximumPermille ||
-                wind.secondaryStrengthPermille > MaximumPermille || wind.gustProbabilityPerMillion > ProbabilityPartsPerMillion ||
-                wind.gustStrengthPermille > MaximumPermille || wind.branchFlexibilityPermille > MaximumPermille ||
-                wind.leafFlutterPermille > MaximumPermille)
+            using enum FoliageWindModel;
+            if (wind.model >= Count || wind.primaryStrengthPermille > MaximumPermille || wind.secondaryStrengthPermille > MaximumPermille ||
+                wind.gustProbabilityPerMillion > ProbabilityPartsPerMillion || wind.gustStrengthPermille > MaximumPermille ||
+                wind.branchFlexibilityPermille > MaximumPermille || wind.leafFlutterPermille > MaximumPermille)
                 return false;
-            if (wind.model == FoliageWindModel::None)
+            if (wind.model == None)
                 return WindIsDisabled(wind);
             if (wind.primaryStrengthPermille == 0 || wind.primaryFrequencyMilliHertz == 0 || wind.branchFlexibilityPermille == 0)
                 return false;
@@ -98,7 +98,7 @@ namespace Horo::Terrain {
                 return false;
             if ((wind.gustProbabilityPerMillion == 0) != (wind.gustStrengthPermille == 0))
                 return false;
-            return wind.model == FoliageWindModel::VertexBend ? wind.leafFlutterPermille == 0 : wind.leafFlutterPermille > 0;
+            return wind.model == VertexBend ? wind.leafFlutterPermille == 0 : wind.leafFlutterPermille > 0;
         }
 
         [[nodiscard]] bool CollisionIsValid(const FoliageCollisionDefinition &collision) noexcept {
@@ -112,16 +112,15 @@ namespace Horo::Terrain {
 
         [[nodiscard]] Result<void> ValidateCapabilities(const FoliageTypeDefinitionData &data,
                                                         const FoliageDefinitionCapabilitySet capabilities) {
+            using enum FoliageDefinitionCapability;
             if (!capabilities.IsValid())
                 return Failure(TerrainErrors::FoliageFeatureUnsupported);
-            const FoliageDefinitionCapability cullingCapability = data.culling.recipe == FoliageCullingRecipe::CpuDirect
-                                                                      ? FoliageDefinitionCapability::CpuCulling
-                                                                      : FoliageDefinitionCapability::GpuIndirectCulling;
-            if (!capabilities.Contains(cullingCapability) ||
-                (data.assets.impostor.has_value() && !capabilities.Contains(FoliageDefinitionCapability::Impostors)) ||
-                (data.wind.model != FoliageWindModel::None && !capabilities.Contains(FoliageDefinitionCapability::VertexWind)) ||
-                (data.collision.shape != FoliageCollisionShape::None && !capabilities.Contains(FoliageDefinitionCapability::Collision)) ||
-                (data.collision.blocksNavigation && !capabilities.Contains(FoliageDefinitionCapability::NavigationBlocking)))
+            if (const FoliageDefinitionCapability cullingCapability =
+                    data.culling.recipe == FoliageCullingRecipe::CpuDirect ? CpuCulling : GpuIndirectCulling;
+                !capabilities.Contains(cullingCapability) || (data.assets.impostor.has_value() && !capabilities.Contains(Impostors)) ||
+                (data.wind.model != FoliageWindModel::None && !capabilities.Contains(VertexWind)) ||
+                (data.collision.shape != FoliageCollisionShape::None && !capabilities.Contains(Collision)) ||
+                (data.collision.blocksNavigation && !capabilities.Contains(NavigationBlocking)))
                 return Failure(TerrainErrors::FoliageFeatureUnsupported);
             return Result<void>::Success();
         }
