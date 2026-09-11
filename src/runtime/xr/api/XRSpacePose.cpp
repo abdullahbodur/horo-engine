@@ -15,8 +15,7 @@ namespace Horo::XR {
         /** @brief Validates a semantic space against current session and origin ownership. */
         [[nodiscard]] bool ValidSpace(const XRCoordinateSpace &space, const XRSessionId &activeSession,
                                       const XRWorldOriginRevision activeOriginRevision, Error &failure) {
-            auto identity = ValidateXRSessionObject(space.id, activeSession);
-            if (identity.HasError()) {
+            if (auto identity = ValidateXRSessionObject(space.id, activeSession); identity.HasError()) {
                 failure = identity.ErrorValue();
                 return false;
             }
@@ -216,8 +215,7 @@ namespace Horo::XR {
     /** @copydoc XRPoseSample::Create */
     Result<XRPoseSample> XRPoseSample::Create(const XRPoseDescriptor &descriptor, const XRSessionId &activeSession,
                                               const XRWorldOriginRevision activeOriginRevision) {
-        auto session = ValidateXRSession(descriptor.session, activeSession);
-        if (session.HasError())
+        if (auto session = ValidateXRSession(descriptor.session, activeSession); session.HasError())
             return Result<XRPoseSample>::Failure(session.ErrorValue());
         Error spaceFailure;
         if (!ValidSpace(descriptor.source, activeSession, activeOriginRevision, spaceFailure) ||
@@ -279,10 +277,11 @@ namespace Horo::XR {
 
         XRPoseSample composed = transforms.front();
         for (std::size_t index = 1; index < transforms.size(); ++index) {
-            auto next = ComposePair(composed, transforms[index], activeSession, activeOriginRevision);
-            if (next.HasError())
+            if (auto next = ComposePair(composed, transforms[index], activeSession, activeOriginRevision); next.HasError()) {
                 return next;
-            composed = std::move(next).Value();
+            } else {
+                composed = std::move(next).Value();
+            }
         }
         return Result<XRPoseSample>::Success(std::move(composed));
     }
