@@ -33,11 +33,17 @@ namespace Horo::PCG {
         REQUIRE(GraphId::Create(0).HasError());
         REQUIRE(NodeId::Create(0).HasError());
         REQUIRE(PinId::Create(0).HasError());
+        REQUIRE(EdgeId::Create(0).HasError());
+        REQUIRE(ExposedInputId::Create(0).HasError());
+        REQUIRE(NodeTypeId::Create(0).HasError());
         REQUIRE(GraphRevision::Create(0).HasError());
         REQUIRE(ExecutionValue::Create(0).HasError());
         REQUIRE(SourceSampleId::Create(0).HasError());
         static_assert(!std::is_same_v<GraphId, NodeId>);
         static_assert(!std::is_same_v<NodeId, PinId>);
+        static_assert(!std::is_same_v<PinId, EdgeId>);
+        static_assert(!std::is_same_v<EdgeId, ExposedInputId>);
+        static_assert(!std::is_same_v<NodeId, NodeTypeId>);
         static_assert(!std::is_convertible_v<std::uint64_t, GraphId>);
         static_assert(std::is_trivially_copyable_v<GraphId>);
 

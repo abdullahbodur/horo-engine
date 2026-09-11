@@ -34,6 +34,30 @@ Offline bake, live preview and runtime generation evaluate the same validated co
 plan. Runtime never parses graph source, invokes a compiler, repairs a plan or chooses
 a cache entry as active content.
 
+### Graph Source Schema 1.1
+
+`PCGGraphAsset` is the implemented bounded semantic source value. It owns stable graph,
+node, graph-global pin, edge and exposed-input identities; exact node-type versions;
+typed pin direction/cardinality/value contracts; an explicit Offline/Runtime/Hybrid
+intent; and one deterministic seed. Capture validates a detached candidate completely,
+canonicalizes nodes, pins, edges and exposed inputs by stable identity, proves edge
+direction/type/cardinality and DAG invariants, then publishes one immutable value.
+
+The canonical `HPCG` byte envelope uses fixed-width network byte order and contains no
+native handles, addresses, editor layout, callbacks or executable code. Decoding checks
+the envelope and tier-derived counts before reserving containers, rejects trailing or
+truncated data, and reuses the same semantic validation boundary as direct creation.
+Floating defaults must be finite and signed zero is normalized before publication, so
+container order and equivalent zero representations cannot change canonical bytes.
+
+Node support is supplied as one immutable host-composed catalog projection. An unknown
+node either fails with `pcg.graph.node_type_unknown` or is retained as inert bounded
+payload under `PreserveInert`; a preserved graph is explicitly not cook-eligible. It is
+never skipped, substituted or discovered globally. Older compatible source enters only
+through an explicitly supplied bounded `IPCGGraphSourceMigrator`, and its output must be
+the exact current schema and pass full decode/validation. Assets remains the owner of
+the surrounding `AssetId`, durable bytes and atomic publication revision.
+
 PCG owns plan validation and pure evaluation, not generated feature truth. Product
 gameplay/server authority permits semantic runtime requests; a host transaction
 coordinator revalidates authority and target revisions, while RuntimeScene,

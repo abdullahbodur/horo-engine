@@ -561,3 +561,19 @@ Consumers link `HoroEngine::DestructionApi`, retain snapshots for read-only work
 revalidate generation/state/capability revisions before live operations. Ad-hoc global
 registries, mutable record exposure, native handles and silently widened queries have no
 compatibility path.
+
+## PCG-2.2 Migration Notes
+
+`HoroEngine::PCG` additionally owns `Horo/PCG/PCGGraphAsset.h`; the target remains
+Foundation-only and backend-neutral. The graph source uses the existing PCG stable
+identity and operational-tier contracts, while new edge and exposed-input identities
+remain distinct authored domains. Public-header consumer coverage compiles the new
+header through the staged owner boundary.
+
+Provisional graph containers must migrate to `PCGGraphAsset::Create` and the canonical
+`HPCG` schema instead of persisting vector indexes, labels, addresses or native node
+objects. Callers provide an immutable catalog projection and explicitly choose reject
+or inert-preservation behavior for unavailable node types. There is no implicit legacy
+decoder: schema 1.0 requires a host-composed bounded migrator and every migrated value
+passes the ordinary schema 1.1 validation before publication. Assets continues to own
+the enclosing asset identity, bytes, revision transaction and physical storage.

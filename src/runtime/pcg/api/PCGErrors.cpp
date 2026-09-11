@@ -155,4 +155,55 @@ namespace Horo::PCG::PCGErrors {
                                                  .summary = "The exact PCG node runtime is unavailable.",
                                                  .remediationHint =
                                                      "Register that semantic runtime explicitly; never select another implementation."};
+    const ErrorCodeDescriptor GraphSourceMalformed{.domain = PcgDomain,
+                                                   .code = ErrorCode{"pcg.graph.source_malformed"},
+                                                   .defaultSeverity = ErrorSeverity::Error,
+                                                   .summary = "The PCG graph source is malformed.",
+                                                   .remediationHint =
+                                                       "Reject the source and repair its typed identities, fields, or values."};
+    const ErrorCodeDescriptor GraphSourceDuplicate{.domain = PcgDomain,
+                                                   .code = ErrorCode{"pcg.graph.source_duplicate"},
+                                                   .defaultSeverity = ErrorSeverity::Error,
+                                                   .summary = "The PCG graph source contains a duplicate semantic identity.",
+                                                   .remediationHint =
+                                                       "Assign every graph element and exposed key a unique stable identity."};
+    const ErrorCodeDescriptor
+        GraphSourceVersionUnsupported{.domain = PcgDomain,
+                                      .code = ErrorCode{"pcg.graph.version_unsupported"},
+                                      .defaultSeverity = ErrorSeverity::Error,
+                                      .summary = "The PCG graph source schema version is unsupported.",
+                                      .remediationHint =
+                                          "Use an explicit compatible migrator or a reader supporting the persisted schema."};
+    const ErrorCodeDescriptor GraphSourceCapacityExceeded{.domain = PcgDomain,
+                                                          .code = ErrorCode{"pcg.graph.capacity_exceeded"},
+                                                          .defaultSeverity = ErrorSeverity::Error,
+                                                          .summary = "The PCG graph source exceeds a finite schema limit.",
+                                                          .remediationHint = "Reduce graph structure or payload before admission."};
+    const ErrorCodeDescriptor GraphTopologyInvalid{.domain = PcgDomain,
+                                                   .code = ErrorCode{"pcg.graph.topology_invalid"},
+                                                   .defaultSeverity = ErrorSeverity::Error,
+                                                   .summary = "The PCG graph topology is invalid.",
+                                                   .remediationHint = "Repair pin direction, type, cardinality, endpoints, or cycles."};
+    const ErrorCodeDescriptor
+        GraphNodeTypeUnknown{.domain = PcgDomain,
+                             .code = ErrorCode{"pcg.graph.node_type_unknown"},
+                             .defaultSeverity = ErrorSeverity::Error,
+                             .summary = "The PCG graph references an unavailable node type.",
+                             .remediationHint = "Install the exact catalog type or preserve it only for inert authoring round trips."};
+    const ErrorCodeDescriptor GraphMigrationFailed{.domain = PcgDomain,
+                                                   .code = ErrorCode{"pcg.graph.migration_failed"},
+                                                   .defaultSeverity = ErrorSeverity::Error,
+                                                   .summary = "The PCG graph source migration failed.",
+                                                   .remediationHint =
+                                                       "Use a bounded migrator that emits the exact current canonical schema."};
+    const ErrorCodeDescriptor GraphReplacementInvalid{.domain = PcgDomain,
+                                                      .code = ErrorCode{"pcg.graph.replacement_invalid"},
+                                                      .defaultSeverity = ErrorSeverity::Error,
+                                                      .summary = "The PCG graph replacement does not preserve and advance its lineage.",
+                                                      .remediationHint = "Preserve GraphId and publish a strictly newer GraphRevision."};
+    const ErrorCodeDescriptor GraphLifecycleUnavailable{.domain = PcgDomain,
+                                                        .code = ErrorCode{"pcg.graph.lifecycle_unavailable"},
+                                                        .defaultSeverity = ErrorSeverity::Warning,
+                                                        .summary = "PCG graph-source admission is closed.",
+                                                        .remediationHint = "Do not begin source work after cancellation or shutdown."};
 }  // namespace Horo::PCG::PCGErrors

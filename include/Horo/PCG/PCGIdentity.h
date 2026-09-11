@@ -22,6 +22,9 @@ namespace Horo::PCG {
     struct GraphIdentityTag;
     struct NodeIdentityTag;
     struct PinIdentityTag;
+    struct EdgeIdentityTag;
+    struct ExposedInputIdentityTag;
+    struct NodeTypeIdentityTag;
     struct GraphRevisionIdentityTag;
     struct ExecutionValueIdentityTag;
     struct SourceSampleIdentityTag;
@@ -37,6 +40,12 @@ namespace Horo::PCG {
     using NodeId = PcgStableIdentity<NodeIdentityTag>;
     /** @brief Stable authored pin identity, independent of node layout, label, and address. */
     using PinId = PcgStableIdentity<PinIdentityTag>;
+    /** @brief Stable authored edge identity, independent of endpoint container order. */
+    using EdgeId = PcgStableIdentity<EdgeIdentityTag>;
+    /** @brief Stable authored exposed-input identity, independent of display name and order. */
+    using ExposedInputId = PcgStableIdentity<ExposedInputIdentityTag>;
+    /** @brief Stable semantic node-type identity resolved through an explicit catalog snapshot. */
+    using NodeTypeId = PcgStableIdentity<NodeTypeIdentityTag>;
     /** @brief Non-zero durable revision of one graph generation. */
     using GraphRevision = PcgStableIdentity<GraphRevisionIdentityTag>;
     /** @brief Owner-issued durable identity of one execution within an exact graph generation. */
