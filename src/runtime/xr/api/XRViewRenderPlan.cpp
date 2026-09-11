@@ -200,8 +200,8 @@ namespace Horo::XR {
             while (index < priorTargets.size()) {
                 const auto &prior = priorTargets[index];
                 const bool differentImageForTarget = prior.target == target.target && prior.image != target.image;
-                const bool duplicateImageLayer = prior.image == target.image && prior.arrayLayer == target.arrayLayer;
-                if (differentImageForTarget || duplicateImageLayer)
+                if (const bool duplicateImageLayer = prior.image == target.image && prior.arrayLayer == target.arrayLayer;
+                    differentImageForTarget || duplicateImageLayer)
                     return true;
                 ++index;
             }
