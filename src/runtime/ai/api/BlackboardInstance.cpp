@@ -107,8 +107,7 @@ namespace Horo::AI {
     Result<void> BlackboardWriteBatch::Stage(BlackboardWrite write) {
         if (!write.key.IsValid())
             return Result<void>::Failure(Failure(AIErrors::BlackboardBatchInvalid));
-        if (const auto duplicate = std::ranges::find(writes_, write.key, &BlackboardWrite::key);
-            duplicate != writes_.end()) {
+        if (const auto duplicate = std::ranges::find(writes_, write.key, &BlackboardWrite::key); duplicate != writes_.end()) {
             duplicate->value = std::move(write.value);
             return Result<void>::Success();
         }
