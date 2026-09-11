@@ -132,6 +132,35 @@ namespace Horo::Vfx {
         CHECK(expiry.active == 0);
     }
 
+    TEST_CASE("CPU spawn initialization clears recycled transient state", "[unit][vfx][particle-spawn]") {
+        CpuParticleSpawnPipeline pipeline = Pipeline(Descriptor(1, 0.0, 10.0));
+        REQUIRE(pipeline.Advance({.burstCount = 1}).HasValue());
+        CpuParticleSoAView first = pipeline.View().Value();
+        first.age[0] = 9.0F;
+        first.angularVelocity[0] = 17.0F;
+        first.customFlags[0] = std::numeric_limits<std::uint32_t>::max();
+        const CpuParticleHandle retired = pipeline.HandleAtDenseIndex(0).Value();
+        REQUIRE(pipeline.SignalKill(retired).HasValue());
+        REQUIRE(pipeline.Advance({}).Value().killed == 1);
+
+        const auto replacement = pipeline.Advance({.burstCount = 1}).Value();
+        REQUIRE(replacement.spawned == 1);
+        REQUIRE(replacement.killed == 0);
+        const CpuParticleSoAView recycled = pipeline.View().Value();
+        CHECK(recycled.age[0] == 0.0F);
+        CHECK(recycled.angularVelocity[0] == 0.0F);
+        CHECK(recycled.customFlags[0] == 0U);
+    }
+
+    TEST_CASE("CPU spawn handles are limited to the active dense prefix", "[unit][vfx][particle-spawn]") {
+        CpuParticleSpawnPipeline pipeline = Pipeline(Descriptor(4));
+        REQUIRE(pipeline.Advance({.burstCount = 1}).HasValue());
+
+        REQUIRE(pipeline.HandleAtDenseIndex(0).HasValue());
+        CHECK(HasError(pipeline.HandleAtDenseIndex(1), VfxErrors::ParticleHandleInvalid));
+        CHECK(HasError(pipeline.HandleAtDenseIndex(3), VfxErrors::ParticleHandleInvalid));
+    }
+
     TEST_CASE("CPU spawn capacity reports rejected births without replacing live particles", "[unit][vfx][particle-spawn]") {
         CpuParticleSpawnPipeline pipeline = Pipeline(Descriptor(3));
         const auto result = pipeline.Advance({.burstCount = 8}).Value();
