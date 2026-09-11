@@ -8,6 +8,12 @@
 
 namespace Horo::PCG {
     struct PCGGenerationPlan::State final {
+        explicit State(PCGGenerationPlanCandidate candidate, const PCGGenerationResourceEstimate totalResources)
+            : version(candidate.version), plan(candidate.plan), execution(candidate.execution), seed(candidate.seed),
+              lineage(candidate.lineage), set(candidate.set), setRevision(candidate.setRevision), cell(candidate.cell),
+              requiredCapabilities(candidate.requiredCapabilities), target(candidate.validation),
+              dependencies(std::move(candidate.dependencies)), outputs(std::move(candidate.outputs)), resources(totalResources) {}
+
         PCGGenerationPlanVersion version;
         GenerationPlanId plan;
         ExecutionId execution;
@@ -302,11 +308,7 @@ namespace Horo::PCG {
         auto resources = ValidateAndCanonicalizeOutputs(candidate, context, owned.Value());
         if (resources.HasError())
             return Result<PCGGenerationPlan>::Failure(resources.ErrorValue());
-        auto state = std::make_shared<const PCGGenerationPlan::State>(
-            PCGGenerationPlan::State{candidate.version, candidate.plan, candidate.execution, candidate.seed, candidate.lineage,
-                                     candidate.set, candidate.setRevision, candidate.cell, candidate.requiredCapabilities,
-                                     candidate.validation, std::move(candidate.dependencies), std::move(candidate.outputs),
-                                     resources.Value()});
+        auto state = std::make_shared<const PCGGenerationPlan::State>(std::move(candidate), resources.Value());
         return Result<PCGGenerationPlan>::Success(PCGGenerationPlan{PCGGenerationPlan::ConstructionKey{}, std::move(state)});
     }
 
