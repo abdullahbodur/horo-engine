@@ -44,18 +44,26 @@ namespace Horo {
         }
     }  // namespace
 
-    class JobRecord {
+    /** @brief Encapsulates the mutex shared by internal aggregate state without exposing the synchronization primitive as data. */
+    class SynchronizedStateMutex {
     public:
+        [[nodiscard]] std::mutex &Mutex() const noexcept {
+            return mutex_;
+        }
+
+    private:
+        mutable std::mutex mutex_;
+    };
+
+    struct JobRecord : private SynchronizedStateMutex {
+        using SynchronizedStateMutex::Mutex;
+
         JobRecord(const JobId jobId, const JobDescriptor &descriptor, ContextJobFunction jobWork, const SchedulerIdentity scheduler,
                   std::weak_ptr<JobStoreState> owner)
             : id(jobId), cancellation(descriptor.parentCancellation), work(std::move(jobWork)), operationId(descriptor.operationId),
               taskGroupId(descriptor.taskGroupId), configuration(descriptor.configuration), schedulerIdentity(scheduler),
               store(std::move(owner)) {
             timing.submittedAt = std::chrono::steady_clock::now();
-        }
-
-        [[nodiscard]] std::mutex &Mutex() const noexcept {
-            return mutex_;
         }
 
         [[nodiscard]] static JobExecutionContext ExecutionContext(std::shared_ptr<JobRecord> record) {
@@ -77,27 +85,18 @@ namespace Horo {
         SchedulerIdentity schedulerIdentity;
         std::weak_ptr<JobStoreState> store;
         std::thread::id submittingThread = std::this_thread::get_id();
-
-    private:
-        mutable std::mutex mutex_;
     };
 
-    class JobStoreState final {
-    public:
-        explicit JobStoreState(const std::size_t capacity) : terminalCapacity(capacity) {}
+    struct JobStoreState final : private SynchronizedStateMutex {
+        using SynchronizedStateMutex::Mutex;
 
-        [[nodiscard]] std::mutex &Mutex() const noexcept {
-            return mutex_;
-        }
+        explicit JobStoreState(const std::size_t capacity) : terminalCapacity(capacity) {}
 
         const std::size_t terminalCapacity;
         std::unordered_map<JobId, std::shared_ptr<JobRecord>> records;
         std::deque<JobId> terminalOrder;
         std::uint64_t revision{};
         std::uint64_t droppedTerminalCount{};
-
-    private:
-        mutable std::mutex mutex_;
     };
 
     struct JobSystem::State {
