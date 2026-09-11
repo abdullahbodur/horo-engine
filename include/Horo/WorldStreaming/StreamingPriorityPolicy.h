@@ -39,14 +39,15 @@ namespace Horo::WorldStreaming {
         static constexpr std::uint32_t CurrentContractVersion = 1;
         static constexpr std::uint32_t MaximumCandidateCount = 65'536;
 
-        std::uint32_t contractVersion{CurrentContractVersion};       /**< Exact supported in-memory contract version. */
-        StreamingPriorityPolicyId id{};                              /**< Stable policy authority identity. */
-        StreamingPriorityPolicyRevision revision{};                  /**< Exact immutable policy publication. */
-        std::uint64_t epsilonMillimeters{1'000};                     /**< Positive distance denominator floor; default one metre. */
-        std::array<double, 4> intentMultipliers{1.0, 0.9, 0.8, 1.2}; /**< Camera, Gameplay, Network, Preload weights. */
-        double ageSlopePerSecond{0.1};                               /**< Non-negative priority gained per queued second. */
-        double maximumAgeBoost{2.0};                                 /**< Finite non-negative queue-age contribution cap. */
-        std::uint32_t maximumCandidates{1'024};                      /**< Maximum rows ranked by one bounded call. */
+        std::uint32_t contractVersion{CurrentContractVersion}; /**< Exact supported in-memory contract version. */
+        StreamingPriorityPolicyId id{};                        /**< Stable policy authority identity. */
+        StreamingPriorityPolicyRevision revision{};            /**< Exact immutable policy publication. */
+        std::uint64_t epsilonMillimeters{1'000};               /**< Positive distance denominator floor; default one metre. */
+        std::array<double, static_cast<std::size_t>(StreamingSourceIntent::Count)>
+            intentMultipliers{1.0, 0.9, 0.8, 1.2}; /**< Camera, Gameplay, Network, Preload weights. */
+        double ageSlopePerSecond{0.1};             /**< Non-negative priority gained per queued second. */
+        double maximumAgeBoost{2.0};               /**< Finite non-negative queue-age contribution cap. */
+        std::uint32_t maximumCandidates{1'024};    /**< Maximum rows ranked by one bounded call. */
     };
 
     /** @brief Immutable validated priority policy; construction has no registration or activation effects. */

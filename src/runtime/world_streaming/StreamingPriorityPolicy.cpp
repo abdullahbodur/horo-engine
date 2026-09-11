@@ -12,6 +12,8 @@ namespace Horo::WorldStreaming {
         constexpr double MaximumOverride = 2.0;
         constexpr double MaximumPolicyFactor = 1'024.0;
         constexpr std::uint64_t MaximumEpsilonMillimeters = 1'000'000'000;
+        static_assert(std::tuple_size_v<decltype(StreamingPriorityPolicyRequest::intentMultipliers)> ==
+                      static_cast<std::size_t>(StreamingSourceIntent::Count));
 
         template <typename T> [[nodiscard]] Result<T> Failure(const ErrorCodeDescriptor &descriptor) {
             return Result<T>::Failure(MakeError(descriptor));

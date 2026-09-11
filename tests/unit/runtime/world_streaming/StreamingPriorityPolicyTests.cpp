@@ -159,7 +159,7 @@ namespace Horo::WorldStreaming {
         CHECK(output[0].score == 77.0);
 
         invalid = Candidate(1, Cell(1));
-        invalid.source.intent = static_cast<StreamingSourceIntent>(255);
+        invalid.source.intent = StreamingSourceIntent::Count;
         const std::array unsupportedCandidates{invalid};
         RequireError(RankStreamingCellPriorities(Policy(), Context(), unsupportedCandidates, output),
                      WorldStreamingErrors::SourceIntentUnsupported);
