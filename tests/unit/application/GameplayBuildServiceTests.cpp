@@ -152,21 +152,21 @@ TEST_CASE("Compiler diagnostic parser supports GCC Clang and MSVC output", "[uni
         REQUIRE((diagnostic->compilerCode == "C2143"));
         REQUIRE((diagnostic->message == "syntax error: missing ';' before '}'"));
     }
+}
 
-    SECTION("GCC and Clang diagnostics may omit the column") {
-        const auto diagnostic = ParseCompilerDiagnostic("source/gameplay/Player.cpp:31: error: expected declaration", projectRoot);
-        REQUIRE(diagnostic.has_value());
-        REQUIRE((diagnostic->source.line == 31U));
-        REQUIRE((diagnostic->source.column == 0U));
-    }
+TEST_CASE("Compiler diagnostic parser accepts omitted columns", "[unit][gameplay][build][diagnostics]") {
+    const std::filesystem::path projectRoot = std::filesystem::temp_directory_path() / "horo parser project";
 
-    SECTION("MSVC diagnostics may omit the column") {
-        const auto diagnostic = ParseCompilerDiagnostic("source\\Player.cpp(19): warning C4100: unreferenced parameter", projectRoot);
-        REQUIRE(diagnostic.has_value());
-        REQUIRE((diagnostic->source.line == 19U));
-        REQUIRE((diagnostic->source.column == 0U));
-        REQUIRE((diagnostic->compilerCode == "C4100"));
-    }
+    const auto gcc = ParseCompilerDiagnostic("source/gameplay/Player.cpp:31: error: expected declaration", projectRoot);
+    REQUIRE(gcc.has_value());
+    REQUIRE((gcc->source.line == 31U));
+    REQUIRE((gcc->source.column == 0U));
+
+    const auto msvc = ParseCompilerDiagnostic("source\\Player.cpp(19): warning C4100: unreferenced parameter", projectRoot);
+    REQUIRE(msvc.has_value());
+    REQUIRE((msvc->source.line == 19U));
+    REQUIRE((msvc->source.column == 0U));
+    REQUIRE((msvc->compilerCode == "C4100"));
 }
 
 TEST_CASE("Compiler diagnostic parser rejects malformed and oversized input safely", "[unit][gameplay][build][diagnostics]") {
