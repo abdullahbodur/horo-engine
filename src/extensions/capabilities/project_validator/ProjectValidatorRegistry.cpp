@@ -7,6 +7,7 @@
 #include <algorithm>
 #include <atomic>
 #include <cctype>
+#include <format>
 #include <mutex>
 #include <optional>
 #include <ranges>
@@ -68,8 +69,8 @@ namespace Horo::Extensions {
         }
 
         [[nodiscard]] Error ProviderFailure(const ProjectValidatorProviderDescriptor &provider, Error cause = {}) {
-            const std::string detail = "Project validator failed: " + provider.providerId.value + "@" +
-                                       std::to_string(provider.providerGeneration) + " (" + provider.validatorId.value + ").";
+            const std::string detail = std::format("Project validator failed: {}@{} ({}).", provider.providerId.value,
+                                                   provider.providerGeneration, provider.validatorId.value);
             return cause.code.Value().empty() ? MakeError(ExtensionErrors::ProjectValidatorInvocationFailed, detail)
                                               : WrapError(ExtensionErrors::ProjectValidatorInvocationFailed, std::move(cause), detail);
         }
@@ -78,8 +79,8 @@ namespace Horo::Extensions {
             if (provider == nullptr)
                 return MakeError(ExtensionErrors::ProjectValidationCancelled);
             return MakeError(ExtensionErrors::ProjectValidationCancelled,
-                             "Project validation cancelled at provider: " + provider->providerId.value + "@" +
-                                 std::to_string(provider->providerGeneration) + ".");
+                             std::format("Project validation cancelled at provider: {}@{}.", provider->providerId.value,
+                                         provider->providerGeneration));
         }
 
         void RemoveProvider(const std::shared_ptr<ProjectValidatorRegistryState> &registry,
@@ -191,7 +192,7 @@ namespace Horo::Extensions {
 
     /** @copydoc ProjectValidatorRegistry::Register */
     Result<ProjectValidatorRegistration> ProjectValidatorRegistry::Register(ProjectValidatorProviderDescriptor descriptor,
-                                                                            std::shared_ptr<const IProjectValidator> provider) {
+                                                                            std::shared_ptr<const IProjectValidator> provider) const {
         if (!ValidDescriptor(descriptor) || provider == nullptr)
             return Result<ProjectValidatorRegistration>::Failure(MakeError(ExtensionErrors::ProjectValidatorRegistryInvalid));
         if (state_ == nullptr)
@@ -219,8 +220,7 @@ namespace Horo::Extensions {
     Result<std::vector<AttributedProjectValidationResult>> ProjectValidatorRegistry::ValidateAll(
         const ProjectValidationSnapshot &snapshot, const CancellationToken &cancellation) const {
         const auto state = state_;
-        const auto validSnapshot = ValidateSnapshot(snapshot);
-        if (validSnapshot.HasError())
+        if (const auto validSnapshot = ValidateSnapshot(snapshot); validSnapshot.HasError())
             return Result<std::vector<AttributedProjectValidationResult>>::Failure(validSnapshot.ErrorValue());
         if (state == nullptr)
             return Result<std::vector<AttributedProjectValidationResult>>::Failure(
@@ -254,7 +254,7 @@ namespace Horo::Extensions {
             if (completed.HasError())
                 return Result<std::vector<AttributedProjectValidationResult>>::Failure(
                     ProviderFailure(provider->descriptor, completed.ErrorValue()));
-            results.push_back({provider->descriptor, std::move(completed).Value()});
+            results.emplace_back(provider->descriptor, std::move(completed).Value());
         }
         if (cancellation.IsCancellationRequested())
             return Result<std::vector<AttributedProjectValidationResult>>::Failure(CancellationFailure(nullptr));
@@ -262,7 +262,7 @@ namespace Horo::Extensions {
     }
 
     /** @copydoc ProjectValidatorRegistry::BeginShutdown */
-    void ProjectValidatorRegistry::BeginShutdown() {
+    void ProjectValidatorRegistry::BeginShutdown() const {
         if (state_ == nullptr)
             return;
         std::scoped_lock lock{state_->mutex};

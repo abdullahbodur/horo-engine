@@ -163,7 +163,7 @@ namespace Horo::Extensions {
          * @note Registration never invokes provider code.
          */
         [[nodiscard]] Result<ProjectValidatorRegistration> Register(ProjectValidatorProviderDescriptor descriptor,
-                                                                    std::shared_ptr<const IProjectValidator> provider);
+                                                                    std::shared_ptr<const IProjectValidator> provider) const;
 
         /**
          * @brief Runs one immutable snapshot through the deterministically ordered provider set.
@@ -175,7 +175,7 @@ namespace Horo::Extensions {
                                                                                          const CancellationToken &cancellation) const;
 
         /** @brief Idempotently closes registration and new validation admission. */
-        void BeginShutdown();
+        void BeginShutdown() const;
         /**
          * @brief Reports whether this registry has entered terminal shutdown.
          * @return True after shutdown admission closes.
