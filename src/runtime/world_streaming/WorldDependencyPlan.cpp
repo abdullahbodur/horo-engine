@@ -104,7 +104,7 @@ namespace Horo::WorldStreaming {
             if (storage.softReferences.size() >= limits.maximumSoftReferences)
                 return Result<void>::Failure(MakeError(WorldStreamingErrors::DependencyPlanCapacityExceeded));
             storage.softReferences.emplace_back(edge);
-            storage.softResolutions.push_back({source, target});
+            storage.softResolutions.emplace_back(source, target);
             return Result<void>::Success();
         }
 
