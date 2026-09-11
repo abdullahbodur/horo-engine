@@ -191,8 +191,9 @@ namespace Horo::Extensions {
     }
 
     /** @copydoc ProjectValidatorRegistry::Register */
-    Result<ProjectValidatorRegistration> ProjectValidatorRegistry::Register(ProjectValidatorProviderDescriptor descriptor,
-                                                                            std::shared_ptr<const IProjectValidator> provider) const {
+    Result<ProjectValidatorRegistration> ProjectValidatorRegistry::Register(  // NOSONAR(cpp:S5817) Publication mutates owner lifecycle
+                                                                              // state.
+        ProjectValidatorProviderDescriptor descriptor, std::shared_ptr<const IProjectValidator> provider) {
         if (!ValidDescriptor(descriptor) || provider == nullptr)
             return Result<ProjectValidatorRegistration>::Failure(MakeError(ExtensionErrors::ProjectValidatorRegistryInvalid));
         if (state_ == nullptr)
@@ -262,7 +263,7 @@ namespace Horo::Extensions {
     }
 
     /** @copydoc ProjectValidatorRegistry::BeginShutdown */
-    void ProjectValidatorRegistry::BeginShutdown() const {
+    void ProjectValidatorRegistry::BeginShutdown() {  // NOSONAR(cpp:S5817) Terminal admission mutation belongs to the owner facade.
         if (state_ == nullptr)
             return;
         std::scoped_lock lock{state_->mutex};
