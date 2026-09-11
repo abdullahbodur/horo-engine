@@ -223,7 +223,7 @@ namespace Horo::Extensions {
             return Result<ExtensionCapabilityHandle>::Failure(MakeError(ExtensionErrors::CapabilityRevoked));
         if (!state_->active.load(std::memory_order_acquire))
             return Result<ExtensionCapabilityHandle>::Failure(MakeError(ExtensionErrors::CapabilityRevoked));
-        if (!Contains(capabilities_, capability)) {
+        if (!std::ranges::binary_search(capabilities_, capability.value, {}, &ExtensionCapabilityId::value)) {
             return Result<ExtensionCapabilityHandle>::Failure(
                 MakeError(ExtensionErrors::CapabilityUnavailable, "Capability was not declared and admitted: " + capability.value));
         }
