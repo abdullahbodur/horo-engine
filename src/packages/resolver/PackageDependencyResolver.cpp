@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <charconv>
+#include <format>
 #include <map>
 #include <optional>
 #include <set>
@@ -57,10 +58,11 @@ namespace Horo::Packages {
                            value == '-';
                 }))
                     return false;
-                const bool numeric = std::ranges::all_of(identifier, [](const unsigned char value) {
+                if (const bool numeric = std::ranges::all_of(identifier,
+                                                             [](const unsigned char value) {
                     return value >= '0' && value <= '9';
                 });
-                if (numeric && identifier.size() > 1U && identifier.front() == '0')
+                    numeric && identifier.size() > 1U && identifier.front() == '0')
                     return false;
                 if (separator == std::string_view::npos)
                     return true;
@@ -69,31 +71,42 @@ namespace Horo::Packages {
             return false;
         }
 
+        struct PrereleaseIdentifier {
+            std::string_view value;
+            std::size_t separator;
+            bool numeric;
+        };
+
+        [[nodiscard]] PrereleaseIdentifier FirstPrereleaseIdentifier(const std::string_view text) noexcept {
+            const std::size_t separator = text.find('.');
+            const std::string_view value = text.substr(0, separator);
+            return {value, separator, std::ranges::all_of(value, [](const unsigned char character) {
+                return character >= '0' && character <= '9';
+            })};
+        }
+
+        [[nodiscard]] std::strong_ordering ComparePrereleaseIdentifier(const PrereleaseIdentifier &left,
+                                                                       const PrereleaseIdentifier &right) noexcept {
+            if (left.numeric != right.numeric)
+                return left.numeric ? std::strong_ordering::less : std::strong_ordering::greater;
+            if (left.numeric && left.value.size() != right.value.size())
+                return left.value.size() < right.value.size() ? std::strong_ordering::less : std::strong_ordering::greater;
+            return left.value <=> right.value;
+        }
+
         [[nodiscard]] std::strong_ordering ComparePrerelease(std::string_view left, std::string_view right) noexcept {
             while (!left.empty() && !right.empty()) {
-                const std::size_t leftSeparator = left.find('.');
-                const std::size_t rightSeparator = right.find('.');
-                const std::string_view leftId = left.substr(0, leftSeparator);
-                const std::string_view rightId = right.substr(0, rightSeparator);
-                const bool leftNumeric = std::ranges::all_of(leftId, [](const unsigned char value) {
-                    return value >= '0' && value <= '9';
-                });
-                const bool rightNumeric = std::ranges::all_of(rightId, [](const unsigned char value) {
-                    return value >= '0' && value <= '9';
-                });
-                if (leftNumeric != rightNumeric)
-                    return leftNumeric ? std::strong_ordering::less : std::strong_ordering::greater;
-                if (leftNumeric && leftId.size() != rightId.size())
-                    return leftId.size() < rightId.size() ? std::strong_ordering::less : std::strong_ordering::greater;
-                if (const auto comparison = leftId <=> rightId; comparison != 0)
+                const PrereleaseIdentifier leftIdentifier = FirstPrereleaseIdentifier(left);
+                const PrereleaseIdentifier rightIdentifier = FirstPrereleaseIdentifier(right);
+                if (const auto comparison = ComparePrereleaseIdentifier(leftIdentifier, rightIdentifier); comparison != 0)
                     return comparison;
-                if (leftSeparator == std::string_view::npos || rightSeparator == std::string_view::npos) {
-                    if (leftSeparator == rightSeparator)
+                if (leftIdentifier.separator == std::string_view::npos || rightIdentifier.separator == std::string_view::npos) {
+                    if (leftIdentifier.separator == rightIdentifier.separator)
                         return std::strong_ordering::equal;
-                    return leftSeparator == std::string_view::npos ? std::strong_ordering::less : std::strong_ordering::greater;
+                    return leftIdentifier.separator == std::string_view::npos ? std::strong_ordering::less : std::strong_ordering::greater;
                 }
-                left.remove_prefix(leftSeparator + 1U);
-                right.remove_prefix(rightSeparator + 1U);
+                left.remove_prefix(leftIdentifier.separator + 1U);
+                right.remove_prefix(rightIdentifier.separator + 1U);
             }
             return std::strong_ordering::equal;
         }
@@ -115,11 +128,12 @@ namespace Horo::Packages {
         }
 
         [[nodiscard]] bool ValidRange(const PackageVersionRange &range) {
+            using enum PackageVersionRange::Kind;
             switch (range.kind) {
-                case PackageVersionRange::Kind::Any:
+                case Any:
                     return true;
-                case PackageVersionRange::Kind::Exact:
-                case PackageVersionRange::Kind::Caret:
+                case Exact:
+                case Caret:
                     return ValidVersion(range.version);
             }
             return false;
@@ -155,6 +169,13 @@ namespace Horo::Packages {
             int priority{};
         };
 
+        struct SearchContext {
+            const PackageResolutionRequest &request;
+            SearchState &solution;
+            Failure &failure;
+            std::size_t searchSteps{};
+        };
+
         void KeepFailure(Failure &target, const ErrorCodeDescriptor &descriptor, std::string message, const int priority) {
             if (priority > target.priority || (priority == target.priority && (target.message.empty() || message < target.message)))
                 target = Failure{&descriptor, std::move(message), priority};
@@ -168,45 +189,53 @@ namespace Horo::Packages {
             });
         }
 
-        [[nodiscard]] bool HasCycle(const PackageResolutionRequest &request, const SearchState &state, std::string &explanation) {
-            enum class Mark : std::uint8_t {
-                Visiting,
-                Visited
-            };
-            std::map<std::string, Mark, std::less<>> marks;
+        enum class VisitMark : std::uint8_t {
+            Visiting,
+            Visited,
+        };
+
+        struct CycleDetector {
+            const PackageResolutionRequest &request;
+            const SearchState &state;
+            std::string &explanation;
+            std::map<std::string, VisitMark, std::less<>> marks;
             std::vector<std::string> path;
-            const auto visit = [&](const auto &self, const std::string &id) -> bool {
-                if (const auto mark = marks.find(id); mark != marks.end()) {
-                    if (mark->second == Mark::Visited)
-                        return false;
-                    const auto begin = std::ranges::find(path, id);
-                    explanation = "Dependency cycle: ";
-                    for (auto it = begin; it != path.end(); ++it)
-                        explanation += (it == begin ? "" : " -> ") + *it;
-                    explanation += " -> " + id;
-                    return true;
-                }
-                marks.emplace(id, Mark::Visiting);
-                path.push_back(id);
-                const auto selected = state.selected.find(id);
-                if (selected != state.selected.end()) {
-                    for (const PackageDependencyRequest &dependency : request.candidates[selected->second].dependencies) {
-                        if (dependency.requirement == PackageDependencyRequirement::Optional && !request.includeOptionalDependencies)
-                            continue;
-                        if (self(self, dependency.package.Value()))
-                            return true;
-                    }
-                }
-                path.pop_back();
-                marks[id] = Mark::Visited;
-                return false;
-            };
-            for (const auto &[id, unused] : state.selected) {
-                static_cast<void>(unused);
-                if (!marks.contains(id) && visit(visit, id))
-                    return true;
+
+            [[nodiscard]] bool RecordCycle(const std::string &id) {
+                const auto begin = std::ranges::find(path, id);
+                explanation = "Dependency cycle: ";
+                for (auto it = begin; it != path.end(); ++it)
+                    explanation += (it == begin ? "" : " -> ") + *it;
+                explanation += " -> " + id;
+                return true;
             }
-            return false;
+
+            [[nodiscard]] bool Visit(const std::string &id) {
+                if (const auto mark = marks.find(id); mark != marks.end())
+                    return mark->second == VisitMark::Visiting && RecordCycle(id);
+                marks.try_emplace(id, VisitMark::Visiting);
+                path.push_back(id);
+                bool found{};
+                if (const auto selected = state.selected.find(id); selected != state.selected.end()) {
+                    found = std::ranges::any_of(request.candidates[selected->second].dependencies,
+                                                [&](const PackageDependencyRequest &dependency) {
+                        return (dependency.requirement == PackageDependencyRequirement::Required || request.includeOptionalDependencies) &&
+                               Visit(dependency.package.Value());
+                    });
+                }
+                if (found)
+                    return true;
+                path.pop_back();
+                marks[id] = VisitMark::Visited;
+                return false;
+            }
+        };
+
+        [[nodiscard]] bool HasCycle(const PackageResolutionRequest &request, const SearchState &state, std::string &explanation) {
+            CycleDetector detector{request, state, explanation};
+            return std::ranges::any_of(state.selected, [&](const auto &selection) {
+                return detector.Visit(selection.first);
+            });
         }
 
         [[nodiscard]] std::vector<std::size_t> MatchingCandidates(const PackageResolutionRequest &request, const SearchState &state,
@@ -234,7 +263,7 @@ namespace Horo::Packages {
             std::map<PackageVersion, std::string> digests;
             for (const std::size_t index : matches) {
                 const PackageResolutionCandidate &candidate = request.candidates[index];
-                const auto [existing, inserted] = digests.emplace(candidate.version, candidate.artifactDigest);
+                const auto [existing, inserted] = digests.try_emplace(candidate.version, candidate.artifactDigest);
                 if (!inserted && existing->second != candidate.artifactDigest)
                     return candidate.version;
             }
@@ -262,57 +291,53 @@ namespace Horo::Packages {
             return true;
         }
 
-        [[nodiscard]] bool ResolveNext(const PackageResolutionRequest &request, SearchState state, SearchState &solution, Failure &failure,
-                                       std::size_t depth, std::size_t &searchSteps);
+        [[nodiscard]] bool ResolveNext(SearchContext &context, SearchState state, std::size_t depth);
 
-        [[nodiscard]] bool TryCandidates(const PackageResolutionRequest &request, const SearchState &state, SearchState &solution,
-                                         Failure &failure, const std::string &unresolved, const std::vector<std::size_t> &matches,
-                                         const std::size_t depth, std::size_t &searchSteps) {
+        [[nodiscard]] bool TryCandidates(SearchContext &context, const SearchState &state, const std::string &unresolved,
+                                         const std::vector<std::size_t> &matches, const std::size_t depth) {
             for (const std::size_t candidateIndex : matches) {
-                const PackageResolutionCandidate &candidate = request.candidates[candidateIndex];
+                const PackageResolutionCandidate &candidate = context.request.candidates[candidateIndex];
                 SearchState branch = state;
                 branch.selected[unresolved] = candidateIndex;
-                if (!AddDependencies(request, candidate, branch, failure))
+                if (!AddDependencies(context.request, candidate, branch, context.failure))
                     continue;
-                std::string cycle;
-                if (HasCycle(request, branch, cycle)) {
-                    KeepFailure(failure, Cycle, std::move(cycle), 4);
+                if (std::string cycle; HasCycle(context.request, branch, cycle)) {
+                    KeepFailure(context.failure, Cycle, std::move(cycle), 4);
                     continue;
                 }
-                if (ResolveNext(request, std::move(branch), solution, failure, depth + 1U, searchSteps))
+                if (ResolveNext(context, std::move(branch), depth + 1U))
                     return true;
             }
             return false;
         }
 
-        [[nodiscard]] bool ResolveNext(const PackageResolutionRequest &request, SearchState state, SearchState &solution, Failure &failure,
-                                       const std::size_t depth, std::size_t &searchSteps) {
-            if (searchSteps >= request.limits.searchSteps) {
-                KeepFailure(failure, ResourceLimit, "Dependency search exceeds its exploration-step limit.", 5);
+        [[nodiscard]] bool ResolveNext(SearchContext &context, SearchState state, const std::size_t depth) {
+            if (context.searchSteps >= context.request.limits.searchSteps) {
+                KeepFailure(context.failure, ResourceLimit, "Dependency search exceeds its exploration-step limit.", 5);
                 return false;
             }
-            ++searchSteps;
-            if (depth > request.limits.graphDepth) {
-                KeepFailure(failure, ResourceLimit, "Dependency graph exceeds maximum depth.", 5);
+            ++context.searchSteps;
+            if (depth > context.request.limits.graphDepth) {
+                KeepFailure(context.failure, ResourceLimit, "Dependency graph exceeds maximum depth.", 5);
                 return false;
             }
             const auto unresolved = std::ranges::find_if(state.constraints, [&](const auto &entry) {
                 return !state.selected.contains(entry.first);
             });
             if (unresolved == state.constraints.end()) {
-                solution = std::move(state);
+                context.solution = std::move(state);
                 return true;
             }
-            const std::vector<std::size_t> matches = MatchingCandidates(request, state, unresolved->first);
-            if (!matches.empty()) {
-                if (const auto ambiguous = FindSourceAmbiguity(request, matches); ambiguous.has_value()) {
-                    KeepFailure(failure, SourceAmbiguity, "Source ambiguity for " + unresolved->first + "@" + ambiguous->ToString(), 6);
+            if (const std::vector<std::size_t> matches = MatchingCandidates(context.request, state, unresolved->first); !matches.empty()) {
+                if (const auto ambiguous = FindSourceAmbiguity(context.request, matches); ambiguous.has_value()) {
+                    KeepFailure(context.failure, SourceAmbiguity, "Source ambiguity for " + unresolved->first + "@" + ambiguous->ToString(),
+                                6);
                     return false;
                 }
-                return TryCandidates(request, state, solution, failure, unresolved->first, matches, depth, searchSteps);
+                return TryCandidates(context, state, unresolved->first, matches, depth);
             }
             const bool conflicting = unresolved->second.ranges.size() > 1U;
-            KeepFailure(failure, conflicting ? Conflict : Unsatisfied,
+            KeepFailure(context.failure, conflicting ? Conflict : Unsatisfied,
                         std::string{conflicting ? "Conflicting constraints for " : "No compatible candidate for "} + unresolved->first,
                         conflicting ? 2 : 1);
             return false;
@@ -375,21 +400,22 @@ namespace Horo::Packages {
         const std::size_t first = text.find('.');
         const std::size_t second = first == std::string_view::npos ? first : text.find('.', first + 1U);
         const std::size_t dash = second == std::string_view::npos ? second : text.find('-', second + 1U);
-        const std::string_view core = text.substr(0, dash);
-        if (first == std::string_view::npos || second == std::string_view::npos || core.find('.', second + 1U) != std::string_view::npos)
+        if (const std::string_view core = text.substr(0, dash);
+            first == std::string_view::npos || second == std::string_view::npos || core.find('.', second + 1U) != std::string_view::npos)
             return Result<PackageVersion>::Failure(MakeError(InvalidInput, "Semantic version is not canonical."));
         const auto major = ParseNumber(text.substr(0, first));
         const auto minor = ParseNumber(text.substr(first + 1U, second - first - 1U));
         const auto patch = ParseNumber(text.substr(second + 1U, dash - second - 1U));
         const std::string_view prerelease = dash == std::string_view::npos ? std::string_view{} : text.substr(dash + 1U);
-        if (!major || !minor || !patch || (dash != std::string_view::npos && !CanonicalPrerelease(prerelease)))
+        if (!major.has_value() || !minor.has_value() || !patch.has_value() ||
+            (dash != std::string_view::npos && !CanonicalPrerelease(prerelease)))
             return Result<PackageVersion>::Failure(MakeError(InvalidInput, "Semantic version is not canonical."));
         return Result<PackageVersion>::Success(PackageVersion{*major, *minor, *patch, std::string{prerelease}});
     }
 
     /** @copydoc PackageVersion::ToString */
     std::string PackageVersion::ToString() const {
-        std::string result = std::to_string(major) + "." + std::to_string(minor) + "." + std::to_string(patch);
+        std::string result = std::format("{}.{}.{}", major, minor, patch);
         if (!prerelease.empty())
             result += "-" + prerelease;
         return result;
@@ -444,8 +470,7 @@ namespace Horo::Packages {
         }
         SearchState solution;
         Failure failure;
-        std::size_t searchSteps{};
-        if (!ResolveNext(request, std::move(initial), solution, failure, 0U, searchSteps))
+        if (SearchContext context{request, solution, failure}; !ResolveNext(context, std::move(initial), 0U))
             return Result<PackageResolutionPlan>::Failure(MakeError(*failure.descriptor, std::move(failure.message)));
 
         PackageResolutionPlan plan;
