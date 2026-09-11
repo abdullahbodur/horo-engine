@@ -1,18 +1,39 @@
 #pragma once
 
+/**
+ * @file JobSystem.h
+ * @brief Bounded job scheduling, durable handles, authoritative records and structured child work.
+ */
+
 #include "Horo/Foundation/CancellationToken.h"
+#include "Horo/Foundation/Configuration.h"
+#include "Horo/Foundation/OperationStore.h"
 #include "Horo/Foundation/Result.h"
 #include "Horo/Foundation/Time.h"
 
+#include <chrono>
+#include <compare>
 #include <cstddef>
 #include <cstdint>
 #include <functional>
 #include <memory>
 #include <optional>
+#include <string>
 #include <vector>
 
 namespace Horo {
     using JobId = std::uint64_t;
+
+    /** @brief Process-local identity correlating structured child work without creating a user-facing operation. */
+    struct TaskGroupId final {
+        std::uint64_t value{};
+
+        [[nodiscard]] constexpr explicit operator bool() const noexcept {
+            return value != 0;
+        }
+
+        [[nodiscard]] constexpr auto operator<=>(const TaskGroupId &) const noexcept = default;
+    };
 
     /** @brief Lifecycle state of an accepted job. */
     enum class JobState : std::uint8_t {
@@ -23,11 +44,44 @@ namespace Horo {
         Cancelled,
     };
 
-    /** @brief Snapshot of an accepted job's immutable identity and current state. */
+    /** @brief Monotonic progress within one bounded named phase. */
+    struct JobProgress final {
+        std::string phase;
+        std::optional<float> value;
+    };
+
+    /** @brief Queue, execution and terminal timestamps from the scheduler monotonic clock. */
+    struct JobTiming final {
+        std::chrono::steady_clock::time_point submittedAt{};
+        std::optional<std::chrono::steady_clock::time_point> startedAt;
+        std::optional<std::chrono::steady_clock::time_point> finishedAt;
+    };
+
+    /** @brief Immutable typed result installed by the job's first terminal transition. */
+    struct JobTerminalResult final {
+        JobState state{JobState::Failed};
+        std::optional<Error> error;
+    };
+
+    /** @brief Snapshot of an accepted job's immutable identity and current durable state. */
     struct JobSnapshot {
         JobId id = 0;
         JobState state = JobState::Queued;
+        JobProgress progress;
+        JobTiming timing;
+        std::optional<JobTerminalResult> terminalResult;
+        std::optional<OperationId> operationId;
+        TaskGroupId taskGroupId;
+        std::optional<ConfigurationRevision> configurationRevision;
         std::optional<Error> error;
+    };
+
+    /** @brief Bounded owned view of all retained active and recent terminal job records. */
+    struct JobStoreSnapshot final {
+        std::uint64_t revision{};
+        std::size_t terminalCapacity{};
+        std::uint64_t droppedTerminalCount{};
+        std::vector<JobSnapshot> jobs;
     };
 
     /** @brief Result-returning unit of scheduled work. */
@@ -35,13 +89,17 @@ namespace Horo {
 
     /** @brief Submission metadata retained by the job system. */
     struct JobDescriptor {
-        CancellationToken parentCancellation; /**< Optional parent operation cancellation. */
+        CancellationToken parentCancellation;                  /**< Optional parent operation cancellation. */
+        std::optional<OperationId> operationId;                /**< Optional explicit application operation correlation only. */
+        TaskGroupId taskGroupId;                               /**< Optional structured-work correlation, replaced by TaskGroup. */
+        std::optional<ConfigurationSnapshotRef> configuration; /**< Explicit immutable submission configuration. */
     };
 
     /** @brief Fixed scheduling limits for one JobSystem instance. */
     struct JobSystemConfig {
         std::size_t workerCount = 1;
         std::size_t maxQueuedJobs = 1024;
+        std::size_t maxRetainedTerminalJobs = 1024;
     };
 
     /** @brief Defines how queued work is treated during shutdown. */
@@ -66,6 +124,41 @@ namespace Horo {
 
     struct JobRecord;
 
+    /** @brief Read-only submission-captured state and progress control supplied to one callback. */
+    class JobExecutionContext final {
+    public:
+        JobExecutionContext(const JobExecutionContext &) = delete;
+        JobExecutionContext &operator=(const JobExecutionContext &) = delete;
+        JobExecutionContext(JobExecutionContext &&) = delete;
+        JobExecutionContext &operator=(JobExecutionContext &&) = delete;
+
+        /** @brief Returns this job's cooperative cancellation ancestry. */
+        [[nodiscard]] const CancellationToken &Cancellation() const noexcept;
+        /** @brief Returns the explicitly captured immutable configuration, when the work is configuration-dependent. */
+        [[nodiscard]] const std::optional<ConfigurationSnapshotRef> &Configuration() const noexcept;
+        /** @brief Returns explicit application-operation correlation without creating an OperationStore record. */
+        [[nodiscard]] std::optional<OperationId> Operation() const noexcept;
+        /** @brief Returns the structured task-group correlation, or an invalid ID for independent work. */
+        [[nodiscard]] TaskGroupId Group() const noexcept;
+        /**
+         * @brief Publishes bounded progress, monotonic within one phase.
+         * @param phase Non-empty phase name of at most 128 UTF-8 bytes.
+         * @param value Optional normalized progress in [0, 1]. A new phase may restart progress.
+         * @return Success, or a typed validation/lifecycle error without mutating the record.
+         */
+        [[nodiscard]] Result<void> UpdateProgress(std::string phase, std::optional<float> value = std::nullopt) const;
+
+    private:
+        friend class JobSystem;
+        friend struct JobRecord;
+        explicit JobExecutionContext(std::shared_ptr<JobRecord> record);
+        std::shared_ptr<JobRecord> record_;
+        CancellationToken cancellation_;
+    };
+
+    /** @brief Result-returning unit of work with immutable submission context and progress control. */
+    using ContextJobFunction = std::function<Result<void>(const JobExecutionContext &)>;
+
     /** @brief Move-only reference to a durable accepted job record. */
     class JobHandle {
     public:
@@ -87,6 +180,10 @@ namespace Horo {
         [[nodiscard]] Result<void> Wait(const JoinOptions &options) const;
         /** @brief Returns the stable identifier assigned at successful submission. */
         [[nodiscard]] JobId Id() const noexcept;
+        /** @brief Returns an owned consistent snapshot even after bounded store eviction. */
+        [[nodiscard]] std::optional<JobSnapshot> Snapshot() const;
+        /** @brief Requests cooperative cancellation through this durable record lease. */
+        [[nodiscard]] Result<void> RequestCancel() const;
 
     private:
         friend class JobSystem;
@@ -116,10 +213,21 @@ namespace Horo {
          * @return Move-only accepted-job handle or a typed admission failure.
          */
         [[nodiscard]] Result<JobHandle> SubmitResult(JobDescriptor descriptor, JobFunction work) const;
+        /**
+         * @brief Queues context-aware work after freezing all descriptor and diagnostic context.
+         * @param descriptor Explicit cancellation, correlation and configuration inputs.
+         * @param work Owned callback receiving read-only captured context and progress control.
+         * @return Move-only accepted-job handle or a typed admission failure. Rejection creates no record.
+         */
+        [[nodiscard]] Result<JobHandle> SubmitContext(JobDescriptor descriptor, ContextJobFunction work) const;
         /** @brief Requests cooperative cancellation; queued work becomes terminal immediately. */
         [[nodiscard]] Result<void> RequestCancel(JobId id) const;
         /** @brief Returns the latest state for an accepted job. */
         [[nodiscard]] JobSnapshot Query(JobId id) const;
+        /** @brief Finds a retained record, distinguishing eviction or unknown identity from a queued job. */
+        [[nodiscard]] std::optional<JobSnapshot> Find(JobId id) const;
+        /** @brief Returns a bounded store snapshot only when its authoritative revision changed. */
+        [[nodiscard]] std::optional<JobStoreSnapshot> SnapshotIfChanged(std::uint64_t knownRevision) const;
         /** @brief Returns the immutable worker count configured for this scheduler. */
         [[nodiscard]] std::size_t WorkerCount() const noexcept;
         /** @brief Stops submissions, then drains or cooperatively cancels work and joins all workers. */
@@ -162,6 +270,15 @@ namespace Horo {
          * @return Accepted child identifier or a typed admission failure.
          */
         [[nodiscard]] Result<JobId> Spawn(JobDescriptor descriptor, JobFunction work) const;
+        /**
+         * @brief Admits one context-aware child correlated to this group.
+         * @param descriptor Child submission metadata; cancellation and task-group identity are replaced by the group.
+         * @param work Owned child callback receiving immutable submission context.
+         * @return Accepted child identifier or a typed admission failure.
+         */
+        [[nodiscard]] Result<JobId> SpawnContext(JobDescriptor descriptor, ContextJobFunction work) const;
+        /** @brief Returns the stable process-local identity correlated to every accepted child. */
+        [[nodiscard]] TaskGroupId Id() const noexcept;
         /** @brief Closes admission and requests cooperative cancellation for all accepted children. */
         void RequestCancel() const;
         /**

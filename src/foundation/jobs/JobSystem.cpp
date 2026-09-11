@@ -7,6 +7,7 @@
 #include <array>
 #include <atomic>
 #include <chrono>
+#include <cmath>
 #include <condition_variable>
 #include <deque>
 #include <exception>
@@ -19,6 +20,8 @@
 #include <vector>
 
 namespace Horo {
+    struct JobStoreState;
+
     namespace {
         [[nodiscard]] Error MakeJobError(const ErrorCodeDescriptor &descriptor, const char *message) {
             return MakeError(descriptor, message);
@@ -42,27 +45,54 @@ namespace Horo {
     }  // namespace
 
     struct JobRecord {
-        JobRecord(const JobId jobId, const JobDescriptor &descriptor, JobFunction jobWork, const SchedulerIdentity scheduler)
-            : id(jobId), cancellation(descriptor.parentCancellation), work(std::move(jobWork)), schedulerIdentity(scheduler) {}
+        JobRecord(const JobId jobId, const JobDescriptor &descriptor, ContextJobFunction jobWork, const SchedulerIdentity scheduler,
+                  std::weak_ptr<JobStoreState> owner)
+            : id(jobId), cancellation(descriptor.parentCancellation), work(std::move(jobWork)), operationId(descriptor.operationId),
+              taskGroupId(descriptor.taskGroupId), configuration(descriptor.configuration), schedulerIdentity(scheduler),
+              store(std::move(owner)) {
+            timing.submittedAt = std::chrono::steady_clock::now();
+        }
 
         [[nodiscard]] std::mutex &Mutex() const noexcept {
             return mutex_;
         }
 
+        [[nodiscard]] static JobExecutionContext ExecutionContext(std::shared_ptr<JobRecord> record) {
+            return JobExecutionContext(std::move(record));
+        }
+
         JobId id;
         std::condition_variable completed;
         JobState state = JobState::Queued;
-        std::optional<Error> error;
+        JobProgress progress;
+        JobTiming timing;
+        std::optional<JobTerminalResult> terminalResult;
         CancellationSource cancellation;
-        JobFunction work;
+        ContextJobFunction work;
         Telemetry::OperationContext operationContext = Telemetry::CaptureOperationContext();
+        std::optional<OperationId> operationId;
+        TaskGroupId taskGroupId;
+        std::optional<ConfigurationSnapshotRef> configuration;
         SchedulerIdentity schedulerIdentity;
+        std::weak_ptr<JobStoreState> store;
         std::thread::id submittingThread = std::this_thread::get_id();
         mutable std::mutex mutex_;  // NOSONAR(cpp:S8379) Controlled via Mutex() accessor.
     };
 
+    struct JobStoreState final {
+        explicit JobStoreState(const std::size_t capacity) : terminalCapacity(capacity) {}
+
+        const std::size_t terminalCapacity;
+        mutable std::mutex mutex;
+        std::unordered_map<JobId, std::shared_ptr<JobRecord>> records;
+        std::deque<JobId> terminalOrder;
+        std::uint64_t revision{};
+        std::uint64_t droppedTerminalCount{};
+    };
+
     struct JobSystem::State {
-        explicit State(const JobSystemConfig value) : config(value) {}
+        explicit State(const JobSystemConfig value)
+            : config(value), store(std::make_shared<JobStoreState>(value.maxRetainedTerminalJobs)) {}
 
         JobSystemConfig config;
         SchedulerIdentity schedulerIdentity = NextSchedulerIdentity();
@@ -72,7 +102,7 @@ namespace Horo {
         bool stopping = false;
         JobId nextId = 1;
         std::deque<std::shared_ptr<JobRecord>> queue;
-        std::unordered_map<JobId, std::shared_ptr<JobRecord>> jobs;
+        std::shared_ptr<JobStoreState> store;
         std::vector<std::thread> workers;  // NOSONAR(cpp:S6168) std::jthread not supported by AppleClang libc++ without experimental flags
 
         std::mutex shutdownMutex;
@@ -116,31 +146,79 @@ namespace Horo {
             return false;
         }
 
-        [[nodiscard]] JobFunction SetTerminalState(const std::shared_ptr<JobRecord> &record, const JobState state,
-                                                   std::optional<Error> error = std::nullopt) {
-            JobFunction releasedWork;
-            {
-                std::lock_guard lock(record->Mutex());
-                if (IsTerminal(record->state))
-                    return releasedWork;
-                record->state = state;
-                record->error = std::move(error);
-                releasedWork = std::move(record->work);
-                record->completed.notify_all();
+        void RetainTerminalRecord(JobStoreState &store, const JobId id) {
+            store.terminalOrder.push_back(id);
+            while (store.terminalOrder.size() > store.terminalCapacity) {
+                const JobId evicted = store.terminalOrder.front();
+                store.terminalOrder.pop_front();
+                store.records.erase(evicted);
+                ++store.droppedTerminalCount;
+            }
+        }
+
+        [[nodiscard]] JobSnapshot SnapshotRecord(const JobRecord &record) {
+            std::lock_guard lock(record.Mutex());
+            return JobSnapshot{.id = record.id,
+                               .state = record.state,
+                               .progress = record.progress,
+                               .timing = record.timing,
+                               .terminalResult = record.terminalResult,
+                               .operationId = record.operationId,
+                               .taskGroupId = record.taskGroupId,
+                               .configurationRevision =
+                                   record.configuration.has_value() ? std::optional{record.configuration->Revision()} : std::nullopt,
+                               .error = record.terminalResult.has_value() ? record.terminalResult->error : std::nullopt};
+        }
+
+        [[nodiscard]] ContextJobFunction TransitionTerminalLocked(JobRecord &record, JobStoreState *store, const JobState state,
+                                                                  std::optional<Error> error, const bool queuedOnly) {
+            ContextJobFunction releasedWork;
+            if (IsTerminal(record.state) || (queuedOnly && record.state != JobState::Queued))
+                return releasedWork;
+            record.state = state;
+            record.terminalResult = JobTerminalResult{.state = state, .error = std::move(error)};
+            record.timing.finishedAt = std::chrono::steady_clock::now();
+            releasedWork = std::move(record.work);
+            record.completed.notify_all();
+            if (store != nullptr) {
+                ++store->revision;
+                RetainTerminalRecord(*store, record.id);
             }
             return releasedWork;
+        }
+
+        [[nodiscard]] ContextJobFunction TransitionTerminal(const std::shared_ptr<JobRecord> &record, const JobState state,
+                                                            std::optional<Error> error, const bool queuedOnly) {
+            const std::shared_ptr store = record->store.lock();
+            if (store) {
+                std::lock_guard storeLock(store->mutex);
+                std::lock_guard recordLock(record->Mutex());
+                return TransitionTerminalLocked(*record, store.get(), state, std::move(error), queuedOnly);
+            }
+            std::lock_guard recordLock(record->Mutex());
+            return TransitionTerminalLocked(*record, nullptr, state, std::move(error), queuedOnly);
+        }
+
+        [[nodiscard]] ContextJobFunction SetTerminalState(const std::shared_ptr<JobRecord> &record, const JobState state,
+                                                          std::optional<Error> error = std::nullopt) {
+            return TransitionTerminal(record, state, std::move(error), false);
+        }
+
+        [[nodiscard]] ContextJobFunction CancelQueuedRecord(const std::shared_ptr<JobRecord> &record, const char *message) {
+            return TransitionTerminal(record, JobState::Cancelled, MakeJobError(JobErrors::Cancelled, message), true);
         }
 
         void ExecuteJobRecord(const std::shared_ptr<JobRecord> &record) {
             const Telemetry::ScopedOperationContext operationContext{record->operationContext};
             const JobExecutionScope executionScope{*record};
-            JobFunction work;
+            ContextJobFunction work;
             {
                 std::lock_guard lock(record->Mutex());
                 work = std::move(record->work);
             }
             try {
-                Result<void> outcome = work(record->cancellation.Token());
+                const JobExecutionContext context = JobRecord::ExecutionContext(record);
+                Result<void> outcome = work(context);
                 if (outcome.HasError()) {
                     const bool cancelled = record->cancellation.Token().IsCancellationRequested() &&
                                            outcome.ErrorValue().code.Value() == JobErrors::Cancelled.code.Value();
@@ -165,12 +243,25 @@ namespace Horo {
             work = {};
         }
 
-        [[nodiscard]] bool TryClaimJobRecord(const std::shared_ptr<JobRecord> &record) {
-            std::lock_guard lock(record->Mutex());
-            if (record->state != JobState::Queued)
+        [[nodiscard]] bool ClaimRecordLocked(JobRecord &record, JobStoreState *store) {
+            if (record.state != JobState::Queued)
                 return false;
-            record->state = JobState::Running;
+            record.state = JobState::Running;
+            record.timing.startedAt = std::chrono::steady_clock::now();
+            if (store != nullptr)
+                ++store->revision;
             return true;
+        }
+
+        [[nodiscard]] bool TryClaimJobRecord(const std::shared_ptr<JobRecord> &record) {
+            const std::shared_ptr store = record->store.lock();
+            if (store) {
+                std::lock_guard storeLock(store->mutex);
+                std::lock_guard recordLock(record->Mutex());
+                return ClaimRecordLocked(*record, store.get());
+            }
+            std::lock_guard recordLock(record->Mutex());
+            return ClaimRecordLocked(*record, nullptr);
         }
 
         [[nodiscard]] Result<void> ValidateBoundedWait(const JobRecord &record, const WaitPolicy policy) {
@@ -201,10 +292,11 @@ namespace Horo {
         }
 
         [[nodiscard]] Result<void> TerminalResult(const JobRecord &record) {
-            return record.state == JobState::Succeeded
-                       ? Result<void>::Success()
-                       : Result<void>::Failure(record.error.value_or(
-                             MakeJobError(JobErrors::Failed, "Terminal job state did not retain its required error payload.")));
+            if (record.state == JobState::Succeeded)
+                return Result<void>::Success();
+            if (record.terminalResult.has_value() && record.terminalResult->error.has_value())
+                return Result<void>::Failure(*record.terminalResult->error);
+            return Result<void>::Failure(MakeJobError(JobErrors::Failed, "Terminal job state did not retain its required error payload."));
         }
 
         [[nodiscard]] std::chrono::steady_clock::time_point WaitDeadline(const Duration timeout) noexcept {
@@ -294,6 +386,13 @@ namespace Horo {
     }
 
     Result<JobHandle> JobSystem::SubmitResult(JobDescriptor descriptor, JobFunction work) const {
+        return SubmitContext(std::move(descriptor), [work = std::move(work)](const JobExecutionContext &context) {
+            return work(context.Cancellation());
+        });
+    }
+
+    /** @copydoc JobSystem::SubmitContext */
+    Result<JobHandle> JobSystem::SubmitContext(JobDescriptor descriptor, ContextJobFunction work) const {
         std::lock_guard lock(m_state->mutex);
         if (!m_state->accepting)
             return Result<JobHandle>::Failure(MakeJobError(JobErrors::Shutdown, "Job system is no longer accepting work."));
@@ -305,8 +404,13 @@ namespace Horo {
         if (m_state->queue.size() >= m_state->config.maxQueuedJobs)
             return Result<JobHandle>::Failure(MakeJobError(JobErrors::QueueFull, "Job queue is at capacity."));
 
-        auto record = std::make_shared<JobRecord>(m_state->nextId++, descriptor, std::move(work), m_state->schedulerIdentity);
-        m_state->jobs.try_emplace(record->id, record);
+        auto record =
+            std::make_shared<JobRecord>(m_state->nextId++, descriptor, std::move(work), m_state->schedulerIdentity, m_state->store);
+        {
+            std::lock_guard storeLock(m_state->store->mutex);
+            m_state->store->records.try_emplace(record->id, record);
+            ++m_state->store->revision;
+        }
         m_state->queue.push_back(record);
         m_state->workAvailable.notify_one();
         return Result<JobHandle>::Success(JobHandle(std::move(record)));
@@ -315,38 +419,52 @@ namespace Horo {
     Result<void> JobSystem::RequestCancel(const JobId id) const {
         std::shared_ptr<JobRecord> record;
         {
-            std::lock_guard lock(m_state->mutex);
-            const auto found = m_state->jobs.find(id);
-            if (found == m_state->jobs.end())
+            std::lock_guard lock(m_state->store->mutex);
+            const auto found = m_state->store->records.find(id);
+            if (found == m_state->store->records.end())
                 return Result<void>::Failure(MakeJobError(JobErrors::NotFound, "Job identifier is not known by this job system."));
             record = found->second;
         }
         record->cancellation.RequestCancellation();
-        JobFunction releasedWork;
-        {
-            std::lock_guard lock(record->Mutex());
-            if (record->state == JobState::Queued) {
-                record->state = JobState::Cancelled;
-                record->error = MakeJobError(JobErrors::Cancelled, "Job was cancelled before execution.");
-                releasedWork = std::move(record->work);
-                record->completed.notify_all();
-            }
-        }
+        ContextJobFunction releasedWork = CancelQueuedRecord(record, "Job was cancelled before execution.");
         return Result<void>::Success();
     }
 
     JobSnapshot JobSystem::Query(const JobId id) const {
+        return Find(id).value_or(JobSnapshot{.id = id});
+    }
+
+    /** @copydoc JobSystem::Find */
+    std::optional<JobSnapshot> JobSystem::Find(const JobId id) const {
         std::shared_ptr<JobRecord> record;
         {
-            std::lock_guard lock(m_state->mutex);
-            const auto found = m_state->jobs.find(id);
-            if (found == m_state->jobs.end())
-                return JobSnapshot{.id = id};
+            std::lock_guard lock(m_state->store->mutex);
+            const auto found = m_state->store->records.find(id);
+            if (found == m_state->store->records.end())
+                return std::nullopt;
             record = found->second;
         }
+        return SnapshotRecord(*record);
+    }
 
-        std::lock_guard lock(record->Mutex());
-        return JobSnapshot{.id = record->id, .state = record->state, .error = record->error};
+    /** @copydoc JobSystem::SnapshotIfChanged */
+    std::optional<JobStoreSnapshot> JobSystem::SnapshotIfChanged(const std::uint64_t knownRevision) const {
+        JobStoreSnapshot snapshot;
+        {
+            std::lock_guard lock(m_state->store->mutex);
+            if (knownRevision == m_state->store->revision)
+                return std::nullopt;
+            snapshot.revision = m_state->store->revision;
+            snapshot.terminalCapacity = m_state->store->terminalCapacity;
+            snapshot.droppedTerminalCount = m_state->store->droppedTerminalCount;
+            snapshot.jobs.reserve(m_state->store->records.size());
+            for (const auto &[id, record] : m_state->store->records) {
+                (void)id;
+                snapshot.jobs.push_back(SnapshotRecord(*record));
+            }
+        }
+        std::ranges::sort(snapshot.jobs, {}, &JobSnapshot::id);
+        return snapshot;
     }
 
     /** @copydoc JobSystem::WorkerCount */
@@ -355,7 +473,7 @@ namespace Horo {
     }
 
     void JobSystem::Shutdown(const ShutdownPolicy policy) const {
-        std::vector<JobFunction> releasedWork;
+        std::vector<ContextJobFunction> releasedWork;
         {
             std::lock_guard shutdownLock(m_state->shutdownMutex);
             {
@@ -370,10 +488,17 @@ namespace Horo {
                                                                 MakeJobError(JobErrors::Cancelled, "Job was cancelled during shutdown.")));
                     }
                     m_state->queue.clear();
-                    for (const auto &[id, record] : m_state->jobs) {
-                        (void)id;
-                        record->cancellation.RequestCancellation();
+                    std::vector<std::shared_ptr<JobRecord>> records;
+                    {
+                        std::lock_guard storeLock(m_state->store->mutex);
+                        records.reserve(m_state->store->records.size());
+                        for (const auto &[id, record] : m_state->store->records) {
+                            (void)id;
+                            records.push_back(record);
+                        }
                     }
+                    for (const auto &record : records)
+                        record->cancellation.RequestCancellation();
                 }
             }
             m_state->workAvailable.notify_all();
@@ -410,13 +535,84 @@ namespace Horo {
         return m_record ? m_record->id : 0;
     }
 
+    /** @copydoc JobHandle::Snapshot */
+    std::optional<JobSnapshot> JobHandle::Snapshot() const {
+        return m_record ? std::optional{SnapshotRecord(*m_record)} : std::nullopt;
+    }
+
+    /** @copydoc JobHandle::RequestCancel */
+    Result<void> JobHandle::RequestCancel() const {
+        if (!m_record)
+            return Result<void>::Failure(MakeJobError(JobErrors::InvalidHandle, "Cannot cancel through an invalid job handle."));
+        m_record->cancellation.RequestCancellation();
+        ContextJobFunction releasedWork = CancelQueuedRecord(m_record, "Job was cancelled before execution.");
+        return Result<void>::Success();
+    }
+
+    JobExecutionContext::JobExecutionContext(std::shared_ptr<JobRecord> record)
+        : record_(std::move(record)), cancellation_(record_->cancellation.Token()) {}
+
+    /** @copydoc JobExecutionContext::Cancellation */
+    const CancellationToken &JobExecutionContext::Cancellation() const noexcept {
+        return cancellation_;
+    }
+
+    /** @copydoc JobExecutionContext::Configuration */
+    const std::optional<ConfigurationSnapshotRef> &JobExecutionContext::Configuration() const noexcept {
+        return record_->configuration;
+    }
+
+    /** @copydoc JobExecutionContext::Operation */
+    std::optional<OperationId> JobExecutionContext::Operation() const noexcept {
+        return record_->operationId;
+    }
+
+    /** @copydoc JobExecutionContext::Group */
+    TaskGroupId JobExecutionContext::Group() const noexcept {
+        return record_->taskGroupId;
+    }
+
+    /** @copydoc JobExecutionContext::UpdateProgress */
+    Result<void> JobExecutionContext::UpdateProgress(std::string phase, const std::optional<float> value) const {
+        constexpr std::size_t MaximumPhaseBytes = 128;
+        if (phase.empty() || phase.size() > MaximumPhaseBytes ||
+            (value.has_value() && (!std::isfinite(*value) || *value < 0.0F || *value > 1.0F)))
+            return Result<void>::Failure(MakeJobError(JobErrors::InvalidProgress, "Job progress phase or normalized value is invalid."));
+
+        const auto updateLocked = [this, &phase, value](JobStoreState *store) -> Result<void> {
+            if (IsTerminal(record_->state))
+                return Result<void>::Failure(MakeJobError(JobErrors::TerminalImmutable, "Terminal job progress cannot be changed."));
+            const bool samePhase = record_->progress.phase == phase;
+            if (samePhase && record_->progress.value.has_value() && (!value.has_value() || *value < *record_->progress.value))
+                return Result<void>::Failure(MakeJobError(JobErrors::ProgressRegressed, "Job progress cannot decrease within one phase."));
+            record_->progress = JobProgress{.phase = std::move(phase), .value = value};
+            if (store != nullptr)
+                ++store->revision;
+            return Result<void>::Success();
+        };
+        const std::shared_ptr store = record_->store.lock();
+        if (store) {
+            std::lock_guard storeLock(store->mutex);
+            std::lock_guard recordLock(record_->Mutex());
+            return updateLocked(store.get());
+        }
+        std::lock_guard recordLock(record_->Mutex());
+        return updateLocked(nullptr);
+    }
+
     struct TaskGroup::State {
         State(JobSystem &jobSystem, const TaskGroupFailurePolicy failurePolicy, const CancellationToken &parentCancellation)
-            : jobs(jobSystem), policy(failurePolicy), cancellation(parentCancellation) {}
+            : jobs(jobSystem), policy(failurePolicy), cancellation(parentCancellation), id(NextTaskGroupIdentity()) {}
+
+        [[nodiscard]] static TaskGroupId NextTaskGroupIdentity() noexcept {
+            static std::atomic<std::uint64_t> next{1};
+            return TaskGroupId{next.fetch_add(1)};
+        }
 
         JobSystem &jobs;
         TaskGroupFailurePolicy policy;
         CancellationSource cancellation;
+        TaskGroupId id;
         std::mutex mutex;
         std::mutex joinMutex;
         bool accepting = true;
@@ -452,17 +648,25 @@ namespace Horo {
     }
 
     Result<JobId> TaskGroup::Spawn(JobDescriptor descriptor, JobFunction work) const {
+        return SpawnContext(std::move(descriptor), [work = std::move(work)](const JobExecutionContext &context) {
+            return work(context.Cancellation());
+        });
+    }
+
+    /** @copydoc TaskGroup::SpawnContext */
+    Result<JobId> TaskGroup::SpawnContext(JobDescriptor descriptor, ContextJobFunction work) const {
         std::lock_guard lock(m_state->mutex);
         if (!m_state->accepting)
             return Result<JobId>::Failure(MakeJobError(JobErrors::TaskGroupClosed, "Task group admission is closed."));
 
         descriptor.parentCancellation = m_state->cancellation.Token();
+        descriptor.taskGroupId = m_state->id;
         const std::weak_ptr weakState = m_state;
         Result<JobHandle> submitted =
-            m_state->jobs.SubmitResult(std::move(descriptor), [weakState, work = std::move(work)](const CancellationToken &cancellation) {
-            if (cancellation.IsCancellationRequested())
+            m_state->jobs.SubmitContext(std::move(descriptor), [weakState, work = std::move(work)](const JobExecutionContext &context) {
+            if (context.Cancellation().IsCancellationRequested())
                 return Result<void>::Failure(MakeJobError(JobErrors::Cancelled, "Task group child was cancelled before execution."));
-            Result<void> outcome = work(cancellation);
+            Result<void> outcome = work(context);
             if (outcome.HasError()) {
                 if (const auto state = weakState.lock(); state && state->policy == TaskGroupFailurePolicy::FailFast)
                     CancelChildren(state);
@@ -476,6 +680,11 @@ namespace Horo {
         const JobId childId = child.Id();
         m_state->children.push_back(std::move(child));
         return Result<JobId>::Success(childId);
+    }
+
+    /** @copydoc TaskGroup::Id */
+    TaskGroupId TaskGroup::Id() const noexcept {
+        return m_state->id;
     }
 
     void TaskGroup::RequestCancel() const {

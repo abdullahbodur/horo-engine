@@ -47,16 +47,16 @@ that affinity and synchronization are explicit.
 
 ## Job System Interface
 
-Implementation status on 6 September 2026: the FND-001A baseline implements the
-bounded worker queue, result-returning submissions, parent cancellation and the
-non-movable operation-owned `TaskGroup` below. A bounded `OperationStore`
-baseline also provides typed state, phase, monotonic per-phase progress,
-terminal retention, and cooperative cancellation. `JobHandle::Wait(options)`
-implements the finite wait subset below with explicit caller-affinity validation
-and exact-record helping. Priority, configuration snapshot capture, general
-main-thread pumping, job aggregation, wait reasons, and revision notifications
-remain later Foundation work; examples of those capabilities below otherwise
-describe the target rather than implemented behavior.
+Implementation status on 11 September 2026: the FND-001A and JOB-001.1 baselines
+provide the bounded worker queue, structured `TaskGroup`, typed bounded waits and
+exact-record helping. JOB-001.2 adds scheduler-owned bounded terminal retention,
+durable move-only handles, immutable terminal results, timing, monotonic
+per-phase progress and explicit operation/task-group/configuration correlation.
+Context-aware submissions freeze the caller's diagnostic context and explicit
+configuration snapshot before enqueue, then restore the worker's previous
+context after every callback. Priority, general main-thread continuation
+pumping, job aggregation, wait reasons and revision events remain later work;
+examples of those capabilities below otherwise describe the target.
 
 ```cpp
 class JobSystem {
@@ -114,12 +114,16 @@ with a typed capacity diagnostic instead of deadlocking a single-worker pool.
 ```cpp
 struct JobDescriptor {
     CancellationToken parentCancellation;
+    std::optional<OperationId> operationId;
+    TaskGroupId taskGroupId;
+    std::optional<ConfigurationSnapshotRef> configuration;
 };
 ```
 
-The implemented descriptor intentionally contains only parent cancellation.
-Additional scheduling metadata is introduced only with its owning scheduler
-policy and tests.
+Correlation is inert metadata: supplying an `OperationId` never creates or
+updates an `OperationStore` record. A missing configuration snapshot explicitly
+marks configuration-independent work. `TaskGroup` replaces a caller-provided
+group ID with its own typed identity.
 
 Priorities are coarse and starvation-safe:
 
@@ -535,3 +539,4 @@ Required tests cover:
 - [Configuration System](./configuration-system.md)
 - [Observability Architecture](../observability/observability.md)
 - [Runtime Lifecycle](../runtime/runtime-lifecycle.md)
+- [Job Store And Submission Context Migration](../../guides/job-store-context-migration.md)

@@ -26,6 +26,9 @@ namespace Horo::JobErrors {
     extern const ErrorCodeDescriptor WaitForbidden;
     extern const ErrorCodeDescriptor WaitTimedOut;
     extern const ErrorCodeDescriptor WaitCapacityDeadlock;
+    extern const ErrorCodeDescriptor InvalidProgress;
+    extern const ErrorCodeDescriptor ProgressRegressed;
+    extern const ErrorCodeDescriptor TerminalImmutable;
 }  // namespace Horo::JobErrors
 
 namespace Horo::HashingErrors {
