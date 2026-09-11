@@ -33,4 +33,16 @@ namespace Horo::Extensions::ExtensionErrors {
     extern const ErrorCodeDescriptor CapabilityRegistryCapacityExceeded;
     /** @brief The application capability registry is shutting down. */
     extern const ErrorCodeDescriptor CapabilityRegistryShutdown;
+    /** @brief A project-validator descriptor, snapshot, finding, or limit is malformed. */
+    extern const ErrorCodeDescriptor ProjectValidatorRegistryInvalid;
+    /** @brief A project-validator identity already has a published provider. */
+    extern const ErrorCodeDescriptor ProjectValidatorRegistryDuplicate;
+    /** @brief The bounded project-validator provider registry is full. */
+    extern const ErrorCodeDescriptor ProjectValidatorRegistryCapacityExceeded;
+    /** @brief Project-validator registration and new validation admission are closed. */
+    extern const ErrorCodeDescriptor ProjectValidatorRegistryShutdown;
+    /** @brief One attributed project-validator callback or finding pass failed. */
+    extern const ErrorCodeDescriptor ProjectValidatorInvocationFailed;
+    /** @brief Project validation was cooperatively cancelled without publishing partial results. */
+    extern const ErrorCodeDescriptor ProjectValidationCancelled;
 }  // namespace Horo::Extensions::ExtensionErrors
