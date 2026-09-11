@@ -1,6 +1,7 @@
 #include "Horo/Navigation/Backends/RecastDetourProvider.h"
 
 #include "Horo/Navigation/NavigationErrors.h"
+#include "runtime/navigation/backends/recast_detour/RecastDetourProviderValidation.h"
 
 #include <DetourAlloc.h>
 #include <DetourNavMesh.h>
@@ -111,65 +112,23 @@ namespace Horo::Navigation {
             QuerySlot *slot_{};
         };
 
-        [[nodiscard]] bool IsPositiveFinite(const float value) noexcept {
-            return std::isfinite(value) && value > 0.0F;
-        }
-
-        [[nodiscard]] bool IsNonNegativeFinite(const float value) noexcept {
-            return std::isfinite(value) && value >= 0.0F;
-        }
-
-        [[nodiscard]] bool CheckedAdd(std::size_t &total, const std::size_t value) noexcept {
-            const std::size_t remaining = std::numeric_limits<std::size_t>::max() - total;
-            if (value > remaining)
-                return false;
-            total = total + value;
-            return true;
-        }
-
-        [[nodiscard]] bool CheckedProduct(const std::size_t first, const std::size_t second, std::size_t &result) noexcept {
-            if (first == 0) {
-                result = 0;
-                return true;
-            }
-            if (second > std::numeric_limits<std::size_t>::max() / first)
-                return false;
-            result = first * second;
-            return true;
-        }
-
-        [[nodiscard]] bool FitsOwnedBudget(const RecastDetourProviderCreateInfo &info) noexcept {
-            std::size_t bytes{};
-            std::size_t value{};
-            if (!CheckedProduct(info.vertices.size(), 64U, value) || !CheckedAdd(bytes, value) ||
-                !CheckedProduct(info.polygons.size(), 256U, value) || !CheckedAdd(bytes, value) ||
-                !CheckedProduct(info.maximumConcurrentQueries,
-                                (static_cast<std::size_t>(info.maximumQueryNodes) * sizeof(dtPolyRef)) +
-                                    (static_cast<std::size_t>(info.maximumResultPoints) *
-                                     ((sizeof(float) * 3U) + sizeof(unsigned char) + sizeof(dtPolyRef))),
-                                value) ||
-                !CheckedAdd(bytes, value))
-                return false;
-            return bytes <= info.maximumOwnedBytes;
-        }
-
         [[nodiscard]] Result<void> ValidateCreateInfo(const RecastDetourProviderCreateInfo &info) {
             if (!info.world.IsValid() || !info.topology.IsValid() || info.vertices.size() < 3 || info.polygons.empty() ||
                 info.vertices.size() > RecastDetourProviderHardLimits::Vertices ||
                 info.polygons.size() > RecastDetourProviderHardLimits::Polygons || !Math::IsFinite(info.nearestPointHalfExtents) ||
                 info.nearestPointHalfExtents.x <= 0.0F || info.nearestPointHalfExtents.y <= 0.0F ||
-                info.nearestPointHalfExtents.z <= 0.0F || !IsPositiveFinite(info.cellSizeMeters) ||
-                !IsPositiveFinite(info.cellHeightMeters) || !IsPositiveFinite(info.walkableHeightMeters) ||
-                !IsNonNegativeFinite(info.walkableRadiusMeters) || !IsNonNegativeFinite(info.walkableClimbMeters) ||
+                info.nearestPointHalfExtents.z <= 0.0F || !Detail::IsPositiveFinite(info.cellSizeMeters) ||
+                !Detail::IsPositiveFinite(info.cellHeightMeters) || !Detail::IsPositiveFinite(info.walkableHeightMeters) ||
+                !Detail::IsNonNegativeFinite(info.walkableRadiusMeters) || !Detail::IsNonNegativeFinite(info.walkableClimbMeters) ||
                 info.maximumQueryNodes == 0 || info.maximumQueryNodes > RecastDetourProviderHardLimits::QueryNodes ||
                 info.maximumResultPoints < 2 || info.maximumResultPoints > RecastDetourProviderHardLimits::ResultPoints ||
                 info.maximumConcurrentQueries == 0 || info.maximumConcurrentQueries > RecastDetourProviderHardLimits::ConcurrentQueries ||
-                !IsPositiveFinite(info.maximumSearchDistanceMeters) || info.maximumOwnedBytes == 0 ||
+                !Detail::IsPositiveFinite(info.maximumSearchDistanceMeters) || info.maximumOwnedBytes == 0 ||
                 info.maximumOwnedBytes > RecastDetourProviderHardLimits::OwnedBytes || info.capabilityRevision == 0 ||
                 info.vertices.size() > static_cast<std::size_t>(std::numeric_limits<int>::max()) ||
                 info.polygons.size() > static_cast<std::size_t>(std::numeric_limits<int>::max()))
                 return Failure<void>(NavigationErrors::CapabilityDescriptorInvalid);
-            if (!FitsOwnedBudget(info))
+            if (!Detail::FitsOwnedBudget(info))
                 return Failure<void>(NavigationErrors::CapacityExceeded);
             if (!std::ranges::all_of(info.vertices, [](const Math::Vec3 vertex) {
                 return Math::IsFinite(vertex);

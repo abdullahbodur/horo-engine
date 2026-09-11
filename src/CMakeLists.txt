@@ -621,6 +621,7 @@ target_link_libraries(HoroNavigationRecastDetour PUBLIC HoroEngine::NavigationAp
 if(HORO_BUILD_NAVIGATION_RECAST_DETOUR)
     target_sources(HoroNavigationRecastDetour PRIVATE
             runtime/navigation/backends/recast_detour/RecastDetourProvider.cpp
+            runtime/navigation/backends/recast_detour/RecastDetourProviderValidation.h
     )
     target_link_libraries(HoroNavigationRecastDetour PRIVATE HoroThirdPartyDetour)
 else()
