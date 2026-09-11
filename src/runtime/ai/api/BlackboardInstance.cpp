@@ -190,21 +190,25 @@ namespace Horo::AI {
             ValidateAiRuntimeHandle(registration.task, binding_.agent.incarnation).HasError() ||
             FindKey(*schema_, registration.key) == schema_->Keys().size())
             return Result<BlackboardObserverToken>::Failure(Failure(AIErrors::BlackboardObserverInvalid));
-        if (std::ranges::any_of(observers_, [&registration](const ObserverSlot &slot) {
-            return slot.active && slot.registration.agent == registration.agent && slot.registration.task == registration.task &&
-                   slot.registration.key == registration.key && slot.registration.callback == registration.callback &&
-                   slot.registration.context == registration.context;
-        }))
-            return Result<BlackboardObserverToken>::Failure(Failure(AIErrors::BlackboardObserverInvalid));
+        std::size_t available = observers_.size();
         for (std::size_t index = 0; index < observers_.size(); ++index) {
-            auto &slot = observers_[index];
-            if (slot.active || slot.retired)
+            const auto &slot = observers_[index];
+            if (slot.active) {
+                if (slot.registration.agent == registration.agent && slot.registration.task == registration.task &&
+                    slot.registration.key == registration.key && slot.registration.callback == registration.callback &&
+                    slot.registration.context == registration.context)
+                    return Result<BlackboardObserverToken>::Failure(Failure(AIErrors::BlackboardObserverInvalid));
                 continue;
-            slot.registration = registration;
-            slot.active = true;
-            return Result<BlackboardObserverToken>::Success({binding_, index, slot.generation});
+            }
+            if (!slot.retired && available == observers_.size())
+                available = index;
         }
-        return Result<BlackboardObserverToken>::Failure(Failure(AIErrors::BlackboardObserverLimitExceeded));
+        if (available == observers_.size())
+            return Result<BlackboardObserverToken>::Failure(Failure(AIErrors::BlackboardObserverLimitExceeded));
+        auto &slot = observers_[available];
+        slot.registration = registration;
+        slot.active = true;
+        return Result<BlackboardObserverToken>::Success({binding_, available, slot.generation});
     }
 
     /** @copydoc BlackboardInstance::RemoveObserverAtBlackboardSync */
