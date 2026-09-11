@@ -577,3 +577,11 @@ or inert-preservation behavior for unavailable node types. There is no implicit 
 decoder: schema 1.0 requires a host-composed bounded migrator and every migrated value
 passes the ordinary schema 1.1 validation before publication. Assets continues to own
 the enclosing asset identity, bytes, revision transaction and physical storage.
+
+`[PCG-2.3]` adds `Horo/PCG/PCGGraphValidation.h` to `HoroEngine::PCG`. The public
+surface consumes only the existing immutable graph-source and registry contracts and
+publishes bounded typed validation output; no compiler, evaluator, target subsystem or
+backend type crosses the boundary. Callers that previously inferred readiness from
+source validity must now retain an exact registry snapshot, call `ValidatePCGGraph`,
+and hand the returned generation-fenced dependency order to the later compiler. There
+is no compatibility path for ambient runtime discovery or best-effort fallback.

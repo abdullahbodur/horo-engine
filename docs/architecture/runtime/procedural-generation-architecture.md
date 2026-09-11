@@ -451,6 +451,30 @@ same typed unsupported result rather than fabricated empty success. `Close()` en
 publication and releases the live catalog while already issued snapshots retain their
 owned immutable data.
 
+## Pre-Compile Graph Validation Contract
+
+`Horo/PCG/PCGGraphValidation.h` is the PCG-2.3 boundary between canonical authored
+source and the later plan compiler. `ValidatePCGGraph` accepts one immutable
+`PCGGraphAsset`, one retained immutable `PCGRegistrySnapshot`, explicit caller
+capabilities, finite work/diagnostic ceilings and a captured lifecycle admission gate.
+It never repairs source, discovers a runtime, mutates a registry or emits an executable
+plan.
+
+Validation requires the exact durable graph revision, descriptor/source node identity
+and type agreement, the host's explicit validation grant, graph and caller capability
+grants, and one exact runtime handle for every node. Success owns a compact node array
+in deterministic dependency-first order; stable node identity breaks ties between
+independent nodes. Every handle is fenced to the returned registry generation, so a
+compiler must retain the issuing snapshot and must not resolve the handle through a
+replacement generation.
+
+Malformed topology and unknown-node policy are rejected by `PCGGraphAsset::Create`
+before this boundary. Missing runtime evidence is accumulated in stable node order with
+graph/revision/node provenance up to the admitted diagnostic ceiling. Capacity,
+cancellation and shutdown reject without partial validated output. Retained snapshots
+remain valid after replacement or registry shutdown, while new validation against a
+replacement snapshot requires the replacement graph revision and runtime contracts.
+
 ## Related Documents
 
 - [PCG Ownership, Authority, Tier and Lifecycle](../../adr/151-pcg-ownership-authority-tier-and-lifecycle.md)
