@@ -1,5 +1,6 @@
 #include "Horo/Application/GameplayBuildService.h"
 
+#include "Horo/Application/CompilerDiagnosticParser.h"
 #include "Horo/Foundation/PathUtils.h"
 #include "Horo/Foundation/Platform.h"
 #include "Horo/Foundation/Sha256.h"
@@ -8,14 +9,12 @@
 #include "Horo/Platform/ExternalProcess.h"
 
 #include <algorithm>
-#include <charconv>
 #include <exception>
 #include <format>
 #include <fstream>
 #include <functional>
 #include <mutex>
 #include <nlohmann/json.hpp>
-#include <regex>
 #include <set>
 #include <string_view>
 #include <thread>
@@ -399,40 +398,6 @@ namespace Horo::Application {
             state.output->Append(std::move(record));
         }
 
-        [[nodiscard]] std::optional<std::uint32_t> ParseDiagnosticCoordinate(const std::string_view digits) noexcept {
-            std::uint32_t value{};
-            const auto [end, error] = std::from_chars(digits.data(), digits.data() + digits.size(), value);
-            if (error != std::errc{} || end != digits.data() + digits.size())
-                return std::nullopt;
-            return value;
-        }
-
-        void ClassifyCompilerDiagnostic(BuildOutputRecord &record, const std::filesystem::path &projectRoot) {
-            static const std::regex diagnostic{R"(^(.+):(\d+):(\d+):\s*(error|warning):\s*(.*)$)"};
-            std::smatch match;
-            if (!std::regex_match(record.message, match, diagnostic))
-                return;
-
-            const std::string lineDigits = match[2].str();
-            const std::string columnDigits = match[3].str();
-            const std::optional<std::uint32_t> line = ParseDiagnosticCoordinate(lineDigits);
-            const std::optional<std::uint32_t> column = ParseDiagnosticCoordinate(columnDigits);
-            if (!line.has_value() || !column.has_value())
-                return;
-
-            std::filesystem::path sourcePath{match[1].str()};
-            std::error_code pathError;
-            if (sourcePath.is_relative())
-                sourcePath = std::filesystem::absolute(projectRoot / sourcePath, pathError);
-            if (pathError || !sourcePath.is_absolute())
-                return;
-
-            record.source = DiagnosticSourceLocation{sourcePath.lexically_normal().string(), *line, *column};
-            const bool isError = match[4].str() == "error";
-            record.severity = isError ? DiagnosticSeverity::Error : DiagnosticSeverity::Warning;
-            record.code = DiagnosticCode{isError ? "gameplay.build.compiler_error" : "gameplay.build.compiler_warning"};
-        }
-
         void PublishOutput(GameplayBuildService::State &state, const std::shared_ptr<GameplayBuildService::State::Session> &session,
                            OutputBudget &budget, const char *phase, ProcessOutputLine line) {
             constexpr std::size_t MaximumBytes = 8U * 1024U * 1024U;
@@ -441,6 +406,7 @@ namespace Horo::Application {
             constexpr std::size_t DiagnosticByteReserve = 1024U * 1024U;
             if (!state.output)
                 return;
+            const auto diagnostic = ParseCompilerDiagnostic(line.text, session->request.projectRoot, line.truncated);
             std::string message = std::move(line.text);
             if (line.truncated)
                 message = std::format("{} … [line truncated]", message);
@@ -449,7 +415,13 @@ namespace Horo::Application {
                                      .stage = phase,
                                      .code = DiagnosticCode{"gameplay.build.output"},
                                      .message = std::move(message)};
-            ClassifyCompilerDiagnostic(record, session->request.projectRoot);
+            if (diagnostic.has_value()) {
+                record.source = diagnostic->source;
+                record.severity = diagnostic->severity;
+                record.code = DiagnosticCode{diagnostic->severity == DiagnosticSeverity::Error ? "gameplay.build.compiler_error"
+                                                                                               : "gameplay.build.compiler_warning"};
+                record.toolCode = diagnostic->compilerCode;
+            }
             const bool diagnosticRecord = record.source.has_value();
             const bool byteBudgetAvailable = budget.bytes + record.message.size() <= MaximumBytes;
             const bool recordBudgetAvailable = budget.records < MaximumRecords;

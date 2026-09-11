@@ -166,6 +166,7 @@ horo_configure_target_header_boundary(HoroGameplayModuleHost PUBLIC_HEADERS
     Horo/Gameplay/GameModuleHost.h
 )
 horo_configure_target_header_boundary(HoroGameplayBuild PUBLIC_HEADERS
+    Horo/Application/CompilerDiagnosticParser.h
     Horo/Application/GameplayBuildService.h
 )
 horo_configure_target_header_boundary(HoroGameplayLua PUBLIC_HEADERS
