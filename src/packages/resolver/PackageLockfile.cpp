@@ -199,7 +199,7 @@ namespace Horo::Packages {
                 return Result<void>::Failure(MakeError(InvalidLock));
             std::map<std::string_view, std::size_t, std::less<>> indices;
             for (std::size_t index = 0; index < packages.size(); ++index)
-                indices.emplace(packages[index].package.Value(), index);
+                indices.try_emplace(packages[index].package.Value(), index);
 
             auto resolve = [&](const LockedPackageReference &reference) -> std::optional<std::size_t> {
                 const auto found = indices.find(reference.package.Value());
@@ -218,18 +218,19 @@ namespace Horo::Packages {
                 Visiting,
                 Visited
             };
+            using enum Mark;
             std::vector<std::optional<Mark>> marks(packages.size());
             std::size_t visited{};
             std::function<bool(std::size_t)> visit = [&](const std::size_t index) {
                 if (marks[index].has_value())
-                    return *marks[index] == Mark::Visited;
-                marks[index] = Mark::Visiting;
+                    return *marks[index] == Visited;
+                marks[index] = Visiting;
                 for (const auto &dependency : packages[index].dependencies) {
                     const auto child = resolve(dependency);
-                    if (!child.has_value() || (marks[*child] == Mark::Visiting) || !visit(*child))
+                    if (!child.has_value() || (marks[*child] == Visiting) || !visit(*child))
                         return false;
                 }
-                marks[index] = Mark::Visited;
+                marks[index] = Visited;
                 ++visited;
                 return true;
             };
@@ -249,7 +250,7 @@ namespace Horo::Packages {
         [[nodiscard]] Result<ResolvedIndex> IndexResolvedPackages(const PackageResolutionPlan &plan, const PackageLockfileLimits &limits) {
             ResolvedIndex result;
             for (const auto &package : plan.packages) {
-                if (!result.emplace(package.package.Value(), &package).second ||
+                if (!result.try_emplace(package.package.Value(), &package).second ||
                     package.dependencies.size() > limits.dependenciesPerPackage)
                     return Result<ResolvedIndex>::Failure(MakeError(InvalidLock));
             }
@@ -260,7 +261,7 @@ namespace Horo::Packages {
                                                            const PackageLockfileLimits &limits) {
             ArtifactIndex result;
             for (const auto &artifact : artifacts) {
-                if (!result.emplace(artifact.package.Value(), &artifact).second)
+                if (!result.try_emplace(artifact.package.Value(), &artifact).second)
                     return Result<ArtifactIndex>::Failure(MakeError(InvalidLock));
                 if (artifact.platforms.size() > limits.platformsPerPackage ||
                     artifact.contributions.size() > limits.contributionsPerPackage)
@@ -293,7 +294,7 @@ namespace Horo::Packages {
                 const auto selected = resolved.find(dependency.Value());
                 if (selected == resolved.end())
                     return Result<LockedPackage>::Failure(MakeError(InvalidLock, "Resolution has a stale dependency edge."));
-                entry.dependencies.push_back({dependency, selected->second->version});
+                entry.dependencies.emplace_back(dependency, selected->second->version);
             }
             std::ranges::sort(entry.platforms, PlatformLess);
             std::ranges::sort(entry.dependencies, ReferenceLess);
@@ -329,7 +330,7 @@ namespace Horo::Packages {
                 if (selected == resolved.end())
                     return Result<std::vector<LockedPackageReference>>::Failure(
                         MakeError(InvalidLock, "Requested root is absent from resolution."));
-                result.push_back({root, selected->second->version});
+                result.emplace_back(root, selected->second->version);
             }
             std::ranges::sort(result, ReferenceLess);
             return Result<std::vector<LockedPackageReference>>::Success(std::move(result));
