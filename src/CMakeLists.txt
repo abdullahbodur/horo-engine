@@ -499,6 +499,7 @@ add_library(HoroPCG STATIC
         runtime/pcg/api/PCGErrors.cpp
         runtime/pcg/api/PCGGraphAsset.cpp
         runtime/pcg/api/PCGGraphAssetSerialization.cpp
+        runtime/pcg/api/PCGGraphAssetValidation.cpp
         runtime/pcg/api/PCGIdentity.cpp
         runtime/pcg/api/PCGPointSchema.cpp
         runtime/pcg/api/PCGSpatialSnapshot.cpp

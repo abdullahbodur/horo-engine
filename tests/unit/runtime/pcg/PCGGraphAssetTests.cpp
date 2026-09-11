@@ -79,6 +79,14 @@ namespace Horo::PCG {
             CHECK(matchesDescriptor);
         }
 
+        [[nodiscard]] PCGGraphAsset RoundTrip(const PCGGraphAsset &asset) {
+            auto bytes = SerializePCGGraphAsset(asset);
+            REQUIRE(bytes.HasValue());
+            auto restored = DeserializePCGGraphAsset(bytes.Value(), Context());
+            REQUIRE(restored.HasValue());
+            return std::move(restored).Value();
+        }
+
         class UpgradeMinorVersion final : public IPCGGraphSourceMigrator {
         public:
             Result<std::vector<std::uint8_t>> Migrate(const std::span<const std::uint8_t> source, const PCGGraphSchemaVersion from,
@@ -130,11 +138,7 @@ namespace Horo::PCG {
         const PCGGraphAsset asset = ValidAsset(std::move(data));
         const double exposed = std::get<double>(asset.Data().exposedInputs.front().defaultValue);
         CHECK_FALSE(std::signbit(exposed));
-        auto bytes = SerializePCGGraphAsset(asset);
-        REQUIRE(bytes.HasValue());
-        auto roundTrip = DeserializePCGGraphAsset(bytes.Value(), Context());
-        REQUIRE(roundTrip.HasValue());
-        CHECK(roundTrip.Value().Data() == asset.Data());
+        CHECK(RoundTrip(asset).Data() == asset.Data());
     }
 
     TEST_CASE("PCG graph source uses explicit binary32 vectors and binary64 scalars", "[unit][pcg][graph][values]") {
@@ -145,11 +149,7 @@ namespace Horo::PCG {
             InputPin(104, PCGPinType::Vector4, PCGPinCardinality::Single, Math::Vec4{7.0F, -8.0F, 9.5F, 10.0F}));
         data.exposedInputs.push_back({Id<ExposedInputId>(71), "world.offset", Id<NodeId>(10), Id<PinId>(102), Math::Vec2{1.25F, -2.5F}});
         const PCGGraphAsset asset = ValidAsset(std::move(data));
-        auto bytes = SerializePCGGraphAsset(asset);
-        REQUIRE(bytes.HasValue());
-        auto roundTrip = DeserializePCGGraphAsset(bytes.Value(), Context());
-        REQUIRE(roundTrip.HasValue());
-        CHECK(roundTrip.Value().Data() == asset.Data());
+        CHECK(RoundTrip(asset).Data() == asset.Data());
     }
 
     TEST_CASE("PCG graph source rejects malformed and oversized encoded bytes transactionally", "[unit][pcg][graph][decode]") {
