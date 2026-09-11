@@ -160,7 +160,7 @@ namespace Horo::Extensions {
         [[nodiscard]] Result<ExtensionCapabilityHandle> Grant(const ExtensionCapabilityId &capability) const;
 
         /** @brief Closes callback admission for every handle; safe repeatedly and across threads. */
-        void Revoke() noexcept;
+        void Revoke() const noexcept;
 
         /** @brief Returns the immutable policy revision that produced this admission. */
         [[nodiscard]] std::uint64_t PolicyRevision() const noexcept;

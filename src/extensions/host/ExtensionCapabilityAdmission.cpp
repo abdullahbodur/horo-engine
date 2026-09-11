@@ -231,7 +231,7 @@ namespace Horo::Extensions {
     }
 
     /** @copydoc ExtensionCapabilityAdmission::Revoke */
-    void ExtensionCapabilityAdmission::Revoke() noexcept {
+    void ExtensionCapabilityAdmission::Revoke() const noexcept {
         if (state_ != nullptr)
             state_->active.store(false, std::memory_order_release);
     }
