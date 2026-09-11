@@ -7,16 +7,19 @@
 #include <limits>
 #include <new>
 #include <utility>
+#include <vector>
 
 namespace Horo::WorldStreaming {
     struct WorldPartitionRegistrySnapshot::State final {
         WorldPartitionRegistryBinding binding{};
         WorldPartitionRegistryLimits limits{};
         WorldPartitionDescriptor descriptor;
+        std::vector<WorldPartitionBounds> cellBounds;
 
         State(WorldPartitionRegistryBinding bindingValue, const WorldPartitionRegistryLimits limitsValue,
-              WorldPartitionDescriptor descriptorValue) noexcept
-            : binding(std::move(bindingValue)), limits(limitsValue), descriptor(std::move(descriptorValue)) {}
+              WorldPartitionDescriptor descriptorValue, std::vector<WorldPartitionBounds> cellBoundsValue) noexcept
+            : binding(std::move(bindingValue)), limits(limitsValue), descriptor(std::move(descriptorValue)),
+              cellBounds(std::move(cellBoundsValue)) {}
     };
 
     namespace {
@@ -31,6 +34,8 @@ namespace Horo::WorldStreaming {
         }
 
         [[nodiscard]] bool MultiplyChecked(const std::int64_t value, const std::int64_t factor, std::int64_t &product) noexcept {
+            if (factor <= 0)
+                return false;
             if (value > 0 && value > std::numeric_limits<std::int64_t>::max() / factor)
                 return false;
             if (value < 0 && value < std::numeric_limits<std::int64_t>::min() / factor)
@@ -78,12 +83,11 @@ namespace Horo::WorldStreaming {
                    leftMaximum[1] >= rightMinimum[1] && leftMinimum[2] <= rightMaximum[2] && leftMaximum[2] >= rightMinimum[2];
         }
 
-        [[nodiscard]] bool Matches(const WorldPartitionCellDescriptor &cell, const WorldPartitionSpatialQuery &query,
-                                   const WorldCellQuantizationPolicy &grid) noexcept {
+        [[nodiscard]] bool Matches(const WorldPartitionCellDescriptor &cell, const WorldPartitionBounds &cellBounds,
+                                   const WorldPartitionSpatialQuery &query) noexcept {
             if ((query.layer.has_value() && cell.id.layer != *query.layer) || (query.lod.has_value() && cell.id.lod != *query.lod))
                 return false;
-            WorldPartitionBounds cellBounds{};
-            return CellBounds(grid, cell.id, cellBounds) && Intersects(cellBounds, query.bounds);
+            return Intersects(cellBounds, query.bounds);
         }
 
         [[nodiscard]] auto FindCell(const std::span<const WorldPartitionCellDescriptor> cells, const StreamingCellId cell) noexcept {
@@ -94,16 +98,23 @@ namespace Horo::WorldStreaming {
             return std::ranges::binary_search(descriptor.Layers(), layer, {}, &WorldLayerDescriptor::id);
         }
 
-        [[nodiscard]] Result<void> ValidateDescriptorForIndex(const WorldPartitionDescriptor &descriptor,
-                                                              const WorldPartitionRegistryLimits limits) {
+        [[nodiscard]] Result<std::vector<WorldPartitionBounds>> BuildCellBounds(const WorldPartitionDescriptor &descriptor,
+                                                                                const WorldPartitionRegistryLimits limits) {
             if (descriptor.Cells().size() > limits.cells)
-                return Failure<void>(WorldStreamingErrors::PartitionRegistryCapacityExceeded);
-            for (const auto &cell : descriptor.Cells()) {
-                WorldPartitionBounds bounds{};
-                if (!CellBounds(descriptor.Grid(), cell.id, bounds))
-                    return Failure<void>(WorldStreamingErrors::PartitionRegistryUnsupported);
+                return Failure<std::vector<WorldPartitionBounds>>(WorldStreamingErrors::PartitionRegistryCapacityExceeded);
+            std::vector<WorldPartitionBounds> bounds;
+            try {
+                bounds.reserve(descriptor.Cells().size());
+            } catch (const std::bad_alloc &) {
+                return Failure<std::vector<WorldPartitionBounds>>(WorldStreamingErrors::PartitionRegistryStorageUnavailable);
             }
-            return Result<void>::Success();
+            for (const auto &cell : descriptor.Cells()) {
+                WorldPartitionBounds cellBounds{};
+                if (!CellBounds(descriptor.Grid(), cell.id, cellBounds))
+                    return Failure<std::vector<WorldPartitionBounds>>(WorldStreamingErrors::PartitionRegistryUnsupported);
+                bounds.emplace_back(cellBounds);
+            }
+            return Result<std::vector<WorldPartitionBounds>>::Success(std::move(bounds));
         }
     }  // namespace
 
@@ -173,18 +184,20 @@ namespace Horo::WorldStreaming {
         if (query.lod.has_value() && *query.lod >= state_->descriptor.Grid().LodLevels())
             return Failure<std::size_t>(WorldStreamingErrors::PartitionRegistryUnsupported);
         std::size_t matches{};
-        for (const auto &cell : Cells()) {
-            if (Matches(cell, query, state_->descriptor.Grid()))
+        const auto cells = Cells();
+        for (std::size_t index = 0; index < cells.size(); ++index) {
+            if (Matches(cells[index], state_->cellBounds[index], query))
                 ++matches;
         }
         if (matches > state_->limits.queryResults || matches > output.size())
             return Failure<std::size_t>(WorldStreamingErrors::PartitionRegistryCapacityExceeded);
 
         std::size_t written{};
-        for (const auto &cell : Cells()) {
-            if (!Matches(cell, query, state_->descriptor.Grid()))
+        for (std::size_t index = 0; index < cells.size(); ++index) {
+            const auto &cell = cells[index];
+            if (!Matches(cell, state_->cellBounds[index], query))
                 continue;
-            output[written] = {state_->binding, static_cast<std::uint32_t>(&cell - Cells().data()), cell.id};
+            output[written] = {state_->binding, static_cast<std::uint32_t>(index), cell.id};
             ++written;
         }
         return Result<std::size_t>::Success(written);
@@ -215,10 +228,11 @@ namespace Horo::WorldStreaming {
             return Failure<void>(WorldStreamingErrors::PartitionRegistryLifecycleUnavailable);
         if (!revision.IsValid() || descriptor.Partition() != owner_.partition)
             return Failure<void>(WorldStreamingErrors::PartitionRegistryInvalid);
-        if (const auto valid = ValidateDescriptorForIndex(descriptor, limits_); valid.HasError())
-            return valid;
+        auto cellBounds = BuildCellBounds(descriptor, limits_);
+        if (cellBounds.HasError())
+            return Result<void>::Failure(cellBounds.Error());
 
-        const auto current = std::atomic_load(&state_);
+        const auto current = state_.load();
         if (current != nullptr && current->binding.revision.Value() == std::numeric_limits<std::uint64_t>::max())
             return Failure<void>(WorldStreamingErrors::GenerationExhausted);
         if ((current == nullptr && revision.Value() != 1) ||
@@ -226,9 +240,10 @@ namespace Horo::WorldStreaming {
             return Failure<void>(WorldStreamingErrors::PartitionRegistryStale);
 
         try {
-            auto next = std::make_shared<WorldPartitionRegistrySnapshot::State>(WorldPartitionRegistryBinding{registry_, revision, owner_},
-                                                                                limits_, std::move(descriptor));
-            std::atomic_store(&state_, std::shared_ptr<const WorldPartitionRegistrySnapshot::State>{std::move(next)});
+            auto next =
+                std::make_shared<WorldPartitionRegistrySnapshot::State>(WorldPartitionRegistryBinding{registry_, revision, owner_}, limits_,
+                                                                        std::move(descriptor), std::move(cellBounds.Value()));
+            state_.store(std::shared_ptr<const WorldPartitionRegistrySnapshot::State>{std::move(next)});
             return Result<void>::Success();
         } catch (const std::bad_alloc &) {
             return Failure<void>(WorldStreamingErrors::PartitionRegistryStorageUnavailable);
@@ -239,7 +254,7 @@ namespace Horo::WorldStreaming {
     Result<WorldPartitionRegistrySnapshot> WorldPartitionRegistry::Snapshot() const {
         if (Lifecycle() != WorldPartitionRegistryState::Active)
             return Failure<WorldPartitionRegistrySnapshot>(WorldStreamingErrors::PartitionRegistryLifecycleUnavailable);
-        auto state = std::atomic_load(&state_);
+        auto state = state_.load();
         if (state == nullptr)
             return Failure<WorldPartitionRegistrySnapshot>(WorldStreamingErrors::PartitionRegistryUnavailable);
         return Result<WorldPartitionRegistrySnapshot>::Success(WorldPartitionRegistrySnapshot{std::move(state)});
@@ -254,7 +269,7 @@ namespace Horo::WorldStreaming {
     /** @copydoc WorldPartitionRegistry::Shutdown */
     void WorldPartitionRegistry::Shutdown() noexcept {
         lifecycle_.store(WorldPartitionRegistryState::Closed);
-        std::atomic_store(&state_, std::shared_ptr<const WorldPartitionRegistrySnapshot::State>{});
+        state_.store(std::shared_ptr<const WorldPartitionRegistrySnapshot::State>{});
     }
 
     /** @copydoc WorldPartitionRegistry::~WorldPartitionRegistry */
