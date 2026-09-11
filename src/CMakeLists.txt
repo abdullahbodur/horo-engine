@@ -313,6 +313,7 @@ add_library(HoroGameplayLua STATIC
 )
 
 add_library(HoroGameplayBuild STATIC
+        application/gameplay/CompilerDiagnosticParser.cpp
         application/gameplay/GameplayBuildService.cpp
 )
 add_library(HoroEngine::GameplayBuild ALIAS HoroGameplayBuild)
