@@ -341,6 +341,15 @@ must be adapted or rejected during provider validation, not silently exempted. A
 failure returns a typed bounded failure, with no partial state publication or fallback to
 untracked malloc. Failure-injection/accounting tests cover shutdown and concurrent queries.
 
+Project navigation profiles are the sole typed authority for agent, surface, resident-tile,
+query, resident-memory, and per-tick work ceilings. Every limit is positive, explicit in its
+unit, checked for aggregate overflow, and validated before activation. A developer-preview
+preference is revision-bound non-authoritative input: resolution may reduce or clamp project
+ceilings but never expand them. Provider capability evidence is checked against the exact
+profile revision before activation, and editor, packaged, and headless hosts use the same
+resolver. Renderer backends and graphics feature tiers do not select or alter navigation
+profiles.
+
 ## Navigation Mesh
 
 ### NavMesh Generation

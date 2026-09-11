@@ -242,6 +242,9 @@ namespace Horo::Navigation {
                 &NavigationErrors::SourceGeometryUnsupported,
                 &NavigationErrors::SourceGeometryCapacityExceeded,
                 &NavigationErrors::SourceGeometryStale,
+                &NavigationErrors::ProjectProfileInvalid,
+                &NavigationErrors::ProjectProfileStale,
+                &NavigationErrors::ProjectProfileCapacityExceeded,
             };
             for (std::size_t first = 0; first < descriptors.size(); ++first) {
                 REQUIRE(descriptors[first]->domain.Value() == "horo.navigation");

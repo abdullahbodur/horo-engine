@@ -554,6 +554,7 @@ add_library(HoroNavigationApi STATIC
         runtime/navigation/api/NavigationErrors.cpp
         runtime/navigation/api/NavigationIdentity.cpp
         runtime/navigation/api/NavigationOutcomes.cpp
+        runtime/navigation/api/NavigationProjectProfiles.cpp
         runtime/navigation/api/NavigationSourceGeometry.cpp
 )
 add_library(HoroEngine::NavigationApi ALIAS HoroNavigationApi)

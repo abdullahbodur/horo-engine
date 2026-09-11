@@ -62,4 +62,10 @@ namespace Horo::Navigation::NavigationErrors {
     extern const ErrorCodeDescriptor SourceGeometryCapacityExceeded;
     /** @brief Captured source revision or digest evidence no longer matches authoritative geometry. */
     extern const ErrorCodeDescriptor SourceGeometryStale;
+    /** @brief A project profile identity, revision, capability requirement or finite capacity is malformed. */
+    extern const ErrorCodeDescriptor ProjectProfileInvalid;
+    /** @brief A profile candidate or preview preference does not target the current project revision. */
+    extern const ErrorCodeDescriptor ProjectProfileStale;
+    /** @brief A profile aggregate, provider or usage exceeds an authoritative finite capacity. */
+    extern const ErrorCodeDescriptor ProjectProfileCapacityExceeded;
 }  // namespace Horo::Navigation::NavigationErrors
