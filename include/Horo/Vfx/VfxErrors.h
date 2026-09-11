@@ -76,4 +76,10 @@ namespace Horo::Vfx::VfxErrors {
     extern const ErrorCodeDescriptor ParticleHandleInvalid;
     /** @brief A CPU particle handle names a retired or reused slot generation. */
     extern const ErrorCodeDescriptor ParticleHandleStale;
+    /** @brief CPU particle spawn-step input or prepared limits are malformed. */
+    extern const ErrorCodeDescriptor ParticleSpawnStepInvalid;
+    /** @brief A CPU particle spawn step was cancelled before mutation. */
+    extern const ErrorCodeDescriptor ParticleSpawnStepCancelled;
+    /** @brief The stable particle spawn ordinal cannot advance without wrapping. */
+    extern const ErrorCodeDescriptor ParticleSpawnOrdinalExhausted;
 }  // namespace Horo::Vfx::VfxErrors

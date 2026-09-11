@@ -210,4 +210,23 @@ namespace Horo::Vfx::VfxErrors {
                                                   .summary = "The particle handle names a killed or recycled slot generation.",
                                                   .remediationHint =
                                                       "Discard stale handles; storage-slot reuse never preserves particle authority."};
+    const ErrorCodeDescriptor
+        ParticleSpawnStepInvalid{.domain = VfxDomain,
+                                 .code = ErrorCode{"vfx.particle_spawn.step_invalid"},
+                                 .defaultSeverity = ErrorSeverity::Error,
+                                 .summary = "The CPU particle spawn-step contract is malformed or exceeds its prepared bounds.",
+                                 .remediationHint = "Submit finite bounded delta and burst values to a valid prepared pipeline."};
+    const ErrorCodeDescriptor ParticleSpawnStepCancelled{.domain = VfxDomain,
+                                                         .code = ErrorCode{"vfx.particle_spawn.cancelled"},
+                                                         .defaultSeverity = ErrorSeverity::Info,
+                                                         .summary = "The CPU particle spawn step was cancelled before mutation.",
+                                                         .remediationHint =
+                                                             "Discard the cancelled candidate and preserve the prior state."};
+    const ErrorCodeDescriptor
+        ParticleSpawnOrdinalExhausted{.domain = VfxDomain,
+                                      .code = ErrorCode{"vfx.particle_spawn.ordinal_exhausted"},
+                                      .defaultSeverity = ErrorSeverity::Critical,
+                                      .summary = "The stable particle spawn ordinal cannot advance without wrapping.",
+                                      .remediationHint =
+                                          "Retire the emitter activation and create a new generation; never wrap the ordinal."};
 }  // namespace Horo::Vfx::VfxErrors

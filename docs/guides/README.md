@@ -31,6 +31,9 @@ workflows.
 - [CPU Particle Buffer Migration](./cpu-particle-buffer-migration.md):
   replace per-particle storage and freelists with bounded aligned SoA storage and
   generation-safe spawn/kill bookkeeping.
+- [CPU Particle Spawn Pipeline Migration](./cpu-particle-spawn-pipeline-migration.md):
+  prepare deterministic continuous/burst birth, descriptor initialization and expiry
+  over fixed SoA capacity without steady-state allocation.
 
 ## Writing a Guide
 

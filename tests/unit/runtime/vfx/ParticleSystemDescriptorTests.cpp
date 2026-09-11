@@ -1,6 +1,7 @@
 #include "Horo/Foundation/ModuleDescriptor.h"
 #include "Horo/Vfx/ParticleSystemDescriptor.h"
 #include "Horo/Vfx/VfxErrors.h"
+#include "support/VfxTestSupport.h"
 
 #include <algorithm>
 #include <array>
@@ -15,57 +16,19 @@
 namespace Horo::Vfx {
     namespace {
         [[nodiscard]] Assets::AssetId Material(const std::string_view text = "00112233-4455-6677-8899-aabbccddeeff") {
-            auto material = Assets::AssetId::Parse(text);
-            REQUIRE(material.HasValue());
-            return material.Value();
+            return Tests::ParticleMaterial(text);
         }
 
         [[nodiscard]] EmitterId Emitter() {
-            auto scope = VfxIdentityScope::Create(42);
-            REQUIRE(scope.HasValue());
-            auto emitter = MakeVfxIdentity<EmitterIdentityTag>(scope.Value(), 7, 3);
-            REQUIRE(emitter.HasValue());
-            return emitter.Value();
+            return Tests::ParticleEmitter();
         }
 
         [[nodiscard]] ParticleSystemDescriptorData ValidData() {
-            return {.version = CurrentParticleDescriptorSchemaVersion,
-                    .emitter = Emitter(),
-                    .simulationPreference = SimulationPreference::PreferGPU,
-                    .maximumParticles = 4'096,
-                    .shape = ParticleEmitterShape::Cone,
-                    .spawnRate = {100.0, 500.0},
-                    .lifetimeKind = ParticleLifetimeKind::Finite,
-                    .lifetimeSeconds = {0.5, 4.0},
-                    .killCondition = ParticleKillCondition::Lifetime,
-                    .initialSpeed = {-2.0, 12.0},
-                    .initialSize = {0.1, 2.0},
-                    .initialOpacity = {0.25, 1.0},
-                    .material = Material(),
-                    .renderMode = ParticleRenderMode::Billboard,
-                    .sortMode = ParticleSortMode::ByDistance,
-                    .collisionMode = ParticleCollisionMode::SceneDepth};
+            return Tests::ValidParticleDescriptorData();
         }
 
         [[nodiscard]] ErrorCodeRegistry Registry() {
-            const std::array descriptors{&VfxErrors::ParticleDescriptorMalformed,
-                                         &VfxErrors::ParticleDescriptorDuplicate,
-                                         &VfxErrors::ParticleDescriptorVersionUnsupported,
-                                         &VfxErrors::ParticleDescriptorLimitExceeded,
-                                         &VfxErrors::ParticleRangeInvalid,
-                                         &VfxErrors::ParticleLifetimeUnbounded,
-                                         &VfxErrors::ParticleModeIncompatible,
-                                         &VfxErrors::ParticleMaterialMissing,
-                                         &VfxErrors::ParticleMaterialTypeMismatch,
-                                         &VfxErrors::ParticleMaterialUnloadable,
-                                         &VfxErrors::ParticleCookTierExceeded};
-            ModuleDescriptor module{.id = {"horo.vfx"},
-                                    .version = {1, 0, 0},
-                                    .errorDomains = {
-                                        {.id = ErrorDomainId{"horo.vfx"}, .descriptors = {descriptors.begin(), descriptors.end()}}}};
-            auto registry = BuildErrorCodeRegistry(std::span{&module, 1});
-            REQUIRE(registry.HasValue());
-            return registry.Value();
+            return Tests::ParticleErrorRegistry();
         }
 
         [[nodiscard]] std::string ValidJson() {
