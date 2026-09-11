@@ -68,11 +68,6 @@ namespace Horo::Release {
             return (value >= 'a' && value <= 'z') || (value >= '0' && value <= '9') || value == '.' || value == '_' || value == '-';
         }
 
-        [[nodiscard]] bool IsValidIdentity(const std::string_view value) noexcept {
-            return !value.empty() && value.size() <= MaximumDistributionIdentityBytes && value.front() >= 'a' && value.front() <= 'z' &&
-                   std::ranges::all_of(value, IsIdentityCharacter);
-        }
-
         [[nodiscard]] bool IsKnownProduct(const DistributionProductKind kind) noexcept {
             return kind >= DistributionProductKind::Editor && kind <= DistributionProductKind::GameDedicatedServer;
         }
@@ -105,15 +100,13 @@ namespace Horo::Release {
             if (!IsKnownProduct(product.kind))
                 return false;
             const bool renderer = product.kind == DistributionProductKind::RendererComponent;
-            return renderer ? IsValidIdentity(product.componentId) : product.componentId.empty();
+            return renderer ? IsValidDistributionIdentity(product.componentId) : product.componentId.empty();
         }
 
-        [[nodiscard]] bool SupportsArtifactClass(const DistributionArtifactIdentity &artifact,
-                                                 const DistributionPackageFormat format) noexcept {
-            if (artifact.artifactClass == DistributionArtifactClass::InstallableProduct)
-                return artifact.installation.has_value() && IsValidIdentity(artifact.installation->value);
-            if (artifact.installation.has_value())
-                return false;
+        [[nodiscard]] bool SupportsArtifactClassFormat(const DistributionArtifactClass artifactClass,
+                                                       const DistributionPackageFormat format) noexcept {
+            if (artifactClass == DistributionArtifactClass::InstallableProduct)
+                return true;
             return format == DistributionPackageFormat::ZipArchive || format == DistributionPackageFormat::TarGzip;
         }
 
@@ -131,6 +124,12 @@ namespace Horo::Release {
         }
     }  // namespace
 
+    /** @copydoc IsValidDistributionIdentity */
+    bool IsValidDistributionIdentity(const std::string_view value) noexcept {
+        return !value.empty() && value.size() <= MaximumDistributionIdentityBytes && value.front() >= 'a' && value.front() <= 'z' &&
+               std::ranges::all_of(value, IsIdentityCharacter);
+    }
+
     /** @copydoc DescribeDistributionPackageFormat */
     Result<DistributionPackageCapabilities> DescribeDistributionPackageFormat(const DistributionPackageFormat format,
                                                                               const DistributionPlatform platform) {
@@ -140,16 +139,33 @@ namespace Horo::Release {
         return Result<DistributionPackageCapabilities>::Success(descriptor->capabilities);
     }
 
+    /** @copydoc ValidateDistributionProductPackageFormat */
+    Result<DistributionPackageCapabilities> ValidateDistributionProductPackageFormat(const DistributionProductIdentity &product,
+                                                                                     const DistributionArtifactClass artifactClass,
+                                                                                     const DistributionPlatform platform,
+                                                                                     const DistributionPackageFormat format) {
+        if (!ValidProductIdentity(product) || !IsKnownArtifactClass(artifactClass))
+            return Result<DistributionPackageCapabilities>::Failure(MakeError(ReleaseErrors::DistributionIdentityInvalid));
+        auto capabilities = DescribeDistributionPackageFormat(format, platform);
+        if (capabilities.HasError() || !SupportsArtifactClassFormat(artifactClass, format) || !SupportsProduct(product, format))
+            return Result<DistributionPackageCapabilities>::Failure(MakeError(ReleaseErrors::DistributionCombinationUnsupported));
+        return capabilities;
+    }
+
     /** @copydoc ValidateDistributionPackageSelection */
     Result<DistributionPackageSelection> ValidateDistributionPackageSelection(const DistributionArtifactIdentity &artifact,
                                                                               const DistributionPackageFormat format) {
         if (!ValidProductIdentity(artifact.product) || !IsKnownArchitecture(artifact.architecture) ||
-            !IsKnownArtifactClass(artifact.artifactClass) || !IsValidIdentity(artifact.build.value) ||
-            !IsValidIdentity(artifact.package.value) || !ProductVersionMatches(artifact))
+            !IsKnownArtifactClass(artifact.artifactClass) || !IsValidDistributionIdentity(artifact.build.value) ||
+            !IsValidDistributionIdentity(artifact.package.value) || !ProductVersionMatches(artifact))
             return Result<DistributionPackageSelection>::Failure(MakeError(ReleaseErrors::DistributionIdentityInvalid));
-        auto capabilities = DescribeDistributionPackageFormat(format, artifact.platform);
-        if (capabilities.HasError() || !SupportsArtifactClass(artifact, format) || !SupportsProduct(artifact.product, format))
+        const bool installable = artifact.artifactClass == DistributionArtifactClass::InstallableProduct;
+        if (installable != artifact.installation.has_value() ||
+            (artifact.installation.has_value() && !IsValidDistributionIdentity(artifact.installation->value)))
             return Result<DistributionPackageSelection>::Failure(MakeError(ReleaseErrors::DistributionCombinationUnsupported));
+        auto capabilities = ValidateDistributionProductPackageFormat(artifact.product, artifact.artifactClass, artifact.platform, format);
+        if (capabilities.HasError())
+            return Result<DistributionPackageSelection>::Failure(capabilities.ErrorValue());
         return Result<DistributionPackageSelection>::Success({artifact, format, std::move(capabilities).Value()});
     }
 }  // namespace Horo::Release
