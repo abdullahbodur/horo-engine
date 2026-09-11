@@ -36,6 +36,12 @@ namespace Horo::Runtime::Ui::UiErrors {
     extern const ErrorCodeDescriptor PayloadInvalid;
     /** @brief A scene/component canvas reference lacks stable identity or revision evidence. */
     extern const ErrorCodeDescriptor CanvasReferenceInvalid;
+    /** @brief A canvas descriptor, viewport extent, or caller-supplied scale is malformed. */
+    extern const ErrorCodeDescriptor CanvasSpaceInvalid;
+    /** @brief A screen/world resolver was used with the wrong semantic canvas mode. */
+    extern const ErrorCodeDescriptor CanvasSpaceModeMismatch;
+    /** @brief Canvas resolution cannot be represented safely in the canonical logical domain. */
+    extern const ErrorCodeDescriptor CanvasSpaceOverflow;
     /** @brief A runtime instance cannot admit the requested lifecycle transition. */
     extern const ErrorCodeDescriptor InstanceStateInvalid;
     /** @brief A retained element tree is malformed, disconnected, cyclic, or exceeds its declared depth. */

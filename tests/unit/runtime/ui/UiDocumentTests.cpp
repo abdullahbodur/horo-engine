@@ -67,6 +67,12 @@ namespace Horo::Runtime::Ui {
             for (std::uint8_t marker = 1; marker <= MaximumUiDocumentCanvases; ++marker)
                 REQUIRE(bounded.AddCanvas(Canvas(marker)).HasValue());
             REQUIRE(bounded.AddCanvas(Canvas(65)).HasError());
+
+            UiDocumentBuilder malformedCanvas{IdWith<UiDocumentId>(1), Revision()};
+            auto invalidPolicy = Canvas(3);
+            invalidPolicy.referenceResolution.width = 0;
+            REQUIRE(malformedCanvas.AddCanvas(invalidPolicy).HasValue());
+            REQUIRE(std::move(malformedCanvas).Build().HasError());
         }
 
         TEST_CASE("Cooked UI document owns bytes separately from authoring", "[runtime_ui][document]") {
@@ -140,7 +146,8 @@ namespace Horo::Runtime::Ui {
             const std::array descriptors{&UiErrors::DocumentInvalid,     &UiErrors::DocumentDuplicateIdentity,
                                          &UiErrors::DependencyInvalid,   &UiErrors::CapacityExceeded,
                                          &UiErrors::PayloadInvalid,      &UiErrors::CanvasReferenceInvalid,
-                                         &UiErrors::InstanceStateInvalid};
+                                         &UiErrors::CanvasSpaceInvalid,  &UiErrors::CanvasSpaceModeMismatch,
+                                         &UiErrors::CanvasSpaceOverflow, &UiErrors::InstanceStateInvalid};
             std::set<std::string_view> codes;
             for (const ErrorCodeDescriptor *descriptor : descriptors) {
                 REQUIRE(descriptor->domain.Value() == "horo.runtime_ui");

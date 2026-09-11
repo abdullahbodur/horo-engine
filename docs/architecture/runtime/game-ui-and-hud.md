@@ -205,13 +205,33 @@ supplies logical extent, DPI, safe area, view identity and presented revision.
 ```cpp
 struct UiCanvasDescriptor {
     UiCanvasId id;
+    UiElementId rootElement;
     UiRenderMode renderMode;
-    Vec2 referenceResolution;
+    UiCanvasReferenceResolution referenceResolution;
     UiScaleMode scaleMode;
-    UiSafeAreaPolicy safeAreaPolicy;
-    UiInputScope inputScope;
 };
 ```
+
+This descriptor is the coordinate-space foundation. Safe-area, DPI/font-scale,
+sorting, and input-scope contracts are layered by their owning follow-up
+capabilities rather than being represented by placeholder fields here.
+
+`UiRenderMode` is the closed `ScreenSpaceOverlay`, `ScreenSpaceCamera`, or
+`WorldSpace` vocabulary. `UiScaleMode` is the closed `ScaleWithScreenSize`,
+`ConstantPixelSize`, or `ConstantPhysicalSize` vocabulary. For
+`ScaleWithScreenSize`, Runtime UI chooses the smaller width/reference-width and
+height/reference-height ratio, preserving uniform logical units while exposing
+any additional logical extent on a wider or taller viewport. Constant pixel size
+uses one physical pixel per DIP. Constant physical size consumes a caller-resolved
+positive rational pixels-per-DIP value; Runtime UI does not query a display or
+invent DPI evidence.
+
+Screen resolution uses checked integer rational arithmetic and ties-to-even
+rounding into the 1/64-DIP logical domain. Safe-area insets, font scale, and
+physical pixel snapping remain the later RUI-002.7 policy and are supplied before
+or after this resolver at their declared boundaries. World-space canvases retain
+their authored logical extent in headless/runtime state; camera projection and
+device pixels remain Renderer-owned.
 
 Screen-space UI is resolved after world rendering unless a render graph pass
 explicitly composes it earlier. World-space UI produces normal render instances

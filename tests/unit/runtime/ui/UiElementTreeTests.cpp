@@ -1,4 +1,5 @@
 #include "Horo/Runtime/Ui/UiElementTree.h"
+#include "UiTestUtils.h"
 
 #include <array>
 #include <atomic>
@@ -30,11 +31,7 @@ void operator delete(void *memory, std::size_t) noexcept {
 
 namespace Horo::Runtime::Ui {
     namespace {
-        template <typename Id> Id Stable(const std::uint8_t marker) {
-            SerializedUiId bytes{};
-            bytes.back() = marker;
-            return Id::Create(bytes).Value();
-        }
+        using Test::Stable;
 
         UiOwnershipGeneration Owner(const std::uint64_t value = 7) {
             return UiOwnershipGeneration::Create(value).Value();

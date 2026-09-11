@@ -1206,6 +1206,11 @@ add_executable(HoroRuntimeUiDocumentTests
 )
 target_compile_features(HoroRuntimeUiDocumentTests PRIVATE cxx_std_20)
 target_link_libraries(HoroRuntimeUiDocumentTests PRIVATE HoroEngine::RuntimeUi)
+add_executable(HoroRuntimeUiCanvasSpaceTests
+        unit/runtime/ui/UiCanvasSpaceTests.cpp
+)
+target_compile_features(HoroRuntimeUiCanvasSpaceTests PRIVATE cxx_std_20)
+target_link_libraries(HoroRuntimeUiCanvasSpaceTests PRIVATE HoroEngine::RuntimeUi)
 add_executable(HoroRuntimeUiDiagnosticsTests
         unit/runtime/ui/UiDiagnosticsTests.cpp
 )
@@ -1596,6 +1601,7 @@ set(HORO_CATCH_TEST_TARGETS
         HoroRuntimeSaveCaptureSnapshotTests
         HoroRuntimeUiIdentityTests
         HoroRuntimeUiDocumentTests
+        HoroRuntimeUiCanvasSpaceTests
         HoroRuntimeUiDiagnosticsTests
         HoroRuntimeUiElementTreeTests
         HoroRuntimeUiRenderSnapshotTests
