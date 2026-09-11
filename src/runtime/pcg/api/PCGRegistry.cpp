@@ -62,6 +62,36 @@ namespace Horo::PCG {
             return Result<void>::Success();
         }
 
+        /** @brief Applies the shared lifecycle gate before descriptor-specific mutation validation. */
+        template <typename Descriptor, typename Validator>
+        [[nodiscard]] Result<void> ValidateMutation(const bool closed, Descriptor &descriptor, Validator &&validator) {
+            if (closed)
+                return Result<void>::Failure(MakeError(PCGErrors::RegistryClosed));
+            return std::forward<Validator>(validator)(descriptor);
+        }
+
+        /** @brief Applies graph-specific validation after the common mutation gate. */
+        [[nodiscard]] Result<void> ValidateGraphMutation(const bool closed, PCGGraphDescriptor &descriptor,
+                                                         const PCGRegistryLimits &limits) {
+            return ValidateMutation(closed, descriptor, [&limits](PCGGraphDescriptor &candidate) {
+                return ValidateGraph(candidate, limits);
+            });
+        }
+
+        /** @brief Applies runtime-specific validation after the common mutation gate. */
+        [[nodiscard]] Result<void> ValidateRuntimeMutation(const bool closed, PCGNodeRuntimeDescriptor &descriptor) {
+            return ValidateMutation(closed, descriptor, ValidateRuntime);
+        }
+
+        /** @brief Applies the shared lifecycle and identity gates before removal lookup. */
+        template <typename Identity> [[nodiscard]] Result<void> ValidateRemoval(const bool closed, const Identity identity) {
+            if (closed)
+                return Result<void>::Failure(MakeError(PCGErrors::RegistryClosed));
+            if (!identity.IsValid())
+                return Result<void>::Failure(MakeError(PCGErrors::IdentityInvalid));
+            return Result<void>::Success();
+        }
+
         /** @brief Finds one graph by stable identity in a canonical snapshot. */
         template <typename Range> [[nodiscard]] auto LowerBoundGraph(Range &graphs, const GraphId graph) noexcept {
             return std::ranges::lower_bound(graphs, graph, {}, [](const PCGGraphDescriptor &descriptor) {
@@ -250,28 +280,22 @@ namespace Horo::PCG {
 
     /** @copydoc PCGRegistry::RegisterGraph */
     Result<std::uint64_t> PCGRegistry::RegisterGraph(PCGGraphDescriptor descriptor) {
-        if (closed_)
-            return Result<std::uint64_t>::Failure(MakeError(PCGErrors::RegistryClosed));
-        if (const auto valid = ValidateGraph(descriptor, limits_); valid.HasError())
+        if (const auto valid = ValidateGraphMutation(closed_, descriptor, limits_); valid.HasError())
             return Result<std::uint64_t>::Failure(valid.ErrorValue());
         if (state_->graphs.size() >= limits_.maximumGraphs)
             return Result<std::uint64_t>::Failure(MakeError(PCGErrors::RegistryCapacityExceeded));
-        if (const auto found = LowerBoundGraph(state_->graphs, descriptor.generation.graph);
-            found != state_->graphs.end() && found->generation.graph == descriptor.generation.graph)
+        const auto insertion = LowerBoundGraph(state_->graphs, descriptor.generation.graph);
+        if (insertion != state_->graphs.end() && insertion->generation.graph == descriptor.generation.graph)
             return Result<std::uint64_t>::Failure(MakeError(PCGErrors::RegistryDuplicate));
+        const auto offset = std::distance(state_->graphs.begin(), insertion);
         auto graphs = state_->graphs;
-        graphs.push_back(std::move(descriptor));
-        std::ranges::sort(graphs, {}, [](const PCGGraphDescriptor &graph) {
-            return graph.generation.graph;
-        });
+        graphs.insert(graphs.begin() + offset, std::move(descriptor));
         return Publish(std::move(graphs), state_->runtimes);
     }
 
     /** @copydoc PCGRegistry::ReplaceGraph */
     Result<std::uint64_t> PCGRegistry::ReplaceGraph(PCGGraphDescriptor descriptor) {
-        if (closed_)
-            return Result<std::uint64_t>::Failure(MakeError(PCGErrors::RegistryClosed));
-        if (const auto valid = ValidateGraph(descriptor, limits_); valid.HasError())
+        if (const auto valid = ValidateGraphMutation(closed_, descriptor, limits_); valid.HasError())
             return Result<std::uint64_t>::Failure(valid.ErrorValue());
         auto graphs = state_->graphs;
         const auto found = LowerBoundGraph(graphs, descriptor.generation.graph);
@@ -285,10 +309,8 @@ namespace Horo::PCG {
 
     /** @copydoc PCGRegistry::UnregisterGraph */
     Result<bool> PCGRegistry::UnregisterGraph(const GraphId graph) {
-        if (closed_)
-            return Result<bool>::Failure(MakeError(PCGErrors::RegistryClosed));
-        if (!graph.IsValid())
-            return Result<bool>::Failure(MakeError(PCGErrors::IdentityInvalid));
+        if (const auto valid = ValidateRemoval(closed_, graph); valid.HasError())
+            return Result<bool>::Failure(valid.ErrorValue());
         auto graphs = state_->graphs;
         const auto found = LowerBoundGraph(graphs, graph);
         if (found == graphs.end() || found->generation.graph != graph)
@@ -300,43 +322,37 @@ namespace Horo::PCG {
 
     /** @copydoc PCGRegistry::RegisterNodeRuntime */
     Result<std::uint64_t> PCGRegistry::RegisterNodeRuntime(PCGNodeRuntimeDescriptor descriptor) {
-        if (closed_)
-            return Result<std::uint64_t>::Failure(MakeError(PCGErrors::RegistryClosed));
-        if (const auto valid = ValidateRuntime(descriptor); valid.HasError())
+        if (const auto valid = ValidateRuntimeMutation(closed_, descriptor); valid.HasError())
             return Result<std::uint64_t>::Failure(valid.ErrorValue());
         if (state_->runtimes.size() >= limits_.maximumNodeRuntimes)
             return Result<std::uint64_t>::Failure(MakeError(PCGErrors::RegistryCapacityExceeded));
-        if (const auto found = LowerBoundRuntime(state_->runtimes, descriptor.type);
-            found != state_->runtimes.end() && found->type == descriptor.type)
+        const auto insertion = LowerBoundRuntime(state_->runtimes, descriptor.type);
+        if (insertion != state_->runtimes.end() && insertion->type == descriptor.type)
             return Result<std::uint64_t>::Failure(MakeError(PCGErrors::RegistryDuplicate));
+        const auto offset = std::distance(state_->runtimes.begin(), insertion);
         auto runtimes = state_->runtimes;
-        runtimes.push_back(descriptor);
-        std::ranges::sort(runtimes, {}, &PCGNodeRuntimeDescriptor::type);
+        runtimes.insert(runtimes.begin() + offset, descriptor);
         return Publish(state_->graphs, std::move(runtimes));
     }
 
     /** @copydoc PCGRegistry::ReplaceNodeRuntime */
     Result<std::uint64_t> PCGRegistry::ReplaceNodeRuntime(PCGNodeRuntimeDescriptor descriptor) {
-        if (closed_)
-            return Result<std::uint64_t>::Failure(MakeError(PCGErrors::RegistryClosed));
-        if (const auto valid = ValidateRuntime(descriptor); valid.HasError())
+        if (const auto valid = ValidateRuntimeMutation(closed_, descriptor); valid.HasError())
             return Result<std::uint64_t>::Failure(valid.ErrorValue());
         auto runtimes = state_->runtimes;
         const auto found = LowerBoundRuntime(runtimes, descriptor.type);
         if (found == runtimes.end() || found->type != descriptor.type)
             return Result<std::uint64_t>::Failure(MakeError(PCGErrors::RuntimeUnavailable));
         if (descriptor.contractVersion <= found->contractVersion)
-            return Result<std::uint64_t>::Failure(MakeError(PCGErrors::RegistryHandleStale));
+            return Result<std::uint64_t>::Failure(MakeError(PCGErrors::IdentityStale));
         *found = descriptor;
         return Publish(state_->graphs, std::move(runtimes));
     }
 
     /** @copydoc PCGRegistry::UnregisterNodeRuntime */
     Result<bool> PCGRegistry::UnregisterNodeRuntime(const NodeTypeId type) {
-        if (closed_)
-            return Result<bool>::Failure(MakeError(PCGErrors::RegistryClosed));
-        if (!type.IsValid())
-            return Result<bool>::Failure(MakeError(PCGErrors::IdentityInvalid));
+        if (const auto valid = ValidateRemoval(closed_, type); valid.HasError())
+            return Result<bool>::Failure(valid.ErrorValue());
         auto runtimes = state_->runtimes;
         const auto found = LowerBoundRuntime(runtimes, type);
         if (found == runtimes.end() || found->type != type)
