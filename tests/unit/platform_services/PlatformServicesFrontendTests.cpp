@@ -1,17 +1,16 @@
 #include "Horo/PlatformServices/PlatformServicesFrontend.h"
+#include "PlatformServicesTestSupport.h"
 
 #include <algorithm>
 #include <catch2/catch_test_macros.hpp>
 #include <memory>
 
 namespace Horo::PlatformServices {
+    using TestSupport::AvailableCapabilities;
+    using TestSupport::RequireError;
+
     namespace {
         constexpr std::size_t ServiceCount = static_cast<std::size_t>(PlatformServiceKind::Count);
-
-        template <typename T> void RequireError(const Result<T> &result, const ErrorCodeDescriptor &expected) {
-            REQUIRE(result.HasError());
-            REQUIRE(result.ErrorValue().code.Value() == expected.code.Value());
-        }
 
         class RoutingBackend final : public IPlatformServicesBackend {
         public:
@@ -96,17 +95,7 @@ namespace Horo::PlatformServices {
         };
 
         PlatformServiceCapabilitySnapshot Capabilities(const PlatformProviderGeneration generation = {7}) {
-            PlatformServiceCapabilitySnapshot snapshot{.interfaceVersion = {PlatformServicesBackendInterfaceMajor,
-                                                                            PlatformServicesBackendInterfaceMinor},
-                                                       .provider = {41},
-                                                       .providerGeneration = generation};
-            for (std::size_t index = 0; index < snapshot.services.size(); ++index) {
-                snapshot.services[index] = {.service = static_cast<PlatformServiceKind>(index),
-                                            .availability = PlatformServiceAvailability::Available,
-                                            .limits = {.maxConcurrentRequests = 16, .maxPageEntries = 4, .maxPayloadBytes = 4},
-                                            .binding = PlatformServiceBindingId{index + 1}};
-            }
-            return snapshot;
+            return AvailableCapabilities(generation, {.maxConcurrentRequests = 16, .maxPageEntries = 4, .maxPayloadBytes = 4});
         }
 
         PlatformSessionSnapshot Session(const PlatformProviderGeneration provider = {7}, const PlatformSessionGeneration generation = {5},

@@ -140,18 +140,14 @@ namespace Horo::PlatformServices {
 
     /** @copydoc PlatformServicesFrontend::SubmitScore */
     Result<PlatformRequestHandle<void>> PlatformServicesFrontend::SubmitScore(LeaderboardScoreRequest request) {
-        if (!request.leaderboard.IsValid())
-            return Failure<PlatformRequestHandle<void>>(FrontendErrors::InvalidRequest);
-        if (const auto valid = ValidateSubjectService(PlatformServiceKind::LeaderboardsAndStats, request.subject); valid.HasError())
+        if (const auto valid = ValidateLeaderboardOrStat(request.leaderboard.IsValid(), request.subject); valid.HasError())
             return Result<PlatformRequestHandle<void>>::Failure(valid.ErrorValue());
         return ValidatedDispatch(backend_->SubmitScore(std::move(request)));
     }
 
     /** @copydoc PlatformServicesFrontend::WriteStat */
     Result<PlatformRequestHandle<void>> PlatformServicesFrontend::WriteStat(StatWriteRequest request) {
-        if (!request.stat.IsValid())
-            return Failure<PlatformRequestHandle<void>>(FrontendErrors::InvalidRequest);
-        if (const auto valid = ValidateSubjectService(PlatformServiceKind::LeaderboardsAndStats, request.subject); valid.HasError())
+        if (const auto valid = ValidateLeaderboardOrStat(request.stat.IsValid(), request.subject); valid.HasError())
             return Result<PlatformRequestHandle<void>>::Failure(valid.ErrorValue());
         return ValidatedDispatch(backend_->WriteStat(std::move(request)));
     }
@@ -258,6 +254,14 @@ namespace Horo::PlatformServices {
             return Failure<const PlatformServiceCapability *>(BackendErrors::ServiceUnavailable);
         }
         return Result<const PlatformServiceCapability *>::Success(capability);
+    }
+
+    /** @copydoc PlatformServicesFrontend::ValidateLeaderboardOrStat */
+    Result<void> PlatformServicesFrontend::ValidateLeaderboardOrStat(const bool identityValid, const PlatformSubjectHandle &subject) const {
+        if (!identityValid)
+            return Failure<void>(FrontendErrors::InvalidRequest);
+        const auto valid = ValidateSubjectService(PlatformServiceKind::LeaderboardsAndStats, subject);
+        return valid.HasError() ? Result<void>::Failure(valid.ErrorValue()) : Result<void>::Success();
     }
 
     Result<const PlatformServiceCapability *> PlatformServicesFrontend::ValidateSubjectService(const PlatformServiceKind service,

@@ -110,6 +110,8 @@ namespace Horo::PlatformServices {
         [[nodiscard]] Result<const PlatformServiceCapability *> ValidateService(PlatformServiceKind service) const;
         [[nodiscard]] Result<const PlatformServiceCapability *> ValidateSubjectService(PlatformServiceKind service,
                                                                                        const PlatformSubjectHandle &subject) const;
+        /** @brief Shares stable-identity and subject admission for leaderboard/stat requests. */
+        [[nodiscard]] Result<void> ValidateLeaderboardOrStat(bool identityValid, const PlatformSubjectHandle &subject) const;
 
         std::shared_ptr<IPlatformServicesBackend> backend_;
         PlatformServiceCapabilitySnapshot capabilities_;
