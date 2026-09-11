@@ -4,7 +4,6 @@
 
 #include <algorithm>
 #include <cmath>
-#include <type_traits>
 
 namespace Horo::XR {
     namespace {
@@ -16,12 +15,25 @@ namespace Horo::XR {
         /** @brief Checks the closed Horo render-texture usage mask. */
         [[nodiscard]] bool ValidTextureUsage(const Render::RenderTextureUsage usage) noexcept {
             using enum Render::RenderTextureUsage;
-            using UsageBits = std::underlying_type_t<Render::RenderTextureUsage>;
-            constexpr UsageBits validBits = static_cast<UsageBits>(Sampled) | static_cast<UsageBits>(RenderAttachment) |
-                                            static_cast<UsageBits>(CopySource) | static_cast<UsageBits>(CopyDestination) |
-                                            static_cast<UsageBits>(Storage);
-            const auto bits = static_cast<UsageBits>(usage);
-            return bits != 0 && (bits & static_cast<UsageBits>(~validBits)) == 0 && Render::HasTextureUsage(usage, RenderAttachment);
+            constexpr std::array validUsages{
+                RenderAttachment,
+                RenderAttachment | Sampled,
+                RenderAttachment | CopySource,
+                RenderAttachment | CopyDestination,
+                RenderAttachment | Storage,
+                RenderAttachment | Sampled | CopySource,
+                RenderAttachment | Sampled | CopyDestination,
+                RenderAttachment | Sampled | Storage,
+                RenderAttachment | CopySource | CopyDestination,
+                RenderAttachment | CopySource | Storage,
+                RenderAttachment | CopyDestination | Storage,
+                RenderAttachment | Sampled | CopySource | CopyDestination,
+                RenderAttachment | Sampled | CopySource | Storage,
+                RenderAttachment | Sampled | CopyDestination | Storage,
+                RenderAttachment | CopySource | CopyDestination | Storage,
+                RenderAttachment | Sampled | CopySource | CopyDestination | Storage,
+            };
+            return std::ranges::find(validUsages, usage) != validUsages.end();
         }
 
         /** @brief Reports whether a Horo render format has depth semantics. */
@@ -97,8 +109,7 @@ namespace Horo::XR {
                     return prior.id == view.id;
                 }))
                     return Reject<void>(XRErrors::ViewPlanInvalid);
-                auto pose = XRPoseSample::Create(view.pose, activeSession, activeOriginRevision);
-                if (pose.HasError())
+                if (auto pose = XRPoseSample::Create(view.pose, activeSession, activeOriginRevision); pose.HasError())
                     return Result<void>::Failure(pose.ErrorValue());
                 if (view.pose.purpose != XRPosePurpose::PresentationPrediction || view.pose.time.simulation.has_value() ||
                     view.pose.time.renderPrediction != descriptor.predictedDisplayTime)
@@ -239,8 +250,7 @@ namespace Horo::XR {
                     return Reject<void>(XRErrors::ExternalTargetInvalid);
                 if (auto target = ValidateXRSessionObject(active.target, activeSession); target.HasError())
                     return target;
-                const auto priorImages = acquiredImages.first(index);
-                if (std::ranges::find(priorImages, active) != priorImages.end())
+                if (const auto priorImages = acquiredImages.first(index); std::ranges::find(priorImages, active) != priorImages.end())
                     return Reject<void>(XRErrors::ExternalTargetInvalid);
                 if (std::ranges::none_of(targets, [&active](const XRExternalRenderTargetDescriptor &target) {
                     return SameImageSlot(target.image, active);
@@ -290,26 +300,32 @@ namespace Horo::XR {
             return Result<void>::Success();
         }
 
+        /** @brief Current owner state used to revalidate an immutable view plan. */
+        struct ViewPlanLiveness final {
+            XRSessionId session;
+            XRViewConfigurationId configuration;
+            XRViewConfigurationRevision configurationRevision;
+            XRWorldOriginRevision originRevision;
+        };
+
         /** @brief Validates exact session, configuration, revision, origin, and image liveness. */
         [[nodiscard]] Result<void> ValidateLiveness(const XRViewConfigurationDescriptor &configuration,
                                                     const std::span<const XRViewDescriptor> views,
                                                     const std::span<const XRExternalRenderTargetDescriptor> targets,
-                                                    const XRSessionId &activeSession, const XRViewConfigurationId &activeConfiguration,
-                                                    const XRViewConfigurationRevision expectedRevision,
-                                                    const XRWorldOriginRevision activeOriginRevision,
+                                                    const ViewPlanLiveness &active,
                                                     const std::span<const XRSwapchainImageId> acquiredImages) {
             if (auto configurationState =
-                    ValidateConfigurationLiveness(configuration, activeSession, activeConfiguration, expectedRevision);
+                    ValidateConfigurationLiveness(configuration, active.session, active.configuration, active.configurationRevision);
                 configurationState.HasError())
                 return configurationState;
-            if (!activeOriginRevision.IsValid())
+            if (!active.originRevision.IsValid())
                 return Reject<void>(XRErrors::ViewPlanInvalid);
             for (const auto &view : views) {
-                if (view.pose.source.worldOriginRevision != activeOriginRevision ||
-                    view.pose.target.worldOriginRevision != activeOriginRevision)
+                if (view.pose.source.worldOriginRevision != active.originRevision ||
+                    view.pose.target.worldOriginRevision != active.originRevision)
                     return Reject<void>(XRErrors::OriginRevisionStale);
             }
-            return ValidateAcquiredImages(targets, acquiredImages, activeSession);
+            return ValidateAcquiredImages(targets, acquiredImages, active.session);
         }
     }  // namespace
 
@@ -386,7 +402,12 @@ namespace Horo::XR {
                                           const XRViewConfigurationRevision expectedRevision,
                                           const XRWorldOriginRevision activeOriginRevision,
                                           const std::span<const XRSwapchainImageId> acquiredImages) {
-        return ValidateLiveness(plan.Configuration(), plan.Views(), plan.Targets(), activeSession, activeConfiguration, expectedRevision,
-                                activeOriginRevision, acquiredImages);
+        const ViewPlanLiveness active{
+            .session = activeSession,
+            .configuration = activeConfiguration,
+            .configurationRevision = expectedRevision,
+            .originRevision = activeOriginRevision,
+        };
+        return ValidateLiveness(plan.Configuration(), plan.Views(), plan.Targets(), active, acquiredImages);
     }
 }  // namespace Horo::XR
