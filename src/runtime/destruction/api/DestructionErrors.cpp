@@ -149,4 +149,22 @@ namespace Horo::Destruction::DestructionErrors {
                                                    .summary = "The destruction command terminal result is internally inconsistent.",
                                                    .remediationHint =
                                                        "Discard the result and terminate the exact command with a valid typed outcome."};
+    const ErrorCodeDescriptor RegistryInvalid{.domain = DestructionDomain,
+                                              .code = ErrorCode{"destruction.registry.invalid"},
+                                              .defaultSeverity = ErrorSeverity::Error,
+                                              .summary = "The destruction registry input or bounded query is malformed.",
+                                              .remediationHint =
+                                                  "Use valid immutable records and non-zero limits within the registry ceilings."};
+    const ErrorCodeDescriptor RegistryDuplicate{.domain = DestructionDomain,
+                                                .code = ErrorCode{"destruction.registry.duplicate"},
+                                                .defaultSeverity = ErrorSeverity::Warning,
+                                                .summary = "The destruction registry already contains this target or authored owner.",
+                                                .remediationHint =
+                                                    "Update the owner publication or use explicit next-generation replacement."};
+    const ErrorCodeDescriptor RegistryCapacityExceeded{.domain = DestructionDomain,
+                                                       .code = ErrorCode{"destruction.registry.capacity_exceeded"},
+                                                       .defaultSeverity = ErrorSeverity::Warning,
+                                                       .summary = "The destruction registry operation exceeds an explicit finite bound.",
+                                                       .remediationHint =
+                                                           "Reduce the registration or query count; never truncate implicitly."};
 }  // namespace Horo::Destruction::DestructionErrors
