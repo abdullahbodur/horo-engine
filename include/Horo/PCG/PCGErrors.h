@@ -80,4 +80,8 @@ namespace Horo::PCG::PCGErrors {
     extern const ErrorCodeDescriptor GraphReplacementInvalid;
     /** @brief Graph-source work was rejected because cancellation or shutdown closed admission. */
     extern const ErrorCodeDescriptor GraphLifecycleUnavailable;
+    /** @brief Pre-compile graph validation rejected source, registry, capability, or runtime evidence. */
+    extern const ErrorCodeDescriptor GraphValidationFailed;
+    /** @brief Pre-compile graph validation exceeded a finite work or diagnostic ceiling. */
+    extern const ErrorCodeDescriptor GraphValidationCapacityExceeded;
 }  // namespace Horo::PCG::PCGErrors

@@ -206,4 +206,16 @@ namespace Horo::PCG::PCGErrors {
                                                         .defaultSeverity = ErrorSeverity::Warning,
                                                         .summary = "PCG graph-source admission is closed.",
                                                         .remediationHint = "Do not begin source work after cancellation or shutdown."};
+    const ErrorCodeDescriptor GraphValidationFailed{.domain = PcgDomain,
+                                                    .code = ErrorCode{"pcg.graph.validation_failed"},
+                                                    .defaultSeverity = ErrorSeverity::Error,
+                                                    .summary = "The PCG graph failed pre-compile validation.",
+                                                    .remediationHint =
+                                                        "Repair the typed cause and validate again before compiling or evaluating."};
+    const ErrorCodeDescriptor
+        GraphValidationCapacityExceeded{.domain = PcgDomain,
+                                        .code = ErrorCode{"pcg.graph.validation_capacity_exceeded"},
+                                        .defaultSeverity = ErrorSeverity::Error,
+                                        .summary = "The PCG graph validation pass exceeded a finite ceiling.",
+                                        .remediationHint = "Reduce the graph or select an explicitly larger admitted validation bound."};
 }  // namespace Horo::PCG::PCGErrors
