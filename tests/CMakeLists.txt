@@ -373,6 +373,7 @@ add_executable(HoroXRApiTests
         unit/runtime/xr/XRApiContractTests.cpp
         unit/runtime/xr/XRSpacePoseTests.cpp
         unit/runtime/xr/XRTrackingSnapshotTests.cpp
+        unit/runtime/xr/XRViewRenderPlanTests.cpp
 )
 target_compile_features(HoroXRApiTests PRIVATE cxx_std_20)
 target_include_directories(HoroXRApiTests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})

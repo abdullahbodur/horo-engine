@@ -279,6 +279,16 @@ must consume these Horo types without duplicating them, serializing process-loca
 identity values, or exposing OpenXR headers, handles, result integers, extension
 names, or platform-native types through the public boundary.
 
+## XRA-004.2 Migration Notes
+
+`HoroEngine::XRApi` additionally owns `Horo/XR/XRViewRenderPlan.h` and now declares
+`HoroEngine::RenderApi` as a narrow public dependency for canonical Horo texture format,
+usage, and extent values. XR producers replace fixed eye arrays and native swapchain
+image values with one bounded `XRViewRenderPlan`; private bridges retain all native
+handles. Consumers must revalidate exact session, configuration, origin, and acquired
+image generations before Renderer use. There is no existing production XR rendering
+caller to migrate.
+
 ## TRF-001.2 Migration Notes
 
 `HoroEngine::TerrainApi` owns `Horo/Terrain/TerrainIdentity.h` and

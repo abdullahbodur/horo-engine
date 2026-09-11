@@ -44,6 +44,12 @@ namespace Horo::XR::XRErrors {
     extern const ErrorCodeDescriptor TrackingSnapshotInvalid;
     /** @brief An XR tracking snapshot revision no longer matches the consumer's retained revision. */
     extern const ErrorCodeDescriptor TrackingSnapshotStale;
+    /** @brief An XR view/configuration/render-target plan is malformed or non-canonical. */
+    extern const ErrorCodeDescriptor ViewPlanInvalid;
+    /** @brief An XR view-configuration publication was replaced after capture. */
+    extern const ErrorCodeDescriptor ViewConfigurationStale;
+    /** @brief An external XR render target has malformed identity, format, usage, extent, or ordering. */
+    extern const ErrorCodeDescriptor ExternalTargetInvalid;
 
     /**
      * @brief Returns every stable XRApi descriptor for module-registry contribution.

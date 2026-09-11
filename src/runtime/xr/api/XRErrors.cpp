@@ -160,6 +160,33 @@ namespace Horo::XR::XRErrors {
         .retryable = true,
         .userActionable = false,
     };
+    const ErrorCodeDescriptor ViewPlanInvalid{
+        .domain = XRDomain,
+        .code = ErrorCode{"xr.view_plan.invalid"},
+        .defaultSeverity = ErrorSeverity::Error,
+        .summary = "The XR view plan contains malformed, contradictory, or non-canonical evidence.",
+        .remediationHint = "Publish one complete bounded runtime-ordered view set from the active configuration and prediction time.",
+        .retryable = false,
+        .userActionable = false,
+    };
+    const ErrorCodeDescriptor ViewConfigurationStale{
+        .domain = XRDomain,
+        .code = ErrorCode{"xr.view_configuration.stale"},
+        .defaultSeverity = ErrorSeverity::Warning,
+        .summary = "The retained XR view-configuration publication has been replaced.",
+        .remediationHint = "Capture the current configuration identity and revision before acquiring render targets.",
+        .retryable = true,
+        .userActionable = false,
+    };
+    const ErrorCodeDescriptor ExternalTargetInvalid{
+        .domain = XRDomain,
+        .code = ErrorCode{"xr.external_target.invalid"},
+        .defaultSeverity = ErrorSeverity::Error,
+        .summary = "An XR external render target has invalid identity, format, usage, extent, or ordering.",
+        .remediationHint = "Use a current runtime-owned image and a compatible Horo color or depth attachment descriptor.",
+        .retryable = false,
+        .userActionable = false,
+    };
 
     /** @copydoc Descriptors */
     std::span<const ErrorCodeDescriptor *const> Descriptors() noexcept {
@@ -181,6 +208,9 @@ namespace Horo::XR::XRErrors {
             &OriginRevisionStale,
             &TrackingSnapshotInvalid,
             &TrackingSnapshotStale,
+            &ViewPlanInvalid,
+            &ViewConfigurationStale,
+            &ExternalTargetInvalid,
         };
         return descriptors;
     }

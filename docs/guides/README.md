@@ -43,6 +43,9 @@ workflows.
 - [Grounded Navigation Provider Composition](./grounded-navigation-provider-composition.md):
   compose the pinned Detour runtime provider from neutral topology with explicit
   capacity, world-generation, cancellation, and teardown behavior.
+- [XR View and External Render-Target Contract Migration](./xr-view-render-plan-migration.md):
+  publish bounded runtime-ordered views and generation-fenced Horo external target
+  requirements without fixed stereo arrays or native image types.
 
 ## Writing a Guide
 
