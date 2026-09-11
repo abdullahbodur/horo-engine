@@ -42,6 +42,10 @@ namespace Horo::Runtime::Ui {
                 &UiErrors::RenderResourceReferenceInvalid,
                 &UiErrors::RenderSnapshotStorageExhausted,
                 &UiErrors::RenderSnapshotLifecycleUnavailable,
+                &UiErrors::RenderCompositionCapacityExceeded,
+                &UiErrors::RenderCompositionInvalid,
+                &UiErrors::RenderPresentationInvalid,
+                &UiErrors::RenderPresentationStale,
                 &UiErrors::DiagnosticInvalid,
                 &UiErrors::DiagnosticUnsupported,
             };

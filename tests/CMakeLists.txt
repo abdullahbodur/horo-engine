@@ -1135,6 +1135,7 @@ target_link_libraries(HoroShaderManifestTests PRIVATE HoroEngine::RenderApi)
 add_executable(HoroRenderFrontendTests
         unit/runtime/renderer/RenderFrontendTests.cpp
         unit/runtime/renderer/RenderResourceRegistryTests.cpp
+        unit/runtime/renderer/UiRenderCompositionTests.cpp
 )
 
 target_compile_features(HoroRenderFrontendTests PRIVATE cxx_std_20)

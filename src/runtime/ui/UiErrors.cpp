@@ -238,6 +238,42 @@ namespace Horo::Runtime::Ui::UiErrors {
                                            "Create a new extractor for the active view generation before publishing another snapshot.",
                                            false,
                                            false};
+    /** @copydoc RenderCompositionCapacityExceeded */
+    const ErrorCodeDescriptor
+        RenderCompositionCapacityExceeded{UiDomain,
+                                          ErrorCode{"runtime_ui.render_composition.capacity_exceeded"},
+                                          ErrorSeverity::Error,
+                                          "The Runtime UI render composition request exceeds its bounded pass capacity.",
+                                          "Split the view plan or increase its admitted capacity within the repository ceiling.",
+                                          true,
+                                          false};
+    /** @copydoc RenderCompositionInvalid */
+    const ErrorCodeDescriptor
+        RenderCompositionInvalid{UiDomain,
+                                 ErrorCode{"runtime_ui.render_composition.invalid"},
+                                 ErrorSeverity::Error,
+                                 "The Runtime UI render composition request is invalid.",
+                                 "Use one exact view and graph with ordered compatible color, depth, space, and pass declarations.",
+                                 false,
+                                 false};
+    /** @copydoc RenderPresentationInvalid */
+    const ErrorCodeDescriptor
+        RenderPresentationInvalid{UiDomain,
+                                  ErrorCode{"runtime_ui.render_presentation.invalid"},
+                                  ErrorSeverity::Error,
+                                  "The Runtime UI render presentation result is invalid.",
+                                  "Correlate a known terminal outcome and reason with valid view, canvas, and revision evidence.",
+                                  false,
+                                  false};
+    /** @copydoc RenderPresentationStale */
+    const ErrorCodeDescriptor
+        RenderPresentationStale{UiDomain,
+                                ErrorCode{"runtime_ui.render_presentation.stale"},
+                                ErrorSeverity::Error,
+                                "The Runtime UI render presentation result is stale.",
+                                "Discard older completion evidence and retain the latest successfully presented interaction revision.",
+                                false,
+                                false};
     /** @copydoc DiagnosticInvalid */
     const ErrorCodeDescriptor
         DiagnosticInvalid{UiDomain,

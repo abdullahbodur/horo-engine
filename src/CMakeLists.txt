@@ -228,6 +228,7 @@ add_library(HoroRuntimeUi STATIC
         runtime/ui/UiDiagnostics.cpp
         runtime/ui/UiElementTree.cpp
         runtime/ui/UiRenderSnapshot.cpp
+        runtime/ui/UiPresentationReceipt.cpp
 )
 add_library(HoroEngine::RuntimeUi ALIAS HoroRuntimeUi)
 target_compile_features(HoroRuntimeUi PUBLIC cxx_std_20)
@@ -706,6 +707,7 @@ add_library(HoroRenderFrontend STATIC
         runtime/renderer/frontend/RenderFrontendErrors.cpp
         runtime/renderer/frontend/RenderResourceOperations.cpp
         runtime/renderer/frontend/RenderResourceRegistry.cpp
+        runtime/renderer/frontend/UiRenderComposition.cpp
 )
 add_library(HoroEngine::RenderFrontend ALIAS HoroRenderFrontend)
 
@@ -718,6 +720,7 @@ target_link_libraries(HoroRenderFrontend
         PUBLIC
         HoroEngine::RenderApi
         HoroEngine::RenderBackendRegistry
+        HoroEngine::RuntimeUi
 )
 
 add_library(HoroSceneModel STATIC

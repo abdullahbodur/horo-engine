@@ -64,6 +64,14 @@ namespace Horo::Runtime::Ui::UiErrors {
     extern const ErrorCodeDescriptor RenderSnapshotStorageExhausted;
     /** @brief A Runtime UI render extractor is closed and no longer accepts snapshots. */
     extern const ErrorCodeDescriptor RenderSnapshotLifecycleUnavailable;
+    /** @brief A Runtime UI render composition request exceeds its declared bounded pass capacity. */
+    extern const ErrorCodeDescriptor RenderCompositionCapacityExceeded;
+    /** @brief A Runtime UI render composition pass has invalid view, graph, target, ordering, or space policy. */
+    extern const ErrorCodeDescriptor RenderCompositionInvalid;
+    /** @brief Runtime UI render-completion evidence has an invalid outcome or reason. */
+    extern const ErrorCodeDescriptor RenderPresentationInvalid;
+    /** @brief Runtime UI render-completion evidence is older than the last observed or presented revision. */
+    extern const ErrorCodeDescriptor RenderPresentationStale;
     /** @brief Runtime UI diagnostic evidence is malformed or exceeds its fixed bounds. */
     extern const ErrorCodeDescriptor DiagnosticInvalid;
     /** @brief A Runtime UI diagnostic category or source error is not part of the declared contract. */

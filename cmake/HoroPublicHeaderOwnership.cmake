@@ -122,6 +122,7 @@ horo_configure_target_header_boundary(HoroRuntimeUi PUBLIC_HEADERS
     Horo/Runtime/Ui/UiDiagnostics.h
     Horo/Runtime/Ui/UiElementTree.h
     Horo/Runtime/Ui/UiRenderSnapshot.h
+    Horo/Runtime/Ui/UiPresentationReceipt.h
 )
 horo_configure_target_header_boundary(HoroNetworkApi PUBLIC_HEADERS
     Horo/Network/MessageCodecRegistry.h
@@ -392,6 +393,7 @@ horo_configure_target_header_boundary(HoroRenderBackendRegistry PUBLIC_HEADERS
 )
 horo_configure_target_header_boundary(HoroRenderFrontend PUBLIC_HEADERS
     Horo/Runtime/Render/RenderFrontend.h
+    Horo/Runtime/Render/UiRenderComposition.h
 )
 horo_configure_target_header_boundary(HoroSceneModel PUBLIC_HEADERS
     Horo/Runtime/Scene/PrimitiveCatalog.h
