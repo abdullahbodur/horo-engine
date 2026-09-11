@@ -27,13 +27,6 @@ namespace Horo::Physics {
         }
     }  // namespace
 
-    /** @copydoc PhysicsCommandSourceId::Create */
-    Result<PhysicsCommandSourceId> PhysicsCommandSourceId::Create(const std::uint64_t value) {
-        if (value == 0)
-            return Result<PhysicsCommandSourceId>::Failure(MakeError(PhysicsErrors::CommandOrderInvalid));
-        return Result<PhysicsCommandSourceId>::Success(PhysicsCommandSourceId{value});
-    }
-
     /** @copydoc ValidatePhysicsCommandOrderKey */
     Result<void> ValidatePhysicsCommandOrderKey(const PhysicsCommandOrderKey &key) {
         if (key.protocolVersion != PhysicsCommandOrderingProtocolV1 || key.simulationTick == 0 || key.worldGeneration == 0 ||
@@ -49,13 +42,6 @@ namespace Horo::Physics {
                         left.targetIdentity, left.commandKind, left.source, left.sourceSequence) <
                std::tie(right.protocolVersion, right.simulationTick, right.worldGeneration, right.sceneGeneration, right.targetKind,
                         right.targetIdentity, right.commandKind, right.source, right.sourceSequence);
-    }
-
-    /** @copydoc PhysicsRandomStreamId::Create */
-    Result<PhysicsRandomStreamId> PhysicsRandomStreamId::Create(const std::uint64_t value) {
-        if (value == 0)
-            return Result<PhysicsRandomStreamId>::Failure(MakeError(PhysicsErrors::SeedPolicyInvalid));
-        return Result<PhysicsRandomStreamId>::Success(PhysicsRandomStreamId{value});
     }
 
     /** @copydoc ValidatePhysicsSeedPolicy */

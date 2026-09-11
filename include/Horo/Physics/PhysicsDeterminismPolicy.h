@@ -4,7 +4,8 @@
  * @brief Versioned canonical command-order and random-stream seed contracts.
  */
 
-#include "Horo/Foundation/Result.h"
+#include "Horo/Foundation/StrongId.h"
+#include "Horo/Physics/PhysicsErrors.h"
 
 #include <array>
 #include <cstdint>
@@ -33,33 +34,13 @@ namespace Horo::Physics {
         Destroy = 2
     };
 
+    namespace Detail {
+        struct PhysicsCommandSourceIdTag;
+        struct PhysicsRandomStreamIdTag;
+    }  // namespace Detail
+
     /** @brief Non-zero stable identity of one command-producing authority, never a thread or process ID. */
-    class PhysicsCommandSourceId final {
-    public:
-        /** @brief Constructs an invalid source identity. */
-        PhysicsCommandSourceId() = default;
-        /** @brief Validates a stable authored source identity. @param value Non-zero durable value.
-         * @return Typed identity or PhysicsErrors::CommandOrderInvalid.
-         */
-        [[nodiscard]] static Result<PhysicsCommandSourceId> Create(std::uint64_t value);
-
-        /** @brief Returns the stable value. @return Zero only for the invalid default identity. */
-        [[nodiscard]] constexpr std::uint64_t Value() const noexcept {
-            return value_;
-        }
-
-        /** @brief Checks representation only. @return Whether the value is non-zero. */
-        [[nodiscard]] constexpr bool IsValid() const noexcept {
-            return value_ != 0;
-        }
-
-        auto operator<=>(const PhysicsCommandSourceId &) const noexcept = default;
-
-    private:
-        explicit constexpr PhysicsCommandSourceId(const std::uint64_t value) : value_(value) {}
-
-        std::uint64_t value_{};
-    };
+    using PhysicsCommandSourceId = Foundation::Detail::NonZeroId64<Detail::PhysicsCommandSourceIdTag, PhysicsErrors::CommandOrderInvalid>;
 
     /** @brief Complete canonical key for one simulation-affecting structural command. */
     struct PhysicsCommandOrderKey final {
@@ -93,32 +74,7 @@ namespace Horo::Physics {
     };
 
     /** @brief Non-zero named Physics random stream identity, never a display string or global RNG handle. */
-    class PhysicsRandomStreamId final {
-    public:
-        /** @brief Constructs an invalid stream identity. */
-        PhysicsRandomStreamId() = default;
-        /** @brief Validates a stable named-stream value. @param value Non-zero reviewed stream identity.
-         * @return Typed identity or PhysicsErrors::SeedPolicyInvalid.
-         */
-        [[nodiscard]] static Result<PhysicsRandomStreamId> Create(std::uint64_t value);
-
-        /** @brief Returns the stable value. @return Zero only for the invalid default identity. */
-        [[nodiscard]] constexpr std::uint64_t Value() const noexcept {
-            return value_;
-        }
-
-        /** @brief Checks representation only. @return Whether the value is non-zero. */
-        [[nodiscard]] constexpr bool IsValid() const noexcept {
-            return value_ != 0;
-        }
-
-        auto operator<=>(const PhysicsRandomStreamId &) const noexcept = default;
-
-    private:
-        explicit constexpr PhysicsRandomStreamId(const std::uint64_t value) : value_(value) {}
-
-        std::uint64_t value_{};
-    };
+    using PhysicsRandomStreamId = Foundation::Detail::NonZeroId64<Detail::PhysicsRandomStreamIdTag, PhysicsErrors::SeedPolicyInvalid>;
 
     /** @brief Immutable session seed policy captured before Physics world activation. */
     struct PhysicsSeedPolicy final {

@@ -25,6 +25,18 @@ namespace Horo::Physics {
                               .source = PhysicsCommandSourceId::Create(source).Value(),
                               .sourceSequence = sourceSequence}};
         }
+
+        [[nodiscard]] PhysicsWorldSettings BoundedCommandWorldSettings(const std::uint32_t maximumCommands) {
+            PhysicsWorldSettingsDescriptor descriptor;
+            descriptor.world.capacity = {16, 32, 16, 4096};
+            descriptor.budgets.maximumContactPairs = 32;
+            descriptor.budgets.maximumContactConstraints = 16;
+            descriptor.budgets.maximumInFlightPairs = 8;
+            descriptor.budgets.maximumCommands = maximumCommands;
+            descriptor.budgets.maximumCommandsPerTick = maximumCommands;
+            descriptor.budgets.scratchBytes = 1024 * 1024;
+            return PhysicsWorldSettings::Capture(descriptor).Value();
+        }
     }  // namespace
 
     TEST_CASE("Null Physics is explicit omitted capability and never invents simulation", "[physics][lifecycle]") {
@@ -425,16 +437,8 @@ namespace Horo::Physics {
     }
 
     TEST_CASE("Physics retains interleaved future frames within one bounded command queue", "[physics][commands][determinism]") {
-        PhysicsWorldSettingsDescriptor descriptor;
-        descriptor.world.capacity = {16, 32, 16, 4096};
-        descriptor.budgets.maximumContactPairs = 32;
-        descriptor.budgets.maximumContactConstraints = 16;
-        descriptor.budgets.maximumInFlightPairs = 8;
-        descriptor.budgets.maximumCommands = 4;
-        descriptor.budgets.maximumCommandsPerTick = 4;
-        descriptor.budgets.scratchBytes = 1024 * 1024;
         std::unique_ptr<PhysicsRuntime> runtime;
-        auto world = ActiveCanonicalWorld(PhysicsWorldSettings::Capture(descriptor).Value(), runtime);
+        auto world = ActiveCanonicalWorld(BoundedCommandWorldSettings(4), runtime);
         constexpr Duration fixedDelta = Duration::FromNanoseconds(16'666'667);
 
         REQUIRE(world->QueueStructuralCommand(MakeCommand(2, 200, 8, 1, 20, PhysicsStructuralCommandKind::Create)).HasValue());
@@ -581,16 +585,8 @@ namespace Horo::Physics {
     }
 
     TEST_CASE("Physics command capacity reserves destruction and returns explicit retry ownership", "[physics][commands]") {
-        PhysicsWorldSettingsDescriptor descriptor;
-        descriptor.world.capacity = {16, 32, 16, 4096};
-        descriptor.budgets.maximumContactPairs = 32;
-        descriptor.budgets.maximumContactConstraints = 16;
-        descriptor.budgets.maximumInFlightPairs = 8;
-        descriptor.budgets.maximumCommands = 3;
-        descriptor.budgets.maximumCommandsPerTick = 3;
-        descriptor.budgets.scratchBytes = 1024 * 1024;
         std::unique_ptr<PhysicsRuntime> runtime;
-        auto world = ActiveCanonicalWorld(PhysicsWorldSettings::Capture(descriptor).Value(), runtime);
+        auto world = ActiveCanonicalWorld(BoundedCommandWorldSettings(3), runtime);
 
         REQUIRE(world->QueueStructuralCommand({}).ErrorValue().code.Value() == PhysicsErrors::CommandOrderInvalid.code.Value());
         REQUIRE(world->QueueStructuralCommand(MakeCommand(1, 200, 8, 1, 21, PhysicsStructuralCommandKind::Create)).Value().status ==
