@@ -507,13 +507,17 @@ target_compile_features(HoroPCG PUBLIC cxx_std_20)
 target_link_libraries(HoroPCG PUBLIC HoroEngine::Foundation)
 
 add_library(HoroVfxApi STATIC
+        runtime/vfx/api/ParticleSystemDescriptor.cpp
         runtime/vfx/api/VfxErrors.cpp
         runtime/vfx/api/VfxIdentity.cpp
         runtime/vfx/api/VfxQualityPolicy.cpp
 )
 add_library(HoroEngine::VfxApi ALIAS HoroVfxApi)
 target_compile_features(HoroVfxApi PUBLIC cxx_std_20)
-target_link_libraries(HoroVfxApi PUBLIC HoroEngine::Foundation)
+target_link_libraries(HoroVfxApi
+        PUBLIC HoroEngine::Foundation HoroEngine::Assets
+        PRIVATE nlohmann_json::nlohmann_json
+)
 
 add_library(HoroDestructionApi STATIC
         runtime/destruction/api/DestructionCommand.cpp
