@@ -763,6 +763,37 @@ Replacement and shutdown never rewrite or delete an already published page in pl
 Provider integration, merge UI and Editor persistence remain application/Editor
 responsibilities layered over this contract rather than alternate sources of truth.
 
+### Persistent, non-spatial and dynamic ownership policy
+
+`WorldObjectOwnershipDescriptor` is the inert WST-001.7 policy fact that separates
+authored always-present, authored spatial and runtime-spawned provenance from the
+runtime authority currently responsible for the object. Authored identities remain
+page-scoped `WorldAuthoringObjectAddress` values. Runtime-spawned identities are
+stable only within the active runtime contract; promotion into a durable save identity
+belongs to SAV-004.3 and is never inferred from ownership class or lifetime.
+
+Every descriptor names exactly one owner: the mounted world, an exact cell-generation
+fence, or a typed non-spatial runtime owner plus generation. Authored always-present
+objects are world-owned. Authored spatial objects are cell-owned and retire with that
+cell. A runtime-spawned cell-owned object explicitly chooses retirement or required
+handoff; no missing or failed handoff silently promotes it to world or runtime ownership.
+Non-cell owners must use `NotApplicable` rather than carrying a dormant cell-exit rule.
+
+Admission is a pure bounded compare-and-swap decision over immutable values. Inserts
+require available capacity; replacements and handoffs require the exact current
+revision and its non-wrapping successor. A changed runtime-spawned owner is classified
+as a handoff, while authored identity never changes authority class implicitly. Stale
+world, cell or runtime-owner generations, ambiguous identity, unsupported policy,
+capacity exhaustion and cancelling/closed lifecycle all fail without mutation.
+An object whose current cell policy is `Retire` cannot be handed off; changing its
+owner requires a current `RequireHandoff` publication rather than overriding the
+retirement decision during replacement.
+
+This contract does not move entities, retain components, serialize runtime state or
+coordinate cell retirement. WST-005.8 owns the transactional runtime-spawned handoff
+state machine; SAV-004.3 owns durable identity and persistence. Hosts consume this
+policy at those explicit boundaries instead of creating a second ownership registry.
+
 ### Spanning-object cook policy
 
 Spatial assignment first records every descriptor-owned cell covered by an exact

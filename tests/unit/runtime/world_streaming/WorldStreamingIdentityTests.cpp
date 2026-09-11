@@ -236,6 +236,13 @@ namespace Horo::WorldStreaming {
                 &WorldStreamingErrors::SpatialObjectRevisionStale,
                 &WorldStreamingErrors::SpatialObjectCapacityExceeded,
                 &WorldStreamingErrors::SpatialObjectLifecycleUnavailable,
+                &WorldStreamingErrors::ObjectOwnershipInvalid,
+                &WorldStreamingErrors::ObjectOwnershipUnsupported,
+                &WorldStreamingErrors::ObjectOwnershipIdentityConflict,
+                &WorldStreamingErrors::ObjectOwnershipRevisionStale,
+                &WorldStreamingErrors::ObjectOwnershipOwnerStale,
+                &WorldStreamingErrors::ObjectOwnershipCapacityExceeded,
+                &WorldStreamingErrors::ObjectOwnershipLifecycleUnavailable,
             };
             std::set<std::string_view> codes;
             for (const ErrorCodeDescriptor *descriptor : descriptors) {
