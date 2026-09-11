@@ -156,7 +156,7 @@ namespace Horo::Packages {
     public:
         /**
          * @brief Resolves required roots and enabled optional edges from one complete source snapshot.
-         * @param request Owned immutable-by-convention requests, candidates, host tuple and limits.
+         * @param request Caller-owned immutable request, candidate snapshot, host tuple and limits.
          * @return Canonical exact plan or a stable typed resolver failure.
          */
         [[nodiscard]] static Result<PackageResolutionPlan> Resolve(const PackageResolutionRequest &request);

@@ -191,6 +191,37 @@ TEST_CASE("Package semantic versions follow prerelease precedence", "[packages][
     CHECK(PackageVersion::Parse("1.0").HasError());
     CHECK(PackageVersion::Parse("01.0.0").HasError());
     CHECK(HoroPackageId::Parse("com..horo").HasError());
+    CHECK_FALSE(Caret("1.0.0").Allows(Version("1.1.0-alpha")));
+    CHECK(Caret("1.0.0-alpha").Allows(Version("1.0.0-beta")));
+    CHECK(Caret("1.0.0-alpha").Allows(Version("1.0.0")));
+    CHECK_FALSE(Caret("1.0.0-alpha").Allows(Version("1.1.0-alpha")));
+}
+
+TEST_CASE("Package resolver reverses multiple nested choices before selecting a plan", "[packages][resolver][backtracking]") {
+    PackageResolutionRequest request{
+        .roots = {Dependency("com.root", Caret("1.0.0")), Dependency("com.shared", Caret("1.0.0"))},
+        .candidates = {Candidate("com.root", "1.2.0", "public", 10, "sha256:root-new", {Dependency("com.middle", Exact("2.0.0"))}),
+                       Candidate("com.root", "1.1.0", "public", 10, "sha256:root-middle", {Dependency("com.middle", Exact("1.0.0"))}),
+                       Candidate("com.middle", "2.0.0", "public", 10, "sha256:middle-new", {Dependency("com.shared", Caret("3.0.0"))}),
+                       Candidate("com.middle", "1.0.0", "public", 10, "sha256:middle-old", {Dependency("com.shared", Caret("1.0.0"))}),
+                       Candidate("com.shared", "1.5.0", "public", 10, "sha256:shared")},
+    };
+    const auto result = PackageDependencyResolver::Resolve(request);
+    REQUIRE(result.HasValue());
+    CHECK((PlanIdentity(result.Value()) ==
+           std::vector<std::string>{"com.middle@1.0.0#public", "com.root@1.1.0#public", "com.shared@1.5.0#public"}));
+}
+
+TEST_CASE("Package resolver stops a branching search at its exploration budget", "[packages][resolver][limits]") {
+    PackageResolutionRequest request{
+        .roots = {Dependency("com.root", Caret("1.0.0"))},
+        .candidates = {Candidate("com.root", "1.2.0", "public", 10, "sha256:new", {Dependency("com.missing", Exact("3.0.0"))}),
+                       Candidate("com.root", "1.1.0", "public", 10, "sha256:middle", {Dependency("com.missing", Exact("2.0.0"))}),
+                       Candidate("com.root", "1.0.0", "public", 10, "sha256:old", {Dependency("com.missing", Exact("1.0.0"))})},
+        .limits = {.searchSteps = 2},
+    };
+    const auto result = PackageDependencyResolver::Resolve(request);
+    CheckFailure(result, "packages.resolver.limit", "Dependency search exceeds its exploration-step limit.");
 }
 
 TEST_CASE("Package resolver distinguishes unsatisfied and malformed input", "[packages][resolver]") {

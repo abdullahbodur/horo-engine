@@ -229,13 +229,16 @@ namespace Horo::Packages {
             return matches;
         }
 
-        [[nodiscard]] bool HasSourceAmbiguity(const PackageResolutionRequest &request, const std::vector<std::size_t> &matches,
-                                              const std::size_t candidateIndex) {
-            const PackageResolutionCandidate &candidate = request.candidates[candidateIndex];
-            return std::ranges::any_of(matches, [&](const std::size_t otherIndex) {
-                const PackageResolutionCandidate &other = request.candidates[otherIndex];
-                return other.version == candidate.version && other.artifactDigest != candidate.artifactDigest;
-            });
+        [[nodiscard]] std::optional<PackageVersion> FindSourceAmbiguity(const PackageResolutionRequest &request,
+                                                                        const std::vector<std::size_t> &matches) {
+            std::map<PackageVersion, std::string> digests;
+            for (const std::size_t index : matches) {
+                const PackageResolutionCandidate &candidate = request.candidates[index];
+                const auto [existing, inserted] = digests.emplace(candidate.version, candidate.artifactDigest);
+                if (!inserted && existing->second != candidate.artifactDigest)
+                    return candidate.version;
+            }
+            return std::nullopt;
         }
 
         [[nodiscard]] bool AddDependencies(const PackageResolutionRequest &request, const PackageResolutionCandidate &candidate,
@@ -267,14 +270,16 @@ namespace Horo::Packages {
                                          const std::size_t depth, std::size_t &searchSteps) {
             for (const std::size_t candidateIndex : matches) {
                 const PackageResolutionCandidate &candidate = request.candidates[candidateIndex];
-                if (HasSourceAmbiguity(request, matches, candidateIndex)) {
-                    KeepFailure(failure, SourceAmbiguity, "Source ambiguity for " + unresolved + "@" + candidate.version.ToString(), 6);
-                    return false;
-                }
                 SearchState branch = state;
                 branch.selected[unresolved] = candidateIndex;
-                if (AddDependencies(request, candidate, branch, failure) &&
-                    ResolveNext(request, std::move(branch), solution, failure, depth + 1U, searchSteps))
+                if (!AddDependencies(request, candidate, branch, failure))
+                    continue;
+                std::string cycle;
+                if (HasCycle(request, branch, cycle)) {
+                    KeepFailure(failure, Cycle, std::move(cycle), 4);
+                    continue;
+                }
+                if (ResolveNext(request, std::move(branch), solution, failure, depth + 1U, searchSteps))
                     return true;
             }
             return false;
@@ -295,17 +300,17 @@ namespace Horo::Packages {
                 return !state.selected.contains(entry.first);
             });
             if (unresolved == state.constraints.end()) {
-                std::string explanation;
-                if (HasCycle(request, state, explanation)) {
-                    KeepFailure(failure, Cycle, std::move(explanation), 4);
-                    return false;
-                }
                 solution = std::move(state);
                 return true;
             }
             const std::vector<std::size_t> matches = MatchingCandidates(request, state, unresolved->first);
-            if (!matches.empty())
+            if (!matches.empty()) {
+                if (const auto ambiguous = FindSourceAmbiguity(request, matches); ambiguous.has_value()) {
+                    KeepFailure(failure, SourceAmbiguity, "Source ambiguity for " + unresolved->first + "@" + ambiguous->ToString(), 6);
+                    return false;
+                }
                 return TryCandidates(request, state, solution, failure, unresolved->first, matches, depth, searchSteps);
+            }
             const bool conflicting = unresolved->second.ranges.size() > 1U;
             KeepFailure(failure, conflicting ? Conflict : Unsatisfied,
                         std::string{conflicting ? "Conflicting constraints for " : "No compatible candidate for "} + unresolved->first,
@@ -408,6 +413,9 @@ namespace Horo::Packages {
             return true;
         if (kind == Kind::Exact)
             return candidate == version;
+        if (!candidate.prerelease.empty() && (version.prerelease.empty() || candidate.major != version.major ||
+                                              candidate.minor != version.minor || candidate.patch != version.patch))
+            return false;
         if (candidate < version)
             return false;
         if (version.major > 0U)
