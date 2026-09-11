@@ -17,8 +17,7 @@ namespace Horo::Navigation::Detail {
     }
 
     [[nodiscard]] inline bool CheckedAdd(std::size_t &total, const std::size_t value) noexcept {
-        const std::size_t remaining = std::numeric_limits<std::size_t>::max() - total;
-        if (value > remaining)
+        if (const std::size_t remaining = std::numeric_limits<std::size_t>::max() - total; value > remaining)
             return false;
         total = total + value;
         return true;
@@ -37,15 +36,14 @@ namespace Horo::Navigation::Detail {
 
     [[nodiscard]] inline bool FitsOwnedBudget(const RecastDetourProviderCreateInfo &info) noexcept {
         std::size_t bytes{};
-        std::size_t value{};
-        if (!CheckedProduct(info.vertices.size(), 64U, value) || !CheckedAdd(bytes, value) ||
-            !CheckedProduct(info.polygons.size(), 256U, value) || !CheckedAdd(bytes, value) ||
-            !CheckedProduct(info.maximumConcurrentQueries,
-                            (static_cast<std::size_t>(info.maximumQueryNodes) * sizeof(dtPolyRef)) +
-                                (static_cast<std::size_t>(info.maximumResultPoints) *
-                                 ((sizeof(float) * 3U) + sizeof(unsigned char) + sizeof(dtPolyRef))),
-                            value) ||
-            !CheckedAdd(bytes, value))
+        if (std::size_t value{}; !CheckedProduct(info.vertices.size(), 64U, value) || !CheckedAdd(bytes, value) ||
+                                 !CheckedProduct(info.polygons.size(), 256U, value) || !CheckedAdd(bytes, value) ||
+                                 !CheckedProduct(info.maximumConcurrentQueries,
+                                                 (static_cast<std::size_t>(info.maximumQueryNodes) * sizeof(dtPolyRef)) +
+                                                     (static_cast<std::size_t>(info.maximumResultPoints) *
+                                                      ((sizeof(float) * 3U) + sizeof(unsigned char) + sizeof(dtPolyRef))),
+                                                 value) ||
+                                 !CheckedAdd(bytes, value))
             return false;
         return bytes <= info.maximumOwnedBytes;
     }

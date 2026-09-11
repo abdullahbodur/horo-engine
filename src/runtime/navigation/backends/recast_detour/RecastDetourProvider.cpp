@@ -68,7 +68,11 @@ namespace Horo::Navigation {
 
         struct QuerySlot final {
             QuerySlot() = default;
-            ~QuerySlot() = default;
+
+            ~QuerySlot() {
+                leased.store(false);
+            }
+
             QuerySlot(const QuerySlot &) = delete;
             QuerySlot &operator=(const QuerySlot &) = delete;
 
@@ -155,8 +159,8 @@ namespace Horo::Navigation {
             for (std::uint8_t edgeIndex = 0; edgeIndex < polygon.vertexCount; ++edgeIndex) {
                 const std::uint32_t first = polygon.vertexIndices[edgeIndex];
                 const std::uint32_t second = polygon.vertexIndices[(edgeIndex + 1U) % polygon.vertexCount];
-                const auto priorEnd = polygon.vertexIndices.begin() + edgeIndex;
-                if (first >= info.vertices.size() || second >= info.vertices.size() || first == second ||
+                if (const auto priorEnd = polygon.vertexIndices.begin() + edgeIndex;
+                    first >= info.vertices.size() || second >= info.vertices.size() || first == second ||
                     std::find(polygon.vertexIndices.begin(), priorEnd, first) != priorEnd)
                     return Failure<void>(NavigationErrors::ProviderFailed);
                 edges.push_back({.first = std::min(first, second),
@@ -405,7 +409,7 @@ namespace Horo::Navigation {
                                                const std::uint32_t maximumNodes) {
             int polygonCount{};
             const auto scratchCapacity = static_cast<std::uint32_t>(slot.polygonPath.size());
-            const int boundedNodes = static_cast<int>(std::min(maximumNodes, scratchCapacity));
+            const auto boundedNodes = static_cast<int>(std::min(maximumNodes, scratchCapacity));
             if (const dtStatus status =
                     slot.query->findPath(endpoints.startPolygon, endpoints.destinationPolygon, endpoints.start.data(),
                                          endpoints.destination.data(), &filter, slot.polygonPath.data(), &polygonCount, boundedNodes);
@@ -422,7 +426,7 @@ namespace Horo::Navigation {
                                                        const NavigationPathRequest &request, const int polygonCount) {
             int pointCount{};
             const auto scratchCapacity = static_cast<std::uint32_t>(slot.straightPoints.size() / 3U);
-            const int boundedPoints = static_cast<int>(std::min(request.requirement.limits.maximumResultPoints, scratchCapacity));
+            const auto boundedPoints = static_cast<int>(std::min(request.requirement.limits.maximumResultPoints, scratchCapacity));
             if (const dtStatus status =
                     slot.query->findStraightPath(endpoints.start.data(), endpoints.destination.data(), slot.polygonPath.data(),
                                                  polygonCount, slot.straightPoints.data(), slot.straightFlags.data(),
