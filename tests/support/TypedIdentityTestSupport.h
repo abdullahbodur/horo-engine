@@ -1,5 +1,8 @@
 #pragma once
 
+#include "Horo/Foundation/ErrorCode.h"
+#include "Horo/Foundation/Result.h"
+
 #include <catch2/catch_test_macros.hpp>
 #include <cstdint>
 
@@ -9,5 +12,12 @@ namespace Horo::Tests {
         auto result = Identity::Create(value);
         REQUIRE(result.HasValue());
         return result.Value();
+    }
+
+    /** @brief Verifies that one typed result preserved the expected stable error identity. */
+    template <typename Value> void RequireFailureIdentity(const Result<Value> &result, const ErrorCodeDescriptor &expected) {
+        REQUIRE_FALSE(result.HasValue());
+        CHECK(result.ErrorValue().domain.Value() == expected.domain.Value());
+        CHECK(result.ErrorValue().code.Value() == expected.code.Value());
     }
 }  // namespace Horo::Tests

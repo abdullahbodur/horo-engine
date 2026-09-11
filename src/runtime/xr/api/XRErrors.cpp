@@ -187,6 +187,106 @@ namespace Horo::XR::XRErrors {
         .retryable = false,
         .userActionable = false,
     };
+    const ErrorCodeDescriptor LoaderPreflightInvalid{
+        .domain = XRDomain,
+        .code = ErrorCode{"xr.loader_preflight.invalid"},
+        .defaultSeverity = ErrorSeverity::Error,
+        .summary = "XR loader preflight policy or evidence is malformed or exceeds its fixed work bound.",
+        .remediationHint = "Use one verified backend/install record, known policy values, and bounded evidence from the same attempt.",
+        .retryable = false,
+        .userActionable = true,
+    };
+    const ErrorCodeDescriptor LoaderAbsent{
+        .domain = XRDomain,
+        .code = ErrorCode{"xr.loader.absent"},
+        .defaultSeverity = ErrorSeverity::Error,
+        .summary = "The exact product-selected XR loader source is absent.",
+        .remediationHint =
+            "Install or repair the verified loader selected by the product; Horo will not scan or fall back to another source.",
+        .retryable = false,
+        .userActionable = true,
+    };
+    const ErrorCodeDescriptor LoaderIncompatible{
+        .domain = XRDomain,
+        .code = ErrorCode{"xr.loader.incompatible"},
+        .defaultSeverity = ErrorSeverity::Error,
+        .summary = "The discovered XR loader API is outside the product's admitted compatibility interval.",
+        .remediationHint = "Install a loader version admitted by the verified product composition record.",
+        .retryable = false,
+        .userActionable = true,
+    };
+    const ErrorCodeDescriptor LoaderOpenFailed{
+        .domain = XRDomain,
+        .code = ErrorCode{"xr.loader.open_failed"},
+        .defaultSeverity = ErrorSeverity::Error,
+        .summary = "The verified XR loader artifact could not be opened through the platform capability.",
+        .remediationHint = "Repair the verified loader artifact or its declared native dependency closure.",
+        .retryable = true,
+        .userActionable = true,
+    };
+    const ErrorCodeDescriptor RuntimeUnavailable{
+        .domain = XRDomain,
+        .code = ErrorCode{"xr.runtime.unavailable"},
+        .defaultSeverity = ErrorSeverity::Warning,
+        .summary = "The selected loader could not discover an active XR runtime.",
+        .remediationHint = "Install, enable, or start the product-qualified active runtime before retrying preflight.",
+        .retryable = true,
+        .userActionable = true,
+    };
+    const ErrorCodeDescriptor RuntimeRejected{
+        .domain = XRDomain,
+        .code = ErrorCode{"xr.runtime.rejected"},
+        .defaultSeverity = ErrorSeverity::Error,
+        .summary = "The discovered XR runtime was rejected by explicit runtime or product policy.",
+        .remediationHint = "Select a qualified runtime configuration matching the product composition and release policy.",
+        .retryable = false,
+        .userActionable = true,
+    };
+    const ErrorCodeDescriptor SystemUnsupported{
+        .domain = XRDomain,
+        .code = ErrorCode{"xr.system.unsupported"},
+        .defaultSeverity = ErrorSeverity::Error,
+        .summary = "The active runtime exposes no XR system satisfying the requested product profile.",
+        .remediationHint = "Use a qualified system or request a product profile supported by the active runtime and device.",
+        .retryable = false,
+        .userActionable = true,
+    };
+    const ErrorCodeDescriptor SystemTemporarilyUnavailable{
+        .domain = XRDomain,
+        .code = ErrorCode{"xr.system.temporarily_unavailable"},
+        .defaultSeverity = ErrorSeverity::Warning,
+        .summary = "The selected XR system is known but temporarily unavailable.",
+        .remediationHint = "Restore the device/runtime connection and repeat the complete preflight attempt.",
+        .retryable = true,
+        .userActionable = true,
+    };
+    const ErrorCodeDescriptor RuntimeOverrideRejected{
+        .domain = XRDomain,
+        .code = ErrorCode{"xr.runtime_override.rejected"},
+        .defaultSeverity = ErrorSeverity::Error,
+        .summary = "The requested XR runtime override is not authorized for this product execution.",
+        .remediationHint = "Use system-default selection or an explicitly approved non-shipping developer override.",
+        .retryable = false,
+        .userActionable = true,
+    };
+    const ErrorCodeDescriptor LoaderPreflightCancelled{
+        .domain = XRDomain,
+        .code = ErrorCode{"xr.loader_preflight.cancelled"},
+        .defaultSeverity = ErrorSeverity::Warning,
+        .summary = "XR loader preflight was cancelled before activation publication.",
+        .remediationHint = "Start a new owner-issued preflight attempt when XR activation is requested again.",
+        .retryable = true,
+        .userActionable = false,
+    };
+    const ErrorCodeDescriptor LoaderPreflightStale{
+        .domain = XRDomain,
+        .code = ErrorCode{"xr.loader_preflight.stale"},
+        .defaultSeverity = ErrorSeverity::Warning,
+        .summary = "XR loader preflight evidence belongs to a replaced attempt or composition input.",
+        .remediationHint = "Discard retained evidence and repeat preflight for the current composition generation.",
+        .retryable = true,
+        .userActionable = false,
+    };
 
     /** @copydoc Descriptors */
     std::span<const ErrorCodeDescriptor *const> Descriptors() noexcept {
@@ -211,6 +311,17 @@ namespace Horo::XR::XRErrors {
             &ViewPlanInvalid,
             &ViewConfigurationStale,
             &ExternalTargetInvalid,
+            &LoaderPreflightInvalid,
+            &LoaderAbsent,
+            &LoaderIncompatible,
+            &LoaderOpenFailed,
+            &RuntimeUnavailable,
+            &RuntimeRejected,
+            &SystemUnsupported,
+            &SystemTemporarilyUnavailable,
+            &RuntimeOverrideRejected,
+            &LoaderPreflightCancelled,
+            &LoaderPreflightStale,
         };
         return descriptors;
     }

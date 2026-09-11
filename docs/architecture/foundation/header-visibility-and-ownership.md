@@ -267,9 +267,10 @@ provider-private authenticated binding outside this public target.
 
 ## XRA-001.2 Migration Notes
 
-`HoroEngine::XRApi` owns the four public headers under `Horo/XR/` and depends
+`HoroEngine::XRApi` owns the public headers under `Horo/XR/` and depends
 publicly only on Foundation. Consumers of typed XR identities, capability evidence,
-contract versions, admission results, or error descriptors must link XRApi directly;
+contract versions, loader-preflight evidence, admission results, or error descriptors
+must link XRApi directly;
 linking Runtime, RenderApi, Platform, Input, or a future concrete XR backend does not
 implicitly publish this contract. Public-header consumer coverage compiles every XR
 header through the staged owner boundary.

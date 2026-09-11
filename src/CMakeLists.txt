@@ -597,6 +597,7 @@ add_library(HoroXRApi STATIC
         runtime/xr/api/XRContract.cpp
         runtime/xr/api/XRErrors.cpp
         runtime/xr/api/XRIdentity.cpp
+        runtime/xr/api/XRLoaderPreflight.cpp
         runtime/xr/api/XRSpacePose.cpp
         runtime/xr/api/XRTrackingSnapshot.cpp
         runtime/xr/api/XRViewRenderPlan.cpp

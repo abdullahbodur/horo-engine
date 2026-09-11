@@ -50,6 +50,28 @@ namespace Horo::XR::XRErrors {
     extern const ErrorCodeDescriptor ViewConfigurationStale;
     /** @brief An external XR render target has malformed identity, format, usage, extent, or ordering. */
     extern const ErrorCodeDescriptor ExternalTargetInvalid;
+    /** @brief XR loader preflight policy or evidence is malformed. */
+    extern const ErrorCodeDescriptor LoaderPreflightInvalid;
+    /** @brief The exact product-selected loader source is absent. */
+    extern const ErrorCodeDescriptor LoaderAbsent;
+    /** @brief The discovered loader cannot satisfy the admitted API interval. */
+    extern const ErrorCodeDescriptor LoaderIncompatible;
+    /** @brief The verified loader artifact could not be opened. */
+    extern const ErrorCodeDescriptor LoaderOpenFailed;
+    /** @brief The selected loader could not discover an active runtime. */
+    extern const ErrorCodeDescriptor RuntimeUnavailable;
+    /** @brief Runtime discovery was rejected by explicit product or runtime policy. */
+    extern const ErrorCodeDescriptor RuntimeRejected;
+    /** @brief The active runtime has no system satisfying the requested product profile. */
+    extern const ErrorCodeDescriptor SystemUnsupported;
+    /** @brief An otherwise admissible XR system is temporarily unavailable. */
+    extern const ErrorCodeDescriptor SystemTemporarilyUnavailable;
+    /** @brief A runtime-selection override is not authorized for this product execution. */
+    extern const ErrorCodeDescriptor RuntimeOverrideRejected;
+    /** @brief Loader preflight was cancelled before activation publication. */
+    extern const ErrorCodeDescriptor LoaderPreflightCancelled;
+    /** @brief Loader preflight evidence belongs to a replaced attempt or composition input. */
+    extern const ErrorCodeDescriptor LoaderPreflightStale;
 
     /**
      * @brief Returns every stable XRApi descriptor for module-registry contribution.
