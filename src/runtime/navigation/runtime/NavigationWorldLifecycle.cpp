@@ -140,7 +140,8 @@ namespace Horo::Navigation {
         if (!CanRetireActive())
             return Failure<void>(NavigationErrors::CapacityExceeded);
 
-        RetireActive();
+        if (active_)
+            RetireActive();
         active_ = std::move(staged_);
         state_ = NavigationWorldLifecycleState::Active;
         return Result<void>::Success();
