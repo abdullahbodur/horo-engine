@@ -267,6 +267,7 @@ target_compile_definitions(HoroGameplayApi PRIVATE
 
 add_library(HoroRuntimeScene STATIC
         runtime/scene/RuntimeSceneDefinition.cpp
+        runtime/scene/SavedSceneBootstrap.cpp
         runtime/scene/RuntimeScene.cpp
         runtime/scene/RuntimeSceneErrors.cpp
 )
