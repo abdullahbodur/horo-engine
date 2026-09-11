@@ -218,4 +218,34 @@ namespace Horo::PCG::PCGErrors {
                                         .defaultSeverity = ErrorSeverity::Error,
                                         .summary = "The PCG graph validation pass exceeded a finite ceiling.",
                                         .remediationHint = "Reduce the graph or select an explicitly larger admitted validation bound."};
+    const ErrorCodeDescriptor GenerationPlanInvalid{.domain = PcgDomain,
+                                                    .code = ErrorCode{"pcg.generation_plan.invalid"},
+                                                    .defaultSeverity = ErrorSeverity::Error,
+                                                    .summary = "A PCG generation plan or its provenance is invalid.",
+                                                    .remediationHint =
+                                                        "Build a complete typed plan from one exact evaluation and target receipt."};
+    const ErrorCodeDescriptor GenerationPlanCapacityExceeded{.domain = PcgDomain,
+                                                             .code = ErrorCode{"pcg.generation_plan.capacity_exceeded"},
+                                                             .defaultSeverity = ErrorSeverity::Error,
+                                                             .summary = "A PCG generation plan exceeds its finite resource envelope.",
+                                                             .remediationHint =
+                                                                 "Reduce outputs, dependencies, work, or charged bytes before admission."};
+    const ErrorCodeDescriptor GenerationPlanStale{.domain = PcgDomain,
+                                                  .code = ErrorCode{"pcg.generation_plan.stale"},
+                                                  .defaultSeverity = ErrorSeverity::Warning,
+                                                  .summary = "The PCG generation plan references stale target or replacement state.",
+                                                  .remediationHint = "Recapture exact target evidence and rebuild the plan."};
+    const ErrorCodeDescriptor
+        GenerationOwnershipMismatch{.domain = PcgDomain,
+                                    .code = ErrorCode{"pcg.generation_plan.ownership_mismatch"},
+                                    .defaultSeverity = ErrorSeverity::Error,
+                                    .summary = "A PCG output delta is not authorized by exact target-owned provenance.",
+                                    .remediationHint =
+                                        "Update or remove only the exact lineage, set, scope, owner generation, and content."};
+    const ErrorCodeDescriptor GenerationPlanLifecycleUnavailable{.domain = PcgDomain,
+                                                                 .code = ErrorCode{"pcg.generation_plan.lifecycle_unavailable"},
+                                                                 .defaultSeverity = ErrorSeverity::Warning,
+                                                                 .summary = "PCG generation-plan admission is closed.",
+                                                                 .remediationHint =
+                                                                     "Do not build plans after cancellation or shutdown begins."};
 }  // namespace Horo::PCG::PCGErrors
