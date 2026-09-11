@@ -88,12 +88,79 @@ namespace Horo::Terrain::TerrainErrors {
         .retryable = false,
         .userActionable = false,
     };
+    const ErrorCodeDescriptor DescriptorInvalid{
+        .domain = TerrainDomain,
+        .code = ErrorCode{"terrain.descriptor.invalid"},
+        .defaultSeverity = ErrorSeverity::Error,
+        .summary = "A shared Terrain/Foliage descriptor is malformed or internally inconsistent.",
+        .remediationHint =
+            "Provide valid identities, non-zero revisions, ordered bounds, bounded dimensions, and coherent footprint facts.",
+        .retryable = false,
+        .userActionable = true,
+    };
+    const ErrorCodeDescriptor TierInvalid{
+        .domain = TerrainDomain,
+        .code = ErrorCode{"terrain.tier.invalid"},
+        .defaultSeverity = ErrorSeverity::Error,
+        .summary = "A Terrain feature tier is outside the closed provider-neutral vocabulary.",
+        .remediationHint = "Select Baseline, Standard, High, or Ultra through the typed product configuration.",
+        .retryable = false,
+        .userActionable = true,
+    };
+    const ErrorCodeDescriptor TierUnsupported{
+        .domain = TerrainDomain,
+        .code = ErrorCode{"terrain.tier.unsupported"},
+        .defaultSeverity = ErrorSeverity::Error,
+        .summary = "The exact requested Terrain feature tier is unavailable in the captured plan.",
+        .remediationHint = "Install compatible cooked and provider capabilities or explicitly select another product configuration.",
+        .retryable = false,
+        .userActionable = true,
+    };
+    const ErrorCodeDescriptor LimitProfileInvalid{
+        .domain = TerrainDomain,
+        .code = ErrorCode{"terrain.limits.invalid"},
+        .defaultSeverity = ErrorSeverity::Error,
+        .summary = "A Terrain limit profile is empty, inconsistent, or exceeds its exact tier ceiling.",
+        .remediationHint =
+            "Use finite required limits and an all-zero or fully positive foliage group no wider than the selected versioned tier profile.",
+        .retryable = false,
+        .userActionable = true,
+    };
+    const ErrorCodeDescriptor LimitExceeded{
+        .domain = TerrainDomain,
+        .code = ErrorCode{"terrain.limits.exceeded"},
+        .defaultSeverity = ErrorSeverity::Error,
+        .summary = "Terrain/Foliage descriptor dimensions, counts, bytes, or work exceed captured project limits.",
+        .remediationHint = "Reject or recook the content under an explicitly larger compatible configuration; do not clamp or drop data.",
+        .retryable = false,
+        .userActionable = true,
+    };
+    const ErrorCodeDescriptor RevisionStale{
+        .domain = TerrainDomain,
+        .code = ErrorCode{"terrain.revision.stale"},
+        .defaultSeverity = ErrorSeverity::Warning,
+        .summary = "Terrain descriptor admission references an outdated immutable revision.",
+        .remediationHint = "Capture the current content, bounds, configuration, and capability revisions before retrying.",
+        .retryable = true,
+        .userActionable = false,
+    };
+    const ErrorCodeDescriptor ReplacementInvalid{
+        .domain = TerrainDomain,
+        .code = ErrorCode{"terrain.replacement.invalid"},
+        .defaultSeverity = ErrorSeverity::Error,
+        .summary = "Terrain descriptor insert or replacement state contradicts the current publication.",
+        .remediationHint = "Use Insert only without current state and Replace only with a complete exact current generation expectation.",
+        .retryable = false,
+        .userActionable = false,
+    };
 
     /** @copydoc Descriptors */
     std::span<const ErrorCodeDescriptor *const> Descriptors() noexcept {
         static constexpr std::array descriptors{
-            &IdentityInvalid, &SerializedIdentityInvalid, &DerivationInvalid, &IdentityConflict,     &IdentityUnknown,
-            &GenerationStale, &GenerationExhausted,       &CapacityExceeded,  &LifecycleUnavailable,
+            &IdentityInvalid,    &SerializedIdentityInvalid, &DerivationInvalid,   &IdentityConflict,     &IdentityUnknown,
+            &GenerationStale,    &GenerationExhausted,       &CapacityExceeded,    &LifecycleUnavailable, &DescriptorInvalid,
+            &TierInvalid,        &TierUnsupported,           &LimitProfileInvalid, &LimitExceeded,        &RevisionStale,
+            &ReplacementInvalid,
         };
         return descriptors;
     }

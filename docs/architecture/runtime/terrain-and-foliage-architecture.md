@@ -642,6 +642,41 @@ result records the selected tier, exact finite layer/LOD/instance/byte/work limi
 enabled algorithms, all provider/cooked revisions and every explicit fallback reason.
 TRF-001.3 owns the versioned numeric table and shared validator.
 
+The version-1 canonical ceilings are fixed below. Byte values are binary MiB;
+projects may lower any field, but cannot widen a field beyond the exact selected tier.
+These ceilings bound descriptor admission and remain distinct from ADR-143 qualification
+workload requirements.
+
+The foliage cluster, instance and resident-byte limits form one optional group. A
+project may set all three to zero to disable foliage explicitly; partially zero groups
+are invalid. Every Terrain, staging, retirement and work ceiling remains strictly
+positive, and zero never means unlimited.
+
+| Limit | Baseline | Standard | High | Ultra |
+|---|---:|---:|---:|---:|
+| Height samples per axis | 4,097 | 8,193 | 16,385 | 32,769 |
+| Tile interior quads | 128 | 128 | 256 | 256 |
+| LOD levels / layers per tile | 4 / 4 | 6 / 8 | 8 / 12 | 12 / 16 |
+| Active terrain tiles | 256 | 512 | 1,024 | 2,048 |
+| Active foliage clusters / instances | 1,024 / 262,144 | 2,048 / 524,288 | 4,096 / 1,048,576 | 8,192 / 2,097,152 |
+| Resident Terrain / Foliage MiB | 256 / 256 | 512 / 512 | 1,024 / 1,024 | 2,048 / 2,048 |
+| Staging / retiring MiB | 128 / 128 | 256 / 256 | 512 / 512 | 1,024 / 1,024 |
+| Bounded work items | 1,048,576 | 2,097,152 | 4,194,304 | 8,388,608 |
+
+`TerrainConfigurationSnapshot` captures the exact table revision, project
+configuration revision, effective capability revision, selected tier and project-
+lowered limits. `TerrainDatasetDescriptor` captures stable dataset/content identity,
+revisioned inclusive integer-millimetre bounds, regular-grid shape and the combined
+Terrain/Foliage footprint. Both values are fixed-size inert data. Their validators do
+not allocate, register, activate a provider, inspect a service locator or publish state.
+
+`ResolveTerrainFeatureTier` accepts only the exact requested tier when it is present in
+the captured content/host set. It does not interpret tier ordering. Insert admission
+requires no current publication; replacement requires the exact current content and
+its non-wrapping successor. Unchanged bounds retain their revision, while changed
+bounds require its exact successor. Cancelled, Closing and Closed owners reject
+admission before work.
+
 | Capability family | Baseline | Standard | High | Ultra |
 |---|---|---|---|---|
 | Heightfield/layer/LOD scale | Minimal product-required cooked path | Increased finite authored/cooked limits | Higher finite quality limits | Highest qualified finite product limits |
