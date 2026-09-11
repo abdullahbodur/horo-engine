@@ -34,6 +34,39 @@ namespace {
         }
     };
 
+    class ManualJobBlocker {
+    public:
+        void Block() {
+            std::unique_lock lock(mutex_);
+            started_ = true;
+            condition_.notify_all();
+            condition_.wait(lock, [this] {
+                return released_;
+            });
+        }
+
+        void WaitUntilStarted() {
+            std::unique_lock lock(mutex_);
+            condition_.wait(lock, [this] {
+                return started_;
+            });
+        }
+
+        void Release() {
+            {
+                std::lock_guard lock(mutex_);
+                released_ = true;
+            }
+            condition_.notify_all();
+        }
+
+    private:
+        std::mutex mutex_;
+        std::condition_variable condition_;
+        bool started_{};
+        bool released_{};
+    };
+
     enum class ReentrantReleasePath : std::uint8_t {
         Completed,
         RequestCancel,
@@ -242,25 +275,12 @@ namespace {
 
     TEST_CASE("Dropping Caller Handle Does Not Cancel Or Delete Accepted Work", "[unit][foundation][jobs][lifetime]") {
         Horo::JobSystem jobs{Horo::JobSystemConfig{.workerCount = 1, .maxQueuedJobs = 2, .maxRetainedTerminalJobs = 2}};
-        std::mutex mutex;
-        std::condition_variable condition;
-        bool blockerStarted{};
-        bool releaseBlocker{};
-        auto blocker = jobs.Submit({}, [&](const Horo::CancellationToken &) {
-            std::unique_lock lock(mutex);
-            blockerStarted = true;
-            condition.notify_all();
-            condition.wait(lock, [&] {
-                return releaseBlocker;
-            });
+        ManualJobBlocker gate;
+        auto blocker = jobs.Submit({}, [&gate](const Horo::CancellationToken &) {
+            gate.Block();
         });
         REQUIRE(blocker.HasValue());
-        {
-            std::unique_lock lock(mutex);
-            condition.wait(lock, [&] {
-                return blockerStarted;
-            });
-        }
+        gate.WaitUntilStarted();
 
         std::atomic<bool> executed{};
         Horo::JobId droppedId{};
@@ -271,11 +291,7 @@ namespace {
             REQUIRE(dropped.HasValue());
             droppedId = dropped.Value().Id();
         }
-        {
-            std::lock_guard lock(mutex);
-            releaseBlocker = true;
-        }
-        condition.notify_all();
+        gate.Release();
         REQUIRE(blocker.Value().Wait().HasValue());
         jobs.Shutdown(Horo::ShutdownPolicy::Drain);
         REQUIRE(executed.load());
@@ -571,25 +587,12 @@ namespace {
 
     TEST_CASE("Timed Out Task Group Join Remains Retryable", "[unit][foundation][jobs][wait]") {
         Horo::JobSystem jobs{Horo::JobSystemConfig{.workerCount = 1, .maxQueuedJobs = 3}};
-        std::mutex mutex;
-        std::condition_variable condition;
-        bool blockerStarted{};
-        bool releaseBlocker{};
-        auto blocker = jobs.Submit({}, [&](const Horo::CancellationToken &) {
-            std::unique_lock lock(mutex);
-            blockerStarted = true;
-            condition.notify_all();
-            condition.wait(lock, [&] {
-                return releaseBlocker;
-            });
+        ManualJobBlocker gate;
+        auto blocker = jobs.Submit({}, [&gate](const Horo::CancellationToken &) {
+            gate.Block();
         });
         REQUIRE((blocker.HasValue()));
-        {
-            std::unique_lock lock(mutex);
-            condition.wait(lock, [&] {
-                return blockerStarted;
-            });
-        }
+        gate.WaitUntilStarted();
 
         Horo::TaskGroup group(jobs);
         std::atomic childExecuted{false};
@@ -606,11 +609,7 @@ namespace {
         REQUIRE((waitError == "job.wait_timed_out"));
         REQUIRE_FALSE((childExecuted.load()));
 
-        {
-            std::lock_guard lock(mutex);
-            releaseBlocker = true;
-        }
-        condition.notify_all();
+        gate.Release();
         REQUIRE((blocker.Value().Wait().HasValue()));
         REQUIRE((group.Join().HasValue()));
         REQUIRE((group.Join().HasValue()));
