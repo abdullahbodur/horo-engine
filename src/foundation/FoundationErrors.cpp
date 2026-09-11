@@ -8,7 +8,17 @@ namespace Horo {
         const ErrorDomainId MathDomain{"horo.foundation.math"};
         const ErrorDomainId ModuleDescriptorDomain{"horo.foundation.modules"};
         const ErrorDomainId ErrorCodeRegistryDomain{"horo.foundation.errors"};
+        const ErrorDomainId ValidationDomain{"horo.foundation.validation"};
         const ErrorDomainId ObservabilityDomain{"horo.foundation.observability"};
+
+        [[nodiscard]] ErrorCodeDescriptor ValidationDescriptor(const std::string_view code, const std::string_view summary,
+                                                               const std::string_view remediationHint) {
+            return {.domain = ValidationDomain,
+                    .code = ErrorCode{std::string{code}},
+                    .defaultSeverity = ErrorSeverity::Error,
+                    .summary = summary,
+                    .remediationHint = remediationHint};
+        }
     }  // namespace
 
     namespace ConfigurationErrors {
@@ -262,6 +272,24 @@ namespace Horo {
                                                      .summary = "Error code deprecation replacement is invalid.",
                                                      .remediationHint = "Reference a distinct registered code in the same domain."};
     }  // namespace ErrorCodeRegistryErrors
+
+    namespace ValidationErrors {
+        const ErrorCodeDescriptor InvalidLimits =
+            ValidationDescriptor("foundation.validation.invalid_limits", "Validation result limits are invalid.",
+                                 "Choose a non-zero capacity within the documented hard limit.");
+        const ErrorCodeDescriptor UnknownDiagnostic =
+            ValidationDescriptor("foundation.validation.unknown_diagnostic", "Validation finding identity is not registered.",
+                                 "Declare and activate the module-owned error descriptor first.");
+        const ErrorCodeDescriptor InvalidSource =
+            ValidationDescriptor("foundation.validation.invalid_source", "Validation finding source context is invalid.",
+                                 "Provide a stable source and a column only with a line.");
+        const ErrorCodeDescriptor CapacityExceeded =
+            ValidationDescriptor("foundation.validation.capacity_exceeded", "Validation finding capacity was exceeded.",
+                                 "Split the input or admit a larger bounded validation pass.");
+        const ErrorCodeDescriptor PassClosed =
+            ValidationDescriptor("foundation.validation.pass_closed", "Validation pass is already closed.",
+                                 "Create a new pass for additional findings.");
+    }  // namespace ValidationErrors
 
     namespace ObservabilityErrors {
         const ErrorCodeDescriptor InvalidBundleRequest{.domain = ObservabilityDomain,

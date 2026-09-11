@@ -74,3 +74,11 @@ namespace Horo::ErrorCodeRegistryErrors {
     extern const ErrorCodeDescriptor DuplicateCode;
     extern const ErrorCodeDescriptor InvalidDeprecation;
 }  // namespace Horo::ErrorCodeRegistryErrors
+
+namespace Horo::ValidationErrors {
+    extern const ErrorCodeDescriptor InvalidLimits;
+    extern const ErrorCodeDescriptor UnknownDiagnostic;
+    extern const ErrorCodeDescriptor InvalidSource;
+    extern const ErrorCodeDescriptor CapacityExceeded;
+    extern const ErrorCodeDescriptor PassClosed;
+}  // namespace Horo::ValidationErrors
