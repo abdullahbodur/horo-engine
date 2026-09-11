@@ -190,8 +190,11 @@ namespace Horo::Runtime {
             auto compatible = Descriptor();
             auto prepared = PrepareSavedSceneBootstrap(compatible, SceneAssetType(), Registry(compatible), Definition(), Digest(4));
             REQUIRE(prepared.HasValue());
-            REQUIRE(prepared.Value().Queue(service).HasValue());
+            auto proof = std::move(prepared).Value();
+            RequireCode(std::move(prepared).Value().Queue(service), "scene.save_bootstrap.invalid");
+            REQUIRE(std::move(proof).Queue(service).HasValue());
             REQUIRE(service.ActiveScene()->DefinitionId() == SceneDefinitionId{42});
+            RequireCode(std::move(proof).Queue(service), "scene.save_bootstrap.invalid");
             REQUIRE(service.OnPhase(RuntimePhase::CommitDeferredLifecycleChanges, Context(cancellation.Token())).HasValue());
             REQUIRE(service.ActiveScene()->DefinitionId() == compatible.definition);
             service.Shutdown();

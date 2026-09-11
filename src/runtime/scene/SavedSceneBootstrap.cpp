@@ -37,6 +37,26 @@ namespace Horo::Runtime {
         : descriptor_(std::move(descriptor)), baseSceneAsset_(baseSceneAsset), registryRevision_(registryRevision),
           definition_(std::move(definition)) {}
 
+    /** @copydoc PreparedSavedSceneBootstrap::PreparedSavedSceneBootstrap */
+    PreparedSavedSceneBootstrap::PreparedSavedSceneBootstrap(PreparedSavedSceneBootstrap &&other) noexcept
+        : descriptor_(std::move(other.descriptor_)), baseSceneAsset_(other.baseSceneAsset_), registryRevision_(other.registryRevision_),
+          definition_(std::move(other.definition_)), consumed_(other.consumed_) {
+        other.consumed_ = true;
+    }
+
+    /** @copydoc PreparedSavedSceneBootstrap::operator= */
+    PreparedSavedSceneBootstrap &PreparedSavedSceneBootstrap::operator=(PreparedSavedSceneBootstrap &&other) noexcept {
+        if (this == &other)
+            return *this;
+        descriptor_ = std::move(other.descriptor_);
+        baseSceneAsset_ = other.baseSceneAsset_;
+        registryRevision_ = other.registryRevision_;
+        definition_ = std::move(other.definition_);
+        consumed_ = other.consumed_;
+        other.consumed_ = true;
+        return *this;
+    }
+
     /** @copydoc PreparedSavedSceneBootstrap::Descriptor */
     const SavedSceneBootstrapDescriptor &PreparedSavedSceneBootstrap::Descriptor() const noexcept {
         return descriptor_;
@@ -58,8 +78,11 @@ namespace Horo::Runtime {
     }
 
     /** @copydoc PreparedSavedSceneBootstrap::Queue */
-    Result<void> PreparedSavedSceneBootstrap::Queue(RuntimeSceneService &service) const {
-        return service.QueuePreparation(definition_);
+    Result<void> PreparedSavedSceneBootstrap::Queue(RuntimeSceneService &service) && {
+        if (consumed_)
+            return Failure<void>(SceneErrors::SaveBootstrapInvalid);
+        consumed_ = true;
+        return service.QueuePreparation(std::move(definition_));
     }
 
     /** @copydoc PrepareSavedSceneBootstrap */

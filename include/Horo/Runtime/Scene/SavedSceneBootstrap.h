@@ -47,8 +47,10 @@ namespace Horo::Runtime {
     public:
         PreparedSavedSceneBootstrap(const PreparedSavedSceneBootstrap &) = delete;
         PreparedSavedSceneBootstrap &operator=(const PreparedSavedSceneBootstrap &) = delete;
-        PreparedSavedSceneBootstrap(PreparedSavedSceneBootstrap &&) noexcept = default;
-        PreparedSavedSceneBootstrap &operator=(PreparedSavedSceneBootstrap &&) noexcept = default;
+        /** @brief Transfers the unique preparation proof and invalidates reuse of the source. */
+        PreparedSavedSceneBootstrap(PreparedSavedSceneBootstrap &&other) noexcept;
+        /** @brief Transfers the unique preparation proof and invalidates reuse of the source. */
+        PreparedSavedSceneBootstrap &operator=(PreparedSavedSceneBootstrap &&other) noexcept;
 
         /** @brief Returns the validated durable requirements. @return Borrow valid for this prepared value's lifetime. */
         [[nodiscard]] const SavedSceneBootstrapDescriptor &Descriptor() const noexcept;
@@ -58,9 +60,10 @@ namespace Horo::Runtime {
         [[nodiscard]] Assets::AssetRegistryRevision RegistryRevision() const noexcept;
         /** @brief Returns the owned immutable default scene to receive later saved overrides. @return Borrowed definition. */
         [[nodiscard]] const RuntimeSceneDefinition &Definition() const noexcept;
-        /** @brief Queues the validated default scene through the normal lifecycle admission path. @param service Scene owner.
-         * @return Queue admission result; active scene publication still occurs only at its lifecycle commit boundary. */
-        [[nodiscard]] Result<void> Queue(RuntimeSceneService &service) const;
+        /** @brief Consumes and queues the validated default scene through normal lifecycle admission. @param service Scene owner.
+         * @return Queue admission result; active publication still occurs only at its lifecycle commit boundary. The proof is consumed
+         * even when admission fails, and subsequent use returns SaveBootstrapInvalid. */
+        [[nodiscard]] Result<void> Queue(RuntimeSceneService &service) &&;
 
     private:
         friend Result<PreparedSavedSceneBootstrap> PrepareSavedSceneBootstrap(SavedSceneBootstrapDescriptor, const Assets::AssetTypeId &,
@@ -75,6 +78,7 @@ namespace Horo::Runtime {
         Assets::AssetId baseSceneAsset_;
         Assets::AssetRegistryRevision registryRevision_;
         RuntimeSceneDefinition definition_;
+        bool consumed_{};
     };
 
     /**

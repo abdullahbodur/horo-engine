@@ -95,7 +95,7 @@ device backend.
 
 | Real target (alias) | Availability | Owner and public/private boundary | Direct first-party dependencies |
 |---|---|---|---|
-| `HoroRuntimeScene` (`HoroEngine::RuntimeScene`) | Always | Owns runtime scene definition, scene state, saved-scene baseline admission, and scene component contracts under `Runtime/Scene/**`, excluding primitive mesh/catalog headers. | Foundation, Runtime, Assets, GameplayApi (public) |
+| `HoroRuntimeScene` (`HoroEngine::RuntimeScene`) | Always | Owns runtime scene definition, scene state, saved-scene baseline admission, and scene component contracts under `Runtime/Scene/**`, excluding primitive mesh/catalog headers. | Foundation, Runtime (including Runtime/Save), RuntimeUi, GameplayApi, Assets, SceneModel (public) |
 | `HoroNetworkRuntime` (`HoroEngine::NetworkRuntime`) | Always | Owns the bounded session/scene-scoped network-object mapping and immutable diagnostic snapshots under `Network/NetworkObjectMapping.h`; it performs no Scene mutation or transport work. | NetworkApi, RuntimeScene (public) |
 | `HoroSceneModel` (`HoroEngine::SceneModel`) | Always | Owns `Runtime/Scene/PrimitiveCatalog.h`, `PrimitiveMesh.h`, and `PrimitiveMeshDescriptor.h`. | Foundation, RenderApi (public) |
 | `HoroRenderApi` (`HoroEngine::RenderApi`) | Always | Owns backend-neutral mesh, render-scene, shader-manifest/binding-layout, and backend contracts under `Runtime/Render/**`, excluding registry/frontend/module headers. | Foundation (public) |
