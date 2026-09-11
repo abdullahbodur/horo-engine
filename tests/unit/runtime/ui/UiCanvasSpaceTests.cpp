@@ -1,5 +1,6 @@
 #include "Horo/Runtime/Ui/UiCanvasSpace.h"
 #include "Horo/Runtime/Ui/UiErrors.h"
+#include "UiTestUtils.h"
 
 #include <catch2/catch_test_macros.hpp>
 #include <cstdint>
@@ -7,11 +8,7 @@
 
 namespace Horo::Runtime::Ui {
     namespace {
-        template <typename Id> Id Stable(const std::uint8_t marker) {
-            SerializedUiId bytes{};
-            bytes.back() = marker;
-            return Id::Create(bytes).Value();
-        }
+        using Test::Stable;
 
         UiCanvasDescriptor Canvas(const UiRenderMode renderMode = UiRenderMode::ScreenSpaceOverlay,
                                   const UiScaleMode scaleMode = UiScaleMode::ScaleWithScreenSize) {
