@@ -178,6 +178,12 @@ namespace Horo::XR {
         descriptor = fixture.Descriptor();
         REQUIRE(
             HasErrorIdentity(XRTrackingSnapshot::Create(descriptor, fixture.session, fixture.origin), XRErrors::TrackingSnapshotInvalid));
+
+        fixture.devices = {fixture.head, fixture.controller};
+        fixture.devices[1].role = XRTrackedDeviceRole::Count;
+        descriptor = fixture.Descriptor();
+        REQUIRE(
+            HasErrorIdentity(XRTrackingSnapshot::Create(descriptor, fixture.session, fixture.origin), XRErrors::TrackingSnapshotInvalid));
     }
 
     TEST_CASE("XR tracking snapshots reject contradictory device and pose evidence", "[unit][xr][tracking-snapshot]") {

@@ -101,7 +101,7 @@ namespace Horo::XR {
 
         /** @brief Validates canonical device identities, roles, states, and uniqueness. */
         [[nodiscard]] Result<void> ValidateDevices(const std::span<const XRTrackedDeviceRecord> devices, const XRSessionId &activeSession) {
-            std::array<bool, 3> assignedRoles{};
+            std::array<bool, static_cast<std::size_t>(XRTrackedDeviceRole::Count)> assignedRoles{};
             for (std::size_t index = 0; index < devices.size(); ++index) {
                 const auto &device = devices[index];
                 if (auto identity = ValidateXRSessionObject(device.id, activeSession); identity.HasError())
