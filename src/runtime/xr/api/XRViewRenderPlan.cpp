@@ -157,9 +157,11 @@ namespace Horo::XR {
         /** @brief Detects a stale acquired image while keeping unavailable distinct. */
         [[nodiscard]] bool HasReplacedImage(const std::span<const XRSwapchainImageId> acquiredImages,
                                             const XRSwapchainImageId &image) noexcept {
-            for (std::size_t index = 0; index < acquiredImages.size(); ++index) {
+            std::size_t index = 0;
+            while (index < acquiredImages.size()) {
                 if (const auto &active = acquiredImages[index]; SameImageSlot(active, image) && active != image)
                     return true;
+                ++index;
             }
             return false;
         }
@@ -194,12 +196,14 @@ namespace Horo::XR {
         /** @brief Detects contradictory images or aliased subresources in prior target bindings. */
         [[nodiscard]] bool InvalidImageAliasing(const std::span<const XRExternalRenderTargetDescriptor> priorTargets,
                                                 const XRExternalRenderTargetDescriptor &target) noexcept {
-            for (std::size_t index = 0; index < priorTargets.size(); ++index) {
+            std::size_t index = 0;
+            while (index < priorTargets.size()) {
                 const auto &prior = priorTargets[index];
                 const bool differentImageForTarget = prior.target == target.target && prior.image != target.image;
                 const bool duplicateImageLayer = prior.image == target.image && prior.arrayLayer == target.arrayLayer;
                 if (differentImageForTarget || duplicateImageLayer)
                     return true;
+                ++index;
             }
             return false;
         }
@@ -241,9 +245,11 @@ namespace Horo::XR {
         /** @brief Checks whether a current image belongs to one declared external-target slot. */
         [[nodiscard]] bool KnownTargetSlot(const std::span<const XRExternalRenderTargetDescriptor> targets,
                                            const XRSwapchainImageId &image) noexcept {
-            for (std::size_t index = 0; index < targets.size(); ++index) {
+            std::size_t index = 0;
+            while (index < targets.size()) {
                 if (SameImageSlot(targets[index].image, image))
                     return true;
+                ++index;
             }
             return false;
         }
@@ -251,9 +257,11 @@ namespace Horo::XR {
         /** @brief Checks whether an exact target image generation is currently acquired. */
         [[nodiscard]] bool ExactImageAvailable(const std::span<const XRSwapchainImageId> acquiredImages,
                                                const XRSwapchainImageId &image) noexcept {
-            for (std::size_t index = 0; index < acquiredImages.size(); ++index) {
+            std::size_t index = 0;
+            while (index < acquiredImages.size()) {
                 if (acquiredImages[index] == image)
                     return true;
+                ++index;
             }
             return false;
         }
