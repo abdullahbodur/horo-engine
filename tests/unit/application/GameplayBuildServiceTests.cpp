@@ -102,8 +102,8 @@ HORO_BEHAVIOR(Movement, "game.tests.build_movement")
     public:
         Result<ExternalProcessResult> Run(const ExternalProcessRequest &request, const CancellationToken &) override {
             const std::filesystem::path absoluteSource = request.workingDirectory / "source/gameplay/Movement.cpp";
-            request.onOutput(
-                {ProcessOutputStream::StandardError, "source/gameplay/Movement.cpp:12:7: warning: deprecated gameplay declaration"});
+            request.onOutput({ProcessOutputStream::StandardError,
+                              "source/gameplay/Movement.cpp:12:7: warning: deprecated gameplay declaration [-Wdeprecated-declarations]"});
             request.onOutput({ProcessOutputStream::StandardError, absoluteSource.string() + ":14:3: error: invalid gameplay declaration"});
             request.onOutput(
                 {ProcessOutputStream::StandardError, "source/gameplay/Movement.cpp:99999999999999999999:1: error: invalid coordinate"});
@@ -152,6 +152,21 @@ TEST_CASE("Compiler diagnostic parser supports GCC Clang and MSVC output", "[uni
         REQUIRE((diagnostic->compilerCode == "C2143"));
         REQUIRE((diagnostic->message == "syntax error: missing ';' before '}'"));
     }
+
+    SECTION("GCC and Clang diagnostics may omit the column") {
+        const auto diagnostic = ParseCompilerDiagnostic("source/gameplay/Player.cpp:31: error: expected declaration", projectRoot);
+        REQUIRE(diagnostic.has_value());
+        REQUIRE((diagnostic->source.line == 31U));
+        REQUIRE((diagnostic->source.column == 0U));
+    }
+
+    SECTION("MSVC diagnostics may omit the column") {
+        const auto diagnostic = ParseCompilerDiagnostic("source\\Player.cpp(19): warning C4100: unreferenced parameter", projectRoot);
+        REQUIRE(diagnostic.has_value());
+        REQUIRE((diagnostic->source.line == 19U));
+        REQUIRE((diagnostic->source.column == 0U));
+        REQUIRE((diagnostic->compilerCode == "C4100"));
+    }
 }
 
 TEST_CASE("Compiler diagnostic parser rejects malformed and oversized input safely", "[unit][gameplay][build][diagnostics]") {
@@ -160,7 +175,7 @@ TEST_CASE("Compiler diagnostic parser rejects malformed and oversized input safe
     REQUIRE_FALSE(ParseCompilerDiagnostic("not a diagnostic", projectRoot).has_value());
     REQUIRE_FALSE(ParseCompilerDiagnostic("file.cpp:0:2: error: invalid line", projectRoot).has_value());
     REQUIRE_FALSE(ParseCompilerDiagnostic("file.cpp:2:nope: warning: invalid column", projectRoot).has_value());
-    REQUIRE_FALSE(ParseCompilerDiagnostic("file.cpp(2): error C1000: missing column", projectRoot).has_value());
+    REQUIRE_FALSE(ParseCompilerDiagnostic("file.cpp(nope): error C1000: invalid line", projectRoot).has_value());
     REQUIRE_FALSE(ParseCompilerDiagnostic(std::string(MaximumCompilerDiagnosticLineBytes + 1U, 'x'), projectRoot).has_value());
 
     const std::string prefix = "file.cpp:1:1: warning: ";
@@ -275,6 +290,7 @@ TEST_CASE("Gameplay build output classifies bounded GCC and Clang diagnostics", 
     REQUIRE((std::filesystem::path{warning->source->absolutePath} == (project.root / "source/gameplay/Movement.cpp").lexically_normal()));
     REQUIRE((warning->source->line == 12U));
     REQUIRE((warning->source->column == 7U));
+    REQUIRE((warning->toolCode == "-Wdeprecated-declarations"));
 
     const auto error = findCode("gameplay.build.compiler_error");
     REQUIRE((error != snapshot->records.end()));

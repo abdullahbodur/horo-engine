@@ -420,6 +420,7 @@ namespace Horo::Application {
                 record.severity = diagnostic->severity;
                 record.code = DiagnosticCode{diagnostic->severity == DiagnosticSeverity::Error ? "gameplay.build.compiler_error"
                                                                                                : "gameplay.build.compiler_warning"};
+                record.toolCode = diagnostic->compilerCode;
             }
             const bool diagnosticRecord = record.source.has_value();
             const bool byteBudgetAvailable = budget.bytes + record.message.size() <= MaximumBytes;

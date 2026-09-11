@@ -12,6 +12,12 @@ namespace Horo::Application {
             std::string_view marker;
         };
 
+        struct ParsedLocation {
+            std::string_view path;
+            std::uint32_t line{};
+            std::uint32_t column{};
+        };
+
         [[nodiscard]] std::optional<std::uint32_t> ParseCoordinate(const std::string_view digits) noexcept {
             if (digits.empty())
                 return std::nullopt;
@@ -20,6 +26,45 @@ namespace Horo::Application {
             if (error != std::errc{} || end != digits.data() + digits.size() || value == 0U)
                 return std::nullopt;
             return value;
+        }
+
+        [[nodiscard]] std::optional<ParsedLocation> ParseColonLocation(const std::string_view location) noexcept {
+            const std::size_t lastSeparator = location.rfind(':');
+            if (lastSeparator == std::string_view::npos)
+                return std::nullopt;
+            const auto lastCoordinate = ParseCoordinate(location.substr(lastSeparator + 1U));
+            if (!lastCoordinate.has_value())
+                return std::nullopt;
+
+            const std::size_t previousSeparator = lastSeparator == 0U ? std::string_view::npos : location.rfind(':', lastSeparator - 1U);
+            if (previousSeparator != std::string_view::npos) {
+                const std::string_view possibleLine = location.substr(previousSeparator + 1U, lastSeparator - previousSeparator - 1U);
+                if (const auto line = ParseCoordinate(possibleLine); line.has_value()) {
+                    return ParsedLocation{location.substr(0, previousSeparator), *line, *lastCoordinate};
+                }
+                if (!possibleLine.empty() && std::ranges::all_of(possibleLine, [](const unsigned char value) {
+                    return value >= '0' && value <= '9';
+                }))
+                    return std::nullopt;
+            }
+            return ParsedLocation{location.substr(0, lastSeparator), *lastCoordinate, 0U};
+        }
+
+        [[nodiscard]] std::optional<std::pair<std::uint32_t, std::uint32_t>> ParseParenthesizedCoordinates(
+            const std::string_view coordinates) noexcept {
+            const std::size_t separator = coordinates.find(',');
+            if (separator == std::string_view::npos) {
+                if (const auto line = ParseCoordinate(coordinates); line.has_value())
+                    return std::pair{*line, 0U};
+                return std::nullopt;
+            }
+            if (coordinates.find(',', separator + 1U) != std::string_view::npos)
+                return std::nullopt;
+            const auto line = ParseCoordinate(coordinates.substr(0, separator));
+            const auto column = ParseCoordinate(coordinates.substr(separator + 1U));
+            if (!line.has_value() || !column.has_value())
+                return std::nullopt;
+            return std::pair{*line, *column};
         }
 
         [[nodiscard]] std::optional<SeverityMatch> FindSeverity(const std::string_view line, const std::string_view errorMarker,
@@ -60,17 +105,10 @@ namespace Horo::Application {
             if (!severity.has_value())
                 return std::nullopt;
             const std::string_view location = input.substr(0, severity->position);
-            const std::size_t columnSeparator = location.rfind(':');
-            if (columnSeparator == std::string_view::npos)
+            const auto parsedLocation = ParseColonLocation(location);
+            if (!parsedLocation.has_value())
                 return std::nullopt;
-            const std::size_t lineSeparator = location.rfind(':', columnSeparator - 1U);
-            if (lineSeparator == std::string_view::npos)
-                return std::nullopt;
-            const auto line = ParseCoordinate(location.substr(lineSeparator + 1U, columnSeparator - lineSeparator - 1U));
-            const auto column = ParseCoordinate(location.substr(columnSeparator + 1U));
-            if (!line.has_value() || !column.has_value())
-                return std::nullopt;
-            const auto source = MakeSource(location.substr(0, lineSeparator), *line, *column, projectRoot);
+            const auto source = MakeSource(parsedLocation->path, parsedLocation->line, parsedLocation->column, projectRoot);
             if (!source.has_value())
                 return std::nullopt;
 
@@ -95,14 +133,10 @@ namespace Horo::Application {
             if (open == std::string_view::npos || open == 0U)
                 return std::nullopt;
             const std::string_view coordinates = input.substr(open + 1U, severity->position - open - 1U);
-            const std::size_t separator = coordinates.find(',');
-            if (separator == std::string_view::npos || coordinates.find(',', separator + 1U) != std::string_view::npos)
+            const auto parsedCoordinates = ParseParenthesizedCoordinates(coordinates);
+            if (!parsedCoordinates.has_value())
                 return std::nullopt;
-            const auto line = ParseCoordinate(coordinates.substr(0, separator));
-            const auto column = ParseCoordinate(coordinates.substr(separator + 1U));
-            if (!line.has_value() || !column.has_value())
-                return std::nullopt;
-            const auto source = MakeSource(input.substr(0, open), *line, *column, projectRoot);
+            const auto source = MakeSource(input.substr(0, open), parsedCoordinates->first, parsedCoordinates->second, projectRoot);
             if (!source.has_value())
                 return std::nullopt;
 

@@ -72,6 +72,7 @@ namespace Horo {
         BuildOutputResult result{BuildOutputResult::None};
         std::string stage;
         DiagnosticCode code;
+        std::optional<std::string> toolCode; /**< Optional producer/tool-native code; never replaces the stable Horo code. */
         std::string message;
         std::optional<DiagnosticSourceLocation> source;
     };
