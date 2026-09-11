@@ -36,8 +36,9 @@ namespace Horo::Destruction {
 
         template <typename T> void CheckError(const Result<T> &result, const ErrorCodeDescriptor &expected) {
             REQUIRE(result.HasError());
-            CHECK((result.ErrorValue().domain.Value() == expected.domain.Value() &&
-                   result.ErrorValue().code.Value() == expected.code.Value()));
+            const Error &actual = result.ErrorValue();
+            CHECK(actual.domain.Value() == expected.domain.Value());
+            CHECK(actual.code.Value() == expected.code.Value());
         }
     }  // namespace
 

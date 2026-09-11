@@ -47,8 +47,8 @@ namespace Horo::Destruction {
                 if (seen[index])
                     return Result<std::array<DestructionCapabilityFact, DestructionHostCapabilityCount>>::Failure(
                         MakeError(DestructionErrors::CompositionInvalid));
-                const bool available = fact.availability == DestructionCapabilityAvailability::Available;
-                if (available != fact.revision.IsValid())
+                if (const bool available = fact.availability == DestructionCapabilityAvailability::Available;
+                    available != fact.revision.IsValid())
                     return Result<std::array<DestructionCapabilityFact, DestructionHostCapabilityCount>>::Failure(
                         MakeError(DestructionErrors::CompositionInvalid));
                 seen[index] = true;
@@ -155,13 +155,14 @@ namespace Horo::Destruction {
     Result<void> ValidateDestructionCompositionAdmission(const DestructionComposition &composition,
                                                          const DestructionCompositionRevision currentRevision,
                                                          const DestructionCompositionLifecycle lifecycle) {
+        using enum DestructionCompositionLifecycle;
         if (!currentRevision.IsValid() || !IsKnown(lifecycle))
             return Result<void>::Failure(MakeError(DestructionErrors::CompositionInvalid));
         if (composition.Revision() != currentRevision)
             return Result<void>::Failure(MakeError(DestructionErrors::CompositionStale));
-        if (lifecycle == DestructionCompositionLifecycle::Cancelling)
+        if (lifecycle == Cancelling)
             return Result<void>::Failure(MakeError(DestructionErrors::CancelledBeforeCommit));
-        if (lifecycle == DestructionCompositionLifecycle::ShuttingDown || lifecycle == DestructionCompositionLifecycle::Closed)
+        if (lifecycle == ShuttingDown || lifecycle == Closed)
             return Result<void>::Failure(MakeError(DestructionErrors::ShutdownInProgress));
         return Result<void>::Success();
     }
