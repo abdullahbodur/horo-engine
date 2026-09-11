@@ -7,19 +7,20 @@
 #include <limits>
 #include <new>
 #include <utility>
+#include <vector>
 
 namespace Horo::Vfx {
     namespace Detail {
         struct CpuParticleSpawnPipelineState final {
             CpuParticleSpawnPipelineState(CpuParticleBuffer bufferValue, const ParticleSystemDescriptorData &descriptorValue,
                                           const CpuParticleSpawnPipelineCreateInfo &infoValue,
-                                          std::unique_ptr<CpuParticleHandle[]> handlesValue) noexcept
+                                          std::vector<CpuParticleHandle> handlesValue) noexcept
                 : buffer(std::move(bufferValue)), descriptor(descriptorValue), info(infoValue), handles(std::move(handlesValue)) {}
 
             CpuParticleBuffer buffer;
             ParticleSystemDescriptorData descriptor;
             CpuParticleSpawnPipelineCreateInfo info;
-            std::unique_ptr<CpuParticleHandle[]> handles;
+            std::vector<CpuParticleHandle> handles;
             double spawnRate{};
             double spawnCarry{};
             std::uint64_t nextSimulationIdentity{};
@@ -98,7 +99,9 @@ namespace Horo::Vfx {
         }
 
         void InitializePosition(const Detail::CpuParticleSpawnPipelineState &state, const ParticleSimulationId particle,
-                                CpuParticleSoAView &view, const std::uint32_t dense) noexcept {
+                                const CpuParticleSoAView &view, const std::uint32_t dense) noexcept {
+            using enum ParticleEmitterShape;
+
             const double u = UnitFloat(state, particle, ParticleRandomChannel::SpawnX);
             const double v = UnitFloat(state, particle, ParticleRandomChannel::SpawnY);
             const double w = UnitFloat(state, particle, ParticleRandomChannel::SpawnZ);
@@ -106,9 +109,9 @@ namespace Horo::Vfx {
             double y{};
             double z{};
             switch (state.descriptor.shape) {
-                case ParticleEmitterShape::Point:
+                case Point:
                     break;
-                case ParticleEmitterShape::Sphere: {
+                case Sphere: {
                     const double cosine = (2.0 * v) - 1.0;
                     const double radius = std::cbrt(w);
                     const double radial = std::sqrt(std::max(0.0, 1.0 - (cosine * cosine))) * radius;
@@ -118,12 +121,12 @@ namespace Horo::Vfx {
                     z = cosine * radius;
                     break;
                 }
-                case ParticleEmitterShape::Box:
+                case Box:
                     x = (2.0 * u) - 1.0;
                     y = (2.0 * v) - 1.0;
                     z = (2.0 * w) - 1.0;
                     break;
-                case ParticleEmitterShape::Cone: {
+                case Cone: {
                     z = std::cbrt(w);
                     const double radial = std::sqrt(v) * z;
                     const double angle = Tau * u;
@@ -131,7 +134,7 @@ namespace Horo::Vfx {
                     y = radial * std::sin(angle);
                     break;
                 }
-                case ParticleEmitterShape::Count:
+                case Count:
                     break;
             }
             view.positionX[dense] = static_cast<float>(x);
@@ -140,7 +143,7 @@ namespace Horo::Vfx {
         }
 
         void InitializeVelocity(const Detail::CpuParticleSpawnPipelineState &state, const ParticleSimulationId particle,
-                                CpuParticleSoAView &view, const std::uint32_t dense) noexcept {
+                                const CpuParticleSoAView &view, const std::uint32_t dense) noexcept {
             double x = view.positionX[dense];
             double y = view.positionY[dense];
             double z = view.positionZ[dense];
@@ -161,20 +164,21 @@ namespace Horo::Vfx {
         }
 
         void InitializeParticle(const Detail::CpuParticleSpawnPipelineState &state, const CpuParticleHandle &handle,
-                                CpuParticleSoAView &view, const std::uint32_t dense) noexcept {
+                                const CpuParticleSoAView &view, const std::uint32_t dense) noexcept {
+            using enum ParticleRandomChannel;
+
             InitializePosition(state, handle.particle, view, dense);
             InitializeVelocity(state, handle.particle, view, dense);
-            const float size = SampleRange(state, handle.particle, ParticleRandomChannel::Size, state.descriptor.initialSize);
-            const float opacity = SampleRange(state, handle.particle, ParticleRandomChannel::Opacity, state.descriptor.initialOpacity);
+            const float size = SampleRange(state, handle.particle, Size, state.descriptor.initialSize);
+            const float opacity = SampleRange(state, handle.particle, Opacity, state.descriptor.initialOpacity);
             view.sizeX[dense] = size;
             view.sizeY[dense] = size;
-            view.rotation[dense] = static_cast<float>(Tau * UnitFloat(state, handle.particle, ParticleRandomChannel::Rotation));
+            view.rotation[dense] = static_cast<float>(Tau * UnitFloat(state, handle.particle, Rotation));
             view.angularVelocity[dense] = 0.0F;
             view.age[dense] = 0.0F;
-            view.maximumAge[dense] =
-                state.descriptor.lifetimeKind == ParticleLifetimeKind::Finite
-                    ? SampleRange(state, handle.particle, ParticleRandomChannel::Lifetime, state.descriptor.lifetimeSeconds)
-                    : std::numeric_limits<float>::max();
+            view.maximumAge[dense] = state.descriptor.lifetimeKind == ParticleLifetimeKind::Finite
+                                         ? SampleRange(state, handle.particle, Lifetime, state.descriptor.lifetimeSeconds)
+                                         : std::numeric_limits<float>::max();
             view.customFlags[dense] = 0U;
             const auto alpha = static_cast<std::uint32_t>(std::clamp(opacity, 0.0F, 1.0F) * 255.0F + 0.5F);
             view.packedColor[dense] = 0xFFFFFF00U | alpha;
@@ -205,7 +209,7 @@ namespace Horo::Vfx {
         }
 
         [[nodiscard]] Result<std::uint32_t> SpawnParticles(Detail::CpuParticleSpawnPipelineState &state, const std::uint32_t admitted) {
-            const std::uint32_t firstDense = state.buffer.Statistics().active;
+            const auto firstDense = state.buffer.Statistics().active;
             for (std::uint32_t birth = 0; birth < admitted; ++birth) {
                 auto particle = ParticleSimulationId::Create(++state.nextSimulationIdentity);
                 if (particle.HasError())
@@ -218,7 +222,7 @@ namespace Horo::Vfx {
             return Result<std::uint32_t>::Success(firstDense);
         }
 
-        void InitializeParticles(const Detail::CpuParticleSpawnPipelineState &state, CpuParticleSoAView &view,
+        void InitializeParticles(const Detail::CpuParticleSpawnPipelineState &state, const CpuParticleSoAView &view,
                                  const std::uint32_t firstDense, const std::uint32_t admitted) noexcept {
             for (std::uint32_t birth = 0; birth < admitted; ++birth) {
                 const std::uint32_t dense = firstDense + birth;
@@ -226,7 +230,7 @@ namespace Horo::Vfx {
             }
         }
 
-        void AdvanceAges(CpuParticleSoAView &view, const float deltaSeconds) noexcept {
+        void AdvanceAges(const CpuParticleSoAView &view, const float deltaSeconds) noexcept {
             for (float &age : view.age)
                 age = std::min(age, std::numeric_limits<float>::max() - deltaSeconds) + deltaSeconds;
         }
@@ -283,7 +287,7 @@ namespace Horo::Vfx {
             return Result<CpuParticleSpawnPipeline>::Failure(buffer.ErrorValue());
 
         try {
-            auto handles = std::make_unique<CpuParticleHandle[]>(data.maximumParticles);
+            std::vector<CpuParticleHandle> handles(data.maximumParticles);
             auto state = std::make_unique<Detail::CpuParticleSpawnPipelineState>(std::move(buffer).Value(), data, info, std::move(handles));
             const std::uint64_t base = IdentityBase(info.activation, data.emitter);
             state->nextSimulationIdentity = base == 0 ? 1 : base;
@@ -380,8 +384,7 @@ namespace Horo::Vfx {
     Result<void> CpuParticleSpawnPipeline::Shutdown() {
         if (state_ == nullptr || state_->shutDown)
             return Result<void>::Success();
-        auto result = state_->buffer.Shutdown();
-        if (result.HasError())
+        if (auto result = state_->buffer.Shutdown(); result.HasError())
             return result;
         state_->shutDown = true;
         return Result<void>::Success();
