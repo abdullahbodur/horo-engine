@@ -275,6 +275,7 @@ horo_register_catch_test(HoroAnimationApiTests LABELS "unit;animation;headless")
 add_executable(HoroPCGTests
         unit/runtime/pcg/PCGIdentityTests.cpp
         unit/runtime/pcg/PCGPointSchemaTests.cpp
+        unit/runtime/pcg/PCGSpatialSnapshotTests.cpp
 )
 target_compile_features(HoroPCGTests PRIVATE cxx_std_20)
 target_link_libraries(HoroPCGTests PRIVATE HoroEngine::PCG)

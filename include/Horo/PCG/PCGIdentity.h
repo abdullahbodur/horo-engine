@@ -25,6 +25,11 @@ namespace Horo::PCG {
     struct GraphRevisionIdentityTag;
     struct ExecutionValueIdentityTag;
     struct SourceSampleIdentityTag;
+    struct SpatialProviderIdentityTag;
+    struct SpatialSourceIdentityTag;
+    struct SpatialSnapshotIdentityTag;
+    struct SpatialRevisionIdentityTag;
+    struct SpatialElementIdentityTag;
 
     /** @brief Stable authored graph identity, independent of path, name, address, and load instance. */
     using GraphId = PcgStableIdentity<GraphIdentityTag>;
@@ -38,6 +43,16 @@ namespace Horo::PCG {
     using ExecutionValue = PcgStableIdentity<ExecutionValueIdentityTag>;
     /** @brief Stable source-sample identity used by deterministic generated-output derivation. */
     using SourceSampleId = PcgStableIdentity<SourceSampleIdentityTag>;
+    /** @brief Stable identity of one host-composed spatial provider contribution. */
+    using SpatialProviderId = PcgStableIdentity<SpatialProviderIdentityTag>;
+    /** @brief Stable identity of provider-owned source truth independent of storage address. */
+    using SpatialSourceId = PcgStableIdentity<SpatialSourceIdentityTag>;
+    /** @brief Unique identity of one immutable captured spatial snapshot. */
+    using SpatialSnapshotId = PcgStableIdentity<SpatialSnapshotIdentityTag>;
+    /** @brief Monotonic semantic revision of one provider-owned spatial source. */
+    using SpatialRevision = PcgStableIdentity<SpatialRevisionIdentityTag>;
+    /** @brief Stable provider-owned identity of one canonical spatial element. */
+    using SpatialElementId = PcgStableIdentity<SpatialElementIdentityTag>;
 
     /** @brief Canonical network-byte-order encoding of one stable PCG identity. */
     using SerializedStableIdentity = std::array<std::uint8_t, sizeof(std::uint64_t)>;
