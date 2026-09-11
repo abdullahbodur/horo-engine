@@ -114,31 +114,31 @@ namespace Horo::XR {
         /** @brief Conservatively combines two component-validity provenances. */
         [[nodiscard]] XRPoseComponentValidity CombinedValidity(const XRPoseComponentValidity first,
                                                                const XRPoseComponentValidity second) noexcept {
-            if (first == XRPoseComponentValidity::Invalid || second == XRPoseComponentValidity::Invalid)
-                return XRPoseComponentValidity::Invalid;
-            return first == XRPoseComponentValidity::Tracked && second == XRPoseComponentValidity::Tracked
-                       ? XRPoseComponentValidity::Tracked
-                       : XRPoseComponentValidity::Inferred;
+            using enum XRPoseComponentValidity;
+            if (first == Invalid || second == Invalid)
+                return Invalid;
+            return first == Tracked && second == Tracked ? Tracked : Inferred;
         }
 
         /** @brief Conservatively combines two tracking-confidence categories. */
         [[nodiscard]] XRTrackingConfidence CombinedConfidence(const XRTrackingConfidence first,
                                                               const XRTrackingConfidence second) noexcept {
-            if (first == XRTrackingConfidence::None || second == XRTrackingConfidence::None)
-                return XRTrackingConfidence::None;
-            return first == XRTrackingConfidence::Low || second == XRTrackingConfidence::Low ? XRTrackingConfidence::Low
-                                                                                             : XRTrackingConfidence::High;
+            using enum XRTrackingConfidence;
+            if (first == None || second == None)
+                return None;
+            return first == Low || second == Low ? Low : High;
         }
 
         /** @brief Combines tracking-loss categories without restoring missing evidence. */
         [[nodiscard]] XRTrackingLossState CombinedLoss(const XRTrackingLossState first, const XRTrackingLossState second) noexcept {
-            if (first == XRTrackingLossState::FullyLost || second == XRTrackingLossState::FullyLost)
-                return XRTrackingLossState::FullyLost;
-            if (first == XRTrackingLossState::None)
+            using enum XRTrackingLossState;
+            if (first == FullyLost || second == FullyLost)
+                return FullyLost;
+            if (first == None)
                 return second;
-            if (second == XRTrackingLossState::None || first == second)
+            if (second == None || first == second)
                 return first;
-            return XRTrackingLossState::FullyLost;
+            return FullyLost;
         }
 
         /** @brief Rotates and adds two vector components while retaining weakest validity. */
@@ -171,8 +171,8 @@ namespace Horo::XR {
         [[nodiscard]] XRPoseComponents ComposeComponents(const XRPoseComponents &first, const XRPoseComponents &second) {
             XRPoseComponents composed;
             composed.positionMeters = ComposeVector(first.positionMeters, second.positionMeters, second.orientation);
-            const auto orientationValidity = CombinedValidity(first.orientation.validity, second.orientation.validity);
-            if (orientationValidity != XRPoseComponentValidity::Invalid) {
+            if (const auto orientationValidity = CombinedValidity(first.orientation.validity, second.orientation.validity);
+                orientationValidity != XRPoseComponentValidity::Invalid) {
                 composed.orientation = {.value = *second.orientation.value * *first.orientation.value, .validity = orientationValidity};
             }
             composed.linearVelocityMetersPerSecond = ComposeLinearVelocity(first, second);
@@ -217,9 +217,8 @@ namespace Horo::XR {
                                               const XRWorldOriginRevision activeOriginRevision) {
         if (auto session = ValidateXRSession(descriptor.session, activeSession); session.HasError())
             return Result<XRPoseSample>::Failure(session.ErrorValue());
-        Error spaceFailure;
-        if (!ValidSpace(descriptor.source, activeSession, activeOriginRevision, spaceFailure) ||
-            !ValidSpace(descriptor.target, activeSession, activeOriginRevision, spaceFailure)) {
+        if (Error spaceFailure; !ValidSpace(descriptor.source, activeSession, activeOriginRevision, spaceFailure) ||
+                                !ValidSpace(descriptor.target, activeSession, activeOriginRevision, spaceFailure)) {
             return Result<XRPoseSample>::Failure(std::move(spaceFailure));
         }
         if (descriptor.source.id == descriptor.target.id && descriptor.source != descriptor.target)
