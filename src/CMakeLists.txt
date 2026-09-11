@@ -520,6 +520,7 @@ target_link_libraries(HoroPCG PUBLIC HoroEngine::Foundation)
 
 add_library(HoroVfxApi STATIC
         runtime/vfx/api/CpuParticleBuffer.cpp
+        runtime/vfx/api/CpuParticleSpawnPipeline.cpp
         runtime/vfx/api/ParticleSystemDescriptor.cpp
         runtime/vfx/api/VfxErrors.cpp
         runtime/vfx/api/VfxIdentity.cpp

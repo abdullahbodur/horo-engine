@@ -725,6 +725,31 @@ backend-neutral frame slice with its own lease. RenderFrontend owns upload and n
 GPU buffers; neither a mutable SoA span nor a `CpuParticleHandle` is a render-resource
 handle or durable extraction reference.
 
+`Horo/Vfx/CpuParticleSpawnPipeline.h` composes the first, second and sixth CPU stages
+over that storage without adding another owner. Preparation copies one already
+validated descriptor, preallocates the dense handle table and captures the effect
+activation, seed and product-lowered burst/delta limits. `Advance` then evaluates
+continuous rate carry plus the frozen burst request, admits at most the available
+slots, initializes every accepted birth and reclaims finite-lifetime or explicitly
+signalled deaths. Capacity rejection is returned as an exact dropped count; it never
+replaces a live particle or grows storage.
+
+The installed initialization contract uses canonical emitter-local unit point,
+sphere, box and cone geometry. Host/world transforms remain a later immutable stage
+input. Version-one counter-hash samples include the cooked seed, activation, emitter,
+stable particle identity, semantic channel, sample ordinal and algorithm version.
+Integer words and their 24-bit `[0,1)` mapping are independent of mutable PRNG state,
+slot reuse and call ordering; floating geometry remains subject to ADR-123's qualified
+numeric contract. Continuous fractional carry and stable spawn ordinals commit only
+with an accepted step. Invalid, over-limit or cancelled inputs fail before mutation.
+
+Spawn, initialization, age advancement and kill are bounded by fixed buffer capacity.
+They allocate nothing, block on no worker/backend and remain owner-thread affine.
+Kill uses the buffer's swap removal and updates the parallel dense-handle table in the
+same owner operation. Explicit kill is a bit in the private `customFlags` stream and
+becomes effective at the next Kill stage; no callback or same-step reentrant spawn is
+introduced. Shutdown is idempotent and leaves moved-from facades inert.
+
 ### GPU Compute Simulation Layout
 
 The renderer owns GPU device buffers and runs the cooked kernels in declared graph
