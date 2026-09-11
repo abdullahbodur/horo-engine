@@ -71,6 +71,7 @@ endfunction()
 
 add_executable(HoroPackageValidationTests
     unit/packages/PackageDependencyResolverTests.cpp
+    unit/packages/PackageLockfileTests.cpp
     unit/packages/PackagePathTests.cpp
     unit/packages/PackageArchiveTests.cpp
     unit/packages/PackageFileManifestTests.cpp)

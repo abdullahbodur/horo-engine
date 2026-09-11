@@ -518,6 +518,15 @@ decision by accident. Non-interactive restore and release validation fail when
 `packages.lock.requestHash` does not match the canonical dependency request in
 `packages.json`.
 
+The implemented schema-v1 codec is `ValidatedPackageLockfileV1`. Generation
+binds every resolver selection to typed source identity, artifact, package
+manifest and file-manifest digests before publishing one canonical package-ID
+ordered document. Direct roots and exact-version edges make the stored closure
+auditable; parsing rejects unknown or duplicate fields, noncanonical nested
+ordering, cyclic edges and unreachable stale entries. Restore validation is a
+pure preflight over the request digest, package format and exact host platform;
+it performs no cache, project, trust or activation mutation.
+
 ## Resolver Rules
 
 The resolver is deterministic:

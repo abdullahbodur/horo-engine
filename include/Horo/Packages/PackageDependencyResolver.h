@@ -6,6 +6,7 @@
  */
 
 #include "Horo/Foundation/Result.h"
+#include "Horo/Foundation/Sha256.h"
 
 #include <compare>
 #include <cstddef>
@@ -34,6 +35,24 @@ namespace Horo::Packages {
 
     private:
         explicit HoroPackageId(std::string value);
+        std::string value_;
+    };
+
+    /** @brief Canonical portable identity of an approved package source authority. */
+    class HoroPackageSourceId {
+    public:
+        /**
+         * @brief Parses a bounded lowercase source identity without transport or credential material.
+         * @param text Candidate canonical identity.
+         * @return Parsed source identity or a typed invalid-input failure.
+         */
+        [[nodiscard]] static Result<HoroPackageSourceId> Parse(std::string_view text);
+        /** @brief Returns the canonical identity. @return Stable identity storage owned by this value. */
+        [[nodiscard]] const std::string &Value() const noexcept;
+        [[nodiscard]] auto operator<=>(const HoroPackageSourceId &) const = default;
+
+    private:
+        explicit HoroPackageSourceId(std::string value);
         std::string value_;
     };
 
@@ -109,9 +128,9 @@ namespace Horo::Packages {
     struct PackageResolutionCandidate {
         HoroPackageId package;
         PackageVersion version;
-        std::string sourceId;
+        HoroPackageSourceId source;
         std::uint32_t sourceRank{}; /**< Lower ranks have higher explicit policy precedence. */
-        std::string artifactDigest;
+        Sha256Digest artifactDigest;
         std::vector<std::string> features;
         std::vector<PackageDependencyRequest> dependencies;
         std::vector<PackagePlatform> platforms;
@@ -141,8 +160,8 @@ namespace Horo::Packages {
     struct ResolvedPackage {
         HoroPackageId package;
         PackageVersion version;
-        std::string sourceId;
-        std::string artifactDigest;
+        HoroPackageSourceId source;
+        Sha256Digest artifactDigest;
         std::vector<HoroPackageId> dependencies;
     };
 
