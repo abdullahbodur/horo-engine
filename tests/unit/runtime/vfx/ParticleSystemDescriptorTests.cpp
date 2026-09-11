@@ -114,6 +114,12 @@ namespace Horo::Vfx {
         REQUIRE(malformed.HasError());
         RequireError(malformed.ErrorValue(), VfxErrors::ParticleDescriptorMalformed);
 
+        std::string invalidEmitter = ValidJson();
+        invalidEmitter.replace(invalidEmitter.find("\"slot\":7"), std::string{"\"slot\":7"}.size(), "\"slot\":\"seven\"");
+        auto emitterFailure = ParseParticleSystemDescriptor(invalidEmitter);
+        REQUIRE(emitterFailure.HasError());
+        REQUIRE(emitterFailure.ErrorValue().message == "emitterId values are outside their encoded ranges.");
+
         std::string newer = ValidJson();
         newer.replace(newer.find("\"major\":1"), std::string{"\"major\":1"}.size(), "\"major\":2");
         auto unsupported = ParseParticleSystemDescriptor(newer);

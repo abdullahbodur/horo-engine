@@ -168,6 +168,16 @@ namespace Horo::Vfx {
             return Result<ParticleScalarRange>::Success({*minimum, *maximum});
         }
 
+        template <typename... Results> [[nodiscard]] std::optional<Error> FirstDecodeFailure(const Results &...results) {
+            std::optional<Error> failure;
+            const auto capture = [&failure](const auto &result) {
+                if (!failure.has_value() && result.HasError())
+                    failure = result.ErrorValue();
+            };
+            (capture(results), ...);
+            return failure;
+        }
+
         [[nodiscard]] bool ValidRoot(const Json &root) {
             return ExactObject(root, {"schemaVersion", "emitterId", "simulationPreference", "maximumParticles", "shape", "spawnRate",
                                       "lifetime", "initialSpeed", "initialSize", "initialOpacity", "materialId", "renderMode", "sortMode",
@@ -188,10 +198,9 @@ namespace Horo::Vfx {
             auto size = DecodeRange(root.at("initialSize"), "initialSize");
             auto opacity = DecodeRange(root.at("initialOpacity"), "initialOpacity");
             const auto maximumParticles = Unsigned<std::uint32_t>(root.at("maximumParticles"));
-            if (version.HasError())
-                return Result<ParticleSystemDescriptorData>::Failure(version.ErrorValue());
-            if (emitter.HasError() || spawnRate.HasError() || lifetime.HasError() || speed.HasError() || size.HasError() ||
-                opacity.HasError() || !maximumParticles.has_value() || !root.at("materialId").is_string())
+            if (auto failure = FirstDecodeFailure(version, emitter, spawnRate, lifetime, speed, size, opacity); failure.has_value())
+                return Result<ParticleSystemDescriptorData>::Failure(std::move(*failure));
+            if (!maximumParticles.has_value() || !root.at("materialId").is_string())
                 return Reject<ParticleSystemDescriptorData>(VfxErrors::ParticleDescriptorMalformed,
                                                             "Particle-system source contains a structurally invalid field.");
 
