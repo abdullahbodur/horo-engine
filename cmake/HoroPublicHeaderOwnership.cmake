@@ -279,6 +279,7 @@ horo_configure_target_header_boundary(HoroPCG PUBLIC_HEADERS
     Horo/PCG/PCGRegistry.h
 )
 horo_configure_target_header_boundary(HoroVfxApi PUBLIC_HEADERS
+    Horo/Vfx/CpuParticleBuffer.h
     Horo/Vfx/ParticleSystemDescriptor.h
     Horo/Vfx/VfxErrors.h
     Horo/Vfx/VfxIdentity.h

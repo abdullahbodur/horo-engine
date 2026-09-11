@@ -26,6 +26,9 @@ workflows.
 - [XR Tracking Snapshot Migration](./xr-tracking-snapshot-migration.md):
   publish immutable, bounded device and pose snapshots with stable identity,
   capability, confidence, and loss-state semantics.
+- [CPU Particle Buffer Migration](./cpu-particle-buffer-migration.md):
+  replace per-particle storage and freelists with bounded aligned SoA storage and
+  generation-safe spawn/kill bookkeeping.
 
 ## Writing a Guide
 

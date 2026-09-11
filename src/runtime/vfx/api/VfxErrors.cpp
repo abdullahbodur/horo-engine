@@ -156,4 +156,58 @@ namespace Horo::Vfx::VfxErrors {
                                                        .remediationHint =
                                                            "Reduce the emitter workload or explicitly select a larger admitted tier.",
                                                        .userActionable = true};
+    const ErrorCodeDescriptor
+        ParticleSimulationIdentityInvalid{.domain = VfxDomain,
+                                          .code = ErrorCode{"vfx.particle.identity_invalid"},
+                                          .defaultSeverity = ErrorSeverity::Error,
+                                          .summary = "The particle simulation identity is invalid or was already issued.",
+                                          .remediationHint =
+                                              "Issue strictly increasing non-zero simulation identities independently from storage slots."};
+    const ErrorCodeDescriptor
+        ParticleBufferInvalid{.domain = VfxDomain,
+                              .code = ErrorCode{"vfx.particle_buffer.invalid"},
+                              .defaultSeverity = ErrorSeverity::Error,
+                              .summary = "The CPU particle buffer allocation contract is invalid.",
+                              .remediationHint =
+                                  "Use a valid buffer identity and bounded non-zero capacity, payload count, and byte budget."};
+    const ErrorCodeDescriptor
+        ParticleBufferAllocationFailed{.domain = VfxDomain,
+                                       .code = ErrorCode{"vfx.particle_buffer.allocation_failed"},
+                                       .defaultSeverity = ErrorSeverity::Error,
+                                       .summary = "The admitted CPU particle storage block could not be allocated.",
+                                       .remediationHint =
+                                           "Reduce the prepared capacity or release other scene-owned VFX storage before retrying.",
+                                       .retryable = true};
+    const ErrorCodeDescriptor ParticleBufferCapacityExceeded{.domain = VfxDomain,
+                                                             .code = ErrorCode{"vfx.particle_buffer.capacity_exceeded"},
+                                                             .defaultSeverity = ErrorSeverity::Warning,
+                                                             .summary = "The CPU particle buffer has no reusable slot.",
+                                                             .remediationHint =
+                                                                 "Reject the newest birth or use an explicitly admitted overload policy."};
+    const ErrorCodeDescriptor ParticleBufferThreadViolation{.domain = VfxDomain,
+                                                            .code = ErrorCode{"vfx.particle_buffer.thread_violation"},
+                                                            .defaultSeverity = ErrorSeverity::Error,
+                                                            .summary =
+                                                                "CPU particle storage was accessed outside its owning simulation thread.",
+                                                            .remediationHint =
+                                                                "Schedule mutation and views on the VFX simulation owner safe point."};
+    const ErrorCodeDescriptor
+        ParticleBufferShutDown{.domain = VfxDomain,
+                               .code = ErrorCode{"vfx.particle_buffer.shut_down"},
+                               .defaultSeverity = ErrorSeverity::Warning,
+                               .summary = "The CPU particle buffer has closed admission and retired its live slots.",
+                               .remediationHint =
+                                   "Discard the old buffer facade and create storage for the replacement scene incarnation."};
+    const ErrorCodeDescriptor ParticleHandleInvalid{.domain = VfxDomain,
+                                                    .code = ErrorCode{"vfx.particle_buffer.handle_invalid"},
+                                                    .defaultSeverity = ErrorSeverity::Error,
+                                                    .summary = "The particle handle is malformed or belongs to another buffer.",
+                                                    .remediationHint =
+                                                        "Use the complete handle returned by the owning CPU particle buffer."};
+    const ErrorCodeDescriptor ParticleHandleStale{.domain = VfxDomain,
+                                                  .code = ErrorCode{"vfx.particle_buffer.handle_stale"},
+                                                  .defaultSeverity = ErrorSeverity::Warning,
+                                                  .summary = "The particle handle names a killed or recycled slot generation.",
+                                                  .remediationHint =
+                                                      "Discard stale handles; storage-slot reuse never preserves particle authority."};
 }  // namespace Horo::Vfx::VfxErrors

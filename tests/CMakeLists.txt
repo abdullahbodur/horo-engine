@@ -290,11 +290,14 @@ target_link_libraries(HoroPCGTests PRIVATE HoroEngine::PCG)
 horo_register_catch_test(HoroPCGTests LABELS "unit;pcg;headless")
 
 add_executable(HoroVfxApiTests
+        support/AllocationProbe.cpp
+        unit/runtime/vfx/CpuParticleBufferTests.cpp
         unit/runtime/vfx/ParticleSystemDescriptorTests.cpp
         unit/runtime/vfx/VfxIdentityTests.cpp
         unit/runtime/vfx/VfxQualityPolicyTests.cpp
 )
 target_compile_features(HoroVfxApiTests PRIVATE cxx_std_20)
+target_include_directories(HoroVfxApiTests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
 target_link_libraries(HoroVfxApiTests PRIVATE HoroEngine::VfxApi)
 horo_register_catch_test(HoroVfxApiTests LABELS "unit;vfx;headless")
 

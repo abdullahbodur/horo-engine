@@ -699,9 +699,31 @@ struct CpuParticleBufferSoA {
 };
 ```
 
+`Horo/Vfx/CpuParticleBuffer.h` installs this contract as one preallocated,
+cache-line-aligned storage block plus fixed slot-indirection tables. The simulation
+owner issues strictly increasing `ParticleSimulationId` values independently from
+recyclable slots. `CpuParticleHandle` carries the owning buffer incarnation, stable
+particle identity, slot and non-wrapping generation; kill and clear invalidate the
+old generation before a slot can be reused. Live data is a packed prefix and kill
+uses deterministic swap-remove while preserving handles through dense/slot maps.
+
+Creation is an explicit preparation boundary. Spawn, kill, lookup, clear, view and
+shutdown are bounded and allocate nothing. These operations and diagnostics are
+simulation-owner-thread affine; shutdown closes admission and is idempotent. Views
+expire at the next mutation and must never cross a job, extraction or frame boundary.
+Generation exhaustion permanently retires a slot instead of wrapping. Capacity,
+custom-channel and byte ceilings are validated before allocation, and exhaustion is
+a typed rejection rather than growth or silent eviction.
+
 The SoA is never a gameplay capability. `customFlags` and additional compiled channels
 remain private unless their schema class explicitly projects a bounded immutable value
 through the gameplay seam below.
+
+CPU-to-GPU interchange is a copy/pack boundary, not shared mutable storage. Extraction
+reads the live prefix at its declared owner safe point and publishes an immutable,
+backend-neutral frame slice with its own lease. RenderFrontend owns upload and native
+GPU buffers; neither a mutable SoA span nor a `CpuParticleHandle` is a render-resource
+handle or durable extraction reference.
 
 ### GPU Compute Simulation Layout
 

@@ -60,4 +60,20 @@ namespace Horo::Vfx::VfxErrors {
     extern const ErrorCodeDescriptor ParticleMaterialUnloadable;
     /** @brief The particle descriptor exceeds the explicitly selected cook tier. */
     extern const ErrorCodeDescriptor ParticleCookTierExceeded;
+    /** @brief A stable particle simulation identity is invalid or not strictly monotonic. */
+    extern const ErrorCodeDescriptor ParticleSimulationIdentityInvalid;
+    /** @brief CPU particle storage configuration is zero, excessive, or arithmetically unsafe. */
+    extern const ErrorCodeDescriptor ParticleBufferInvalid;
+    /** @brief CPU particle storage could not be allocated during explicit preparation. */
+    extern const ErrorCodeDescriptor ParticleBufferAllocationFailed;
+    /** @brief No reusable CPU particle slot remains. */
+    extern const ErrorCodeDescriptor ParticleBufferCapacityExceeded;
+    /** @brief A CPU particle operation occurred on a non-owning thread. */
+    extern const ErrorCodeDescriptor ParticleBufferThreadViolation;
+    /** @brief A CPU particle operation targeted a shut-down buffer. */
+    extern const ErrorCodeDescriptor ParticleBufferShutDown;
+    /** @brief A CPU particle handle is malformed or belongs to another buffer. */
+    extern const ErrorCodeDescriptor ParticleHandleInvalid;
+    /** @brief A CPU particle handle names a retired or reused slot generation. */
+    extern const ErrorCodeDescriptor ParticleHandleStale;
 }  // namespace Horo::Vfx::VfxErrors
