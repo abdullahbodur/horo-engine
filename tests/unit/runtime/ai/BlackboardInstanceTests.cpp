@@ -85,8 +85,8 @@ namespace Horo::AI {
         void Observe(void *context, const BlackboardNotificationBatch &notification) noexcept {
             auto &probe = *static_cast<ObserverProbe *>(context);
             ++probe.calls;
-            probe.revision = notification.revision;
-            probe.changedCount = notification.changedKeyCount;
+            probe.revision = notification.Revision();
+            probe.changedCount = notification.Changes().size();
             std::ranges::copy(notification.Changes(), probe.changes.begin());
             if (probe.instance == nullptr)
                 return;
@@ -126,6 +126,13 @@ namespace Horo::AI {
         static_assert(std::is_same_v<decltype(std::declval<const BlackboardWriteBatch>().Writes()), std::span<const BlackboardWrite>>);
         static_assert(std::is_same_v<decltype(std::declval<const BlackboardSnapshot>().Read(BlackboardKeyId{})),
                                      Result<std::optional<BlackboardValue>>>);
+        static_assert(!std::is_default_constructible_v<BlackboardNotificationBatch>);
+        static_assert(!std::is_aggregate_v<BlackboardNotificationBatch>);
+        static_assert(std::is_same_v<BlackboardObserverCallback, void (*)(void *, const BlackboardNotificationBatch &) noexcept>);
+        static_assert(
+            std::is_same_v<decltype(std::declval<const BlackboardNotificationBatch>().Changes()), std::span<const BlackboardKeyId>>);
+        static_assert(sizeof(BlackboardNotificationBatch) <= 2048,
+                      "Callback-scoped blackboard notifications must stay within the owner-thread stack budget");
         static_assert(sizeof(Result<BlackboardWriteBatch>) <= 4096, "Bounded batch storage must not consume the Windows caller stack");
         static_assert(sizeof(Result<BlackboardSnapshot>) <= 4096, "Immutable snapshot storage must not consume the Windows caller stack");
     }

@@ -15,6 +15,7 @@
 #include <memory>
 #include <optional>
 #include <span>
+#include <utility>
 #include <vector>
 
 namespace Horo::AI {
@@ -54,17 +55,34 @@ namespace Horo::AI {
         }
     };
 
-    /** @brief Immutable change facts borrowed only for the duration of one publication callback. */
-    struct BlackboardNotificationBatch final {
-        BlackboardInstanceBinding binding;                                /**< Exact publishing instance generation. */
-        std::uint64_t revision{};                                         /**< Newly published blackboard revision. */
-        std::array<BlackboardKeyId, MaximumBlackboardKeys> changedKeys{}; /**< Stable key-sorted changed prefix. */
-        std::size_t changedKeyCount{};                                    /**< Active changed-key count. */
+    class BlackboardInstance;
 
-        /** @brief Returns the changed-key prefix. @return Callback-scoped immutable change facts. */
-        [[nodiscard]] std::span<const BlackboardKeyId> Changes() const noexcept {
-            return {changedKeys.data(), changedKeyCount};
+    /** @brief Immutable validated change facts borrowed only for the duration of one publication callback. */
+    class BlackboardNotificationBatch final {
+    public:
+        /** @brief Returns the exact publishing instance fence. @return Agent/schema/instance binding. */
+        [[nodiscard]] const BlackboardInstanceBinding &Binding() const noexcept {
+            return binding_;
         }
+
+        /** @brief Returns the newly published revision. @return Non-zero monotonic revision. */
+        [[nodiscard]] std::uint64_t Revision() const noexcept {
+            return result_.revision;
+        }
+
+        /** @brief Returns the changed-key prefix. @return Callback-scoped immutable key-sorted facts. */
+        [[nodiscard]] std::span<const BlackboardKeyId> Changes() const noexcept {
+            return result_.Changes();
+        }
+
+    private:
+        friend class BlackboardInstance;
+
+        BlackboardNotificationBatch(BlackboardInstanceBinding binding, BlackboardCommitResult result) noexcept
+            : binding_(binding), result_(std::move(result)) {}
+
+        BlackboardInstanceBinding binding_;
+        BlackboardCommitResult result_;
     };
 
     /**
@@ -96,8 +114,6 @@ namespace Horo::AI {
 
         [[nodiscard]] constexpr auto operator<=>(const BlackboardObserverToken &) const noexcept = default;
     };
-
-    class BlackboardInstance;
 
     /** @brief Detached bounded batch fenced to one exact instance revision. */
     class BlackboardWriteBatch final {

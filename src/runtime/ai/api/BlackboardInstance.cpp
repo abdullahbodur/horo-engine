@@ -363,12 +363,7 @@ namespace Horo::AI {
         }
         if (matchingCount == 0)
             return;
-        const BlackboardNotificationBatch notification{
-            .binding = binding_,
-            .revision = result.revision,
-            .changedKeys = result.changedKeys,
-            .changedKeyCount = result.changedKeyCount,
-        };
+        const BlackboardNotificationBatch notification{binding_, result};
         publishing_ = true;
         for (std::size_t index = 0; index < matchingCount; ++index)
             matching[index].callback(matching[index].context, notification);
