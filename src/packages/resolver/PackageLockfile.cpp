@@ -1,5 +1,7 @@
 #include "Horo/Packages/PackageLockfile.h"
 
+#include "PackageValidation.h"
+
 #include <algorithm>
 #include <array>
 #include <functional>
@@ -31,20 +33,6 @@ namespace Horo::Packages {
         const ErrorCodeDescriptor UnsupportedFormat{LockDomain, ErrorCode{"packages.lockfile.unsupported_format"}, ErrorSeverity::Error,
                                                     "A locked package uses an unsupported package format.",
                                                     "Restore with a compatible host or resolve a supported package artifact."};
-
-        [[nodiscard]] bool CanonicalToken(const std::string_view text, const std::size_t maximum) noexcept {
-            if (text.empty() || text.size() > maximum || text.front() == '.' || text.back() == '.' ||
-                text.find("..") != std::string_view::npos)
-                return false;
-            return std::ranges::all_of(text, [](const unsigned char value) {
-                return (value >= 'a' && value <= 'z') || (value >= '0' && value <= '9') || value == '.' || value == '-' || value == '_';
-            });
-        }
-
-        [[nodiscard]] bool ValidPlatform(const PackagePlatform &platform) noexcept {
-            return CanonicalToken(platform.operatingSystem, 64U) && CanonicalToken(platform.architecture, 64U) &&
-                   CanonicalToken(platform.sdkAbi, 128U);
-        }
 
         [[nodiscard]] auto PlatformKey(const PackagePlatform &platform) {
             return std::tie(platform.operatingSystem, platform.architecture, platform.sdkAbi);
@@ -115,7 +103,7 @@ namespace Horo::Packages {
                 return Result<PackagePlatform>::Failure(MakeError(InvalidLock));
             PackagePlatform platform{value.at("operatingSystem").get<std::string>(), value.at("architecture").get<std::string>(),
                                      value.at("sdkAbi").get<std::string>()};
-            if (!ValidPlatform(platform))
+            if (!Detail::IsValidPackagePlatform(platform))
                 return Result<PackagePlatform>::Failure(MakeError(InvalidLock));
             return Result<PackagePlatform>::Success(std::move(platform));
         }
@@ -155,7 +143,7 @@ namespace Horo::Packages {
             std::vector<std::string> result;
             result.reserve(values.size());
             for (const Json &encoded : values) {
-                if (!encoded.is_string() || !CanonicalToken(encoded.get_ref<const std::string &>(), 128U))
+                if (!encoded.is_string() || !Detail::IsCanonicalPackageToken(encoded.get_ref<const std::string &>(), 128U))
                     return Result<std::vector<std::string>>::Failure(MakeError(InvalidLock));
                 result.push_back(encoded.get<std::string>());
             }
@@ -255,6 +243,98 @@ namespace Horo::Packages {
             return Result<void>::Success();
         }
 
+        using ResolvedIndex = std::map<std::string_view, const ResolvedPackage *, std::less<>>;
+        using ArtifactIndex = std::map<std::string_view, const PackageLockArtifact *, std::less<>>;
+
+        [[nodiscard]] Result<ResolvedIndex> IndexResolvedPackages(const PackageResolutionPlan &plan, const PackageLockfileLimits &limits) {
+            ResolvedIndex result;
+            for (const auto &package : plan.packages) {
+                if (!result.emplace(package.package.Value(), &package).second ||
+                    package.dependencies.size() > limits.dependenciesPerPackage)
+                    return Result<ResolvedIndex>::Failure(MakeError(InvalidLock));
+            }
+            return Result<ResolvedIndex>::Success(std::move(result));
+        }
+
+        [[nodiscard]] Result<ArtifactIndex> IndexArtifacts(const std::span<const PackageLockArtifact> artifacts,
+                                                           const PackageLockfileLimits &limits) {
+            ArtifactIndex result;
+            for (const auto &artifact : artifacts) {
+                if (!result.emplace(artifact.package.Value(), &artifact).second)
+                    return Result<ArtifactIndex>::Failure(MakeError(InvalidLock));
+                if (artifact.platforms.size() > limits.platformsPerPackage ||
+                    artifact.contributions.size() > limits.contributionsPerPackage)
+                    return Result<ArtifactIndex>::Failure(MakeError(ResourceLimit));
+            }
+            return Result<ArtifactIndex>::Success(std::move(result));
+        }
+
+        [[nodiscard]] Result<LockedPackage> BuildLockedPackage(const ResolvedPackage &package, const PackageLockArtifact &artifact,
+                                                               const ResolvedIndex &resolved) {
+            if (artifact.version != package.version || artifact.source != package.source ||
+                artifact.artifactDigest != package.artifactDigest || artifact.packageFormatVersion == 0U ||
+                !std::ranges::all_of(artifact.platforms, Detail::IsValidPackagePlatform) ||
+                !std::ranges::all_of(artifact.contributions, [](const std::string &value) {
+                return Detail::IsCanonicalPackageToken(value, 128U);
+            }))
+                return Result<LockedPackage>::Failure(MakeError(InvalidLock, "Artifact evidence does not match resolution."));
+
+            LockedPackage entry{package.package,
+                                package.version,
+                                package.source,
+                                package.artifactDigest,
+                                artifact.manifestDigest,
+                                artifact.fileManifestDigest,
+                                artifact.packageFormatVersion,
+                                artifact.platforms,
+                                {},
+                                artifact.contributions};
+            for (const HoroPackageId &dependency : package.dependencies) {
+                const auto selected = resolved.find(dependency.Value());
+                if (selected == resolved.end())
+                    return Result<LockedPackage>::Failure(MakeError(InvalidLock, "Resolution has a stale dependency edge."));
+                entry.dependencies.push_back({dependency, selected->second->version});
+            }
+            std::ranges::sort(entry.platforms, PlatformLess);
+            std::ranges::sort(entry.dependencies, ReferenceLess);
+            std::ranges::sort(entry.contributions);
+            if (!StrictlySorted(entry.platforms, PlatformLess) || !StrictlySorted(entry.dependencies, ReferenceLess) ||
+                !StrictlySorted(entry.contributions, std::less<>{}))
+                return Result<LockedPackage>::Failure(MakeError(InvalidLock));
+            return Result<LockedPackage>::Success(std::move(entry));
+        }
+
+        [[nodiscard]] Result<std::vector<LockedPackage>> BuildLockedPackages(const ResolvedIndex &resolved,
+                                                                             const ArtifactIndex &artifacts) {
+            std::vector<LockedPackage> result;
+            result.reserve(resolved.size());
+            for (const auto &[id, package] : resolved) {
+                const auto evidence = artifacts.find(id);
+                if (evidence == artifacts.end())
+                    return Result<std::vector<LockedPackage>>::Failure(MakeError(InvalidLock, "Artifact evidence is incomplete."));
+                auto entry = BuildLockedPackage(*package, *evidence->second, resolved);
+                if (entry.HasError())
+                    return Result<std::vector<LockedPackage>>::Failure(entry.ErrorValue());
+                result.push_back(std::move(entry).Value());
+            }
+            return Result<std::vector<LockedPackage>>::Success(std::move(result));
+        }
+
+        [[nodiscard]] Result<std::vector<LockedPackageReference>> BuildLockedRoots(const std::span<const HoroPackageId> roots,
+                                                                                   const ResolvedIndex &resolved) {
+            std::vector<LockedPackageReference> result;
+            result.reserve(roots.size());
+            for (const HoroPackageId &root : roots) {
+                const auto selected = resolved.find(root.Value());
+                if (selected == resolved.end())
+                    return Result<std::vector<LockedPackageReference>>::Failure(
+                        MakeError(InvalidLock, "Requested root is absent from resolution."));
+                result.push_back({root, selected->second->version});
+            }
+            std::ranges::sort(result, ReferenceLess);
+            return Result<std::vector<LockedPackageReference>>::Success(std::move(result));
+        }
+
         [[nodiscard]] OrderedJson EncodeReference(const LockedPackageReference &reference) {
             return OrderedJson{{"id", reference.package.Value()}, {"version", reference.version.ToString()}};
         }
@@ -291,71 +371,21 @@ namespace Horo::Packages {
         if (plan.packages.size() > limits.packages || roots.size() > limits.roots)
             return Result<ValidatedPackageLockfileV1>::Failure(MakeError(ResourceLimit));
 
-        std::map<std::string_view, const ResolvedPackage *, std::less<>> resolved;
-        for (const auto &package : plan.packages) {
-            if (!resolved.emplace(package.package.Value(), &package).second || package.dependencies.size() > limits.dependenciesPerPackage)
-                return Result<ValidatedPackageLockfileV1>::Failure(MakeError(InvalidLock));
-        }
-        std::map<std::string_view, const PackageLockArtifact *, std::less<>> evidence;
-        for (const auto &artifact : artifacts) {
-            if (!evidence.emplace(artifact.package.Value(), &artifact).second)
-                return Result<ValidatedPackageLockfileV1>::Failure(MakeError(InvalidLock));
-            if (artifact.platforms.size() > limits.platformsPerPackage || artifact.contributions.size() > limits.contributionsPerPackage)
-                return Result<ValidatedPackageLockfileV1>::Failure(MakeError(ResourceLimit));
-        }
-
-        std::vector<LockedPackage> locked;
-        locked.reserve(plan.packages.size());
-        for (const auto &[id, package] : resolved) {
-            const auto found = evidence.find(id);
-            if (found == evidence.end())
-                return Result<ValidatedPackageLockfileV1>::Failure(MakeError(InvalidLock, "Artifact evidence is incomplete."));
-            const PackageLockArtifact &artifact = *found->second;
-            if (artifact.version != package->version || artifact.source != package->source ||
-                artifact.artifactDigest != package->artifactDigest || artifact.packageFormatVersion == 0U ||
-                !std::ranges::all_of(artifact.platforms, ValidPlatform) ||
-                !std::ranges::all_of(artifact.contributions, [](const std::string &value) {
-                return CanonicalToken(value, 128U);
-            }))
-                return Result<ValidatedPackageLockfileV1>::Failure(MakeError(InvalidLock, "Artifact evidence does not match resolution."));
-
-            LockedPackage entry{package->package,
-                                package->version,
-                                package->source,
-                                package->artifactDigest,
-                                artifact.manifestDigest,
-                                artifact.fileManifestDigest,
-                                artifact.packageFormatVersion,
-                                artifact.platforms,
-                                {},
-                                artifact.contributions};
-            for (const HoroPackageId &dependency : package->dependencies) {
-                const auto selected = resolved.find(dependency.Value());
-                if (selected == resolved.end())
-                    return Result<ValidatedPackageLockfileV1>::Failure(MakeError(InvalidLock, "Resolution has a stale dependency edge."));
-                entry.dependencies.push_back({dependency, selected->second->version});
-            }
-            std::ranges::sort(entry.platforms, PlatformLess);
-            std::ranges::sort(entry.dependencies, ReferenceLess);
-            std::ranges::sort(entry.contributions);
-            if (!StrictlySorted(entry.platforms, PlatformLess) || !StrictlySorted(entry.dependencies, ReferenceLess) ||
-                !StrictlySorted(entry.contributions, std::less<>{}))
-                return Result<ValidatedPackageLockfileV1>::Failure(MakeError(InvalidLock));
-            locked.push_back(std::move(entry));
-        }
-
-        std::vector<LockedPackageReference> lockedRoots;
-        lockedRoots.reserve(roots.size());
-        for (const HoroPackageId &root : roots) {
-            const auto selected = resolved.find(root.Value());
-            if (selected == resolved.end())
-                return Result<ValidatedPackageLockfileV1>::Failure(MakeError(InvalidLock, "Requested root is absent from resolution."));
-            lockedRoots.push_back({root, selected->second->version});
-        }
-        std::ranges::sort(lockedRoots, ReferenceLess);
-        if (const auto graph = ValidateGraph(lockedRoots, locked); graph.HasError())
+        auto resolved = IndexResolvedPackages(plan, limits);
+        auto evidence = IndexArtifacts(artifacts, limits);
+        if (resolved.HasError())
+            return Result<ValidatedPackageLockfileV1>::Failure(resolved.ErrorValue());
+        if (evidence.HasError())
+            return Result<ValidatedPackageLockfileV1>::Failure(evidence.ErrorValue());
+        auto locked = BuildLockedPackages(resolved.Value(), evidence.Value());
+        auto lockedRoots = BuildLockedRoots(roots, resolved.Value());
+        if (locked.HasError())
+            return Result<ValidatedPackageLockfileV1>::Failure(locked.ErrorValue());
+        if (lockedRoots.HasError())
+            return Result<ValidatedPackageLockfileV1>::Failure(lockedRoots.ErrorValue());
+        if (const auto graph = ValidateGraph(lockedRoots.Value(), locked.Value()); graph.HasError())
             return Result<ValidatedPackageLockfileV1>::Failure(graph.ErrorValue());
-        ValidatedPackageLockfileV1 result{requestHash, std::move(lockedRoots), std::move(locked)};
+        ValidatedPackageLockfileV1 result{requestHash, std::move(lockedRoots).Value(), std::move(locked).Value()};
         if (result.SerializeCanonical().size() > limits.documentBytes)
             return Result<ValidatedPackageLockfileV1>::Failure(MakeError(ResourceLimit));
         return Result<ValidatedPackageLockfileV1>::Success(std::move(result));
@@ -409,7 +439,7 @@ namespace Horo::Packages {
                                                                 const std::uint32_t supportedPackageFormatVersion) const {
         if (expectedRequestHash != m_requestHash)
             return Result<void>::Failure(MakeError(StaleLock));
-        if (!ValidPlatform(platform))
+        if (!Detail::IsValidPackagePlatform(platform))
             return Result<void>::Failure(MakeError(InvalidLock, "Restore platform is not canonical."));
         for (const LockedPackage &package : m_packages) {
             if (package.packageFormatVersion != supportedPackageFormatVersion)
