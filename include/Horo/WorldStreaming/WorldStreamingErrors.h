@@ -224,4 +224,18 @@ namespace Horo::WorldStreaming::WorldStreamingErrors {
     extern const ErrorCodeDescriptor SpatialObjectCapacityExceeded;
     /** @brief Spatial-object admission is closed because its owner is cancelling or shut down. */
     extern const ErrorCodeDescriptor SpatialObjectLifecycleUnavailable;
+    /** @brief An object-ownership descriptor, request, or owner snapshot is structurally invalid. */
+    extern const ErrorCodeDescriptor ObjectOwnershipInvalid;
+    /** @brief An object class, owner kind, or cell-exit policy is unsupported or incoherent. */
+    extern const ErrorCodeDescriptor ObjectOwnershipUnsupported;
+    /** @brief An ownership replacement names a different authored or runtime-spawned object. */
+    extern const ErrorCodeDescriptor ObjectOwnershipIdentityConflict;
+    /** @brief An ownership publication is missing the current revision or is not its exact successor. */
+    extern const ErrorCodeDescriptor ObjectOwnershipRevisionStale;
+    /** @brief An ownership fact does not belong to the active mounted-world owner lifetime. */
+    extern const ErrorCodeDescriptor ObjectOwnershipOwnerStale;
+    /** @brief A new ownership record exceeds the bounded owner capacity. */
+    extern const ErrorCodeDescriptor ObjectOwnershipCapacityExceeded;
+    /** @brief Ownership admission is closed because its authority is cancelling or shut down. */
+    extern const ErrorCodeDescriptor ObjectOwnershipLifecycleUnavailable;
 }  // namespace Horo::WorldStreaming::WorldStreamingErrors

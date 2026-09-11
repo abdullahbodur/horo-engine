@@ -455,4 +455,34 @@ namespace Horo::WorldStreaming::WorldStreamingErrors {
         Describe("world_streaming.spatial_object.lifecycle_unavailable", ErrorSeverity::Warning,
                  "The spatial-object owner is cancelling or closed to new admission.",
                  "Finish owner retirement or submit the descriptor to a new active owner.", false);
+    const ErrorCodeDescriptor ObjectOwnershipInvalid =
+        Describe("world_streaming.object_ownership.invalid", ErrorSeverity::Error,
+                 "An object-ownership descriptor, request, or owner snapshot is malformed.",
+                 "Provide one valid object identity, an exact owner binding, a revision, and positive bounded capacity.", true);
+    const ErrorCodeDescriptor ObjectOwnershipUnsupported =
+        Describe("world_streaming.object_ownership.unsupported", ErrorSeverity::Error,
+                 "An object class, owner kind, or cell-exit policy is unsupported or contradictory.",
+                 "Use world ownership for authored always-present content, cell ownership for authored spatial content, and an explicit "
+                 "runtime-spawned policy.",
+                 true);
+    const ErrorCodeDescriptor ObjectOwnershipIdentityConflict =
+        Describe("world_streaming.object_ownership.identity_conflict", ErrorSeverity::Error,
+                 "An ownership replacement names a different authored or runtime-spawned object.",
+                 "Resolve the exact current object identity before publishing its ownership successor.", false);
+    const ErrorCodeDescriptor ObjectOwnershipRevisionStale =
+        Describe("world_streaming.object_ownership.revision_stale", ErrorSeverity::Warning,
+                 "An ownership publication is missing the current revision or is not its exact successor.",
+                 "Reload the current ownership fact and submit its next non-wrapping revision.", false);
+    const ErrorCodeDescriptor ObjectOwnershipOwnerStale =
+        Describe("world_streaming.object_ownership.owner_stale", ErrorSeverity::Warning,
+                 "An ownership fact does not belong to the active mounted-world owner lifetime.",
+                 "Discard the stale fact and rebuild it from the current partition epoch and runtime owner token.", false);
+    const ErrorCodeDescriptor ObjectOwnershipCapacityExceeded =
+        Describe("world_streaming.object_ownership.capacity_exceeded", ErrorSeverity::Error,
+                 "The bounded ownership authority cannot admit another object identity.",
+                 "Retire an existing ownership record or increase the host-configured capacity.", false);
+    const ErrorCodeDescriptor ObjectOwnershipLifecycleUnavailable =
+        Describe("world_streaming.object_ownership.lifecycle_unavailable", ErrorSeverity::Warning,
+                 "The ownership authority is cancelling or closed to publication.",
+                 "Finish retirement or publish to a new active mounted-world authority.", false);
 }  // namespace Horo::WorldStreaming::WorldStreamingErrors

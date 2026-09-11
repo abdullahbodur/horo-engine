@@ -20,6 +20,8 @@ workflows.
   adopt stable authored-object identity, source, bounds, placement, and revision admission.
 - [Cross-Cell Dependency Policy Migration](./cross-cell-dependency-policy-migration.md):
   classify hard co-load and soft deferred references without mixed-policy ambiguity.
+- [World Object Ownership Migration](./world-object-ownership-migration.md): adopt explicit
+  authored, persistent, cell-bound, and runtime-spawned ownership admission.
 - [XR Coordinate and Pose Contract Migration](./xr-coordinate-pose-migration.md):
   publish generation-fenced coordinate, validity, and time evidence without native
   backend leakage or implicit clock conversion.
