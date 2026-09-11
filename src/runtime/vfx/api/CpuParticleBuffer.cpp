@@ -91,6 +91,12 @@ namespace Horo::Vfx {
             return Result<void>::Success();
         }
 
+        [[nodiscard]] Result<void> ValidateOperationalState(const Detail::CpuParticleBufferState *const state) {
+            if (state == nullptr || state->shutDown)
+                return Failure<void>(VfxErrors::ParticleBufferShutDown);
+            return OwnerThreadResult(*state);
+        }
+
         template <typename T> T *TakeStream(Detail::CpuParticleBufferState &state, std::size_t &offset) noexcept {
             constexpr std::size_t alignment = CpuParticleBufferHardLimits::StreamAlignment;
             offset = (offset + alignment - 1U) & ~(alignment - 1U);
@@ -212,12 +218,8 @@ namespace Horo::Vfx {
 
     /** @copydoc CpuParticleBuffer::Spawn */
     Result<CpuParticleHandle> CpuParticleBuffer::Spawn(const ParticleSimulationId particle) {
-        if (state_ == nullptr)
-            return Failure<CpuParticleHandle>(VfxErrors::ParticleBufferShutDown);
-        if (auto owner = OwnerThreadResult(*state_); owner.HasError())
-            return Failure<CpuParticleHandle>(VfxErrors::ParticleBufferThreadViolation);
-        if (state_->shutDown)
-            return Failure<CpuParticleHandle>(VfxErrors::ParticleBufferShutDown);
+        if (const auto state = ValidateOperationalState(state_.get()); state.HasError())
+            return Result<CpuParticleHandle>::Failure(state.ErrorValue());
         if (!particle.IsValid() || particle.Value() <= state_->lastSimulationIdentity) {
             ++state_->failedSpawns;
             return Failure<CpuParticleHandle>(VfxErrors::ParticleSimulationIdentityInvalid);
@@ -241,12 +243,8 @@ namespace Horo::Vfx {
 
     /** @copydoc CpuParticleBuffer::Kill */
     Result<void> CpuParticleBuffer::Kill(const CpuParticleHandle &handle) {
-        if (state_ == nullptr)
-            return Failure<void>(VfxErrors::ParticleBufferShutDown);
-        if (auto owner = OwnerThreadResult(*state_); owner.HasError())
-            return owner;
-        if (state_->shutDown)
-            return Failure<void>(VfxErrors::ParticleBufferShutDown);
+        if (auto state = ValidateOperationalState(state_.get()); state.HasError())
+            return state;
         const auto resolved = ResolveHandle(*state_, handle);
         if (resolved.HasError())
             return Result<void>::Failure(resolved.ErrorValue());
@@ -273,23 +271,15 @@ namespace Horo::Vfx {
 
     /** @copydoc CpuParticleBuffer::ResolveDenseIndex */
     Result<std::uint32_t> CpuParticleBuffer::ResolveDenseIndex(const CpuParticleHandle &handle) {
-        if (state_ == nullptr)
-            return Failure<std::uint32_t>(VfxErrors::ParticleBufferShutDown);
-        if (auto owner = OwnerThreadResult(*state_); owner.HasError())
-            return Failure<std::uint32_t>(VfxErrors::ParticleBufferThreadViolation);
-        if (state_->shutDown)
-            return Failure<std::uint32_t>(VfxErrors::ParticleBufferShutDown);
+        if (const auto state = ValidateOperationalState(state_.get()); state.HasError())
+            return Result<std::uint32_t>::Failure(state.ErrorValue());
         return ResolveHandle(*state_, handle);
     }
 
     /** @copydoc CpuParticleBuffer::View */
     Result<CpuParticleSoAView> CpuParticleBuffer::View() {
-        if (state_ == nullptr)
-            return Failure<CpuParticleSoAView>(VfxErrors::ParticleBufferShutDown);
-        if (auto owner = OwnerThreadResult(*state_); owner.HasError())
-            return Failure<CpuParticleSoAView>(VfxErrors::ParticleBufferThreadViolation);
-        if (state_->shutDown)
-            return Failure<CpuParticleSoAView>(VfxErrors::ParticleBufferShutDown);
+        if (const auto state = ValidateOperationalState(state_.get()); state.HasError())
+            return Result<CpuParticleSoAView>::Failure(state.ErrorValue());
         const std::size_t count = state_->active;
         CpuParticleSoAView view{
             .positionX = {state_->floats[0], count},
@@ -315,12 +305,8 @@ namespace Horo::Vfx {
 
     /** @copydoc CpuParticleBuffer::Clear */
     Result<void> CpuParticleBuffer::Clear() {
-        if (state_ == nullptr)
-            return Failure<void>(VfxErrors::ParticleBufferShutDown);
-        if (auto owner = OwnerThreadResult(*state_); owner.HasError())
-            return owner;
-        if (state_->shutDown)
-            return Failure<void>(VfxErrors::ParticleBufferShutDown);
+        if (auto state = ValidateOperationalState(state_.get()); state.HasError())
+            return state;
         ClearLiveSlots(*state_);
         return Result<void>::Success();
     }
