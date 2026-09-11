@@ -73,19 +73,20 @@ namespace Horo::Runtime::Ui {
         if (canvas.renderMode == UiRenderMode::WorldSpace)
             return Failure<UiResolvedScreenCanvas>(UiErrors::CanvasSpaceModeMismatch);
 
+        using enum UiScaleMode;
         UiCanvasDeviceScale scale;
         switch (canvas.scaleMode) {
-            case UiScaleMode::ScaleWithScreenSize: {
+            case ScaleWithScreenSize: {
                 const std::uint64_t widthCross = static_cast<std::uint64_t>(viewport.width) * canvas.referenceResolution.height;
                 const std::uint64_t heightCross = static_cast<std::uint64_t>(viewport.height) * canvas.referenceResolution.width;
                 scale = widthCross <= heightCross ? ReducedScale(viewport.width, canvas.referenceResolution.width)
                                                   : ReducedScale(viewport.height, canvas.referenceResolution.height);
                 break;
             }
-            case UiScaleMode::ConstantPixelSize:
+            case ConstantPixelSize:
                 scale = {1, 1};
                 break;
-            case UiScaleMode::ConstantPhysicalSize:
+            case ConstantPhysicalSize:
                 if (!deviceScale.IsValid())
                     return Failure<UiResolvedScreenCanvas>(UiErrors::CanvasSpaceInvalid);
                 scale = ReducedScale(deviceScale.pixelUnits, deviceScale.logicalDips);
