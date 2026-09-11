@@ -113,22 +113,13 @@ namespace Horo::Navigation {
         };
 
         [[nodiscard]] Result<void> ValidateCreateInfo(const RecastDetourProviderCreateInfo &info) {
-            if (!info.world.IsValid() || !info.topology.IsValid() || info.vertices.size() < 3 || info.polygons.empty() ||
-                info.vertices.size() > RecastDetourProviderHardLimits::Vertices ||
-                info.polygons.size() > RecastDetourProviderHardLimits::Polygons || !Math::IsFinite(info.nearestPointHalfExtents) ||
-                info.nearestPointHalfExtents.x <= 0.0F || info.nearestPointHalfExtents.y <= 0.0F ||
-                info.nearestPointHalfExtents.z <= 0.0F || !Detail::IsPositiveFinite(info.cellSizeMeters) ||
-                !Detail::IsPositiveFinite(info.cellHeightMeters) || !Detail::IsPositiveFinite(info.walkableHeightMeters) ||
-                !Detail::IsNonNegativeFinite(info.walkableRadiusMeters) || !Detail::IsNonNegativeFinite(info.walkableClimbMeters) ||
-                info.maximumQueryNodes == 0 || info.maximumQueryNodes > RecastDetourProviderHardLimits::QueryNodes ||
-                info.maximumResultPoints < 2 || info.maximumResultPoints > RecastDetourProviderHardLimits::ResultPoints ||
-                info.maximumConcurrentQueries == 0 || info.maximumConcurrentQueries > RecastDetourProviderHardLimits::ConcurrentQueries ||
-                !Detail::IsPositiveFinite(info.maximumSearchDistanceMeters) || info.maximumOwnedBytes == 0 ||
-                info.maximumOwnedBytes > RecastDetourProviderHardLimits::OwnedBytes || info.capabilityRevision == 0 ||
-                info.vertices.size() > static_cast<std::size_t>(std::numeric_limits<int>::max()) ||
-                info.polygons.size() > static_cast<std::size_t>(std::numeric_limits<int>::max()))
+            if (!Detail::HasValidIdentityAndTopologyBounds(info))
                 return Failure<void>(NavigationErrors::CapabilityDescriptorInvalid);
-            if (!Detail::FitsOwnedBudget(info))
+            if (!Detail::HasValidAgentSettings(info))
+                return Failure<void>(NavigationErrors::CapabilityDescriptorInvalid);
+            if (!Detail::HasValidQuerySettings(info))
+                return Failure<void>(NavigationErrors::CapabilityDescriptorInvalid);
+            if (!Detail::HasValidMemoryBudget(info))
                 return Failure<void>(NavigationErrors::CapacityExceeded);
             if (!std::ranges::all_of(info.vertices, [](const Math::Vec3 vertex) {
                 return Math::IsFinite(vertex);
@@ -403,9 +394,11 @@ namespace Horo::Navigation {
         [[nodiscard]] Result<int> FindCorridor(QuerySlot &slot, const QueryEndpoints &endpoints, const dtQueryFilter &filter,
                                                const std::uint32_t maximumNodes) {
             int polygonCount{};
-            const dtStatus status = slot.query->findPath(endpoints.startPolygon, endpoints.destinationPolygon, endpoints.start.data(),
-                                                         endpoints.destination.data(), &filter, slot.polygonPath.data(), &polygonCount,
-                                                         static_cast<int>(maximumNodes));
+            const auto scratchCapacity = static_cast<std::uint32_t>(slot.polygonPath.size());
+            const int boundedNodes = static_cast<int>(std::min(maximumNodes, scratchCapacity));
+            const dtStatus status =
+                slot.query->findPath(endpoints.startPolygon, endpoints.destinationPolygon, endpoints.start.data(),
+                                     endpoints.destination.data(), &filter, slot.polygonPath.data(), &polygonCount, boundedNodes);
             if (dtStatusFailed(status))
                 return Failure<int>(dtStatusDetail(status, DT_OUT_OF_NODES) || dtStatusDetail(status, DT_BUFFER_TOO_SMALL)
                                         ? NavigationErrors::CapacityExceeded
@@ -418,10 +411,12 @@ namespace Horo::Navigation {
         [[nodiscard]] Result<NavigationPath> BuildPath(QuerySlot &slot, const QueryEndpoints &endpoints,
                                                        const NavigationPathRequest &request, const int polygonCount) {
             int pointCount{};
+            const auto scratchCapacity = static_cast<std::uint32_t>(slot.straightPoints.size() / 3U);
+            const int boundedPoints = static_cast<int>(std::min(request.requirement.limits.maximumResultPoints, scratchCapacity));
             const dtStatus status =
                 slot.query->findStraightPath(endpoints.start.data(), endpoints.destination.data(), slot.polygonPath.data(), polygonCount,
                                              slot.straightPoints.data(), slot.straightFlags.data(), slot.straightPolygons.data(),
-                                             &pointCount, static_cast<int>(request.requirement.limits.maximumResultPoints));
+                                             &pointCount, boundedPoints);
             if (dtStatusFailed(status) || dtStatusDetail(status, DT_BUFFER_TOO_SMALL))
                 return Failure<NavigationPath>(dtStatusDetail(status, DT_BUFFER_TOO_SMALL) ? NavigationErrors::CapacityExceeded
                                                                                            : NavigationErrors::ProviderFailed);

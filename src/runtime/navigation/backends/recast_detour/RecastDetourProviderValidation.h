@@ -49,4 +49,30 @@ namespace Horo::Navigation::Detail {
             return false;
         return bytes <= info.maximumOwnedBytes;
     }
+
+    [[nodiscard]] inline bool HasValidIdentityAndTopologyBounds(const RecastDetourProviderCreateInfo &info) noexcept {
+        return info.world.IsValid() && info.topology.IsValid() && info.vertices.size() >= 3 && !info.polygons.empty() &&
+               info.vertices.size() <= RecastDetourProviderHardLimits::Vertices &&
+               info.polygons.size() <= RecastDetourProviderHardLimits::Polygons &&
+               info.vertices.size() <= static_cast<std::size_t>(std::numeric_limits<int>::max()) &&
+               info.polygons.size() <= static_cast<std::size_t>(std::numeric_limits<int>::max());
+    }
+
+    [[nodiscard]] inline bool HasValidAgentSettings(const RecastDetourProviderCreateInfo &info) noexcept {
+        return Math::IsFinite(info.nearestPointHalfExtents) && info.nearestPointHalfExtents.x > 0.0F &&
+               info.nearestPointHalfExtents.y > 0.0F && info.nearestPointHalfExtents.z > 0.0F && IsPositiveFinite(info.cellSizeMeters) &&
+               IsPositiveFinite(info.cellHeightMeters) && IsPositiveFinite(info.walkableHeightMeters) &&
+               IsNonNegativeFinite(info.walkableRadiusMeters) && IsNonNegativeFinite(info.walkableClimbMeters);
+    }
+
+    [[nodiscard]] inline bool HasValidQuerySettings(const RecastDetourProviderCreateInfo &info) noexcept {
+        return info.maximumQueryNodes > 0 && info.maximumQueryNodes <= RecastDetourProviderHardLimits::QueryNodes &&
+               info.maximumResultPoints >= 2 && info.maximumResultPoints <= RecastDetourProviderHardLimits::ResultPoints &&
+               info.maximumConcurrentQueries > 0 && info.maximumConcurrentQueries <= RecastDetourProviderHardLimits::ConcurrentQueries &&
+               IsPositiveFinite(info.maximumSearchDistanceMeters) && info.capabilityRevision != 0;
+    }
+
+    [[nodiscard]] inline bool HasValidMemoryBudget(const RecastDetourProviderCreateInfo &info) noexcept {
+        return info.maximumOwnedBytes > 0 && info.maximumOwnedBytes <= RecastDetourProviderHardLimits::OwnedBytes && FitsOwnedBudget(info);
+    }
 }  // namespace Horo::Navigation::Detail
