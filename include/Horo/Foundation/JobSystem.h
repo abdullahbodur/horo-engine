@@ -11,6 +11,7 @@
 #include "Horo/Foundation/Result.h"
 #include "Horo/Foundation/Time.h"
 
+#include <array>
 #include <chrono>
 #include <compare>
 #include <cstddef>
@@ -18,7 +19,7 @@
 #include <functional>
 #include <memory>
 #include <optional>
-#include <string>
+#include <string_view>
 #include <vector>
 
 namespace Horo {
@@ -44,9 +45,41 @@ namespace Horo {
         Cancelled,
     };
 
+    /** @brief Inline bounded progress phase name that never allocates while a job reports progress. */
+    class JobProgressPhase final {
+    public:
+        static constexpr std::size_t MaximumBytes = 128;
+
+        /** @brief Constructs the empty initial phase. */
+        JobProgressPhase() = default;
+
+        /** @brief Returns the exact admitted UTF-8 bytes. @return Borrowed view owned by this value. */
+        [[nodiscard]] std::string_view View() const noexcept {
+            return {characters_.data(), size_};
+        }
+
+        /** @brief Checks whether no phase has been published. @return True only for the empty initial phase. */
+        [[nodiscard]] bool Empty() const noexcept {
+            return size_ == 0;
+        }
+
+        [[nodiscard]] friend bool operator==(const JobProgressPhase &left, const std::string_view right) noexcept {
+            return left.View() == right;
+        }
+
+        [[nodiscard]] constexpr auto operator<=>(const JobProgressPhase &) const noexcept = default;
+
+    private:
+        friend class JobExecutionContext;
+        explicit JobProgressPhase(std::string_view value) noexcept;
+
+        std::array<char, MaximumBytes> characters_{};
+        std::uint8_t size_{};
+    };
+
     /** @brief Monotonic progress within one bounded named phase. */
     struct JobProgress final {
-        std::string phase;
+        JobProgressPhase phase;
         std::optional<float> value;
     };
 
@@ -146,7 +179,7 @@ namespace Horo {
          * @param value Optional normalized progress in [0, 1]. A new phase may restart progress.
          * @return Success, or a typed validation/lifecycle error without mutating the record.
          */
-        [[nodiscard]] Result<void> UpdateProgress(std::string phase, std::optional<float> value = std::nullopt) const;
+        [[nodiscard]] Result<void> UpdateProgress(std::string_view phase, std::optional<float> value = std::nullopt) const;
 
     private:
         friend class JobSystem;

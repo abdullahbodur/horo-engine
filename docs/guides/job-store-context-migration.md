@@ -25,9 +25,10 @@ edge; `JobSystem` does not create an `OperationStore`, and internal jobs should
 leave it empty. Structured children use `TaskGroup::SpawnContext`, which replaces
 any supplied task-group identity with the group's typed ID.
 
-Progress values are finite and normalized. They cannot decrease within one
-phase; beginning a different bounded phase permits a reset. The first terminal
-result is immutable. `JobHandle::Snapshot()` remains valid after bounded store
+Progress values are finite and normalized. Phase names are copied into a bounded
+128-byte inline value, so repeated updates allocate no phase storage. They cannot
+decrease within one phase; beginning a different bounded phase permits a reset.
+The first terminal result is immutable. `JobHandle::Snapshot()` remains valid after bounded store
 eviction, while `JobSystem::Find()` and `SnapshotIfChanged()` expose only active
 and retained recent records. Dropping a handle neither cancels the callback nor
 removes scheduler authority.

@@ -170,6 +170,12 @@ namespace Horo {
                                .error = record.terminalResult.has_value() ? record.terminalResult->error : std::nullopt};
         }
 
+        [[nodiscard]] std::shared_ptr<JobRecord> FindRetainedRecord(const std::shared_ptr<JobStoreState> &store, const JobId id) {
+            std::lock_guard lock(store->mutex);
+            const auto found = store->records.find(id);
+            return found == store->records.end() ? nullptr : found->second;
+        }
+
         [[nodiscard]] ContextJobFunction TransitionTerminalLocked(JobRecord &record, JobStoreState *store, const JobState state,
                                                                   std::optional<Error> error, const bool queuedOnly) {
             ContextJobFunction releasedWork;
@@ -417,14 +423,9 @@ namespace Horo {
     }
 
     Result<void> JobSystem::RequestCancel(const JobId id) const {
-        std::shared_ptr<JobRecord> record;
-        {
-            std::lock_guard lock(m_state->store->mutex);
-            const auto found = m_state->store->records.find(id);
-            if (found == m_state->store->records.end())
-                return Result<void>::Failure(MakeJobError(JobErrors::NotFound, "Job identifier is not known by this job system."));
-            record = found->second;
-        }
+        const std::shared_ptr record = FindRetainedRecord(m_state->store, id);
+        if (!record)
+            return Result<void>::Failure(MakeJobError(JobErrors::NotFound, "Job identifier is not known by this job system."));
         record->cancellation.RequestCancellation();
         ContextJobFunction releasedWork = CancelQueuedRecord(record, "Job was cancelled before execution.");
         return Result<void>::Success();
@@ -436,15 +437,8 @@ namespace Horo {
 
     /** @copydoc JobSystem::Find */
     std::optional<JobSnapshot> JobSystem::Find(const JobId id) const {
-        std::shared_ptr<JobRecord> record;
-        {
-            std::lock_guard lock(m_state->store->mutex);
-            const auto found = m_state->store->records.find(id);
-            if (found == m_state->store->records.end())
-                return std::nullopt;
-            record = found->second;
-        }
-        return SnapshotRecord(*record);
+        const std::shared_ptr record = FindRetainedRecord(m_state->store, id);
+        return record ? std::optional{SnapshotRecord(*record)} : std::nullopt;
     }
 
     /** @copydoc JobSystem::SnapshotIfChanged */
@@ -572,20 +566,23 @@ namespace Horo {
         return record_->taskGroupId;
     }
 
+    JobProgressPhase::JobProgressPhase(const std::string_view value) noexcept : size_(static_cast<std::uint8_t>(value.size())) {
+        std::ranges::copy(value, characters_.begin());
+    }
+
     /** @copydoc JobExecutionContext::UpdateProgress */
-    Result<void> JobExecutionContext::UpdateProgress(std::string phase, const std::optional<float> value) const {
-        constexpr std::size_t MaximumPhaseBytes = 128;
-        if (phase.empty() || phase.size() > MaximumPhaseBytes ||
+    Result<void> JobExecutionContext::UpdateProgress(const std::string_view phase, const std::optional<float> value) const {
+        if (phase.empty() || phase.size() > JobProgressPhase::MaximumBytes ||
             (value.has_value() && (!std::isfinite(*value) || *value < 0.0F || *value > 1.0F)))
             return Result<void>::Failure(MakeJobError(JobErrors::InvalidProgress, "Job progress phase or normalized value is invalid."));
 
-        const auto updateLocked = [this, &phase, value](JobStoreState *store) -> Result<void> {
+        const auto updateLocked = [this, phase, value](JobStoreState *store) -> Result<void> {
             if (IsTerminal(record_->state))
                 return Result<void>::Failure(MakeJobError(JobErrors::TerminalImmutable, "Terminal job progress cannot be changed."));
-            const bool samePhase = record_->progress.phase == phase;
+            const bool samePhase = record_->progress.phase.View() == phase;
             if (samePhase && record_->progress.value.has_value() && (!value.has_value() || *value < *record_->progress.value))
                 return Result<void>::Failure(MakeJobError(JobErrors::ProgressRegressed, "Job progress cannot decrease within one phase."));
-            record_->progress = JobProgress{.phase = std::move(phase), .value = value};
+            record_->progress = JobProgress{.phase = JobProgressPhase{phase}, .value = value};
             if (store != nullptr)
                 ++store->revision;
             return Result<void>::Success();
