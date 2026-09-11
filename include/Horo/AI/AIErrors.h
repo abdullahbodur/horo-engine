@@ -38,4 +38,10 @@ namespace Horo::AI::AIErrors {
     extern const ErrorCodeDescriptor BlackboardBatchInvalid;
     /** @brief Blackboard revision or instance generation cannot advance without wrapping. */
     extern const ErrorCodeDescriptor BlackboardRevisionExhausted;
+    /** @brief A blackboard observer registration or generation-fenced token is invalid. */
+    extern const ErrorCodeDescriptor BlackboardObserverInvalid;
+    /** @brief A blackboard instance has no free bounded observer slot. */
+    extern const ErrorCodeDescriptor BlackboardObserverLimitExceeded;
+    /** @brief A publication callback attempted to mutate its blackboard or observer registry. */
+    extern const ErrorCodeDescriptor BlackboardReentrantMutation;
 }  // namespace Horo::AI::AIErrors

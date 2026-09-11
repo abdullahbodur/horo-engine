@@ -11,6 +11,7 @@
 #include <array>
 #include <atomic>
 #include <cstdint>
+#include <limits>
 #include <memory>
 #include <optional>
 #include <span>
@@ -19,6 +20,8 @@
 namespace Horo::AI {
     /** @brief Maximum writes admitted by one BlackboardSync transaction. */
     inline constexpr std::size_t MaximumBlackboardWritesPerBatch = MaximumBlackboardKeys;
+    /** @brief Maximum observers owned by one agent-scoped blackboard instance. */
+    inline constexpr std::size_t MaximumBlackboardObservers = MaximumBlackboardKeys;
 
     /** @brief Exact runtime, agent, schema-publication, and instance generation fence. */
     struct BlackboardInstanceBinding final {
@@ -49,6 +52,49 @@ namespace Horo::AI {
         [[nodiscard]] std::span<const BlackboardKeyId> Changes() const noexcept {
             return {changedKeys.data(), changedKeyCount};
         }
+    };
+
+    /** @brief Immutable change facts borrowed only for the duration of one publication callback. */
+    struct BlackboardNotificationBatch final {
+        BlackboardInstanceBinding binding;                                /**< Exact publishing instance generation. */
+        std::uint64_t revision{};                                         /**< Newly published blackboard revision. */
+        std::array<BlackboardKeyId, MaximumBlackboardKeys> changedKeys{}; /**< Stable key-sorted changed prefix. */
+        std::size_t changedKeyCount{};                                    /**< Active changed-key count. */
+
+        /** @brief Returns the changed-key prefix. @return Callback-scoped immutable change facts. */
+        [[nodiscard]] std::span<const BlackboardKeyId> Changes() const noexcept {
+            return {changedKeys.data(), changedKeyCount};
+        }
+    };
+
+    /**
+     * @brief Allocation-free observer callback invoked on the BlackboardSync owner thread.
+     * @param context Borrowed registration context that must remain alive until removal, task cancellation, replacement, or teardown.
+     * @param notification Callback-scoped batch; neither it nor its span may be retained after return.
+     */
+    using BlackboardObserverCallback = void (*)(void *context, const BlackboardNotificationBatch &notification) noexcept;
+
+    /** @brief Borrowed callback registration scoped to one exact agent and executing task. */
+    struct BlackboardObserverRegistration final {
+        AgentHandle agent;                     /**< Must equal the instance's exact agent handle. */
+        TaskHandle task;                       /**< Active task owner used for deterministic cancellation cleanup. */
+        BlackboardKeyId key;                   /**< Stable key whose changes wake this observer. */
+        BlackboardObserverCallback callback{}; /**< Non-null, non-throwing owner-thread callback. */
+        void *context{};                       /**< Borrowed callback context; ownership stays with the registrant. */
+    };
+
+    /** @brief Generation-fenced process-local handle for one observer slot. */
+    struct BlackboardObserverToken final {
+        BlackboardInstanceBinding binding;                         /**< Exact instance generation that issued the token. */
+        std::size_t slot{std::numeric_limits<std::size_t>::max()}; /**< Bounded instance-local slot. */
+        std::uint32_t generation{};                                /**< Non-zero slot generation. */
+
+        /** @brief Checks representation. @return Whether the token has a bounded non-zero slot generation. */
+        [[nodiscard]] bool IsValid() const noexcept {
+            return binding.IsValid() && slot < MaximumBlackboardObservers && generation != 0;
+        }
+
+        [[nodiscard]] constexpr auto operator<=>(const BlackboardObserverToken &) const noexcept = default;
     };
 
     class BlackboardInstance;
@@ -149,6 +195,26 @@ namespace Horo::AI {
         /** @brief Starts a detached fixed-capacity batch. @return Revision-fenced batch or stale failure. */
         [[nodiscard]] Result<BlackboardWriteBatch> BeginWriteBatch() const;
         /**
+         * @brief Registers one bounded key observer on the BlackboardSync owner thread.
+         * @param registration Exact agent/task/key and borrowed callback context.
+         * @return Generation-fenced token or a typed validation, capacity, or reentrancy failure.
+         * @pre The callback context remains alive until successful removal, task cancellation, replacement, or teardown.
+         */
+        [[nodiscard]] Result<BlackboardObserverToken> RegisterObserverAtBlackboardSync(const BlackboardObserverRegistration &registration);
+        /**
+         * @brief Removes one exact observer generation on the BlackboardSync owner thread.
+         * @param token Token returned by this instance generation.
+         * @return Whether an active matching observer was removed, or a typed reentrancy failure.
+         * @post A successful removal prevents every later callback for the token.
+         */
+        [[nodiscard]] Result<bool> RemoveObserverAtBlackboardSync(const BlackboardObserverToken &token);
+        /**
+         * @brief Removes every observer owned by a cancelled task on the BlackboardSync owner thread.
+         * @param task Exact executing task handle.
+         * @return Removed observer count or a typed invalid-handle/reentrancy failure.
+         */
+        [[nodiscard]] Result<std::size_t> CancelTaskObserversAtBlackboardSync(TaskHandle task);
+        /**
          * @brief Validates and atomically applies a complete batch at the owner BlackboardSync safe point.
          * @param batch Detached candidate batch.
          * @return New revision and deterministic changes, or a stable failure with no mutation.
@@ -164,8 +230,8 @@ namespace Horo::AI {
                                                            std::shared_ptr<const BlackboardSchema> replacementSchema);
         /** @brief Resets every key to the active schema default. @return Revision/change facts or stable failure. */
         [[nodiscard]] Result<BlackboardCommitResult> ResetAtBlackboardSync();
-        /** @brief Idempotently invalidates batches/snapshots and releases active storage. */
-        void TeardownAtBlackboardSync() noexcept;
+        /** @brief Idempotently invalidates batches, snapshots, observers, and active storage. @return Success or reentrancy failure. */
+        [[nodiscard]] Result<void> TeardownAtBlackboardSync();
 
         /** @brief Checks lifecycle state. @return Whether the instance accepts snapshots and batches. */
         [[nodiscard]] bool IsActive() const noexcept {
@@ -193,12 +259,28 @@ namespace Horo::AI {
         }
 
     private:
+        struct ObserverSlot final {
+            BlackboardObserverRegistration registration{};
+            std::uint32_t generation{1};
+            bool active{};
+            bool retired{};
+        };
+
+        /** @brief Releases an active observer and advances or retires its token generation. @param slot Active owned slot. */
+        static void ReleaseObserverSlot(ObserverSlot &slot) noexcept;
+        /** @brief Invalidates every active observer before instance generation replacement or teardown. */
+        void InvalidateObservers() noexcept;
+        /** @brief Freezes and invokes matching callbacks for one non-empty committed result. @param result Published change facts. */
+        void PublishNotification(const BlackboardCommitResult &result) noexcept;
+
         BlackboardInstanceBinding binding_;
         std::shared_ptr<const BlackboardSchema> schema_;
         std::vector<std::optional<BlackboardValue>> values_;
         std::vector<std::optional<BlackboardValue>> scratch_;
         std::uint64_t revision_{1};
         std::shared_ptr<std::atomic_bool> generationActive_;
+        std::array<ObserverSlot, MaximumBlackboardObservers> observers_{};
+        bool publishing_{};
         bool active_{true};
     };
 }  // namespace Horo::AI
