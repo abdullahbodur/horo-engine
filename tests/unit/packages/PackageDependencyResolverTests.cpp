@@ -54,6 +54,11 @@ namespace {
         if (!message.empty())
             CHECK(result.ErrorValue().message == message);
     }
+
+    void CheckPlan(const Horo::Result<PackageResolutionPlan> &result, const std::vector<std::string> &expected) {
+        REQUIRE(result.HasValue());
+        CHECK(PlanIdentity(result.Value()) == expected);
+    }
 }  // namespace
 
 TEST_CASE("Package resolver produces the same transitive plan for every candidate order", "[packages][resolver]") {
@@ -103,8 +108,7 @@ TEST_CASE("Package resolver filters platform and required features", "[packages]
         .host = {"linux", "x64", "horo-sdk-2"},
     };
     const auto result = PackageDependencyResolver::Resolve(request);
-    REQUIRE(result.HasValue());
-    REQUIRE((PlanIdentity(result.Value()) == std::vector<std::string>{"com.horo.runtime@2.1.0#public"}));
+    CheckPlan(result, {"com.horo.runtime@2.1.0#public"});
 }
 
 TEST_CASE("Package resolver reports stable constraint conflicts", "[packages][resolver]") {
@@ -162,8 +166,7 @@ TEST_CASE("Package resolver backtracks and enforces input limits", "[packages][r
                            Candidate("com.shared", "1.2.0", "public", 10, "sha256:shared")},
         };
         const auto result = PackageDependencyResolver::Resolve(request);
-        REQUIRE(result.HasValue());
-        CHECK((PlanIdentity(result.Value()) == std::vector<std::string>{"com.root@1.0.0#public", "com.shared@1.2.0#public"}));
+        CheckPlan(result, {"com.root@1.0.0#public", "com.shared@1.2.0#public"});
     }
 
     SECTION("candidate limit is checked before search") {
@@ -207,9 +210,7 @@ TEST_CASE("Package resolver reverses multiple nested choices before selecting a 
                        Candidate("com.shared", "1.5.0", "public", 10, "sha256:shared")},
     };
     const auto result = PackageDependencyResolver::Resolve(request);
-    REQUIRE(result.HasValue());
-    CHECK((PlanIdentity(result.Value()) ==
-           std::vector<std::string>{"com.middle@1.0.0#public", "com.root@1.1.0#public", "com.shared@1.5.0#public"}));
+    CheckPlan(result, {"com.middle@1.0.0#public", "com.root@1.1.0#public", "com.shared@1.5.0#public"});
 }
 
 TEST_CASE("Package resolver stops a branching search at its exploration budget", "[packages][resolver][limits]") {
