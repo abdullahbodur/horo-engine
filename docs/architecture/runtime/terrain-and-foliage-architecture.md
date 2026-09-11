@@ -304,20 +304,10 @@ Backend-specific command names never appear in the Terrain contract:
 - RenderFrontend owns native instance storage, per-view culling/LOD results and batching
 - the private backend owns native resources, commands and synchronization
 
-```cpp
-struct FoliageType {
-    FoliageTypeId         id;
-    FoliageDefinitionRevision revision;
-    AssetId               meshId;
-    FoliagePlacementRules placement;
-    FoliageCullingRules   culling;
-    FoliageWindSettings   wind;
-    float                 minScale;
-    float                 maxScale;
-    bool                  alignToTerrain;
-    uint32_t              instanceLimit;  // tier-enforced maximum
-};
-```
+The stable definition below is the sole foliage type contract. Older illustrative
+sketches that used generic asset identifiers, floating-point scale values or loose
+booleans are intentionally superseded; authored data must use the typed,
+fixed-point fields of `FoliageTypeDefinitionData`.
 
 ### Stable Foliage Definition Contract
 
