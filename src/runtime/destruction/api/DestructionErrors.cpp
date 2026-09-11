@@ -167,4 +167,22 @@ namespace Horo::Destruction::DestructionErrors {
                                                        .summary = "The destruction registry operation exceeds an explicit finite bound.",
                                                        .remediationHint =
                                                            "Reduce the registration or query count; never truncate implicitly."};
+    const ErrorCodeDescriptor
+        CompositionInvalid{.domain = DestructionDomain,
+                           .code = ErrorCode{"destruction.composition.invalid"},
+                           .defaultSeverity = ErrorSeverity::Error,
+                           .summary = "The destruction product composition contains malformed explicit evidence.",
+                           .remediationHint = "Supply one canonical fact per capability and a known profile, revision, and lifecycle."};
+    const ErrorCodeDescriptor CompositionCapabilityUnavailable{.domain = DestructionDomain,
+                                                               .code = ErrorCode{"destruction.composition.capability_unavailable"},
+                                                               .defaultSeverity = ErrorSeverity::Error,
+                                                               .summary =
+                                                                   "A capability required by the exact destruction profile is unavailable.",
+                                                               .remediationHint = "Install the capability explicitly or select a different "
+                                                                                  "product profile; no fallback occurs."};
+    const ErrorCodeDescriptor CompositionStale{.domain = DestructionDomain,
+                                               .code = ErrorCode{"destruction.composition.stale"},
+                                               .defaultSeverity = ErrorSeverity::Warning,
+                                               .summary = "The destruction composition revision was replaced.",
+                                               .remediationHint = "Discard captured work and resolve the current immutable composition."};
 }  // namespace Horo::Destruction::DestructionErrors

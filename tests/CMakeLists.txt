@@ -294,6 +294,7 @@ add_executable(HoroDestructionApiTests
         support/AllocationProbe.cpp
         unit/runtime/destruction/DestructibleDescriptorTests.cpp
         unit/runtime/destruction/DestructionCommandTests.cpp
+        unit/runtime/destruction/DestructionCompositionTests.cpp
         unit/runtime/destruction/DestructionIdentityTests.cpp
         unit/runtime/destruction/DestructionRegistryTests.cpp
         unit/runtime/destruction/DestructionStateMachineTests.cpp

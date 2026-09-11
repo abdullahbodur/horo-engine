@@ -66,4 +66,10 @@ namespace Horo::Destruction::DestructionErrors {
     extern const ErrorCodeDescriptor RegistryDuplicate;
     /** @brief A registry or query would exceed its explicit finite capacity. */
     extern const ErrorCodeDescriptor RegistryCapacityExceeded;
+    /** @brief A destruction product composition has malformed schema, profile, facts, or lifecycle evidence. */
+    extern const ErrorCodeDescriptor CompositionInvalid;
+    /** @brief An exact product profile requires a capability the host reported unavailable. */
+    extern const ErrorCodeDescriptor CompositionCapabilityUnavailable;
+    /** @brief Work references a replaced immutable destruction composition revision. */
+    extern const ErrorCodeDescriptor CompositionStale;
 }  // namespace Horo::Destruction::DestructionErrors
