@@ -139,7 +139,10 @@ transitive co-load components; cycles are valid and components are emitted by
 canonical object address. Soft edges require an admitted exact source revision but
 preserve an unresolved exact target for deferred resolution. Duplicate directed
 edges, self references, stale revisions, missing hard targets, and configured graph
-or bundle ceilings fail transactionally. The plan owns only partition identity,
+or bundle ceilings fail transactionally. A soft-only cycle remains deferred and is
+therefore valid, while a soft edge whose admitted endpoints are already connected by
+the transitive hard graph is an illegal mixed-policy cycle or ambiguity and is
+rejected before publication. The plan owns only partition identity,
 object-revision bundle members, and canonical soft-reference metadata. It is not a
 second manifest, topology authority, persistent schema, residency owner, or resolver;
 serialization remains deferred until its wire contract is separately ratified.

@@ -343,6 +343,10 @@ namespace Horo::WorldStreaming::WorldStreamingErrors {
         Describe("world_streaming.dependency_plan.hard_target_missing", ErrorSeverity::Error,
                  "A hard dependency target is absent from the admitted spatial assignments.",
                  "Include the exact target revision in spatial assignment or change the authored edge to a soft reference.", true);
+    const ErrorCodeDescriptor DependencyPlanAmbiguous =
+        Describe("world_streaming.dependency_plan.ambiguous", ErrorSeverity::Error,
+                 "A deferred reference connects objects already joined by the transitive hard co-load policy.",
+                 "Remove the soft edge or replace the conflicting hard path with one unambiguous dependency policy.", true);
     const ErrorCodeDescriptor SourceDescriptorInvalid =
         Describe("world_streaming.source.descriptor_invalid", ErrorSeverity::Error,
                  "A streaming source descriptor or admission context is structurally invalid.",
