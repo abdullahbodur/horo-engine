@@ -251,6 +251,11 @@ namespace Horo::PlatformServices {
         CHECK(backend->inspectCalls == 0);
 
         invalid = backend->snapshot;
+        invalid.services.back().service = invalid.services.front().service;
+        RequireError(PlatformServicesFrontend::Create(backend, invalid, session), FrontendErrors::InvalidComposition);
+        CHECK(backend->inspectCalls == 0);
+
+        invalid = backend->snapshot;
         invalid.services[0].limits.maxPayloadBytes = 3;
         RequireError(PlatformServicesFrontend::Create(backend, invalid, session), FrontendErrors::InvalidComposition);
         CHECK(backend->inspectCalls == 1);

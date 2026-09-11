@@ -229,40 +229,29 @@ template <typename T>
 class PlatformRequestHandle {
 public:
     PlatformRequestId Id() const;
-    FrontendGeneration Frontend() const;
+    PlatformRequestGeneration Generation() const;
+    bool IsValid() const;
 };
 
 class PlatformServicesFrontend {
 public:
-    Result<PlatformRequestHandle<AchievementUnlockResult>>
-    UnlockAchievement(AchievementId id);
-
-    Result<PlatformRequestHandle<LeaderboardEntries>>
-    GetLeaderboardEntries(LeaderboardId id, const LeaderboardQuery& query);
-
-    Result<PlatformRequestHandle<CloudBlobReadResult>>
-    ReadCloudSave(CloudBlobReadRequest request);
-
-    Result<PlatformRequestHandle<CloudMutationResult>>
-    WriteCloudSave(CloudBlobWriteRequest request);
-
-    Result<PlatformRequestHandle<CloudMutationResult>>
-    DeleteCloudSave(CloudBlobDeleteRequest request);
-
-    Result<PlatformRequestHandle<void>>
-    SetPresence(const PresenceState& state);
-
-    template <typename T>
-    Result<PlatformRequestSnapshot<T>> Query(PlatformRequestHandle<T> request) const;
-    template <typename T>
-    Result<PlatformRequestSubscription> Subscribe(
-        PlatformRequestHandle<T> request,
-        PlatformCompletionExecutor executor,
-        PlatformTerminalObserver<T> observer);
-    template <typename T>
-    Result<void> Cancel(PlatformRequestHandle<T> request);
+    Result<PlatformRequestHandle<void>> UnlockAchievement(AchievementUnlockRequest request);
+    Result<PlatformRequestHandle<void>> SubmitScore(LeaderboardScoreRequest request);
+    Result<PlatformRequestHandle<void>> WriteStat(StatWriteRequest request);
+    Result<PlatformRequestHandle<CloudReadResult>> ReadCloudObject(CloudReadRequest request);
+    Result<PlatformRequestHandle<void>> WriteCloudObject(CloudWriteRequest request);
+    Result<PlatformRequestHandle<void>> SetPresence(PresenceUpdateRequest request);
+    Result<PlatformRequestHandle<void>> ClearPresence(PlatformSubjectHandle subject);
+    Result<PlatformRequestHandle<FriendsPage>> QueryFriends(FriendsQuery query);
+    Result<PlatformRequestHandle<PlatformSessionSnapshot>> QueryCurrentSession();
+    Result<PlatformServiceLimits> ServiceLimits(PlatformServiceKind service) const;
+    Result<void> Close();
 };
 ```
+
+The query, subscription and cancellation surfaces remain owned by the request store
+until the PLS-001.4 completion handoff connects admitted frontend handles to that
+store; they are not frontend methods in this slice.
 
 Pre-admission validation, permission, lifecycle, capability, session and bounded-
 capacity failure returns `Result` with no request record or provider call. Once admitted,

@@ -32,10 +32,7 @@ namespace Horo::PlatformServices {
             if (left.interfaceVersion != right.interfaceVersion || left.provider != right.provider ||
                 left.providerGeneration != right.providerGeneration)
                 return false;
-            return std::ranges::all_of(left.services, [&right](const PlatformServiceCapability &entry) {
-                const auto *other = FindCapability(right, entry.service);
-                return other != nullptr && SameCapability(entry, *other);
-            });
+            return std::ranges::is_permutation(left.services, right.services, SameCapability);
         }
 
         template <typename T> [[nodiscard]] Result<PlatformRequestHandle<T>> ValidatedDispatch(Result<PlatformRequestHandle<T>> result) {
