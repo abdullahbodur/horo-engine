@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <memory>
+#include <new>
 #include <utility>
 
 namespace Horo::PlatformServices {
@@ -119,8 +120,10 @@ namespace Horo::PlatformServices {
     PlatformServicesFrontend::~PlatformServicesFrontend() {
         try {
             static_cast<void>(Close());
-        } catch (...) {
-            // Destruction cannot surface allocation failure while preserving a typed shutdown error.
+        } catch (const std::bad_alloc &) {
+            // Close already stopped admission and invoked shutdown before storing the typed error.
+            open_ = false;
+            shutdownInvoked_ = true;
         }
     }
 
@@ -225,10 +228,10 @@ namespace Horo::PlatformServices {
         if (shutdownInvoked_)
             return closeError_ ? Result<void>::Failure(*closeError_) : Result<void>::Success();
         shutdownInvoked_ = true;
-        auto result = [&]() -> Result<void> {
+        auto result = [&]() {
             try {
                 return backend_->Shutdown();
-            } catch (...) {
+            } catch (...) {  // NOSONAR: backend adapters are an extension boundary and may throw non-standard exceptions.
                 return Failure<void>(BackendErrors::ServiceUnavailable);
             }
         }();

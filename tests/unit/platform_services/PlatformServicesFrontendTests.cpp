@@ -22,6 +22,7 @@ namespace Horo::PlatformServices {
             std::uint32_t shutdownCalls{};
             bool shutdownFails{};
             bool shutdownThrows{};
+            bool shutdownThrowsNonStandard{};
             bool malformedHandle{};
 
             Result<PlatformServiceCapabilitySnapshot> InspectCapabilities() const override {
@@ -41,6 +42,8 @@ namespace Horo::PlatformServices {
                 ++shutdownCalls;
                 if (shutdownThrows)
                     throw std::runtime_error("test backend shutdown failure");
+                if (shutdownThrowsNonStandard)
+                    throw 17;
                 if (shutdownFails)
                     return Result<void>::Failure(MakeError(BackendErrors::ServiceUnavailable));
                 return Result<void>::Success();
@@ -305,6 +308,13 @@ namespace Horo::PlatformServices {
         auto throwingFrontend = Frontend(backend, session);
         RequireError(throwingFrontend.Close(), BackendErrors::ServiceUnavailable);
         RequireError(throwingFrontend.Close(), BackendErrors::ServiceUnavailable);
+        CHECK(backend->shutdownCalls == 1);
+
+        backend = std::make_shared<RoutingBackend>();
+        backend->shutdownThrowsNonStandard = true;
+        auto nonStandardThrowingFrontend = Frontend(backend, session);
+        RequireError(nonStandardThrowingFrontend.Close(), BackendErrors::ServiceUnavailable);
+        RequireError(nonStandardThrowingFrontend.Close(), BackendErrors::ServiceUnavailable);
         CHECK(backend->shutdownCalls == 1);
 
         backend = std::make_shared<RoutingBackend>();
