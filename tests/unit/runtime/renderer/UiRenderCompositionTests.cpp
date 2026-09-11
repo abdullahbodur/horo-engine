@@ -106,6 +106,25 @@ namespace Horo::Render {
             REQUIRE(result.ErrorValue().code.Value() == expected.code.Value());
         }
 
+        template <typename Mutation>
+        void RequireRejectedPass(UiRenderCompositionPass pass, const RenderGraphOwnerId graph, const FramebufferExtent extent,
+                                 Mutation mutate, const ErrorCodeDescriptor &expected = UiErrors::RenderCompositionInvalid) {
+            mutate(pass);
+            const std::array passes{std::move(pass)};
+            RequireError(ValidateUiRenderComposition({View(), graph, extent, {1}, passes}), expected);
+        }
+
+        UiPresentationReceipt Receipt(const UiCanvasInstanceId canvas, const std::uint64_t interactionRevision,
+                                      const std::uint64_t snapshotRevision, const UiPresentationOutcome outcome,
+                                      const UiPresentationReason reason) {
+            return {View(),
+                    canvas,
+                    UiInteractionRevision::Create(interactionRevision).Value(),
+                    UiRenderSnapshotRevision::Create(snapshotRevision).Value(),
+                    outcome,
+                    reason};
+        }
+
         TEST_CASE("UI composition admits ordered world camera and screen passes", "[renderer][runtime_ui][composition]") {
             const auto world = Snapshot(2, 2, 2);
             const auto camera = Snapshot(3, 3, 3);
@@ -153,29 +172,26 @@ namespace Horo::Render {
             const auto snapshot = Snapshot(2, 2, 2);
             constexpr RenderGraphOwnerId graph{41};
             constexpr FramebufferExtent extent{1280, 720};
-            std::array passes{Pass(snapshot, graph, 1, 1, UiRenderCompositionSpace::World, UiRenderCompositionPoint::SceneBeforePostProcess,
-                                   UiRenderPresentationBand::World, extent)};
+            const auto world = Pass(snapshot, graph, 1, 1, UiRenderCompositionSpace::World,
+                                    UiRenderCompositionPoint::SceneBeforePostProcess, UiRenderPresentationBand::World, extent);
+            const auto screen = Pass(snapshot, graph, 1, 1, UiRenderCompositionSpace::Screen, UiRenderCompositionPoint::DisplayOverlay,
+                                     UiRenderPresentationBand::Screen, extent);
 
-            passes[0].depth.reset();
-            RequireError(ValidateUiRenderComposition({View(), graph, extent, {1}, passes}), UiErrors::RenderCompositionInvalid);
-            passes[0] = Pass(snapshot, graph, 1, 1, UiRenderCompositionSpace::Screen, UiRenderCompositionPoint::DisplayOverlay,
-                             UiRenderPresentationBand::Screen, extent);
-            passes[0].colorOutput.texture.format = RenderTextureFormat::Depth32Float;
-            RequireError(ValidateUiRenderComposition({View(), graph, extent, {1}, passes}), UiErrors::RenderCompositionInvalid);
-            passes[0] = Pass(snapshot, graph, 1, 1, UiRenderCompositionSpace::Screen, UiRenderCompositionPoint::DisplayOverlay,
-                             UiRenderPresentationBand::Screen, extent);
-            passes[0].colorOutput.resource.owner = {99};
-            RequireError(ValidateUiRenderComposition({View(), graph, extent, {1}, passes}), UiErrors::HandleOwnerMismatch);
-
-            passes[0] = Pass(snapshot, graph, 1, 1, UiRenderCompositionSpace::Screen, UiRenderCompositionPoint::DisplayOverlay,
-                             UiRenderPresentationBand::Screen, extent);
-            passes[0].colorOutput.texture.format = RenderTextureFormat::Rgba8Unorm;
-            RequireError(ValidateUiRenderComposition({View(), graph, extent, {1}, passes}), UiErrors::RenderCompositionInvalid);
-
-            passes[0] = Pass(snapshot, graph, 1, 1, UiRenderCompositionSpace::World, UiRenderCompositionPoint::SceneBeforePostProcess,
-                             UiRenderPresentationBand::World, extent);
-            passes[0].depth->resource.owner = {99};
-            RequireError(ValidateUiRenderComposition({View(), graph, extent, {1}, passes}), UiErrors::HandleOwnerMismatch);
+            RequireRejectedPass(world, graph, extent, [](auto &pass) {
+                pass.depth.reset();
+            });
+            RequireRejectedPass(screen, graph, extent, [](auto &pass) {
+                pass.colorOutput.texture.format = RenderTextureFormat::Depth32Float;
+            });
+            RequireRejectedPass(screen, graph, extent, [](auto &pass) {
+                pass.colorOutput.resource.owner = {99};
+            }, UiErrors::HandleOwnerMismatch);
+            RequireRejectedPass(screen, graph, extent, [](auto &pass) {
+                pass.colorOutput.texture.format = RenderTextureFormat::Rgba8Unorm;
+            });
+            RequireRejectedPass(world, graph, extent, [](auto &pass) {
+                pass.depth->resource.owner = {99};
+            }, UiErrors::HandleOwnerMismatch);
         }
 
         TEST_CASE("only presented UI receipts advance interaction eligibility", "[renderer][runtime_ui][presentation]") {
@@ -183,34 +199,19 @@ namespace Horo::Render {
             auto stateResult = UiPresentedInteractionState::Create(View(), canvas);
             REQUIRE(stateResult.HasValue());
             auto state = std::move(stateResult).Value();
-            const UiPresentationReceipt skipped{View(),
-                                                canvas,
-                                                UiInteractionRevision::Create(2).Value(),
-                                                UiRenderSnapshotRevision::Create(2).Value(),
-                                                UiPresentationOutcome::Skipped,
-                                                UiPresentationReason::Suppressed};
+            const auto skipped = Receipt(canvas, 2, 2, UiPresentationOutcome::Skipped, UiPresentationReason::Suppressed);
             auto applied = state.Apply(skipped);
             REQUIRE(applied.HasValue());
             REQUIRE_FALSE(applied.Value());
             REQUIRE_FALSE(state.LastPresentedInteraction().IsValid());
 
-            const UiPresentationReceipt failed{View(),
-                                               canvas,
-                                               UiInteractionRevision::Create(3).Value(),
-                                               UiRenderSnapshotRevision::Create(3).Value(),
-                                               UiPresentationOutcome::Failed,
-                                               UiPresentationReason::ExecutionFailure};
+            const auto failed = Receipt(canvas, 3, 3, UiPresentationOutcome::Failed, UiPresentationReason::ExecutionFailure);
             applied = state.Apply(failed);
             REQUIRE(applied.HasValue());
             REQUIRE_FALSE(applied.Value());
             REQUIRE_FALSE(state.LastPresentedInteraction().IsValid());
 
-            const UiPresentationReceipt presented{View(),
-                                                  canvas,
-                                                  UiInteractionRevision::Create(4).Value(),
-                                                  UiRenderSnapshotRevision::Create(4).Value(),
-                                                  UiPresentationOutcome::Presented,
-                                                  UiPresentationReason::None};
+            const auto presented = Receipt(canvas, 4, 4, UiPresentationOutcome::Presented, UiPresentationReason::None);
             applied = state.Apply(presented);
             REQUIRE(applied.HasValue());
             REQUIRE(applied.Value());
@@ -234,23 +235,13 @@ namespace Horo::Render {
             auto stateResult = UiPresentedInteractionState::Create(View(), canvas);
             REQUIRE(stateResult.HasValue());
             auto state = std::move(stateResult).Value();
-            UiPresentationReceipt invalid{View(),
-                                          canvas,
-                                          UiInteractionRevision::Create(2).Value(),
-                                          UiRenderSnapshotRevision::Create(2).Value(),
-                                          UiPresentationOutcome::Presented,
-                                          UiPresentationReason::ExecutionFailure};
+            auto invalid = Receipt(canvas, 2, 2, UiPresentationOutcome::Presented, UiPresentationReason::ExecutionFailure);
             RequireError(state.Apply(invalid), UiErrors::RenderPresentationInvalid);
             invalid.outcome = static_cast<UiPresentationOutcome>(99);
             RequireError(state.Apply(invalid), UiErrors::RenderPresentationInvalid);
 
             const auto foreignCanvas = UiCanvasInstanceId{Owner(), 3, 1};
-            invalid = {View(),
-                       foreignCanvas,
-                       UiInteractionRevision::Create(2).Value(),
-                       UiRenderSnapshotRevision::Create(2).Value(),
-                       UiPresentationOutcome::Presented,
-                       UiPresentationReason::None};
+            invalid = Receipt(foreignCanvas, 2, 2, UiPresentationOutcome::Presented, UiPresentationReason::None);
             RequireError(state.Apply(invalid), UiErrors::HandleOwnerMismatch);
         }
     }  // namespace

@@ -3,6 +3,7 @@
 #include "Horo/Runtime/Ui/UiErrors.h"
 
 #include <array>
+#include <bit>
 
 namespace Horo::Render {
     namespace {
@@ -75,6 +76,10 @@ namespace Horo::Render {
         };
 
         inline constexpr std::size_t SnapshotKeySlotCount = MaximumUiRenderCompositionPasses * 2;
+        inline constexpr std::size_t MaximumSnapshotKeyStorageBytes = 16U * 1024U;
+        static_assert(std::has_single_bit(SnapshotKeySlotCount));
+        static_assert(sizeof(SnapshotKeySlot) * SnapshotKeySlotCount <= MaximumSnapshotKeyStorageBytes,
+                      "Runtime UI composition identity storage exceeds the render-thread stack budget");
 
         [[nodiscard]] std::size_t SnapshotKeyHash(const Runtime::Ui::UiCanvasInstanceId canvas,
                                                   const Runtime::Ui::UiRenderSnapshotRevision revision) noexcept {
