@@ -54,7 +54,7 @@ namespace Horo::PCG {
         [[nodiscard]] std::span<const PCGValidatedNode> Nodes() const noexcept;
 
     private:
-        PCGValidatedGraph(GraphGeneration generation, std::uint64_t registryGeneration, PCGGraphHandle registryGraph,
+        PCGValidatedGraph(GraphGeneration generation, std::uint64_t registryGeneration, const PCGGraphHandle &registryGraph,
                           std::vector<PCGValidatedNode> nodes) noexcept;
 
         GraphGeneration generation_{};

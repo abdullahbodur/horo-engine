@@ -77,7 +77,7 @@ namespace Horo::PCG {
             for (const PCGGraphNode &node : source.nodes) {
                 auto runtime = registry.QueryNodeRuntime(node.type, PCGCapabilitySet::Empty());
                 if (runtime.HasValue()) {
-                    nodes.push_back({node.id, node.type, runtime.Value()});
+                    nodes.emplace_back(node.id, node.type, runtime.Value());
                     continue;
                 }
                 if (diagnostics.size() == limits.maximumDiagnostics) {
@@ -107,8 +107,8 @@ namespace Horo::PCG {
                 if (sourceNode == nodes.end() || targetNode == nodes.end() || sourceNode->node != edge.sourceNode ||
                     targetNode->node != edge.targetNode)
                     return Reject<std::vector<PCGValidatedNode>>(PCGErrors::GraphTopologyInvalid);
-                const std::size_t sourceIndex = static_cast<std::size_t>(std::distance(nodes.begin(), sourceNode));
-                const std::size_t targetIndex = static_cast<std::size_t>(std::distance(nodes.begin(), targetNode));
+                const auto sourceIndex = static_cast<std::size_t>(std::distance(nodes.begin(), sourceNode));
+                const auto targetIndex = static_cast<std::size_t>(std::distance(nodes.begin(), targetNode));
                 outgoing[sourceIndex].push_back(targetIndex);
                 ++indegree[targetIndex];
             }
@@ -143,7 +143,7 @@ namespace Horo::PCG {
     }  // namespace
 
     PCGValidatedGraph::PCGValidatedGraph(const GraphGeneration generation, const std::uint64_t registryGeneration,
-                                         const PCGGraphHandle registryGraph, std::vector<PCGValidatedNode> nodes) noexcept
+                                         const PCGGraphHandle &registryGraph, std::vector<PCGValidatedNode> nodes) noexcept
         : generation_(generation), registryGeneration_(registryGeneration), registryGraph_(registryGraph), nodes_(std::move(nodes)) {}
 
     /** @copydoc PCGValidatedGraph::Generation */
