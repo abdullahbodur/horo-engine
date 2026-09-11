@@ -4,6 +4,7 @@
 #include <algorithm>
 #include <catch2/catch_test_macros.hpp>
 #include <cstdint>
+#include <initializer_list>
 #include <optional>
 #include <type_traits>
 #include <utility>
@@ -54,6 +55,14 @@ namespace Horo::AI {
             auto instance = BlackboardInstance::Create(Binding(schema), schema);
             REQUIRE(instance.HasValue());
             return std::move(instance).Value();
+        }
+
+        /** @brief Stages and commits true values for the requested test keys. */
+        void CommitTrueValues(BlackboardInstance &instance, std::initializer_list<std::uint64_t> keyIds) {
+            auto batch = instance.BeginWriteBatch().Value();
+            for (const auto keyId : keyIds)
+                REQUIRE(batch.Stage({MakeIdentity<BlackboardKeyId>(keyId), Bool(true)}).HasValue());
+            REQUIRE(instance.CommitAtBlackboardSync(std::move(batch)).HasValue());
         }
     }  // namespace
 
@@ -176,9 +185,7 @@ namespace Horo::AI {
     TEST_CASE("Blackboard replacement expires old snapshots and preserves compatible values", "[unit][ai][blackboard-instance]") {
         auto schema = Schema({Key(1, BlackboardValueKind::Boolean)});
         auto instance = Instance(schema);
-        auto write = instance->BeginWriteBatch().Value();
-        REQUIRE(write.Stage({MakeIdentity<BlackboardKeyId>(1), Bool(true)}).HasValue());
-        REQUIRE(instance->CommitAtBlackboardSync(std::move(write)).HasValue());
+        CommitTrueValues(*instance, {1});
         auto old = instance->Snapshot().Value();
         auto replacement = Schema({Key(1, BlackboardValueKind::Boolean), Key(2, BlackboardValueKind::Boolean)}, 20, 2);
         auto replacementBinding = Binding(replacement, 7, 2, 2);
@@ -219,10 +226,7 @@ namespace Horo::AI {
         auto schema = Schema(
             {Key(1, BlackboardValueKind::Boolean), Key(2, BlackboardValueKind::Boolean, std::nullopt, BlackboardKeyPresence::Optional)});
         auto instance = Instance(schema);
-        auto write = instance->BeginWriteBatch().Value();
-        REQUIRE(write.Stage({MakeIdentity<BlackboardKeyId>(1), Bool(true)}).HasValue());
-        REQUIRE(write.Stage({MakeIdentity<BlackboardKeyId>(2), Bool(true)}).HasValue());
-        REQUIRE(instance->CommitAtBlackboardSync(std::move(write)).HasValue());
+        CommitTrueValues(*instance, {1, 2});
         auto reset = instance->ResetAtBlackboardSync().Value();
         CHECK(reset.revision == 3);
         CHECK(std::ranges::equal(reset.Changes(), std::array{MakeIdentity<BlackboardKeyId>(1), MakeIdentity<BlackboardKeyId>(2)}));
@@ -233,5 +237,14 @@ namespace Horo::AI {
         CHECK_FALSE(instance->IsActive());
         ExpectError(snapshot.Read(MakeIdentity<BlackboardKeyId>(1)), AIErrors::BlackboardInstanceStale);
         ExpectError(instance->BeginWriteBatch(), AIErrors::BlackboardInstanceStale);
+    }
+
+    TEST_CASE("Blackboard reset is a no-op when values already match defaults", "[unit][ai][blackboard-instance]") {
+        auto instance = Instance(Schema({Key(1, BlackboardValueKind::Boolean)}));
+        auto reset = instance->ResetAtBlackboardSync();
+        REQUIRE(reset.HasValue());
+        CHECK(reset.Value().revision == 1);
+        CHECK(reset.Value().Changes().empty());
+        CHECK(instance->Snapshot().Value().Revision().Value() == 1);
     }
 }  // namespace Horo::AI

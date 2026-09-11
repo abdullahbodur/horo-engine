@@ -74,6 +74,19 @@ namespace Horo::AI {
             return Result<bool>::Success(true);
         }
 
+        /** @brief Publishes one changed, completely validated candidate and advances its revision exactly once. */
+        [[nodiscard]] Result<BlackboardCommitResult> PublishChangedValues(BlackboardValueStorage &activeValues,
+                                                                          BlackboardValueStorage &candidateValues,
+                                                                          BlackboardCommitResult result, std::uint64_t &revision) {
+            if (result.changedKeyCount == 0)
+                return Result<BlackboardCommitResult>::Success(std::move(result));
+            if (revision == std::numeric_limits<std::uint64_t>::max())
+                return Result<BlackboardCommitResult>::Failure(Failure(AIErrors::BlackboardRevisionExhausted));
+            activeValues.swap(candidateValues);
+            result.revision = ++revision;
+            return Result<BlackboardCommitResult>::Success(std::move(result));
+        }
+
         [[nodiscard]] bool IsCompatibleReplacement(const BlackboardInstanceBinding &current, const BlackboardInstanceBinding &replacement,
                                                    const std::shared_ptr<const BlackboardSchema> &schema) noexcept {
             return schema != nullptr && replacement.IsValid() && replacement.agent == current.agent &&
@@ -176,13 +189,7 @@ namespace Horo::AI {
             if (applied.Value())
                 result.changedKeys[result.changedKeyCount++] = write.key;
         }
-        if (result.changedKeyCount == 0)
-            return Result<BlackboardCommitResult>::Success(std::move(result));
-        if (revision_ == std::numeric_limits<std::uint64_t>::max())
-            return Result<BlackboardCommitResult>::Failure(Failure(AIErrors::BlackboardRevisionExhausted));
-        values_.swap(scratch_);
-        result.revision = ++revision_;
-        return Result<BlackboardCommitResult>::Success(std::move(result));
+        return PublishChangedValues(values_, scratch_, std::move(result), revision_);
     }
 
     /** @copydoc BlackboardInstance::ReplaceAtBlackboardSync */
@@ -223,13 +230,8 @@ namespace Horo::AI {
             if (values_[index] != defaults.Value()[index])
                 result.changedKeys[result.changedKeyCount++] = schema_->Keys()[index].key;
         }
-        if (result.changedKeyCount == 0)
-            return Result<BlackboardCommitResult>::Success(std::move(result));
-        if (revision_ == std::numeric_limits<std::uint64_t>::max())
-            return Result<BlackboardCommitResult>::Failure(Failure(AIErrors::BlackboardRevisionExhausted));
-        values_ = std::move(defaults).Value();
-        result.revision = ++revision_;
-        return Result<BlackboardCommitResult>::Success(std::move(result));
+        auto candidateValues = std::move(defaults).Value();
+        return PublishChangedValues(values_, candidateValues, std::move(result), revision_);
     }
 
     /** @copydoc BlackboardInstance::TeardownAtBlackboardSync */
