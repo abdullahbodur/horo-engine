@@ -204,13 +204,13 @@ namespace Horo::WorldStreaming {
     }
 
     WorldPartitionRegistry::WorldPartitionRegistry(ConstructionKey, const WorldPartitionRegistryId registry,
-                                                   const StreamingRuntimeOwnerToken owner,
+                                                   const StreamingRuntimeOwnerToken &owner,
                                                    const WorldPartitionRegistryLimits limits) noexcept
         : registry_(registry), owner_(owner), limits_(limits) {}
 
     /** @copydoc WorldPartitionRegistry::Create */
     Result<std::unique_ptr<WorldPartitionRegistry>> WorldPartitionRegistry::Create(const WorldPartitionRegistryId registry,
-                                                                                   const StreamingRuntimeOwnerToken owner,
+                                                                                   const StreamingRuntimeOwnerToken &owner,
                                                                                    const WorldPartitionRegistryLimits limits) {
         if (!registry.IsValid() || !owner.IsValid() || !limits.IsValid())
             return Failure<std::unique_ptr<WorldPartitionRegistry>>(WorldStreamingErrors::PartitionRegistryInvalid);

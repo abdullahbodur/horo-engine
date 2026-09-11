@@ -137,7 +137,7 @@ namespace Horo::WorldStreaming {
         };
 
         /** @brief Adopts validated construction facts through the creation-only gate. */
-        WorldPartitionRegistry(ConstructionKey, WorldPartitionRegistryId registry, StreamingRuntimeOwnerToken owner,
+        WorldPartitionRegistry(ConstructionKey, WorldPartitionRegistryId registry, const StreamingRuntimeOwnerToken &owner,
                                WorldPartitionRegistryLimits limits) noexcept;
 
         /**
@@ -148,7 +148,7 @@ namespace Horo::WorldStreaming {
          * @return Unique registry owner or a typed invalid/storage failure.
          */
         [[nodiscard]] static Result<std::unique_ptr<WorldPartitionRegistry>> Create(WorldPartitionRegistryId registry,
-                                                                                    StreamingRuntimeOwnerToken owner,
+                                                                                    const StreamingRuntimeOwnerToken &owner,
                                                                                     WorldPartitionRegistryLimits limits);
 
         /**
