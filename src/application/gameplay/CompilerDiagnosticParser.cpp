@@ -36,8 +36,9 @@ namespace Horo::Application {
             if (!lastCoordinate.has_value())
                 return std::nullopt;
 
-            const std::size_t previousSeparator = lastSeparator == 0U ? std::string_view::npos : location.rfind(':', lastSeparator - 1U);
-            if (previousSeparator != std::string_view::npos) {
+            if (const std::size_t previousSeparator =
+                    lastSeparator == 0U ? std::string_view::npos : location.rfind(':', lastSeparator - 1U);
+                previousSeparator != std::string_view::npos) {
                 const std::string_view possibleLine = location.substr(previousSeparator + 1U, lastSeparator - previousSeparator - 1U);
                 if (const auto line = ParseCoordinate(possibleLine); line.has_value()) {
                     return ParsedLocation{location.substr(0, previousSeparator), *line, *lastCoordinate};
@@ -118,8 +119,7 @@ namespace Horo::Application {
                                       .inputTruncated = inputTruncated};
             const std::string_view message = input.substr(severity->position + severity->marker.size());
             SetMessage(result, message);
-            const std::size_t codeBegin = message.rfind(" [-");
-            if (codeBegin != std::string_view::npos && message.ends_with(']'))
+            if (const std::size_t codeBegin = message.rfind(" [-"); codeBegin != std::string_view::npos && message.ends_with(']'))
                 result.compilerCode = std::string{message.substr(codeBegin + 2U, message.size() - codeBegin - 3U)};
             return result;
         }
