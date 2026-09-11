@@ -202,7 +202,7 @@ namespace Horo::Vfx {
                                                 ? std::numeric_limits<std::uint64_t>::max()
                                                 : continuousBirths + step.burstCount;
             const std::uint32_t available = state.buffer.Statistics().available;
-            const std::uint32_t admitted = static_cast<std::uint32_t>(std::min<std::uint64_t>(requested, available));
+            const auto admitted = static_cast<std::uint32_t>(std::min<std::uint64_t>(requested, available));
             if (state.nextSimulationIdentity > std::numeric_limits<std::uint64_t>::max() - admitted)
                 return Failure<BirthPlan>(VfxErrors::ParticleSpawnOrdinalExhausted);
             return Result<BirthPlan>::Success({.requested = requested, .admitted = admitted, .carry = continuous - integral});
