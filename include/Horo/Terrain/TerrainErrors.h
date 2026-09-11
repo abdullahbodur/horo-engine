@@ -28,6 +28,20 @@ namespace Horo::Terrain::TerrainErrors {
     extern const ErrorCodeDescriptor CapacityExceeded;
     /** @brief The terrain runtime is closing or closed and no longer admits identity access. */
     extern const ErrorCodeDescriptor LifecycleUnavailable;
+    /** @brief A shared Terrain/Foliage descriptor is malformed or internally inconsistent. */
+    extern const ErrorCodeDescriptor DescriptorInvalid;
+    /** @brief A provider-neutral Terrain feature tier value is outside the closed vocabulary. */
+    extern const ErrorCodeDescriptor TierInvalid;
+    /** @brief The exact requested Terrain tier is unavailable in the captured host/content plan. */
+    extern const ErrorCodeDescriptor TierUnsupported;
+    /** @brief A project Terrain limit profile is empty, inconsistent, or exceeds its tier ceiling. */
+    extern const ErrorCodeDescriptor LimitProfileInvalid;
+    /** @brief Dataset counts, bytes, or work exceed the captured project limits. */
+    extern const ErrorCodeDescriptor LimitExceeded;
+    /** @brief A descriptor admission references an outdated content, configuration, capability, or bounds revision. */
+    extern const ErrorCodeDescriptor RevisionStale;
+    /** @brief Insert or replacement state is incomplete or contradicts the current publication. */
+    extern const ErrorCodeDescriptor ReplacementInvalid;
 
     /**
      * @brief Returns every stable TerrainApi descriptor for module-registry contribution.
