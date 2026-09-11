@@ -381,6 +381,7 @@ add_executable(HoroWorldStreamingTests
         unit/runtime/world_streaming/WorldCellQuantizationTests.cpp
         unit/runtime/world_streaming/WorldPartitionDescriptorTests.cpp
         unit/runtime/world_streaming/WorldSpatialAssignmentTests.cpp
+        unit/runtime/world_streaming/WorldSpatialObjectDescriptorTests.cpp
         unit/runtime/world_streaming/WorldSpanningObjectPlanTests.cpp
         unit/runtime/world_streaming/WorldStreamingIdentityTests.cpp
         unit/runtime/world_streaming/WorldStreamingRuntimeCompositionTests.cpp

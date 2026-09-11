@@ -712,6 +712,20 @@ they are never the authority that permits a stale revision to overwrite the curr
 page. A mismatch, identity conflict, unsupported policy, capacity limit or exhausted
 revision returns a typed result and leaves the existing page unchanged.
 
+Each object supplied by an immutable page revision is described by an inert
+`WorldSpatialObjectDescriptor`. Its durable identity is the page-scoped
+`WorldAuthoringObjectAddress`; `sourceAsset` identifies the asset used to construct
+the object and is not an object identity. Bounds use inclusive canonical
+`WorldCoordinate64` millimeters and therefore remain stable across floating-origin
+changes. Version one distinguishes spatial and always-present authored placement
+while leaving residency, runtime-spawned ownership and handoff behavior to WST-001.7.
+
+Descriptor validation and admission are pure. They do not resolve assets, inspect
+live Scene objects, register content or mutate an owner. A bounded owner snapshot
+authorizes either an insert or an exact-successor compare-and-swap replacement.
+Unknown versions/classes, malformed bounds/identities, stale revisions, capacity
+exhaustion and cancelling/closed owners return typed errors without partial state.
+
 The authoring owner admits a bounded number of open pages. Cancelling closes new
 admission while existing page operations retire; Closed rejects all admission.
 Replacement and shutdown never rewrite or delete an already published page in place.
