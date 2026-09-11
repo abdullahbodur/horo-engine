@@ -13,15 +13,17 @@
 namespace Horo::PCG {
     namespace {
         template <typename Identity> [[nodiscard]] Identity Id(const std::uint64_t value) {
-            auto identity = Identity::Create(value);
-            REQUIRE(identity.HasValue());
-            return identity.Value();
+            auto created = Identity::Create(value);
+            REQUIRE_FALSE(created.HasError());
+            return std::move(created).Value();
         }
 
-        template <typename T> void CheckError(const Result<T> &result, const ErrorCodeDescriptor &expected) {
-            REQUIRE(result.HasError());
-            CHECK(result.ErrorValue().domain.Value() == expected.domain.Value());
-            CHECK(result.ErrorValue().code.Value() == expected.code.Value());
+        template <typename T> void RequireFailureCode(const Result<T> &result, const ErrorCodeDescriptor &expected) {
+            REQUIRE_FALSE(result.HasValue());
+            const auto &failure = result.ErrorValue();
+            INFO("expected " << expected.domain.Value() << ':' << expected.code.Value());
+            CHECK(failure.domain.Value() == expected.domain.Value());
+            CHECK(failure.code.Value() == expected.code.Value());
         }
 
         [[nodiscard]] PCGGenerationDigest Digest(const std::uint8_t value) {
@@ -137,60 +139,61 @@ namespace Horo::PCG {
     TEST_CASE("PCG generation plan rejects stale target and missing target capability", "[unit][pcg][generation-plan]") {
         auto staleOwner = Candidate();
         staleOwner.validation.ownerGeneration = 4;
-        CheckError(CreatePCGGenerationPlan(std::move(staleOwner), Context()), PCGErrors::GenerationPlanStale);
+        RequireFailureCode(CreatePCGGenerationPlan(std::move(staleOwner), Context()), PCGErrors::GenerationPlanStale);
 
         auto staleCapabilities = Candidate();
         staleCapabilities.validation.capabilityGeneration = 6;
-        CheckError(CreatePCGGenerationPlan(std::move(staleCapabilities), Context()), PCGErrors::GenerationPlanStale);
+        RequireFailureCode(CreatePCGGenerationPlan(std::move(staleCapabilities), Context()), PCGErrors::GenerationPlanStale);
 
         auto unsupported = Candidate();
         unsupported.requiredCapabilities = Capabilities({PCGCapability::TerrainOutput});
-        CheckError(CreatePCGGenerationPlan(std::move(unsupported), Context()), PCGErrors::UnsupportedCapability);
+        RequireFailureCode(CreatePCGGenerationPlan(std::move(unsupported), Context()), PCGErrors::UnsupportedCapability);
 
         auto wrongOwner = Candidate();
         wrongOwner.targetOwner = Id<GenerationTargetOwnerId>(99);
-        CheckError(CreatePCGGenerationPlan(std::move(wrongOwner), Context()), PCGErrors::GenerationPlanInvalid);
+        RequireFailureCode(CreatePCGGenerationPlan(std::move(wrongOwner), Context()), PCGErrors::GenerationPlanInvalid);
 
         auto versionSkew = Candidate();
         versionSkew.version = {2, 0};
-        CheckError(CreatePCGGenerationPlan(std::move(versionSkew), Context()), PCGErrors::GenerationPlanInvalid);
+        RequireFailureCode(CreatePCGGenerationPlan(std::move(versionSkew), Context()), PCGErrors::GenerationPlanInvalid);
     }
 
     TEST_CASE("PCG generation plan lifecycle gates allocate and publish nothing", "[unit][pcg][generation-plan]") {
         for (const auto admission : {PCGGenerationPlanAdmission::CancellationRequested, PCGGenerationPlanAdmission::ShuttingDown}) {
             auto context = Context();
             context.admission = admission;
-            CheckError(CreatePCGGenerationPlan(Candidate(), context), PCGErrors::GenerationPlanLifecycleUnavailable);
+            RequireFailureCode(CreatePCGGenerationPlan(Candidate(), context), PCGErrors::GenerationPlanLifecycleUnavailable);
         }
         auto invalid = Context();
         invalid.limits.maximumOutputs = 0;
-        CheckError(CreatePCGGenerationPlan(Candidate(), invalid), PCGErrors::GenerationPlanInvalid);
+        RequireFailureCode(CreatePCGGenerationPlan(Candidate(), invalid), PCGErrors::GenerationPlanInvalid);
     }
 
     TEST_CASE("PCG generation plan validates canonical dependency closure and delta shape", "[unit][pcg][generation-plan]") {
         auto duplicateDependency = Candidate();
         duplicateDependency.dependencies.push_back(duplicateDependency.dependencies.front());
-        CheckError(CreatePCGGenerationPlan(std::move(duplicateDependency), Context()), PCGErrors::GenerationPlanInvalid);
+        RequireFailureCode(CreatePCGGenerationPlan(std::move(duplicateDependency), Context()), PCGErrors::GenerationPlanInvalid);
 
         auto unknownDependency = Candidate();
         unknownDependency.outputs[0].dependencies[0] = Id<GenerationDependencyId>(99);
-        CheckError(CreatePCGGenerationPlan(std::move(unknownDependency), Context()), PCGErrors::GenerationPlanInvalid);
+        RequireFailureCode(CreatePCGGenerationPlan(std::move(unknownDependency), Context()), PCGErrors::GenerationPlanInvalid);
 
         auto duplicateOutput = Candidate();
         duplicateOutput.outputs.push_back(duplicateOutput.outputs.front());
-        CheckError(CreatePCGGenerationPlan(std::move(duplicateOutput), Context()), PCGErrors::GenerationPlanInvalid);
+        RequireFailureCode(CreatePCGGenerationPlan(std::move(duplicateOutput), Context()), PCGErrors::GenerationPlanInvalid);
 
         auto malformedCreate = Candidate();
         malformedCreate.outputs[0].priorContent = Digest(3);
-        CheckError(CreatePCGGenerationPlan(std::move(malformedCreate), Context()), PCGErrors::GenerationPlanInvalid);
+        RequireFailureCode(CreatePCGGenerationPlan(std::move(malformedCreate), Context()), PCGErrors::GenerationPlanInvalid);
 
         auto mismatchedExecution = Candidate();
         mismatchedExecution.outputs[0].provenance.sourceOutput.execution = Execution(2);
-        CheckError(CreatePCGGenerationPlan(std::move(mismatchedExecution), Context()), PCGErrors::GenerationPlanInvalid);
+        RequireFailureCode(CreatePCGGenerationPlan(std::move(mismatchedExecution), Context()), PCGErrors::GenerationPlanInvalid);
 
         auto mismatchedOwnerGeneration = Candidate();
         mismatchedOwnerGeneration.outputs[0].provenance.ownershipGeneration = 4;
-        CheckError(CreatePCGGenerationPlan(std::move(mismatchedOwnerGeneration), Context()), PCGErrors::GenerationOwnershipMismatch);
+        RequireFailureCode(CreatePCGGenerationPlan(std::move(mismatchedOwnerGeneration), Context()),
+                           PCGErrors::GenerationOwnershipMismatch);
     }
 
     TEST_CASE("PCG generation plan enforces checked independent count and resource bounds", "[unit][pcg][generation-plan]") {
@@ -198,21 +201,21 @@ namespace Horo::PCG {
         outputBound.limits.maximumOutputs = 1;
         auto twoOutputs = Candidate();
         twoOutputs.outputs.push_back(CreateDelta(101));
-        CheckError(CreatePCGGenerationPlan(std::move(twoOutputs), outputBound), PCGErrors::GenerationPlanCapacityExceeded);
+        RequireFailureCode(CreatePCGGenerationPlan(std::move(twoOutputs), outputBound), PCGErrors::GenerationPlanCapacityExceeded);
 
         auto dependencyBound = Context();
         dependencyBound.limits.maximumDependencies = 1;
         auto twoDependencies = Candidate();
         twoDependencies.dependencies.push_back({Id<GenerationDependencyId>(62), 5, Digest(7)});
-        CheckError(CreatePCGGenerationPlan(std::move(twoDependencies), dependencyBound), PCGErrors::GenerationPlanCapacityExceeded);
+        RequireFailureCode(CreatePCGGenerationPlan(std::move(twoDependencies), dependencyBound), PCGErrors::GenerationPlanCapacityExceeded);
 
         auto workBound = Context();
         workBound.limits.maximumWorkUnits = 4;
-        CheckError(CreatePCGGenerationPlan(Candidate(), workBound), PCGErrors::GenerationPlanCapacityExceeded);
+        RequireFailureCode(CreatePCGGenerationPlan(Candidate(), workBound), PCGErrors::GenerationPlanCapacityExceeded);
 
         auto overflow = Candidate();
         overflow.outputs[0].resources.residentBytes = std::numeric_limits<std::uint64_t>::max();
-        CheckError(CreatePCGGenerationPlan(std::move(overflow), Context()), PCGErrors::GenerationPlanCapacityExceeded);
+        RequireFailureCode(CreatePCGGenerationPlan(std::move(overflow), Context()), PCGErrors::GenerationPlanCapacityExceeded);
 
         auto exact = Context();
         exact.limits.maximumWorkUnits = 5;
@@ -226,7 +229,7 @@ namespace Horo::PCG {
         const auto context = Context(ownership);
 
         auto createCollision = Candidate();
-        CheckError(CreatePCGGenerationPlan(std::move(createCollision), context), PCGErrors::GenerationOwnershipMismatch);
+        RequireFailureCode(CreatePCGGenerationPlan(std::move(createCollision), context), PCGErrors::GenerationOwnershipMismatch);
 
         auto update = ReplacementCandidate(PCGOutputDeltaKind::Update, owned);
         REQUIRE(CreatePCGGenerationPlan(std::move(update), context).HasValue());
@@ -236,20 +239,20 @@ namespace Horo::PCG {
 
         auto wrongContent = ReplacementCandidate(PCGOutputDeltaKind::Remove, owned);
         wrongContent.outputs[0].priorContent = Digest(4);
-        CheckError(CreatePCGGenerationPlan(std::move(wrongContent), context), PCGErrors::GenerationOwnershipMismatch);
+        RequireFailureCode(CreatePCGGenerationPlan(std::move(wrongContent), context), PCGErrors::GenerationOwnershipMismatch);
 
         auto wrongRevision = ReplacementCandidate(PCGOutputDeltaKind::Remove, owned);
         wrongRevision.outputs[0].expectedSetRevision = owned.provenance.setRevision + 1;
-        CheckError(CreatePCGGenerationPlan(std::move(wrongRevision), context), PCGErrors::GenerationOwnershipMismatch);
+        RequireFailureCode(CreatePCGGenerationPlan(std::move(wrongRevision), context), PCGErrors::GenerationOwnershipMismatch);
 
         auto wrongScope = ReplacementCandidate(PCGOutputDeltaKind::Remove, owned);
         wrongScope.cell = Id<GenerationCellId>(51);
         wrongScope.outputs[0].provenance.cell = wrongScope.cell;
-        CheckError(CreatePCGGenerationPlan(std::move(wrongScope), context), PCGErrors::GenerationOwnershipMismatch);
+        RequireFailureCode(CreatePCGGenerationPlan(std::move(wrongScope), context), PCGErrors::GenerationOwnershipMismatch);
 
         auto wrongOwnership = ReplacementCandidate(PCGOutputDeltaKind::Remove, owned);
         wrongOwnership.outputs[0].provenance.ownershipGeneration = 6;
-        CheckError(CreatePCGGenerationPlan(std::move(wrongOwnership), context), PCGErrors::GenerationOwnershipMismatch);
+        RequireFailureCode(CreatePCGGenerationPlan(std::move(wrongOwnership), context), PCGErrors::GenerationOwnershipMismatch);
     }
 
     TEST_CASE("PCG generation plan replacement preserves old roots and advances exact lineage", "[unit][pcg][generation-plan]") {
@@ -270,12 +273,13 @@ namespace Horo::PCG {
         auto staleRevision = ReplacementCandidate(PCGOutputDeltaKind::Update, owned);
         staleRevision.setRevision = 1;
         staleRevision.outputs[0].provenance.setRevision = 1;
-        CheckError(ReplacePCGGenerationPlan(retained, std::move(staleRevision), Context(ownership)), PCGErrors::GenerationPlanStale);
+        RequireFailureCode(ReplacePCGGenerationPlan(retained, std::move(staleRevision), Context(ownership)),
+                           PCGErrors::GenerationPlanStale);
 
         auto wrongLineage = ReplacementCandidate(PCGOutputDeltaKind::Update, owned);
         wrongLineage.lineage = Id<GenerationLineageId>(88);
         wrongLineage.outputs[0].provenance.lineage = wrongLineage.lineage;
-        CheckError(ReplacePCGGenerationPlan(retained, std::move(wrongLineage), Context(ownership)), PCGErrors::GenerationPlanStale);
+        RequireFailureCode(ReplacePCGGenerationPlan(retained, std::move(wrongLineage), Context(ownership)), PCGErrors::GenerationPlanStale);
 
         auto olderGraph = ReplacementCandidate(PCGOutputDeltaKind::Update, owned);
         olderGraph.execution = Execution(1, 21);
@@ -287,11 +291,11 @@ namespace Horo::PCG {
         auto invalid = Owned();
         invalid.provenance.targetOwner = {};
         const std::vector invalidOwnership{invalid};
-        CheckError(CreatePCGGenerationPlan(Candidate(), Context(invalidOwnership)), PCGErrors::GenerationPlanInvalid);
+        RequireFailureCode(CreatePCGGenerationPlan(Candidate(), Context(invalidOwnership)), PCGErrors::GenerationPlanInvalid);
 
         const auto owned = Owned();
         const std::vector duplicateOwnership{owned, owned};
-        CheckError(CreatePCGGenerationPlan(Candidate(), Context(duplicateOwnership)), PCGErrors::GenerationPlanInvalid);
+        RequireFailureCode(CreatePCGGenerationPlan(Candidate(), Context(duplicateOwnership)), PCGErrors::GenerationPlanInvalid);
     }
 
     TEST_CASE("PCG generation plan errors are stable unique public descriptors", "[unit][pcg][generation-plan][errors]") {
