@@ -44,7 +44,8 @@ namespace Horo {
         }
     }  // namespace
 
-    struct JobRecord {
+    class JobRecord {
+    public:
         JobRecord(const JobId jobId, const JobDescriptor &descriptor, ContextJobFunction jobWork, const SchedulerIdentity scheduler,
                   std::weak_ptr<JobStoreState> owner)
             : id(jobId), cancellation(descriptor.parentCancellation), work(std::move(jobWork)), operationId(descriptor.operationId),
@@ -76,18 +77,27 @@ namespace Horo {
         SchedulerIdentity schedulerIdentity;
         std::weak_ptr<JobStoreState> store;
         std::thread::id submittingThread = std::this_thread::get_id();
-        mutable std::mutex mutex_;  // NOSONAR(cpp:S8379) Controlled via Mutex() accessor.
+
+    private:
+        mutable std::mutex mutex_;
     };
 
-    struct JobStoreState final {
+    class JobStoreState final {
+    public:
         explicit JobStoreState(const std::size_t capacity) : terminalCapacity(capacity) {}
 
+        [[nodiscard]] std::mutex &Mutex() const noexcept {
+            return mutex_;
+        }
+
         const std::size_t terminalCapacity;
-        mutable std::mutex mutex;
         std::unordered_map<JobId, std::shared_ptr<JobRecord>> records;
         std::deque<JobId> terminalOrder;
         std::uint64_t revision{};
         std::uint64_t droppedTerminalCount{};
+
+    private:
+        mutable std::mutex mutex_;
     };
 
     struct JobSystem::State {
@@ -171,7 +181,7 @@ namespace Horo {
         }
 
         [[nodiscard]] std::shared_ptr<JobRecord> FindRetainedRecord(const std::shared_ptr<JobStoreState> &store, const JobId id) {
-            std::lock_guard lock(store->mutex);
+            std::lock_guard lock(store->Mutex());
             const auto found = store->records.find(id);
             return found == store->records.end() ? nullptr : found->second;
         }
@@ -195,10 +205,8 @@ namespace Horo {
 
         [[nodiscard]] ContextJobFunction TransitionTerminal(const std::shared_ptr<JobRecord> &record, const JobState state,
                                                             std::optional<Error> error, const bool queuedOnly) {
-            const std::shared_ptr store = record->store.lock();
-            if (store) {
-                std::lock_guard storeLock(store->mutex);
-                std::lock_guard recordLock(record->Mutex());
+            if (const std::shared_ptr store = record->store.lock()) {
+                std::scoped_lock locks(store->Mutex(), record->Mutex());
                 return TransitionTerminalLocked(*record, store.get(), state, std::move(error), queuedOnly);
             }
             std::lock_guard recordLock(record->Mutex());
@@ -260,10 +268,8 @@ namespace Horo {
         }
 
         [[nodiscard]] bool TryClaimJobRecord(const std::shared_ptr<JobRecord> &record) {
-            const std::shared_ptr store = record->store.lock();
-            if (store) {
-                std::lock_guard storeLock(store->mutex);
-                std::lock_guard recordLock(record->Mutex());
+            if (const std::shared_ptr store = record->store.lock()) {
+                std::scoped_lock locks(store->Mutex(), record->Mutex());
                 return ClaimRecordLocked(*record, store.get());
             }
             std::lock_guard recordLock(record->Mutex());
@@ -413,7 +419,7 @@ namespace Horo {
         auto record =
             std::make_shared<JobRecord>(m_state->nextId++, descriptor, std::move(work), m_state->schedulerIdentity, m_state->store);
         {
-            std::lock_guard storeLock(m_state->store->mutex);
+            std::lock_guard storeLock(m_state->store->Mutex());
             m_state->store->records.try_emplace(record->id, record);
             ++m_state->store->revision;
         }
@@ -445,7 +451,7 @@ namespace Horo {
     std::optional<JobStoreSnapshot> JobSystem::SnapshotIfChanged(const std::uint64_t knownRevision) const {
         JobStoreSnapshot snapshot;
         {
-            std::lock_guard lock(m_state->store->mutex);
+            std::lock_guard lock(m_state->store->Mutex());
             if (knownRevision == m_state->store->revision)
                 return std::nullopt;
             snapshot.revision = m_state->store->revision;
@@ -484,7 +490,7 @@ namespace Horo {
                     m_state->queue.clear();
                     std::vector<std::shared_ptr<JobRecord>> records;
                     {
-                        std::lock_guard storeLock(m_state->store->mutex);
+                        std::lock_guard storeLock(m_state->store->Mutex());
                         records.reserve(m_state->store->records.size());
                         for (const auto &[id, record] : m_state->store->records) {
                             (void)id;
@@ -576,21 +582,19 @@ namespace Horo {
             (value.has_value() && (!std::isfinite(*value) || *value < 0.0F || *value > 1.0F)))
             return Result<void>::Failure(MakeJobError(JobErrors::InvalidProgress, "Job progress phase or normalized value is invalid."));
 
-        const auto updateLocked = [this, phase, value](JobStoreState *store) -> Result<void> {
+        const auto updateLocked = [this, phase, value](JobStoreState *store) {
             if (IsTerminal(record_->state))
                 return Result<void>::Failure(MakeJobError(JobErrors::TerminalImmutable, "Terminal job progress cannot be changed."));
-            const bool samePhase = record_->progress.phase.View() == phase;
-            if (samePhase && record_->progress.value.has_value() && (!value.has_value() || *value < *record_->progress.value))
+            if (const bool samePhase = record_->progress.phase.View() == phase;
+                samePhase && record_->progress.value.has_value() && (!value.has_value() || *value < *record_->progress.value))
                 return Result<void>::Failure(MakeJobError(JobErrors::ProgressRegressed, "Job progress cannot decrease within one phase."));
             record_->progress = JobProgress{.phase = JobProgressPhase{phase}, .value = value};
             if (store != nullptr)
                 ++store->revision;
             return Result<void>::Success();
         };
-        const std::shared_ptr store = record_->store.lock();
-        if (store) {
-            std::lock_guard storeLock(store->mutex);
-            std::lock_guard recordLock(record_->Mutex());
+        if (const std::shared_ptr store = record_->store.lock()) {
+            std::scoped_lock locks(store->Mutex(), record_->Mutex());
             return updateLocked(store.get());
         }
         std::lock_guard recordLock(record_->Mutex());
@@ -599,7 +603,7 @@ namespace Horo {
 
     struct TaskGroup::State {
         State(JobSystem &jobSystem, const TaskGroupFailurePolicy failurePolicy, const CancellationToken &parentCancellation)
-            : jobs(jobSystem), policy(failurePolicy), cancellation(parentCancellation), id(NextTaskGroupIdentity()) {}
+            : jobs(jobSystem), policy(failurePolicy), cancellation(parentCancellation) {}
 
         [[nodiscard]] static TaskGroupId NextTaskGroupIdentity() noexcept {
             static std::atomic<std::uint64_t> next{1};
@@ -609,7 +613,7 @@ namespace Horo {
         JobSystem &jobs;
         TaskGroupFailurePolicy policy;
         CancellationSource cancellation;
-        TaskGroupId id;
+        TaskGroupId id = NextTaskGroupIdentity();
         std::mutex mutex;
         std::mutex joinMutex;
         bool accepting = true;
