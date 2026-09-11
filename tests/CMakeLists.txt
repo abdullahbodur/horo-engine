@@ -70,6 +70,7 @@ function(horo_register_catch_test target)
 endfunction()
 
 add_executable(HoroPackageValidationTests
+    unit/packages/PackageDependencyResolverTests.cpp
     unit/packages/PackagePathTests.cpp
     unit/packages/PackageArchiveTests.cpp
     unit/packages/PackageFileManifestTests.cpp)
