@@ -8,7 +8,7 @@
 
 namespace Horo::PCG {
     struct PCGGenerationPlan::State final {
-        explicit State(PCGGenerationPlanCandidate candidate, const PCGGenerationResourceEstimate totalResources)
+        explicit State(PCGGenerationPlanCandidate candidate, const PCGGenerationResourceEstimate &totalResources)
             : version(candidate.version), plan(candidate.plan), execution(candidate.execution), seed(candidate.seed),
               lineage(candidate.lineage), set(candidate.set), setRevision(candidate.setRevision), cell(candidate.cell),
               requiredCapabilities(candidate.requiredCapabilities), target(candidate.validation),
