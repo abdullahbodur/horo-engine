@@ -142,6 +142,24 @@ namespace Horo::XR::XRErrors {
         .retryable = true,
         .userActionable = false,
     };
+    const ErrorCodeDescriptor TrackingSnapshotInvalid{
+        .domain = XRDomain,
+        .code = ErrorCode{"xr.tracking_snapshot.invalid"},
+        .defaultSeverity = ErrorSeverity::Error,
+        .summary = "XR tracking snapshot evidence is malformed, contradictory, or not canonically ordered.",
+        .remediationHint = "Publish bounded canonical device and simulation-pose evidence from one exact session, time, and origin.",
+        .retryable = false,
+        .userActionable = false,
+    };
+    const ErrorCodeDescriptor TrackingSnapshotStale{
+        .domain = XRDomain,
+        .code = ErrorCode{"xr.tracking_snapshot.stale"},
+        .defaultSeverity = ErrorSeverity::Warning,
+        .summary = "The retained XR tracking snapshot revision has been replaced.",
+        .remediationHint = "Acquire the current immutable tracking snapshot before querying device pose evidence.",
+        .retryable = true,
+        .userActionable = false,
+    };
 
     /** @copydoc Descriptors */
     std::span<const ErrorCodeDescriptor *const> Descriptors() noexcept {
@@ -161,6 +179,8 @@ namespace Horo::XR::XRErrors {
             &TimeDomainIncompatible,
             &PoseInvalid,
             &OriginRevisionStale,
+            &TrackingSnapshotInvalid,
+            &TrackingSnapshotStale,
         };
         return descriptors;
     }

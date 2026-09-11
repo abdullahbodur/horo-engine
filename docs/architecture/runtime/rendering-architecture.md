@@ -1217,6 +1217,20 @@ RuntimeUiService, not Renderer, decides when that revision becomes eligible for
 next-frame input. Failed/skipped presentation cannot silently adopt unpublished
 hit-test geometry.
 
+The concrete frontend admission boundary is
+`Horo/Runtime/Render/UiRenderComposition.h`. It validates one bounded,
+allocation-free, per-view pass span against a single graph owner and output extent.
+Entries reuse `RenderTextureDescriptor` for color/depth structure, keep graph-local
+resources inside Renderer, and borrow immutable `UiRenderSnapshot` values only for
+the synchronous admission call. The frame owner retains accepted snapshot leases
+until completion. Semantic composition point and presentation band ordering are
+validated before graph execution; native backends cannot infer or reorder them.
+
+Renderer produces `UiPresentationReceipt` evidence but does not apply it. Runtime UI
+owns `UiPresentedInteractionState` and advances interaction eligibility only for a
+strictly newer valid Presented receipt. Skipped and failed receipts preserve the
+previous last-presented interaction revision.
+
 The [VFX contract](./vfx-and-particles-architecture.md) extends the snapshot with
 bounded immutable GPU simulation work, CPU/GPU particle sources, decals and volume
 batches. VfxRenderExtractor never submits graph passes or writes mapped GPU buffers.

@@ -63,4 +63,16 @@ namespace Horo::Runtime::SceneErrors {
     const ErrorCodeDescriptor StructuralCommitFailed{kDomain, ErrorCode{"scene.structural.commit_failed"}, kError,
                                                      "The structural command batch could not be committed.",
                                                      "Correct the command batch and retry."};
+    const ErrorCodeDescriptor SaveBootstrapInvalid{kDomain, ErrorCode{"scene.save_bootstrap.invalid"}, kError,
+                                                   "The saved-scene bootstrap requirements are invalid.",
+                                                   "Provide complete typed world, scene, content, spawn, and transition evidence."};
+    const ErrorCodeDescriptor SaveBootstrapAssetUnavailable{kDomain, ErrorCode{"scene.save_bootstrap.asset_unavailable"}, kError,
+                                                            "The saved base scene is absent from the pinned asset registry.",
+                                                            "Install or restore the required cooked scene asset before loading."};
+    const ErrorCodeDescriptor SaveBootstrapIncompatible{kDomain, ErrorCode{"scene.save_bootstrap.incompatible"}, kError,
+                                                        "The available scene baseline is incompatible with the save.",
+                                                        "Run an explicitly supported base migration or use matching cooked content."};
+    const ErrorCodeDescriptor SaveBootstrapSpawnMissing{kDomain, ErrorCode{"scene.save_bootstrap.spawn_missing"}, kError,
+                                                        "The saved spawn anchor is absent from the compatible scene baseline.",
+                                                        "Restore the authored anchor or migrate the saved spawn location."};
 }  // namespace Horo::Runtime::SceneErrors

@@ -153,14 +153,70 @@ namespace Horo::Terrain::TerrainErrors {
         .retryable = false,
         .userActionable = false,
     };
+    const ErrorCodeDescriptor FoliageDefinitionInvalid{
+        .domain = TerrainDomain,
+        .code = ErrorCode{"terrain.foliage.definition_invalid"},
+        .defaultSeverity = ErrorSeverity::Error,
+        .summary = "A foliage type definition is malformed or internally inconsistent.",
+        .remediationHint = "Provide a valid type revision, bounded scales, and complete stable mesh and material asset references.",
+        .retryable = false,
+        .userActionable = true,
+    };
+    const ErrorCodeDescriptor FoliageFeatureUnsupported{
+        .domain = TerrainDomain,
+        .code = ErrorCode{"terrain.foliage.feature_unsupported"},
+        .defaultSeverity = ErrorSeverity::Error,
+        .summary = "The exact foliage definition requires a feature absent from the captured capability plan.",
+        .remediationHint = "Provide the required culling, impostor, wind, collision, or navigation capability; do not silently downgrade.",
+        .retryable = false,
+        .userActionable = true,
+    };
+    const ErrorCodeDescriptor FoliagePlacementInvalid{
+        .domain = TerrainDomain,
+        .code = ErrorCode{"terrain.foliage.placement_invalid"},
+        .defaultSeverity = ErrorSeverity::Error,
+        .summary = "Foliage placement constraints or deterministic algorithm metadata are invalid.",
+        .remediationHint =
+            "Use the supported algorithm version and ordered bounded density, altitude, slope, separation, and quantization values.",
+        .retryable = false,
+        .userActionable = true,
+    };
+    const ErrorCodeDescriptor FoliageCullingInvalid{
+        .domain = TerrainDomain,
+        .code = ErrorCode{"terrain.foliage.culling_invalid"},
+        .defaultSeverity = ErrorSeverity::Error,
+        .summary = "Foliage LOD, impostor, transition, or culling thresholds are invalid.",
+        .remediationHint = "Provide strictly increasing populated LOD thresholds and a farther finite cull distance.",
+        .retryable = false,
+        .userActionable = true,
+    };
+    const ErrorCodeDescriptor FoliageWindInvalid{
+        .domain = TerrainDomain,
+        .code = ErrorCode{"terrain.foliage.wind_invalid"},
+        .defaultSeverity = ErrorSeverity::Error,
+        .summary = "Foliage wind parameters contradict the selected fixed-point deformation model.",
+        .remediationHint = "Zero every wind field for None, or provide bounded strengths, frequencies, flexibility, and required flutter.",
+        .retryable = false,
+        .userActionable = true,
+    };
+    const ErrorCodeDescriptor FoliageCollisionInvalid{
+        .domain = TerrainDomain,
+        .code = ErrorCode{"terrain.foliage.collision_invalid"},
+        .defaultSeverity = ErrorSeverity::Error,
+        .summary = "Foliage collision dimensions or response flags contradict the selected primitive.",
+        .remediationHint = "Use no dimensions or flags for visual-only foliage, or a positive bounded cylinder or capsule.",
+        .retryable = false,
+        .userActionable = true,
+    };
 
     /** @copydoc Descriptors */
     std::span<const ErrorCodeDescriptor *const> Descriptors() noexcept {
         static constexpr std::array descriptors{
-            &IdentityInvalid,    &SerializedIdentityInvalid, &DerivationInvalid,   &IdentityConflict,     &IdentityUnknown,
-            &GenerationStale,    &GenerationExhausted,       &CapacityExceeded,    &LifecycleUnavailable, &DescriptorInvalid,
-            &TierInvalid,        &TierUnsupported,           &LimitProfileInvalid, &LimitExceeded,        &RevisionStale,
-            &ReplacementInvalid,
+            &IdentityInvalid,    &SerializedIdentityInvalid, &DerivationInvalid,         &IdentityConflict,        &IdentityUnknown,
+            &GenerationStale,    &GenerationExhausted,       &CapacityExceeded,          &LifecycleUnavailable,    &DescriptorInvalid,
+            &TierInvalid,        &TierUnsupported,           &LimitProfileInvalid,       &LimitExceeded,           &RevisionStale,
+            &ReplacementInvalid, &FoliageDefinitionInvalid,  &FoliageFeatureUnsupported, &FoliagePlacementInvalid, &FoliageCullingInvalid,
+            &FoliageWindInvalid, &FoliageCollisionInvalid,
         };
         return descriptors;
     }

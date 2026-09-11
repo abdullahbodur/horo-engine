@@ -76,6 +76,7 @@ horo_configure_target_header_boundary(HoroPlatformServices PUBLIC_HEADERS
     Horo/PlatformServices/PlatformRequestErrors.h
     Horo/PlatformServices/PlatformServiceInterfaces.h
     Horo/PlatformServices/PlatformServicesBackend.h
+    Horo/PlatformServices/PlatformServicesFrontend.h
     Horo/PlatformServices/PlatformStableIdRegistry.h
     Horo/PlatformServices/PlatformUserSession.h
 )
@@ -88,6 +89,7 @@ horo_configure_target_header_boundary(HoroApplication PUBLIC_HEADERS
     Horo/Application/ProjectVersion.h
     Horo/Release/DistributionModel.h
     Horo/Release/ReleaseErrors.h
+    Horo/Release/ReleaseProfile.h
     Horo/Release/ReleaseVersion.h
 )
 horo_configure_target_header_boundary(HoroPackages PUBLIC_HEADERS
@@ -122,6 +124,7 @@ horo_configure_target_header_boundary(HoroRuntimeUi PUBLIC_HEADERS
     Horo/Runtime/Ui/UiDiagnostics.h
     Horo/Runtime/Ui/UiElementTree.h
     Horo/Runtime/Ui/UiRenderSnapshot.h
+    Horo/Runtime/Ui/UiPresentationReceipt.h
 )
 horo_configure_target_header_boundary(HoroNetworkApi PUBLIC_HEADERS
     Horo/Network/MessageCodecRegistry.h
@@ -159,6 +162,7 @@ horo_configure_target_header_boundary(HoroGameplayApi PUBLIC_HEADERS
 horo_configure_target_header_boundary(HoroRuntimeScene PUBLIC_HEADERS
     Horo/Runtime/Scene/RuntimeScene.h
     Horo/Runtime/Scene/RuntimeSceneDefinition.h
+    Horo/Runtime/Scene/SavedSceneBootstrap.h
 )
 horo_configure_target_header_boundary(HoroGameplayRuntime PUBLIC_HEADERS
     Horo/Gameplay/BehaviorRegistry.h
@@ -319,8 +323,10 @@ horo_configure_target_header_boundary(HoroXRApi PUBLIC_HEADERS
     Horo/XR/XRErrors.h
     Horo/XR/XRIdentity.h
     Horo/XR/XRSpacePose.h
+    Horo/XR/XRTrackingSnapshot.h
 )
 horo_configure_target_header_boundary(HoroTerrainApi PUBLIC_HEADERS
+    Horo/Terrain/FoliageDefinition.h
     Horo/Terrain/TerrainDescriptor.h
     Horo/Terrain/TerrainErrors.h
     Horo/Terrain/TerrainIdentity.h
@@ -329,6 +335,7 @@ horo_configure_target_header_boundary(HoroNavigationNull PUBLIC_HEADERS
     Horo/Navigation/Backends/NullProvider.h
 )
 horo_configure_target_header_boundary(HoroWorldStreaming PUBLIC_HEADERS
+    Horo/WorldStreaming/NetworkStreamingAuthority.h
     Horo/WorldStreaming/OriginFrame.h
     Horo/WorldStreaming/CookedWorldIndexManifest.h
     Horo/WorldStreaming/FallbackStreamingProvider.h
@@ -392,6 +399,7 @@ horo_configure_target_header_boundary(HoroRenderBackendRegistry PUBLIC_HEADERS
 )
 horo_configure_target_header_boundary(HoroRenderFrontend PUBLIC_HEADERS
     Horo/Runtime/Render/RenderFrontend.h
+    Horo/Runtime/Render/UiRenderComposition.h
 )
 horo_configure_target_header_boundary(HoroSceneModel PUBLIC_HEADERS
     Horo/Runtime/Scene/PrimitiveCatalog.h
@@ -479,6 +487,7 @@ horo_configure_target_header_boundary(HoroExtensions PUBLIC_HEADERS
     Horo/Extensions/ExtensionManifest.h
     Horo/Extensions/ExtensionModuleResolution.h
     Horo/Extensions/ExtensionMarketplace.h
+    Horo/Extensions/ProjectValidatorRegistry.h
 )
 
 horo_verify_public_header_inventory()

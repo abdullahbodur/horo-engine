@@ -81,6 +81,17 @@ Each profile declares:
 - update and patch eligibility
 - store/publication destination eligibility
 
+`ReleaseProfileCatalog` is the Horo-owned schema-v1 persistence and resolution
+boundary for this policy. Presets use bounded single-parent inheritance and
+resolve into an immutable `EffectiveReleaseProfile`; explicit child fields
+replace the corresponding inherited field. Product, artifact class, platform,
+and package-format admission reuses the distribution model's authoritative
+compatibility table. Toolchain/CMake presets, output paths, credential handles,
+private bindings, and publication execution state are separate inputs and are
+not fields in persistent product profiles. Unknown fields, duplicate identities,
+missing parents, cycles, unsupported required capabilities, and incompatible
+overrides fail before a release request is frozen.
+
 For a network-capable game profile,
 [ADR-103](../../adr/103-network-project-configuration-and-build-profile-ownership.md)
 also requires a typed network release profile naming supported ADR-102 modes,

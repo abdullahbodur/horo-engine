@@ -542,6 +542,57 @@ components. Viewport attachments and snapshots contain only Horo view/extent/DPI
 safe-area/resource identities; native surfaces, swapchains, command buffers and
 editor GUI texture IDs remain private to Platform/Renderer adapters.
 
+### Render-graph composition admission
+
+`Horo/Runtime/Render/UiRenderComposition.h` is the single typed bridge from an
+immutable per-view `UiRenderSnapshot` to renderer-owned graph authoring. The bridge
+lives in `RenderFrontend`, which may depend on Runtime UI; Runtime UI never depends
+on Renderer and never receives graph resources or pass identities back.
+
+Each admission request names exactly one `UiRenderViewId`, one `RenderGraphOwnerId`,
+one output extent, a finite pass bound and an already ordered borrowed pass span.
+Every pass binds one immutable snapshot to a canonical graph pass, explicit color
+input/output textures and, for world-space UI only, a depth attachment. Texture
+shape, sample count, format and usage reuse the existing Horo
+`RenderTextureDescriptor`; the UI bridge does not define a competing color-format
+vocabulary. Distinct color input/output resources require a sampleable input and an
+attachment-capable output. All graph-local references share the request owner.
+
+Composition order is semantic and stable: scene-before-post-process,
+scene-after-post-process, then display overlay; within each point the fixed World,
+HUD, Screen, Overlay, Modal, Loading and Debug bands apply. World-space UI is a
+depth-aware scene pass before post-processing. Camera UI is a scene pass without a
+depth attachment. Screen UI may use an explicitly selected scene or display point,
+but never gains world-depth authority. The renderer may batch inside one compatible
+entry; it may not reorder entries across points or bands.
+
+Validation is a bounded allocation-free scan over caller-owned entries. A successful
+call only admits the declarations. The frame owner then retains its own
+`UiRenderSnapshot` leases through graph execution and presentation; the borrowed
+request is never retained. Empty views are valid. Capacity overflow, mixed views,
+foreign graph owners, duplicate snapshot generations, malformed targets and invalid
+space/depth policy fail atomically with typed Runtime UI errors.
+
+Renderer produces the renderer-independent `UiPresentationReceipt` declared by
+Runtime UI. A receipt is `Presented`, `Skipped` or `Failed` and is correlated to the
+exact view, canvas, snapshot and interaction revisions. Runtime UI owns receipt
+application. Skipped/failed receipts consume their strictly increasing snapshot
+revision but cannot advance the last-presented interaction revision. Only a valid
+Presented receipt can make matching hit-test geometry eligible for next-frame input;
+stale completion is rejected.
+
+Rejected alternatives:
+
+- Runtime UI does not author `RenderGraph` objects or depend on renderer headers;
+  that would reverse the ownership direction.
+- Backends do not infer composition from canvas type, texture format or native render
+  targets; the host/frontend supplies the explicit semantic point and band.
+- A successful graph execution is not treated as successful presentation. Adoption
+  waits for an explicit receipt, and skipped/failed frames retain the previous
+  interaction revision.
+- Admission does not allocate an unbounded owning plan in the frame-hot path. The
+  frame owner preallocates bounded storage and retains snapshot leases explicitly.
+
 ## Serialization
 
 Game UI is serialized as project/scene content:

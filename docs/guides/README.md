@@ -14,11 +14,16 @@ workflows.
   configure the IDE bridge, analyze local changes, and diagnose partial results.
 - [Terrain Descriptor Migration](./terrain-descriptor-migration.md): adopt revisioned
   bounds, versioned tier limits, immutable configuration snapshots, and replacement fencing.
+- [Foliage Definition Migration](./foliage-definition-migration.md): adopt stable typed
+  placement, culling, wind, collision, and exact capability admission.
 - [World Spatial Object Descriptor Migration](./world-spatial-object-descriptor-migration.md):
   adopt stable authored-object identity, source, bounds, placement, and revision admission.
 - [XR Coordinate and Pose Contract Migration](./xr-coordinate-pose-migration.md):
   publish generation-fenced coordinate, validity, and time evidence without native
   backend leakage or implicit clock conversion.
+- [XR Tracking Snapshot Migration](./xr-tracking-snapshot-migration.md):
+  publish immutable, bounded device and pose snapshots with stable identity,
+  capability, confidence, and loss-state semantics.
 
 ## Writing a Guide
 

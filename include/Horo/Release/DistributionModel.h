@@ -137,6 +137,13 @@ namespace Horo::Release {
     };
 
     /**
+     * @brief Validates one portable distribution-domain identity component.
+     * @param value Candidate identity text.
+     * @return True only for the canonical bounded identity grammar.
+     */
+    [[nodiscard]] bool IsValidDistributionIdentity(std::string_view value) noexcept;
+
+    /**
      * @brief Resolves the Horo-owned capability descriptor for an explicit format and platform.
      * @param format Package format selected by policy or profile.
      * @param platform Exact target platform.
@@ -144,6 +151,18 @@ namespace Horo::Release {
      */
     [[nodiscard]] Result<DistributionPackageCapabilities> DescribeDistributionPackageFormat(DistributionPackageFormat format,
                                                                                             DistributionPlatform platform);
+
+    /**
+     * @brief Validates product, supplemental-artifact class, platform, and format policy without an artifact instance.
+     * @param product Typed product identity.
+     * @param artifactClass Installable, symbol, or diagnostics output class.
+     * @param platform Exact target platform.
+     * @param format Explicit package format.
+     * @return Authoritative format capabilities or an invalid/unsupported-combination error.
+     */
+    [[nodiscard]] Result<DistributionPackageCapabilities> ValidateDistributionProductPackageFormat(
+        const DistributionProductIdentity &product, DistributionArtifactClass artifactClass, DistributionPlatform platform,
+        DistributionPackageFormat format);
 
     /**
      * @brief Validates one explicit product/platform/format selection before external work begins.

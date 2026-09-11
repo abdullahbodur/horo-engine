@@ -20,7 +20,10 @@ loader can discover it. Support requires reproducible qualification evidence.
 The backend-neutral `HoroEngine::XRApi` contract is implemented. It owns the
 Horo XR contract version, generation-safe system/session/space/view/action/device
 identities, immutable fixed-size system capability snapshots, finite hard limits,
-pre-dispatch admission, and the `horo.xr` error descriptor contribution. It does
+pre-dispatch admission, coordinate and time-domain pose evidence, and immutable
+bounded tracking snapshots with canonical device/pose queries. Tracking publication
+copies only after complete validation; frame-hot queries remain allocation-free and
+never reuse lost evidence. The target also owns the `horo.xr` error descriptor contribution. It does
 not discover or activate an XR runtime and therefore does not constitute OpenXR,
 platform, headset, or product-profile support.
 
@@ -175,6 +178,15 @@ claims. `AdmitXRCapability` is a side-effect-free pre-dispatch check: it validat
 the active owner and exact revision, preserves unsupported/unavailable/incompatible
 categories, and rejects over-capacity requests without allocation, blocking I/O,
 job submission, native calls, or CPU/GPU synchronization.
+
+`XRTrackingSnapshot` is an immutable owner-backed publication with explicit session,
+snapshot revision, sequence, runtime sample time, world-origin revision, focus,
+visibility, aggregate tracking state, and admitted device/pose bounds. Devices and
+poses are generation-safe and canonically ordered. Pose validity and confidence come
+from `XRPoseSample`; tracking loss removes pose evidence instead of preserving a
+last-known value. `QueryXRTrackedPose` performs bounded binary lookup without
+allocation and distinguishes unsupported pose purposes, temporary unavailability,
+device replacement, snapshot replacement, shutdown, and origin replacement.
 
 The descriptor set returned by `XRErrors::Descriptors()` is the complete bounded
 `horo.xr` contribution for later host module registration. XRRuntime and XROpenXR
