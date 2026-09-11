@@ -234,6 +234,7 @@ add_executable(HoroPhysicsTests
         unit/runtime/physics/PhysicsDiagnosticsTests.cpp
         unit/runtime/physics/PhysicsHandleRegistryTests.cpp
         unit/runtime/physics/PhysicsIdentityTests.cpp
+        unit/runtime/physics/PhysicsMetricsTests.cpp
         unit/runtime/physics/PhysicsPoseTests.cpp
         unit/runtime/physics/PhysicsQueryTests.cpp
         unit/runtime/physics/PhysicsShapeDescriptorTests.cpp
@@ -259,6 +260,7 @@ target_link_libraries(HoroAITests PRIVATE HoroEngine::AI)
 horo_register_catch_test(HoroAITests LABELS "unit;ai;headless")
 
 add_executable(HoroAnimationApiTests
+        unit/runtime/animation/AnimationCompressionTests.cpp
         unit/runtime/animation/AnimationClipTests.cpp
         unit/runtime/animation/AnimationComponentTests.cpp
         unit/runtime/animation/AnimationIdentityTests.cpp
@@ -291,6 +293,7 @@ add_executable(HoroDestructionApiTests
         unit/runtime/destruction/DestructibleDescriptorTests.cpp
         unit/runtime/destruction/DestructionCommandTests.cpp
         unit/runtime/destruction/DestructionIdentityTests.cpp
+        unit/runtime/destruction/DestructionRegistryTests.cpp
         unit/runtime/destruction/DestructionStateMachineTests.cpp
 )
 target_compile_features(HoroDestructionApiTests PRIVATE cxx_std_20)
@@ -311,6 +314,7 @@ target_link_libraries(HoroCinematicModelTests PRIVATE HoroEngine::CinematicModel
 horo_register_catch_test(HoroCinematicModelTests LABELS "unit;cinematic;headless")
 add_executable(HoroCinematicRuntimeTests
         support/AllocationProbe.cpp
+        unit/runtime/cinematic/SequenceEvaluationTests.cpp
         unit/runtime/cinematic/SequencePlayerTests.cpp
 )
 target_compile_features(HoroCinematicRuntimeTests PRIVATE cxx_std_20)

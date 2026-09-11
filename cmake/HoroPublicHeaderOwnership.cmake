@@ -229,6 +229,7 @@ horo_configure_target_header_boundary(HoroPhysics PUBLIC_HEADERS
     Horo/Physics/PhysicsErrors.h
     Horo/Physics/PhysicsFilterIdentity.h
     Horo/Physics/PhysicsIdentity.h
+    Horo/Physics/PhysicsMetrics.h
     Horo/Physics/PhysicsPose.h
     Horo/Physics/PhysicsQuery.h
     Horo/Physics/PhysicsShapeDescriptor.h
@@ -246,6 +247,7 @@ horo_configure_target_header_boundary(HoroAI PUBLIC_HEADERS
     Horo/AI/BlackboardSchema.h
 )
 horo_configure_target_header_boundary(HoroAnimationApi PUBLIC_HEADERS
+    Horo/Animation/AnimationCompression.h
     Horo/Animation/AnimationClip.h
     Horo/Animation/AnimationComponents.h
     Horo/Animation/AnimationErrors.h
@@ -269,6 +271,7 @@ horo_configure_target_header_boundary(HoroDestructionApi PUBLIC_HEADERS
     Horo/Destruction/DestructionCommand.h
     Horo/Destruction/DestructionErrors.h
     Horo/Destruction/DestructionIdentity.h
+    Horo/Destruction/DestructionRegistry.h
     Horo/Destruction/DestructionStateMachine.h
 )
 horo_configure_target_header_boundary(HoroCinematicModel PUBLIC_HEADERS
@@ -279,6 +282,8 @@ horo_configure_target_header_boundary(HoroCinematicModel PUBLIC_HEADERS
     Horo/Cinematic/TransformTrack.h
 )
 horo_configure_target_header_boundary(HoroCinematicRuntime PUBLIC_HEADERS
+    Horo/Cinematic/SequenceEvaluation.h
+    Horo/Cinematic/SequenceEvaluationErrors.h
     Horo/Cinematic/SequencePlayer.h
     Horo/Cinematic/SequencePlayerErrors.h
 )

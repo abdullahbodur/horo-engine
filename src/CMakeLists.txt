@@ -437,6 +437,7 @@ add_library(HoroPhysics STATIC
         physics/PhysicsFilterIdentity.cpp
         physics/PhysicsHandleRegistry.h
         physics/PhysicsIdentity.cpp
+        physics/PhysicsMetrics.cpp
         physics/PhysicsPose.cpp
         physics/PhysicsQuery.cpp
         physics/PhysicsShapeDescriptor.cpp
@@ -476,6 +477,7 @@ target_compile_features(HoroAI PUBLIC cxx_std_20)
 target_link_libraries(HoroAI PUBLIC HoroEngine::Foundation)
 
 add_library(HoroAnimationApi STATIC
+        runtime/animation/api/AnimationCompression.cpp
         runtime/animation/api/AnimationClip.cpp
         runtime/animation/api/AnimationComponents.cpp
         runtime/animation/api/AnimationErrors.cpp
@@ -510,6 +512,7 @@ add_library(HoroDestructionApi STATIC
         runtime/destruction/api/DestructionCommand.cpp
         runtime/destruction/api/DestructionErrors.cpp
         runtime/destruction/api/DestructionIdentity.cpp
+        runtime/destruction/api/DestructionRegistry.cpp
         runtime/destruction/api/DestructionStateMachine.cpp
         runtime/destruction/api/DestructibleDescriptor.cpp
 )
@@ -533,6 +536,8 @@ target_link_libraries(HoroCinematicModel
 )
 
 add_library(HoroCinematicRuntime STATIC
+        runtime/cinematic/player/SequenceEvaluation.cpp
+        runtime/cinematic/player/SequenceEvaluationErrors.cpp
         runtime/cinematic/player/SequencePlayer.cpp
         runtime/cinematic/player/SequencePlayerErrors.cpp
 )
