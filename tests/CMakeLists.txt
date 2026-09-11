@@ -1137,6 +1137,14 @@ target_link_libraries(HoroRuntimeLifecycleTests
         HoroEngine::RenderFrontend
         HoroEngine::RenderNull
 )
+add_executable(HoroAndroidLifecycleTests
+        unit/platform/AndroidLifecycleTests.cpp
+)
+target_compile_features(HoroAndroidLifecycleTests PRIVATE cxx_std_20)
+target_include_directories(HoroAndroidLifecycleTests PRIVATE
+        ${PROJECT_SOURCE_DIR}/src/platform/android
+)
+target_link_libraries(HoroAndroidLifecycleTests PRIVATE HoroEngine::Platform)
 add_executable(HoroRuntimeSaveIdentityTests
         unit/runtime/save/SaveIdentityTests.cpp
 )
@@ -1532,6 +1540,7 @@ set(HORO_CATCH_TEST_TARGETS
         HoroFoundationDiagnosticsTests
         HoroFoundationJobSystemTests
         HoroPlatformTests
+        HoroAndroidLifecycleTests
         HoroPlatformRequestTests
         HoroGameplayBuildServiceTests
         HoroEditorViewportSceneTests

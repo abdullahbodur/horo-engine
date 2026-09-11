@@ -24,6 +24,18 @@ contract, Doxygen documentation, migration notes, and consumer coverage.
 immutable capability/policy evidence and pure admission decisions; consumers keep
 linking `HoroEngine::VfxApi`, and no include spelling or existing caller migrates.
 
+## Android Lifecycle Boundary
+
+`HoroEngine::Platform` owns `Horo/Platform/AndroidLifecycle.h`. The header exposes
+only portable lifecycle observations, generations, snapshots, typed results and
+the bounded owner-thread controller. GameActivity, JNI, `ANativeWindow`, Vulkan
+and OpenXR types remain target-private. The callback-shaped adapter lives under
+`src/platform/android` and is never staged through public usage requirements.
+There are no prior Android lifecycle callers to migrate; future Android product
+composition consumes this contract while portable Runtime consumers remain free
+of Android SDK dependencies. The generated standalone Platform public-header
+consumer enforces that boundary.
+
 ## Build-Tree Contract
 
 `cmake/HoroPublicHeaderOwnership.cmake` assigns each public header to one real

@@ -59,6 +59,7 @@ horo_configure_target_header_boundary(HoroOpenTelemetry PUBLIC_HEADERS
     Horo/Foundation/Telemetry/OpenTelemetrySink.h)
 
 horo_configure_target_header_boundary(HoroPlatform PUBLIC_HEADERS
+    Horo/Platform/AndroidLifecycle.h
     Horo/Platform/ConfigurationFileStore.h
     Horo/Platform/DynamicLibrary.h
     Horo/Platform/ExternalProcess.h
