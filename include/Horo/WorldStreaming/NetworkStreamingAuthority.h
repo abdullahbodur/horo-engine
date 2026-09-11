@@ -168,7 +168,8 @@ namespace Horo::WorldStreaming {
         [[nodiscard]] NetworkStreamingAuthorityLifecycle Lifecycle() const noexcept;
 
     private:
-        NetworkStreamingAuthority(NetworkStreamingAuthorityConfig config, std::vector<NetworkStreamingAuthorityRecord> records) noexcept;
+        NetworkStreamingAuthority(const NetworkStreamingAuthorityConfig &config,
+                                  std::vector<NetworkStreamingAuthorityRecord> records) noexcept;
 
         NetworkStreamingAuthorityConfig config_;
         std::vector<NetworkStreamingAuthorityRecord> records_;

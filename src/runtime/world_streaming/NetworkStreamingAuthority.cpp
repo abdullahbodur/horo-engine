@@ -80,8 +80,7 @@ namespace Horo::WorldStreaming {
         [[nodiscard]] Result<void> ValidateReadyProof(const NetworkStreamingIntentCommand &command,
                                                       const StreamingRuntimeOwnerToken &localOwner,
                                                       const NetworkStreamingReadinessReport &report) {
-            const bool ready = report.readiness == NetworkStreamingClientReadiness::Ready;
-            if (!ready)
+            if (const bool ready = report.readiness == NetworkStreamingClientReadiness::Ready; !ready)
                 return report.localFence || report.localState ? Failure<void>(WorldStreamingErrors::NetworkStreamingReadinessInvalid)
                                                               : Result<void>::Success();
             if (!report.localFence || !report.localState || !report.localFence->IsValid())
@@ -114,7 +113,7 @@ namespace Horo::WorldStreaming {
         return session.IsValid() && localOwner.IsValid() && maximumTrackedCells > 0 && maximumTrackedCells <= MaximumTrackedCells;
     }
 
-    NetworkStreamingAuthority::NetworkStreamingAuthority(NetworkStreamingAuthorityConfig config,
+    NetworkStreamingAuthority::NetworkStreamingAuthority(const NetworkStreamingAuthorityConfig &config,
                                                          std::vector<NetworkStreamingAuthorityRecord> records) noexcept
         : config_(config), records_(std::move(records)) {}
 
