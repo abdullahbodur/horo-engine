@@ -20,7 +20,7 @@ namespace Horo::Extensions {
     struct ApplicationCapabilityRegistryState final {
         // Registration and resolution are bounded control-path operations. The mutex
         // makes publication removal linearizable with concurrent callback admission.
-        mutable std::mutex mutex;
+        std::mutex mutex;
         std::vector<std::shared_ptr<ApplicationCapabilityProviderState>> providers;
         bool shutdown{};
     };
@@ -101,6 +101,10 @@ namespace Horo::Extensions {
         BeginShutdown();
     }
 
+    ApplicationCapabilityRegistryState &ApplicationCapabilityRegistry::MutableState() noexcept {
+        return *state_;
+    }
+
     /** @copydoc ApplicationCapabilityRegistry::Register */
     Result<ApplicationCapabilityProviderRegistration> ApplicationCapabilityRegistry::Register(
         ApplicationCapabilityProviderDescriptor descriptor) {
@@ -110,25 +114,27 @@ namespace Horo::Extensions {
         }
         if (state_ == nullptr)
             return Result<ApplicationCapabilityProviderRegistration>::Failure(MakeError(ExtensionErrors::CapabilityRegistryShutdown));
-        std::scoped_lock lock{state_->mutex};
-        if (state_->shutdown)
+        ApplicationCapabilityRegistryState &state = MutableState();
+        std::scoped_lock lock{state.mutex};
+        if (state.shutdown)
             return Result<ApplicationCapabilityProviderRegistration>::Failure(MakeError(ExtensionErrors::CapabilityRegistryShutdown));
-        const auto duplicate = std::ranges::find_if(state_->providers, [&descriptor](const auto &provider) {
+        if (const auto duplicate = std::ranges::find_if(state.providers,
+                                                        [&descriptor](const auto &provider) {
             return provider->descriptor.capability == descriptor.capability && provider->descriptor.version == descriptor.version;
         });
-        if (duplicate != state_->providers.end()) {
+            duplicate != state.providers.end()) {
             return Result<ApplicationCapabilityProviderRegistration>::Failure(
                 MakeError(ExtensionErrors::CapabilityRegistryDuplicate,
                           "Capability and contract version already have a provider: " + descriptor.capability.value));
         }
-        if (state_->providers.size() >= MaximumProviders) {
+        if (state.providers.size() >= MaximumProviders) {
             return Result<ApplicationCapabilityProviderRegistration>::Failure(
                 MakeError(ExtensionErrors::CapabilityRegistryCapacityExceeded));
         }
         auto provider = std::make_shared<ApplicationCapabilityProviderState>();
         provider->descriptor = std::move(descriptor);
-        state_->providers.push_back(provider);
-        std::ranges::sort(state_->providers, [](const auto &left, const auto &right) {
+        state.providers.push_back(provider);
+        std::ranges::sort(state.providers, [](const auto &left, const auto &right) {
             return std::tie(left->descriptor.capability.value, left->descriptor.version) <
                    std::tie(right->descriptor.capability.value, right->descriptor.version);
         });
@@ -178,11 +184,12 @@ namespace Horo::Extensions {
     void ApplicationCapabilityRegistry::BeginShutdown() noexcept {
         if (state_ == nullptr)
             return;
-        std::scoped_lock lock{state_->mutex};
-        state_->shutdown = true;
-        for (const auto &provider : state_->providers)
+        ApplicationCapabilityRegistryState &state = MutableState();
+        std::scoped_lock lock{state.mutex};
+        state.shutdown = true;
+        for (const auto &provider : state.providers)
             provider->active.store(false, std::memory_order_release);
-        state_->providers.clear();
+        state.providers.clear();
     }
 
     /** @copydoc ApplicationCapabilityRegistry::IsShutdown */

@@ -16,9 +16,9 @@ namespace Horo::Extensions::Detail {
         while (start < value.size()) {
             const std::size_t separator = value.find('.', start);
             const std::size_t end = separator == std::string_view::npos ? value.size() : separator;
-            const std::string_view segment = value.substr(start, end - start);
-            if (segment.empty() || segment.front() < 'a' || segment.front() > 'z' || segment.back() == '-' ||
-                !std::ranges::all_of(segment, [](const char character) {
+            if (const std::string_view segment = value.substr(start, end - start); segment.empty() || segment.front() < 'a' ||
+                                                                                   segment.front() > 'z' || segment.back() == '-' ||
+                                                                                   !std::ranges::all_of(segment, [](const char character) {
                 return (character >= 'a' && character <= 'z') || (character >= '0' && character <= '9') || character == '-';
             })) {
                 return false;

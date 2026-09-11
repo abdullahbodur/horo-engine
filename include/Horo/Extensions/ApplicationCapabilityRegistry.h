@@ -130,6 +130,8 @@ namespace Horo::Extensions {
         [[nodiscard]] bool IsShutdown() const noexcept;
 
     private:
+        [[nodiscard]] ApplicationCapabilityRegistryState &MutableState() noexcept;
+
         std::shared_ptr<ApplicationCapabilityRegistryState> state_;
     };
 }  // namespace Horo::Extensions
