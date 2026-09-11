@@ -260,6 +260,7 @@ target_link_libraries(HoroAITests PRIVATE HoroEngine::AI)
 horo_register_catch_test(HoroAITests LABELS "unit;ai;headless")
 
 add_executable(HoroAnimationApiTests
+        unit/runtime/animation/AnimationCompressionTests.cpp
         unit/runtime/animation/AnimationClipTests.cpp
         unit/runtime/animation/AnimationComponentTests.cpp
         unit/runtime/animation/AnimationIdentityTests.cpp
@@ -312,6 +313,7 @@ target_link_libraries(HoroCinematicModelTests PRIVATE HoroEngine::CinematicModel
 horo_register_catch_test(HoroCinematicModelTests LABELS "unit;cinematic;headless")
 add_executable(HoroCinematicRuntimeTests
         support/AllocationProbe.cpp
+        unit/runtime/cinematic/SequenceEvaluationTests.cpp
         unit/runtime/cinematic/SequencePlayerTests.cpp
 )
 target_compile_features(HoroCinematicRuntimeTests PRIVATE cxx_std_20)

@@ -278,6 +278,46 @@ compressed.
 
 Cook-time compression may reduce precision based on the active cook profile.
 
+### Compression Cook Contract
+
+`Horo/Animation/AnimationCompression.h` owns ANI-001.7. Compression is an
+Animation/Asset-Pipeline cook-boundary transaction over an already validated
+`AnimationClipAsset` and its exact skeleton publication. The caller captures the
+current clip and skeleton generations before admission. Cancellation or shutdown
+rejects before reduction begins, and reload accepts a replacement only for the
+same stable clip, skeleton, profile, scheme, and compression-contract domain. A
+failure never replaces the last good immutable publication.
+
+`Lossless`, `Balanced`, and `Aggressive` resolve to complete typed profiles with a
+stable `AnimationCompressionProfileId`; no project setting, platform codec,
+service locator, mutable global, or backend handle supplies an implicit fallback.
+Every profile declares finite source/output-key and error-evaluation limits plus
+finite translation, quaternion-angle, and scale thresholds. `Linear` performs one
+canonical reduction pass. `Adaptive` deterministically subdivides each segment at
+the intermediate key with the greatest normalized threshold error, retaining the
+earliest key when errors tie. Step and cubic boundaries are retained because
+replacing them with linear interpolation would change their semantics.
+The immutable statistics report exact source/output/removed keys, maximum keys per
+track, and performed error evaluations.
+
+The compressed publication carries its exact contract version, profile, stable
+clip and skeleton identities, immutable generations, and representation. Runtime
+sampling must present that complete compatibility value; old generations fail as
+stale and another profile or representation fails as unsupported. Before writing
+caller-owned output, the wrapper proves the track and binary-search worst-case fit
+the captured `AnimationDecompressionBudget`. Successful frame-hot sampling then
+delegates to the immutable clip sampler and performs no allocation, blocking I/O,
+callback, global lookup, or backend dispatch. Immutable publications may be read
+concurrently while their owner-provided lifetime remains valid. The asset owner
+closes admission, joins/cancels cook work, retires old publication leases, and only
+then destroys clip and skeleton storage during unload or shutdown.
+
+Migration: the ANI-001.6 `AnimationClipDescriptor::compression` field remains the
+portable representation tag, but it is not sufficient proof that a cooked artifact
+is compatible. Existing compressed artifacts must be recooked to publish the
+ANI-001.7 compatibility value and statistics; runtimes must not synthesize missing
+profile identity or generation evidence.
+
 ### Clip Sampling
 
 `AnimationClipAsset::Sample` writes a complete local pose into caller-owned bounded

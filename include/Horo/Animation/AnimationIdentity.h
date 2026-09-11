@@ -101,6 +101,7 @@ namespace Horo::Animation {
     struct AnimationClipGenerationIdentityTag;
     struct AnimationReferencePoseIdentityTag;
     struct AnimationReferencePoseGenerationIdentityTag;
+    struct AnimationCompressionProfileIdentityTag;
     struct AnimationRuntimeIdentityTag;
     struct PoseGenerationIdentityTag;
     struct AnimationTickIdentityTag;
@@ -125,6 +126,8 @@ namespace Horo::Animation {
     using AnimationReferencePoseId = AnimationStableIdentity<AnimationReferencePoseIdentityTag>;
     /** @brief Non-reusable immutable additive-reference-pose publication generation. */
     using AnimationReferencePoseGeneration = AnimationStableIdentity<AnimationReferencePoseGenerationIdentityTag>;
+    /** @brief Stable identity of an immutable animation compression cook profile. */
+    using AnimationCompressionProfileId = AnimationStableIdentity<AnimationCompressionProfileIdentityTag>;
     /** @brief Process-local owner identity of one animation-runtime incarnation. */
     using AnimationRuntimeId = AnimationStableIdentity<AnimationRuntimeIdentityTag>;
     /** @brief Monotonic committed-pose generation within one runtime instance. */

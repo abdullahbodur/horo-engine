@@ -619,6 +619,22 @@ Unsupported rather than historical side-effect playback.
 
 ## Frame Evaluation Phase
 
+The implemented `Horo/Cinematic/SequenceEvaluation.h` contract provides the
+allocation-free fixed-boundary core. Activation copies and canonically orders
+bounded scalar-track adapters, event keys and camera-cut keys. Each evaluation
+preflights exact rational advancement, loop/turn crossings, caller scratch capacity,
+all samples and required typed hooks before it publishes the cursor or invokes an
+apply adapter. Apply order is property then transform with stable `TrackId` order;
+committed event occurrences and camera requests follow afterward. A control-revision
+fence prevents a cursor prepared before seek, rate, pause, stop, replacement or
+shutdown from evaluating a newer player. Cursor recreation uses an explicit reset
+policy so initial playback may emit its current boundary while seek remains silent.
+
+Root-player batches use `OrderSequenceFramePlayers` over caller-owned storage:
+priority descends and stable typed player identity ascends. The bounded insertion
+sort is independent of allocation, input/container order and worker completion and
+performs no frame-hot allocation.
+
 ### Authoritative Simulation Path
 
 Presentation frame order is not a replacement for the fixed-tick scheduler in

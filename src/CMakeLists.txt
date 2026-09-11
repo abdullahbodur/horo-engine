@@ -475,6 +475,7 @@ target_compile_features(HoroAI PUBLIC cxx_std_20)
 target_link_libraries(HoroAI PUBLIC HoroEngine::Foundation)
 
 add_library(HoroAnimationApi STATIC
+        runtime/animation/api/AnimationCompression.cpp
         runtime/animation/api/AnimationClip.cpp
         runtime/animation/api/AnimationComponents.cpp
         runtime/animation/api/AnimationErrors.cpp
@@ -532,6 +533,8 @@ target_link_libraries(HoroCinematicModel
 )
 
 add_library(HoroCinematicRuntime STATIC
+        runtime/cinematic/player/SequenceEvaluation.cpp
+        runtime/cinematic/player/SequenceEvaluationErrors.cpp
         runtime/cinematic/player/SequencePlayer.cpp
         runtime/cinematic/player/SequencePlayerErrors.cpp
 )
