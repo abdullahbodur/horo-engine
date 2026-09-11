@@ -158,6 +158,20 @@ namespace Horo::WorldStreaming {
             }
             return Result<void>::Success();
         }
+
+        [[nodiscard]] Result<void> ValidateSoftReferencePolicy(const std::span<const WorldSpatialAssignmentEntry> objects,
+                                                               DisjointSets &sets,
+                                                               const std::span<const WorldDependencyCandidate> softReferences) {
+            for (const auto &reference : softReferences) {
+                const auto target = FindObject(objects, reference.target.address);
+                if (!target.has_value())
+                    continue;
+                const auto source = FindObject(objects, reference.source.address);
+                if (source.has_value() && sets.Root(*source) == sets.Root(*target))
+                    return Result<void>::Failure(MakeError(WorldStreamingErrors::DependencyPlanAmbiguous));
+            }
+            return Result<void>::Success();
+        }
     }  // namespace
 
     /** @copydoc WorldDependencyPlan::WorldDependencyPlan */
@@ -190,6 +204,8 @@ namespace Horo::WorldStreaming {
             if (const auto processed = ProcessEdge(edge, objects, limits, sets, hardCounts, hardMembers, storage); processed.HasError())
                 return Result<WorldDependencyPlan>::Failure(processed.ErrorValue());
         }
+        if (const auto policy = ValidateSoftReferencePolicy(objects, sets, storage.softReferences); policy.HasError())
+            return Result<WorldDependencyPlan>::Failure(policy.ErrorValue());
         if (const auto bundles = BuildBundles(objects, limits, sets, hardMembers, storage); bundles.HasError())
             return Result<WorldDependencyPlan>::Failure(bundles.ErrorValue());
         return Result<WorldDependencyPlan>::Success(WorldDependencyPlan{assignments.Partition(), std::move(storage.bundles),

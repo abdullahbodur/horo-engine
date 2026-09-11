@@ -116,6 +116,29 @@ namespace Horo::WorldStreaming {
             REQUIRE(empty.Value().SoftReferences().empty());
         }
 
+        TEST_CASE("Dependency plan rejects soft references inside transitive hard co-load bundles",
+                  "[unit][world_streaming][dependency_plan][policy]") {
+            const auto assignments = Assignments();
+
+            const std::array directConflict{Edge(1, 2), Edge(1, 2, WorldDependencyKind::Soft)};
+            RequireError(WorldDependencyPlan::Create(assignments, directConflict, Limits), WorldStreamingErrors::DependencyPlanAmbiguous);
+
+            const std::array transitiveConflict{Edge(1, 2), Edge(2, 3), Edge(3, 1, WorldDependencyKind::Soft)};
+            RequireError(WorldDependencyPlan::Create(assignments, transitiveConflict, Limits),
+                         WorldStreamingErrors::DependencyPlanAmbiguous);
+        }
+
+        TEST_CASE("Dependency plan permits soft-only cycles because resolution remains deferred",
+                  "[unit][world_streaming][dependency_plan][policy]") {
+            const auto assignments = Assignments();
+            const std::array dependencies{Edge(1, 2, WorldDependencyKind::Soft), Edge(2, 1, WorldDependencyKind::Soft)};
+
+            auto result = WorldDependencyPlan::Create(assignments, dependencies, Limits);
+            REQUIRE(result.HasValue());
+            REQUIRE(result.Value().Bundles().empty());
+            REQUIRE(result.Value().SoftReferences().size() == 2);
+        }
+
         TEST_CASE("Dependency plan rejects malformed self and duplicate edges", "[unit][world_streaming][dependency_plan]") {
             const auto assignments = Assignments();
             RequireError(WorldDependencyPlan::Create(assignments, {}, {0, 1, 1, 1}), WorldStreamingErrors::DependencyPlanInvalid);

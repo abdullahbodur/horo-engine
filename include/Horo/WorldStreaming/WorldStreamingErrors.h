@@ -168,6 +168,8 @@ namespace Horo::WorldStreaming::WorldStreamingErrors {
     extern const ErrorCodeDescriptor DependencyPlanCapacityExceeded;
     /** @brief A hard dependency target is absent from the admitted spatial assignments. */
     extern const ErrorCodeDescriptor DependencyPlanHardTargetMissing;
+    /** @brief A soft reference contradicts the transitive hard co-load policy for the same objects. */
+    extern const ErrorCodeDescriptor DependencyPlanAmbiguous;
     /** @brief A streaming source descriptor or admission context is structurally invalid. */
     extern const ErrorCodeDescriptor SourceDescriptorInvalid;
     /** @brief A streaming source intent is not supported by this contract version. */
