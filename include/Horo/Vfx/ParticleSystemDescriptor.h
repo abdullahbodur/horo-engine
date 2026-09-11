@@ -142,7 +142,7 @@ namespace Horo::Vfx {
         ParticleSystemDescriptorData data_;
 
         friend Result<ParticleDescriptorValidation> ValidateParticleSystemDescriptor(ParticleSystemDescriptorData, ErrorCodeRegistry,
-                                                                                     std::string, const ParticleDescriptorLimits &);
+                                                                                     const std::string &, const ParticleDescriptorLimits &);
     };
 
     /** @brief Full-pass import validation outcome with an admitted descriptor only when no error finding exists. */
@@ -187,7 +187,7 @@ namespace Horo::Vfx {
      */
     [[nodiscard]] Result<ParticleDescriptorValidation> ValidateParticleSystemDescriptor(ParticleSystemDescriptorData data,
                                                                                         ErrorCodeRegistry registry,
-                                                                                        std::string sourceName = "particle-system",
+                                                                                        const std::string &sourceName = "particle-system",
                                                                                         const ParticleDescriptorLimits &limits = {});
 
     /** @brief Provider-neutral particle cook tier. */
@@ -258,5 +258,5 @@ namespace Horo::Vfx {
                                                                              const ParticleCookProfile &profile,
                                                                              const ParticleMaterialEvidence &material,
                                                                              ErrorCodeRegistry registry,
-                                                                             std::string sourceName = "particle-system");
+                                                                             const std::string &sourceName = "particle-system");
 }  // namespace Horo::Vfx

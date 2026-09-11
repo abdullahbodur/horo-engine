@@ -98,6 +98,29 @@ namespace Horo::Vfx {
             return match == mapping.end() ? invalid : match->second;
         }
 
+        constexpr std::array SimulationPreferences{std::pair{"automatic"sv, SimulationPreference::Automatic},
+                                                   std::pair{"requireCpu"sv, SimulationPreference::RequireCPU},
+                                                   std::pair{"preferCpu"sv, SimulationPreference::PreferCPU},
+                                                   std::pair{"preferGpu"sv, SimulationPreference::PreferGPU},
+                                                   std::pair{"requireGpu"sv, SimulationPreference::RequireGPU}};
+        constexpr std::array EmitterShapes{std::pair{"point"sv, ParticleEmitterShape::Point},
+                                           std::pair{"sphere"sv, ParticleEmitterShape::Sphere},
+                                           std::pair{"box"sv, ParticleEmitterShape::Box}, std::pair{"cone"sv, ParticleEmitterShape::Cone}};
+        constexpr std::array LifetimeKinds{std::pair{"finite"sv, ParticleLifetimeKind::Finite},
+                                           std::pair{"infinite"sv, ParticleLifetimeKind::Infinite}};
+        constexpr std::array KillConditions{std::pair{"none"sv, ParticleKillCondition::None},
+                                            std::pair{"lifetime"sv, ParticleKillCondition::Lifetime},
+                                            std::pair{"collision"sv, ParticleKillCondition::Collision},
+                                            std::pair{"explicitSignal"sv, ParticleKillCondition::ExplicitSignal}};
+        constexpr std::array RenderModes{std::pair{"billboard"sv, ParticleRenderMode::Billboard},
+                                         std::pair{"mesh"sv, ParticleRenderMode::Mesh}, std::pair{"ribbon"sv, ParticleRenderMode::Ribbon}};
+        constexpr std::array SortModes{std::pair{"none"sv, ParticleSortMode::None}, std::pair{"byDistance"sv, ParticleSortMode::ByDistance},
+                                       std::pair{"oldestFirst"sv, ParticleSortMode::OldestFirst}};
+        constexpr std::array CollisionModes{std::pair{"none"sv, ParticleCollisionMode::None},
+                                            std::pair{"planes"sv, ParticleCollisionMode::Planes},
+                                            std::pair{"sceneDepth"sv, ParticleCollisionMode::SceneDepth},
+                                            std::pair{"physicsWorld"sv, ParticleCollisionMode::PhysicsWorld}};
+
         [[nodiscard]] Result<ParticleDescriptorSchemaVersion> DecodeVersion(const Json &value) {
             if (!ExactObject(value, {"major", "minor"}))
                 return Reject<ParticleDescriptorSchemaVersion>(VfxErrors::ParticleDescriptorMalformed,
@@ -177,48 +200,23 @@ namespace Horo::Vfx {
                 return Reject<ParticleSystemDescriptorData>(VfxErrors::ParticleDescriptorMalformed,
                                                             "materialId must be one canonical non-zero lowercase UUID.");
 
-            constexpr std::array preferences{std::pair{"automatic"sv, SimulationPreference::Automatic},
-                                             std::pair{"requireCpu"sv, SimulationPreference::RequireCPU},
-                                             std::pair{"preferCpu"sv, SimulationPreference::PreferCPU},
-                                             std::pair{"preferGpu"sv, SimulationPreference::PreferGPU},
-                                             std::pair{"requireGpu"sv, SimulationPreference::RequireGPU}};
-            constexpr std::array shapes{std::pair{"point"sv, ParticleEmitterShape::Point},
-                                        std::pair{"sphere"sv, ParticleEmitterShape::Sphere}, std::pair{"box"sv, ParticleEmitterShape::Box},
-                                        std::pair{"cone"sv, ParticleEmitterShape::Cone}};
-            constexpr std::array lifetimeKinds{std::pair{"finite"sv, ParticleLifetimeKind::Finite},
-                                               std::pair{"infinite"sv, ParticleLifetimeKind::Infinite}};
-            constexpr std::array killConditions{std::pair{"none"sv, ParticleKillCondition::None},
-                                                std::pair{"lifetime"sv, ParticleKillCondition::Lifetime},
-                                                std::pair{"collision"sv, ParticleKillCondition::Collision},
-                                                std::pair{"explicitSignal"sv, ParticleKillCondition::ExplicitSignal}};
-            constexpr std::array renderModes{std::pair{"billboard"sv, ParticleRenderMode::Billboard},
-                                             std::pair{"mesh"sv, ParticleRenderMode::Mesh},
-                                             std::pair{"ribbon"sv, ParticleRenderMode::Ribbon}};
-            constexpr std::array sortModes{std::pair{"none"sv, ParticleSortMode::None},
-                                           std::pair{"byDistance"sv, ParticleSortMode::ByDistance},
-                                           std::pair{"oldestFirst"sv, ParticleSortMode::OldestFirst}};
-            constexpr std::array collisionModes{std::pair{"none"sv, ParticleCollisionMode::None},
-                                                std::pair{"planes"sv, ParticleCollisionMode::Planes},
-                                                std::pair{"sceneDepth"sv, ParticleCollisionMode::SceneDepth},
-                                                std::pair{"physicsWorld"sv, ParticleCollisionMode::PhysicsWorld}};
-
             return Result<ParticleSystemDescriptorData>::Success(
                 {.version = version.Value(),
                  .emitter = emitter.Value(),
-                 .simulationPreference = EnumValue(root.at("simulationPreference"), preferences, SimulationPreference::Count),
+                 .simulationPreference = EnumValue(root.at("simulationPreference"), SimulationPreferences, SimulationPreference::Count),
                  .maximumParticles = *maximumParticles,
-                 .shape = EnumValue(root.at("shape"), shapes, ParticleEmitterShape::Count),
+                 .shape = EnumValue(root.at("shape"), EmitterShapes, ParticleEmitterShape::Count),
                  .spawnRate = spawnRate.Value(),
-                 .lifetimeKind = EnumValue(root.at("lifetime").at("kind"), lifetimeKinds, ParticleLifetimeKind::Count),
+                 .lifetimeKind = EnumValue(root.at("lifetime").at("kind"), LifetimeKinds, ParticleLifetimeKind::Count),
                  .lifetimeSeconds = lifetime.Value(),
-                 .killCondition = EnumValue(root.at("lifetime").at("killCondition"), killConditions, ParticleKillCondition::Count),
+                 .killCondition = EnumValue(root.at("lifetime").at("killCondition"), KillConditions, ParticleKillCondition::Count),
                  .initialSpeed = speed.Value(),
                  .initialSize = size.Value(),
                  .initialOpacity = opacity.Value(),
                  .material = std::move(material).Value(),
-                 .renderMode = EnumValue(root.at("renderMode"), renderModes, ParticleRenderMode::Count),
-                 .sortMode = EnumValue(root.at("sortMode"), sortModes, ParticleSortMode::Count),
-                 .collisionMode = EnumValue(root.at("collisionMode"), collisionModes, ParticleCollisionMode::Count)});
+                 .renderMode = EnumValue(root.at("renderMode"), RenderModes, ParticleRenderMode::Count),
+                 .sortMode = EnumValue(root.at("sortMode"), SortModes, ParticleSortMode::Count),
+                 .collisionMode = EnumValue(root.at("collisionMode"), CollisionModes, ParticleCollisionMode::Count)});
         }
 
         [[nodiscard]] bool FiniteOrdered(const ParticleScalarRange &range) noexcept {
@@ -370,7 +368,8 @@ namespace Horo::Vfx {
 
     /** @copydoc ValidateParticleSystemDescriptor */
     Result<ParticleDescriptorValidation> ValidateParticleSystemDescriptor(ParticleSystemDescriptorData data, ErrorCodeRegistry registry,
-                                                                          std::string sourceName, const ParticleDescriptorLimits &limits) {
+                                                                          const std::string &sourceName,
+                                                                          const ParticleDescriptorLimits &limits) {
         if (!ValidLimits(limits))
             return Reject<ParticleDescriptorValidation>(VfxErrors::ParticleDescriptorLimitExceeded,
                                                         "Active particle descriptor limits are invalid.");
@@ -416,7 +415,7 @@ namespace Horo::Vfx {
     /** @copydoc BuildParticleSystemCookPlan */
     Result<ParticleCookValidation> BuildParticleSystemCookPlan(const ParticleSystemDescriptor &descriptor,
                                                                const ParticleCookProfile &profile, const ParticleMaterialEvidence &material,
-                                                               ErrorCodeRegistry registry, std::string sourceName) {
+                                                               ErrorCodeRegistry registry, const std::string &sourceName) {
         auto builder = ValidationResultBuilder::Create(std::move(registry));
         if (builder.HasError())
             return Result<ParticleCookValidation>::Failure(builder.ErrorValue());
