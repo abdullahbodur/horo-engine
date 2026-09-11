@@ -6,6 +6,7 @@
 
 #include <algorithm>
 #include <atomic>
+#include <cctype>
 #include <mutex>
 #include <optional>
 #include <ranges>
@@ -60,6 +61,12 @@ namespace Horo::Extensions {
             return Result<void>::Success();
         }
 
+        [[nodiscard]] bool IsRootedSource(const std::string_view source) noexcept {
+            if (source.starts_with('/') || source.starts_with('\\'))
+                return true;
+            return source.size() >= 2U && std::isalpha(static_cast<unsigned char>(source.front())) != 0 && source[1] == ':';
+        }
+
         [[nodiscard]] Error ProviderFailure(const ProjectValidatorProviderDescriptor &provider, Error cause = {}) {
             const std::string detail = "Project validator failed: " + provider.providerId.value + "@" +
                                        std::to_string(provider.providerGeneration) + " (" + provider.validatorId.value + ").";
@@ -95,9 +102,12 @@ namespace Horo::Extensions {
 
     /** @copydoc ProjectValidationFindingSink::Add */
     Result<void> ProjectValidationFindingSink::Add(const ErrorCodeDescriptor &descriptor, std::string message, SourceLocation location) {
-        auto normalized = ProjectPath::Parse(location.source);
-        if (normalized.HasError() || normalized.Value().String().empty() || normalized.Value().String() != location.source)
+        if (IsRootedSource(location.source))
             return builder_.Add(descriptor, std::move(message), {});
+        auto normalized = ProjectPath::Parse(location.source);
+        if (normalized.HasError() || normalized.Value().String().empty())
+            return builder_.Add(descriptor, std::move(message), {});
+        location.source = normalized.Value().String();
         return builder_.Add(descriptor, std::move(message), std::move(location));
     }
 
@@ -190,9 +200,10 @@ namespace Horo::Extensions {
         std::scoped_lock lock{state_->mutex};
         if (state_->shutdown)
             return Result<ProjectValidatorRegistration>::Failure(MakeError(ExtensionErrors::ProjectValidatorRegistryShutdown));
-        if (std::ranges::find(state_->providers, descriptor.validatorId.value, [](const auto &candidate) {
+        const auto insertion = std::ranges::lower_bound(state_->providers, descriptor.validatorId.value, {}, [](const auto &candidate) {
             return candidate->descriptor.validatorId.value;
-        }) != state_->providers.end())
+        });
+        if (insertion != state_->providers.end() && (*insertion)->descriptor.validatorId == descriptor.validatorId)
             return Result<ProjectValidatorRegistration>::Failure(MakeError(ExtensionErrors::ProjectValidatorRegistryDuplicate));
         if (state_->providers.size() >= MaximumProviders)
             return Result<ProjectValidatorRegistration>::Failure(MakeError(ExtensionErrors::ProjectValidatorRegistryCapacityExceeded));
@@ -200,23 +211,21 @@ namespace Horo::Extensions {
         auto published = std::make_shared<ProjectValidatorProviderState>();
         published->descriptor = std::move(descriptor);
         published->provider = std::move(provider);
-        state_->providers.push_back(published);
-        std::ranges::sort(state_->providers, {}, [](const auto &candidate) {
-            return candidate->descriptor.validatorId.value;
-        });
+        state_->providers.insert(insertion, published);
         return Result<ProjectValidatorRegistration>::Success(ProjectValidatorRegistration{state_, std::move(published)});
     }
 
     /** @copydoc ProjectValidatorRegistry::ValidateAll */
     Result<std::vector<AttributedProjectValidationResult>> ProjectValidatorRegistry::ValidateAll(
         const ProjectValidationSnapshot &snapshot, const CancellationToken &cancellation) const {
+        const auto state = state_;
         const auto validSnapshot = ValidateSnapshot(snapshot);
         if (validSnapshot.HasError())
             return Result<std::vector<AttributedProjectValidationResult>>::Failure(validSnapshot.ErrorValue());
-        if (state_ == nullptr)
+        if (state == nullptr)
             return Result<std::vector<AttributedProjectValidationResult>>::Failure(
                 MakeError(ExtensionErrors::ProjectValidatorRegistryShutdown));
-        auto providers = SnapshotProviders(state_);
+        auto providers = SnapshotProviders(state);
         if (!providers)
             return Result<std::vector<AttributedProjectValidationResult>>::Failure(
                 MakeError(ExtensionErrors::ProjectValidatorRegistryShutdown));
@@ -226,7 +235,7 @@ namespace Horo::Extensions {
         for (const auto &provider : *providers) {
             if (cancellation.IsCancellationRequested())
                 return Result<std::vector<AttributedProjectValidationResult>>::Failure(CancellationFailure(&provider->descriptor));
-            auto builder = ValidationResultBuilder::Create(state_->errors, state_->findingLimits);
+            auto builder = ValidationResultBuilder::Create(state->errors, state->findingLimits);
             if (builder.HasError())
                 return Result<std::vector<AttributedProjectValidationResult>>::Failure(
                     ProviderFailure(provider->descriptor, builder.ErrorValue()));

@@ -229,14 +229,8 @@ namespace Horo::Extensions::Tests {
         RequireError(registry.Register(Provider("validator.capacity-overflow"), provider), "project_validator_registry_capacity_exceeded");
     }
 
-    TEST_CASE("Project validator inputs and findings remain normalized project-relative bounded views",
-              "[unit][extensions][project-validator][headless]") {
+    TEST_CASE("Project validator snapshots enforce normalized project-relative bounds", "[unit][extensions][project-validator][headless]") {
         ProjectValidatorRegistry registry = Registry();
-        auto provider = std::make_shared<RecordingValidator>("finding");
-        auto registration = registry.Register(Provider("validator.paths"), provider);
-        REQUIRE(registration.HasValue());
-        ProjectValidatorRegistration ownedRegistration = std::move(registration).Value();
-
         SnapshotFixture fixture;
         std::array reversed{fixture.resources[1], fixture.resources[0]};
         auto snapshot = fixture.Snapshot();
@@ -246,12 +240,23 @@ namespace Horo::Extensions::Tests {
         snapshot.projectId = "   ";
         RequireError(registry.ValidateAll(snapshot, {}), "project_validator_registry_invalid");
         snapshot = fixture.Snapshot();
-        snapshot.projectId = std::string(ProjectValidatorRegistry::MaximumProjectIdBytes + 1U, 'p');
+        const std::string oversizedProjectId(ProjectValidatorRegistry::MaximumProjectIdBytes + 1U, 'p');
+        snapshot.projectId = oversizedProjectId;
         RequireError(registry.ValidateAll(snapshot, {}), "project_validator_registry_invalid");
         snapshot = fixture.Snapshot();
         snapshot.mode = static_cast<ProjectValidationMode>(255U);
         RequireError(registry.ValidateAll(snapshot, {}), "project_validator_registry_invalid");
+        std::vector<ProjectValidationResourceView> oversizedResources(ProjectValidatorRegistry::MaximumResources + 1U,
+                                                                      fixture.resources.front());
+        snapshot = fixture.Snapshot();
+        snapshot.resources = oversizedResources;
+        RequireError(registry.ValidateAll(snapshot, {}), "project_validator_registry_invalid");
 
+        RequireError(ProjectValidatorRegistry::Create(ErrorRegistry(), {.maximumDiagnostics = 0U}), "project_validator_registry_invalid");
+    }
+
+    TEST_CASE("Project validator findings reject roots and preserve normalized source detail",
+              "[unit][extensions][project-validator][headless]") {
         class AbsoluteFindingValidator final : public IProjectValidator {
         public:
             Result<void> Validate(const ProjectValidationSnapshot &, ProjectValidationFindingSink &findings,
@@ -261,12 +266,31 @@ namespace Horo::Extensions::Tests {
             }
         };
 
-        ownedRegistration.Reset();
+        ProjectValidatorRegistry registry = Registry();
+        SnapshotFixture fixture;
         auto absolute = registry.Register(Provider("validator.absolute"), std::make_shared<AbsoluteFindingValidator>());
         REQUIRE(absolute.HasValue());
         RequireError(registry.ValidateAll(fixture.Snapshot(), {}), "project_validator_invocation_failed");
 
-        RequireError(ProjectValidatorRegistry::Create(ErrorRegistry(), {.maximumDiagnostics = 0U}), "project_validator_registry_invalid");
+        class NormalizingFindingValidator final : public IProjectValidator {
+        public:
+            Result<void> Validate(const ProjectValidationSnapshot &, ProjectValidationFindingSink &findings,
+                                  const CancellationToken &) const override {
+                return findings.Add(Finding, {}, {.source = ".horo//project.json", .line = 7U, .column = 2U});
+            }
+        };
+
+        ProjectValidatorRegistration absoluteRegistration = std::move(absolute).Value();
+        absoluteRegistration.Reset();
+        auto normalizing = registry.Register(Provider("validator.normalizing"), std::make_shared<NormalizingFindingValidator>());
+        REQUIRE(normalizing.HasValue());
+        const auto normalized = registry.ValidateAll(fixture.Snapshot(), {});
+        REQUIRE(normalized.HasValue());
+        REQUIRE(normalized.Value().size() == 1U);
+        REQUIRE(normalized.Value().front().result.Diagnostics().size() == 1U);
+        CHECK(normalized.Value().front().result.Diagnostics().front().location.source == ".horo/project.json");
+        CHECK(normalized.Value().front().result.Diagnostics().front().location.line == 7U);
+        CHECK(normalized.Value().front().result.Diagnostics().front().location.column == 2U);
     }
 
     TEST_CASE("Unregister and shutdown retain an admitted in-flight project validator", "[unit][extensions][project-validator][headless]") {
