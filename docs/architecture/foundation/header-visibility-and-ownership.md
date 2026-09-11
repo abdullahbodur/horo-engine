@@ -132,6 +132,16 @@ application, platform, renderer, or third-party dependency. Existing error
 producers keep their textual `ErrorDomainId` and `ErrorCode` values while module
 composition migrates descriptor ownership into `ModuleDescriptor::errorDomains`.
 
+## ERR-001.4 Migration Notes
+
+`HoroEngine::Foundation` owns the new
+`Horo/Foundation/ValidationResult.h` public contract. Cook and import validators
+that previously returned a bare `vector<Diagnostic>` should create a bounded
+`ValidationResultBuilder` from the active immutable error registry, submit every
+finding through a module-owned descriptor, then return
+`Result<ValidationResult>`. Existing non-validation `Result<T>` APIs and
+`Error::diagnostics` callers do not change.
+
 ## CIN-001.4 Migration Notes
 
 `HoroEngine::CinematicModel` owns the new `Horo/Cinematic/CurveSampling.h`

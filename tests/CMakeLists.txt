@@ -956,6 +956,12 @@ add_executable(HoroFoundationDiagnosticsTests
 
 target_compile_features(HoroFoundationDiagnosticsTests PRIVATE cxx_std_20)
 target_link_libraries(HoroFoundationDiagnosticsTests PRIVATE HoroEngine::Foundation)
+add_executable(HoroFoundationValidationResultTests
+        unit/foundation/ValidationResultTests.cpp
+)
+
+target_compile_features(HoroFoundationValidationResultTests PRIVATE cxx_std_20)
+target_link_libraries(HoroFoundationValidationResultTests PRIVATE HoroEngine::Foundation)
 add_executable(HoroFoundationJobSystemTests
         unit/foundation/JobSystemTests.cpp
 )
@@ -1548,6 +1554,7 @@ set(HORO_CATCH_TEST_TARGETS
         HoroFoundationCancellationProgressTests
         HoroFoundationConfigurationTests
         HoroFoundationDiagnosticsTests
+        HoroFoundationValidationResultTests
         HoroFoundationJobSystemTests
         HoroPlatformTests
         HoroAndroidLifecycleTests

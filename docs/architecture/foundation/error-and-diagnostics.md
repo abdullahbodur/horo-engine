@@ -327,6 +327,30 @@ struct Diagnostic {
 Diagnostics are ordered deterministically so CLI output, tests, and support
 bundles remain stable.
 
+### Multi-Diagnostic Validation Results
+
+A full validation pass returns `Result<ValidationResult>`. Success means the
+pass completed; its value may contain note, warning, error, or fatal findings.
+Failure means the pass itself could not be performed. This distinction keeps
+the ordinary single-failure `Result<T>` contract unchanged and avoids treating
+an error-severity content finding as an operation failure.
+
+Cook and import validators use a `ValidationResultBuilder` created with one
+immutable `ErrorCodeRegistry` snapshot and an explicit maximum submission count.
+They inspect the complete admitted input and call `Add` for each finding before
+calling `Complete`. Every finding identity must resolve through that snapshot;
+the registry supplies the canonical severity and fallback message. Source text
+is required, while zero line and column identify the entire source. A non-zero
+column without a line is invalid.
+
+Completion orders findings by `(domain, code, severity, source, line, column,
+message)` and removes only exact tuple duplicates. Distinct messages or source
+locations are retained. The submission bound includes duplicates so hostile
+input cannot turn deduplication into unbounded work. Reaching the bound fails the
+pass with a typed error rather than returning a truncated report. A builder owns
+its registry snapshot, is confined to one validation owner/thread, and becomes
+terminal after completion or admission failure.
+
 ### Build Output Projection
 
 Build and cook producers publish immutable records into one composition-root-owned,
@@ -464,6 +488,8 @@ Required tests cover:
 - host serialized payload shape for CLI, MCP, GUI details, and Python exceptions
 - cause-chain preservation
 - deterministic diagnostic ordering
+- exact diagnostic deduplication without loss of distinct source findings
+- registry rejection, source validation, capacity, and completed-pass lifecycle
 - exception-to-error adapters
 - GUI, CLI, MCP, and Python mappings
 - cancellation and timeout distinction

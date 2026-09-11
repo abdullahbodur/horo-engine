@@ -6,7 +6,8 @@
 - **Scope**: Foundation `Result<T,Error>`, `ErrorCode`/`Error`, diagnostics, registry and exception boundaries
 - **Issues**: [ERR-001.1](https://github.com/HoroCore/horo-engine/issues/1814),
   [ERR-001.2](https://github.com/HoroCore/horo-engine/issues/1815),
-  [ERR-001.3](https://github.com/HoroCore/horo-engine/issues/1816)
+  [ERR-001.3](https://github.com/HoroCore/horo-engine/issues/1816),
+  [ERR-001.4](https://github.com/HoroCore/horo-engine/issues/1817)
 - **Normative document**: [Error And Diagnostics](../architecture/foundation/error-and-diagnostics.md)
 
 ## Context
@@ -29,15 +30,15 @@ Implementation audit (2026-08-27) found the baseline is structurally aligned but
 
 ## Decision
 
-**The foundation owns error types and inert descriptors; the application host owns registry validation and immutability. `src/foundation/error/` is the canonical implementation owner for `ErrorCode` types and `MakeError`; `src/foundation/diagnostics/` retains diagnostic observation and bundle concerns. Validation carries multiple `Diagnostic` values inside `Error.diagnostics` without introducing a second result channel.**
+**The foundation owns error types, inert descriptors and the typed multi-diagnostic validation result; the application host owns registry validation and immutability. `src/foundation/error/` is the canonical implementation owner for `ErrorCode` types, `MakeError` and validation-result canonicalization; `src/foundation/diagnostics/` retains diagnostic observation and bundle concerns. Validation carries multiple diagnostics without introducing a second result channel.**
 
 ### Ownership and dependency direction
 
-- `HoroFoundation` (target `HoroFoundation`) owns: `include/Horo/Foundation/ErrorCode.h`, `include/Horo/Foundation/Result.h`, `include/Horo/Foundation/Diagnostics.h`, and the implementation `src/foundation/error/ErrorCode.cpp` (+ descriptor sources). These are inert type/descriptor definitions — creating or validating a descriptor never registers a service, selects a backend, or mutates ambient state, per `docs/architecture/foundation/internal-module-descriptor.md`.
+- `HoroFoundation` (target `HoroFoundation`) owns: `include/Horo/Foundation/ErrorCode.h`, `include/Horo/Foundation/Result.h`, `include/Horo/Foundation/Diagnostics.h`, `include/Horo/Foundation/ValidationResult.h`, and the implementations under `src/foundation/error/` (+ descriptor sources). These are inert type/descriptor definitions and explicit value builders — creating or validating a descriptor never registers a service, selects a backend, or mutates ambient state, per `docs/architecture/foundation/internal-module-descriptor.md`.
 - `src/foundation/error/` is canonical. `MakeError()` moves from `src/foundation/diagnostics/ErrorCode.cpp` to `src/foundation/error/ErrorCode.cpp`. `src/foundation/diagnostics/` keeps `DiagnosticsEngine`, `OperationStore`, `DiagnosticBundle`, `BuildOutputStore` — observation and persistence of diagnostics, not error construction.
 - `src/foundation/FoundationErrors.h/.cpp` is ratified at its current path for this milestone to avoid churn; it is conceptually owned by `src/foundation/error/` and may be relocated to `src/foundation/error/FoundationErrors.h/.cpp` in a follow-up without changing public headers. Public consumers include only `Horo/Foundation/ErrorCode.h`.
 - The host composition root (`ModuleHost` / application layer) owns the **ErrorCodeRegistry**: a host-constructed, immutable-after-activation table that validates every `ErrorCodeDescriptor` contributed by selected modules. Foundation declares; host validates. `ModuleDescriptor::errorDomains` is inert metadata, while `ModuleHost::ActivateRegistered` transactionally validates and publishes a snapshot before callbacks. This preserves dependency direction — feature code never discovers or registers error domains through a global locator.
-- `cmake/HoroPublicHeaderOwnership.cmake` continues to assign `Horo/Foundation/ErrorCode.h`, `Result.h`, `Diagnostics.h` to `HoroFoundation`. `horo_configure_target_header_boundary` remains the enforcement gate; no repository-wide `src/` include is published.
+- `cmake/HoroPublicHeaderOwnership.cmake` assigns `Horo/Foundation/ErrorCode.h`, `Result.h`, `Diagnostics.h` and `ValidationResult.h` to `HoroFoundation`. `horo_configure_target_header_boundary` remains the enforcement gate; no repository-wide `src/` include is published.
 
 ### Stable error codes and registry (ratify with bounded revision)
 
@@ -54,11 +55,11 @@ Implementation audit (2026-08-27) found the baseline is structurally aligned but
 
 - Public fallible APIs use `Horo::Result<T>` (`Result<void>` as `Status`). The template is the foundation-owned alias for the normative `Expected<ValueT,Error>`; naming is ratified. Implementation detail (`std::variant` vs `std::expected`) is not public. `HasValue()`/`HasError()`/`Value()`/`ErrorValue()` are the branching contract — never `message` text.
 - `Result` is for invalid user/project input, missing files/assets/capabilities, unsupported operations, serialization/validation failures, recoverable platform/renderer failures, cancellation/timeout/exhaustion. Absence is `std::optional<T>`.
-- Validation that needs multiple findings returns `Error` with `vector<Diagnostic> diagnostics`; where the operation itself is validation, the success value is `vector<Diagnostic>` via `Result<vector<Diagnostic>>` — one `Result` still represents one operation. Callers branch on `Error.code`; presentation reads `diagnostics` deterministically ordered.
+- Validation that needs multiple findings returns `Error` with `vector<Diagnostic> diagnostics`; where the operation itself is a full validation pass, the success value is `ValidationResult` via `Result<ValidationResult>` — one `Result` still represents one operation. Callers branch on `Error.code`; presentation reads the immutable completed diagnostics in deterministic order.
 
 ### Diagnostics (ratify minimal shape)
 
-- Current `Diagnostic {code, severity, message, location}` and `SourceLocation {source,line,column}` are **ratified** for M0. The richer `notes`/`SuggestedAction`/`DiagnosticNote` in the normative doc are deferred to Post-1.0 — they are additive and do not invalidate the `Error.diagnostics` vector as the multi-diagnostic channel. Ordering is deterministic by `(code.value, severity, source, line, column)` at emission for CLI/test/bundle stability.
+- Current `Diagnostic {code, severity, message, location}` and `SourceLocation {source,line,column}` are **ratified** for M0. The richer `notes`/`SuggestedAction`/`DiagnosticNote` in the normative doc are deferred to Post-1.0 — they are additive and do not invalidate the `Error.diagnostics` vector as the multi-diagnostic channel. A completed `ValidationResult` owns the registered domain/code pair as well as this presentation data. Ordering is deterministic by `(domain, code, severity, source, line, column, message)` for CLI/test/bundle stability; only findings identical across that full tuple are deduplicated.
 
 ### Exception policy and enforcement
 
@@ -80,7 +81,7 @@ Rules:
 
 ### Validation surfacing multiple diagnostics
 
-- Ratified: validation preserves `Result` semantics — one operation, one `Result`. Multiple findings are surfaced as `Error.diagnostics` (`vector<Diagnostic>`); where the operation itself is validation, the success case is `Result<vector<Diagnostic>>` (findings carried as the value, failure as `Error` with its own `diagnostics`). No second authoritative store is introduced. GUI/CLI/MCP/Python adapters render the same `diagnostics` list; logs carry correlation IDs (`operation_id`, `job_id`) from `LogContext`.
+- Ratified: validation preserves `Result` semantics — one operation, one `Result`. Multiple findings are surfaced as `Error.diagnostics` (`vector<Diagnostic>`); where the operation itself is validation, the success case is `Result<ValidationResult>` (findings carried as the typed value, pass failure as one `Error`). `ValidationResultBuilder` is the cook/import full-pass seam: it captures one immutable registry snapshot, accepts every bounded finding before completion, resolves severity and fallback text from registered descriptors, and produces one immutable sorted/deduplicated result. Invalid identity, malformed source, capacity exhaustion or reuse after completion is a typed pass failure; findings are never silently truncated. No second authoritative store is introduced. GUI/CLI/MCP/Python adapters render the same completed list; logs carry correlation IDs (`operation_id`, `job_id`) from `LogContext`.
 
 ## Consequences
 
@@ -97,4 +98,4 @@ Rules:
 - **Make the registry a foundation-global singleton populated by static initializers.** Rejected: introduces ambient side effects, static-init ordering hazards, and violates the AGENTS.md rule that descriptor creation must be inert and registration lives in the host composition root.
 - **Add `cause`, `ErrorMetadata`, and diagnostic notes in one cross-cutting change.** Rejected: ERR-001.2 adds the cause chain independently and source-compatibly; bounded metadata and notes remain focused follow-ups instead of coupling unrelated payload migrations.
 - **Enforce exception boundaries solely with `noexcept` on all public APIs.** Rejected: `noexcept` would terminate on any missed throw and hides the conversion-to-Error requirement; the adapter `try`/`catch` → `Error` preserves diagnostics and keeps the host in control of presentation.
-- **Return `vector<Error>` or `vector<Diagnostic>` as the primary result for validation.** Rejected: fragments the result contract into two success/failure channels; the single `Result` + `diagnostics` vector already satisfies multi-finding validation without a second authoritative store.
+- **Return a bare `vector<Error>` or `vector<Diagnostic>` as the primary result for validation.** Rejected: it cannot distinguish a completed pass containing error-severity findings from failure to perform the pass, and it cannot enforce registry identity, bounds, ordering or deduplication. `Result<ValidationResult>` keeps one typed operation channel.
