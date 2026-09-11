@@ -2,7 +2,6 @@
 
 #include "Horo/XR/XRErrors.h"
 
-#include <algorithm>
 #include <cmath>
 
 namespace Horo::XR {
@@ -88,10 +87,10 @@ namespace Horo::XR {
                     !view.recommendedExtent.IsValid() || !view.maximumExtent.IsValid() ||
                     view.recommendedExtent.width > view.maximumExtent.width || view.recommendedExtent.height > view.maximumExtent.height)
                     return Reject<void>(XRErrors::ViewPlanInvalid);
-                if (std::ranges::any_of(descriptor.views.first(index), [&view](const XRViewDescriptor &prior) {
-                    return prior.id == view.id;
-                }))
-                    return Reject<void>(XRErrors::ViewPlanInvalid);
+                for (std::size_t priorIndex = 0; priorIndex < index; ++priorIndex) {
+                    if (descriptor.views[priorIndex].id == view.id)
+                        return Reject<void>(XRErrors::ViewPlanInvalid);
+                }
                 if (auto pose = XRPoseSample::Create(view.pose, activeSession, activeOriginRevision); pose.HasError())
                     return Result<void>::Failure(pose.ErrorValue());
                 if (view.pose.purpose != XRPosePurpose::PresentationPrediction || view.pose.time.simulation.has_value() ||
@@ -113,8 +112,11 @@ namespace Horo::XR {
 
         /** @brief Finds the runtime order associated with one exact view identity. */
         [[nodiscard]] std::size_t FindViewOrder(const std::span<const XRViewDescriptor> views, const XRViewId &view) noexcept {
-            const auto found = std::ranges::find(views, view, &XRViewDescriptor::id);
-            return found == views.end() ? views.size() : found->order;
+            for (const auto &candidate : views) {
+                if (candidate.id == view)
+                    return candidate.order;
+            }
+            return views.size();
         }
 
         /** @brief Validates one target's Horo format, subresource, sampling, and render-area contract. */
@@ -155,9 +157,11 @@ namespace Horo::XR {
         /** @brief Detects a stale acquired image while keeping unavailable distinct. */
         [[nodiscard]] bool HasReplacedImage(const std::span<const XRSwapchainImageId> acquiredImages,
                                             const XRSwapchainImageId &image) noexcept {
-            return std::ranges::any_of(acquiredImages, [&image](const XRSwapchainImageId &active) {
-                return SameImageSlot(active, image) && active != image;
-            });
+            for (const auto &active : acquiredImages) {
+                if (SameImageSlot(active, image) && active != image)
+                    return true;
+            }
+            return false;
         }
 
         /** @brief Mutable canonical-order cursor local to one bounded validation pass. */
@@ -190,11 +194,13 @@ namespace Horo::XR {
         /** @brief Detects contradictory images or aliased subresources in prior target bindings. */
         [[nodiscard]] bool InvalidImageAliasing(const std::span<const XRExternalRenderTargetDescriptor> priorTargets,
                                                 const XRExternalRenderTargetDescriptor &target) noexcept {
-            return std::ranges::any_of(priorTargets, [&target](const XRExternalRenderTargetDescriptor &prior) {
+            for (const auto &prior : priorTargets) {
                 const bool differentImageForTarget = prior.target == target.target && prior.image != target.image;
                 const bool duplicateImageLayer = prior.image == target.image && prior.arrayLayer == target.arrayLayer;
-                return differentImageForTarget || duplicateImageLayer;
-            });
+                if (differentImageForTarget || duplicateImageLayer)
+                    return true;
+            }
+            return false;
         }
 
         /** @brief Validates target structure and canonical view/role ordering. */
@@ -214,10 +220,10 @@ namespace Horo::XR {
                     InvalidImageAliasing(descriptor.targets.first(index), target))
                     return Reject<void>(XRErrors::ExternalTargetInvalid);
             }
-            if (std::ranges::any_of(hasColor.begin(), hasColor.begin() + descriptor.views.size(), [](const bool present) {
-                return !present;
-            }))
-                return Reject<void>(XRErrors::ExternalTargetInvalid);
+            for (std::size_t viewOrder = 0; viewOrder < descriptor.views.size(); ++viewOrder) {
+                if (!hasColor[viewOrder])
+                    return Reject<void>(XRErrors::ExternalTargetInvalid);
+            }
             return Result<void>::Success();
         }
 
@@ -233,15 +239,29 @@ namespace Horo::XR {
                     return Reject<void>(XRErrors::ExternalTargetInvalid);
                 if (auto target = ValidateXRSessionObject(active.target, activeSession); target.HasError())
                     return target;
-                if (const auto priorImages = acquiredImages.first(index); std::ranges::find(priorImages, active) != priorImages.end())
-                    return Reject<void>(XRErrors::ExternalTargetInvalid);
-                if (std::ranges::none_of(targets, [&active](const XRExternalRenderTargetDescriptor &target) {
-                    return SameImageSlot(target.image, active);
-                }))
+                for (std::size_t priorIndex = 0; priorIndex < index; ++priorIndex) {
+                    if (acquiredImages[priorIndex] == active)
+                        return Reject<void>(XRErrors::ExternalTargetInvalid);
+                }
+                bool targetKnown = false;
+                for (const auto &target : targets) {
+                    if (SameImageSlot(target.image, active)) {
+                        targetKnown = true;
+                        break;
+                    }
+                }
+                if (!targetKnown)
                     return Reject<void>(XRErrors::ExternalTargetInvalid);
             }
             for (const auto &target : targets) {
-                if (std::ranges::find(acquiredImages, target.image) != acquiredImages.end())
+                bool imageAvailable = false;
+                for (const auto &active : acquiredImages) {
+                    if (active == target.image) {
+                        imageAvailable = true;
+                        break;
+                    }
+                }
+                if (imageAvailable)
                     continue;
                 return Reject<void>(HasReplacedImage(acquiredImages, target.image) ? XRErrors::IdentityStale
                                                                                    : XRErrors::OperationUnavailable);
@@ -355,8 +375,10 @@ namespace Horo::XR {
     XRViewRenderPlan::XRViewRenderPlan(const XRViewRenderPlanDescriptor &descriptor) noexcept
         : configuration_(descriptor.configuration), predictedDisplayTime_(descriptor.predictedDisplayTime),
           viewCount_(descriptor.views.size()), targetCount_(descriptor.targets.size()) {
-        std::ranges::copy(descriptor.views, views_.begin());
-        std::ranges::copy(descriptor.targets, targets_.begin());
+        for (std::size_t index = 0; index < viewCount_; ++index)
+            views_[index] = descriptor.views[index];
+        for (std::size_t index = 0; index < targetCount_; ++index)
+            targets_[index] = descriptor.targets[index];
     }
 
     /** @copydoc XRViewRenderPlan::Configuration */
