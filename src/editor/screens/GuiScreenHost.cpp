@@ -40,6 +40,42 @@ namespace Horo::Editor {
             }
         }
 
+        /** @brief Registers built-in importers and publishes their typed activation outcome. */
+        void ActivateBuiltInImporters(Assets::AssetImporterCatalog &catalog, Extensions::ExtensionInventory *inventory) {
+            if (inventory != nullptr && !inventory->IsEnabled("horo.builtin.assets"))
+                return;
+
+            const Result<void> registered = RegisterAllBuiltinImporters(catalog);
+            if (inventory == nullptr)
+                return;
+            if (registered.HasError()) {
+                static_cast<void>(inventory->RecordActivationFailure("horo.builtin.assets",
+                                                                     Extensions::ExtensionActivationFailureReason::ContributionRejected,
+                                                                     registered.ErrorValue().message));
+                return;
+            }
+            if (auto activated = inventory->MarkRuntimeActive("horo.builtin.assets"); activated.HasError())
+                LOG_ERROR("editor.extensions", "Built-in extension activation state was rejected.");
+        }
+
+        /** @brief Loads eligible user extensions and publishes their typed activation outcomes. */
+        void ActivateUserExtensions(Extensions::ExtensionManager &manager, Extensions::ExtensionInventory &inventory) {
+            for (const auto &extension : inventory.Entries()) {
+                if (extension.origin != Extensions::ExtensionOrigin::UserInstalled ||
+                    extension.ActivationState().DesiredActivation() != Extensions::ExtensionDesiredActivation::Active)
+                    continue;
+
+                if (Result<std::string> loaded = manager.LoadExtension(extension.absoluteRootPath.string()); loaded.HasError()) {
+                    static_cast<void>(inventory.RecordActivationFailure(extension.packageId,
+                                                                        Extensions::ExtensionActivationFailureReason::HostLoadFailed,
+                                                                        loaded.ErrorValue().message));
+                    continue;
+                }
+                if (auto activated = inventory.MarkRuntimeActive(extension.packageId); activated.HasError())
+                    LOG_ERROR("editor.extensions", "Extension activation state was rejected for '%s'.", extension.packageId.c_str());
+            }
+        }
+
     }  // namespace
 
     GuiScreenHost::GuiScreenHost(const EditorGuiContext &context, EditorModalHost &modalHost,  // NOSONAR(cpp:S107)
@@ -74,25 +110,9 @@ namespace Horo::Editor {
             services_.Register<Extensions::ExtensionMarketplaceService>(*extensionMarketplace_);
         importerCatalogCandidate_ = std::make_unique<Assets::AssetImporterCatalog>();
         extensionManager_ = std::make_unique<Extensions::ExtensionManager>(importerCatalogCandidate_.get());
-        if (const bool enableBuiltIns = extensionInventory_ == nullptr || extensionInventory_->IsEnabled("horo.builtin.assets");
-            enableBuiltIns) {
-            const Result<void> registered = RegisterAllBuiltinImporters(*importerCatalogCandidate_);
-            if (registered.HasValue() && extensionInventory_ != nullptr)
-                extensionInventory_->MarkRuntimeActive("horo.builtin.assets");
-            else if (registered.HasError() && extensionInventory_ != nullptr)
-                extensionInventory_->SetLoadError("horo.builtin.assets", registered.ErrorValue().message);
-        }
-        if (extensionInventory_ != nullptr) {
-            for (const auto &extension : extensionInventory_->Entries()) {
-                if (extension.origin != Extensions::ExtensionOrigin::UserInstalled || !extension.enabled || !extension.locallyTrusted)
-                    continue;
-                Result<std::string> loaded = extensionManager_->LoadExtension(extension.absoluteRootPath.string());
-                if (loaded.HasValue())
-                    extensionInventory_->MarkRuntimeActive(extension.packageId);
-                else
-                    extensionInventory_->SetLoadError(extension.packageId, loaded.ErrorValue().message);
-            }
-        }
+        ActivateBuiltInImporters(*importerCatalogCandidate_, extensionInventory_);
+        if (extensionInventory_ != nullptr)
+            ActivateUserExtensions(*extensionManager_, *extensionInventory_);
         if (auto published = importerCatalogCandidate_->Publish(); published.HasValue())
             importerCatalog_ = std::move(published).Value();
         if (!importerCatalog_) {

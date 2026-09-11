@@ -297,7 +297,7 @@ namespace Horo::Extensions::Tests {
         REQUIRE(builtIn.enabled);
         REQUIRE(builtIn.modules.size() == 2);
 
-        inventory.MarkRuntimeActive(builtIn.packageId);
+        REQUIRE(inventory.MarkRuntimeActive(builtIn.packageId).HasValue());
         REQUIRE_FALSE(inventory.Entries().front().RestartRequired());
         REQUIRE(inventory.SetEnabled(builtIn.packageId, false).HasValue());
         REQUIRE(inventory.Entries().front().RestartRequired());
@@ -436,7 +436,7 @@ namespace Horo::Extensions::Tests {
         REQUIRE(installed.HasValue());
         REQUIRE(installed.Value() == "com.horo.examples.asset-importer-basic");
 
-        const auto entry = std::ranges::find(inventory.Entries(), installed.Value(), &ExtensionInventoryEntry::packageId);
+        auto entry = std::ranges::find(inventory.Entries(), installed.Value(), &ExtensionInventoryEntry::packageId);
         REQUIRE(entry != inventory.Entries().end());
         REQUIRE(entry->origin == ExtensionOrigin::UserInstalled);
         REQUIRE(entry->absoluteRootPath.is_absolute());
@@ -445,16 +445,61 @@ namespace Horo::Extensions::Tests {
         REQUIRE_FALSE(entry->locallyTrusted);
         REQUIRE(inventory.EnabledUserPackageRoots().empty());
 
+        {
+            std::ofstream legacyState{installRoot / "_state.json", std::ios::binary | std::ios::trunc};
+            legacyState << R"({"schemaVersion":1,"enabled":["com.horo.examples.asset-importer-basic"],)"
+                           R"("trusted":["com.horo.examples.asset-importer-basic"]})";
+        }
+        REQUIRE(inventory.Refresh().HasValue());
+        entry = std::ranges::find(inventory.Entries(), installed.Value(), &ExtensionInventoryEntry::packageId);
+        REQUIRE(entry != inventory.Entries().end());
+        REQUIRE(entry->enabled);
+        REQUIRE_FALSE(entry->locallyTrusted);
+        REQUIRE(inventory.EnabledUserPackageRoots().empty());
+        REQUIRE(inventory.SetEnabled(entry->packageId, false).HasValue());
         REQUIRE(inventory.SetEnabled(entry->packageId, true).HasValue());
+        REQUIRE_FALSE(entry->locallyTrusted);
+        REQUIRE(inventory.EnabledUserPackageRoots().empty());
+        REQUIRE(inventory.SetTrusted(entry->packageId, true).HasValue());
         const auto roots = inventory.EnabledUserPackageRoots();
         REQUIRE(roots.size() == 1);
         REQUIRE(roots.front().is_absolute());
-        inventory.MarkRuntimeActive(installed.Value());
-        REQUIRE_FALSE(std::ranges::find(inventory.Entries(), installed.Value(), &ExtensionInventoryEntry::packageId)->RestartRequired());
+        ExtensionInventory persisted{installRoot};
+        REQUIRE(persisted.Refresh().HasValue());
+        const auto persistedEntry = std::ranges::find(persisted.Entries(), installed.Value(), &ExtensionInventoryEntry::packageId);
+        REQUIRE(persistedEntry != persisted.Entries().end());
+        REQUIRE(persistedEntry->enabled);
+        REQUIRE(persistedEntry->locallyTrusted);
+        REQUIRE(persistedEntry->trustedCompositionVersion == persistedEntry->compositionVersion);
+        REQUIRE(inventory.MarkRuntimeActive(installed.Value()).HasValue());
+        entry = std::ranges::find(inventory.Entries(), installed.Value(), &ExtensionInventoryEntry::packageId);
+        REQUIRE_FALSE(entry->RestartRequired());
+        REQUIRE(inventory.SetTrusted(entry->packageId, false).HasValue());
+        REQUIRE(entry->runtimeActive);
+        REQUIRE(entry->ActivationState().RestartReason() == ExtensionRestartReason::DeactivationRequired);
+        REQUIRE(inventory.EnabledUserPackageRoots().empty());
+        REQUIRE(inventory.SetTrusted(entry->packageId, true).HasValue());
+        REQUIRE_FALSE(entry->RestartRequired());
 
         const fs::path installedManifest = roots.front() / "extension.json";
         std::ifstream manifestInput(installedManifest, std::ios::binary);
         std::string manifestText{std::istreambuf_iterator<char>{manifestInput}, std::istreambuf_iterator<char>{}};
+        const std::string authorField{"\"author\": \"Horo Engine\""};
+        const std::size_t author = manifestText.find(authorField);
+        REQUIRE(author != std::string::npos);
+        manifestText.replace(author, authorField.size(), "\"author\": \"Changed Publisher\"");
+        {
+            std::ofstream manifestOutput(installedManifest, std::ios::binary | std::ios::trunc);
+            manifestOutput << manifestText;
+        }
+        REQUIRE(inventory.Refresh().HasValue());
+        const auto changedPublisher = std::ranges::find(inventory.Entries(), installed.Value(), &ExtensionInventoryEntry::packageId);
+        REQUIRE(changedPublisher != inventory.Entries().end());
+        REQUIRE(changedPublisher->runtimeActive);
+        REQUIRE_FALSE(changedPublisher->locallyTrusted);
+        REQUIRE(changedPublisher->RestartRequired());
+        REQUIRE(inventory.SetTrusted(changedPublisher->packageId, true).HasValue());
+
         const std::string versionField{"\"version\": \"1.0.0\""};
         const std::size_t packageVersion = manifestText.find(versionField);
         REQUIRE(packageVersion != std::string::npos);
@@ -469,6 +514,8 @@ namespace Horo::Extensions::Tests {
         const auto updated = std::ranges::find(inventory.Entries(), installed.Value(), &ExtensionInventoryEntry::packageId);
         REQUIRE(updated != inventory.Entries().end());
         REQUIRE(updated->runtimeActive);
+        REQUIRE_FALSE(updated->locallyTrusted);
+        REQUIRE(inventory.EnabledUserPackageRoots().empty());
         REQUIRE(updated->RestartRequired());
         REQUIRE(inventory.InstallFromDirectory(source).HasError());
     }
