@@ -360,6 +360,27 @@ public:
 - **Global Entity Positioning**: Components requiring absolute world queries resolve `WorldCoordinate64` on demand:
   $$P_{\text{world}} = C_{\text{origin}} + P_{\text{local}}$$
 
+### 7. XR Coordinate and Time Evidence
+
+- XRApi publishes view, local, stage, and world spaces through generation-safe
+  `XRCoordinateSpace` values. All translations use metres in Horo's right-handed,
+  Y-up, negative-Z-forward convention; native runtime enums and handles remain in
+  the concrete XR backend.
+- Every space carries the owning session and exact `XRWorldOriginRevision`.
+  Replacing a session or committing a world-origin change retires earlier pose
+  evidence instead of silently translating it through ambient state.
+- `XRPoseSample` stores position, orientation, and velocities as independently
+  validity-tagged optional values. Tracking loss removes the affected values;
+  identity transforms, zero vectors, and last-known poses are not substitutes for
+  missing evidence.
+- Runtime sample time, fixed-simulation time, and render-prediction time are
+  different strong types. A sample is either committed simulation input or a
+  presentation prediction. Presentation predictions cannot rewrite simulation
+  state, and coordinate composition requires exact time evidence equality.
+- `ComposeXRSpaceTransforms` consumes caller-owned contiguous storage and is
+  limited to eight hops. It performs no allocation, blocking I/O, native runtime
+  call, or CPU/GPU synchronization on the frame-hot path.
+
 ---
 
 ## Error Handling and Diagnostics

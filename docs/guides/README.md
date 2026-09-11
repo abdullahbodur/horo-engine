@@ -14,6 +14,9 @@ workflows.
   configure the IDE bridge, analyze local changes, and diagnose partial results.
 - [World Spatial Object Descriptor Migration](./world-spatial-object-descriptor-migration.md):
   adopt stable authored-object identity, source, bounds, placement, and revision admission.
+- [XR Coordinate and Pose Contract Migration](./xr-coordinate-pose-migration.md):
+  publish generation-fenced coordinate, validity, and time evidence without native
+  backend leakage or implicit clock conversion.
 
 ## Writing a Guide
 

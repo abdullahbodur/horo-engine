@@ -315,6 +315,7 @@ horo_configure_target_header_boundary(HoroXRApi PUBLIC_HEADERS
     Horo/XR/XRContract.h
     Horo/XR/XRErrors.h
     Horo/XR/XRIdentity.h
+    Horo/XR/XRSpacePose.h
 )
 horo_configure_target_header_boundary(HoroTerrainApi PUBLIC_HEADERS
     Horo/Terrain/TerrainErrors.h

@@ -32,6 +32,14 @@ namespace Horo::XR::XRErrors {
     extern const ErrorCodeDescriptor CapacityExceeded;
     /** @brief An XR operation request is malformed. */
     extern const ErrorCodeDescriptor OperationInvalid;
+    /** @brief An XR coordinate-space relation or convention is incompatible. */
+    extern const ErrorCodeDescriptor CoordinateSpaceIncompatible;
+    /** @brief XR clock evidence mixes or omits required time domains. */
+    extern const ErrorCodeDescriptor TimeDomainIncompatible;
+    /** @brief XR pose component validity, value, confidence, or loss evidence is malformed. */
+    extern const ErrorCodeDescriptor PoseInvalid;
+    /** @brief An XR space or pose references a retired world-origin revision. */
+    extern const ErrorCodeDescriptor OriginRevisionStale;
 
     /**
      * @brief Returns every stable XRApi descriptor for module-registry contribution.

@@ -354,6 +354,7 @@ horo_register_catch_test(HoroNavigationApiTests LABELS "unit;navigation;headless
 
 add_executable(HoroXRApiTests
         unit/runtime/xr/XRApiContractTests.cpp
+        unit/runtime/xr/XRSpacePoseTests.cpp
 )
 target_compile_features(HoroXRApiTests PRIVATE cxx_std_20)
 target_link_libraries(HoroXRApiTests PRIVATE HoroEngine::XRApi)
