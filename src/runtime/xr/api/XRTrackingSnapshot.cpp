@@ -4,6 +4,7 @@
 
 #include <algorithm>
 #include <array>
+#include <memory>
 #include <utility>
 
 namespace Horo::XR {
@@ -53,11 +54,8 @@ namespace Horo::XR {
         /** @brief Looks up one canonical device without allocating. */
         [[nodiscard]] const XRTrackedDeviceRecord *FindDevice(const std::span<const XRTrackedDeviceRecord> devices,
                                                               const XRDeviceId &id) noexcept {
-            const auto found =
-                std::lower_bound(devices.begin(), devices.end(), id, [](const XRTrackedDeviceRecord &record, const XRDeviceId &candidate) {
-                return record.id < candidate;
-            });
-            return found != devices.end() && found->id == id ? &*found : nullptr;
+            const auto found = std::ranges::lower_bound(devices, id, {}, &XRTrackedDeviceRecord::id);
+            return found != devices.end() && found->id == id ? std::to_address(found) : nullptr;
         }
 
         /** @brief Detects replacement of a device slot retained by a caller. */
@@ -71,10 +69,10 @@ namespace Horo::XR {
         [[nodiscard]] const XRTrackedPoseRecord *FindPose(const std::span<const XRTrackedPoseRecord> poses, const XRDeviceId &device,
                                                           const XRTrackedPoseKind kind) noexcept {
             const auto key = std::pair{device, kind};
-            const auto found = std::lower_bound(poses.begin(), poses.end(), key, [](const XRTrackedPoseRecord &record, const auto &value) {
-                return std::pair{record.device, record.kind} < value;
+            const auto found = std::ranges::lower_bound(poses, key, {}, [](const XRTrackedPoseRecord &record) {
+                return std::pair{record.device, record.kind};
             });
-            return found != poses.end() && found->device == device && found->kind == kind ? &*found : nullptr;
+            return found != poses.end() && found->device == device && found->kind == kind ? std::to_address(found) : nullptr;
         }
 
         /** @brief Validates fixed bounds before immutable storage allocation. */
@@ -89,9 +87,9 @@ namespace Horo::XR {
         /** @brief Checks that advertised device capabilities agree with the semantic role. */
         [[nodiscard]] bool ValidCapabilities(const XRTrackedDeviceRecord &device) noexcept {
             using enum XRTrackedDeviceCapability;
-            const bool controller =
-                device.role == XRTrackedDeviceRole::LeftController || device.role == XRTrackedDeviceRole::RightController;
-            if (device.capabilities.Has(HeadPose) != (device.role == XRTrackedDeviceRole::Head) ||
+            if (const bool controller =
+                    device.role == XRTrackedDeviceRole::LeftController || device.role == XRTrackedDeviceRole::RightController;
+                device.capabilities.Has(HeadPose) != (device.role == XRTrackedDeviceRole::Head) ||
                 device.capabilities.Has(TrackerPose) != (device.role == XRTrackedDeviceRole::GenericTracker) ||
                 (device.capabilities.Has(GripPose) || device.capabilities.Has(AimPose) || device.capabilities.Has(PalmPose)) !=
                     controller ||
