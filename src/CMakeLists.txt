@@ -581,6 +581,7 @@ add_library(HoroXRApi STATIC
         runtime/xr/api/XRContract.cpp
         runtime/xr/api/XRErrors.cpp
         runtime/xr/api/XRIdentity.cpp
+        runtime/xr/api/XRSpacePose.cpp
 )
 add_library(HoroEngine::XRApi ALIAS HoroXRApi)
 target_compile_features(HoroXRApi PUBLIC cxx_std_20)

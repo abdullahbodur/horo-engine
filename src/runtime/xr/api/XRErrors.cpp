@@ -106,6 +106,42 @@ namespace Horo::XR::XRErrors {
         .retryable = false,
         .userActionable = true,
     };
+    const ErrorCodeDescriptor CoordinateSpaceIncompatible{
+        .domain = XRDomain,
+        .code = ErrorCode{"xr.coordinate_space.incompatible"},
+        .defaultSeverity = ErrorSeverity::Error,
+        .summary = "XR coordinate spaces cannot be related under the declared Horo convention.",
+        .remediationHint = "Use a contiguous current-session path in metres and right-handed Y-up negative-Z-forward space.",
+        .retryable = false,
+        .userActionable = true,
+    };
+    const ErrorCodeDescriptor TimeDomainIncompatible{
+        .domain = XRDomain,
+        .code = ErrorCode{"xr.time_domain.incompatible"},
+        .defaultSeverity = ErrorSeverity::Error,
+        .summary = "XR pose timing evidence mixes or omits required clock domains.",
+        .remediationHint = "Correlate runtime samples explicitly with either simulation time or render prediction time.",
+        .retryable = false,
+        .userActionable = false,
+    };
+    const ErrorCodeDescriptor PoseInvalid{
+        .domain = XRDomain,
+        .code = ErrorCode{"xr.pose.invalid"},
+        .defaultSeverity = ErrorSeverity::Error,
+        .summary = "XR pose values conflict with their validity, confidence, or loss evidence.",
+        .remediationHint = "Publish finite unit pose values only for independently valid components and clear lost components.",
+        .retryable = true,
+        .userActionable = false,
+    };
+    const ErrorCodeDescriptor OriginRevisionStale{
+        .domain = XRDomain,
+        .code = ErrorCode{"xr.origin_revision.stale"},
+        .defaultSeverity = ErrorSeverity::Warning,
+        .summary = "XR coordinate evidence references a retired world-origin revision.",
+        .remediationHint = "Relocate the pose through the current world-origin adapter before use.",
+        .retryable = true,
+        .userActionable = false,
+    };
 
     /** @copydoc Descriptors */
     std::span<const ErrorCodeDescriptor *const> Descriptors() noexcept {
@@ -121,6 +157,10 @@ namespace Horo::XR::XRErrors {
             &OperationIncompatible,
             &CapacityExceeded,
             &OperationInvalid,
+            &CoordinateSpaceIncompatible,
+            &TimeDomainIncompatible,
+            &PoseInvalid,
+            &OriginRevisionStale,
         };
         return descriptors;
     }

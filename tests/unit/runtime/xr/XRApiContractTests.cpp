@@ -231,7 +231,7 @@ namespace Horo::XR {
 
         TEST_CASE("XR error registry contribution is complete unique and actionable", "[unit][xr][errors]") {
             const auto descriptors = XRErrors::Descriptors();
-            REQUIRE(descriptors.size() == 11);
+            REQUIRE(descriptors.size() == 15);
             std::set<std::string_view> codes;
             for (const auto *descriptor : descriptors) {
                 REQUIRE(descriptor != nullptr);
