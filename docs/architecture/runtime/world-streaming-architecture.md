@@ -100,6 +100,24 @@ existing path-independent asset identity rather than a competing identifier.
 Serialized layout, cooked checksums, streaming volumes, and residency lifecycle
 state remain owned by their later contracts and are not inferred here.
 
+`WorldPartitionRegistry` is the explicit owner-thread publication boundary over
+those validated descriptors. Each successful complete publication advances one
+non-wrapping typed registry revision and atomically replaces the current immutable
+index. Concurrent consumers retain `WorldPartitionRegistrySnapshot` values that
+own their publication independently from later replacement, cancellation, or
+shutdown. Lookups return dense handles fenced by registry identity, revision,
+partition identity, and partition epoch; a handle issued by one publication cannot
+resolve against another even if the same cell tuple remains present.
+
+Snapshot lookup is logarithmic in canonical manifest order. Spatial intersection
+queries scan at most the registry's admitted cell ceiling, perform no allocation,
+emit canonical handles into caller-owned bounded storage, and publish no partial
+output when capacity is insufficient. Query bounds use exact inclusive canonical
+millimeters with optional declared layer and LOD filters. The registry is an index,
+not a second topology or residency authority: it does not mount worlds, perform I/O,
+select providers, mutate cell state, or silently fall back to another layer, LOD,
+partition epoch, or snapshot revision.
+
 `CookedWorldIndexManifest` is the immutable WST-004.2 aggregate layered over that
 descriptor. It takes ownership of exactly one validated `WorldPartitionDescriptor`
 and adds exactly one cooked record per declared cell: encoded and decoded byte
