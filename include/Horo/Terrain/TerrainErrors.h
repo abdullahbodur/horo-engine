@@ -42,6 +42,18 @@ namespace Horo::Terrain::TerrainErrors {
     extern const ErrorCodeDescriptor RevisionStale;
     /** @brief Insert or replacement state is incomplete or contradicts the current publication. */
     extern const ErrorCodeDescriptor ReplacementInvalid;
+    /** @brief A foliage type definition has malformed identity, assets, scale, or schema data. */
+    extern const ErrorCodeDescriptor FoliageDefinitionInvalid;
+    /** @brief A foliage definition requires a feature absent from the exact captured capability plan. */
+    extern const ErrorCodeDescriptor FoliageFeatureUnsupported;
+    /** @brief Deterministic placement constraints or their algorithm version are invalid. */
+    extern const ErrorCodeDescriptor FoliagePlacementInvalid;
+    /** @brief Foliage LOD, culling, impostor, or transition thresholds are invalid. */
+    extern const ErrorCodeDescriptor FoliageCullingInvalid;
+    /** @brief Foliage wind parameters contradict the selected deformation model. */
+    extern const ErrorCodeDescriptor FoliageWindInvalid;
+    /** @brief Optional foliage collision dimensions or flags are inconsistent. */
+    extern const ErrorCodeDescriptor FoliageCollisionInvalid;
 
     /**
      * @brief Returns every stable TerrainApi descriptor for module-registry contribution.

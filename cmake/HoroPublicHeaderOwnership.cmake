@@ -325,6 +325,7 @@ horo_configure_target_header_boundary(HoroXRApi PUBLIC_HEADERS
     Horo/XR/XRTrackingSnapshot.h
 )
 horo_configure_target_header_boundary(HoroTerrainApi PUBLIC_HEADERS
+    Horo/Terrain/FoliageDefinition.h
     Horo/Terrain/TerrainDescriptor.h
     Horo/Terrain/TerrainErrors.h
     Horo/Terrain/TerrainIdentity.h
