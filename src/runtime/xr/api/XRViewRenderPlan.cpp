@@ -15,25 +15,8 @@ namespace Horo::XR {
         /** @brief Checks the closed Horo render-texture usage mask. */
         [[nodiscard]] bool ValidTextureUsage(const Render::RenderTextureUsage usage) noexcept {
             using enum Render::RenderTextureUsage;
-            constexpr std::array validUsages{
-                RenderAttachment,
-                RenderAttachment | Sampled,
-                RenderAttachment | CopySource,
-                RenderAttachment | CopyDestination,
-                RenderAttachment | Storage,
-                RenderAttachment | Sampled | CopySource,
-                RenderAttachment | Sampled | CopyDestination,
-                RenderAttachment | Sampled | Storage,
-                RenderAttachment | CopySource | CopyDestination,
-                RenderAttachment | CopySource | Storage,
-                RenderAttachment | CopyDestination | Storage,
-                RenderAttachment | Sampled | CopySource | CopyDestination,
-                RenderAttachment | Sampled | CopySource | Storage,
-                RenderAttachment | Sampled | CopyDestination | Storage,
-                RenderAttachment | CopySource | CopyDestination | Storage,
-                RenderAttachment | Sampled | CopySource | CopyDestination | Storage,
-            };
-            return std::ranges::find(validUsages, usage) != validUsages.end();
+            constexpr auto maximumValidUsage = Sampled | RenderAttachment | CopySource | CopyDestination | Storage;
+            return usage <= maximumValidUsage && Render::HasTextureUsage(usage, RenderAttachment);
         }
 
         /** @brief Reports whether a Horo render format has depth semantics. */
