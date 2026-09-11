@@ -176,7 +176,11 @@ namespace Horo::Runtime::Ui {
             REQUIRE(snapshot.Descriptor().interaction == Rev<UiInteractionRevision>(1));
             REQUIRE(snapshot.Records()[0].element == tree.Root().Value().handle);
             REQUIRE(snapshot.Records()[1].element == tree.Find(Stable<UiElementId>(2)).Value());
-            REQUIRE(snapshot.Get(tree.Find(Stable<UiElementId>(4)).Value()).HasValue());
+            const auto last = tree.Find(Stable<UiElementId>(4)).Value();
+            REQUIRE(snapshot.Get(last).HasValue());
+            auto stale = last;
+            ++stale.generation;
+            RequireError(snapshot.Get(stale), UiErrors::HandleStale);
 
             const auto retained = snapshot.Records()[0].arrangement.contentBox;
             evaluator.ResetCounts();

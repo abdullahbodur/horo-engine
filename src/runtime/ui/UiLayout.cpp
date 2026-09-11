@@ -71,9 +71,11 @@ namespace Horo::Runtime::Ui {
         mutable std::atomic<std::uint64_t> leases{};
         UiLayoutSnapshotDescriptor descriptor;
         std::vector<UiLayoutRecord> records;
+        std::vector<std::uint32_t> recordLookup;
 
         explicit Storage(const std::uint32_t capacity) {
             records.reserve(capacity);
+            recordLookup.reserve(capacity);
         }
     };
 
@@ -97,6 +99,7 @@ namespace Horo::Runtime::Ui {
         std::vector<Node> candidateNodes;
         std::vector<std::uint32_t> activeChildren;
         std::vector<std::uint32_t> candidateChildren;
+        std::vector<std::uint32_t> candidateLookup;
         std::vector<UiElementHandle> traversalScratch;
         std::vector<UiElementHandle> childHandleScratch;
         std::vector<UiLayoutConstraints> constraintScratch;
@@ -116,6 +119,7 @@ namespace Horo::Runtime::Ui {
             candidateNodes.reserve(source.elementCapacity);
             activeChildren.reserve(source.elementCapacity - 1);
             candidateChildren.reserve(source.elementCapacity - 1);
+            candidateLookup.reserve(source.elementCapacity);
             traversalScratch.reserve(source.elementCapacity);
             childHandleScratch.reserve(source.elementCapacity);
             constraintScratch.reserve(source.elementCapacity);
@@ -131,9 +135,11 @@ namespace Horo::Runtime::Ui {
             ReleaseCurrent();
         }
 
-        [[nodiscard]] std::uint32_t Find(const std::vector<Node> &nodes, const UiElementHandle element) const noexcept {
-            const auto found = std::ranges::find(nodes, element, &Node::element);
-            return found == nodes.end() ? NoParent : static_cast<std::uint32_t>(std::distance(nodes.begin(), found));
+        [[nodiscard]] std::uint32_t FindCandidate(const UiElementHandle element) const noexcept {
+            const auto found = std::ranges::lower_bound(candidateLookup, element, {}, [this](const std::uint32_t index) {
+                return candidateNodes[index].element;
+            });
+            return found != candidateLookup.end() && candidateNodes[*found].element == element ? *found : NoParent;
         }
 
         [[nodiscard]] Result<void> BuildTopology(const UiElementTree &tree) {
@@ -147,16 +153,23 @@ namespace Horo::Runtime::Ui {
 
             candidateNodes.clear();
             candidateChildren.clear();
+            candidateLookup.clear();
             candidateNodes.resize(traversalScratch.size());
-            for (std::uint32_t index = 0; index < traversalScratch.size(); ++index)
+            candidateLookup.resize(traversalScratch.size());
+            for (std::uint32_t index = 0; index < traversalScratch.size(); ++index) {
                 candidateNodes[index].element = traversalScratch[index];
+                candidateLookup[index] = index;
+            }
+            std::ranges::sort(candidateLookup, {}, [this](const std::uint32_t index) {
+                return candidateNodes[index].element;
+            });
 
             for (std::uint32_t index = 0; index < candidateNodes.size(); ++index) {
                 const auto record = tree.Get(candidateNodes[index].element);
                 if (record.HasError())
                     return Result<void>::Failure(record.ErrorValue());
                 if (record.Value().parent.IsValid()) {
-                    const auto parent = Find(candidateNodes, record.Value().parent);
+                    const auto parent = FindCandidate(record.Value().parent);
                     if (parent == NoParent || parent >= index)
                         return Failure(UiErrors::ElementTreeInvalid);
                     candidateNodes[index].parent = parent;
@@ -170,7 +183,7 @@ namespace Horo::Runtime::Ui {
                 candidateNodes[index].firstChild = static_cast<std::uint32_t>(candidateChildren.size());
                 candidateNodes[index].childCount = static_cast<std::uint32_t>(children.Value());
                 for (const auto child : childHandleScratch) {
-                    const auto childIndex = Find(candidateNodes, child);
+                    const auto childIndex = FindCandidate(child);
                     if (childIndex == NoParent)
                         return Failure(UiErrors::ElementTreeInvalid);
                     candidateChildren.push_back(childIndex);
@@ -196,7 +209,7 @@ namespace Horo::Runtime::Ui {
                     MarkAll();
                     continue;
                 }
-                auto index = Find(candidateNodes, invalidation.element);
+                auto index = FindCandidate(invalidation.element);
                 if (index == NoParent)
                     return Failure(UiErrors::LayoutSourceStale);
                 candidateNodes[index].arrangeDirty = true;
@@ -227,10 +240,7 @@ namespace Horo::Runtime::Ui {
             return {measurementScratch.data(), node.childCount};
         }
 
-        [[nodiscard]] Result<bool> EvaluatePass(const UiLayoutUpdateRequest &request, const bool remeasure) {
-            candidateNodes.front().constraints = request.rootConstraints;
-            candidateNodes.front().assignedContent = request.rootContent;
-
+        [[nodiscard]] Result<void> ResolveConstraints(const UiLayoutUpdateRequest &request) {
             for (std::uint32_t index = 0; index < candidateNodes.size(); ++index) {
                 auto &node = candidateNodes[index];
                 if (!node.measureDirty || node.childCount == 0)
@@ -239,10 +249,10 @@ namespace Horo::Runtime::Ui {
                 const UiLayoutChildConstraintRequest childRequest{node.element, node.constraints, ChildHandles(node)};
                 const auto resolved = request.evaluator->ResolveChildConstraints(childRequest, constraintScratch);
                 if (resolved.HasError())
-                    return Result<bool>::Failure(resolved.ErrorValue());
+                    return Result<void>::Failure(resolved.ErrorValue());
                 for (std::uint32_t offset = 0; offset < node.childCount; ++offset) {
                     if (!constraintScratch[offset].IsValid())
-                        return Failure<bool>(UiErrors::LayoutInvalid);
+                        return Failure(UiErrors::LayoutInvalid);
                     auto &child = candidateNodes[candidateChildren[node.firstChild + offset]];
                     if (child.constraints != constraintScratch[offset]) {
                         child.constraints = constraintScratch[offset];
@@ -251,7 +261,10 @@ namespace Horo::Runtime::Ui {
                     }
                 }
             }
+            return Result<void>::Success();
+        }
 
+        [[nodiscard]] Result<void> MeasureNodes(const UiLayoutUpdateRequest &request, const bool remeasure) {
             for (std::size_t position = candidateNodes.size(); position > 0; --position) {
                 auto &node = candidateNodes[position - 1];
                 if (!node.measureDirty)
@@ -259,15 +272,18 @@ namespace Horo::Runtime::Ui {
                 const UiLayoutMeasureRequest measureRequest{node.element, node.constraints, ChildMeasurements(node), remeasure};
                 const auto measured = request.evaluator->Measure(measureRequest);
                 if (measured.HasError())
-                    return Result<bool>::Failure(measured.ErrorValue());
+                    return Result<void>::Failure(measured.ErrorValue());
                 if (!measured.Value().IsValid(node.constraints))
-                    return Failure<bool>(UiErrors::LayoutInvalid);
+                    return Failure(UiErrors::LayoutInvalid);
                 if (node.measurement != measured.Value())
                     node.arrangeDirty = true;
                 node.measurement = measured.Value();
                 node.measureDirty = false;
             }
+            return Result<void>::Success();
+        }
 
+        [[nodiscard]] Result<bool> ArrangeNodes(const UiLayoutUpdateRequest &request, const bool remeasure) {
             bool needsRemeasure = false;
             for (std::uint32_t index = 0; index < candidateNodes.size(); ++index) {
                 auto &node = candidateNodes[index];
@@ -308,6 +324,43 @@ namespace Horo::Runtime::Ui {
             return Result<bool>::Success(needsRemeasure);
         }
 
+        [[nodiscard]] Result<bool> EvaluatePass(const UiLayoutUpdateRequest &request, const bool remeasure) {
+            candidateNodes.front().constraints = request.rootConstraints;
+            candidateNodes.front().assignedContent = request.rootContent;
+            if (const auto resolved = ResolveConstraints(request); resolved.HasError())
+                return Result<bool>::Failure(resolved.ErrorValue());
+            if (const auto measured = MeasureNodes(request, remeasure); measured.HasError())
+                return Result<bool>::Failure(measured.ErrorValue());
+            return ArrangeNodes(request, remeasure);
+        }
+
+        [[nodiscard]] Result<void> PrepareCandidate(const UiElementTree &tree, const UiLayoutUpdateRequest &request,
+                                                    const bool topologyChanged, const bool rootChanged, const bool sourcesChanged) {
+            if (topologyChanged) {
+                if (const auto topology = BuildTopology(tree); topology.HasError())
+                    return topology;
+                MarkAll();
+            } else {
+                candidateNodes = activeNodes;
+                candidateChildren = activeChildren;
+            }
+            if (rootChanged || (sourcesChanged && invalidations.empty()))
+                MarkAll();
+            return ApplyInvalidations(request.sources.tree);
+        }
+
+        [[nodiscard]] Result<void> EvaluateCandidate(const UiLayoutUpdateRequest &request) {
+            const auto firstPass = EvaluatePass(request, false);
+            if (firstPass.HasError())
+                return Result<void>::Failure(firstPass.ErrorValue());
+            if (!firstPass.Value())
+                return Result<void>::Success();
+            const auto secondPass = EvaluatePass(request, true);
+            if (secondPass.HasError())
+                return Result<void>::Failure(secondPass.ErrorValue());
+            return secondPass.Value() ? Failure(UiErrors::LayoutNonConvergent) : Result<void>::Success();
+        }
+
         [[nodiscard]] std::shared_ptr<UiLayoutSnapshot::Storage> TryAcquire() noexcept {
             for (std::size_t offset = 0; offset < slots.size(); ++offset) {
                 const auto index = (nextSlot + offset) % slots.size();
@@ -318,6 +371,43 @@ namespace Horo::Runtime::Ui {
                 }
             }
             return {};
+        }
+
+        [[nodiscard]] Result<std::shared_ptr<UiLayoutSnapshot::Storage>> PublishCandidate(const UiLayoutUpdateRequest &request) {
+            UiInteractionRevision publication = interaction;
+            if (current) {
+                const auto next = interaction.Next();
+                if (next.HasError())
+                    return Result<std::shared_ptr<UiLayoutSnapshot::Storage>>::Failure(next.ErrorValue());
+                publication = next.Value();
+            }
+
+            auto slot = TryAcquire();
+            if (!slot)
+                return Failure<std::shared_ptr<UiLayoutSnapshot::Storage>>(UiErrors::LayoutSnapshotStorageExhausted);
+            slot->descriptor = {descriptor.instance, descriptor.canvas, descriptor.document, request.sources, publication};
+            slot->records.resize(candidateNodes.size());
+            slot->recordLookup.resize(candidateNodes.size());
+            for (std::uint32_t index = 0; index < candidateNodes.size(); ++index) {
+                const auto &node = candidateNodes[index];
+                slot->records[index] = {node.element, node.measurement, node.arrangement};
+                slot->recordLookup[index] = index;
+            }
+            std::ranges::sort(slot->recordLookup, {}, [&records = slot->records](const std::uint32_t index) {
+                return records[index].element;
+            });
+
+            ReleaseCurrent();
+            current = slot;
+            activeNodes.swap(candidateNodes);
+            activeChildren.swap(candidateChildren);
+            sources = request.sources;
+            rootConstraints = request.rootConstraints;
+            rootContent = request.rootContent;
+            interaction = publication;
+            invalidations.clear();
+            slot->leases.fetch_add(1);
+            return Result<std::shared_ptr<UiLayoutSnapshot::Storage>>::Success(std::move(slot));
         }
 
         void ReleaseCurrent() noexcept {
@@ -391,8 +481,12 @@ namespace Horo::Runtime::Ui {
     Result<UiLayoutRecord> UiLayoutSnapshot::Get(const UiElementHandle element) const {
         if (!storage_ || !element.IsValid())
             return Failure<UiLayoutRecord>(UiErrors::LayoutInvalid);
-        const auto found = std::ranges::find(storage_->records, element, &UiLayoutRecord::element);
-        return found == storage_->records.end() ? Failure<UiLayoutRecord>(UiErrors::HandleStale) : Result<UiLayoutRecord>::Success(*found);
+        const auto found = std::ranges::lower_bound(storage_->recordLookup, element, {}, [this](const std::uint32_t index) {
+            return storage_->records[index].element;
+        });
+        if (found == storage_->recordLookup.end() || storage_->records[*found].element != element)
+            return Failure<UiLayoutRecord>(UiErrors::HandleStale);
+        return Result<UiLayoutRecord>::Success(storage_->records[*found]);
     }
 
     /** @copydoc UiLayoutEngine::Create */
@@ -471,63 +565,15 @@ namespace Horo::Runtime::Ui {
             return Result<UiLayoutSnapshot>::Success(UiLayoutSnapshot{storage_->current});
         }
 
-        if (topologyChanged) {
-            const auto topology = storage_->BuildTopology(tree);
-            if (topology.HasError())
-                return Result<UiLayoutSnapshot>::Failure(topology.ErrorValue());
-            storage_->MarkAll();
-        } else {
-            storage_->candidateNodes = storage_->activeNodes;
-            storage_->candidateChildren = storage_->activeChildren;
-        }
-        if (rootChanged || (sourcesChanged && storage_->invalidations.empty()))
-            storage_->MarkAll();
-        const auto invalidated = storage_->ApplyInvalidations(request.sources.tree);
-        if (invalidated.HasError())
-            return Result<UiLayoutSnapshot>::Failure(invalidated.ErrorValue());
-
-        const auto firstPass = storage_->EvaluatePass(request, false);
-        if (firstPass.HasError())
-            return Result<UiLayoutSnapshot>::Failure(firstPass.ErrorValue());
-        if (firstPass.Value()) {
-            const auto secondPass = storage_->EvaluatePass(request, true);
-            if (secondPass.HasError())
-                return Result<UiLayoutSnapshot>::Failure(secondPass.ErrorValue());
-            if (secondPass.Value())
-                return Failure<UiLayoutSnapshot>(UiErrors::LayoutNonConvergent);
-        }
-
-        auto slot = storage_->TryAcquire();
-        if (!slot)
-            return Failure<UiLayoutSnapshot>(UiErrors::LayoutSnapshotStorageExhausted);
-        UiInteractionRevision publication = storage_->interaction;
-        if (storage_->current) {
-            const auto next = storage_->interaction.Next();
-            if (next.HasError()) {
-                slot->leases.store(0);
-                return Result<UiLayoutSnapshot>::Failure(next.ErrorValue());
-            }
-            publication = next.Value();
-        }
-        slot->descriptor = {storage_->descriptor.instance, storage_->descriptor.canvas, storage_->descriptor.document, request.sources,
-                            publication};
-        slot->records.resize(storage_->candidateNodes.size());
-        for (std::size_t index = 0; index < storage_->candidateNodes.size(); ++index) {
-            const auto &node = storage_->candidateNodes[index];
-            slot->records[index] = {node.element, node.measurement, node.arrangement};
-        }
-
-        storage_->ReleaseCurrent();
-        storage_->current = slot;
-        storage_->activeNodes.swap(storage_->candidateNodes);
-        storage_->activeChildren.swap(storage_->candidateChildren);
-        storage_->sources = request.sources;
-        storage_->rootConstraints = request.rootConstraints;
-        storage_->rootContent = request.rootContent;
-        storage_->interaction = publication;
-        storage_->invalidations.clear();
-        slot->leases.fetch_add(1);
-        return Result<UiLayoutSnapshot>::Success(UiLayoutSnapshot{std::move(slot)});
+        if (const auto prepared = storage_->PrepareCandidate(tree, request, topologyChanged, rootChanged, sourcesChanged);
+            prepared.HasError())
+            return Result<UiLayoutSnapshot>::Failure(prepared.ErrorValue());
+        if (const auto evaluated = storage_->EvaluateCandidate(request); evaluated.HasError())
+            return Result<UiLayoutSnapshot>::Failure(evaluated.ErrorValue());
+        auto published = storage_->PublishCandidate(request);
+        if (published.HasError())
+            return Result<UiLayoutSnapshot>::Failure(published.ErrorValue());
+        return Result<UiLayoutSnapshot>::Success(UiLayoutSnapshot{std::move(published).Value()});
     }
 
     /** @copydoc UiLayoutEngine::BeginRetirement */
