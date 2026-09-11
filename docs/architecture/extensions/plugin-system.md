@@ -492,6 +492,19 @@ The host denies undeclared capabilities. Native packages remain trusted code;
 permissions reduce accidental authority and support informed decisions, but they
 are not a memory-safety sandbox.
 
+The implemented admission primitive is `ExtensionCapabilityAdmission`. The
+application composition root supplies one immutable policy revision containing
+the sealed permission catalog, its approved subset, and the capabilities present
+in that host composition. ExtensionHost evaluates a module's complete
+manifest-derived request before exposing any service handle. A malformed policy,
+unknown or unapproved permission, unavailable capability, duplicate request, or
+invalid owner/generation rejects the complete request without a partial grant.
+Each granted handle is bound to its extension ID, module ID, and activation
+generation. Callback boundaries atomically acquire a use lease for that exact
+tuple; admission revocation or destruction closes every retained handle to later
+acquisitions. This contract is an admission gate, not a global capability
+registry or a native-code sandbox.
+
 ## Module Loading And ABI Boundary
 
 The generic module C ABI is a bootstrap/control boundary, not sufficient for every

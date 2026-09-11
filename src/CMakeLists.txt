@@ -1111,6 +1111,7 @@ add_library(HoroExtensions STATIC
         extensions/discovery/DiscoveryPlan.cpp
         extensions/discovery/DiscoveryRootPolicy.cpp
         extensions/host/ExtensionManager.cpp
+        extensions/host/ExtensionCapabilityAdmission.cpp
         extensions/host/ExtensionActivationTransaction.cpp
         extensions/host/ExtensionModuleResolution.cpp
         extensions/host/ExtensionAbiValidation.cpp
