@@ -12,6 +12,7 @@ namespace Horo::AI {
     namespace {
         using BlackboardValueStorage = std::vector<std::optional<BlackboardValue>>;
         static_assert(std::is_nothrow_copy_assignable_v<std::optional<BlackboardValue>>);
+        static_assert(std::is_nothrow_move_assignable_v<BlackboardValue>);
 
         [[nodiscard]] Error Failure(const ErrorCodeDescriptor &descriptor) {
             return MakeError(descriptor);
@@ -106,12 +107,12 @@ namespace Horo::AI {
     Result<void> BlackboardWriteBatch::Stage(BlackboardWrite write) {
         if (!write.key.IsValid())
             return Result<void>::Failure(Failure(AIErrors::BlackboardBatchInvalid));
+        if (const auto duplicate = std::ranges::find(writes_, write.key, &BlackboardWrite::key); duplicate != writes_.end()) {
+            duplicate->value = std::move(write.value);
+            return Result<void>::Success();
+        }
         if (writes_.size() >= MaximumBlackboardWritesPerBatch)
             return Result<void>::Failure(Failure(AIErrors::BlackboardLimitExceeded));
-        if (std::ranges::any_of(Writes(), [&write](const auto &existing) {
-            return existing.key == write.key;
-        }))
-            return Result<void>::Failure(Failure(AIErrors::BlackboardBatchInvalid));
         try {
             writes_.push_back(std::move(write));
             return Result<void>::Success();
@@ -170,13 +171,82 @@ namespace Horo::AI {
 
     /** @copydoc BlackboardInstance::BeginWriteBatch */
     Result<BlackboardWriteBatch> BlackboardInstance::BeginWriteBatch() const {
+        if (publishing_)
+            return Result<BlackboardWriteBatch>::Failure(Failure(AIErrors::BlackboardReentrantMutation));
         if (!active_)
             return Result<BlackboardWriteBatch>::Failure(Failure(AIErrors::BlackboardInstanceStale));
         return Result<BlackboardWriteBatch>::Success(BlackboardWriteBatch{binding_, revision_});
     }
 
+    /** @copydoc BlackboardInstance::RegisterObserverAtBlackboardSync */
+    Result<BlackboardObserverToken> BlackboardInstance::RegisterObserverAtBlackboardSync(
+        const BlackboardObserverRegistration &registration) {
+        if (publishing_)
+            return Result<BlackboardObserverToken>::Failure(Failure(AIErrors::BlackboardReentrantMutation));
+        if (!active_)
+            return Result<BlackboardObserverToken>::Failure(Failure(AIErrors::BlackboardInstanceStale));
+        if (registration.agent != binding_.agent || registration.callback == nullptr ||
+            ValidateAiRuntimeHandle(registration.task, binding_.agent.incarnation).HasError() ||
+            FindKey(*schema_, registration.key) == schema_->Keys().size())
+            return Result<BlackboardObserverToken>::Failure(Failure(AIErrors::BlackboardObserverInvalid));
+        std::size_t available = observers_.size();
+        for (std::size_t index = 0; index < observers_.size(); ++index) {
+            const auto &slot = observers_[index];
+            if (slot.active) {
+                if (slot.registration.agent == registration.agent && slot.registration.task == registration.task &&
+                    slot.registration.key == registration.key && slot.registration.callback == registration.callback &&
+                    slot.registration.context == registration.context)
+                    return Result<BlackboardObserverToken>::Failure(Failure(AIErrors::BlackboardObserverInvalid));
+                continue;
+            }
+            if (!slot.retired && available == observers_.size())
+                available = index;
+        }
+        if (available == observers_.size())
+            return Result<BlackboardObserverToken>::Failure(Failure(AIErrors::BlackboardObserverLimitExceeded));
+        auto &slot = observers_[available];
+        slot.registration = registration;
+        slot.active = true;
+        return Result<BlackboardObserverToken>::Success({binding_, available, slot.generation});
+    }
+
+    /** @copydoc BlackboardInstance::RemoveObserverAtBlackboardSync */
+    Result<bool> BlackboardInstance::RemoveObserverAtBlackboardSync(const BlackboardObserverToken &token) {
+        if (publishing_)
+            return Result<bool>::Failure(Failure(AIErrors::BlackboardReentrantMutation));
+        if (!active_)
+            return Result<bool>::Failure(Failure(AIErrors::BlackboardInstanceStale));
+        if (!token.IsValid() || token.binding != binding_)
+            return Result<bool>::Failure(Failure(AIErrors::BlackboardObserverInvalid));
+        auto &slot = observers_[token.slot];
+        if (!slot.active || slot.generation != token.generation)
+            return Result<bool>::Success(false);
+        ReleaseObserverSlot(slot);
+        return Result<bool>::Success(true);
+    }
+
+    /** @copydoc BlackboardInstance::CancelTaskObserversAtBlackboardSync */
+    Result<std::size_t> BlackboardInstance::CancelTaskObserversAtBlackboardSync(const TaskHandle task) {
+        if (publishing_)
+            return Result<std::size_t>::Failure(Failure(AIErrors::BlackboardReentrantMutation));
+        if (!active_)
+            return Result<std::size_t>::Failure(Failure(AIErrors::BlackboardInstanceStale));
+        if (ValidateAiRuntimeHandle(task, binding_.agent.incarnation).HasError())
+            return Result<std::size_t>::Failure(Failure(AIErrors::HandleInvalid));
+        std::size_t removed{};
+        for (auto &slot : observers_) {
+            if (!slot.active || slot.registration.task != task)
+                continue;
+            ReleaseObserverSlot(slot);
+            ++removed;
+        }
+        return Result<std::size_t>::Success(removed);
+    }
+
     /** @copydoc BlackboardInstance::CommitAtBlackboardSync */
     Result<BlackboardCommitResult> BlackboardInstance::CommitAtBlackboardSync(BlackboardWriteBatch batch) {
+        if (publishing_)
+            return Result<BlackboardCommitResult>::Failure(Failure(AIErrors::BlackboardReentrantMutation));
         if (!active_ || batch.Binding() != binding_ || batch.BaseRevision() != revision_)
             return Result<BlackboardCommitResult>::Failure(Failure(AIErrors::BlackboardInstanceStale));
         std::ranges::sort(batch.writes_, {}, &BlackboardWrite::key);
@@ -189,12 +259,17 @@ namespace Horo::AI {
             if (applied.Value())
                 result.changedKeys[result.changedKeyCount++] = write.key;
         }
-        return PublishChangedValues(values_, scratch_, std::move(result), revision_);
+        auto published = PublishChangedValues(values_, scratch_, std::move(result), revision_);
+        if (published.HasValue())
+            PublishNotification(published.Value());
+        return published;
     }
 
     /** @copydoc BlackboardInstance::ReplaceAtBlackboardSync */
     Result<void> BlackboardInstance::ReplaceAtBlackboardSync(const BlackboardInstanceBinding &replacementBinding,
                                                              std::shared_ptr<const BlackboardSchema> replacementSchema) {
+        if (publishing_)
+            return Result<void>::Failure(Failure(AIErrors::BlackboardReentrantMutation));
         if (!active_ || !IsCompatibleReplacement(binding_, replacementBinding, replacementSchema))
             return Result<void>::Failure(Failure(AIErrors::BlackboardInstanceInvalid));
         if (revision_ == std::numeric_limits<std::uint64_t>::max())
@@ -208,6 +283,7 @@ namespace Horo::AI {
             values_ = std::move(replacement).Value();
             scratch_ = std::move(replacementScratch);
             schema_ = std::move(replacementSchema);
+            InvalidateObservers();
             binding_ = replacementBinding;
             ++revision_;
             generationActive_->store(false);
@@ -220,6 +296,8 @@ namespace Horo::AI {
 
     /** @copydoc BlackboardInstance::ResetAtBlackboardSync */
     Result<BlackboardCommitResult> BlackboardInstance::ResetAtBlackboardSync() {
+        if (publishing_)
+            return Result<BlackboardCommitResult>::Failure(Failure(AIErrors::BlackboardReentrantMutation));
         if (!active_)
             return Result<BlackboardCommitResult>::Failure(Failure(AIErrors::BlackboardInstanceStale));
         auto defaults = BuildDefaultValues(*schema_);
@@ -231,17 +309,67 @@ namespace Horo::AI {
                 result.changedKeys[result.changedKeyCount++] = schema_->Keys()[index].key;
         }
         auto candidateValues = std::move(defaults).Value();
-        return PublishChangedValues(values_, candidateValues, std::move(result), revision_);
+        auto published = PublishChangedValues(values_, candidateValues, std::move(result), revision_);
+        if (published.HasValue())
+            PublishNotification(published.Value());
+        return published;
     }
 
     /** @copydoc BlackboardInstance::TeardownAtBlackboardSync */
-    void BlackboardInstance::TeardownAtBlackboardSync() noexcept {
+    Result<void> BlackboardInstance::TeardownAtBlackboardSync() {
+        if (publishing_)
+            return Result<void>::Failure(Failure(AIErrors::BlackboardReentrantMutation));
         if (!active_)
-            return;
+            return Result<void>::Success();
         active_ = false;
         generationActive_->store(false);
+        InvalidateObservers();
         schema_.reset();
         values_.clear();
         scratch_.clear();
+        return Result<void>::Success();
+    }
+
+    /** @copydoc BlackboardInstance::ReleaseObserverSlot */
+    void BlackboardInstance::ReleaseObserverSlot(ObserverSlot &slot) noexcept {
+        slot.active = false;
+        slot.registration = {};
+        if (slot.generation == std::numeric_limits<std::uint32_t>::max())
+            slot.retired = true;
+        else
+            ++slot.generation;
+    }
+
+    /** @copydoc BlackboardInstance::InvalidateObservers */
+    void BlackboardInstance::InvalidateObservers() noexcept {
+        for (auto &slot : observers_) {
+            if (slot.active)
+                ReleaseObserverSlot(slot);
+        }
+    }
+
+    /** @copydoc BlackboardInstance::PublishNotification */
+    void BlackboardInstance::PublishNotification(const BlackboardCommitResult &result) noexcept {
+        if (result.Changes().empty())
+            return;
+
+        struct FrozenObserver final {
+            BlackboardObserverCallback callback{};
+            void *context{};
+        };
+
+        std::array<FrozenObserver, MaximumBlackboardObservers> matching{};
+        std::size_t matchingCount{};
+        for (const auto &slot : observers_) {
+            if (slot.active && std::ranges::binary_search(result.Changes(), slot.registration.key))
+                matching[matchingCount++] = {slot.registration.callback, slot.registration.context};
+        }
+        if (matchingCount == 0)
+            return;
+        const BlackboardNotificationBatch notification{binding_, result};
+        publishing_ = true;
+        for (std::size_t index = 0; index < matchingCount; ++index)
+            matching[index].callback(matching[index].context, notification);
+        publishing_ = false;
     }
 }  // namespace Horo::AI

@@ -1000,6 +1000,7 @@ add_executable(HoroPlatformRequestTests
         unit/platform_services/PlatformProjectConfigurationTests.cpp
         unit/platform_services/PlatformRequestTests.cpp
         unit/platform_services/PlatformServicesBackendTests.cpp
+        unit/platform_services/PlatformServicesFrontendTests.cpp
         unit/platform_services/PlatformStableIdRegistryTests.cpp
         unit/platform_services/PlatformUserSessionTests.cpp
 )
@@ -1145,6 +1146,7 @@ target_link_libraries(HoroShaderManifestTests PRIVATE HoroEngine::RenderApi)
 add_executable(HoroRenderFrontendTests
         unit/runtime/renderer/RenderFrontendTests.cpp
         unit/runtime/renderer/RenderResourceRegistryTests.cpp
+        unit/runtime/renderer/UiRenderCompositionTests.cpp
 )
 
 target_compile_features(HoroRenderFrontendTests PRIVATE cxx_std_20)
@@ -1416,6 +1418,13 @@ if(TARGET HoroAssetImporterBasicExample)
     )
 endif()
 add_test(NAME HoroExtensionManagerTests COMMAND HoroExtensionManagerTests)
+
+add_executable(HoroProjectValidatorRegistryTests
+        unit/extensions/ProjectValidatorRegistryTests.cpp
+)
+target_compile_features(HoroProjectValidatorRegistryTests PRIVATE cxx_std_20)
+target_link_libraries(HoroProjectValidatorRegistryTests PRIVATE HoroEngine::Extensions Catch2::Catch2WithMain)
+add_test(NAME HoroProjectValidatorRegistryTests COMMAND HoroProjectValidatorRegistryTests)
 
 add_executable(HoroSecurityBaselineTests unit/security/SecurityBaselineTests.cpp)
 target_compile_features(HoroSecurityBaselineTests PRIVATE cxx_std_20)

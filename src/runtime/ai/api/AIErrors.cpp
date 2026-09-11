@@ -135,4 +135,31 @@ namespace Horo::AI::AIErrors {
                                                               "Retire the instance; never wrap or reuse an issued generation.",
                                                           .retryable = false,
                                                           .userActionable = false};
+    const ErrorCodeDescriptor BlackboardObserverInvalid{
+        .domain = AiDomain,
+        .code = ErrorCode{"ai.blackboard.observer_invalid"},
+        .defaultSeverity = ErrorSeverity::Error,
+        .summary = "The blackboard observer registration or token is invalid, foreign, or stale.",
+        .remediationHint = "Register a valid key and task against the active agent-scoped blackboard generation.",
+        .retryable = false,
+        .userActionable = false,
+    };
+    const ErrorCodeDescriptor BlackboardObserverLimitExceeded{
+        .domain = AiDomain,
+        .code = ErrorCode{"ai.blackboard.observer_limit_exceeded"},
+        .defaultSeverity = ErrorSeverity::Error,
+        .summary = "The agent-scoped blackboard observer registry has no reusable slot.",
+        .remediationHint = "Remove completed task observers before registering additional key observers.",
+        .retryable = true,
+        .userActionable = false,
+    };
+    const ErrorCodeDescriptor BlackboardReentrantMutation{
+        .domain = AiDomain,
+        .code = ErrorCode{"ai.blackboard.reentrant_mutation"},
+        .defaultSeverity = ErrorSeverity::Error,
+        .summary = "A blackboard publication callback attempted a reentrant mutation.",
+        .remediationHint = "Stage the mutation for the next BlackboardSync safe point after publication completes.",
+        .retryable = true,
+        .userActionable = false,
+    };
 }  // namespace Horo::AI::AIErrors

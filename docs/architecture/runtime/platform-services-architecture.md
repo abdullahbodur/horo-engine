@@ -216,45 +216,42 @@ provider cancellation, normalized provider errors, and host-wide frontend compos
 remain the later PLS-001.3 through PLS-001.8 slices; callers must not treat the request
 store as a provider backend or bypass those owners.
 
+PLS-001.3 adds the generation-fenced `PlatformServicesFrontend` routing boundary.
+It retains a strong backend lease plus copied capability/session snapshots, exposes
+only Horo request types and public finite limits, and rejects closed, policy-denied,
+unavailable/Null, stale-session, malformed-ID and over-bound requests before backend
+invocation. Routing and idempotent `Close` are serialized by the composition owner;
+`Close` publishes closed admission before invoking backend shutdown. The completion
+queue and provider-to-frontend request-store handoff remain PLS-001.4 scope.
+
 ```cpp
 template <typename T>
 class PlatformRequestHandle {
 public:
     PlatformRequestId Id() const;
-    FrontendGeneration Frontend() const;
+    PlatformRequestGeneration Generation() const;
+    bool IsValid() const;
 };
 
 class PlatformServicesFrontend {
 public:
-    Result<PlatformRequestHandle<AchievementUnlockResult>>
-    UnlockAchievement(AchievementId id);
-
-    Result<PlatformRequestHandle<LeaderboardEntries>>
-    GetLeaderboardEntries(LeaderboardId id, const LeaderboardQuery& query);
-
-    Result<PlatformRequestHandle<CloudBlobReadResult>>
-    ReadCloudSave(CloudBlobReadRequest request);
-
-    Result<PlatformRequestHandle<CloudMutationResult>>
-    WriteCloudSave(CloudBlobWriteRequest request);
-
-    Result<PlatformRequestHandle<CloudMutationResult>>
-    DeleteCloudSave(CloudBlobDeleteRequest request);
-
-    Result<PlatformRequestHandle<void>>
-    SetPresence(const PresenceState& state);
-
-    template <typename T>
-    Result<PlatformRequestSnapshot<T>> Query(PlatformRequestHandle<T> request) const;
-    template <typename T>
-    Result<PlatformRequestSubscription> Subscribe(
-        PlatformRequestHandle<T> request,
-        PlatformCompletionExecutor executor,
-        PlatformTerminalObserver<T> observer);
-    template <typename T>
-    Result<void> Cancel(PlatformRequestHandle<T> request);
+    Result<PlatformRequestHandle<void>> UnlockAchievement(AchievementUnlockRequest request) const;
+    Result<PlatformRequestHandle<void>> SubmitScore(LeaderboardScoreRequest request) const;
+    Result<PlatformRequestHandle<void>> WriteStat(StatWriteRequest request) const;
+    Result<PlatformRequestHandle<CloudReadResult>> ReadCloudObject(CloudReadRequest request) const;
+    Result<PlatformRequestHandle<void>> WriteCloudObject(CloudWriteRequest request) const;
+    Result<PlatformRequestHandle<void>> SetPresence(PresenceUpdateRequest request) const;
+    Result<PlatformRequestHandle<void>> ClearPresence(PlatformSubjectHandle subject) const;
+    Result<PlatformRequestHandle<FriendsPage>> QueryFriends(FriendsQuery query) const;
+    Result<PlatformRequestHandle<PlatformSessionSnapshot>> QueryCurrentSession() const;
+    Result<PlatformServiceLimits> ServiceLimits(PlatformServiceKind service) const;
+    Result<void> Close();
 };
 ```
+
+The query, subscription and cancellation surfaces remain owned by the request store
+until the PLS-001.4 completion handoff connects admitted frontend handles to that
+store; they are not frontend methods in this slice.
 
 Pre-admission validation, permission, lifecycle, capability, session and bounded-
 capacity failure returns `Result` with no request record or provider call. Once admitted,
