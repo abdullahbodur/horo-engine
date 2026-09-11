@@ -232,7 +232,7 @@ namespace Horo::WorldStreaming {
         if (cellBounds.HasError())
             return Result<void>::Failure(cellBounds.ErrorValue());
 
-        const auto current = state_.load();
+        const auto current = std::atomic_load(&state_);
         if (current != nullptr && current->binding.revision.Value() == std::numeric_limits<std::uint64_t>::max())
             return Failure<void>(WorldStreamingErrors::GenerationExhausted);
         if ((current == nullptr && revision.Value() != 1) ||
@@ -243,7 +243,7 @@ namespace Horo::WorldStreaming {
             auto next =
                 std::make_shared<WorldPartitionRegistrySnapshot::State>(WorldPartitionRegistryBinding{registry_, revision, owner_}, limits_,
                                                                         std::move(descriptor), std::move(cellBounds).Value());
-            state_.store(std::shared_ptr<const WorldPartitionRegistrySnapshot::State>{std::move(next)});
+            std::atomic_store(&state_, std::shared_ptr<const WorldPartitionRegistrySnapshot::State>{std::move(next)});
             return Result<void>::Success();
         } catch (const std::bad_alloc &) {
             return Failure<void>(WorldStreamingErrors::PartitionRegistryStorageUnavailable);
@@ -254,7 +254,7 @@ namespace Horo::WorldStreaming {
     Result<WorldPartitionRegistrySnapshot> WorldPartitionRegistry::Snapshot() const {
         if (Lifecycle() != WorldPartitionRegistryState::Active)
             return Failure<WorldPartitionRegistrySnapshot>(WorldStreamingErrors::PartitionRegistryLifecycleUnavailable);
-        auto state = state_.load();
+        auto state = std::atomic_load(&state_);
         if (state == nullptr)
             return Failure<WorldPartitionRegistrySnapshot>(WorldStreamingErrors::PartitionRegistryUnavailable);
         return Result<WorldPartitionRegistrySnapshot>::Success(WorldPartitionRegistrySnapshot{std::move(state)});
@@ -269,7 +269,7 @@ namespace Horo::WorldStreaming {
     /** @copydoc WorldPartitionRegistry::Shutdown */
     void WorldPartitionRegistry::Shutdown() noexcept {
         lifecycle_.store(WorldPartitionRegistryState::Closed);
-        state_.store(std::shared_ptr<const WorldPartitionRegistrySnapshot::State>{});
+        std::atomic_store(&state_, std::shared_ptr<const WorldPartitionRegistrySnapshot::State>{});
     }
 
     /** @copydoc WorldPartitionRegistry::~WorldPartitionRegistry */

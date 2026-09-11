@@ -181,7 +181,7 @@ namespace Horo::WorldStreaming {
         WorldPartitionRegistryId registry_{};
         StreamingRuntimeOwnerToken owner_{};
         WorldPartitionRegistryLimits limits_{};
-        std::atomic<std::shared_ptr<const WorldPartitionRegistrySnapshot::State>> state_;
+        std::shared_ptr<const WorldPartitionRegistrySnapshot::State> state_;
         std::atomic<WorldPartitionRegistryState> lifecycle_{WorldPartitionRegistryState::Active};
     };
 
