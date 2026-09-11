@@ -185,8 +185,8 @@ namespace Horo::Physics {
                 return Result<std::uint32_t>::Failure(
                     MakeError(PhysicsErrors::CapacityExceeded, "The canonical Physics command frame exceeds its admitted tick budget."));
             for (std::uint32_t offset = 0; offset < eligible; ++offset) {
-                const PhysicsCommandOrderKey &key = impl.CommandAt(offset).order;
-                if (key.worldGeneration != impl.identity.Value() || key.sceneGeneration != input.sceneGeneration)
+                if (const PhysicsCommandOrderKey &key = impl.CommandAt(offset).order;
+                    key.worldGeneration != impl.identity.Value() || key.sceneGeneration != input.sceneGeneration)
                     return Result<std::uint32_t>::Failure(
                         MakeError(PhysicsErrors::CommandOrderInvalid, "A Physics command targets a stale world or scene generation."));
                 impl.sourceOrder[offset] = offset;
@@ -455,8 +455,8 @@ namespace Horo::Physics {
             return Result<PhysicsCommandAdmission>::Failure(MakeError(PhysicsErrors::InvalidState));
         if (const Result<void> valid = ValidatePhysicsCommandOrderKey(command.order); valid.HasError())
             return Result<PhysicsCommandAdmission>::Failure(valid.ErrorValue());
-        const std::uint64_t completedOrActiveTick = impl_->stepping ? impl_->activeTick : impl_->published.completedTick;
-        if (command.order.simulationTick <= completedOrActiveTick || command.order.worldGeneration != impl_->identity.Value())
+        if (const std::uint64_t completedOrActiveTick = impl_->stepping ? impl_->activeTick : impl_->published.completedTick;
+            command.order.simulationTick <= completedOrActiveTick || command.order.worldGeneration != impl_->identity.Value())
             return Result<PhysicsCommandAdmission>::Failure(
                 MakeError(PhysicsErrors::CommandOrderInvalid,
                           "Physics commands cannot target a completed tick or another world generation."));
