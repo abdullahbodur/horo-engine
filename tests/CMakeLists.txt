@@ -70,6 +70,7 @@ function(horo_register_catch_test target)
 endfunction()
 
 add_executable(HoroPackageValidationTests
+    unit/packages/PackageDependencyResolverTests.cpp
     unit/packages/PackagePathTests.cpp
     unit/packages/PackageArchiveTests.cpp
     unit/packages/PackageFileManifestTests.cpp)
@@ -286,6 +287,7 @@ target_link_libraries(HoroPCGTests PRIVATE HoroEngine::PCG)
 horo_register_catch_test(HoroPCGTests LABELS "unit;pcg;headless")
 
 add_executable(HoroVfxApiTests
+        unit/runtime/vfx/ParticleSystemDescriptorTests.cpp
         unit/runtime/vfx/VfxIdentityTests.cpp
         unit/runtime/vfx/VfxQualityPolicyTests.cpp
 )
@@ -380,6 +382,7 @@ add_executable(HoroWorldStreamingTests
         unit/runtime/world_streaming/WorldCellQuantizationTests.cpp
         unit/runtime/world_streaming/WorldPartitionDescriptorTests.cpp
         unit/runtime/world_streaming/WorldSpatialAssignmentTests.cpp
+        unit/runtime/world_streaming/WorldSpatialObjectDescriptorTests.cpp
         unit/runtime/world_streaming/WorldSpanningObjectPlanTests.cpp
         unit/runtime/world_streaming/WorldStreamingIdentityTests.cpp
         unit/runtime/world_streaming/WorldStreamingRuntimeCompositionTests.cpp

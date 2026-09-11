@@ -12,6 +12,8 @@ workflows.
   commands, and data-bus observers through the extension ABI/API.
 - [Local C/C++ Analysis with SonarQube MCP and VS Code](./sonarqube-mcp-local-analysis.md):
   configure the IDE bridge, analyze local changes, and diagnose partial results.
+- [World Spatial Object Descriptor Migration](./world-spatial-object-descriptor-migration.md):
+  adopt stable authored-object identity, source, bounds, placement, and revision admission.
 
 ## Writing a Guide
 

@@ -38,4 +38,26 @@ namespace Horo::Vfx::VfxErrors {
     extern const ErrorCodeDescriptor CapabilityRevisionStale;
     /** @brief A prepared decision references a retired quality-policy revision. */
     extern const ErrorCodeDescriptor QualityPolicyRevisionStale;
+    /** @brief Particle-system source bytes or field shapes are malformed. */
+    extern const ErrorCodeDescriptor ParticleDescriptorMalformed;
+    /** @brief Particle-system source contains an ambiguous duplicate JSON field. */
+    extern const ErrorCodeDescriptor ParticleDescriptorDuplicate;
+    /** @brief Particle-system source requires migration or a newer reader. */
+    extern const ErrorCodeDescriptor ParticleDescriptorVersionUnsupported;
+    /** @brief Particle-system source exceeds a compiled parser or semantic ceiling. */
+    extern const ErrorCodeDescriptor ParticleDescriptorLimitExceeded;
+    /** @brief A particle numeric range contains non-finite or inverted values. */
+    extern const ErrorCodeDescriptor ParticleRangeInvalid;
+    /** @brief An infinite-lifetime particle has no independent terminal condition. */
+    extern const ErrorCodeDescriptor ParticleLifetimeUnbounded;
+    /** @brief Particle render, collision, kill, or simulation policies conflict. */
+    extern const ErrorCodeDescriptor ParticleModeIncompatible;
+    /** @brief The particle material is absent from the exact cook snapshot. */
+    extern const ErrorCodeDescriptor ParticleMaterialMissing;
+    /** @brief The particle material identity resolves to a non-material asset. */
+    extern const ErrorCodeDescriptor ParticleMaterialTypeMismatch;
+    /** @brief The particle material cannot be loaded from the exact cook snapshot. */
+    extern const ErrorCodeDescriptor ParticleMaterialUnloadable;
+    /** @brief The particle descriptor exceeds the explicitly selected cook tier. */
+    extern const ErrorCodeDescriptor ParticleCookTierExceeded;
 }  // namespace Horo::Vfx::VfxErrors

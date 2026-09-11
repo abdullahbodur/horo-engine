@@ -196,4 +196,18 @@ namespace Horo::WorldStreaming::WorldStreamingErrors {
     extern const ErrorCodeDescriptor AuthoringCapacityExceeded;
     /** @brief Authoring admission is closed because the owner is cancelling or shut down. */
     extern const ErrorCodeDescriptor AuthoringLifecycleUnavailable;
+    /** @brief A spatial-object descriptor, request, or owner snapshot is structurally invalid. */
+    extern const ErrorCodeDescriptor SpatialObjectDescriptorInvalid;
+    /** @brief The spatial-object descriptor schema version is unsupported. */
+    extern const ErrorCodeDescriptor SpatialObjectVersionUnsupported;
+    /** @brief The spatial-object placement class is unsupported by this contract version. */
+    extern const ErrorCodeDescriptor SpatialObjectPlacementUnsupported;
+    /** @brief A replacement does not name the currently admitted authored-object identity. */
+    extern const ErrorCodeDescriptor SpatialObjectIdentityConflict;
+    /** @brief A replacement carries a stale, missing, or non-successor authoring revision. */
+    extern const ErrorCodeDescriptor SpatialObjectRevisionStale;
+    /** @brief A new spatial-object descriptor exceeds the bounded owner capacity. */
+    extern const ErrorCodeDescriptor SpatialObjectCapacityExceeded;
+    /** @brief Spatial-object admission is closed because its owner is cancelling or shut down. */
+    extern const ErrorCodeDescriptor SpatialObjectLifecycleUnavailable;
 }  // namespace Horo::WorldStreaming::WorldStreamingErrors

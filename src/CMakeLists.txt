@@ -133,6 +133,7 @@ target_compile_features(HoroPlatformServices PUBLIC cxx_std_20)
 target_link_libraries(HoroPlatformServices PUBLIC HoroEngine::Foundation)
 
 add_library(HoroPackages STATIC
+        packages/resolver/PackageDependencyResolver.cpp
         packages/validation/PackagePath.cpp
         packages/validation/PackageArchive.cpp
         packages/validation/PackageFileManifest.cpp
@@ -510,13 +511,17 @@ target_compile_features(HoroPCG PUBLIC cxx_std_20)
 target_link_libraries(HoroPCG PUBLIC HoroEngine::Foundation)
 
 add_library(HoroVfxApi STATIC
+        runtime/vfx/api/ParticleSystemDescriptor.cpp
         runtime/vfx/api/VfxErrors.cpp
         runtime/vfx/api/VfxIdentity.cpp
         runtime/vfx/api/VfxQualityPolicy.cpp
 )
 add_library(HoroEngine::VfxApi ALIAS HoroVfxApi)
 target_compile_features(HoroVfxApi PUBLIC cxx_std_20)
-target_link_libraries(HoroVfxApi PUBLIC HoroEngine::Foundation)
+target_link_libraries(HoroVfxApi
+        PUBLIC HoroEngine::Foundation HoroEngine::Assets
+        PRIVATE nlohmann_json::nlohmann_json
+)
 
 add_library(HoroDestructionApi STATIC
         runtime/destruction/api/DestructionCommand.cpp
@@ -612,6 +617,7 @@ add_library(HoroWorldStreaming STATIC
         runtime/world_streaming/WorldCellQuantization.cpp
         runtime/world_streaming/WorldPartitionDescriptor.cpp
         runtime/world_streaming/WorldSpatialAssignment.cpp
+        runtime/world_streaming/WorldSpatialObjectDescriptor.cpp
         runtime/world_streaming/WorldSpanningObjectPlan.cpp
         runtime/world_streaming/WorldStreamingRuntimeComposition.cpp
         runtime/world_streaming/WorldStreamingDiagnosticSnapshot.cpp

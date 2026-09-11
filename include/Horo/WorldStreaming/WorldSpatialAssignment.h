@@ -5,8 +5,7 @@
  * @brief Deterministic authored-object to world-cell cook-stage assignment contract.
  */
 
-#include "Horo/Assets/AssetId.h"
-#include "Horo/WorldStreaming/WorldPartitionDescriptor.h"
+#include "Horo/WorldStreaming/WorldSpatialObjectDescriptor.h"
 
 #include <cstddef>
 #include <cstdint>
@@ -14,19 +13,6 @@
 #include <vector>
 
 namespace Horo::WorldStreaming {
-    /** @brief Stable address of one authored object within its source-controlled page. */
-    struct WorldAuthoringObjectAddress final {
-        Assets::AssetId page{}; /**< Stable path-independent authoring-page identity. */
-        std::uint64_t object{}; /**< Stable non-zero object identity within the page. */
-
-        /** @brief Checks the persistent representation. @return True when both identity components are usable. */
-        [[nodiscard]] bool IsValid() const noexcept {
-            return page.IsValid() && object != 0;
-        }
-
-        [[nodiscard]] constexpr auto operator<=>(const WorldAuthoringObjectAddress &) const noexcept = default;
-    };
-
     /** @brief One immutable authored-object snapshot presented to the spatial cook stage. */
     struct WorldSpatialAssignmentCandidate final {
         WorldAuthoringObjectAddress address{}; /**< Stable page-scoped object address. */

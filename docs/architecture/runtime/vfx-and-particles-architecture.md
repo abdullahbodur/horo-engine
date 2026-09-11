@@ -81,6 +81,12 @@ Physical renderer allocations and retained snapshot leases may outlive logical
 scene shutdown while retiring. They cannot retain raw VfxWorld/ECS pointers or gain
 access to the replacement scene. This is deferred ownership, not a live old effect.
 
+The VFX public model may depend on the narrow Assets identity contract for stable
+material references. It must not query an asset registry or provider while parsing
+or validating a descriptor. Material type and availability evidence is supplied
+explicitly by the cook composition boundary, so descriptor construction remains
+inert and deterministic.
+
 For footsteps, [ADR-091](../../adr/091-footstep-and-locomotion-event-ownership.md)
 requires an application-owned post-commit adapter to join the Animation marker
 occurrence with exact same-tick Character surface evidence. VFX receives only the
@@ -633,10 +639,19 @@ is not zero; repeated overruns can only inform an explicitly re-admitted later p
 
 `ParticleSystemDescriptor` is the compiled emitter-unit foundation nested only in
 `CompiledVfxEffectDescriptor`; it is not a second top-level stack/graph runtime asset.
-It describes how particles are spawned, simulated, rendered and destroyed. The
-sortMode is validated against its output
-material: None/OldestFirst cannot override required back-to-front alpha ordering.
-Authored age order is allowed only for an output whose blend contract permits it.
+The installed `Horo/Vfx/ParticleSystemDescriptor.h` contract owns the versioned
+source carrier, strict bounded JSON parser, full-pass import validation and inert cook
+plan admission. The parser accepts one exact schema shape and rejects duplicate fields,
+unsupported versions, excessive source bytes and excessive nesting with typed VFX
+errors. Semantic validation reports every independent finding through
+`ValidationResult`; it never silently clamps a range or changes an authored mode.
+
+Finite emitters use finite positive lifetime ranges and the canonical lifetime kill
+condition. Infinite emitters encode the canonical zero lifetime range and require
+collision or explicit-signal termination. A descriptor cannot be cooked until the
+composition root supplies exact immutable material evidence and an explicit finite cook
+profile. Parsing and validation do not query an asset registry, load a provider or
+publish runtime state.
 
 ```cpp
 struct ParticleSystemDescriptor {
@@ -655,6 +670,11 @@ struct ParticleSystemDescriptor {
     CollisionMode collisionMode;  // None, Planes, SceneDepth, PhysicsWorld
 };
 ```
+
+The schematic shape above remains the eventual compiled-effect projection. Its
+installed source contract currently represents initial speed, size and opacity as
+finite inclusive scalar ranges; future vector/color channels require an explicit
+schema-version change and migration rather than reinterpretation.
 
 ### CPU Simulation Layout (Structure of Arrays)
 

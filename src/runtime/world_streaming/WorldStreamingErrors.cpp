@@ -398,4 +398,32 @@ namespace Horo::WorldStreaming::WorldStreamingErrors {
         Describe("world_streaming.authoring.lifecycle_unavailable", ErrorSeverity::Warning,
                  "The authoring owner is cancelling or closed to page admission.",
                  "Finish retirement or submit the page to a new active authoring owner.", false);
+    const ErrorCodeDescriptor SpatialObjectDescriptorInvalid =
+        Describe("world_streaming.spatial_object.descriptor_invalid", ErrorSeverity::Error,
+                 "A spatial-object descriptor, request, or owner snapshot is malformed.",
+                 "Provide valid stable identities, ordered canonical bounds, revisions and a positive owner capacity.", true);
+    const ErrorCodeDescriptor SpatialObjectVersionUnsupported =
+        Describe("world_streaming.spatial_object.version_unsupported", ErrorSeverity::Error,
+                 "The spatial-object descriptor schema version is unsupported.",
+                 "Migrate the descriptor to the exact version supported by this world-streaming build.", true);
+    const ErrorCodeDescriptor SpatialObjectPlacementUnsupported =
+        Describe("world_streaming.spatial_object.placement_unsupported", ErrorSeverity::Error,
+                 "The authored spatial-object placement class is unsupported.",
+                 "Use a spatial or always-present authored placement class supported by schema version one.", true);
+    const ErrorCodeDescriptor SpatialObjectIdentityConflict =
+        Describe("world_streaming.spatial_object.identity_conflict", ErrorSeverity::Error,
+                 "A replacement does not name the currently admitted authored-object identity.",
+                 "Resolve the exact page-scoped object address before retrying the replacement.", false);
+    const ErrorCodeDescriptor SpatialObjectRevisionStale =
+        Describe("world_streaming.spatial_object.revision_stale", ErrorSeverity::Warning,
+                 "A spatial-object replacement is missing the current revision or is not its exact successor.",
+                 "Reload the current descriptor and submit its exact non-wrapping successor revision.", false);
+    const ErrorCodeDescriptor SpatialObjectCapacityExceeded =
+        Describe("world_streaming.spatial_object.capacity_exceeded", ErrorSeverity::Error,
+                 "The bounded spatial-object registry cannot admit another identity.",
+                 "Retire an existing descriptor or increase the host-configured descriptor capacity.", false);
+    const ErrorCodeDescriptor SpatialObjectLifecycleUnavailable =
+        Describe("world_streaming.spatial_object.lifecycle_unavailable", ErrorSeverity::Warning,
+                 "The spatial-object owner is cancelling or closed to new admission.",
+                 "Finish owner retirement or submit the descriptor to a new active owner.", false);
 }  // namespace Horo::WorldStreaming::WorldStreamingErrors

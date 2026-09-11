@@ -91,6 +91,7 @@ horo_configure_target_header_boundary(HoroApplication PUBLIC_HEADERS
     Horo/Release/ReleaseVersion.h
 )
 horo_configure_target_header_boundary(HoroPackages PUBLIC_HEADERS
+    Horo/Packages/PackageDependencyResolver.h
     Horo/Packages/PackagePath.h
     Horo/Packages/PackageArchive.h
     Horo/Packages/PackageFileManifest.h
@@ -270,6 +271,7 @@ horo_configure_target_header_boundary(HoroPCG PUBLIC_HEADERS
     Horo/PCG/PCGRegistry.h
 )
 horo_configure_target_header_boundary(HoroVfxApi PUBLIC_HEADERS
+    Horo/Vfx/ParticleSystemDescriptor.h
     Horo/Vfx/VfxErrors.h
     Horo/Vfx/VfxIdentity.h
     Horo/Vfx/VfxQualityPolicy.h
@@ -337,6 +339,7 @@ horo_configure_target_header_boundary(HoroWorldStreaming PUBLIC_HEADERS
     Horo/WorldStreaming/WorldCellQuantization.h
     Horo/WorldStreaming/WorldPartitionDescriptor.h
     Horo/WorldStreaming/WorldSpatialAssignment.h
+    Horo/WorldStreaming/WorldSpatialObjectDescriptor.h
     Horo/WorldStreaming/WorldSpanningObjectPlan.h
     Horo/WorldStreaming/WorldStreamingRuntimeComposition.h
     Horo/WorldStreaming/WorldStreamingDiagnosticSnapshot.h
