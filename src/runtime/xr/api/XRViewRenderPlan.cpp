@@ -157,8 +157,8 @@ namespace Horo::XR {
         /** @brief Detects a stale acquired image while keeping unavailable distinct. */
         [[nodiscard]] bool HasReplacedImage(const std::span<const XRSwapchainImageId> acquiredImages,
                                             const XRSwapchainImageId &image) noexcept {
-            for (const auto &active : acquiredImages) {
-                if (SameImageSlot(active, image) && active != image)
+            for (std::size_t index = 0; index < acquiredImages.size(); ++index) {
+                if (const auto &active = acquiredImages[index]; SameImageSlot(active, image) && active != image)
                     return true;
             }
             return false;
@@ -194,7 +194,8 @@ namespace Horo::XR {
         /** @brief Detects contradictory images or aliased subresources in prior target bindings. */
         [[nodiscard]] bool InvalidImageAliasing(const std::span<const XRExternalRenderTargetDescriptor> priorTargets,
                                                 const XRExternalRenderTargetDescriptor &target) noexcept {
-            for (const auto &prior : priorTargets) {
+            for (std::size_t index = 0; index < priorTargets.size(); ++index) {
+                const auto &prior = priorTargets[index];
                 const bool differentImageForTarget = prior.target == target.target && prior.image != target.image;
                 const bool duplicateImageLayer = prior.image == target.image && prior.arrayLayer == target.arrayLayer;
                 if (differentImageForTarget || duplicateImageLayer)
@@ -227,6 +228,50 @@ namespace Horo::XR {
             return Result<void>::Success();
         }
 
+        /** @brief Checks whether an acquired image was already listed earlier in the same bounded set. */
+        [[nodiscard]] bool DuplicateAcquiredImage(const std::span<const XRSwapchainImageId> acquiredImages,
+                                                  const std::size_t index) noexcept {
+            for (std::size_t priorIndex = 0; priorIndex < index; ++priorIndex) {
+                if (acquiredImages[priorIndex] == acquiredImages[index])
+                    return true;
+            }
+            return false;
+        }
+
+        /** @brief Checks whether a current image belongs to one declared external-target slot. */
+        [[nodiscard]] bool KnownTargetSlot(const std::span<const XRExternalRenderTargetDescriptor> targets,
+                                           const XRSwapchainImageId &image) noexcept {
+            for (std::size_t index = 0; index < targets.size(); ++index) {
+                if (SameImageSlot(targets[index].image, image))
+                    return true;
+            }
+            return false;
+        }
+
+        /** @brief Checks whether an exact target image generation is currently acquired. */
+        [[nodiscard]] bool ExactImageAvailable(const std::span<const XRSwapchainImageId> acquiredImages,
+                                               const XRSwapchainImageId &image) noexcept {
+            for (std::size_t index = 0; index < acquiredImages.size(); ++index) {
+                if (acquiredImages[index] == image)
+                    return true;
+            }
+            return false;
+        }
+
+        /** @brief Validates one current acquired image against ownership, uniqueness, and target membership. */
+        [[nodiscard]] Result<void> ValidateAcquiredImage(const std::span<const XRExternalRenderTargetDescriptor> targets,
+                                                         const std::span<const XRSwapchainImageId> acquiredImages,
+                                                         const XRSessionId &activeSession, const std::size_t index) {
+            const auto &active = acquiredImages[index];
+            if (!active.IsValid())
+                return Reject<void>(XRErrors::ExternalTargetInvalid);
+            if (auto target = ValidateXRSessionObject(active.target, activeSession); target.HasError())
+                return target;
+            if (DuplicateAcquiredImage(acquiredImages, index) || !KnownTargetSlot(targets, active))
+                return Reject<void>(XRErrors::ExternalTargetInvalid);
+            return Result<void>::Success();
+        }
+
         /** @brief Validates the complete current acquired-image set against target descriptors. */
         [[nodiscard]] Result<void> ValidateAcquiredImages(const std::span<const XRExternalRenderTargetDescriptor> targets,
                                                           const std::span<const XRSwapchainImageId> acquiredImages,
@@ -234,34 +279,11 @@ namespace Horo::XR {
             if (acquiredImages.empty())
                 return Reject<void>(XRErrors::OperationUnavailable);
             for (std::size_t index = 0; index < acquiredImages.size(); ++index) {
-                const auto &active = acquiredImages[index];
-                if (!active.IsValid())
-                    return Reject<void>(XRErrors::ExternalTargetInvalid);
-                if (auto target = ValidateXRSessionObject(active.target, activeSession); target.HasError())
-                    return target;
-                for (std::size_t priorIndex = 0; priorIndex < index; ++priorIndex) {
-                    if (acquiredImages[priorIndex] == active)
-                        return Reject<void>(XRErrors::ExternalTargetInvalid);
-                }
-                bool targetKnown = false;
-                for (const auto &target : targets) {
-                    if (SameImageSlot(target.image, active)) {
-                        targetKnown = true;
-                        break;
-                    }
-                }
-                if (!targetKnown)
-                    return Reject<void>(XRErrors::ExternalTargetInvalid);
+                if (auto image = ValidateAcquiredImage(targets, acquiredImages, activeSession, index); image.HasError())
+                    return image;
             }
             for (const auto &target : targets) {
-                bool imageAvailable = false;
-                for (const auto &active : acquiredImages) {
-                    if (active == target.image) {
-                        imageAvailable = true;
-                        break;
-                    }
-                }
-                if (imageAvailable)
+                if (ExactImageAvailable(acquiredImages, target.image))
                     continue;
                 return Reject<void>(HasReplacedImage(acquiredImages, target.image) ? XRErrors::IdentityStale
                                                                                    : XRErrors::OperationUnavailable);
