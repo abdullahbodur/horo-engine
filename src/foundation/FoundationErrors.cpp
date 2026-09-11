@@ -186,6 +186,30 @@ namespace Horo {
                                                            "Restructure the dependency so a job never waits on its active execution chain.",
                                                        .retryable = false,
                                                        .userActionable = false};
+
+        const ErrorCodeDescriptor InvalidProgress{.domain = JobDomain,
+                                                  .code = ErrorCode{"job.progress_invalid"},
+                                                  .defaultSeverity = ErrorSeverity::Error,
+                                                  .summary = "Job progress is invalid.",
+                                                  .remediationHint = "Use a bounded phase and normalized finite progress value.",
+                                                  .retryable = false,
+                                                  .userActionable = false};
+
+        const ErrorCodeDescriptor ProgressRegressed{.domain = JobDomain,
+                                                    .code = ErrorCode{"job.progress_regressed"},
+                                                    .defaultSeverity = ErrorSeverity::Error,
+                                                    .summary = "Job progress regressed within its phase.",
+                                                    .remediationHint = "Advance monotonically or begin a new phase.",
+                                                    .retryable = false,
+                                                    .userActionable = false};
+
+        const ErrorCodeDescriptor TerminalImmutable{.domain = JobDomain,
+                                                    .code = ErrorCode{"job.terminal_immutable"},
+                                                    .defaultSeverity = ErrorSeverity::Error,
+                                                    .summary = "Terminal job state is immutable.",
+                                                    .remediationHint = "Publish progress before returning the terminal result.",
+                                                    .retryable = false,
+                                                    .userActionable = false};
     }  // namespace JobErrors
 
     namespace HashingErrors {
