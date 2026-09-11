@@ -4,9 +4,9 @@
 - **Date**: 2026-09-02
 - **Supersedes**: None
 - **Scope**: Immersive editor-agent audience, mode admission, multimodal evidence, proposal approval, mutation authority, cross-system ownership, privacy and risk
-- **Issue**: [AIA-004.1](https://github.com/abdullahbodur/horo-engine/issues/2288)
+- **Issue**: [AIA-004.1](https://github.com/HoroCore/horo-engine/issues/2288)
 - **Jira**: [HORO-2227](https://horo-engine.atlassian.net/browse/HORO-2227)
-- **Parent**: [AIA-004](https://github.com/abdullahbodur/horo-engine/issues/2287)
+- **Parent**: [AIA-004](https://github.com/HoroCore/horo-engine/issues/2287)
 - **Related**: [ADR-018](018-command-registration-permissions-threading-and-packaged-build-policy.md), [ADR-021](021-gameplay-ai-ownership-scheduling-and-behavior-boundary.md), [ADR-070](070-capture-and-voice-io-ownership.md), [ADR-157](157-xr-ownership-runtime-composition-and-capability-tier.md), [ADR-159](159-xr-action-tracking-and-input-projection-ownership.md), [ADR-161](161-xr-interaction-runtime-ui-locomotion-and-accessibility-ownership.md)
 - **Normative documents**: [Editor AI Agent Architecture](../architecture/editor/editor-ai-agent-architecture.md), [Editor Document Model](../architecture/editor/editor-document-model.md), [MCP Architecture](../architecture/interfaces/mcp-architecture.md), [XR Architecture](../architecture/runtime/vr-ar-architecture.md)
 

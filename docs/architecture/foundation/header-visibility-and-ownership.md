@@ -24,6 +24,18 @@ contract, Doxygen documentation, migration notes, and consumer coverage.
 immutable capability/policy evidence and pure admission decisions; consumers keep
 linking `HoroEngine::VfxApi`, and no include spelling or existing caller migrates.
 
+## Android Lifecycle Boundary
+
+`HoroEngine::Platform` owns `Horo/Platform/AndroidLifecycle.h`. The header exposes
+only portable lifecycle observations, generations, snapshots, typed results and
+the bounded owner-thread controller. GameActivity, JNI, `ANativeWindow`, Vulkan
+and OpenXR types remain target-private. The callback-shaped adapter lives under
+`src/platform/android` and is never staged through public usage requirements.
+There are no prior Android lifecycle callers to migrate; future Android product
+composition consumes this contract while portable Runtime consumers remain free
+of Android SDK dependencies. The generated standalone Platform public-header
+consumer enforces that boundary.
+
 ## Build-Tree Contract
 
 `cmake/HoroPublicHeaderOwnership.cmake` assigns each public header to one real
@@ -120,6 +132,16 @@ curve enters frame-hot evaluation. Callers replace accumulated forward-only curv
 state with direct `Sample(time)` calls and choose explicit clamp, repeat, or
 ping-pong behavior for each boundary. Legacy non-finite values, duplicate times,
 and non-monotonic cubic tangents are rejected rather than normalized silently.
+
+## CIN-002.3 Migration Notes
+
+`HoroEngine::CinematicRuntime` owns `Horo/Cinematic/SequencePlayer.h`,
+`Horo/Cinematic/SequencePlayerErrors.h`, `Horo/Cinematic/SequenceEvaluation.h`,
+and `Horo/Cinematic/SequenceEvaluationErrors.h`. Runtime hosts that own sequence-player
+registries link this target directly. Model-only asset, cook and curve consumers keep
+linking `HoroEngine::CinematicModel`; the runtime state machine does not widen that
+lower-level public surface or introduce an Editor/GUI dependency. Detailed call-site
+migration is documented in `docs/guides/cinematic-sequence-player-migration.md`.
 
 ## CIN-001.5 Migration Notes
 
@@ -340,6 +362,15 @@ the same boundary, and the standalone Physics consumer compiles the new header.
 No existing caller is migrated. The earlier Foundation-only statements above
 describe the initial identity/analytic slice, not this additional reference surface.
 
+`[PHY-009.2]` adds `Horo/Physics/PhysicsMetrics.h` to `HoroEngine::Physics`.
+The header exposes only bounded Horo measurement values, exact Physics world/revision
+identity and Foundation Telemetry handles already registered by process composition.
+It adds no solver SDK, renderer, editor, platform clock, metric store or profiler
+backend dependency. Existing Physics producers migrate by supplying one immutable
+post-publication snapshot and pre-bound handles; metric dimensions are never resolved
+on the fixed-tick path. The generated standalone Physics header consumer verifies the
+same ownership boundary.
+
 Reference validation does not read an artifact, recompute a target key or establish
 geometry readiness. Full target encoding and envelope verification remain the
 owning cook/runtime work; opaque digest equality alone cannot prove a correct
@@ -354,6 +385,22 @@ SDK visibility at compile time. A separate native-boundary test deliberately
 links Jolt to verify binary ABI mismatch rejection and unchanged factory/allocator
 state. The check itself never registers types or initializes a world; explicit
 activation and world teardown remain the scene lifecycle owner's responsibility.
+
+## Gameplay AI Blackboard Boundary
+
+`HoroEngine::AI` owns `Horo/AI/AIIdentity.h`, `Horo/AI/BlackboardSchema.h`, and
+`Horo/AI/BlackboardInstance.h` with a Foundation-only public dependency. The
+instance contract reuses the existing strong agent/schema/key identities and typed
+schema values. Its public storage, snapshots, write batches, generation fences,
+revisions, and diagnostics contain no RuntimeScene, editor, MCP, network, platform,
+or backend-native types. The owning Scene adapter creates and tears down instances;
+only its `BlackboardSync` safe point applies staged mutations.
+
+`BlackboardInstance.h` is registered to the existing AI target and compiled by the
+generated standalone public-header consumer. This slice introduces no production
+caller migration and no second schema/value authority. Future AI runtime composition
+must consume this contract instead of duplicating string-keyed storage or exposing
+mutable instance memory to worker tasks.
 
 ## PCG Identity Boundary
 
@@ -426,10 +473,21 @@ frame lease semantics; it has no Scene Runtime, renderer, physics, native,
 editor, or GUI dependency. Trigger policy, participant coordination, and backend
 adapters remain outside this public identity boundary.
 
+ANI-001.6 adds `Horo/Animation/AnimationClip.h` to the same owner. Asset and runtime
+composition replace ad hoc floating-point cursors and untyped wrap flags with exact
+nanosecond-tick time, reduced sample-rate metadata, stable generation-fenced clip and
+additive-reference identities, and immutable canonical joint tracks. Load/cook may
+allocate while validation and canonicalization run; directed traversal and sampling
+are bounded, allocation-free, and write only caller-owned pose storage after complete
+preflight. The public boundary adds no RuntimeScene, renderer, physics, filesystem,
+job-system, codec, middleware, callback, or backend-native dependency.
+
 ## Destruction Identity Boundary
 
 `HoroEngine::DestructionApi` owns `Horo/Destruction/DestructibleDescriptor.h`,
-`Horo/Destruction/DestructionIdentity.h` and `Horo/Destruction/DestructionErrors.h`.
+`Horo/Destruction/DestructionCommand.h`, `Horo/Destruction/DestructionIdentity.h`,
+`Horo/Destruction/DestructionRegistry.h`, `Horo/Destruction/DestructionStateMachine.h`
+and `Horo/Destruction/DestructionErrors.h`.
 Its public dependencies are limited to
 Foundation and Assets for typed results/errors, the shared SHA-256 value and the
 path-independent `AssetId`. Physics, Render, RuntimeScene and native provider headers
@@ -448,3 +506,31 @@ feature-tier and finite-limit descriptors plus allocation-free admission validat
 Consumers migrate from duplicated numeric limits or provider selection to the exact
 provider-neutral tier profile and typed failures. The header introduces no Physics,
 Render, RuntimeScene, platform or native provider dependency.
+
+The `[DFR-001.4]` slice adds `Horo/Destruction/DestructionStateMachine.h` to the same
+owner. DestructionRuntime composition creates the immutable state from an admitted
+descriptor and serializes candidate commits at its owner safe point. Producers prepare
+generation- and revision-fenced commands against immutable snapshots; they do not
+mutate scene components, retain backend handles or publish detached work directly.
+Exact retries are idempotent, conflicting command reuse is rejected, and replacement,
+cancellation and shutdown preserve the last published snapshot until a legal successor
+commits. Existing prototypes with mutable health/state fields must migrate to this
+single-owner contract rather than dual-write both representations.
+
+The `[DFR-001.5]` slice adds fixed-size impact, explosion, collision, damage and
+script commands with exact authority, capability, generation, revision and fixed-tick
+evidence. Callers validate the immutable value before queue admission, then lower it to
+the existing state-machine command without changing its identity. Durable terminal
+results preserve successful, rejected, cancelled, unsupported and failed dispositions
+as closed types. Producers must migrate from provider handles, callback mutation and
+message parsing to this contract; rejected or stale private work is discarded and is
+never published as a partial fallback.
+
+The `[DFR-001.6]` slice adds the explicit fixed-capacity registry, immutable value
+snapshots, bounded queries and capability projections. The composition owner copies
+only current backend-neutral publication evidence into the registry; membership never
+owns a destructible or extends Scene, Physics, Render, artifact or authority lifetime.
+Consumers link `HoroEngine::DestructionApi`, retain snapshots for read-only work and
+revalidate generation/state/capability revisions before live operations. Ad-hoc global
+registries, mutable record exposure, native handles and silently widened queries have no
+compatibility path.

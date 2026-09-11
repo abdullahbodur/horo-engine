@@ -4,7 +4,7 @@
 - **Date**: 2026-09-02
 - **Supersedes**: The ENet-specific concrete-backend selection in [ADR-020](020-network-target-ownership-and-dependency-boundary.md); its target boundary, dependency direction and lifecycle decision remain active
 - **Scope**: First production real-time transport selection, third-party encapsulation, security and authentication ownership, direct-IP baseline, optional NAT/relay and provider composition, bounded work, shutdown, qualification and migration
-- **Issue**: [NET-001.9](https://github.com/abdullahbodur/horo-engine/issues/1106)
+- **Issue**: [NET-001.9](https://github.com/HoroCore/horo-engine/issues/1106)
 - **Jira**: [HORO-1106](https://horo-engine.atlassian.net/browse/HORO-1106)
 - **Related**: [ADR-020](020-network-target-ownership-and-dependency-boundary.md)
 - **Normative documents**: [Networking Architecture](../architecture/runtime/networking-architecture.md), [Multiplayer Replication Architecture](../architecture/runtime/multiplayer-replication-architecture.md)

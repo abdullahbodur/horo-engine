@@ -4,7 +4,7 @@
 - **Date**: 2026-09-02
 - **Supersedes**: None
 - **Scope**: Standalone, client, listen-server and dedicated-server host composition; package support versus runtime selection; world-scoped role and authority exposure; startup, travel, disconnect and shutdown lifecycle
-- **Issue**: [NET-007.1](https://github.com/abdullahbodur/horo-engine/issues/1161)
+- **Issue**: [NET-007.1](https://github.com/HoroCore/horo-engine/issues/1161)
 - **Jira**: [HORO-1161](https://horo-engine.atlassian.net/browse/HORO-1161)
 - **Related**: [ADR-097](097-default-real-time-transport-backend.md), [ADR-098](098-protocol-session-and-trust-policy.md), [ADR-099](099-replication-ownership-authority-and-compatibility.md), [ADR-100](100-prediction-capability-tiers-and-determinism-policy.md), [ADR-101](101-interest-priority-and-network-budget-model.md)
 - **Normative documents**: [Networking Architecture](../architecture/runtime/networking-architecture.md), [Multiplayer Replication Architecture](../architecture/runtime/multiplayer-replication-architecture.md), [Runtime Lifecycle](../architecture/runtime/runtime-lifecycle.md), [System Design](../architecture/foundation/system-design.md)

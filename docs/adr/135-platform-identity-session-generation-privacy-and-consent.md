@@ -4,7 +4,7 @@
 - **Date**: 2026-09-02
 - **Supersedes**: None
 - **Scope**: Platform account/handle/presentation separation, session and access-policy generations, sign-in/out/account switching, opaque subject handles, stale callbacks, service-purpose consent, restricted accounts, privacy, retention and observability
-- **Issue**: [PLS-006.1](https://github.com/abdullahbodur/horo-engine/issues/1891)
+- **Issue**: [PLS-006.1](https://github.com/HoroCore/horo-engine/issues/1891)
 - **Jira**: [HORO-1847](https://horo-engine.atlassian.net/browse/HORO-1847)
 - **Related**: [ADR-002](002-credential-handling.md), [ADR-008](008-error-model-exception-boundary-and-registry.md), [ADR-056](056-external-editor-ui-boundary.md), [ADR-098](098-protocol-session-and-trust-policy.md), [ADR-113](113-local-storage-user-profile-and-slot-ownership.md), [ADR-115](115-cloud-save-authority-revision-and-conflict-policy.md), [ADR-130](130-platform-services-frontend-request-lifetime-timeout-null-and-error-semantics.md), [ADR-131](131-platform-services-closed-sdk-extension-abi-package-and-composition-boundary.md), [ADR-133](133-platform-progression-authority-trust-and-idempotency.md), [ADR-134](134-cloud-blob-transport-revision-precondition-and-offline-ownership.md)
 - **Normative documents**: [Platform Services Architecture](../architecture/runtime/platform-services-architecture.md), [Save Game and Persistence](../architecture/runtime/save-game-and-persistence.md), [Application Security](../architecture/security/application-security.md), [Observability Logging](../architecture/observability/observability-logging.md)

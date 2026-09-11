@@ -4,7 +4,7 @@
 - **Date**: 2026-09-02
 - **Supersedes**: None
 - **Scope**: XR ray/direct/proximity evidence, Runtime UI hit testing/focus/capture, world-space canvas presentation, gameplay interaction intent, Character locomotion authority, Camera/view composition, tracking-origin/recenter policy, comfort/accessibility preferences, capability tiers, lifecycle, migration and validation
-- **Issue**: [XRA-005.1](https://github.com/abdullahbodur/horo-engine/issues/2148)
+- **Issue**: [XRA-005.1](https://github.com/HoroCore/horo-engine/issues/2148)
 - **Jira**: [HORO-2102](https://horo-engine.atlassian.net/browse/HORO-2102)
 - **Related**: [ADR-026](026-large-world-precision-and-floating-origin-strategy.md), [ADR-061](061-animation-ownership-update-order-and-clock.md), [ADR-073](073-runtime-ui-ownership-scope-and-update-order.md), [ADR-078](078-runtime-ui-input-context-and-player-routing.md), [ADR-082](082-runtime-ui-accessibility-capability-and-ownership.md), [ADR-089](089-character-controller-ownership-implementation-and-update-order.md), [ADR-157](157-xr-ownership-runtime-composition-and-capability-tier.md), [ADR-159](159-xr-action-tracking-and-input-projection-ownership.md), [ADR-160](160-xr-rendering-openxr-compositor-and-renderer-ownership.md)
 - **Normative documents**: [XR Architecture](../architecture/runtime/vr-ar-architecture.md), [Game UI and HUD](../architecture/runtime/game-ui-and-hud.md), [Input Architecture](../architecture/runtime/input-architecture.md), [Character Controller](../architecture/runtime/character-controller-architecture.md), [Accessibility Architecture](../architecture/runtime/accessibility-architecture.md)

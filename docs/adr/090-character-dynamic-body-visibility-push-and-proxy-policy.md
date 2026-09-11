@@ -4,9 +4,9 @@
 - **Date**: 2026-09-02
 - **Supersedes**: None
 - **Scope**: Character/dynamic-body visibility modes, one-way push, optional kinematic presence proxy, transform and momentum authority, capability negotiation, filtering, fixed-tick ordering, lifecycle, failure, limits and qualification
-- **Issue**: [CHR-003.7](https://github.com/abdullahbodur/horo-engine/issues/959)
+- **Issue**: [CHR-003.7](https://github.com/HoroCore/horo-engine/issues/959)
 - **Jira**: [HORO-959](https://horo-engine.atlassian.net/browse/HORO-959)
-- **Parent**: [CHR-003](https://github.com/abdullahbodur/horo-engine/issues/932)
+- **Parent**: [CHR-003](https://github.com/HoroCore/horo-engine/issues/932)
 - **Related**: [ADR-008](008-error-model-exception-boundary-and-registry.md), [ADR-084](084-canonical-physics-solver-units-and-tolerances.md), [ADR-086](086-collision-layer-profile-and-query-channel-policy.md), [ADR-087](087-scene-to-physics-ownership-and-conversion.md), [ADR-088](088-physics-determinism-capability-and-support-tiers.md), [ADR-089](089-character-controller-ownership-implementation-and-update-order.md)
 - **Normative documents**: [Character Controller Architecture](../architecture/runtime/character-controller-architecture.md), [Physics Architecture](../architecture/runtime/physics-architecture.md), [Scene Runtime](../architecture/runtime/scene-runtime.md), [Runtime Lifecycle](../architecture/runtime/runtime-lifecycle.md)
 - **Upstream references**: [Jolt v5.6.0 character controllers](https://github.com/jrouwe/JoltPhysics/blob/v5.6.0/Docs/Architecture.md#character-controllers), [Jolt v5.6.0 CharacterVirtual](https://jrouwe.github.io/JoltPhysicsDocs/5.6.0/class_character_virtual.html)

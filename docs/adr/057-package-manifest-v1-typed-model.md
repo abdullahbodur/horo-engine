@@ -4,9 +4,9 @@
 - **Date**: 2026-09-02
 - **Supersedes**: None
 - **Scope**: Versioned typed package identity, dependencies, compatibility, modules, artifacts, content, contributions, licenses, signature requirements and bounded manifest processing
-- **Issue**: [PKG-001.1](https://github.com/abdullahbodur/horo-engine/issues/115)
+- **Issue**: [PKG-001.1](https://github.com/HoroCore/horo-engine/issues/115)
 - **Jira**: [HORO-115](https://horo-engine.atlassian.net/browse/HORO-115)
-- **Parent**: [PKG-001](https://github.com/abdullahbodur/horo-engine/issues/36)
+- **Parent**: [PKG-001](https://github.com/HoroCore/horo-engine/issues/36)
 - **Related**: [ADR-054](054-extension-and-package-authority-boundary.md), [ADR-055](055-extension-manifest-v1-typed-model.md)
 - **Normative documents**: [Horo Package System](../architecture/packages/package-system.md), [Package Lifecycle](../architecture/packages/package-lifecycle.md), [Package Restore](../architecture/packages/package-restore.md), [Package Release Integration](../architecture/packages/package-release-integration.md), [System Design](../architecture/foundation/system-design.md)
 

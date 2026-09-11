@@ -4,9 +4,9 @@
 - **Date**: 2026-09-02
 - **Supersedes**: None
 - **Scope**: Runtime UI font source/face/family identity, weights/styles/variations, deterministic face matching and fallback chains, import/cook dependencies, platform discovery, missing-font behavior, lifecycle, errors, security, and compatibility
-- **Issue**: [RUI-003.1](https://github.com/abdullahbodur/horo-engine/issues/717)
+- **Issue**: [RUI-003.1](https://github.com/HoroCore/horo-engine/issues/717)
 - **Jira**: [HORO-717](https://horo-engine.atlassian.net/browse/HORO-717)
-- **Parent**: [RUI-003](https://github.com/abdullahbodur/horo-engine/issues/716)
+- **Parent**: [RUI-003](https://github.com/HoroCore/horo-engine/issues/716)
 - **Related**: [ADR-008](008-error-model-exception-boundary-and-registry.md), [ADR-054](054-extension-and-package-authority-boundary.md), [ADR-073](073-runtime-ui-ownership-scope-and-update-order.md), [ADR-074](074-runtime-ui-layout-units-and-measure-arrange.md)
 - **Normative documents**: [Game UI and HUD](../architecture/runtime/game-ui-and-hud.md), [Asset Pipeline](../architecture/runtime/asset-pipeline.md), [Rendering Architecture](../architecture/runtime/rendering-architecture.md)
 

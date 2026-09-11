@@ -4,7 +4,7 @@
 - **Date**: 2026-09-02
 - **Supersedes**: None
 - **Scope**: Project-scoped Platform Services identity namespace, deterministic numeric ID algorithm and encoding, key aliases, tombstones, collision handling, salt cloning/regeneration, provider mappings and cooked/runtime consumption
-- **Issue**: [PLS-003.1](https://github.com/abdullahbodur/horo-engine/issues/1888)
+- **Issue**: [PLS-003.1](https://github.com/HoroCore/horo-engine/issues/1888)
 - **Jira**: [HORO-1844](https://horo-engine.atlassian.net/browse/HORO-1844)
 - **Related**: [ADR-008](008-error-model-exception-boundary-and-registry.md), [ADR-009](009-configuration-schema-precedence-and-secret-boundary.md), [ADR-054](054-extension-and-package-authority-boundary.md), [ADR-103](103-network-project-configuration-and-build-profile-ownership.md), [ADR-113](113-local-storage-user-profile-and-slot-ownership.md), [ADR-130](130-platform-services-frontend-request-lifetime-timeout-null-and-error-semantics.md), [ADR-131](131-platform-services-closed-sdk-extension-abi-package-and-composition-boundary.md)
 - **Normative documents**: [Platform Services Architecture](../architecture/runtime/platform-services-architecture.md), [Project Model](../architecture/editor/project-model.md), [Project Versioning and Migration](../architecture/foundation/project-versioning-and-migration.md), [Release Security](../architecture/release/release-security.md)

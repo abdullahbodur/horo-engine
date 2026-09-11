@@ -4,7 +4,7 @@
 - **Date**: 2026-09-02
 - **Supersedes**: None
 - **Scope**: Nested prefab placement and single-parent variant edge semantics, stable placement identity, deterministic resolution and precedence, graph validation, source-revision rebase, editor provenance, cook flattening, limits and qualification
-- **Issue**: [PFB-005.1](https://github.com/abdullahbodur/horo-engine/issues/1046)
+- **Issue**: [PFB-005.1](https://github.com/HoroCore/horo-engine/issues/1046)
 - **Jira**: [HORO-1046](https://horo-engine.atlassian.net/browse/HORO-1046)
 - **Related**: [ADR-017](017-prefab-role-ownership-and-capability-tiers.md), [ADR-093](093-prefab-override-property-identity-and-delta-operations.md)
 - **Normative documents**: [Prefab Architecture](../architecture/runtime/prefab-architecture.md), [Editor Document Model](../architecture/editor/editor-document-model.md), [Prefab Editor Reference](../architecture/runtime/prefab-editor.html), [Project Versioning and Migration](../architecture/foundation/project-versioning-and-migration.md)

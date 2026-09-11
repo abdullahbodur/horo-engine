@@ -4,7 +4,7 @@
 - **Date**: 2026-09-02
 - **Supersedes**: None
 - **Scope**: First-party OpenXR target/package topology, loader dependency and dispatch ownership, verified installation, application-host composition, platform-specific packaging, preflight states, lifecycle, unsupported paths, migration and release evidence
-- **Issue**: [XRA-002.1](https://github.com/abdullahbodur/horo-engine/issues/2118)
+- **Issue**: [XRA-002.1](https://github.com/HoroCore/horo-engine/issues/2118)
 - **Jira**: [HORO-2072](https://horo-engine.atlassian.net/browse/HORO-2072)
 - **Related**: [ADR-008](008-error-model-exception-boundary-and-registry.md), [ADR-018](018-command-registration-permissions-threading-and-packaged-build-policy.md), [ADR-028](028-renderer-capability-limits-and-product-profiles.md), [ADR-033](033-presentation-and-display-ownership.md), [ADR-054](054-extension-and-package-authority-boundary.md), [ADR-057](057-package-manifest-v1-typed-model.md), [ADR-157](157-xr-ownership-runtime-composition-and-capability-tier.md)
 - **Normative documents**: [XR Architecture](../architecture/runtime/vr-ar-architecture.md), [System Design](../architecture/foundation/system-design.md), [Platform Abstraction](../architecture/foundation/platform-abstraction.md), [Android Platform Host](../architecture/foundation/android-platform-host.md)

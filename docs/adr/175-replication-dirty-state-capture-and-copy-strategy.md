@@ -4,7 +4,7 @@
 - **Date**: 2026-09-07
 - **Supersedes**: None
 - **Scope**: Authoritative change detection, capture safe points, copied snapshot ownership, dirty hints, allocation, cancellation, shutdown and qualification ownership
-- **Issue**: [NET-004.2](https://github.com/abdullahbodur/horo-engine/issues/1131)
+- **Issue**: [NET-004.2](https://github.com/HoroCore/horo-engine/issues/1131)
 - **Jira**: [HORO-1131](https://horo-engine.atlassian.net/browse/HORO-1131)
 - **Related**: [ADR-099](099-replication-ownership-authority-and-compatibility.md)
 - **Normative documents**: [Multiplayer Replication Architecture](../architecture/runtime/multiplayer-replication-architecture.md), [Networking Architecture](../architecture/runtime/networking-architecture.md), [Scene Runtime](../architecture/runtime/scene-runtime.md)
@@ -112,10 +112,10 @@ idempotent scheduling input; they cannot reopen capture.
 ### 6. Executable qualification belongs to the implementation tickets
 
 This decision fixes the strategy and its observable gates; it does not introduce a
-premature NetworkRuntime implementation. [NET-004.3](https://github.com/abdullahbodur/horo-engine/issues/1132)
+premature NetworkRuntime implementation. [NET-004.3](https://github.com/HoroCore/horo-engine/issues/1132)
 owns the capture coordinator, revision comparison and focused tests for lost and
 duplicated hints, stale identities, capacity failure, cancellation and shutdown.
-[NET-004.4](https://github.com/abdullahbodur/horo-engine/issues/1133) owns compatible
+[NET-004.4](https://github.com/HoroCore/horo-engine/issues/1133) owns compatible
 baseline/delta encoding and tests that duplicate or missing delivery never changes the
 captured source authority.
 

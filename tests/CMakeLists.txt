@@ -151,6 +151,7 @@ add_executable(HoroNetworkApiTests
         unit/runtime/networking/MessageEnvelopeTests.cpp
         unit/runtime/networking/NetworkAddressTests.cpp
         unit/runtime/networking/NetworkHandleTests.cpp
+        unit/runtime/networking/NetworkFailureTests.cpp
         unit/runtime/networking/PacketQueueTests.cpp
         unit/runtime/networking/ProtocolIdentityTests.cpp
         unit/runtime/networking/ReplicationDescriptorTests.cpp
@@ -233,6 +234,7 @@ add_executable(HoroPhysicsTests
         unit/runtime/physics/PhysicsDiagnosticsTests.cpp
         unit/runtime/physics/PhysicsHandleRegistryTests.cpp
         unit/runtime/physics/PhysicsIdentityTests.cpp
+        unit/runtime/physics/PhysicsMetricsTests.cpp
         unit/runtime/physics/PhysicsPoseTests.cpp
         unit/runtime/physics/PhysicsQueryTests.cpp
         unit/runtime/physics/PhysicsShapeDescriptorTests.cpp
@@ -250,6 +252,7 @@ horo_register_catch_test(HoroPhysicsTests LABELS "unit;physics;headless")
 
 add_executable(HoroAITests
         unit/runtime/ai/AIIdentityTests.cpp
+        unit/runtime/ai/BlackboardInstanceTests.cpp
         unit/runtime/ai/BlackboardSchemaTests.cpp
 )
 target_compile_features(HoroAITests PRIVATE cxx_std_20)
@@ -257,6 +260,8 @@ target_link_libraries(HoroAITests PRIVATE HoroEngine::AI)
 horo_register_catch_test(HoroAITests LABELS "unit;ai;headless")
 
 add_executable(HoroAnimationApiTests
+        unit/runtime/animation/AnimationCompressionTests.cpp
+        unit/runtime/animation/AnimationClipTests.cpp
         unit/runtime/animation/AnimationComponentTests.cpp
         unit/runtime/animation/AnimationIdentityTests.cpp
         unit/runtime/animation/PoseStorageTests.cpp
@@ -284,11 +289,16 @@ target_link_libraries(HoroVfxApiTests PRIVATE HoroEngine::VfxApi)
 horo_register_catch_test(HoroVfxApiTests LABELS "unit;vfx;headless")
 
 add_executable(HoroDestructionApiTests
+        support/AllocationProbe.cpp
         unit/runtime/destruction/DestructibleDescriptorTests.cpp
+        unit/runtime/destruction/DestructionCommandTests.cpp
         unit/runtime/destruction/DestructionIdentityTests.cpp
+        unit/runtime/destruction/DestructionRegistryTests.cpp
+        unit/runtime/destruction/DestructionStateMachineTests.cpp
 )
 target_compile_features(HoroDestructionApiTests PRIVATE cxx_std_20)
 target_link_libraries(HoroDestructionApiTests PRIVATE HoroEngine::DestructionApi)
+target_include_directories(HoroDestructionApiTests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
 horo_register_catch_test(HoroDestructionApiTests LABELS "unit;destruction;headless")
 
 add_executable(HoroCinematicModelTests
@@ -302,6 +312,15 @@ target_compile_features(HoroCinematicModelTests PRIVATE cxx_std_20)
 target_include_directories(HoroCinematicModelTests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
 target_link_libraries(HoroCinematicModelTests PRIVATE HoroEngine::CinematicModel)
 horo_register_catch_test(HoroCinematicModelTests LABELS "unit;cinematic;headless")
+add_executable(HoroCinematicRuntimeTests
+        support/AllocationProbe.cpp
+        unit/runtime/cinematic/SequenceEvaluationTests.cpp
+        unit/runtime/cinematic/SequencePlayerTests.cpp
+)
+target_compile_features(HoroCinematicRuntimeTests PRIVATE cxx_std_20)
+target_include_directories(HoroCinematicRuntimeTests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+target_link_libraries(HoroCinematicRuntimeTests PRIVATE HoroEngine::CinematicRuntime)
+horo_register_catch_test(HoroCinematicRuntimeTests LABELS "unit;cinematic;headless")
 add_executable(HoroCinematicCurveSamplingBenchmark EXCLUDE_FROM_ALL
         benchmarks/cinematic/CurveSamplingBenchmark.cpp
 )
@@ -1118,6 +1137,14 @@ target_link_libraries(HoroRuntimeLifecycleTests
         HoroEngine::RenderFrontend
         HoroEngine::RenderNull
 )
+add_executable(HoroAndroidLifecycleTests
+        unit/platform/AndroidLifecycleTests.cpp
+)
+target_compile_features(HoroAndroidLifecycleTests PRIVATE cxx_std_20)
+target_include_directories(HoroAndroidLifecycleTests PRIVATE
+        ${PROJECT_SOURCE_DIR}/src/platform/android
+)
+target_link_libraries(HoroAndroidLifecycleTests PRIVATE HoroEngine::Platform)
 add_executable(HoroRuntimeSaveIdentityTests
         unit/runtime/save/SaveIdentityTests.cpp
 )
@@ -1514,6 +1541,7 @@ set(HORO_CATCH_TEST_TARGETS
         HoroFoundationDiagnosticsTests
         HoroFoundationJobSystemTests
         HoroPlatformTests
+        HoroAndroidLifecycleTests
         HoroPlatformRequestTests
         HoroGameplayBuildServiceTests
         HoroEditorViewportSceneTests

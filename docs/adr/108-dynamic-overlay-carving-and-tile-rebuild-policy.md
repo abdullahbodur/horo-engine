@@ -4,7 +4,7 @@
 - **Date**: 2026-09-02
 - **Supersedes**: None
 - **Scope**: Moving agents and platforms, transient obstacles, doors, modifiers, terrain edits, destruction and streamed geometry; avoidance, logical blocker overlays, optional DetourTileCache carving, transactional runtime tile rebuild, authored recook, consistency, latency, budgets, failure, networking, persistence and lifecycle
-- **Issue**: [NAV-005.1](https://github.com/abdullahbodur/horo-engine/issues/1267)
+- **Issue**: [NAV-005.1](https://github.com/HoroCore/horo-engine/issues/1267)
 - **Jira**: [HORO-1267](https://horo-engine.atlassian.net/browse/HORO-1267)
 - **Related**: [ADR-010](010-job-waiting-and-operation-store-ownership.md), [ADR-012](012-world-streaming-partition-authority-and-subsystem-boundaries.md), [ADR-016](016-navigation-target-ownership-and-dependency-boundary.md), [ADR-022](022-ai-fixed-tick-order-authority-and-simulation-budget.md), [ADR-085](085-physics-shape-authoring-cook-and-runtime-boundary.md), [ADR-104](104-default-navigation-provider-and-recast-detour-adoption.md), [ADR-105](105-navigation-asset-and-scene-ownership-boundary.md), [ADR-106](106-navigation-bake-ownership-transaction-and-cache.md), [ADR-107](107-navigation-query-consistency-and-snapshot-ownership.md)
 - **Normative documents**: [Navigation and AI Architecture](../architecture/runtime/navigation-and-ai-architecture.md), [Terrain and Foliage Architecture](../architecture/runtime/terrain-and-foliage-architecture.md), [World Streaming](../architecture/runtime/world-streaming-architecture.md), [Character Controller Architecture](../architecture/runtime/character-controller-architecture.md)

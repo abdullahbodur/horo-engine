@@ -4,7 +4,7 @@
 - **Date**: 2026-09-02
 - **Supersedes**: None
 - **Scope**: Network project defaults, user preview preferences, release/build-role policy, runtime host overrides, credential references, product capability manifests, provider isolation, migration and cross-surface resolution
-- **Issue**: [NET-009.1](https://github.com/abdullahbodur/horo-engine/issues/1185)
+- **Issue**: [NET-009.1](https://github.com/HoroCore/horo-engine/issues/1185)
 - **Jira**: [HORO-1185](https://horo-engine.atlassian.net/browse/HORO-1185)
 - **Related**: [ADR-002](002-credential-handling.md), [ADR-009](009-configuration-schema-precedence-and-secret-boundary.md), [ADR-097](097-default-real-time-transport-backend.md), [ADR-098](098-protocol-session-and-trust-policy.md), [ADR-101](101-interest-priority-and-network-budget-model.md), [ADR-102](102-runtime-network-modes-and-authority-exposure.md)
 - **Normative documents**: [Configuration System](../architecture/foundation/configuration-system.md), [Networking Architecture](../architecture/runtime/networking-architecture.md), [Build System](../architecture/delivery/build-system.md), [Release Architecture](../architecture/release/release.md), [Release Security](../architecture/release/release-security.md), [Application Security](../architecture/security/application-security.md)

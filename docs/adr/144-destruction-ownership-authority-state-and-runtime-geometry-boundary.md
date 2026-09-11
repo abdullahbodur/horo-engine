@@ -4,7 +4,7 @@
 - **Date**: 2026-09-02
 - **Supersedes**: None
 - **Scope**: Destruction module and world ownership, canonical semantic state, command authority, fixed-tick transition order, cooked chunk activation, cross-system publication, persistence/replication, provider-neutral tiers, runtime geometry exclusion, cancellation, replacement and shutdown
-- **Issue**: [DFR-001.1](https://github.com/abdullahbodur/horo-engine/issues/1994)
+- **Issue**: [DFR-001.1](https://github.com/HoroCore/horo-engine/issues/1994)
 - **Jira**: [HORO-1948](https://horo-engine.atlassian.net/browse/HORO-1948)
 - **Related**: [ADR-008](008-error-model-exception-boundary-and-registry.md), [ADR-010](010-job-waiting-and-operation-store-ownership.md), [ADR-012](012-world-streaming-partition-authority-and-subsystem-boundaries.md), [ADR-016](016-navigation-target-ownership-and-dependency-boundary.md), [ADR-017](017-prefab-role-ownership-and-capability-tiers.md), [ADR-023](023-world-index-and-cell-format-architecture-decision.md), [ADR-027](027-renderer-resource-identity-and-descriptors.md), [ADR-054](054-extension-and-package-authority-boundary.md), [ADR-085](085-physics-shape-authoring-cook-and-runtime-boundary.md), [ADR-087](087-scene-to-physics-ownership-and-conversion.md), [ADR-099](099-replication-ownership-authority-and-compatibility.md), [ADR-114](114-canonical-runtime-world-persistence-boundary.md)
 - **Normative documents**: [Destruction and Fracture Architecture](../architecture/runtime/destruction-and-fracture-architecture.md), [Scene Runtime](../architecture/runtime/scene-runtime.md), [Physics Architecture](../architecture/runtime/physics-architecture.md), [Asset Pipeline](../architecture/runtime/asset-pipeline.md), [Networking Architecture](../architecture/runtime/networking-architecture.md), [Save Game and Persistence](../architecture/runtime/save-game-and-persistence.md)
@@ -102,7 +102,7 @@ Canonical semantic state is equivalent to:
 enum class DestructionSemanticPhase : uint8_t {
     Intact,
     Damaged,
-    Fractured
+    Destroyed
 };
 
 struct DestructionStateSnapshot {
@@ -119,10 +119,11 @@ struct DestructionStateSnapshot {
 };
 ```
 
-`Damaged` preserves non-terminal health/support changes. `Fractured` means at least one
-cooked chunk transition has committed; it does not imply every chunk is active or that
-the whole object is destroyed. Exact broken, supported, detached, dormant and removed
-chunk membership uses stable IDs and bounded sets, not enum inference.
+`Damaged` preserves non-terminal health/support changes. `Destroyed` is terminal only
+for the exact runtime generation and does not imply that every chunk is active. Exact
+broken, supported, detached, dormant and removed chunk membership uses stable IDs and
+bounded sets, not enum inference. Replacement creates the next generation at its own
+initial revision rather than reviving terminal state in place.
 
 The world/object lifecycle is independently `Absent`, `Preparing`, `Prepared`, `Active`,
 `Replacing`, `Suspended`, `Retiring` or `Failed`. Preparing is not Damaged; Retiring is

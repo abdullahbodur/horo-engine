@@ -92,4 +92,46 @@ namespace Horo::Animation::AnimationErrors {
     extern const ErrorCodeDescriptor PoseFrameStale;
     /** @brief A mutable pose operation ran outside the arena's declared owner thread. */
     extern const ErrorCodeDescriptor PoseThreadViolation;
+    /** @brief An animation clip was produced for an unsupported public contract version. */
+    extern const ErrorCodeDescriptor ClipVersionUnsupported;
+    /** @brief Clip work is closed because the owning animation boundary is unavailable. */
+    extern const ErrorCodeDescriptor ClipAdmissionRejected;
+    /** @brief Clip validation, traversal, or sampling was cancelled before publication. */
+    extern const ErrorCodeDescriptor ClipOperationCancelled;
+    /** @brief A clip reload candidate does not replace the declared stable identity. */
+    extern const ErrorCodeDescriptor ClipReloadMismatch;
+    /** @brief A clip targets another skeleton identity or skeleton contract. */
+    extern const ErrorCodeDescriptor ClipSkeletonMismatch;
+    /** @brief A clip, skeleton, or additive reference targets a retired publication generation. */
+    extern const ErrorCodeDescriptor ClipBindingStale;
+    /** @brief Clip tracks, keys, duration, sample rate, or traversal exceed finite limits. */
+    extern const ErrorCodeDescriptor ClipLimitExceeded;
+    /** @brief A clip contains duplicate joint tracks or key times. */
+    extern const ErrorCodeDescriptor ClipDuplicateIdentity;
+    /** @brief A clip track references a joint absent from the bound skeleton. */
+    extern const ErrorCodeDescriptor ClipJointMissing;
+    /** @brief Clip time, transform, interpolation, wrap, kind, or compression metadata is malformed. */
+    extern const ErrorCodeDescriptor ClipMalformed;
+    /** @brief The requested clip feature or traversal representation is unsupported. */
+    extern const ErrorCodeDescriptor ClipUnsupported;
+    /** @brief Exact cursor advancement would overflow its portable time representation. */
+    extern const ErrorCodeDescriptor ClipTimeOverflow;
+    /** @brief Additive sampling lacks or mismatches its exact reference-pose binding. */
+    extern const ErrorCodeDescriptor ClipReferencePoseMismatch;
+    /** @brief Animation compression metadata was produced for an unsupported contract version. */
+    extern const ErrorCodeDescriptor CompressionVersionUnsupported;
+    /** @brief Compression work is closed because its owner is unavailable or shutting down. */
+    extern const ErrorCodeDescriptor CompressionAdmissionRejected;
+    /** @brief Compression work was cancelled before immutable publication. */
+    extern const ErrorCodeDescriptor CompressionOperationCancelled;
+    /** @brief A compression reload does not replace the declared source/profile compatibility. */
+    extern const ErrorCodeDescriptor CompressionReloadMismatch;
+    /** @brief Compression or decompression targets a retired clip or skeleton publication. */
+    extern const ErrorCodeDescriptor CompressionBindingStale;
+    /** @brief A compression profile contains malformed thresholds or finite limits. */
+    extern const ErrorCodeDescriptor CompressionProfileMalformed;
+    /** @brief The requested compression tier, scheme, or representation is unsupported. */
+    extern const ErrorCodeDescriptor CompressionUnsupported;
+    /** @brief Compression cook or decompression exceeds its captured finite work budget. */
+    extern const ErrorCodeDescriptor CompressionBudgetExceeded;
 }  // namespace Horo::Animation::AnimationErrors

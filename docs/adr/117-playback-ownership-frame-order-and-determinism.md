@@ -4,7 +4,7 @@
 - **Date**: 2026-09-02
 - **Supersedes**: None
 - **Scope**: Sequence-player instance ownership, scene/application lifetime scopes, activation identity, same-boundary multi-player order, replay/headless guarantees, numeric determinism and random-access seek
-- **Issue**: [CIN-002.1](https://github.com/abdullahbodur/horo-engine/issues/1698)
+- **Issue**: [CIN-002.1](https://github.com/HoroCore/horo-engine/issues/1698)
 - **Jira**: [HORO-1657](https://horo-engine.atlassian.net/browse/HORO-1657)
 - **Related**: [ADR-010](010-job-waiting-and-operation-store-ownership.md), [ADR-014](014-sequencer-ownership-clock-authority-and-binding-boundary.md), [ADR-061](061-animation-ownership-update-order-and-clock.md), [ADR-077](077-runtime-ui-animation-clock-and-time-domain.md), [ADR-088](088-physics-determinism-capability-and-support-tiers.md)
 - **Normative documents**: [Cinematic Sequencer Architecture](../architecture/runtime/cinematic-sequencer-architecture.md), [Runtime Lifecycle](../architecture/runtime/runtime-lifecycle.md)

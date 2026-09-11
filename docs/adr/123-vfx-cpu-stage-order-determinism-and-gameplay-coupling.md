@@ -4,7 +4,7 @@
 - **Date**: 2026-09-02
 - **Supersedes**: None
 - **Scope**: Gameplay-coupled CPU particle step stages, stage authority/access, deterministic particle identity and random streams, parallel scheduling/reductions, typed gameplay payloads, commit/failure semantics and CPU/GPU equivalence baseline
-- **Issue**: [VFX-002.1](https://github.com/abdullahbodur/horo-engine/issues/1750)
+- **Issue**: [VFX-002.1](https://github.com/HoroCore/horo-engine/issues/1750)
 - **Jira**: [HORO-1707](https://horo-engine.atlassian.net/browse/HORO-1707)
 - **Related**: [ADR-008](008-error-model-exception-boundary-and-registry.md), [ADR-011](011-vfx-effect-ownership-simulation-domain-and-renderer-boundary.md), [ADR-022](022-ai-fixed-tick-order-authority-and-simulation-budget.md), [ADR-026](026-large-world-precision-and-floating-origin-strategy.md), [ADR-088](088-physics-determinism-capability-and-support-tiers.md)
 - **Normative documents**: [VFX and Particles Architecture](../architecture/runtime/vfx-and-particles-architecture.md), [Runtime Lifecycle](../architecture/runtime/runtime-lifecycle.md), [Gameplay Module Boundary](../architecture/extensions/gameplay-module-boundary.md)

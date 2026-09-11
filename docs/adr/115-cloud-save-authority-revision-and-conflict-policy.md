@@ -4,7 +4,7 @@
 - **Date**: 2026-09-02
 - **Supersedes**: None
 - **Scope**: Local versus cloud authority, provider revision/write preconditions, offline/startup/upload/download/delete states, lineage classification, clock treatment, conflict preservation and UI decision boundary
-- **Issue**: [SAV-006.1](https://github.com/abdullahbodur/horo-engine/issues/1466)
+- **Issue**: [SAV-006.1](https://github.com/HoroCore/horo-engine/issues/1466)
 - **Jira**: [HORO-1466](https://horo-engine.atlassian.net/browse/HORO-1466)
 - **Related**: [ADR-008](008-error-model-exception-boundary-and-registry.md), [ADR-112](112-save-archive-container-and-compatibility-policy.md), [ADR-113](113-local-storage-user-profile-and-slot-ownership.md), [ADR-114](114-canonical-runtime-world-persistence-boundary.md)
 - **Normative documents**: [Save Game And Persistence](../architecture/runtime/save-game-and-persistence.md), [Platform Services](../architecture/runtime/platform-services-architecture.md), [Platform Abstraction](../architecture/foundation/platform-abstraction.md)

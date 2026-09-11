@@ -4,9 +4,9 @@
 - **Date**: 2026-09-02
 - **Supersedes**: None
 - **Scope**: Virtual-texture source/import ownership, deterministic cook identity, immutable generation manifests and page packs, page-store reads, cache classes, integrity, publication, replacement, packaging and migration
-- **Issue**: [VTX-002.1](https://github.com/abdullahbodur/horo-engine/issues/2185)
+- **Issue**: [VTX-002.1](https://github.com/HoroCore/horo-engine/issues/2185)
 - **Jira**: [HORO-2139](https://horo-engine.atlassian.net/browse/HORO-2139)
-- **Parent**: [VTX-002](https://github.com/abdullahbodur/horo-engine/issues/2184)
+- **Parent**: [VTX-002](https://github.com/HoroCore/horo-engine/issues/2184)
 - **Related**: [ADR-008](008-error-model-exception-boundary-and-registry.md), [ADR-010](010-job-waiting-and-operation-store-ownership.md), [ADR-027](027-renderer-resource-identity-and-descriptors.md), [ADR-034](034-gpu-memory-and-residency-ownership.md), [ADR-035](035-shader-source-and-intermediate-representation.md), [ADR-057](057-package-manifest-v1-typed-model.md), [ADR-138](138-terrain-source-cooked-tile-cache-and-streaming-ownership.md), [ADR-164](164-virtual-texturing-ownership-product-scope-and-capability-tier.md)
 - **Normative documents**: [Asset Pipeline](../architecture/runtime/asset-pipeline.md), [Virtual Texturing Architecture](../architecture/runtime/virtual-texturing-architecture.md)
 

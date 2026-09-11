@@ -4,7 +4,7 @@
 - **Date**: 2026-09-02
 - **Supersedes**: None
 - **Scope**: Achievement, stat and leaderboard mutation/query authority; local and server trust boundaries; typed mutation semantics; idempotency, retry, duplicate, replay, ambiguity, unsupported capability and cheating policy
-- **Issue**: [PLS-004.1](https://github.com/abdullahbodur/horo-engine/issues/1889)
+- **Issue**: [PLS-004.1](https://github.com/HoroCore/horo-engine/issues/1889)
 - **Jira**: [HORO-1845](https://horo-engine.atlassian.net/browse/HORO-1845)
 - **Related**: [ADR-008](008-error-model-exception-boundary-and-registry.md), [ADR-020](020-network-target-ownership-and-dependency-boundary.md), [ADR-098](098-protocol-session-and-trust-policy.md), [ADR-102](102-runtime-network-modes-and-authority-exposure.md), [ADR-113](113-local-storage-user-profile-and-slot-ownership.md), [ADR-130](130-platform-services-frontend-request-lifetime-timeout-null-and-error-semantics.md), [ADR-131](131-platform-services-closed-sdk-extension-abi-package-and-composition-boundary.md), [ADR-132](132-platform-services-project-salt-stable-id-tombstone-and-provider-mapping.md)
 - **Normative documents**: [Platform Services Architecture](../architecture/runtime/platform-services-architecture.md), [Multiplayer Replication Architecture](../architecture/runtime/multiplayer-replication-architecture.md), [Application Security](../architecture/security/application-security.md)

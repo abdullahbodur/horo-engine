@@ -4,7 +4,7 @@
 - **Date**: 2026-09-02
 - **Supersedes**: None
 - **Scope**: Destruction source mesh and fracture recipe ownership, normalized input, generated chunk/interior geometry, connectivity, solver-neutral collision inputs, deterministic DFR artifact cooking, Assets cache/publication, Physics native shape cooking, runtime loading, replacement, cancellation and compatibility
-- **Issue**: [DFR-002.1](https://github.com/abdullahbodur/horo-engine/issues/2004)
+- **Issue**: [DFR-002.1](https://github.com/HoroCore/horo-engine/issues/2004)
 - **Jira**: [HORO-1958](https://horo-engine.atlassian.net/browse/HORO-1958)
 - **Related**: [ADR-005](005-submodule-compatibility.md), [ADR-008](008-error-model-exception-boundary-and-registry.md), [ADR-010](010-job-waiting-and-operation-store-ownership.md), [ADR-023](023-world-index-and-cell-format-architecture-decision.md), [ADR-027](027-renderer-resource-identity-and-descriptors.md), [ADR-054](054-extension-and-package-authority-boundary.md), [ADR-085](085-physics-shape-authoring-cook-and-runtime-boundary.md), [ADR-087](087-scene-to-physics-ownership-and-conversion.md), [ADR-138](138-terrain-source-cooked-tile-cache-and-streaming-ownership.md), [ADR-144](144-destruction-ownership-authority-state-and-runtime-geometry-boundary.md)
 - **Normative documents**: [Destruction and Fracture Architecture](../architecture/runtime/destruction-and-fracture-architecture.md), [Asset Pipeline](../architecture/runtime/asset-pipeline.md), [Physics Architecture](../architecture/runtime/physics-architecture.md), [Scene Runtime](../architecture/runtime/scene-runtime.md), [Rendering Architecture](../architecture/runtime/rendering-architecture.md)

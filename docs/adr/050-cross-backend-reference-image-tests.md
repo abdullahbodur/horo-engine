@@ -4,7 +4,7 @@
 - **Date**: 2026-09-01
 - **Supersedes**: None
 - **Scope**: Renderer reference scenes, canonical image capture, comparison policy, artifacts and qualification lanes
-- **Issue**: [RND-017.10](https://github.com/abdullahbodur/horo-engine/issues/442)
+- **Issue**: [RND-017.10](https://github.com/HoroCore/horo-engine/issues/442)
 - **Jira**: [HORO-442](https://horo-engine.atlassian.net/browse/HORO-442)
 - **Companion decisions**: [ADR-028](028-renderer-capability-limits-and-product-profiles.md), [ADR-041](041-backend-neutral-renderer-diagnostics-model.md), [ADR-044](044-render-markers-and-debug-labels.md), [ADR-047](047-renderdoc-pix-and-metal-capture-integration.md)
 - **Normative documents**: [Rendering Architecture](../architecture/runtime/rendering-architecture.md), [Render Backend Parity Contract](../architecture/runtime/render-backend-parity-contract.md), [Testing Architecture](../architecture/delivery/testing-architecture.md), [Quality And CI](../architecture/delivery/quality-and-ci.md)

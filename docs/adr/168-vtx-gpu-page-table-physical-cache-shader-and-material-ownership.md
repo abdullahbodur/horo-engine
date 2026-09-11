@@ -4,9 +4,9 @@
 - **Date**: 2026-09-02
 - **Supersedes**: None
 - **Scope**: VTX logical mappings, Renderer page-table and physical-cache realization, sparse versus atlas paths, shader sampling contract, material binding, frame publication, device loss and migration
-- **Issue**: [VTX-005.1](https://github.com/abdullahbodur/horo-engine/issues/2214)
+- **Issue**: [VTX-005.1](https://github.com/HoroCore/horo-engine/issues/2214)
 - **Jira**: [HORO-2168](https://horo-engine.atlassian.net/browse/HORO-2168)
-- **Parent**: [VTX-005](https://github.com/abdullahbodur/horo-engine/issues/2213)
+- **Parent**: [VTX-005](https://github.com/HoroCore/horo-engine/issues/2213)
 - **Related**: [ADR-027](027-renderer-resource-identity-and-descriptors.md), [ADR-028](028-renderer-capability-limits-and-product-profiles.md), [ADR-034](034-gpu-memory-and-residency-ownership.md), [ADR-035](035-shader-source-and-intermediate-representation.md), [ADR-036](036-raster-render-path-and-quality-architecture.md), [ADR-164](164-virtual-texturing-ownership-product-scope-and-capability-tier.md), [ADR-165](165-virtual-texture-source-cooked-artifact-page-store-and-cache-ownership.md), [ADR-166](166-vtx-feature-local-residency-and-eviction-within-global-reservations.md), [ADR-167](167-vtx-feedback-readback-prediction-and-camera-data-ownership.md)
 - **Normative documents**: [Virtual Texturing Architecture](../architecture/runtime/virtual-texturing-architecture.md), [Rendering Architecture](../architecture/runtime/rendering-architecture.md), [Material and Shader Model](../architecture/runtime/material-and-shader-model.md)
 

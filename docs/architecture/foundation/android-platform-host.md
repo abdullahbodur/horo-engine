@@ -71,6 +71,13 @@ preflight with a typed reason. Runtime code does not probe build/toolchain polic
 
 ## Lifecycle
 
+Implementation status on 10 September 2026: the PLT-001.2 portable baseline
+provides a bounded callback-observation queue, owner-thread state controller,
+distinct process/Activity/window/presentation generations, and a target-private
+adapter seam. It deliberately contains no GameActivity, JNI, `ANativeWindow`,
+Vulkan, Gradle, SDK, or device-support claim; concrete native glue and physical
+qualification remain separate target work.
+
 Android lifecycle callbacks are translated into Horo runtime transitions on the
 application owner thread:
 
@@ -92,8 +99,10 @@ renderer resources from Java/native callbacks.
 
 Backgrounding is not shutdown. Producers pause or neutralize according to their
 runtime contracts while durable application state remains owned by the
-application. Final destruction cancels owned work and releases services in
-reverse dependency order.
+application. `ActivityPaused` enters suspension; a later `ActivityStarted`
+observation makes the Activity visible but does not resume application work until
+`ActivityResumed` commits. Final destruction cancels owned work and releases
+services in reverse dependency order.
 
 ## Native Window And Presentation
 

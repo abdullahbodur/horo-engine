@@ -4,7 +4,7 @@
 - **Date**: 2026-09-02
 - **Supersedes**: None
 - **Scope**: Platform-services frontend request ownership, admission, state machine, dropped handles, cancellation/timeout races, callback dispatch, capability absence, Null behavior and provider-error normalization
-- **Issue**: [PLS-001.1](https://github.com/abdullahbodur/horo-engine/issues/1874)
+- **Issue**: [PLS-001.1](https://github.com/HoroCore/horo-engine/issues/1874)
 - **Jira**: [HORO-1830](https://horo-engine.atlassian.net/browse/HORO-1830)
 - **Related**: [ADR-008](008-error-model-exception-boundary-and-registry.md), [ADR-018](018-command-registration-permissions-threading-and-packaged-build-policy.md), [ADR-056](056-external-editor-ui-boundary.md), [ADR-060](060-release-domain-model-and-state-machine.md), [ADR-113](113-local-storage-user-profile-and-slot-ownership.md), [ADR-115](115-cloud-save-authority-revision-and-conflict-policy.md), [ADR-116](116-save-data-threat-model-and-trust-policy.md)
 - **Normative documents**: [Platform Services Architecture](../architecture/runtime/platform-services-architecture.md), [Error and Diagnostics Architecture](../architecture/foundation/error-and-diagnostics.md), [Internal Module Descriptor](../architecture/foundation/internal-module-descriptor.md)

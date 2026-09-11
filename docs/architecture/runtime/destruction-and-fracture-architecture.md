@@ -113,6 +113,26 @@ request in every core-1.0 tier.
 
 ## Destruction Model
 
+### Registry, query, and capability boundary
+
+`Horo/Destruction/DestructionRegistry.h` defines the explicit discovery boundary.
+One host-owned `DestructionRegistry` copies current state and capability projections into
+fixed-capacity storage. Registry membership is not destructible residency or lifetime:
+register, replace, remove, and shutdown never create, mutate, retain, or destroy a
+destructible, artifact, Physics body, Render resource, authority grant, or backend object.
+There is no global registry or service-location path.
+
+Consumers retain `DestructionRegistrySnapshot` values. Each snapshot is immutable,
+revisioned, sorted by the complete generation-safe handle, and remains readable after
+registry replacement or shutdown. Exact lookup distinguishes an unknown authored owner
+from a stale generation. Queries require an exact world, explicit finite result bound,
+optional closed phase, and required-feature set. They perform fixed work, copy at most the
+requested bound, and report `HasMore` rather than silently widening or substituting a
+feature profile. Capability queries return fixed-size value evidence tied to the registry,
+state, and capability revisions; the evidence grants no command authority and transfers
+no feature ownership. Live operations must still revalidate those revisions at their
+owning admission boundary.
+
 Scene components carry stable binding and authored policy, not live mutable state:
 
 ```cpp
@@ -124,11 +144,25 @@ struct DestructibleSceneBinding {
 };
 ```
 
-`DestructionWorld` owns `Intact`, `Damaged` or `Fractured` semantic phase plus exact
-health, broken chunk set and support state under one monotonic state revision.
-`Fractured` means at least one cooked transition committed; exact membership cannot be
-inferred from the phase. The independent runtime lifecycle is `Absent`, `Preparing`,
-`Prepared`, `Active`, `Replacing`, `Suspended`, `Retiring` or `Failed`.
+`DestructionWorld` owns the foundational `Intact`, `Damaged` or terminal `Destroyed`
+health state plus exact health, broken chunk set and support state under one monotonic
+state revision. `Destroyed` records terminal semantic health only; exact broken,
+detached, dormant and supported chunk membership cannot be inferred from the phase.
+The independent runtime lifecycle is `Absent`, `Preparing`, `Prepared`, `Active`,
+`Replacing`, `Suspended`, `Retiring` or `Failed`.
+
+`Horo/Destruction/DestructionStateMachine.h` defines this narrow revisioned contract.
+Commands bind an idempotency value to the exact runtime generation and expected state
+revision. Preparation produces an immutable detached candidate, and the single
+DestructionRuntime owner compares generation and revision again at its safe-point
+commit. New command values advance monotonically within a generation, so bounded state
+retains a high-water mark instead of an unbounded command-ID set. Two candidates
+prepared from one revision therefore cannot both advance it; an exact latest-command
+retry is a no-op, while conflicting or older command reuse is typed failure. Cancelling
+or discarding a candidate is rollback because preparation never mutates the active
+snapshot. Replacement admits only the next generation and resets its state at revision
+one, invalidating all previous completions. Shutdown closes preparation, commit and
+replacement admission without discarding the last published snapshot.
 
 ## Pre-Fractured Geometry
 
@@ -193,6 +227,23 @@ struct FractureEvent {
 Every trigger becomes an authority-, generation- and revision-checked typed command.
 Physics contacts are immutable evidence consumed after the Physics step; callbacks do
 not fracture objects directly. On a successful pre-cooked transition:
+
+`Horo/Destruction/DestructionCommand.h` owns the portable command envelope for this
+boundary. Impact, explosion, collision, direct damage and script sources retain fixed-
+size Horo-space payloads plus exact command, capability-snapshot and authority-grant
+revisions. Validation is allocation-free and rejects malformed, stale, unauthorized,
+unsupported or over-limit input before owner state or a bounded queue changes. Script
+commands require both script-origin authority and their typed damage or explicit-fracture
+capability. Script fracture lowers only to pre-cooked destruction; it does not grant
+runtime geometry generation.
+
+Every accepted operation ends in a durable typed result. `Succeeded`, `Rejected`,
+`Cancelled`, `Unsupported` and `Failed` remain separate values with a closed terminal
+reason, command identity and source/terminal revisions. Replacement, stale completion
+and shutdown produce rollback-requiring non-success results; they never promote a
+private candidate or infer disposition from diagnostic text. Consumers migrating from
+ad-hoc event structs must submit these typed commands and branch on the terminal enums,
+not backend status codes or strings.
 
 1. Destruction validates command/evidence generation and computes the exact cooked
    direct-detach plus unsupported-chunk closure and complete peak cost.

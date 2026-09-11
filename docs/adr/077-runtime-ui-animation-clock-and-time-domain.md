@@ -4,9 +4,9 @@
 - **Date**: 2026-09-02
 - **Supersedes**: None
 - **Scope**: Runtime UI simulation, unscaled presentation, screen-transition, editor-preview, deterministic-test and manual time domains; sampling, rates, pause/step/suspension, cancellation, screen lifecycle, accessibility, errors, compatibility, and shutdown
-- **Issue**: [RUI-004.4](https://github.com/abdullahbodur/horo-engine/issues/731)
+- **Issue**: [RUI-004.4](https://github.com/HoroCore/horo-engine/issues/731)
 - **Jira**: [HORO-731](https://horo-engine.atlassian.net/browse/HORO-731)
-- **Parent**: [RUI-004](https://github.com/abdullahbodur/horo-engine/issues/726)
+- **Parent**: [RUI-004](https://github.com/HoroCore/horo-engine/issues/726)
 - **Related**: [ADR-014](014-sequencer-ownership-clock-authority-and-binding-boundary.md), [ADR-061](061-animation-ownership-update-order-and-clock.md), [ADR-073](073-runtime-ui-ownership-scope-and-update-order.md), [ADR-076](076-runtime-ui-style-asset-token-and-inheritance.md)
 - **Normative documents**: [Game UI and HUD](../architecture/runtime/game-ui-and-hud.md), [Runtime Lifecycle](../architecture/runtime/runtime-lifecycle.md), [Editor UI Design System](../architecture/editor/ui-design-system.md)
 

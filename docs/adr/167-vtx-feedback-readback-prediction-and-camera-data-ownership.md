@@ -4,9 +4,9 @@
 - **Date**: 2026-09-02
 - **Supersedes**: None
 - **Scope**: VTX GPU feedback plan, Renderer pass/resource/readback ownership, immutable observations, camera and producer hints, prediction, bounded loss, multiview, lifecycle and privacy
-- **Issue**: [VTX-004.1](https://github.com/abdullahbodur/horo-engine/issues/2205)
+- **Issue**: [VTX-004.1](https://github.com/HoroCore/horo-engine/issues/2205)
 - **Jira**: [HORO-2159](https://horo-engine.atlassian.net/browse/HORO-2159)
-- **Parent**: [VTX-004](https://github.com/abdullahbodur/horo-engine/issues/2204)
+- **Parent**: [VTX-004](https://github.com/HoroCore/horo-engine/issues/2204)
 - **Related**: [ADR-008](008-error-model-exception-boundary-and-registry.md), [ADR-010](010-job-waiting-and-operation-store-ownership.md), [ADR-026](026-large-world-precision-and-floating-origin-strategy.md), [ADR-027](027-renderer-resource-identity-and-descriptors.md), [ADR-034](034-gpu-memory-and-residency-ownership.md), [ADR-038](038-gpu-scene-and-instance-data-model.md), [ADR-042](042-cpu-gpu-timestamps-and-pipeline-statistics.md), [ADR-119](119-camera-authority-during-cinematics.md), [ADR-164](164-virtual-texturing-ownership-product-scope-and-capability-tier.md), [ADR-166](166-vtx-feature-local-residency-and-eviction-within-global-reservations.md)
 - **Normative documents**: [Virtual Texturing Architecture](../architecture/runtime/virtual-texturing-architecture.md), [Rendering Architecture](../architecture/runtime/rendering-architecture.md), [Cinematic Sequencer Architecture](../architecture/runtime/cinematic-sequencer-architecture.md)
 

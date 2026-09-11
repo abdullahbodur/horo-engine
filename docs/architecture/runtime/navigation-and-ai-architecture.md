@@ -1248,6 +1248,26 @@ and never aliases authoring storage. Runtime instances may size
 their value array once from this schema, but storage and synchronization remain owned
 by the later blackboard runtime work.
 
+`BlackboardInstance` is the per-agent, Scene-owned materialization of one admitted
+schema publication. Its binding fences the exact `AiRuntimeIncarnation`, agent slot
+generation, schema identity/version/publication generation, and instance generation.
+It materializes schema-sized active and scratch value stores at activation; detached
+write batches and commit change facts use fixed-capacity storage, so ordinary
+`BlackboardSync` commits do not grow containers or allocate. A batch captures the binding and revision,
+is validated completely, and is applied only by the owning `BlackboardSync` safe point.
+Unknown, duplicate, read-only, type-invalid, or stale writes reject the whole batch.
+Changed-key facts are emitted in stable `BlackboardKeyId` order and the monotonic
+revision advances only when stored values change.
+
+`BlackboardSnapshot` owns an immutable value copy rather than a pointer to mutable
+instance storage, so workers cannot mutate or retain the Scene-owned store. Ordinary
+commits do not change an existing snapshot. Schema/instance replacement allocates and
+validates its complete default/migration candidate before publication, then expires
+the old generation lease; failed replacement leaves the old binding, values, revision,
+and snapshots active. Teardown similarly expires retained snapshots and rejects stale
+batches. A replaced agent or `SceneRuntime` incarnation is torn down and re-created,
+not rebound through schema replacement.
+
 Entity and asset values cross HoroAI's Foundation-only public boundary as explicitly
 named blackboard stored projections: the exact scene-incarnation/slot/generation tuple
 or canonical 128-bit asset bytes. They are not alternate canonical identities.

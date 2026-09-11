@@ -4,7 +4,7 @@
 - **Date**: 2026-09-01
 - **Supersedes**: None
 - **Scope**: Raster path selection, lighting preparation, transparency and quality fallback
-- **Issue**: [RND-012.1](https://github.com/abdullahbodur/horo-engine/issues/383)
+- **Issue**: [RND-012.1](https://github.com/HoroCore/horo-engine/issues/383)
 - **Jira**: [HORO-383](https://horo-engine.atlassian.net/browse/HORO-383)
 - **Normative document**: [Rendering Architecture](../architecture/runtime/rendering-architecture.md)
 

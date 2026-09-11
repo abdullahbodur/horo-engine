@@ -4,7 +4,7 @@
 - **Date**: 2026-08-28
 - **Supersedes**: None
 - **Scope**: AI simulation tick scheduling, perception-decision-navigation pipeline ordering, multiplayer host authority boundaries, simulation profiles and CPU budget allocation
-- **Issue**: [GAI-005.1](https://github.com/abdullahbodur/horo-engine/issues/1358)
+- **Issue**: [GAI-005.1](https://github.com/HoroCore/horo-engine/issues/1358)
 - **Jira**: [HORO-1358](https://horo-engine.atlassian.net/browse/HORO-1358)
 - **Related**: [ADR-109](109-avoidance-crowd-and-renderer-independent-budget.md)
 - **Normative documents**:

@@ -59,6 +59,7 @@ horo_configure_target_header_boundary(HoroOpenTelemetry PUBLIC_HEADERS
     Horo/Foundation/Telemetry/OpenTelemetrySink.h)
 
 horo_configure_target_header_boundary(HoroPlatform PUBLIC_HEADERS
+    Horo/Platform/AndroidLifecycle.h
     Horo/Platform/ConfigurationFileStore.h
     Horo/Platform/DynamicLibrary.h
     Horo/Platform/ExternalProcess.h
@@ -122,6 +123,7 @@ horo_configure_target_header_boundary(HoroNetworkApi PUBLIC_HEADERS
     Horo/Network/MessageEnvelope.h
     Horo/Network/NetworkAddress.h
     Horo/Network/NetworkErrors.h
+    Horo/Network/NetworkFailure.h
     Horo/Network/NetworkHandles.h
     Horo/Network/NetworkObjectIdentity.h
     Horo/Network/PacketBuffer.h
@@ -227,6 +229,7 @@ horo_configure_target_header_boundary(HoroPhysics PUBLIC_HEADERS
     Horo/Physics/PhysicsErrors.h
     Horo/Physics/PhysicsFilterIdentity.h
     Horo/Physics/PhysicsIdentity.h
+    Horo/Physics/PhysicsMetrics.h
     Horo/Physics/PhysicsPose.h
     Horo/Physics/PhysicsQuery.h
     Horo/Physics/PhysicsShapeDescriptor.h
@@ -240,9 +243,12 @@ horo_configure_target_header_boundary(HoroPhysics PUBLIC_HEADERS
 horo_configure_target_header_boundary(HoroAI PUBLIC_HEADERS
     Horo/AI/AIErrors.h
     Horo/AI/AIIdentity.h
+    Horo/AI/BlackboardInstance.h
     Horo/AI/BlackboardSchema.h
 )
 horo_configure_target_header_boundary(HoroAnimationApi PUBLIC_HEADERS
+    Horo/Animation/AnimationCompression.h
+    Horo/Animation/AnimationClip.h
     Horo/Animation/AnimationComponents.h
     Horo/Animation/AnimationErrors.h
     Horo/Animation/AnimationIdentity.h
@@ -262,8 +268,11 @@ horo_configure_target_header_boundary(HoroVfxApi PUBLIC_HEADERS
 )
 horo_configure_target_header_boundary(HoroDestructionApi PUBLIC_HEADERS
     Horo/Destruction/DestructibleDescriptor.h
+    Horo/Destruction/DestructionCommand.h
     Horo/Destruction/DestructionErrors.h
     Horo/Destruction/DestructionIdentity.h
+    Horo/Destruction/DestructionRegistry.h
+    Horo/Destruction/DestructionStateMachine.h
 )
 horo_configure_target_header_boundary(HoroCinematicModel PUBLIC_HEADERS
     Horo/Cinematic/CurveSampling.h
@@ -271,6 +280,12 @@ horo_configure_target_header_boundary(HoroCinematicModel PUBLIC_HEADERS
     Horo/Cinematic/CinematicIdentity.h
     Horo/Cinematic/SequenceAsset.h
     Horo/Cinematic/TransformTrack.h
+)
+horo_configure_target_header_boundary(HoroCinematicRuntime PUBLIC_HEADERS
+    Horo/Cinematic/SequenceEvaluation.h
+    Horo/Cinematic/SequenceEvaluationErrors.h
+    Horo/Cinematic/SequencePlayer.h
+    Horo/Cinematic/SequencePlayerErrors.h
 )
 horo_configure_target_header_boundary(HoroNavigationApi PUBLIC_HEADERS
     Horo/Navigation/NavigationAreas.h

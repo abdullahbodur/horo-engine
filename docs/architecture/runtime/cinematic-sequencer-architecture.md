@@ -136,6 +136,35 @@ gameplay command/event occurrence or a recorded application operation identity.
 Allocation order, pointers, thread arrival, worker completion, unordered-map order and
 process-random hash seeds are never player identity or tie-breakers.
 
+### Implemented Playback State Contract
+
+`Horo/Cinematic/SequencePlayer.h` is the implemented owner-side control state machine.
+`CinematicRuntimeService` creates and stores each value; application, scene and tool
+callers retain only `SequencePlayerHandle`. Every command validates the exact runtime
+session and player generations. `SequencePlayerOperationFence` additionally captures
+the monotonically increasing control revision so a completion prepared before play,
+pause, seek, rate, stop, failure or close cannot commit into newer state.
+
+The implemented transitions are `Ready -> Playing <-> Paused`, any controllable state
+to `Stopping -> Stopped`, and every non-terminal state to `Closing -> Stopped` or
+`Failed`. `Stopped` and `Failed` are terminal; replay requires a newly registry-issued
+player generation. Repeating an already-satisfied Play, Pause, Stop, Close or Fail is
+an explicit no-change result and emits no signal. Invalid transitions fail without
+changing state or control revision.
+
+Stop and close deliberately differ. Stop closes future evaluation/event admission and
+drains occurrences already admitted by the owning boundary. Close is cancellation,
+scene/session loss or shutdown: it closes admission immediately and discards pending,
+not-yet-admitted work. Neither transition synchronously destroys leases or provider
+payloads. Their owning registry publishes the terminal state only after retained work
+retires.
+
+Seek accepts any exact target in the inclusive sequence range and publishes the target
+directly; it never advances from the prior cursor. Its signal resets event traversal
+without dispatching the crossed interval. Playback rate is a bounded exact rational.
+Zero rate leaves a player `Playing` with a frozen clock and is observably different
+from `Paused`; negative rate remains available for reverse-capable clocks.
+
 ## Trigger Sources And Admission
 
 Gameplay scripts/native behaviors, scene-load autoplay descriptors, committed
@@ -420,9 +449,9 @@ diagnostic. Not-yet-resident media uses bounded asynchronous preparation, never
 synchronous evaluation/callback I/O. Device/backend loss and missed schedule horizons
 retain Audio-owned typed outcomes and policy.
 
-This seam consumes [AUD-001.1 #525](https://github.com/abdullahbodur/horo-engine/issues/525)
-for runtime/callback ownership, [AUD-002.1 #537](https://github.com/abdullahbodur/horo-engine/issues/537)
-for cooked media/readiness, and [AUD-008.1 #607](https://github.com/abdullahbodur/horo-engine/issues/607)
+This seam consumes [AUD-001.1 #525](https://github.com/HoroCore/horo-engine/issues/525)
+for runtime/callback ownership, [AUD-002.1 #537](https://github.com/HoroCore/horo-engine/issues/537)
+for cooked media/readiness, and [AUD-008.1 #607](https://github.com/HoroCore/horo-engine/issues/607)
 for sequence-to-sample correlation, transport, seek/preroll and acknowledgements.
 Cinematic does not duplicate or override those Audio decisions.
 
@@ -589,6 +618,22 @@ VFX and other stateful destinations receive typed seek/resynchronize intent or
 Unsupported rather than historical side-effect playback.
 
 ## Frame Evaluation Phase
+
+The implemented `Horo/Cinematic/SequenceEvaluation.h` contract provides the
+allocation-free fixed-boundary core. Activation copies and canonically orders
+bounded scalar-track adapters, event keys and camera-cut keys. Each evaluation
+preflights exact rational advancement, loop/turn crossings, caller scratch capacity,
+all samples and required typed hooks before it publishes the cursor or invokes an
+apply adapter. Apply order is property then transform with stable `TrackId` order;
+committed event occurrences and camera requests follow afterward. A control-revision
+fence prevents a cursor prepared before seek, rate, pause, stop, replacement or
+shutdown from evaluating a newer player. Cursor recreation uses an explicit reset
+policy so initial playback may emit its current boundary while seek remains silent.
+
+Root-player batches use `OrderSequenceFramePlayers` over caller-owned storage:
+priority descends and stable typed player identity ascends. The bounded insertion
+sort is independent of allocation, input/container order and worker completion and
+performs no frame-hot allocation.
 
 ### Authoritative Simulation Path
 
@@ -946,14 +991,14 @@ implemented or create substitute tickets:
 
 | Contract | Delivery ticket |
 |---|---|
-| IDs, schema and curve sampling | [CIN-001.2 #1710](https://github.com/abdullahbodur/horo-engine/issues/1710), [CIN-001.3 #1711](https://github.com/abdullahbodur/horo-engine/issues/1711), [CIN-001.4 #1712](https://github.com/abdullahbodur/horo-engine/issues/1712) |
-| Transform/property bindings and qualification | [CIN-001.5 #1713](https://github.com/abdullahbodur/horo-engine/issues/1713), [CIN-001.6 #1714](https://github.com/abdullahbodur/horo-engine/issues/1714), [CIN-001.7 #1715](https://github.com/abdullahbodur/horo-engine/issues/1715) |
-| Clock/phase and domain-authority decisions | [CIN-002.1 #1698](https://github.com/abdullahbodur/horo-engine/issues/1698), [CIN-002.2 #1699](https://github.com/abdullahbodur/horo-engine/issues/1699) |
-| Evaluation, pause and concurrent budgets | [CIN-002.4 #1717](https://github.com/abdullahbodur/horo-engine/issues/1717), [CIN-002.7 #1720](https://github.com/abdullahbodur/horo-engine/issues/1720), [CIN-002.8 #1721](https://github.com/abdullahbodur/horo-engine/issues/1721) |
-| Camera authority and cut implementation | [CIN-003.1 #1700](https://github.com/abdullahbodur/horo-engine/issues/1700), [CIN-003.2 #1723](https://github.com/abdullahbodur/horo-engine/issues/1723) |
-| Camera blending, origin seam and qualification | [CIN-003.3 #1724](https://github.com/abdullahbodur/horo-engine/issues/1724), [CIN-003.4 #1725](https://github.com/abdullahbodur/horo-engine/issues/1725), [CIN-003.5 #1726](https://github.com/abdullahbodur/horo-engine/issues/1726) |
-| Event dispatch authority and EventTrack | [CIN-004.1 #1701](https://github.com/abdullahbodur/horo-engine/issues/1701), [CIN-004.2 #1727](https://github.com/abdullahbodur/horo-engine/issues/1727) |
-| Audio/VFX/sub-sequence integration | [CIN-004.3 #1728](https://github.com/abdullahbodur/horo-engine/issues/1728), [CIN-004.4 #1729](https://github.com/abdullahbodur/horo-engine/issues/1729), [CIN-004.6 #1731](https://github.com/abdullahbodur/horo-engine/issues/1731) |
+| IDs, schema and curve sampling | [CIN-001.2 #1710](https://github.com/HoroCore/horo-engine/issues/1710), [CIN-001.3 #1711](https://github.com/HoroCore/horo-engine/issues/1711), [CIN-001.4 #1712](https://github.com/HoroCore/horo-engine/issues/1712) |
+| Transform/property bindings and qualification | [CIN-001.5 #1713](https://github.com/HoroCore/horo-engine/issues/1713), [CIN-001.6 #1714](https://github.com/HoroCore/horo-engine/issues/1714), [CIN-001.7 #1715](https://github.com/HoroCore/horo-engine/issues/1715) |
+| Clock/phase and domain-authority decisions | [CIN-002.1 #1698](https://github.com/HoroCore/horo-engine/issues/1698), [CIN-002.2 #1699](https://github.com/HoroCore/horo-engine/issues/1699) |
+| Evaluation, pause and concurrent budgets | [CIN-002.4 #1717](https://github.com/HoroCore/horo-engine/issues/1717), [CIN-002.7 #1720](https://github.com/HoroCore/horo-engine/issues/1720), [CIN-002.8 #1721](https://github.com/HoroCore/horo-engine/issues/1721) |
+| Camera authority and cut implementation | [CIN-003.1 #1700](https://github.com/HoroCore/horo-engine/issues/1700), [CIN-003.2 #1723](https://github.com/HoroCore/horo-engine/issues/1723) |
+| Camera blending, origin seam and qualification | [CIN-003.3 #1724](https://github.com/HoroCore/horo-engine/issues/1724), [CIN-003.4 #1725](https://github.com/HoroCore/horo-engine/issues/1725), [CIN-003.5 #1726](https://github.com/HoroCore/horo-engine/issues/1726) |
+| Event dispatch authority and EventTrack | [CIN-004.1 #1701](https://github.com/HoroCore/horo-engine/issues/1701), [CIN-004.2 #1727](https://github.com/HoroCore/horo-engine/issues/1727) |
+| Audio/VFX/sub-sequence integration | [CIN-004.3 #1728](https://github.com/HoroCore/horo-engine/issues/1728), [CIN-004.4 #1729](https://github.com/HoroCore/horo-engine/issues/1729), [CIN-004.6 #1731](https://github.com/HoroCore/horo-engine/issues/1731) |
 
 ## Testing and Verification Requirements
 

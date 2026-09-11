@@ -4,9 +4,9 @@
 - **Date**: 2026-09-02
 - **Supersedes**: None
 - **Scope**: Runtime UI logical units, box constraints, precedence, intrinsic sizing, anchors, aspect ratio, flex/grid participation, measure-arrange phases, overflow, rounding, determinism, failure, and compatibility
-- **Issue**: [RUI-002.1](https://github.com/abdullahbodur/horo-engine/issues/706)
+- **Issue**: [RUI-002.1](https://github.com/HoroCore/horo-engine/issues/706)
 - **Jira**: [HORO-706](https://horo-engine.atlassian.net/browse/HORO-706)
-- **Parent**: [RUI-002](https://github.com/abdullahbodur/horo-engine/issues/705)
+- **Parent**: [RUI-002](https://github.com/HoroCore/horo-engine/issues/705)
 - **Related**: [ADR-008](008-error-model-exception-boundary-and-registry.md), [ADR-033](033-presentation-and-display-ownership.md), [ADR-073](073-runtime-ui-ownership-scope-and-update-order.md)
 - **Normative documents**: [Game UI and HUD](../architecture/runtime/game-ui-and-hud.md), [Rendering Architecture](../architecture/runtime/rendering-architecture.md)
 

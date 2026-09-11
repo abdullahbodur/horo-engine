@@ -4,9 +4,9 @@
 - **Date**: 2026-09-02
 - **Supersedes**: None
 - **Scope**: Runtime UI style asset and class identity, typed visual/layout/typography/imagery tokens, token references, inheritance and element precedence, visual-state overrides, cycles, cook/runtime lifecycle, errors, accessibility, compatibility, and editor/renderer separation
-- **Issue**: [RUI-004.1](https://github.com/abdullahbodur/horo-engine/issues/727)
+- **Issue**: [RUI-004.1](https://github.com/HoroCore/horo-engine/issues/727)
 - **Jira**: [HORO-727](https://horo-engine.atlassian.net/browse/HORO-727)
-- **Parent**: [RUI-004](https://github.com/abdullahbodur/horo-engine/issues/726)
+- **Parent**: [RUI-004](https://github.com/HoroCore/horo-engine/issues/726)
 - **Related**: [ADR-015](015-accessibility-ownership-typed-transport-and-non-gating-policy.md), [ADR-054](054-extension-and-package-authority-boundary.md), [ADR-073](073-runtime-ui-ownership-scope-and-update-order.md), [ADR-074](074-runtime-ui-layout-units-and-measure-arrange.md), [ADR-075](075-runtime-ui-font-asset-family-and-fallback.md)
 - **Normative documents**: [Game UI and HUD](../architecture/runtime/game-ui-and-hud.md), [Asset Pipeline](../architecture/runtime/asset-pipeline.md), [Rendering Architecture](../architecture/runtime/rendering-architecture.md), [Editor UI Design System](../architecture/editor/ui-design-system.md)
 

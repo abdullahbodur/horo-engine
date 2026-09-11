@@ -4,7 +4,7 @@
 - **Date**: 2026-09-02
 - **Supersedes**: None
 - **Scope**: Grounded navigation definition assets, authored Scene intent, bake-input capture, cooked NavMesh artifacts, stable identity and provenance, mutation authority, runtime topology, missing-data behavior, migration and non-ground navigation separation
-- **Issue**: [NAV-002.1](https://github.com/abdullahbodur/horo-engine/issues/1234)
+- **Issue**: [NAV-002.1](https://github.com/HoroCore/horo-engine/issues/1234)
 - **Jira**: [HORO-1234](https://horo-engine.atlassian.net/browse/HORO-1234)
 - **Related**: [ADR-012](012-world-streaming-partition-authority-and-subsystem-boundaries.md), [ADR-016](016-navigation-target-ownership-and-dependency-boundary.md), [ADR-023](023-world-index-and-cell-format-architecture-decision.md), [ADR-026](026-large-world-precision-and-floating-origin-strategy.md), [ADR-085](085-physics-shape-authoring-cook-and-runtime-boundary.md), [ADR-104](104-default-navigation-provider-and-recast-detour-adoption.md)
 - **Normative documents**: [Navigation and AI Architecture](../architecture/runtime/navigation-and-ai-architecture.md), [Scene Runtime](../architecture/runtime/scene-runtime.md), [Asset Pipeline](../architecture/runtime/asset-pipeline.md), [Project Versioning and Migration](../architecture/foundation/project-versioning-and-migration.md), [World Streaming](../architecture/runtime/world-streaming-architecture.md)

@@ -220,21 +220,43 @@ contribution admission before owner-safe-point handoff/lease retirement.
 
 ## Animation Clip
 
-A clip stores sampled animation data for one skeleton.
+A clip stores immutable sampled animation data for one exact skeleton publication.
+`Horo/Animation/AnimationClip.h` is the ANI-001.6 owner of the portable clip,
+directed traversal, and sampling contract. Persistent `AnimationClipId` remains
+separate from the non-reusable `AnimationClipGeneration`; reload never makes an
+old generation refer to replacement data.
 
 ```cpp
 struct AnimationClipDescriptor {
-    ClipId id;
+    AnimationClipId id;
+    AnimationClipGeneration generation;
     SkeletonId skeleton;
+    SkeletonAssetGeneration skeletonGeneration;
     AnimationDeltaTime duration;
     AnimationSampleRate sampleRate;
-    WrapMode wrapMode;
+    AnimationWrapMode wrapMode;
+    AnimationClipKind kind;
     bool hasRootMotion;
     AnimationCompressionScheme compression;
+    optional<AnimationReferencePoseBinding> referencePose;
 };
 ```
 
-Per-joint curves store:
+`AnimationTime`, `AnimationTimeDelta`, and `AnimationDeltaTime` use signed 64-bit
+nanosecond ticks. Clip-local sample positions are in the closed interval from zero
+through duration; cursor phases are normalized by wrap mode. Sample rate is a
+positive reduced `uint32/uint32` rational. Load/cook rejects non-canonical rates,
+non-positive or excessive durations, overflow-prone metadata, and unsupported
+typed values rather than converting through binary floating-point seconds.
+
+Per-joint tracks use stable `JointId` and complete local-transform keys. Candidate
+track and key containers are canonicalized by joint identity and exact key time at
+the load/cook boundary. Duplicate tracks/times, missing joints, invalid transforms,
+unknown interpolation, and bounded-count violations fail transactionally. Runtime
+keys are already decoded portable values; compression metadata never exposes a
+native codec or causes frame-hot I/O.
+
+Track transforms contain:
 
 - translation
 - rotation (quaternion, shortest-path interpolation)
@@ -246,27 +268,89 @@ Compression options:
 - `Linear` — linear key reduction
 - `Adaptive` — error-tolerant key reduction per joint
 
-Additive clips (difference clips applied relative to a reference pose) are a
-separate clip kind, not a compression scheme. A clip may be both additive and
+Additive clips are a separate clip kind, not a compression scheme. They bind one
+stable `AnimationReferencePoseId` and immutable reference-pose generation. Sampling
+requires that exact binding plus complete immutable reference and current base-pose
+views. It computes the sampled reference-relative translation, rotation, and scale
+delta and composes it onto the current base pose. Missing, stale, or size-skewed
+reference input fails before any output write. A clip may be both additive and
 compressed.
 
 Cook-time compression may reduce precision based on the active cook profile.
 
+### Compression Cook Contract
+
+`Horo/Animation/AnimationCompression.h` owns ANI-001.7. Compression is an
+Animation/Asset-Pipeline cook-boundary transaction over an already validated
+`AnimationClipAsset` and its exact skeleton publication. The caller captures the
+current clip and skeleton generations before admission. Cancellation or shutdown
+rejects before reduction begins, and reload accepts a replacement only for the
+same stable clip, skeleton, profile, scheme, and compression-contract domain. A
+failure never replaces the last good immutable publication.
+
+`Lossless`, `Balanced`, and `Aggressive` resolve to complete typed profiles with a
+stable `AnimationCompressionProfileId`; no project setting, platform codec,
+service locator, mutable global, or backend handle supplies an implicit fallback.
+Every profile declares finite source/output-key and error-evaluation limits plus
+finite translation, quaternion-angle, and scale thresholds. `Linear` performs one
+canonical reduction pass. `Adaptive` deterministically subdivides each segment at
+the intermediate key with the greatest normalized threshold error, retaining the
+earliest key when errors tie. Step and cubic boundaries are retained because
+replacing them with linear interpolation would change their semantics.
+The immutable statistics report exact source/output/removed keys, maximum keys per
+track, and performed error evaluations.
+
+The compressed publication carries its exact contract version, profile, stable
+clip and skeleton identities, immutable generations, and representation. Runtime
+sampling must present that complete compatibility value; old generations fail as
+stale and another profile or representation fails as unsupported. Before writing
+caller-owned output, the wrapper proves the track and binary-search worst-case fit
+the captured `AnimationDecompressionBudget`. Successful frame-hot sampling then
+delegates to the immutable clip sampler and performs no allocation, blocking I/O,
+callback, global lookup, or backend dispatch. Immutable publications may be read
+concurrently while their owner-provided lifetime remains valid. The asset owner
+closes admission, joins/cancels cook work, retires old publication leases, and only
+then destroys clip and skeleton storage during unload or shutdown.
+
+Migration: the ANI-001.6 `AnimationClipDescriptor::compression` field remains the
+portable representation tag, but it is not sufficient proof that a cooked artifact
+is compatible. Existing compressed artifacts must be recooked to publish the
+ANI-001.7 compatibility value and statistics; runtimes must not synthesize missing
+profile identity or generation evidence.
+
 ### Clip Sampling
 
-```cpp
-Pose SampleClip(const AnimationClip& clip, AnimationTime time,
-                const Skeleton& skeleton);
-```
+`AnimationClipAsset::Sample` writes a complete local pose into caller-owned bounded
+storage. Untracked absolute joints retain the exact skeleton reference pose captured
+at clip publication. Step, linear, and zero-tangent cubic-Hermite interpolation are
+selected by the left key; rotations use normalized shortest-path interpolation.
+After successful `Create`, sampling performs no allocation, blocking, I/O, service
+lookup, callback, or mutable global access and is safe on concurrent readers while
+the immutable clip and caller views remain alive.
 
 Behavior:
 
-- `AnimationTime` uses the checked fixed-point/rational domain finalized by
-  ANI-001.6; authoritative cursors are not accumulated in floating-point seconds
-- time is wrapped according to `WrapMode` (`Once`, `Loop`, `PingPong`, `ClampForever`)
-- keyframe interpolation is linear or spline depending on clip metadata
-- rotations are normalized after interpolation
-- additive clips are applied relative to the current pose
+- `AnimationClipAsset::Traverse` accepts a canonical cursor and exact signed delta,
+  then returns a complete candidate cursor, local sample time, direction, and
+  boundary-crossing count without mutating player state
+- `Once` clamps at the first reached endpoint and becomes terminal; a terminal
+  cursor holds until its owner explicitly resets the player
+- `Loop` keeps phase in `[0,duration)`; `PingPong` keeps phase in
+  `[0,2*duration)` and reflects local sample direction at both endpoints
+- `ClampForever` holds at an endpoint without becoming terminal and may later move
+  away under an opposite signed delta
+- reverse playback uses the same phase and crossing rules with a negative delta;
+  it does not reverse simulation, physics, or irreversible side effects
+- addition overflow, malformed phase, cancellation, shutdown, or a crossing count
+  above the captured hard-bounded policy returns a typed failure with no partial
+  cursor, event, root-motion, or pose output
+
+Clip creation is a load/cook/control-boundary transaction. Cancellation and shutdown
+are captured before work; reload requires the same persistent clip identity and
+publishes only after complete validation. Sampling rechecks clip, skeleton, and
+additive-reference generations. Asset owners retain the last good publication on
+any validation failure and retire old immutable data only after their external
+lease policy permits it.
 
 ## Animation Graph
 

@@ -4,9 +4,9 @@
 - **Date**: 2026-09-02
 - **Supersedes**: None
 - **Scope**: Runtime UI binding provider/property/schema/instance identity, typed values and read/write capability, descriptor registration, snapshot/read and command/write boundaries, game/player/scene/module lifetime, revocation, module unload, errors, security, compatibility, and shutdown
-- **Issue**: [RUI-006.1](https://github.com/abdullahbodur/horo-engine/issues/747)
+- **Issue**: [RUI-006.1](https://github.com/HoroCore/horo-engine/issues/747)
 - **Jira**: [HORO-747](https://horo-engine.atlassian.net/browse/HORO-747)
-- **Parent**: [RUI-006](https://github.com/abdullahbodur/horo-engine/issues/746)
+- **Parent**: [RUI-006](https://github.com/HoroCore/horo-engine/issues/746)
 - **Related**: [ADR-008](008-error-model-exception-boundary-and-registry.md), [ADR-018](018-command-registration-permissions-threading-and-packaged-build-policy.md), [ADR-054](054-extension-and-package-authority-boundary.md), [ADR-073](073-runtime-ui-ownership-scope-and-update-order.md)
 - **Normative documents**: [Game UI and HUD](../architecture/runtime/game-ui-and-hud.md), [Runtime Lifecycle](../architecture/runtime/runtime-lifecycle.md), [Scene Runtime](../architecture/runtime/scene-runtime.md), [Internal Module Descriptor](../architecture/foundation/internal-module-descriptor.md)
 

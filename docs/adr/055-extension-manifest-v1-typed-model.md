@@ -4,7 +4,7 @@
 - **Date**: 2026-09-02
 - **Supersedes**: None
 - **Scope**: Backend- and GUI-neutral typed model for package-scoped extension modules, contributions, permissions, settings, events, errors, service exports and script bindings
-- **Issue**: [EXT-001.2](https://github.com/abdullahbodur/horo-engine/issues/70)
+- **Issue**: [EXT-001.2](https://github.com/HoroCore/horo-engine/issues/70)
 - **Jira**: [HORO-70](https://horo-engine.atlassian.net/browse/HORO-70)
 - **Related**: [ADR-054](054-extension-and-package-authority-boundary.md)
 - **Normative documents**: [Extension System](../architecture/extensions/plugin-system.md), [Horo Package System](../architecture/packages/package-system.md), [Extension Module Development Guide](../guides/extension-module-development.md), [System Design](../architecture/foundation/system-design.md)

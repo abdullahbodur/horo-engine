@@ -4,9 +4,9 @@
 - **Date**: 2026-09-02
 - **Supersedes**: None
 - **Scope**: Sample-clock music transport, gameplay and narrative decisions, cinematic and animation timing bridges, localized media, captions/subtitles, and save-state boundaries
-- **Issue**: [AUD-008.1](https://github.com/abdullahbodur/horo-engine/issues/607)
+- **Issue**: [AUD-008.1](https://github.com/HoroCore/horo-engine/issues/607)
 - **Jira**: [HORO-607](https://horo-engine.atlassian.net/browse/HORO-607)
-- **Parent**: [AUD-008](https://github.com/abdullahbodur/horo-engine/issues/606)
+- **Parent**: [AUD-008](https://github.com/HoroCore/horo-engine/issues/606)
 - **Related**: [ADR-014](014-sequencer-ownership-clock-authority-and-binding-boundary.md), [ADR-061](061-animation-ownership-update-order-and-clock.md), [ADR-062](062-audio-runtime-ownership-and-update-order.md), [ADR-064](064-audio-asset-and-cook-boundary.md)
 - **Normative documents**: [Audio Architecture](../architecture/runtime/audio-architecture.md), [Cinematic Sequencer](../architecture/runtime/cinematic-sequencer-architecture.md), [Animation Architecture](../architecture/runtime/animation-architecture.md), [Accessibility Architecture](../architecture/runtime/accessibility-architecture.md), [Save Game and Persistence](../architecture/runtime/save-game-and-persistence.md)
 

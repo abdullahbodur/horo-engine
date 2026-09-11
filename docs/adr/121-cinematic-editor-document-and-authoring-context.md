@@ -4,7 +4,7 @@
 - **Date**: 2026-09-02
 - **Supersedes**: None
 - **Scope**: Sequence asset document identity, tab and creation ownership, authoring scene context, reference staleness, command/history boundaries, save/autosave/recovery/external conflict and preview isolation
-- **Issue**: [CIN-005.1](https://github.com/abdullahbodur/horo-engine/issues/1702)
+- **Issue**: [CIN-005.1](https://github.com/HoroCore/horo-engine/issues/1702)
 - **Jira**: [HORO-1661](https://horo-engine.atlassian.net/browse/HORO-1661)
 - **Related**: [ADR-014](014-sequencer-ownership-clock-authority-and-binding-boundary.md), [ADR-093](093-prefab-override-property-identity-and-delta-operations.md), [ADR-094](094-prefab-nested-composition-and-variant-inheritance.md), [ADR-117](117-playback-ownership-frame-order-and-determinism.md), [ADR-119](119-camera-authority-during-cinematics.md)
 - **Normative documents**: [Editor Document Model](../architecture/editor/editor-document-model.md), [Cinematic Sequencer Architecture](../architecture/runtime/cinematic-sequencer-architecture.md), [Project Model](../architecture/editor/project-model.md)

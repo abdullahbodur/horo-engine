@@ -86,6 +86,8 @@ add_library(HoroPlatform STATIC
         platform/Platform.cpp
         platform/PlatformErrors.cpp
         platform/ConfigurationFileStore.cpp
+        platform/android/AndroidLifecycle.cpp
+        platform/android/AndroidLifecycleAdapter.cpp
 )
 
 if (WIN32)
@@ -201,6 +203,7 @@ add_library(HoroNetworkApi STATIC
         runtime/networking/api/MessageCodecRegistry.cpp
         runtime/networking/api/NetworkAddress.cpp
         runtime/networking/api/NetworkErrors.cpp
+        runtime/networking/api/NetworkFailure.cpp
         runtime/networking/api/NetworkObjectIdentity.cpp
         runtime/networking/api/PacketBuffer.cpp
         runtime/networking/api/PacketQueue.cpp
@@ -434,6 +437,7 @@ add_library(HoroPhysics STATIC
         physics/PhysicsFilterIdentity.cpp
         physics/PhysicsHandleRegistry.h
         physics/PhysicsIdentity.cpp
+        physics/PhysicsMetrics.cpp
         physics/PhysicsPose.cpp
         physics/PhysicsQuery.cpp
         physics/PhysicsShapeDescriptor.cpp
@@ -465,6 +469,7 @@ endif()
 add_library(HoroAI STATIC
         runtime/ai/api/AIErrors.cpp
         runtime/ai/api/AIIdentity.cpp
+        runtime/ai/api/BlackboardInstance.cpp
         runtime/ai/api/BlackboardSchema.cpp
 )
 add_library(HoroEngine::AI ALIAS HoroAI)
@@ -472,6 +477,8 @@ target_compile_features(HoroAI PUBLIC cxx_std_20)
 target_link_libraries(HoroAI PUBLIC HoroEngine::Foundation)
 
 add_library(HoroAnimationApi STATIC
+        runtime/animation/api/AnimationCompression.cpp
+        runtime/animation/api/AnimationClip.cpp
         runtime/animation/api/AnimationComponents.cpp
         runtime/animation/api/AnimationErrors.cpp
         runtime/animation/api/AnimationIdentity.cpp
@@ -502,8 +509,11 @@ target_compile_features(HoroVfxApi PUBLIC cxx_std_20)
 target_link_libraries(HoroVfxApi PUBLIC HoroEngine::Foundation)
 
 add_library(HoroDestructionApi STATIC
+        runtime/destruction/api/DestructionCommand.cpp
         runtime/destruction/api/DestructionErrors.cpp
         runtime/destruction/api/DestructionIdentity.cpp
+        runtime/destruction/api/DestructionRegistry.cpp
+        runtime/destruction/api/DestructionStateMachine.cpp
         runtime/destruction/api/DestructibleDescriptor.cpp
 )
 add_library(HoroEngine::DestructionApi ALIAS HoroDestructionApi)
@@ -524,6 +534,16 @@ target_link_libraries(HoroCinematicModel
         PUBLIC HoroEngine::Foundation HoroEngine::Assets
         PRIVATE nlohmann_json::nlohmann_json
 )
+
+add_library(HoroCinematicRuntime STATIC
+        runtime/cinematic/player/SequenceEvaluation.cpp
+        runtime/cinematic/player/SequenceEvaluationErrors.cpp
+        runtime/cinematic/player/SequencePlayer.cpp
+        runtime/cinematic/player/SequencePlayerErrors.cpp
+)
+add_library(HoroEngine::CinematicRuntime ALIAS HoroCinematicRuntime)
+target_compile_features(HoroCinematicRuntime PUBLIC cxx_std_20)
+target_link_libraries(HoroCinematicRuntime PUBLIC HoroEngine::CinematicModel)
 
 add_library(HoroNavigationApi STATIC
         runtime/navigation/api/NavigationAreas.cpp

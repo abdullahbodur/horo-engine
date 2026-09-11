@@ -4,7 +4,7 @@
 - **Date**: 2026-09-02
 - **Supersedes**: None
 - **Scope**: Runtime-driven XR views, native swapchains, external image import, render targets, synchronization, frame/composition submission, bounded N-view admission, depth/motion inputs, dynamic resolution, foveation/VRS/density paths, runtime compositor behavior, lifecycle, migration and validation
-- **Issue**: [XRA-004.1](https://github.com/abdullahbodur/horo-engine/issues/2138)
+- **Issue**: [XRA-004.1](https://github.com/HoroCore/horo-engine/issues/2138)
 - **Jira**: [HORO-2092](https://horo-engine.atlassian.net/browse/HORO-2092)
 - **Related**: [ADR-026](026-large-world-precision-and-floating-origin-strategy.md), [ADR-027](027-renderer-resource-identity-and-descriptors.md), [ADR-028](028-renderer-capability-limits-and-product-profiles.md), [ADR-033](033-presentation-and-display-ownership.md), [ADR-034](034-gpu-memory-and-residency-ownership.md), [ADR-037](037-scene-color-and-hdr-architecture.md), [ADR-040](040-reconstruction-frame-generation-and-latency-providers.md), [ADR-157](157-xr-ownership-runtime-composition-and-capability-tier.md), [ADR-158](158-openxr-loader-backend-packaging-and-host-composition.md), [ADR-159](159-xr-action-tracking-and-input-projection-ownership.md)
 - **Normative documents**: [XR Architecture](../architecture/runtime/vr-ar-architecture.md), [Rendering Architecture](../architecture/runtime/rendering-architecture.md), [Render Backend Parity](../architecture/runtime/render-backend-parity-contract.md), [Post-Processing and Effects Architecture](../architecture/runtime/post-processing-and-effects-architecture.md)

@@ -2,9 +2,9 @@
 
 - Audit status: Implementation snapshot
 - Date: 2026-09-03
-- Issue: [[GAM-001.1]](https://github.com/abdullahbodur/horo-engine/issues/143)
+- Issue: [[GAM-001.1]](https://github.com/HoroCore/horo-engine/issues/143)
 - Jira: [HORO-143](https://horo-engine.atlassian.net/browse/HORO-143)
-- Parent: [[GAM-001]](https://github.com/abdullahbodur/horo-engine/issues/61)
+- Parent: [[GAM-001]](https://github.com/HoroCore/horo-engine/issues/61)
 
 ## Purpose
 
@@ -342,14 +342,14 @@ This audit does not redefine these responsibilities:
 
 | Gap | Focused owner |
 | --- | --- |
-| Complete, deterministic, versioned generated identity, registrations, lifecycle callbacks, diagnostics, and validation | [HORO-144 / GAM-001.2](https://github.com/abdullahbodur/horo-engine/issues/144) |
-| Stable game-owned component identities, serialization metadata, migration, missing-code behavior, and editor inspection | [HORO-145 / GAM-001.3](https://github.com/abdullahbodur/horo-engine/issues/145) |
-| Project system and service registration, dependencies, scheduling, capabilities, cancellation, shutdown, and reload | [HORO-146 / GAM-001.4](https://github.com/abdullahbodur/horo-engine/issues/146) |
-| Game-owned asset type identity, import, serialization, cook, editor representation, and missing-code fallback | [HORO-147 / GAM-001.5](https://github.com/abdullahbodur/horo-engine/issues/147) |
-| Quiesce/snapshot/unload/load/restore transaction, lifetime proof, rollback, and restart fallback | [HORO-148 / GAM-001.6](https://github.com/abdullahbodur/horo-engine/issues/148) |
-| Reusable gameplay libraries through package restore, deterministic symbols, and source/binary ABI policy | [HORO-149 / GAM-001.7](https://github.com/abdullahbodur/horo-engine/issues/149) |
-| Lossless unknown payloads, actionable degraded mode, Play gating, and repair without data loss | [HORO-150 / GAM-001.8](https://github.com/abdullahbodur/horo-engine/issues/150) |
-| Multiple gameplay modules and mods: supported use cases, trust, isolation, ordering, compatibility, distribution, and migration | [HORO-151 / GAM-001.9](https://github.com/abdullahbodur/horo-engine/issues/151) |
+| Complete, deterministic, versioned generated identity, registrations, lifecycle callbacks, diagnostics, and validation | [HORO-144 / GAM-001.2](https://github.com/HoroCore/horo-engine/issues/144) |
+| Stable game-owned component identities, serialization metadata, migration, missing-code behavior, and editor inspection | [HORO-145 / GAM-001.3](https://github.com/HoroCore/horo-engine/issues/145) |
+| Project system and service registration, dependencies, scheduling, capabilities, cancellation, shutdown, and reload | [HORO-146 / GAM-001.4](https://github.com/HoroCore/horo-engine/issues/146) |
+| Game-owned asset type identity, import, serialization, cook, editor representation, and missing-code fallback | [HORO-147 / GAM-001.5](https://github.com/HoroCore/horo-engine/issues/147) |
+| Quiesce/snapshot/unload/load/restore transaction, lifetime proof, rollback, and restart fallback | [HORO-148 / GAM-001.6](https://github.com/HoroCore/horo-engine/issues/148) |
+| Reusable gameplay libraries through package restore, deterministic symbols, and source/binary ABI policy | [HORO-149 / GAM-001.7](https://github.com/HoroCore/horo-engine/issues/149) |
+| Lossless unknown payloads, actionable degraded mode, Play gating, and repair without data loss | [HORO-150 / GAM-001.8](https://github.com/HoroCore/horo-engine/issues/150) |
+| Multiple gameplay modules and mods: supported use cases, trust, isolation, ordering, compatibility, distribution, and migration | [HORO-151 / GAM-001.9](https://github.com/HoroCore/horo-engine/issues/151) |
 
 Cross-cutting implementation work under those tickets must also close the
 packaged-player composition and platform evidence gaps where the owning contract

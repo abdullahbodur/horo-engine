@@ -4,9 +4,9 @@
 - **Date**: 2026-09-02
 - **Supersedes**: None
 - **Scope**: Audio capability identity, generic extension handoff, real-time in-process ABI, versioning, ownership, trust, transactional registration, and unload
-- **Issue**: [AUD-011.1](https://github.com/abdullahbodur/horo-engine/issues/638)
+- **Issue**: [AUD-011.1](https://github.com/HoroCore/horo-engine/issues/638)
 - **Jira**: [HORO-638](https://horo-engine.atlassian.net/browse/HORO-638)
-- **Parent**: [AUD-011](https://github.com/abdullahbodur/horo-engine/issues/637)
+- **Parent**: [AUD-011](https://github.com/HoroCore/horo-engine/issues/637)
 - **Related**: [ADR-054](054-extension-and-package-authority-boundary.md), [ADR-062](062-audio-runtime-ownership-and-update-order.md), [ADR-064](064-audio-asset-and-cook-boundary.md), [ADR-065](065-mixer-topology-and-constrained-dag.md), [ADR-066](066-spatial-provider-and-required-capability.md)
 - **Normative documents**: [Audio Architecture](../architecture/runtime/audio-architecture.md), [Extension System](../architecture/extensions/plugin-system.md), [Horo Package System](../architecture/packages/package-system.md)
 

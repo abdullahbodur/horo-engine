@@ -4,9 +4,9 @@
 - **Date**: 2026-09-02
 - **Supersedes**: None
 - **Scope**: Runtime UI presentation dimensions, persistent/player/scene/viewport ownership projection, world/HUD/screen/overlay/modal/loading/debug bands, route/stack identity and transactions, visibility/coverage/input/transition semantics, loading/debug policy, rendering, errors, compatibility, and shutdown
-- **Issue**: [RUI-008.1](https://github.com/abdullahbodur/horo-engine/issues/768)
+- **Issue**: [RUI-008.1](https://github.com/HoroCore/horo-engine/issues/768)
 - **Jira**: [HORO-768](https://horo-engine.atlassian.net/browse/HORO-768)
-- **Parent**: [RUI-008](https://github.com/abdullahbodur/horo-engine/issues/767)
+- **Parent**: [RUI-008](https://github.com/HoroCore/horo-engine/issues/767)
 - **Related**: [ADR-033](033-presentation-and-display-ownership.md), [ADR-073](073-runtime-ui-ownership-scope-and-update-order.md), [ADR-077](077-runtime-ui-animation-clock-and-time-domain.md), [ADR-078](078-runtime-ui-input-context-and-player-routing.md)
 - **Normative documents**: [Game UI and HUD](../architecture/runtime/game-ui-and-hud.md), [Runtime Lifecycle](../architecture/runtime/runtime-lifecycle.md), [Rendering Architecture](../architecture/runtime/rendering-architecture.md)
 

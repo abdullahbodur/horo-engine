@@ -4,9 +4,9 @@
 - **Date**: 2026-09-02
 - **Supersedes**: None
 - **Scope**: Event-bridge and backend-replacement models, normalized frontend frames, stable IDs, device/mixer ownership, native coexistence, voice budgets, capabilities, bank activation, profiling, package lifecycle, and distribution
-- **Issue**: [AUD-016.1](https://github.com/abdullahbodur/horo-engine/issues/682)
+- **Issue**: [AUD-016.1](https://github.com/HoroCore/horo-engine/issues/682)
 - **Jira**: [HORO-682](https://horo-engine.atlassian.net/browse/HORO-682)
-- **Parent**: [AUD-016](https://github.com/abdullahbodur/horo-engine/issues/681)
+- **Parent**: [AUD-016](https://github.com/HoroCore/horo-engine/issues/681)
 - **Related**: [ADR-054](054-extension-and-package-authority-boundary.md), [ADR-062](062-audio-runtime-ownership-and-update-order.md), [ADR-063](063-audio-sample-format-and-channel-layout.md), [ADR-064](064-audio-asset-and-cook-boundary.md), [ADR-065](065-mixer-topology-and-constrained-dag.md), [ADR-067](067-platform-audio-backend-strategy.md), [ADR-069](069-audio-extension-capability-and-abi.md)
 - **Normative documents**: [Audio Architecture](../architecture/runtime/audio-architecture.md), [Horo Package System](../architecture/packages/package-system.md), [Release and Distribution](../architecture/release/release.md), [Observability Metrics and Profiling](../architecture/observability/observability-performance.md), [Extension System](../architecture/extensions/plugin-system.md)
 

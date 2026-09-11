@@ -4,7 +4,7 @@
 - **Date**: 2026-09-02
 - **Supersedes**: None
 - **Scope**: EventTrack binding, typed payloads, committed occurrence dispatch, gameplay adapter ownership, AudioTrack request coupling, missing binding/media behavior, lifecycle and diagnostics
-- **Issue**: [CIN-004.1](https://github.com/abdullahbodur/horo-engine/issues/1701)
+- **Issue**: [CIN-004.1](https://github.com/HoroCore/horo-engine/issues/1701)
 - **Jira**: [HORO-1660](https://horo-engine.atlassian.net/browse/HORO-1660)
 - **Related**: [ADR-014](014-sequencer-ownership-clock-authority-and-binding-boundary.md), [ADR-017](017-prefab-role-ownership-and-capability-tiers.md), [ADR-062](062-audio-runtime-ownership-and-update-order.md), [ADR-064](064-audio-asset-and-cook-boundary.md), [ADR-068](068-music-transport-and-cross-system-ownership.md), [ADR-117](117-playback-ownership-frame-order-and-determinism.md)
 - **Normative documents**: [Cinematic Sequencer Architecture](../architecture/runtime/cinematic-sequencer-architecture.md), [Audio Architecture](../architecture/runtime/audio-architecture.md), [Runtime Lifecycle](../architecture/runtime/runtime-lifecycle.md), [Engine Data Bus](../architecture/foundation/engine-data-bus.md)
@@ -205,9 +205,9 @@ The cross-family ownership dependencies are normative and are not re-decided her
 
 | AUD decision | Authority consumed by this CIN boundary |
 |---|---|
-| [AUD-001.1 #525](https://github.com/abdullahbodur/horo-engine/issues/525) / ADR-062 | Audio runtime/control/callback ownership, command publication phases, generation and teardown order |
-| [AUD-002.1 #537](https://github.com/abdullahbodur/horo-engine/issues/537) / ADR-064 | Audio-domain cook metadata, runtime media payload/readiness and asset lease boundary |
-| [AUD-008.1 #607](https://github.com/abdullahbodur/horo-engine/issues/607) / ADR-068 | Sequence-to-sample correlation, schedule horizon, music transport, seek/scrub/preroll, late policy and acknowledgements |
+| [AUD-001.1 #525](https://github.com/HoroCore/horo-engine/issues/525) / ADR-062 | Audio runtime/control/callback ownership, command publication phases, generation and teardown order |
+| [AUD-002.1 #537](https://github.com/HoroCore/horo-engine/issues/537) / ADR-064 | Audio-domain cook metadata, runtime media payload/readiness and asset lease boundary |
+| [AUD-008.1 #607](https://github.com/HoroCore/horo-engine/issues/607) / ADR-068 | Sequence-to-sample correlation, schedule horizon, music transport, seek/scrub/preroll, late policy and acknowledgements |
 
 Future AUD-family decisions may refine Audio-internal formats, mixers, providers or
 middleware. CIN consumes their published Horo-owned AudioFrontend contract; it does

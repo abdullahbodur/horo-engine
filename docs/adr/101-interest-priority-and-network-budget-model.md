@@ -4,7 +4,7 @@
 - **Date**: 2026-09-02
 - **Supersedes**: None
 - **Scope**: Renderer-independent network project profiles, immutable relevancy inputs, per-connection scheduling, fairness, bandwidth/work/queue units and bounds, boundary hysteresis, overload, lifecycle, observability and qualification
-- **Issue**: [NET-006.1](https://github.com/abdullahbodur/horo-engine/issues/1152)
+- **Issue**: [NET-006.1](https://github.com/HoroCore/horo-engine/issues/1152)
 - **Jira**: [HORO-1152](https://horo-engine.atlassian.net/browse/HORO-1152)
 - **Related**: [ADR-097](097-default-real-time-transport-backend.md), [ADR-098](098-protocol-session-and-trust-policy.md), [ADR-099](099-replication-ownership-authority-and-compatibility.md), [ADR-100](100-prediction-capability-tiers-and-determinism-policy.md)
 - **Normative documents**: [Multiplayer Replication Architecture](../architecture/runtime/multiplayer-replication-architecture.md), [Networking Architecture](../architecture/runtime/networking-architecture.md)

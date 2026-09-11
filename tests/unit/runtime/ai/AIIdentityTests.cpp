@@ -136,6 +136,10 @@ namespace Horo::AI {
                 &AIErrors::BlackboardValueInvalid,
                 &AIErrors::BlackboardUnknownValueRejected,
                 &AIErrors::BlackboardStorageUnavailable,
+                &AIErrors::BlackboardInstanceStale,
+                &AIErrors::BlackboardInstanceInvalid,
+                &AIErrors::BlackboardBatchInvalid,
+                &AIErrors::BlackboardRevisionExhausted,
             };
             std::set<std::string_view> uniqueCodes;
             for (const ErrorCodeDescriptor *descriptor : descriptors) {
