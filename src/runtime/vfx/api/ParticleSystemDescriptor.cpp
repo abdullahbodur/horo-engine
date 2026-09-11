@@ -35,16 +35,17 @@ namespace Horo::Vfx {
             explicit StrictJsonObserver(const std::size_t maximumDepth) : maximumDepth_(maximumDepth) {}
 
             bool Observe(const int depth, const Json::parse_event_t event, const Json &parsed) {
+                using enum Json::parse_event_t;
                 if (depth < 0 || static_cast<std::size_t>(depth) >= maximumDepth_) {
                     depthExceeded_ = true;
                     return false;
                 }
-                if (event == Json::parse_event_t::object_start) {
+                if (event == object_start) {
                     objectKeys_.emplace_back();
-                } else if (event == Json::parse_event_t::key) {
+                } else if (event == key) {
                     if (objectKeys_.empty() || !objectKeys_.back().insert(parsed.get<std::string>()).second)
                         duplicateField_ = true;
-                } else if (event == Json::parse_event_t::object_end && !objectKeys_.empty()) {
+                } else if (event == object_end && !objectKeys_.empty()) {
                     objectKeys_.pop_back();
                 }
                 return !duplicateField_ && !depthExceeded_;
@@ -320,19 +321,20 @@ namespace Horo::Vfx {
                            "Material evidence does not describe the descriptor's exact stable identity.");
 
             const ErrorCodeDescriptor *materialFailure{};
+            using enum ParticleMaterialAvailability;
             switch (material.availability) {
-                case ParticleMaterialAvailability::Available:
+                case Available:
                     break;
-                case ParticleMaterialAvailability::Missing:
+                case Missing:
                     materialFailure = &VfxErrors::ParticleMaterialMissing;
                     break;
-                case ParticleMaterialAvailability::TypeMismatch:
+                case TypeMismatch:
                     materialFailure = &VfxErrors::ParticleMaterialTypeMismatch;
                     break;
-                case ParticleMaterialAvailability::Unloadable:
+                case Unloadable:
                     materialFailure = &VfxErrors::ParticleMaterialUnloadable;
                     break;
-                case ParticleMaterialAvailability::Count:
+                case Count:
                     materialFailure = &VfxErrors::ParticleDescriptorMalformed;
                     break;
             }
@@ -362,7 +364,8 @@ namespace Horo::Vfx {
                                                         "Particle-system parser limits or source byte count are invalid.");
 
         StrictJsonObserver observer{limits.maximumJsonDepth};
-        Json root = Json::parse(source.begin(), source.end(), [&observer](const int depth, const Json::parse_event_t event, Json &value) {
+        Json root =
+            Json::parse(source.begin(), source.end(), [&observer](const int depth, const Json::parse_event_t event, const Json &value) {
             return observer.Observe(depth, event, value);
         }, false, true);
         if (observer.DuplicateField())
