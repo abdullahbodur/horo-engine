@@ -5,7 +5,12 @@
  * @brief Bounded server-intent and client-local residency readiness contract.
  */
 
+#include "Horo/Foundation/Result.h"
+#include "Horo/Foundation/StrongId.h"
 #include "Horo/WorldStreaming/StreamingCellState.h"
+#include "Horo/WorldStreaming/WorldStreamingErrors.h"
+#include "Horo/WorldStreaming/WorldStreamingIdentity.h"
+#include "Horo/WorldStreaming/WorldStreamingRuntimeComposition.h"
 
 #include <cstdint>
 #include <optional>
