@@ -107,4 +107,52 @@ namespace Horo::PCG::PCGErrors {
                                   .summary = "The PCG spatial replacement does not preserve and advance its lineage.",
                                   .remediationHint =
                                       "Keep provider/source identity and publish a distinct snapshot with a strictly newer revision."};
+    const ErrorCodeDescriptor RegistryDescriptorInvalid{.domain = PcgDomain,
+                                                        .code = ErrorCode{"pcg.registry.descriptor_invalid"},
+                                                        .defaultSeverity = ErrorSeverity::Error,
+                                                        .summary = "A PCG registry descriptor or configuration is invalid.",
+                                                        .remediationHint =
+                                                            "Compose bounded inert descriptors with valid typed identities."};
+    const ErrorCodeDescriptor RegistryDuplicate{.domain = PcgDomain,
+                                                .code = ErrorCode{"pcg.registry.duplicate"},
+                                                .defaultSeverity = ErrorSeverity::Error,
+                                                .summary = "A PCG registry identity is duplicated.",
+                                                .remediationHint = "Register each graph and semantic node runtime exactly once."};
+    const ErrorCodeDescriptor RegistryCapacityExceeded{.domain = PcgDomain,
+                                                       .code = ErrorCode{"pcg.registry.capacity_exceeded"},
+                                                       .defaultSeverity = ErrorSeverity::Error,
+                                                       .summary = "A bounded PCG registry is full.",
+                                                       .remediationHint = "Reduce host contributions or select an explicit larger bound."};
+    const ErrorCodeDescriptor RegistryClosed{.domain = PcgDomain,
+                                             .code = ErrorCode{"pcg.registry.closed"},
+                                             .defaultSeverity = ErrorSeverity::Warning,
+                                             .summary = "The PCG composition registry is closed.",
+                                             .remediationHint = "Stop admission or compose a new independently generated registry."};
+    const ErrorCodeDescriptor RegistryGenerationExhausted{.domain = PcgDomain,
+                                                          .code = ErrorCode{"pcg.registry.generation_exhausted"},
+                                                          .defaultSeverity = ErrorSeverity::Critical,
+                                                          .summary = "The PCG registry publication generation is exhausted.",
+                                                          .remediationHint =
+                                                              "Retire the registry permanently instead of reusing a generation."};
+    const ErrorCodeDescriptor RegistryHandleInvalid{.domain = PcgDomain,
+                                                    .code = ErrorCode{"pcg.registry.handle_invalid"},
+                                                    .defaultSeverity = ErrorSeverity::Error,
+                                                    .summary = "A PCG registry handle is malformed.",
+                                                    .remediationHint = "Use a complete handle issued by an immutable registry snapshot."};
+    const ErrorCodeDescriptor RegistryHandleStale{.domain = PcgDomain,
+                                                  .code = ErrorCode{"pcg.registry.handle_stale"},
+                                                  .defaultSeverity = ErrorSeverity::Warning,
+                                                  .summary = "A PCG registry handle belongs to another publication generation.",
+                                                  .remediationHint = "Discard the stale handle and query the intended immutable snapshot."};
+    const ErrorCodeDescriptor UnsupportedCapability{.domain = PcgDomain,
+                                                    .code = ErrorCode{"pcg.capability.unsupported"},
+                                                    .defaultSeverity = ErrorSeverity::Warning,
+                                                    .summary = "The exact PCG capability is not projected by this host.",
+                                                    .remediationHint = "Install the required capability explicitly or reject the request."};
+    const ErrorCodeDescriptor RuntimeUnavailable{.domain = PcgDomain,
+                                                 .code = ErrorCode{"pcg.runtime.unavailable"},
+                                                 .defaultSeverity = ErrorSeverity::Warning,
+                                                 .summary = "The exact PCG node runtime is unavailable.",
+                                                 .remediationHint =
+                                                     "Register that semantic runtime explicitly; never select another implementation."};
 }  // namespace Horo::PCG::PCGErrors

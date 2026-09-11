@@ -394,6 +394,38 @@ revision cannot resolve into its replacement. Process-local registry handles, wo
 tokens, callbacks, filesystem paths and backend-native values remain outside this
 durable contract and are rebuilt by their owners after load.
 
+## Registry And Host Composition Contract
+
+`Horo/PCG/PCGRegistry.h` is the bounded PCG-1.4 composition and query surface. The
+application host explicitly creates one `PCGRegistry`, projects an exact interactive,
+headless or null capability set, and contributes inert graph and node-runtime
+descriptors. Registration performs no static initialization, service discovery, source
+scan, asset load, worker start, callback invocation or target mutation.
+
+Each successful mutation publishes a new registry generation. `PCGRegistrySnapshot`
+owns immutable, stable-ID-sorted graph and node-runtime arrays. Its process-local graph
+and runtime handles contain the issuing registry generation, dense slot and exact
+durable graph or semantic runtime association. A handle resolves only through that
+issuing snapshot. Replacement and unregister leave older snapshots readable; resolving
+their handles through a newer snapshot returns a typed stale-handle failure.
+
+Graph execution queries require the exact durable graph revision, every explicitly
+requested capability, every graph-declared capability and an exact registered runtime
+for each node type. Missing evidence returns `IdentityStale`,
+`UnsupportedCapability` or `RuntimeUnavailable`; lookup never chooses another graph,
+node type, runtime contract, execution mode or output path. Registration and
+replacement are composition-owner-thread operations. Published snapshots are immutable
+and may be copied to concurrent readers without exposing mutable registry storage.
+
+Interactive composition may grant editor-preview and render-output capabilities.
+Headless composition can install the real deterministic validation/evaluation catalog
+and non-render output capabilities, but rejects editor-preview and render-output grants.
+Null composition grants no validation, evaluation or output capability. It may retain
+inert metadata for discovery, but every capability-bearing admission completes with the
+same typed unsupported result rather than fabricated empty success. `Close()` ends new
+publication and releases the live catalog while already issued snapshots retain their
+owned immutable data.
+
 ## Related Documents
 
 - [PCG Ownership, Authority, Tier and Lifecycle](../../adr/151-pcg-ownership-authority-tier-and-lifecycle.md)
