@@ -319,6 +319,43 @@ struct FoliageType {
 };
 ```
 
+### Stable Foliage Definition Contract
+
+`FoliageTypeDefinition` is the TRF-004.2 cook/runtime contract. It is an immutable,
+fixed-size value keyed by `FoliageTypeId` and a non-wrapping
+`FoliageDefinitionRevision`. Visual references use distinct stable
+`FoliageMeshAssetId`, `FoliageMaterialAssetId` and `FoliageImpostorAssetId` domains: one
+to four canonically ordered mesh LODs, one required material and one optional impostor.
+Unused fixed-array entries must remain zero and duplicate mesh identities are invalid.
+
+Placement uses the version-1 `StratifiedJitterV1` recipe with one authored 64-bit seed,
+integer millimetre altitude/separation/coordinate quantum, milli-degree slope and
+instances-per-square-kilometre density. Cook inputs are canonically sorted before the
+algorithm runs. The coordinate quantum owns geometric tie-breaking; process RNG, wall
+time, locale, pointer identity, filesystem order and worker completion order are never
+inputs. A changed algorithm or quantization contract requires a new version and cook
+fingerprint.
+
+Culling stores strictly increasing integer-millimetre mesh LOD thresholds, an optional
+later impostor threshold, a still-later cull distance and a bounded cross-fade width.
+`CpuDirect` and `GpuIndirect` are exact recipes, not a preference ordering. Missing GPU
+indirect support cannot fall back to CPU; missing impostor content cannot remove the far
+representation silently. Runtime view selection remains Render-owned derived state.
+
+Wind is fixed-point authored data. `None` requires every parameter to be zero;
+`VertexBend` requires primary bend/frequency/flexibility and prohibits leaf flutter;
+`VertexBendAndFlutter` additionally requires flutter. Collision is either entirely
+absent or a positive neutral cylinder/capsule. Navigation blocking requires both
+collision and the explicit navigation-blocking capability. These definitions carry no
+scene wind state, native buffer, Physics body, Navigation handle or renderer command.
+
+Validation uses the exact captured Terrain configuration/capability revision and closed
+capability set before cook or runtime admission. Per-type instance counts cannot exceed
+the captured tier limit. Insert requires no current definition; replacement requires
+the same stable type plus the exact current and non-wrapping successor definition
+revision. Inactive, cancelled or retiring owners reject admission, and every failure
+leaves the current immutable definition unchanged.
+
 **Instance limits**: `instanceLimit` is validated against the selected finite
 provider-neutral Terrain tier during cook and runtime admission. Required content above
 the limit fails with a typed result. Horo does not silently truncate, hide furthest
