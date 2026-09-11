@@ -29,7 +29,7 @@ namespace Horo::PCG {
                 if (!CanWrite(sizeof(Integer)))
                     return false;
                 using Unsigned = std::make_unsigned_t<Integer>;
-                Unsigned remaining = static_cast<Unsigned>(value);
+                auto remaining = static_cast<Unsigned>(value);
                 for (std::size_t shift = sizeof(Integer); shift > 0; --shift)
                     bytes_.push_back(static_cast<std::uint8_t>(remaining >> ((shift - 1U) * 8U)));
                 return true;
@@ -73,10 +73,10 @@ namespace Horo::PCG {
             return writer.WriteInteger(std::bit_cast<std::uint64_t>(value));
         }
 
-        bool WriteValue(ByteWriter &writer, const PCGGraphValue &value) {
-            if (!writer.WriteInteger(static_cast<std::uint8_t>(value.index())))
-                return false;
-            return std::visit([&writer]<typename Value>(const Value &item) {
+        struct GraphValueWriter final {
+            ByteWriter &writer;
+
+            template <typename Value> bool operator()(const Value &item) const {
                 using T = std::remove_cvref_t<Value>;
                 if constexpr (std::is_same_v<T, std::monostate>) {
                     return false;
@@ -96,7 +96,13 @@ namespace Horo::PCG {
                 } else {
                     return false;
                 }
-            }, value);
+            }
+        };
+
+        bool WriteValue(ByteWriter &writer, const PCGGraphValue &value) {
+            if (!writer.WriteInteger(static_cast<std::uint8_t>(value.index())))
+                return false;
+            return std::visit(GraphValueWriter{writer}, value);
         }
 
         bool WritePin(ByteWriter &writer, const PCGGraphPin &pin) {
@@ -104,7 +110,7 @@ namespace Horo::PCG {
                                        writer.WriteInteger(static_cast<std::uint8_t>(pin.type)) &&
                                        writer.WriteInteger(static_cast<std::uint8_t>(pin.cardinality)) &&
                                        writer.WriteInteger(static_cast<std::uint8_t>(pin.defaultValue.has_value()));
-            return headerWritten && (!pin.defaultValue || WriteValue(writer, *pin.defaultValue));
+            return headerWritten && (!pin.defaultValue.has_value() || WriteValue(writer, *pin.defaultValue));
         }
 
         bool WriteNode(ByteWriter &writer, const PCGGraphNode &node) {

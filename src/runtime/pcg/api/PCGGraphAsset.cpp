@@ -26,7 +26,8 @@ namespace Horo::PCG {
         }
 
         [[nodiscard]] bool IsKnown(const PCGOperationalTier value) noexcept {
-            return value == PCGOperationalTier::Baseline || value == PCGOperationalTier::Standard || value == PCGOperationalTier::High;
+            using enum PCGOperationalTier;
+            return value == Baseline || value == Standard || value == High;
         }
 
         template <typename Enum> [[nodiscard]] bool IsKnown(const Enum value) noexcept {
@@ -92,10 +93,10 @@ namespace Horo::PCG {
 
             [[nodiscard]] std::optional<std::string> ReadString(const std::size_t maximum) {
                 const auto size = ReadInteger<std::uint16_t>();
-                if (!size || *size > maximum)
+                if (!size.has_value() || *size > maximum)
                     return std::nullopt;
                 const auto bytes = ReadBytes(*size);
-                if (!bytes)
+                if (!bytes.has_value())
                     return std::nullopt;
                 return std::string{reinterpret_cast<const char *>(bytes->data()), bytes->size()};
             }
@@ -111,7 +112,7 @@ namespace Horo::PCG {
 
         template <typename Identity> [[nodiscard]] std::optional<Identity> ReadIdentity(ByteReader &reader) {
             const auto value = reader.ReadInteger<std::uint64_t>();
-            if (!value)
+            if (!value.has_value())
                 return std::nullopt;
             auto identity = Identity::Create(*value);
             return identity.HasValue() ? std::optional<Identity>{identity.Value()} : std::nullopt;
@@ -119,52 +120,55 @@ namespace Horo::PCG {
 
         [[nodiscard]] std::optional<float> ReadBinary32(ByteReader &reader) {
             const auto bits = reader.ReadInteger<std::uint32_t>();
-            return bits ? std::optional<float>{std::bit_cast<float>(*bits)} : std::nullopt;
+            return bits.has_value() ? std::optional<float>{std::bit_cast<float>(*bits)} : std::nullopt;
         }
 
         [[nodiscard]] std::optional<double> ReadBinary64(ByteReader &reader) {
             const auto bits = reader.ReadInteger<std::uint64_t>();
-            return bits ? std::optional<double>{std::bit_cast<double>(*bits)} : std::nullopt;
+            return bits.has_value() ? std::optional<double>{std::bit_cast<double>(*bits)} : std::nullopt;
         }
 
         [[nodiscard]] std::optional<PCGGraphValue> ReadValue(ByteReader &reader) {
             const auto tag = reader.ReadInteger<std::uint8_t>();
-            if (!tag)
+            if (!tag.has_value())
                 return std::nullopt;
             switch (*tag) {
                 case 1: {
                     const auto value = reader.ReadInteger<std::uint8_t>();
-                    return value && *value <= 1 ? std::optional<PCGGraphValue>{*value != 0} : std::nullopt;
+                    return value.has_value() && *value <= 1 ? std::optional<PCGGraphValue>{*value != 0} : std::nullopt;
                 }
                 case 2: {
                     const auto value = reader.ReadInteger<std::int64_t>();
-                    return value ? std::optional<PCGGraphValue>{*value} : std::nullopt;
+                    return value.has_value() ? std::optional<PCGGraphValue>{*value} : std::nullopt;
                 }
                 case 3: {
                     const auto value = reader.ReadInteger<std::uint64_t>();
-                    return value ? std::optional<PCGGraphValue>{*value} : std::nullopt;
+                    return value.has_value() ? std::optional<PCGGraphValue>{*value} : std::nullopt;
                 }
                 case 4: {
                     const auto value = ReadBinary64(reader);
-                    return value ? std::optional<PCGGraphValue>{*value} : std::nullopt;
+                    return value.has_value() ? std::optional<PCGGraphValue>{*value} : std::nullopt;
                 }
                 case 5: {
                     const auto x = ReadBinary32(reader);
                     const auto y = ReadBinary32(reader);
-                    return x && y ? std::optional<PCGGraphValue>{Math::Vec2{*x, *y}} : std::nullopt;
+                    return x.has_value() && y.has_value() ? std::optional<PCGGraphValue>{Math::Vec2{*x, *y}} : std::nullopt;
                 }
                 case 6: {
                     const auto x = ReadBinary32(reader);
                     const auto y = ReadBinary32(reader);
                     const auto z = ReadBinary32(reader);
-                    return x && y && z ? std::optional<PCGGraphValue>{Math::Vec3{*x, *y, *z}} : std::nullopt;
+                    return x.has_value() && y.has_value() && z.has_value() ? std::optional<PCGGraphValue>{Math::Vec3{*x, *y, *z}}
+                                                                           : std::nullopt;
                 }
                 case 7: {
                     const auto x = ReadBinary32(reader);
                     const auto y = ReadBinary32(reader);
                     const auto z = ReadBinary32(reader);
                     const auto w = ReadBinary32(reader);
-                    return x && y && z && w ? std::optional<PCGGraphValue>{Math::Vec4{*x, *y, *z, *w}} : std::nullopt;
+                    return x.has_value() && y.has_value() && z.has_value() && w.has_value()
+                               ? std::optional<PCGGraphValue>{Math::Vec4{*x, *y, *z, *w}}
+                               : std::nullopt;
                 }
                 default:
                     return std::nullopt;
@@ -177,14 +181,15 @@ namespace Horo::PCG {
             const auto type = reader.ReadInteger<std::uint8_t>();
             const auto cardinality = reader.ReadInteger<std::uint8_t>();
             const auto hasDefault = reader.ReadInteger<std::uint8_t>();
-            if (!id || !direction || !type || !cardinality || !hasDefault || *hasDefault > 1)
+            if (!id.has_value() || !direction.has_value() || !type.has_value() || !cardinality.has_value() || !hasDefault.has_value() ||
+                *hasDefault > 1)
                 return Failed<PCGGraphPin>(PCGErrors::GraphSourceMalformed);
 
             PCGGraphPin pin{*id, static_cast<PCGPinDirection>(*direction), static_cast<PCGPinType>(*type),
                             static_cast<PCGPinCardinality>(*cardinality)};
             if (*hasDefault != 0) {
                 auto value = ReadValue(reader);
-                if (!value)
+                if (!value.has_value())
                     return Failed<PCGGraphPin>(PCGErrors::GraphSourceMalformed);
                 pin.defaultValue = std::move(*value);
             }
@@ -198,7 +203,8 @@ namespace Horo::PCG {
             const auto typeMinor = reader.ReadInteger<std::uint16_t>();
             const auto pinCount = reader.ReadInteger<std::uint16_t>();
             const auto payloadSize = reader.ReadInteger<std::uint32_t>();
-            if (!id || !type || !typeMajor || !typeMinor || !pinCount || !payloadSize)
+            if (!id.has_value() || !type.has_value() || !typeMajor.has_value() || !typeMinor.has_value() || !pinCount.has_value() ||
+                !payloadSize.has_value())
                 return Failed<PCGGraphNode>(PCGErrors::GraphSourceMalformed);
             if (*pinCount > limits.maximumPinsPerNode ||
                 *pinCount > limits.maximumTotalPins - std::min(totalPins, limits.maximumTotalPins) ||
@@ -214,7 +220,7 @@ namespace Horo::PCG {
                 node.pins.push_back(std::move(pin).Value());
             }
             const auto payload = reader.ReadBytes(*payloadSize);
-            if (!payload)
+            if (!payload.has_value())
                 return Failed<PCGGraphNode>(PCGErrors::GraphSourceMalformed);
             node.payload.assign(payload->begin(), payload->end());
             totalPins += *pinCount;
@@ -227,7 +233,7 @@ namespace Horo::PCG {
             const auto sourcePin = ReadIdentity<PinId>(reader);
             const auto targetNode = ReadIdentity<NodeId>(reader);
             const auto targetPin = ReadIdentity<PinId>(reader);
-            if (!id || !sourceNode || !sourcePin || !targetNode || !targetPin)
+            if (!id.has_value() || !sourceNode.has_value() || !sourcePin.has_value() || !targetNode.has_value() || !targetPin.has_value())
                 return Failed<PCGGraphEdge>(PCGErrors::GraphSourceMalformed);
             return Result<PCGGraphEdge>::Success({*id, *sourceNode, *sourcePin, *targetNode, *targetPin});
         }
@@ -238,7 +244,7 @@ namespace Horo::PCG {
             const auto node = ReadIdentity<NodeId>(reader);
             const auto pin = ReadIdentity<PinId>(reader);
             auto value = ReadValue(reader);
-            if (!id || !key || !node || !pin || !value)
+            if (!id.has_value() || !key.has_value() || !node.has_value() || !pin.has_value() || !value.has_value())
                 return Failed<PCGExposedInput>(PCGErrors::GraphSourceMalformed);
             return Result<PCGExposedInput>::Success({*id, std::move(*key), *node, *pin, std::move(*value)});
         }
@@ -257,8 +263,9 @@ namespace Horo::PCG {
             const auto nodeCount = reader.ReadInteger<std::uint32_t>();
             const auto edgeCount = reader.ReadInteger<std::uint32_t>();
             const auto inputCount = reader.ReadInteger<std::uint32_t>();
-            if (!magic || !std::ranges::equal(*magic, GraphMagic) || !major || !minor || !graph || !revision || !tier || !mode || !seed ||
-                !nodeCount || !edgeCount || !inputCount)
+            if (!magic.has_value() || !std::ranges::equal(*magic, GraphMagic) || !major.has_value() || !minor.has_value() ||
+                !graph.has_value() || !revision.has_value() || !tier.has_value() || !mode.has_value() || !seed.has_value() ||
+                !nodeCount.has_value() || !edgeCount.has_value() || !inputCount.has_value())
                 return Failed<PCGGraphAsset>(PCGErrors::GraphSourceMalformed);
             if (*nodeCount > limits.maximumNodes || *edgeCount > limits.maximumEdges || *inputCount > limits.maximumExposedInputs)
                 return Failed<PCGGraphAsset>(PCGErrors::GraphSourceCapacityExceeded);
@@ -354,8 +361,8 @@ namespace Horo::PCG {
         ByteReader reader{source.subspan(4)};
         const auto major = reader.ReadInteger<std::uint16_t>();
         const auto minor = reader.ReadInteger<std::uint16_t>();
-        return major && minor ? Result<PCGGraphSchemaVersion>::Success({*major, *minor})
-                              : Failed<PCGGraphSchemaVersion>(PCGErrors::GraphSourceMalformed);
+        return major.has_value() && minor.has_value() ? Result<PCGGraphSchemaVersion>::Success({*major, *minor})
+                                                      : Failed<PCGGraphSchemaVersion>(PCGErrors::GraphSourceMalformed);
     }
 
     /** @copydoc DeserializePCGGraphAsset */
@@ -369,21 +376,22 @@ namespace Horo::PCG {
         auto version = InspectPCGGraphSchemaVersion(source);
         if (version.HasError())
             return Failed<PCGGraphAsset>(PCGErrors::GraphSourceMalformed);
+        using enum PCGGraphSchemaCompatibility;
         switch (ClassifyPCGGraphSchemaCompatibility(version.Value())) {
-            case PCGGraphSchemaCompatibility::Exact:
+            case Exact:
                 return DecodeCurrent(source, context, limits.Value());
-            case PCGGraphSchemaCompatibility::MigrationRequired: {
+            case MigrationRequired: {
                 if (migrator == nullptr)
                     return Failed<PCGGraphAsset>(PCGErrors::GraphMigrationFailed);
                 auto migrated = migrator->Migrate(source, version.Value(), CurrentPCGGraphSchemaVersion, limits.Value().maximumSourceBytes);
                 if (migrated.HasError() || migrated.Value().size() > limits.Value().maximumSourceBytes)
                     return Failed<PCGGraphAsset>(PCGErrors::GraphMigrationFailed);
-                auto migratedVersion = InspectPCGGraphSchemaVersion(migrated.Value());
-                if (migratedVersion.HasError() || migratedVersion.Value() != CurrentPCGGraphSchemaVersion)
+                if (auto migratedVersion = InspectPCGGraphSchemaVersion(migrated.Value());
+                    migratedVersion.HasError() || migratedVersion.Value() != CurrentPCGGraphSchemaVersion)
                     return Failed<PCGGraphAsset>(PCGErrors::GraphMigrationFailed);
                 return DecodeCurrent(migrated.Value(), context, limits.Value());
             }
-            case PCGGraphSchemaCompatibility::Unsupported:
+            case Unsupported:
                 return Failed<PCGGraphAsset>(PCGErrors::GraphSourceVersionUnsupported);
         }
         return Failed<PCGGraphAsset>(PCGErrors::GraphSourceVersionUnsupported);

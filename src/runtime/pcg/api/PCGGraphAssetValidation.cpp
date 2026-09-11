@@ -4,6 +4,7 @@
 #include <algorithm>
 #include <array>
 #include <cmath>
+#include <memory>
 #include <numeric>
 #include <string_view>
 #include <type_traits>
@@ -40,8 +41,8 @@ namespace Horo::PCG {
             while (start < value.size()) {
                 const std::size_t separator = value.find('.', start);
                 const std::size_t end = separator == std::string_view::npos ? value.size() : separator;
-                const std::string_view part = value.substr(start, end - start);
-                if (part.empty() || !IsLowerAscii(static_cast<unsigned char>(part.front())) ||
+                if (const std::string_view part = value.substr(start, end - start);
+                    part.empty() || !IsLowerAscii(static_cast<unsigned char>(part.front())) ||
                     !std::ranges::all_of(part.substr(1), IsIdentifierTail))
                     return false;
                 if (separator == std::string_view::npos)
@@ -52,23 +53,24 @@ namespace Horo::PCG {
         }
 
         [[nodiscard]] PCGPinType ValueType(const PCGGraphValue &value) noexcept {
+            using enum PCGPinType;
             switch (value.index()) {
                 case 1:
-                    return PCGPinType::Boolean;
+                    return Boolean;
                 case 2:
-                    return PCGPinType::SignedInteger;
+                    return SignedInteger;
                 case 3:
-                    return PCGPinType::UnsignedInteger;
+                    return UnsignedInteger;
                 case 4:
-                    return PCGPinType::Scalar;
+                    return Scalar;
                 case 5:
-                    return PCGPinType::Vector2;
+                    return Vector2;
                 case 6:
-                    return PCGPinType::Vector3;
+                    return Vector3;
                 case 7:
-                    return PCGPinType::Vector4;
+                    return Vector4;
                 default:
-                    return PCGPinType::Count;
+                    return Count;
             }
         }
 
@@ -149,7 +151,7 @@ namespace Horo::PCG {
                 if (!ConsumeEncodedBytes(remaining, EncodedNodeHeaderBytes) || !ConsumeEncodedBytes(remaining, node.payload.size()))
                     return false;
                 for (const PCGGraphPin &pin : node.pins) {
-                    const std::size_t defaultBytes = pin.defaultValue ? EncodedValueBytes(*pin.defaultValue) : 0;
+                    const std::size_t defaultBytes = pin.defaultValue.has_value() ? EncodedValueBytes(*pin.defaultValue) : 0;
                     if (!ConsumeEncodedBytes(remaining, EncodedPinHeaderBytes + defaultBytes))
                         return false;
                 }
@@ -186,11 +188,11 @@ namespace Horo::PCG {
         }
 
         [[nodiscard]] NodeSupportState FindNodeSupport(const PCGGraphNode &node, std::span<const PCGNodeTypeSupport> support) {
+            using enum NodeSupportState;
             const auto found = std::ranges::lower_bound(support, node.type, {}, &PCGNodeTypeSupport::type);
             if (found == support.end() || found->type != node.type)
-                return NodeSupportState::Unknown;
-            return node.version >= found->minimumVersion && node.version <= found->maximumVersion ? NodeSupportState::Supported
-                                                                                                  : NodeSupportState::VersionUnsupported;
+                return Unknown;
+            return node.version >= found->minimumVersion && node.version <= found->maximumVersion ? Supported : VersionUnsupported;
         }
 
         struct PinReference final {
@@ -203,7 +205,7 @@ namespace Horo::PCG {
 
         [[nodiscard]] const PinReference *FindPin(std::span<const PinReference> pins, const PinId id) noexcept {
             const auto found = std::ranges::lower_bound(pins, id, {}, &PinReference::pin);
-            return found == pins.end() || found->pin != id ? nullptr : &*found;
+            return found == pins.end() || found->pin != id ? nullptr : std::to_address(found);
         }
 
         [[nodiscard]] Result<void> ValidateNodeContract(const PCGGraphNode &node, const PCGUnknownNodePolicy unknownNodePolicy,
@@ -228,13 +230,13 @@ namespace Horo::PCG {
         [[nodiscard]] Result<void> ValidatePinContract(PCGGraphPin &pin) {
             const bool outputContractInvalid = pin.direction == PCGPinDirection::Output &&
                                                (pin.cardinality != PCGPinCardinality::Multiple || pin.defaultValue.has_value());
-            const bool defaultInvalid =
-                pin.defaultValue.has_value() &&
-                (!IsFinite(*pin.defaultValue) || ValueType(*pin.defaultValue) != pin.type || pin.type == PCGPinType::PointSet);
-            if (!pin.id.IsValid() || !IsKnown(pin.direction) || !IsKnown(pin.type) || !IsKnown(pin.cardinality) || outputContractInvalid ||
+            if (const bool defaultInvalid =
+                    pin.defaultValue.has_value() &&
+                    (!IsFinite(*pin.defaultValue) || ValueType(*pin.defaultValue) != pin.type || pin.type == PCGPinType::PointSet);
+                !pin.id.IsValid() || !IsKnown(pin.direction) || !IsKnown(pin.type) || !IsKnown(pin.cardinality) || outputContractInvalid ||
                 defaultInvalid)
                 return Rejected<void>(PCGErrors::GraphSourceMalformed);
-            if (pin.defaultValue)
+            if (pin.defaultValue.has_value())
                 CanonicalizeValue(*pin.defaultValue);
             return Result<void>::Success();
         }
@@ -249,7 +251,7 @@ namespace Horo::PCG {
             for (PCGGraphPin &pin : node.pins) {
                 if (auto valid = ValidatePinContract(pin); valid.HasError())
                     return valid;
-                references.push_back({pin.id, node.id, pin.direction, pin.type, pin.cardinality});
+                references.emplace_back(pin.id, node.id, pin.direction, pin.type, pin.cardinality);
             }
             return Result<void>::Success();
         }
@@ -326,8 +328,8 @@ namespace Horo::PCG {
                 if (source == data.nodes.end() || target == data.nodes.end() || source->id != edge.sourceNode ||
                     target->id != edge.targetNode)
                     return Rejected<void>(PCGErrors::GraphTopologyInvalid);
-                const std::size_t sourceIndex = static_cast<std::size_t>(std::distance(data.nodes.begin(), source));
-                const std::size_t targetIndex = static_cast<std::size_t>(std::distance(data.nodes.begin(), target));
+                const auto sourceIndex = static_cast<std::size_t>(std::distance(data.nodes.begin(), source));
+                const auto targetIndex = static_cast<std::size_t>(std::distance(data.nodes.begin(), target));
                 outgoing[sourceIndex].push_back(targetIndex);
                 ++indegree[targetIndex];
             }
@@ -365,8 +367,8 @@ namespace Horo::PCG {
             exposedPins.reserve(data.exposedInputs.size());
             for (std::size_t index = 0; index < data.exposedInputs.size(); ++index) {
                 PCGExposedInput &input = data.exposedInputs[index];
-                const PinReference *pin = FindPin(pins, input.pin);
-                if (!input.id.IsValid() || !input.node.IsValid() || !input.pin.IsValid() ||
+                if (const PinReference *pin = FindPin(pins, input.pin);
+                    !input.id.IsValid() || !input.node.IsValid() || !input.pin.IsValid() ||
                     !IsCanonicalIdentifier(input.key, limits.maximumIdentifierBytes) || !IsFinite(input.defaultValue) || pin == nullptr ||
                     pin->node != input.node || pin->direction != PCGPinDirection::Input || pin->type == PCGPinType::PointSet ||
                     ValueType(input.defaultValue) != pin->type)
