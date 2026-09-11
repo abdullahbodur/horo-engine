@@ -32,18 +32,42 @@ namespace Horo::Physics {
                                          MaximumPhysicsDensity);
         }
 
-        /** @brief Checks finite velocities and the normative linear-speed magnitude with double intermediates. */
+        /** @brief Computes squared vector magnitude with double intermediates. */
+        double SquaredMagnitude(const Math::Vec3 value) noexcept {
+            return static_cast<double>(value.x) * value.x + static_cast<double>(value.y) * value.y + static_cast<double>(value.z) * value.z;
+        }
+
+        /** @brief Validates bounded frame-rate-independent motion safety policy. */
+        Result<void> ValidateMotionSafety(const PhysicsMotionSafety &safety) {
+            if (const auto inRange =
+                    [](const float value, const float maximum) {
+                return std::isfinite(value) && value >= 0.0F && value <= maximum;
+            };
+                !inRange(safety.linearDampingPerSecond, MaximumPhysicsDampingPerSecond) ||
+                !inRange(safety.angularDampingPerSecond, MaximumPhysicsDampingPerSecond) ||
+                !inRange(safety.maximumLinearSpeed, static_cast<float>(MaximumPhysicsLinearSpeed)) ||
+                !inRange(safety.maximumAngularSpeed, MaximumPhysicsAngularSpeed) ||
+                !inRange(safety.maximumDepenetrationSpeed, MaximumPhysicsDepenetrationSpeed) ||
+                (static_cast<unsigned int>(safety.lockedAxes) & ~static_cast<unsigned int>(PhysicsAxisLock::All)) != 0U)
+                return Result<void>::Failure(MakeError(PhysicsErrors::DescriptorInvalid, "Body motion safety policy is invalid."));
+            return Result<void>::Success();
+        }
+
+        /** @brief Checks finite velocities and the descriptor's explicit speed ceilings. */
         Result<void> ValidateInitialVelocity(const PhysicsMotionType motion, const Math::Vec3 linearVelocity,
-                                             const Math::Vec3 angularVelocity) {
+                                             const Math::Vec3 angularVelocity, const PhysicsMotionSafety &safety) {
+            if (const auto policy = ValidateMotionSafety(safety); policy.HasError())
+                return policy;
             if (const std::array velocities{linearVelocity, angularVelocity}; !std::ranges::all_of(velocities, [](const Math::Vec3 value) {
                 return Math::IsFinite(value);
             }))
                 return Result<void>::Failure(MakeError(PhysicsErrors::DescriptorInvalid, "Initial body velocities must be finite."));
-            if (const double squaredSpeed = static_cast<double>(linearVelocity.x) * linearVelocity.x +
-                                            static_cast<double>(linearVelocity.y) * linearVelocity.y +
-                                            static_cast<double>(linearVelocity.z) * linearVelocity.z;
-                squaredSpeed > MaximumPhysicsLinearSpeed * MaximumPhysicsLinearSpeed)
-                return Result<void>::Failure(MakeError(PhysicsErrors::DescriptorInvalid, "Initial linear speed exceeds 500 m/s."));
+            if (SquaredMagnitude(linearVelocity) > static_cast<double>(safety.maximumLinearSpeed) * safety.maximumLinearSpeed)
+                return Result<void>::Failure(
+                    MakeError(PhysicsErrors::DescriptorInvalid, "Initial linear speed exceeds its admitted limit."));
+            if (SquaredMagnitude(angularVelocity) > static_cast<double>(safety.maximumAngularSpeed) * safety.maximumAngularSpeed)
+                return Result<void>::Failure(
+                    MakeError(PhysicsErrors::DescriptorInvalid, "Initial angular speed exceeds its admitted limit."));
             if (motion == PhysicsMotionType::Static && (linearVelocity != Math::Vec3{} || angularVelocity != Math::Vec3{}))
                 return Result<void>::Failure(MakeError(PhysicsErrors::DescriptorInvalid, "Static bodies cannot have initial velocity."));
             return Result<void>::Success();
@@ -61,7 +85,8 @@ namespace Horo::Physics {
             return Result<void>::Failure(MakeError(PhysicsErrors::OperationUnsupported, "Unknown authored body motion mode."));
         if (const auto mass = ValidateMassPolicy(descriptor.motion, descriptor.mass); mass.HasError())
             return mass;
-        return ValidateInitialVelocity(descriptor.motion, descriptor.initialLinearVelocity, descriptor.initialAngularVelocity);
+        return ValidateInitialVelocity(descriptor.motion, descriptor.initialLinearVelocity, descriptor.initialAngularVelocity,
+                                       descriptor.motionSafety);
     }
 
     /** @copydoc ResolvePhysicsBodyDescriptor */
@@ -74,7 +99,8 @@ namespace Horo::Physics {
                                        authored.motion,
                                        authored.mass,
                                        authored.initialLinearVelocity,
-                                       authored.initialAngularVelocity};
+                                       authored.initialAngularVelocity,
+                                       authored.motionSafety};
         if (const auto runtime = ValidatePhysicsBodyDescriptor(resolved, expectedWorld); runtime.HasError())
             return Result<PhysicsBodyDescriptor>::Failure(runtime.ErrorValue());
         return Result<PhysicsBodyDescriptor>::Success(std::move(resolved));
@@ -90,7 +116,7 @@ namespace Horo::Physics {
             return Result<void>::Failure(MakeError(PhysicsErrors::OperationUnsupported, "Unknown body motion mode."));
         if (const auto mass = ValidateMassPolicy(descriptor.motion, descriptor.mass); mass.HasError())
             return mass;
-        return ValidateInitialVelocity(descriptor.motion, descriptor.linearVelocity, descriptor.angularVelocity);
+        return ValidateInitialVelocity(descriptor.motion, descriptor.linearVelocity, descriptor.angularVelocity, descriptor.motionSafety);
     }
 
     /** @copydoc ValidatePhysicsBodyState */
@@ -104,5 +130,14 @@ namespace Horo::Physics {
         if (!FiniteStateVelocity(state))
             return Result<void>::Failure(MakeError(PhysicsErrors::DescriptorInvalid, "Observed body velocities must be finite."));
         return Result<void>::Success();
+    }
+
+    /** @copydoc ComputePhysicsDampingScale */
+    Result<float> ComputePhysicsDampingScale(const float dampingPerSecond, const double deltaSeconds) {
+        if (!std::isfinite(dampingPerSecond) || dampingPerSecond < 0.0F || dampingPerSecond > MaximumPhysicsDampingPerSecond ||
+            !std::isfinite(deltaSeconds) || deltaSeconds < 0.0)
+            return Result<float>::Failure(
+                MakeError(PhysicsErrors::DescriptorInvalid, "Damping rate and fixed-step duration must be finite and bounded."));
+        return Result<float>::Success(static_cast<float>(std::exp(-static_cast<double>(dampingPerSecond) * deltaSeconds)));
     }
 }  // namespace Horo::Physics

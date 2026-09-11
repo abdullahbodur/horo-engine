@@ -1,5 +1,6 @@
 #include "Horo/Physics/PhysicsBodyDescriptor.h"
 
+#include <catch2/catch_approx.hpp>
 #include <catch2/catch_test_macros.hpp>
 #include <cmath>
 #include <limits>
@@ -242,6 +243,62 @@ namespace Horo::Physics {
             const auto unsupported = ValidatePhysicsBodyState(state, state.body.world);
             REQUIRE(unsupported.HasError());
             REQUIRE(unsupported.ErrorValue().code.Value() == PhysicsErrors::OperationUnsupported.code.Value());
+        }
+
+        TEST_CASE("Physics motion safety preserves explicit damping locks and speed ceilings", "[physics][body][motion-safety]") {
+            auto descriptor = MakeBody();
+            descriptor.motion = PhysicsMotionType::Dynamic;
+            descriptor.mass = PhysicsMass{2};
+            descriptor.motionSafety.linearDampingPerSecond = 3;
+            descriptor.motionSafety.angularDampingPerSecond = 4;
+            descriptor.motionSafety.lockedAxes = PhysicsAxisLock::TranslationY | PhysicsAxisLock::RotationX;
+            descriptor.motionSafety.maximumLinearSpeed = 20;
+            descriptor.motionSafety.maximumAngularSpeed = 10;
+            descriptor.motionSafety.maximumDepenetrationSpeed = 5;
+            descriptor.linearVelocity = {12, 0, 0};
+            descriptor.angularVelocity = {0, 8, 0};
+            REQUIRE(ValidatePhysicsBodyDescriptor(descriptor, descriptor.shape.world).HasValue());
+
+            descriptor.linearVelocity = {21, 0, 0};
+            RequireBodyError(descriptor, PhysicsErrors::DescriptorInvalid);
+            descriptor.linearVelocity = {};
+            descriptor.angularVelocity = {0, 11, 0};
+            RequireBodyError(descriptor, PhysicsErrors::DescriptorInvalid);
+        }
+
+        TEST_CASE("Physics motion safety rejects malformed values and unknown lock bits", "[physics][body][motion-safety]") {
+            auto descriptor = MakeBody();
+            descriptor.motionSafety.linearDampingPerSecond = -1;
+            RequireBodyError(descriptor, PhysicsErrors::DescriptorInvalid);
+            descriptor.motionSafety = {};
+            descriptor.motionSafety.maximumAngularSpeed = 0;
+            REQUIRE(ValidatePhysicsBodyDescriptor(descriptor, descriptor.shape.world).HasValue());
+            descriptor.motion = PhysicsMotionType::Kinematic;
+            descriptor.angularVelocity.x = 0.01F;
+            RequireBodyError(descriptor, PhysicsErrors::DescriptorInvalid);
+            descriptor.angularVelocity = {};
+            descriptor.motionSafety = {};
+            descriptor.motionSafety.maximumDepenetrationSpeed = std::numeric_limits<float>::infinity();
+            RequireBodyError(descriptor, PhysicsErrors::DescriptorInvalid);
+            descriptor.motionSafety = {};
+            descriptor.motionSafety.lockedAxes = static_cast<PhysicsAxisLock>(0x80);
+            RequireBodyError(descriptor, PhysicsErrors::DescriptorInvalid);
+
+            PhysicsAxisLock locks = PhysicsAxisLock::TranslationX;
+            locks |= PhysicsAxisLock::RotationZ;
+            REQUIRE(HasPhysicsAxisLock(locks, PhysicsAxisLock::TranslationX));
+            REQUIRE(HasPhysicsAxisLock(locks, PhysicsAxisLock::RotationZ));
+            REQUIRE_FALSE(HasPhysicsAxisLock(locks, PhysicsAxisLock::TranslationY));
+        }
+
+        TEST_CASE("Physics damping depends on elapsed time rather than tick subdivision", "[physics][body][motion-safety]") {
+            const auto whole = ComputePhysicsDampingScale(2.0F, 0.02);
+            const auto half = ComputePhysicsDampingScale(2.0F, 0.01);
+            REQUIRE(whole.HasValue());
+            REQUIRE(half.HasValue());
+            REQUIRE(whole.Value() == Catch::Approx(half.Value() * half.Value()).margin(1.0e-6F));
+            REQUIRE(ComputePhysicsDampingScale(-1.0F, 0.01).HasError());
+            REQUIRE(ComputePhysicsDampingScale(1.0F, -0.01).HasError());
         }
     }  // namespace
 }  // namespace Horo::Physics
