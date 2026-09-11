@@ -84,4 +84,76 @@ namespace Horo::Vfx::VfxErrors {
                                                          .defaultSeverity = ErrorSeverity::Warning,
                                                          .summary = "The prepared VFX decision references a stale quality policy.",
                                                          .remediationHint = "Re-resolve against the current validated policy revision."};
+    const ErrorCodeDescriptor ParticleDescriptorMalformed{.domain = VfxDomain,
+                                                          .code = ErrorCode{"vfx.particle_descriptor.malformed"},
+                                                          .defaultSeverity = ErrorSeverity::Error,
+                                                          .summary = "The particle-system source schema is malformed.",
+                                                          .remediationHint =
+                                                              "Repair the reported field and import the particle system again.",
+                                                          .userActionable = true};
+    const ErrorCodeDescriptor ParticleDescriptorDuplicate{.domain = VfxDomain,
+                                                          .code = ErrorCode{"vfx.particle_descriptor.duplicate"},
+                                                          .defaultSeverity = ErrorSeverity::Error,
+                                                          .summary = "The particle-system source contains a duplicate field.",
+                                                          .remediationHint = "Remove the ambiguous duplicate JSON field before import.",
+                                                          .userActionable = true};
+    const ErrorCodeDescriptor
+        ParticleDescriptorVersionUnsupported{.domain = VfxDomain,
+                                             .code = ErrorCode{"vfx.particle_descriptor.version_unsupported"},
+                                             .defaultSeverity = ErrorSeverity::Error,
+                                             .summary = "The particle-system schema version is not directly readable.",
+                                             .remediationHint = "Run the matching source migration or use a compatible engine version.",
+                                             .userActionable = true};
+    const ErrorCodeDescriptor ParticleDescriptorLimitExceeded{.domain = VfxDomain,
+                                                              .code = ErrorCode{"vfx.particle_descriptor.limit_exceeded"},
+                                                              .defaultSeverity = ErrorSeverity::Error,
+                                                              .summary = "The particle-system source exceeds a safety limit.",
+                                                              .remediationHint =
+                                                                  "Reduce the reported source size, depth, rate, or particle count.",
+                                                              .userActionable = true};
+    const ErrorCodeDescriptor ParticleRangeInvalid{.domain = VfxDomain,
+                                                   .code = ErrorCode{"vfx.particle_descriptor.range_invalid"},
+                                                   .defaultSeverity = ErrorSeverity::Error,
+                                                   .summary = "A particle-system numeric range is invalid.",
+                                                   .remediationHint = "Use finite ordered values within the documented field bounds.",
+                                                   .userActionable = true};
+    const ErrorCodeDescriptor ParticleLifetimeUnbounded{.domain = VfxDomain,
+                                                        .code = ErrorCode{"vfx.particle_descriptor.lifetime_unbounded"},
+                                                        .defaultSeverity = ErrorSeverity::Error,
+                                                        .summary = "An infinite-lifetime particle has no terminal condition.",
+                                                        .remediationHint =
+                                                            "Add collision or explicit-signal termination, or author a finite lifetime.",
+                                                        .userActionable = true};
+    const ErrorCodeDescriptor ParticleModeIncompatible{.domain = VfxDomain,
+                                                       .code = ErrorCode{"vfx.particle_descriptor.mode_incompatible"},
+                                                       .defaultSeverity = ErrorSeverity::Error,
+                                                       .summary = "Particle-system execution policies are incompatible.",
+                                                       .remediationHint = "Align simulation, collision, kill, render, and sort policies.",
+                                                       .userActionable = true};
+    const ErrorCodeDescriptor ParticleMaterialMissing{.domain = VfxDomain,
+                                                      .code = ErrorCode{"vfx.particle_material.missing"},
+                                                      .defaultSeverity = ErrorSeverity::Error,
+                                                      .summary = "The particle material is missing from the cook snapshot.",
+                                                      .remediationHint = "Restore or explicitly replace the referenced material asset.",
+                                                      .userActionable = true};
+    const ErrorCodeDescriptor ParticleMaterialTypeMismatch{.domain = VfxDomain,
+                                                           .code = ErrorCode{"vfx.particle_material.type_mismatch"},
+                                                           .defaultSeverity = ErrorSeverity::Error,
+                                                           .summary = "The particle material reference has an incompatible asset type.",
+                                                           .remediationHint = "Assign a material asset to the particle-system output.",
+                                                           .userActionable = true};
+    const ErrorCodeDescriptor ParticleMaterialUnloadable{.domain = VfxDomain,
+                                                         .code = ErrorCode{"vfx.particle_material.unloadable"},
+                                                         .defaultSeverity = ErrorSeverity::Error,
+                                                         .summary = "The particle material cannot be loaded for cooking.",
+                                                         .remediationHint = "Repair or republish the material before cooking.",
+                                                         .retryable = true,
+                                                         .userActionable = true};
+    const ErrorCodeDescriptor ParticleCookTierExceeded{.domain = VfxDomain,
+                                                       .code = ErrorCode{"vfx.particle_cook.tier_exceeded"},
+                                                       .defaultSeverity = ErrorSeverity::Error,
+                                                       .summary = "The particle system exceeds the selected cook tier.",
+                                                       .remediationHint =
+                                                           "Reduce the emitter workload or explicitly select a larger admitted tier.",
+                                                       .userActionable = true};
 }  // namespace Horo::Vfx::VfxErrors
