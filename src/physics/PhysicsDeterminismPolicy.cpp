@@ -63,7 +63,7 @@ namespace Horo::Physics {
         std::uint64_t state = 0x48524f5048595331ULL;  // "HROPHYS1", an algorithm-version domain, not ambient entropy.
         MixField(state, 1, policy.contractVersion);
         MixField(state, 2, policy.revision);
-        MixField(state, 3, static_cast<std::uint8_t>(policy.algorithm));
+        MixField(state, 3, static_cast<std::uint32_t>(policy.algorithm));
         MixField(state, 4, policy.algorithmVersion);
         MixField(state, 5, policy.rootSeed);
         MixField(state, 6, policy.sessionSeed);
