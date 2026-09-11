@@ -354,10 +354,13 @@ target_link_libraries(HoroNavigationApiTests PRIVATE HoroEngine::NavigationApi H
 horo_register_catch_test(HoroNavigationApiTests LABELS "unit;navigation;headless")
 
 add_executable(HoroXRApiTests
+        support/AllocationProbe.cpp
         unit/runtime/xr/XRApiContractTests.cpp
         unit/runtime/xr/XRSpacePoseTests.cpp
+        unit/runtime/xr/XRTrackingSnapshotTests.cpp
 )
 target_compile_features(HoroXRApiTests PRIVATE cxx_std_20)
+target_include_directories(HoroXRApiTests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
 target_link_libraries(HoroXRApiTests PRIVATE HoroEngine::XRApi)
 horo_register_catch_test(HoroXRApiTests LABELS "unit;xr;headless")
 
