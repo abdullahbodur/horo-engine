@@ -120,14 +120,19 @@ namespace Horo::Navigation {
         }
 
         [[nodiscard]] bool CheckedAdd(std::size_t &total, const std::size_t value) noexcept {
-            if (value > std::numeric_limits<std::size_t>::max() - total)
+            const std::size_t remaining = std::numeric_limits<std::size_t>::max() - total;
+            if (value > remaining)
                 return false;
-            total += value;
+            total = total + value;
             return true;
         }
 
         [[nodiscard]] bool CheckedProduct(const std::size_t first, const std::size_t second, std::size_t &result) noexcept {
-            if (first != 0 && second > std::numeric_limits<std::size_t>::max() / first)
+            if (first == 0) {
+                result = 0;
+                return true;
+            }
+            if (second > std::numeric_limits<std::size_t>::max() / first)
                 return false;
             result = first * second;
             return true;
@@ -231,12 +236,7 @@ namespace Horo::Navigation {
             return Result<std::vector<PolygonEdge>>::Success(std::move(edges));
         }
 
-        [[nodiscard]] Result<NativeTopologyInput> TranslateTopology(const RecastDetourProviderCreateInfo &info) {
-            auto validatedEdges = ValidatePolygons(info);
-            if (validatedEdges.HasError())
-                return Result<NativeTopologyInput>::Failure(validatedEdges.ErrorValue());
-
-            NativeTopologyInput translated;
+        [[nodiscard]] Result<void> TranslateVertices(const RecastDetourProviderCreateInfo &info, NativeTopologyInput &translated) {
             translated.minimum = info.vertices.front();
             translated.maximum = info.vertices.front();
             for (const Math::Vec3 vertex : info.vertices) {
@@ -257,12 +257,15 @@ namespace Horo::Navigation {
                 if (std::ranges::any_of(quantized, [](const double value) {
                     return value < 0.0 || value > static_cast<double>(std::numeric_limits<unsigned short>::max());
                 }))
-                    return Failure<NativeTopologyInput>(NavigationErrors::ProviderFailed);
+                    return Failure<void>(NavigationErrors::ProviderFailed);
                 translated.vertices[(index * 3U) + 0U] = static_cast<unsigned short>(quantized[0]);
                 translated.vertices[(index * 3U) + 1U] = static_cast<unsigned short>(quantized[1]);
                 translated.vertices[(index * 3U) + 2U] = static_cast<unsigned short>(quantized[2]);
             }
+            return Result<void>::Success();
+        }
 
+        [[nodiscard]] Result<void> TranslatePolygonData(const RecastDetourProviderCreateInfo &info, NativeTopologyInput &translated) {
             translated.polygons.assign(info.polygons.size() * MaximumVerticesPerPolygon * 2U, NullPolygonIndex);
             translated.polygonFlags.assign(info.polygons.size(), TraversablePolygonFlag);
             translated.polygonAreas.resize(info.polygons.size());
@@ -273,7 +276,7 @@ namespace Horo::Navigation {
             std::ranges::sort(areas);
             areas.erase(std::ranges::unique(areas).begin(), areas.end());
             if (areas.size() > 64U)
-                return Failure<NativeTopologyInput>(NavigationErrors::ProviderFailed);
+                return Failure<void>(NavigationErrors::ProviderFailed);
             for (std::size_t polygonIndex = 0; polygonIndex < info.polygons.size(); ++polygonIndex) {
                 const GroundedNavigationPolygon &polygon = info.polygons[polygonIndex];
                 const std::size_t offset = polygonIndex * MaximumVerticesPerPolygon * 2U;
@@ -282,8 +285,10 @@ namespace Horo::Navigation {
                 translated.polygonAreas[polygonIndex] =
                     static_cast<unsigned char>(std::ranges::lower_bound(areas, polygon.area.Value()) - areas.begin());
             }
+            return Result<void>::Success();
+        }
 
-            const std::vector<PolygonEdge> &edges = validatedEdges.Value();
+        void LinkPolygonNeighbors(const std::vector<PolygonEdge> &edges, NativeTopologyInput &translated) {
             for (std::size_t index = 0; index + 1U < edges.size(); ++index) {
                 const PolygonEdge &first = edges[index];
                 const PolygonEdge &second = edges[index + 1U];
@@ -296,6 +301,19 @@ namespace Horo::Navigation {
                 translated.polygons[secondOffset] = static_cast<unsigned short>(first.polygon);
                 ++index;
             }
+        }
+
+        [[nodiscard]] Result<NativeTopologyInput> TranslateTopology(const RecastDetourProviderCreateInfo &info) {
+            auto validatedEdges = ValidatePolygons(info);
+            if (validatedEdges.HasError())
+                return Result<NativeTopologyInput>::Failure(validatedEdges.ErrorValue());
+
+            NativeTopologyInput translated;
+            if (auto vertices = TranslateVertices(info, translated); vertices.HasError())
+                return Result<NativeTopologyInput>::Failure(vertices.ErrorValue());
+            if (auto polygons = TranslatePolygonData(info, translated); polygons.HasError())
+                return Result<NativeTopologyInput>::Failure(polygons.ErrorValue());
+            LinkPolygonNeighbors(validatedEdges.Value(), translated);
             return Result<NativeTopologyInput>::Success(std::move(translated));
         }
 
@@ -334,7 +352,8 @@ namespace Horo::Navigation {
             if (dtStatusFailed(initialized))
                 return Failure<NavMeshPtr>(dtStatusDetail(initialized, DT_OUT_OF_MEMORY) ? NavigationErrors::CapacityExceeded
                                                                                          : NavigationErrors::ProviderFailed);
-            tileData.release();
+            if (tileData.release() != rawTileData)
+                return Failure<NavMeshPtr>(NavigationErrors::ProviderFailed);
             return Result<NavMeshPtr>::Success(std::move(mesh));
         }
 

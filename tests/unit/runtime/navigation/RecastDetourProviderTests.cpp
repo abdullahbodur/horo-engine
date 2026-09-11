@@ -62,13 +62,13 @@ namespace Horo::Navigation {
         const SquareTopology topology;
         const auto info = CreateInfo(topology);
         auto created = CreateRecastDetourNavigationQueryBackend(info);
-        REQUIRE(created.HasValue());
-        auto provider = std::move(created).Value();
+        REQUIRE_FALSE(created.HasError());
+        std::unique_ptr<INavigationQueryBackend> provider = std::move(created).Value();
 
         const auto capabilities = provider->Capabilities();
-        REQUIRE(ValidateNavigationProviderCapabilities(capabilities));
-        REQUIRE(QueryNavigationSupport(capabilities, NavigationQueryKind::Path, NavigationQualityLevel::Balanced) ==
-                NavigationSupport::Available);
+        CHECK(ValidateNavigationProviderCapabilities(capabilities));
+        CHECK(QueryNavigationSupport(capabilities, NavigationQueryKind::Path, NavigationQualityLevel::Balanced) ==
+              NavigationSupport::Available);
         const auto path = provider->FindPath(Request(info), {});
         REQUIRE(path.HasValue());
         REQUIRE(path.Value().points.size() >= 2);
