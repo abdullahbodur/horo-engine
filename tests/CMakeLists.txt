@@ -1353,6 +1353,7 @@ add_test(NAME HoroExtensionAbiCConsumer COMMAND HoroExtensionAbiCConsumer)
 
 add_executable(HoroExtensionManagerTests
         unit/extensions/ExtensionActivationTransactionTests.cpp
+        unit/extensions/ExtensionCapabilityAdmissionTests.cpp
         unit/extensions/ExtensionActivationStateTests.cpp
         unit/extensions/ExtensionManagerTests.cpp
         unit/extensions/ExtensionManifestParserTests.cpp

@@ -15,4 +15,12 @@ namespace Horo::Extensions::ExtensionErrors {
     extern const ErrorCodeDescriptor LifecycleRevisionStale;
     /** @brief A lifecycle revision, generation, message, or audit-history bound was exhausted. */
     extern const ErrorCodeDescriptor LifecycleCapacityExceeded;
+    /** @brief Capability admission policy or manifest-derived request is malformed. */
+    extern const ErrorCodeDescriptor CapabilityAdmissionInvalid;
+    /** @brief A required permission is unknown, unapproved, or belongs to another activation. */
+    extern const ErrorCodeDescriptor PermissionDenied;
+    /** @brief A capability is absent from the host composition or exact admitted set. */
+    extern const ErrorCodeDescriptor CapabilityUnavailable;
+    /** @brief A retained capability handle outlived its activation admission. */
+    extern const ErrorCodeDescriptor CapabilityRevoked;
 }  // namespace Horo::Extensions::ExtensionErrors
