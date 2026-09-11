@@ -37,14 +37,18 @@ namespace {
                                          const std::uint32_t rank, const std::string_view digest,
                                          std::vector<PackageDependencyRequest> dependencies = {}, std::vector<std::string> features = {},
                                          std::vector<PackagePlatform> platforms = {}) {
-        return {Id(package),         Version(version),        std::string{source},  rank, std::string{digest},
-                std::move(features), std::move(dependencies), std::move(platforms), false};
+        auto parsedSource = HoroPackageSourceId::Parse(source);
+        REQUIRE(parsedSource.HasValue());
+        const auto parsedDigest = Horo::ComputeSha256(std::as_bytes(std::span{digest.data(), digest.size()}));
+        return {Id(package),  Version(version),    std::move(parsedSource).Value(), rank,
+                parsedDigest, std::move(features), std::move(dependencies),         std::move(platforms),
+                false};
     }
 
     std::vector<std::string> PlanIdentity(const PackageResolutionPlan &plan) {
         std::vector<std::string> result;
         for (const ResolvedPackage &package : plan.packages)
-            result.push_back(package.package.Value() + "@" + package.version.ToString() + "#" + package.sourceId);
+            result.push_back(package.package.Value() + "@" + package.version.ToString() + "#" + package.source.Value());
         return result;
     }
 
@@ -207,6 +211,9 @@ TEST_CASE("Package semantic versions follow prerelease precedence", "[packages][
     CHECK(PackageVersion::Parse("1.0").HasError());
     CHECK(PackageVersion::Parse("01.0.0").HasError());
     CHECK(HoroPackageId::Parse("com..horo").HasError());
+    CHECK(HoroPackageSourceId::Parse("public.registry").HasValue());
+    CHECK(HoroPackageSourceId::Parse("https://registry.example").HasError());
+    CHECK(HoroPackageSourceId::Parse("Private.Registry").HasError());
     CHECK_FALSE(Caret("1.0.0").Allows(Version("1.1.0-alpha")));
     CHECK(Caret("1.0.0-alpha").Allows(Version("1.0.0-beta")));
     CHECK(Caret("1.0.0-alpha").Allows(Version("1.0.0")));

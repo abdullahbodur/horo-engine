@@ -1,5 +1,7 @@
 #include "Horo/Packages/PackageDependencyResolver.h"
 
+#include "PackageValidation.h"
+
 #include <algorithm>
 #include <charconv>
 #include <format>
@@ -27,15 +29,6 @@ namespace Horo::Packages {
                                                   "Resolve the source digest conflict before retrying."};
         const ErrorCodeDescriptor Cycle{ResolverDomain, ErrorCode{"packages.resolver.cycle"}, ErrorSeverity::Error,
                                         "Package dependency graph contains a cycle.", "Remove the reported circular dependency."};
-
-        [[nodiscard]] bool CanonicalToken(const std::string_view text, const std::size_t maximum) noexcept {
-            if (text.empty() || text.size() > maximum || text.front() == '.' || text.back() == '.' ||
-                text.find("..") != std::string_view::npos)
-                return false;
-            return std::ranges::all_of(text, [](const unsigned char value) {
-                return (value >= 'a' && value <= 'z') || (value >= '0' && value <= '9') || value == '.' || value == '-' || value == '_';
-            });
-        }
 
         [[nodiscard]] std::optional<std::uint32_t> ParseNumber(const std::string_view text) noexcept {
             if (text.empty() || (text.size() > 1U && text.front() == '0'))
@@ -139,17 +132,12 @@ namespace Horo::Packages {
             return false;
         }
 
-        [[nodiscard]] bool ValidPlatform(const PackagePlatform &platform) {
-            return CanonicalToken(platform.operatingSystem, 64U) && CanonicalToken(platform.architecture, 64U) &&
-                   CanonicalToken(platform.sdkAbi, 128U);
-        }
-
         [[nodiscard]] bool ValidDependency(const PackageDependencyRequest &dependency) {
             const bool validRequirement = dependency.requirement == PackageDependencyRequirement::Required ||
                                           dependency.requirement == PackageDependencyRequirement::Optional;
             return validRequirement && ValidRange(dependency.versions) &&
                    std::ranges::all_of(dependency.requiredFeatures, [](const std::string &feature) {
-                return CanonicalToken(feature, 128U);
+                return Detail::IsCanonicalPackageToken(feature, 128U);
             });
         }
 
@@ -256,14 +244,14 @@ namespace Horo::Packages {
                     return left.sourceRank < right.sourceRank;
                 if (left.version != right.version)
                     return left.version > right.version;
-                return left.sourceId < right.sourceId;
+                return left.source.Value() < right.source.Value();
             });
             return matches;
         }
 
         [[nodiscard]] std::optional<PackageVersion> FindSourceAmbiguity(const PackageResolutionRequest &request,
                                                                         const std::vector<std::size_t> &matches) {
-            std::map<PackageVersion, std::string> digests;
+            std::map<PackageVersion, Sha256Digest> digests;
             for (const std::size_t index : matches) {
                 const PackageResolutionCandidate &candidate = request.candidates[index];
                 const auto [existing, inserted] = digests.try_emplace(candidate.version, candidate.artifactDigest);
@@ -353,13 +341,12 @@ namespace Horo::Packages {
                 return Result<void>::Failure(MakeError(ResourceLimit));
             std::set<std::pair<std::string, std::string>> identities;
             for (const PackageResolutionCandidate &candidate : request.candidates) {
-                if (!ValidVersion(candidate.version) || !CanonicalToken(candidate.sourceId, 128U) || candidate.artifactDigest.empty() ||
-                    candidate.artifactDigest.size() > 128U || candidate.dependencies.size() > request.limits.dependenciesPerCandidate ||
+                if (!ValidVersion(candidate.version) || candidate.dependencies.size() > request.limits.dependenciesPerCandidate ||
                     candidate.features.size() > request.limits.featuresPerCandidate ||
-                    !identities.emplace(candidate.package.Value(), candidate.version.ToString() + "@" + candidate.sourceId).second)
+                    !identities.emplace(candidate.package.Value(), candidate.version.ToString() + "@" + candidate.source.Value()).second)
                     return Result<void>::Failure(MakeError(InvalidInput));
                 if (!std::ranges::all_of(candidate.features, [](const std::string &feature) {
-                    return CanonicalToken(feature, 128U);
+                    return Detail::IsCanonicalPackageToken(feature, 128U);
                 }))
                     return Result<void>::Failure(MakeError(InvalidInput));
                 std::set<std::string, std::less<>> uniqueFeatures;
@@ -372,7 +359,7 @@ namespace Horo::Packages {
                     if (!uniqueDependencies.insert(dependency.package.Value()).second || !ValidDependency(dependency))
                         return Result<void>::Failure(MakeError(InvalidInput));
                 }
-                if (!std::ranges::all_of(candidate.platforms, ValidPlatform))
+                if (!std::ranges::all_of(candidate.platforms, Detail::IsValidPackagePlatform))
                     return Result<void>::Failure(MakeError(InvalidInput));
             }
             for (const PackageDependencyRequest &root : request.roots) {
@@ -385,7 +372,7 @@ namespace Horo::Packages {
 
     /** @copydoc HoroPackageId::Parse */
     Result<HoroPackageId> HoroPackageId::Parse(const std::string_view text) {
-        if (!CanonicalToken(text, 255U))
+        if (!Detail::IsCanonicalPackageToken(text, 255U))
             return Result<HoroPackageId>::Failure(MakeError(InvalidInput, "Package ID is not canonical."));
         return Result<HoroPackageId>::Success(HoroPackageId{std::string{text}});
     }
@@ -395,6 +382,21 @@ namespace Horo::Packages {
 
     /** @copydoc HoroPackageId::Value */
     const std::string &HoroPackageId::Value() const noexcept {
+        return value_;
+    }
+
+    /** @copydoc HoroPackageSourceId::Parse */
+    Result<HoroPackageSourceId> HoroPackageSourceId::Parse(const std::string_view text) {
+        if (!Detail::IsCanonicalPackageToken(text, 128U))
+            return Result<HoroPackageSourceId>::Failure(MakeError(InvalidInput, "Package source ID is not canonical."));
+        return Result<HoroPackageSourceId>::Success(HoroPackageSourceId{std::string{text}});
+    }
+
+    /** @copydoc HoroPackageSourceId::HoroPackageSourceId */
+    HoroPackageSourceId::HoroPackageSourceId(std::string value) : value_(std::move(value)) {}
+
+    /** @copydoc HoroPackageSourceId::Value */
+    const std::string &HoroPackageSourceId::Value() const noexcept {
         return value_;
     }
 
@@ -481,7 +483,7 @@ namespace Horo::Packages {
         for (const auto &[id, index] : solution.selected) {
             static_cast<void>(id);
             const PackageResolutionCandidate &candidate = request.candidates[index];
-            ResolvedPackage resolved{candidate.package, candidate.version, candidate.sourceId, candidate.artifactDigest, {}};
+            ResolvedPackage resolved{candidate.package, candidate.version, candidate.source, candidate.artifactDigest, {}};
             for (const PackageDependencyRequest &dependency : candidate.dependencies) {
                 if (dependency.requirement == PackageDependencyRequirement::Required || request.includeOptionalDependencies)
                     resolved.dependencies.push_back(dependency.package);

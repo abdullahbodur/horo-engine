@@ -134,6 +134,7 @@ target_link_libraries(HoroPlatformServices PUBLIC HoroEngine::Foundation)
 
 add_library(HoroPackages STATIC
         packages/resolver/PackageDependencyResolver.cpp
+        packages/resolver/PackageLockfile.cpp
         packages/validation/PackagePath.cpp
         packages/validation/PackageArchive.cpp
         packages/validation/PackageFileManifest.cpp
