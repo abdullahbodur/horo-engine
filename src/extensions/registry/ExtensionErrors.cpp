@@ -92,4 +92,44 @@ namespace Horo::Extensions::ExtensionErrors {
         .retryable = false,
         .userActionable = false,
     };
+
+    const ErrorCodeDescriptor CapabilityAdmissionInvalid{
+        .domain = Domain,
+        .code = ErrorCode{"capability_admission_invalid"},
+        .defaultSeverity = ErrorSeverity::Error,
+        .summary = "The extension capability admission input is invalid.",
+        .remediationHint = "Provide canonical bounded identities and a consistent host policy snapshot.",
+        .retryable = false,
+        .userActionable = false,
+    };
+
+    const ErrorCodeDescriptor PermissionDenied{
+        .domain = Domain,
+        .code = ErrorCode{"permission_denied"},
+        .defaultSeverity = ErrorSeverity::Error,
+        .summary = "The extension permission request was denied.",
+        .remediationHint = "Review the extension request and approve only the required permission through host policy.",
+        .retryable = false,
+        .userActionable = true,
+    };
+
+    const ErrorCodeDescriptor CapabilityUnavailable{
+        .domain = Domain,
+        .code = ErrorCode{"capability_unavailable"},
+        .defaultSeverity = ErrorSeverity::Error,
+        .summary = "The requested application capability is unavailable.",
+        .remediationHint = "Use a host composition that exposes the declared capability.",
+        .retryable = false,
+        .userActionable = true,
+    };
+
+    const ErrorCodeDescriptor CapabilityRevoked{
+        .domain = Domain,
+        .code = ErrorCode{"capability_revoked"},
+        .defaultSeverity = ErrorSeverity::Warning,
+        .summary = "The extension capability handle is no longer active.",
+        .remediationHint = "Stop callback dispatch and acquire a handle from the current activation generation.",
+        .retryable = false,
+        .userActionable = false,
+    };
 }  // namespace Horo::Extensions::ExtensionErrors
