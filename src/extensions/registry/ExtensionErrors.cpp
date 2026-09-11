@@ -132,4 +132,54 @@ namespace Horo::Extensions::ExtensionErrors {
         .retryable = false,
         .userActionable = false,
     };
+
+    const ErrorCodeDescriptor CapabilityRegistryInvalid{
+        .domain = Domain,
+        .code = ErrorCode{"capability_registry_invalid"},
+        .defaultSeverity = ErrorSeverity::Error,
+        .summary = "The application capability registry input is invalid.",
+        .remediationHint = "Provide canonical provider identity, version, generation, and version range values.",
+        .retryable = false,
+        .userActionable = false,
+    };
+
+    const ErrorCodeDescriptor CapabilityRegistryDuplicate{
+        .domain = Domain,
+        .code = ErrorCode{"capability_registry_duplicate"},
+        .defaultSeverity = ErrorSeverity::Error,
+        .summary = "The application capability provider is already registered.",
+        .remediationHint = "Register only one provider for each exact capability contract version.",
+        .retryable = false,
+        .userActionable = false,
+    };
+
+    const ErrorCodeDescriptor CapabilityVersionIncompatible{
+        .domain = Domain,
+        .code = ErrorCode{"capability_version_incompatible"},
+        .defaultSeverity = ErrorSeverity::Error,
+        .summary = "No compatible application capability provider version is available.",
+        .remediationHint = "Use a supported contract version or install a compatible provider.",
+        .retryable = false,
+        .userActionable = true,
+    };
+
+    const ErrorCodeDescriptor CapabilityRegistryCapacityExceeded{
+        .domain = Domain,
+        .code = ErrorCode{"capability_registry_capacity_exceeded"},
+        .defaultSeverity = ErrorSeverity::Error,
+        .summary = "The application capability registry capacity was exceeded.",
+        .remediationHint = "Reduce the explicitly composed provider set.",
+        .retryable = false,
+        .userActionable = false,
+    };
+
+    const ErrorCodeDescriptor CapabilityRegistryShutdown{
+        .domain = Domain,
+        .code = ErrorCode{"capability_registry_shutdown"},
+        .defaultSeverity = ErrorSeverity::Error,
+        .summary = "The application capability registry is shutting down.",
+        .remediationHint = "Do not register or resolve providers after host shutdown begins.",
+        .retryable = false,
+        .userActionable = false,
+    };
 }  // namespace Horo::Extensions::ExtensionErrors

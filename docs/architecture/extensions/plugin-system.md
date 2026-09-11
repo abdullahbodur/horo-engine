@@ -505,6 +505,16 @@ tuple; admission revocation or destruction closes every retained handle to later
 acquisitions. This contract is an admission gate, not a global capability
 registry or a native-code sandbox.
 
+`ApplicationCapabilityRegistry` is the composition-owned provider index layered
+on that admission. Providers publish inert canonical IDs, exact semantic contract
+versions, and non-zero generations through move-only lifetime registrations.
+Resolution selects the highest version inside an explicit closed range and also
+acquires the calling extension's exact admission handle. Missing and incompatible
+providers fail distinctly. Shutdown and registration destruction remove future
+discoverability while already leased calls retain their admission lease. The
+registry exposes no concrete service pointer; capability-specific host adapters
+own invocation, scheduling, cancellation, and result storage.
+
 ## Module Loading And ABI Boundary
 
 The generic module C ABI is a bootstrap/control boundary, not sufficient for every
