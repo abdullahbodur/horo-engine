@@ -4,6 +4,7 @@
 
 #include <array>
 #include <bit>
+#include <ranges>
 
 namespace Horo::Render {
     namespace {
@@ -94,16 +95,15 @@ namespace Horo::Render {
         [[nodiscard]] bool InsertSnapshotKey(std::array<SnapshotKeySlot, SnapshotKeySlotCount> &slots,
                                              const UiRenderCompositionPass &entry) noexcept {
             const auto &descriptor = entry.snapshot->Descriptor();
-            std::size_t index = SnapshotKeyHash(descriptor.canvas, descriptor.snapshotRevision);
-            for (std::size_t probe = 0; probe < slots.size(); ++probe) {
-                auto &slot = slots[index];
+            const std::size_t index = SnapshotKeyHash(descriptor.canvas, descriptor.snapshotRevision);
+            for (const std::size_t offset : std::views::iota(std::size_t{0}, slots.size())) {
+                auto &slot = slots[(index + offset) & (slots.size() - 1U)];
                 if (!slot.occupied) {
                     slot = {true, descriptor.canvas, descriptor.snapshotRevision};
                     return true;
                 }
                 if (slot.canvas == descriptor.canvas && slot.revision == descriptor.snapshotRevision)
                     return false;
-                index = (index + 1U) & (slots.size() - 1U);
             }
             return false;
         }
