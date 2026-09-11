@@ -252,4 +252,14 @@ namespace Horo::WorldStreaming::WorldStreamingErrors {
     extern const ErrorCodeDescriptor ObjectOwnershipCapacityExceeded;
     /** @brief Ownership admission is closed because its authority is cancelling or shut down. */
     extern const ErrorCodeDescriptor ObjectOwnershipLifecycleUnavailable;
+    /** @brief A partition capability snapshot or project-settings request is structurally invalid. */
+    extern const ErrorCodeDescriptor PartitionSettingsInvalid;
+    /** @brief A precision or package mode is unsupported by the selected project profile or host. */
+    extern const ErrorCodeDescriptor PartitionSettingsUnsupported;
+    /** @brief Requested grid or storage limits exceed the exact host capability snapshot. */
+    extern const ErrorCodeDescriptor PartitionSettingsCapacityExceeded;
+    /** @brief Settings or capability evidence no longer names the active immutable revision. */
+    extern const ErrorCodeDescriptor PartitionSettingsStale;
+    /** @brief Settings-dependent work is unavailable because admission is cancelling or closed. */
+    extern const ErrorCodeDescriptor PartitionSettingsLifecycleUnavailable;
 }  // namespace Horo::WorldStreaming::WorldStreamingErrors
