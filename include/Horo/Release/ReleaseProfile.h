@@ -23,7 +23,8 @@ namespace Horo::Release {
         std::size_t inheritanceDepth{32};
         std::size_t destinationsPerPreset{64};
         std::size_t capabilitiesPerPreset{64};
-        std::size_t identityBytes{128};
+        std::size_t availableCapabilities{256}; /**< Maximum host capability identities admitted during one resolution. */
+        std::size_t identityBytes{128};         /**< Configurable ceiling at or below the distribution identity hard limit. */
     };
 
     /** @brief Stable portable name of a project release preset. */

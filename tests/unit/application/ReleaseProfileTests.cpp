@@ -226,6 +226,19 @@ TEST_CASE("Unknown required capabilities fail with their stable public identity"
     RequireError(catalog.Resolve({"shipping-base"}, duplicate), "release.profile.invalid");
     const std::array malformed{ReleaseCapabilityId{"Release Packaging"}};
     RequireError(catalog.Resolve({"shipping-base"}, malformed), "release.profile.invalid");
+
+    std::vector<ReleaseCapabilityId> hostCapabilities;
+    hostCapabilities.reserve(65U);
+    hostCapabilities.push_back({"release.packaging"});
+    for (std::size_t index = 1; index < 65U; ++index)
+        hostCapabilities.push_back({"host.capability-" + std::to_string(index)});
+    REQUIRE(catalog.Resolve({"shipping-base"}, hostCapabilities).HasValue());
+
+    ReleaseProfileLimits limits;
+    limits.availableCapabilities = 64U;
+    const auto boundedCatalog = ReleaseProfileCatalog::Parse(ValidCatalog, limits);
+    REQUIRE(boundedCatalog.HasValue());
+    RequireError(boundedCatalog.Value().Resolve({"shipping-base"}, hostCapabilities), "release.profile.limit");
 }
 
 TEST_CASE("Profile inheritance rejects missing parents cycles and excessive depth deterministically",

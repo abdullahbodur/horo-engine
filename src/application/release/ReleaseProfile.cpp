@@ -16,7 +16,10 @@ namespace Horo::Release {
         using Json = nlohmann::json;
         using OrderedJson = nlohmann::ordered_json;
 
-        [[nodiscard]] bool CanonicalIdentity(const std::string_view value, const std::size_t maximum) noexcept {
+        constexpr std::size_t MaximumProfileJsonDepth = 10;
+        constexpr std::size_t MaximumProfileJsonKeyBytes = 64;
+
+        [[nodiscard]] bool ValidBoundedIdentity(const std::string_view value, const std::size_t maximum) noexcept {
             return value.size() <= maximum && IsValidDistributionIdentity(value);
         }
 
@@ -30,8 +33,9 @@ namespace Horo::Release {
                    limits.presets <= maximum.presets && limits.inheritanceDepth > 0U &&
                    limits.inheritanceDepth <= maximum.inheritanceDepth && limits.destinationsPerPreset > 0U &&
                    limits.destinationsPerPreset <= maximum.destinationsPerPreset && limits.capabilitiesPerPreset > 0U &&
-                   limits.capabilitiesPerPreset <= maximum.capabilitiesPerPreset && limits.identityBytes > 0U &&
-                   limits.identityBytes <= maximum.identityBytes;
+                   limits.capabilitiesPerPreset <= maximum.capabilitiesPerPreset && limits.availableCapabilities > 0U &&
+                   limits.availableCapabilities <= maximum.availableCapabilities && limits.identityBytes > 0U &&
+                   limits.identityBytes <= MaximumDistributionIdentityBytes;
         }
 
         [[nodiscard]] bool HasExactKeys(const Json &value, const std::initializer_list<std::string_view> required,
@@ -50,7 +54,8 @@ namespace Horo::Release {
         }
 
         struct DecodeGuard final {
-            std::array<std::set<std::string, std::less<>>, 12> keys;
+            // These are fixed schema-parser safety bounds, not product identity policy.
+            std::array<std::set<std::string, std::less<>>, MaximumProfileJsonDepth + 2U> keys;
             bool valid{true};
 
             bool operator()(const int depth, const Json::parse_event_t event, const Json &value) {
@@ -62,7 +67,7 @@ namespace Horo::Release {
                 if (event == Json::parse_event_t::object_start)
                     keys[index + 1U].clear();
                 else if (event == Json::parse_event_t::key)
-                    valid &= value.is_string() && value.get_ref<const std::string &>().size() <= 64U &&
+                    valid &= value.is_string() && value.get_ref<const std::string &>().size() <= MaximumProfileJsonKeyBytes &&
                              keys[index].insert(value.get_ref<const std::string &>()).second;
                 else if (event == Json::parse_event_t::value && value.is_string())
                     valid &= value.get_ref<const std::string &>().size() <= MaximumDistributionIdentityBytes;
@@ -78,7 +83,7 @@ namespace Horo::Release {
             std::vector<Id> result;
             result.reserve(value.size());
             for (const Json &encoded : value) {
-                if (!encoded.is_string() || !CanonicalIdentity(encoded.get_ref<const std::string &>(), limits.identityBytes))
+                if (!encoded.is_string() || !ValidBoundedIdentity(encoded.get_ref<const std::string &>(), limits.identityBytes))
                     return Result<std::vector<Id>>::Failure(ProfileError(ReleaseErrors::ProfileInvalid));
                 result.push_back({encoded.get<std::string>()});
             }
@@ -294,7 +299,7 @@ namespace Horo::Release {
             const std::string &name = value.at("kind").get_ref<const std::string &>();
             if (name == "renderer-component") {
                 if (!value.contains("componentId") || !value.at("componentId").is_string() ||
-                    !CanonicalIdentity(value.at("componentId").get_ref<const std::string &>(), limits.identityBytes))
+                    !ValidBoundedIdentity(value.at("componentId").get_ref<const std::string &>(), limits.identityBytes))
                     return Result<DistributionProductIdentity>::Failure(ProfileError(ReleaseErrors::ProfileInvalid));
                 return Result<DistributionProductIdentity>::Success(
                     {DistributionProductKind::RendererComponent, value.at("componentId").get<std::string>()});
@@ -470,7 +475,7 @@ namespace Horo::Release {
         }
 
         [[nodiscard]] bool ValidOptionalIdentity(const std::optional<ReleaseProfileId> &id, const ReleaseProfileLimits &limits) noexcept {
-            return !id || CanonicalIdentity(id->value, limits.identityBytes);
+            return !id || ValidBoundedIdentity(id->value, limits.identityBytes);
         }
 
         [[nodiscard]] bool ValidProduct(const std::optional<DistributionProductIdentity> &product,
@@ -480,7 +485,7 @@ namespace Horo::Release {
             if (ProductToString(product->kind).empty())
                 return false;
             const bool renderer = product->kind == DistributionProductKind::RendererComponent;
-            return renderer ? CanonicalIdentity(product->componentId, limits.identityBytes) : product->componentId.empty();
+            return renderer ? ValidBoundedIdentity(product->componentId, limits.identityBytes) : product->componentId.empty();
         }
 
         template <typename Id>
@@ -489,7 +494,7 @@ namespace Horo::Release {
             if (!values)
                 return true;
             if (values->size() > maximum || !std::ranges::all_of(*values, [&](const Id &value) {
-                return CanonicalIdentity(value.value, limits.identityBytes);
+                return ValidBoundedIdentity(value.value, limits.identityBytes);
             }))
                 return false;
             std::ranges::sort(*values, {}, &Id::value);
@@ -506,7 +511,7 @@ namespace Horo::Release {
         }
 
         [[nodiscard]] bool CanonicalizePreset(ReleaseProfilePreset &preset, const ReleaseProfileLimits &limits) {
-            return CanonicalIdentity(preset.id.value, limits.identityBytes) && ValidOptionalIdentity(preset.parent, limits) &&
+            return ValidBoundedIdentity(preset.id.value, limits.identityBytes) && ValidOptionalIdentity(preset.parent, limits) &&
                    ValidProduct(preset.product, limits) && ValidPresetEnums(preset) &&
                    CanonicalizeIdentities(preset.eligibleDestinations, limits.destinationsPerPreset, limits) &&
                    CanonicalizeIdentities(preset.requiredCapabilities, limits.capabilitiesPerPreset, limits);
@@ -825,13 +830,13 @@ namespace Horo::Release {
     /** @copydoc ReleaseProfileCatalog::Resolve */
     Result<EffectiveReleaseProfile> ReleaseProfileCatalog::Resolve(ReleaseProfileId id,
                                                                    const std::span<const ReleaseCapabilityId> availableCapabilities) const {
-        if (!CanonicalIdentity(id.value, m_limits.identityBytes))
+        if (!ValidBoundedIdentity(id.value, m_limits.identityBytes))
             return Result<EffectiveReleaseProfile>::Failure(ProfileError(ReleaseErrors::ProfileInvalid));
-        if (availableCapabilities.size() > m_limits.capabilitiesPerPreset)
+        if (availableCapabilities.size() > m_limits.availableCapabilities)
             return Result<EffectiveReleaseProfile>::Failure(ProfileError(ReleaseErrors::ProfileLimitExceeded));
         std::set<std::string_view, std::less<>> uniqueCapabilities;
         for (const ReleaseCapabilityId &capability : availableCapabilities) {
-            if (!CanonicalIdentity(capability.value, m_limits.identityBytes) || !uniqueCapabilities.insert(capability.value).second)
+            if (!ValidBoundedIdentity(capability.value, m_limits.identityBytes) || !uniqueCapabilities.insert(capability.value).second)
                 return Result<EffectiveReleaseProfile>::Failure(ProfileError(ReleaseErrors::ProfileInvalid));
         }
         std::vector<const ReleaseProfilePreset *> lineage;
