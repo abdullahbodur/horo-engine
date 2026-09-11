@@ -4,7 +4,7 @@
 - **Date**: 2026-09-02
 - **Supersedes**: None
 - **Scope**: Non-predicted baseline, local prediction and rollback/resimulation capability tiers; descriptor admission, fixed-tick input/state hooks, determinism closure, bounded histories, correction, side effects, overflow, lifecycle and qualification
-- **Issue**: [NET-005.1](https://github.com/abdullahbodur/horo-engine/issues/1142)
+- **Issue**: [NET-005.1](https://github.com/HoroCore/horo-engine/issues/1142)
 - **Jira**: [HORO-1142](https://horo-engine.atlassian.net/browse/HORO-1142)
 - **Related**: [ADR-084](084-canonical-physics-solver-units-and-tolerances.md), [ADR-088](088-physics-determinism-capability-and-support-tiers.md), [ADR-092](092-character-controller-determinism-and-state-composition.md), [ADR-098](098-protocol-session-and-trust-policy.md), [ADR-099](099-replication-ownership-authority-and-compatibility.md)
 - **Normative documents**: [Multiplayer Replication Architecture](../architecture/runtime/multiplayer-replication-architecture.md), [Character Controller Architecture](../architecture/runtime/character-controller-architecture.md), [Networking Architecture](../architecture/runtime/networking-architecture.md)

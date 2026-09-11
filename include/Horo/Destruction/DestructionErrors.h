@@ -50,4 +50,20 @@ namespace Horo::Destruction::DestructionErrors {
     extern const ErrorCodeDescriptor CancelledBeforeCommit;
     /** @brief The state owner has closed mutation and replacement admission for shutdown. */
     extern const ErrorCodeDescriptor ShutdownInProgress;
+    /** @brief A damage/fracture command contains malformed identity, schema, enum, vector, or tick data. */
+    extern const ErrorCodeDescriptor CommandInvalid;
+    /** @brief A finite command payload exceeds the explicitly admitted per-command limits. */
+    extern const ErrorCodeDescriptor CommandLimitExceeded;
+    /** @brief The submitted authority grant is invalid, stale, or lacks the required typed capability. */
+    extern const ErrorCodeDescriptor CommandAuthorityDenied;
+    /** @brief The descriptor or immutable capability snapshot does not support the requested command kind. */
+    extern const ErrorCodeDescriptor CommandUnsupported;
+    /** @brief A durable command terminal result contains an impossible outcome/reason/revision combination. */
+    extern const ErrorCodeDescriptor CommandResultInvalid;
+    /** @brief Registry limits, records, query filters, or capability projections are malformed. */
+    extern const ErrorCodeDescriptor RegistryInvalid;
+    /** @brief A registry already contains the exact target or authored owner. */
+    extern const ErrorCodeDescriptor RegistryDuplicate;
+    /** @brief A registry or query would exceed its explicit finite capacity. */
+    extern const ErrorCodeDescriptor RegistryCapacityExceeded;
 }  // namespace Horo::Destruction::DestructionErrors

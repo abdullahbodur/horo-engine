@@ -4,7 +4,7 @@
 - **Date**: 2026-09-02
 - **Supersedes**: None
 - **Scope**: Particle blend-class pass placement, semantic depth policy, CPU/GPU per-view sort ownership and algorithms, stable ordering, sort budgets, overload reporting and backend-neutral graph integration
-- **Issue**: [VFX-004.1](https://github.com/abdullahbodur/horo-engine/issues/1752)
+- **Issue**: [VFX-004.1](https://github.com/HoroCore/horo-engine/issues/1752)
 - **Jira**: [HORO-1709](https://horo-engine.atlassian.net/browse/HORO-1709)
 - **Related**: [ADR-011](011-vfx-effect-ownership-simulation-domain-and-renderer-boundary.md), [ADR-028](028-renderer-capability-limits-and-product-profiles.md), [ADR-036](036-raster-render-path-and-quality-architecture.md), [ADR-037](037-scene-color-and-hdr-architecture.md), [ADR-038](038-gpu-scene-and-instance-data-model.md), [ADR-124](124-vfx-gpu-simulation-readback-and-compute-fallback.md)
 - **Normative documents**: [VFX and Particles Architecture](../architecture/runtime/vfx-and-particles-architecture.md), [Rendering Architecture](../architecture/runtime/rendering-architecture.md), [Render Backend Parity Contract](../architecture/runtime/render-backend-parity-contract.md)

@@ -51,7 +51,7 @@
       "title": "Horo observability documentation",
       "tooltip": "Open the instrumentation and local export guide",
       "type": "link",
-      "url": "https://github.com/abdullahbodur/horo-engine/blob/main/docs/architecture/observability/developer-instrumentation.md"
+      "url": "https://github.com/HoroCore/horo-engine/blob/main/docs/architecture/observability/developer-instrumentation.md"
     }
   ],
   "liveNow": false,

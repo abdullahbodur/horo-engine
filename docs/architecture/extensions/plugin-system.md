@@ -1091,26 +1091,54 @@ The current implementation provides:
 - local directory installation through a bounded staging copy that rejects
   symlinks, path escape, duplicate package IDs, oversized trees, and relative
   source paths;
-- durable user activation and local-trust state in the managed extension root;
-- version, origin, module, contribution, absolute manifest path, activation
-  error, runtime-active, and restart-required projections in Editor Settings;
+- durable project enablement intent and exact-composition local-trust records in
+  the managed extension root; legacy ID-only trust records are not promoted;
+- one typed lifecycle projection separating installation, trust, project
+  enablement, host compatibility, desired activation, loaded/runtime-active
+  state, restart reason, and typed activation outcome;
+- optimistic lifecycle revisions, monotonic activation generations, explicit
+  transition-owner tags, and bounded immutable audit batches for accepted
+  state transitions;
+- version, origin, module, contribution, absolute manifest path, typed
+  activation failure, runtime-active, and restart-required projections in
+  Editor Settings;
 - startup-only native activation into the candidate asset-importer catalog.
 - an optional Marketplace tab backed by the public GitHub-hosted static
   registry URL, with asynchronous search, platform filtering, bounded HTTPS
   downloads, canonical SHA-256 verification, bounded ZIP extraction, and
   transactional publication through the installed-extension inventory.
 
-Newly installed native packages are disabled. Enabling a user package is the
-explicit local trust decision, and enable/disable changes take effect on editor
-restart. Marketplace installation does not grant trust or activate native code;
-the user enables the installed package explicitly from the Installed tab.
+Newly installed native packages are disabled and untrusted. Enabling records
+portable project intent only; it never grants local execution trust. Trust is a
+separate local or organization decision bound to the exact verified package
+composition, and an update or replacement invalidates that decision unless its
+bounded policy explicitly covers the new digest. Install, enable, trust,
+compatibility, desired activation, load, runtime activity, restart requirement,
+and activation failure remain orthogonal facts. Marketplace installation does
+not grant trust or activate native code.
+
+The lifecycle reducer is the canonical state-machine contract. `TrustService`
+owns grant/revoke transitions, `PackageLifecycleService` owns durable
+enablement, compatibility, replacement and typed activation outcomes, and
+`ExtensionHost` owns load/active/inactive evidence for an exact composition and
+generation. Commands with a stale revision, duplicate or
+out-of-order action, wrong owner, mismatched composition, or invalid generation
+fail without partially changing the projection. Audit records are evidence of
+accepted transitions, not a second authority.
 
 Artifact signatures, updates, dependency resolution, per-project requirements,
 removal, private-registry credentials, and live-safe contribution types remain
 future work.
 
-This inventory/manager is transitional and does not define the target package
-authority. The ADR-054 migration inventories top-level legacy `extension.json`
+The direct-directory inventory/manager remains a transitional adapter and does
+not turn its exact encoded-manifest digest into verified package or trust
+authority. It uses that digest to invalidate local trust when publisher,
+capability, entry, or other manifest evidence changes, and projects its
+existing persisted enablement and exact-composition trust decisions through the
+typed lifecycle contract; activation candidates
+from the package system must instead carry the verified artifact/manifest
+digest and trust evidence required by ADR-054. The ADR-054 migration inventories
+top-level legacy `extension.json`
 directories without loading them, generates canonical package and file manifests
 in staging, obtains trust review for the generated digest, publishes one verified
 package install record and converts `.horo/plugins.json` requests into the package

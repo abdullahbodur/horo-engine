@@ -4,7 +4,7 @@
 - **Date**: 2026-09-02
 - **Supersedes**: None
 - **Scope**: PCG subsystem ownership, evaluation purity, commit authority, deterministic execution classes, offline/preview/runtime/hybrid modes, headless/null composition, replacement, cancellation and shutdown
-- **Issue**: [PCG-1.1](https://github.com/abdullahbodur/horo-engine/issues/2054)
+- **Issue**: [PCG-1.1](https://github.com/HoroCore/horo-engine/issues/2054)
 - **Jira**: [HORO-2008](https://horo-engine.atlassian.net/browse/HORO-2008)
 - **Related**: [ADR-008](008-error-model-exception-boundary-and-registry.md), [ADR-010](010-job-waiting-and-operation-store-ownership.md), [ADR-012](012-world-streaming-partition-authority-and-subsystem-boundaries.md), [ADR-018](018-command-registration-permissions-threading-and-packaged-build-policy.md), [ADR-028](028-renderer-capability-limits-and-product-profiles.md), [ADR-085](085-physics-shape-authoring-cook-and-runtime-boundary.md), [ADR-105](105-navigation-asset-and-scene-ownership-boundary.md), [ADR-137](137-terrain-foliage-ownership-data-tier-and-lifecycle.md), [ADR-150](150-pcg-graph-source-cooked-plan-cache-and-runtime-ownership.md)
 - **Normative documents**: [Procedural Generation Architecture](../architecture/runtime/procedural-generation-architecture.md), [System Design](../architecture/foundation/system-design.md), [Scene Runtime](../architecture/runtime/scene-runtime.md), [World Streaming Architecture](../architecture/runtime/world-streaming-architecture.md), [Editor Document Model](../architecture/editor/editor-document-model.md)

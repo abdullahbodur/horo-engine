@@ -4,9 +4,9 @@
 - **Date**: 2026-08-27
 - **Supersedes**: None
 - **Scope**: Foundation `Result<T,Error>`, `ErrorCode`/`Error`, diagnostics, registry and exception boundaries
-- **Issues**: [ERR-001.1](https://github.com/abdullahbodur/horo-engine/issues/1814),
-  [ERR-001.2](https://github.com/abdullahbodur/horo-engine/issues/1815),
-  [ERR-001.3](https://github.com/abdullahbodur/horo-engine/issues/1816)
+- **Issues**: [ERR-001.1](https://github.com/HoroCore/horo-engine/issues/1814),
+  [ERR-001.2](https://github.com/HoroCore/horo-engine/issues/1815),
+  [ERR-001.3](https://github.com/HoroCore/horo-engine/issues/1816)
 - **Normative document**: [Error And Diagnostics](../architecture/foundation/error-and-diagnostics.md)
 
 ## Context

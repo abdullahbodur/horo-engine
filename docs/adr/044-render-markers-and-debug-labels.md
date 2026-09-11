@@ -4,7 +4,7 @@
 - **Date**: 2026-09-01
 - **Supersedes**: None
 - **Scope**: Backend-neutral render marker identity, placement, correlation and native debug labels
-- **Issue**: [RND-017.4](https://github.com/abdullahbodur/horo-engine/issues/436)
+- **Issue**: [RND-017.4](https://github.com/HoroCore/horo-engine/issues/436)
 - **Jira**: [HORO-436](https://horo-engine.atlassian.net/browse/HORO-436)
 - **Related**: [ADR-018](018-command-registration-permissions-threading-and-packaged-build-policy.md),
   [ADR-038](038-gpu-scene-and-instance-data-model.md),

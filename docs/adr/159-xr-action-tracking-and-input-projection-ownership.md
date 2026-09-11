@@ -4,7 +4,7 @@
 - **Date**: 2026-09-02
 - **Supersedes**: None
 - **Scope**: XR action schemas and native action sets, tracking/device/pose snapshots, interaction-profile bindings, Input projection, fixed-tick consumption, gesture derivation, haptic requests, privacy-sensitive hand/eye data, lifecycle, migration and validation
-- **Issue**: [XRA-003.1](https://github.com/abdullahbodur/horo-engine/issues/2128)
+- **Issue**: [XRA-003.1](https://github.com/HoroCore/horo-engine/issues/2128)
 - **Jira**: [HORO-2082](https://horo-engine.atlassian.net/browse/HORO-2082)
 - **Related**: [ADR-008](008-error-model-exception-boundary-and-registry.md), [ADR-026](026-large-world-precision-and-floating-origin-strategy.md), [ADR-073](073-runtime-ui-ownership-scope-and-update-order.md), [ADR-078](078-runtime-ui-input-context-and-player-routing.md), [ADR-135](135-platform-identity-session-generation-privacy-and-consent.md), [ADR-157](157-xr-ownership-runtime-composition-and-capability-tier.md), [ADR-158](158-openxr-loader-backend-packaging-and-host-composition.md)
 - **Normative documents**: [XR Architecture](../architecture/runtime/vr-ar-architecture.md), [Input Architecture](../architecture/runtime/input-architecture.md), [Runtime Lifecycle](../architecture/runtime/runtime-lifecycle.md), [Application Security](../architecture/security/application-security.md)

@@ -4,9 +4,9 @@
 - **Date**: 2026-09-02
 - **Supersedes**: None
 - **Scope**: Typed release identities, single-target jobs, stages, candidates, progress, diagnostics, terminal results, concurrent observation, cancellation and presentation-independent ownership
-- **Issue**: [REL-001.1](https://github.com/abdullahbodur/horo-engine/issues/184)
+- **Issue**: [REL-001.1](https://github.com/HoroCore/horo-engine/issues/184)
 - **Jira**: [HORO-184](https://horo-engine.atlassian.net/browse/HORO-184)
-- **Parent**: [REL-001](https://github.com/abdullahbodur/horo-engine/issues/36)
+- **Parent**: [REL-001](https://github.com/HoroCore/horo-engine/issues/36)
 - **Related**: [ADR-001](001-native-ci-builds.md), [ADR-003](003-artifact-identity.md), [ADR-004](004-cli-core-gui-boundary.md), [ADR-008](008-error-model-exception-boundary-and-registry.md), [ADR-010](010-job-waiting-and-operation-store-ownership.md)
 - **Normative documents**: [Release Architecture](../architecture/release/release.md), [Release Security](../architecture/release/release-security.md), [Engine Data Bus](../architecture/foundation/engine-data-bus.md), [Observability Architecture](../architecture/observability/observability.md)
 
@@ -116,7 +116,7 @@ Request fields are typed intent, not an execution plan. Paths are normalized at
 the owning boundary, credential fields are opaque handles, and adapter-specific
 transport fields do not enter the request. The immutable preflight plan and its
 input freeze are owned by
-[REL-001.4](https://github.com/abdullahbodur/horo-engine/issues/178).
+[REL-001.4](https://github.com/HoroCore/horo-engine/issues/178).
 
 `ReleaseService::Submit` validates bounded request shape, allocates the job and
 operation records, publishes the initial snapshot, and then admits execution. A
@@ -258,7 +258,7 @@ If success commits before cancellation is accepted, a later cancel request retur
 ordinary completion cannot commit success. A failure that prevents safe cleanup
 while cancelling commits `Failed` with cancellation evidence; it is not reported
 as clean cancellation. The detailed recovery implementation is owned by
-[REL-001.17](https://github.com/abdullahbodur/horo-engine/issues/194).
+[REL-001.17](https://github.com/HoroCore/horo-engine/issues/194).
 
 ### 6. Candidates have state independent from job outcome
 

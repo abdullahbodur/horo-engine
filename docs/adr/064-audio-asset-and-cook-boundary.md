@@ -4,9 +4,9 @@
 - **Date**: 2026-09-02
 - **Supersedes**: None
 - **Scope**: Asset Pipeline and Audio ownership for source extraction, domain schemas, cook profiles, cache identity, publication, and runtime media
-- **Issue**: [AUD-002.1](https://github.com/abdullahbodur/horo-engine/issues/537)
+- **Issue**: [AUD-002.1](https://github.com/HoroCore/horo-engine/issues/537)
 - **Jira**: [HORO-537](https://horo-engine.atlassian.net/browse/HORO-537)
-- **Parent**: [AUD-002](https://github.com/abdullahbodur/horo-engine/issues/536)
+- **Parent**: [AUD-002](https://github.com/HoroCore/horo-engine/issues/536)
 - **Related**: [ADR-063](063-audio-sample-format-and-channel-layout.md)
 - **Normative documents**: [Asset Pipeline](../architecture/runtime/asset-pipeline.md), [Audio Architecture](../architecture/runtime/audio-architecture.md)
 

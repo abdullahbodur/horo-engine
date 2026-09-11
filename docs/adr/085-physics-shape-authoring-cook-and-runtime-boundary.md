@@ -4,9 +4,9 @@
 - **Date**: 2026-09-02
 - **Supersedes**: None
 - **Scope**: Authored collider descriptors, analytic and asset-derived shape identity, normalized source models, platform/solver/profile-keyed cooked artifacts, primitive/convex/mesh/heightfield/compound policy, deterministic cooking, immutable runtime shape leases, scaling/materials, scene activation/replacement, errors, compatibility, limits, packages, unload, and qualification
-- **Issue**: [PHY-002.1](https://github.com/abdullahbodur/horo-engine/issues/846)
+- **Issue**: [PHY-002.1](https://github.com/HoroCore/horo-engine/issues/846)
 - **Jira**: [HORO-846](https://horo-engine.atlassian.net/browse/HORO-846)
-- **Parent**: [PHY-002](https://github.com/abdullahbodur/horo-engine/issues/829)
+- **Parent**: [PHY-002](https://github.com/HoroCore/horo-engine/issues/829)
 - **Related**: [ADR-005](005-submodule-compatibility.md), [ADR-008](008-error-model-exception-boundary-and-registry.md), [ADR-023](023-world-index-and-cell-format-architecture-decision.md), [ADR-054](054-extension-and-package-authority-boundary.md), [ADR-084](084-canonical-physics-solver-units-and-tolerances.md)
 - **Normative documents**: [Physics Architecture](../architecture/runtime/physics-architecture.md), [Asset Pipeline](../architecture/runtime/asset-pipeline.md), [Built-In Scene Primitives](../architecture/runtime/built-in-scene-primitives.md), [Scene Runtime](../architecture/runtime/scene-runtime.md), [World Streaming](../architecture/runtime/world-streaming-architecture.md)
 

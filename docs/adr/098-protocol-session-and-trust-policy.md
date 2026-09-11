@@ -4,7 +4,7 @@
 - **Date**: 2026-09-02
 - **Supersedes**: None
 - **Scope**: Transport-to-session admission boundary, wire compatibility, listener trust profiles, peer and application identity, credential binding, active-session gating, bounded hostile parsing, timeout, revocation, diagnostics and shutdown
-- **Issue**: [NET-002.1](https://github.com/abdullahbodur/horo-engine/issues/1110)
+- **Issue**: [NET-002.1](https://github.com/HoroCore/horo-engine/issues/1110)
 - **Jira**: [HORO-1110](https://horo-engine.atlassian.net/browse/HORO-1110)
 - **Related**: [ADR-020](020-network-target-ownership-and-dependency-boundary.md), [ADR-097](097-default-real-time-transport-backend.md)
 - **Normative documents**: [Networking Architecture](../architecture/runtime/networking-architecture.md), [Application Security Architecture](../architecture/security/application-security.md), [Multiplayer Replication Architecture](../architecture/runtime/multiplayer-replication-architecture.md)

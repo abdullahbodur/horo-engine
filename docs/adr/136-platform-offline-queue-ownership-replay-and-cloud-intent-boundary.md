@@ -4,7 +4,7 @@
 - **Date**: 2026-09-02
 - **Supersedes**: None
 - **Scope**: Platform offline intent ownership, durable admission, ordering, coalescing, retry/reconciliation, expiry, per-subject partitioning, shutdown, and the caller-owned cloud intent boundary
-- **Issue**: [PLS-007.1](https://github.com/abdullahbodur/horo-engine/issues/1892)
+- **Issue**: [PLS-007.1](https://github.com/HoroCore/horo-engine/issues/1892)
 - **Jira**: [HORO-1848](https://horo-engine.atlassian.net/browse/HORO-1848)
 - **Related**: [ADR-008](008-error-model-exception-boundary-and-registry.md), [ADR-010](010-job-waiting-and-operation-store-ownership.md), [ADR-113](113-local-storage-user-profile-and-slot-ownership.md), [ADR-115](115-cloud-save-authority-revision-and-conflict-policy.md), [ADR-130](130-platform-services-frontend-request-lifetime-timeout-null-and-error-semantics.md), [ADR-131](131-platform-services-closed-sdk-extension-abi-package-and-composition-boundary.md), [ADR-132](132-platform-services-project-salt-stable-id-tombstone-and-provider-mapping.md), [ADR-133](133-platform-progression-authority-trust-and-idempotency.md), [ADR-134](134-cloud-blob-transport-revision-precondition-and-offline-ownership.md), [ADR-135](135-platform-identity-session-generation-privacy-and-consent.md)
 - **Normative documents**: [Platform Services Architecture](../architecture/runtime/platform-services-architecture.md), [Save Game and Persistence](../architecture/runtime/save-game-and-persistence.md), [Observability Logging](../architecture/observability/observability-logging.md)

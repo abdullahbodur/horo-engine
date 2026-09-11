@@ -4,9 +4,9 @@
 - **Date**: 2026-09-02
 - **Supersedes**: None
 - **Scope**: Third-party editor UI rendering, input, state, localization, accessibility, compatibility, isolation and teardown across declarative, C ABI and out-of-process extension models
-- **Issue**: [EXT-003.1](https://github.com/abdullahbodur/horo-engine/issues/103)
+- **Issue**: [EXT-003.1](https://github.com/HoroCore/horo-engine/issues/103)
 - **Jira**: [HORO-103](https://horo-engine.atlassian.net/browse/HORO-103)
-- **Parent**: [EXT-003](https://github.com/abdullahbodur/horo-engine/issues/58)
+- **Parent**: [EXT-003](https://github.com/HoroCore/horo-engine/issues/58)
 - **Related**: [ADR-055](055-extension-manifest-v1-typed-model.md), [ADR-015](015-accessibility-ownership-typed-transport-and-non-gating-policy.md)
 - **Normative documents**: [Extension System](../architecture/extensions/plugin-system.md), [GUI Design System](../architecture/editor/ui-design-system.md), [Editor Panel Host](../architecture/editor/editor-panel-host.md), [Editor Modal Host](../architecture/editor/editor-modal-host.md), [Extension Module Development Guide](../guides/extension-module-development.md)
 

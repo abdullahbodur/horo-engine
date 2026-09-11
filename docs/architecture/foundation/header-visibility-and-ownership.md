@@ -24,6 +24,18 @@ contract, Doxygen documentation, migration notes, and consumer coverage.
 immutable capability/policy evidence and pure admission decisions; consumers keep
 linking `HoroEngine::VfxApi`, and no include spelling or existing caller migrates.
 
+## Android Lifecycle Boundary
+
+`HoroEngine::Platform` owns `Horo/Platform/AndroidLifecycle.h`. The header exposes
+only portable lifecycle observations, generations, snapshots, typed results and
+the bounded owner-thread controller. GameActivity, JNI, `ANativeWindow`, Vulkan
+and OpenXR types remain target-private. The callback-shaped adapter lives under
+`src/platform/android` and is never staged through public usage requirements.
+There are no prior Android lifecycle callers to migrate; future Android product
+composition consumes this contract while portable Runtime consumers remain free
+of Android SDK dependencies. The generated standalone Platform public-header
+consumer enforces that boundary.
+
 ## Build-Tree Contract
 
 `cmake/HoroPublicHeaderOwnership.cmake` assigns each public header to one real
@@ -123,8 +135,9 @@ and non-monotonic cubic tangents are rejected rather than normalized silently.
 
 ## CIN-002.3 Migration Notes
 
-`HoroEngine::CinematicRuntime` owns `Horo/Cinematic/SequencePlayer.h` and
-`Horo/Cinematic/SequencePlayerErrors.h`. Runtime hosts that own sequence-player
+`HoroEngine::CinematicRuntime` owns `Horo/Cinematic/SequencePlayer.h`,
+`Horo/Cinematic/SequencePlayerErrors.h`, `Horo/Cinematic/SequenceEvaluation.h`,
+and `Horo/Cinematic/SequenceEvaluationErrors.h`. Runtime hosts that own sequence-player
 registries link this target directly. Model-only asset, cook and curve consumers keep
 linking `HoroEngine::CinematicModel`; the runtime state machine does not widen that
 lower-level public surface or introduce an Editor/GUI dependency. Detailed call-site
@@ -349,6 +362,15 @@ the same boundary, and the standalone Physics consumer compiles the new header.
 No existing caller is migrated. The earlier Foundation-only statements above
 describe the initial identity/analytic slice, not this additional reference surface.
 
+`[PHY-009.2]` adds `Horo/Physics/PhysicsMetrics.h` to `HoroEngine::Physics`.
+The header exposes only bounded Horo measurement values, exact Physics world/revision
+identity and Foundation Telemetry handles already registered by process composition.
+It adds no solver SDK, renderer, editor, platform clock, metric store or profiler
+backend dependency. Existing Physics producers migrate by supplying one immutable
+post-publication snapshot and pre-bound handles; metric dimensions are never resolved
+on the fixed-tick path. The generated standalone Physics header consumer verifies the
+same ownership boundary.
+
 Reference validation does not read an artifact, recompute a target key or establish
 geometry readiness. Full target encoding and envelope verification remain the
 owning cook/runtime work; opaque digest equality alone cannot prove a correct
@@ -463,7 +485,8 @@ job-system, codec, middleware, callback, or backend-native dependency.
 ## Destruction Identity Boundary
 
 `HoroEngine::DestructionApi` owns `Horo/Destruction/DestructibleDescriptor.h`,
-`Horo/Destruction/DestructionIdentity.h`, `Horo/Destruction/DestructionStateMachine.h`
+`Horo/Destruction/DestructionCommand.h`, `Horo/Destruction/DestructionIdentity.h`,
+`Horo/Destruction/DestructionRegistry.h`, `Horo/Destruction/DestructionStateMachine.h`
 and `Horo/Destruction/DestructionErrors.h`.
 Its public dependencies are limited to
 Foundation and Assets for typed results/errors, the shared SHA-256 value and the
@@ -493,3 +516,21 @@ Exact retries are idempotent, conflicting command reuse is rejected, and replace
 cancellation and shutdown preserve the last published snapshot until a legal successor
 commits. Existing prototypes with mutable health/state fields must migrate to this
 single-owner contract rather than dual-write both representations.
+
+The `[DFR-001.5]` slice adds fixed-size impact, explosion, collision, damage and
+script commands with exact authority, capability, generation, revision and fixed-tick
+evidence. Callers validate the immutable value before queue admission, then lower it to
+the existing state-machine command without changing its identity. Durable terminal
+results preserve successful, rejected, cancelled, unsupported and failed dispositions
+as closed types. Producers must migrate from provider handles, callback mutation and
+message parsing to this contract; rejected or stale private work is discarded and is
+never published as a partial fallback.
+
+The `[DFR-001.6]` slice adds the explicit fixed-capacity registry, immutable value
+snapshots, bounded queries and capability projections. The composition owner copies
+only current backend-neutral publication evidence into the registry; membership never
+owns a destructible or extends Scene, Physics, Render, artifact or authority lifetime.
+Consumers link `HoroEngine::DestructionApi`, retain snapshots for read-only work and
+revalidate generation/state/capability revisions before live operations. Ad-hoc global
+registries, mutable record exposure, native handles and silently widened queries have no
+compatibility path.

@@ -4,9 +4,9 @@
 - **Date**: 2026-09-02
 - **Supersedes**: None
 - **Scope**: Runtime pose ownership, animation clock domains, fixed-tick ordering, and physics/render handoff
-- **Issue**: [ANI-001.1](https://github.com/abdullahbodur/horo-engine/issues/454)
+- **Issue**: [ANI-001.1](https://github.com/HoroCore/horo-engine/issues/454)
 - **Jira**: [HORO-454](https://horo-engine.atlassian.net/browse/HORO-454)
-- **Parent**: [ANI-001](https://github.com/abdullahbodur/horo-engine/issues/447)
+- **Parent**: [ANI-001](https://github.com/HoroCore/horo-engine/issues/447)
 - **Related**: [ADR-014](014-sequencer-ownership-clock-authority-and-binding-boundary.md), [ADR-077](077-runtime-ui-animation-clock-and-time-domain.md), [ADR-089](089-character-controller-ownership-implementation-and-update-order.md), [ADR-091](091-footstep-and-locomotion-event-ownership.md)
 - **Normative documents**: [Animation Architecture](../architecture/runtime/animation-architecture.md), [Runtime Lifecycle](../architecture/runtime/runtime-lifecycle.md), [Character Controller Architecture](../architecture/runtime/character-controller-architecture.md)
 

@@ -4,9 +4,9 @@
 - **Date**: 2026-09-02
 - **Supersedes**: None
 - **Scope**: Stable project identities and response semantics for simulation layers, reusable collision profiles and query channels; project authority, serialization, runtime resolution, mutation, limits, lifecycle, errors, observability and qualification
-- **Issue**: [PHY-004.1](https://github.com/abdullahbodur/horo-engine/issues/867)
+- **Issue**: [PHY-004.1](https://github.com/HoroCore/horo-engine/issues/867)
 - **Jira**: [HORO-867](https://horo-engine.atlassian.net/browse/HORO-867)
-- **Parent**: [PHY-004](https://github.com/abdullahbodur/horo-engine/issues/831)
+- **Parent**: [PHY-004](https://github.com/HoroCore/horo-engine/issues/831)
 - **Related**: [ADR-005](005-submodule-compatibility.md), [ADR-008](008-error-model-exception-boundary-and-registry.md), [ADR-054](054-extension-and-package-authority-boundary.md), [ADR-084](084-canonical-physics-solver-units-and-tolerances.md), [ADR-085](085-physics-shape-authoring-cook-and-runtime-boundary.md)
 - **Normative documents**: [Physics Architecture](../architecture/runtime/physics-architecture.md), [Project Model](../architecture/editor/project-model.md), [Scene Runtime](../architecture/runtime/scene-runtime.md), [Built-In Scene Primitives](../architecture/runtime/built-in-scene-primitives.md)
 

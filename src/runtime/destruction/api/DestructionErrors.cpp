@@ -120,4 +120,51 @@ namespace Horo::Destruction::DestructionErrors {
                                                  .defaultSeverity = ErrorSeverity::Warning,
                                                  .summary = "The destruction owner has closed mutation admission for shutdown.",
                                                  .remediationHint = "Stop submitting work and allow exact-generation readers to drain."};
+    const ErrorCodeDescriptor CommandInvalid{.domain = DestructionDomain,
+                                             .code = ErrorCode{"destruction.command.invalid"},
+                                             .defaultSeverity = ErrorSeverity::Error,
+                                             .summary = "The destruction command contains malformed typed input.",
+                                             .remediationHint =
+                                                 "Submit a current schema with valid identities, finite vectors, and a non-zero tick."};
+    const ErrorCodeDescriptor CommandLimitExceeded{.domain = DestructionDomain,
+                                                   .code = ErrorCode{"destruction.command.limit_exceeded"},
+                                                   .defaultSeverity = ErrorSeverity::Warning,
+                                                   .summary = "The destruction command exceeds an admitted finite input limit.",
+                                                   .remediationHint = "Clamp or split the request according to the active product limits."};
+    const ErrorCodeDescriptor CommandAuthorityDenied{.domain = DestructionDomain,
+                                                     .code = ErrorCode{"destruction.command.authority_denied"},
+                                                     .defaultSeverity = ErrorSeverity::Warning,
+                                                     .summary = "The destruction authority grant cannot issue this command.",
+                                                     .remediationHint =
+                                                         "Resolve the current grant and request only explicitly granted capabilities."};
+    const ErrorCodeDescriptor CommandUnsupported{.domain = DestructionDomain,
+                                                 .code = ErrorCode{"destruction.command.unsupported"},
+                                                 .defaultSeverity = ErrorSeverity::Warning,
+                                                 .summary = "The current destruction policy does not support this command kind.",
+                                                 .remediationHint =
+                                                     "Use a command admitted by the exact descriptor and capability snapshot."};
+    const ErrorCodeDescriptor CommandResultInvalid{.domain = DestructionDomain,
+                                                   .code = ErrorCode{"destruction.command.result_invalid"},
+                                                   .defaultSeverity = ErrorSeverity::Error,
+                                                   .summary = "The destruction command terminal result is internally inconsistent.",
+                                                   .remediationHint =
+                                                       "Discard the result and terminate the exact command with a valid typed outcome."};
+    const ErrorCodeDescriptor RegistryInvalid{.domain = DestructionDomain,
+                                              .code = ErrorCode{"destruction.registry.invalid"},
+                                              .defaultSeverity = ErrorSeverity::Error,
+                                              .summary = "The destruction registry input or bounded query is malformed.",
+                                              .remediationHint =
+                                                  "Use valid immutable records and non-zero limits within the registry ceilings."};
+    const ErrorCodeDescriptor RegistryDuplicate{.domain = DestructionDomain,
+                                                .code = ErrorCode{"destruction.registry.duplicate"},
+                                                .defaultSeverity = ErrorSeverity::Warning,
+                                                .summary = "The destruction registry already contains this target or authored owner.",
+                                                .remediationHint =
+                                                    "Update the owner publication or use explicit next-generation replacement."};
+    const ErrorCodeDescriptor RegistryCapacityExceeded{.domain = DestructionDomain,
+                                                       .code = ErrorCode{"destruction.registry.capacity_exceeded"},
+                                                       .defaultSeverity = ErrorSeverity::Warning,
+                                                       .summary = "The destruction registry operation exceeds an explicit finite bound.",
+                                                       .remediationHint =
+                                                           "Reduce the registration or query count; never truncate implicitly."};
 }  // namespace Horo::Destruction::DestructionErrors

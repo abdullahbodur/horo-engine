@@ -4,9 +4,9 @@
 - **Date**: 2026-09-02
 - **Supersedes**: None
 - **Scope**: Stable prefab object/component/property/collection identity, typed override operation algebra, canonical ordering/equality/default comparison, source-revision rebase, conflicts/orphans, document/application transactions, opaque preservation, migration, limits and qualification
-- **Issue**: [PFB-003.1](https://github.com/abdullahbodur/horo-engine/issues/1027)
+- **Issue**: [PFB-003.1](https://github.com/HoroCore/horo-engine/issues/1027)
 - **Jira**: [HORO-1027](https://horo-engine.atlassian.net/browse/HORO-1027)
-- **Parent**: [PFB-003](https://github.com/abdullahbodur/horo-engine/issues/1002)
+- **Parent**: [PFB-003](https://github.com/HoroCore/horo-engine/issues/1002)
 - **Related**: [ADR-008](008-error-model-exception-boundary-and-registry.md), [ADR-017](017-prefab-role-ownership-and-capability-tiers.md), [ADR-054](054-extension-and-package-authority-boundary.md), [ADR-057](057-package-manifest-v1-typed-model.md), [ADR-094](094-prefab-nested-composition-and-variant-inheritance.md)
 - **Normative documents**: [Prefab Architecture](../architecture/runtime/prefab-architecture.md), [Editor Document Model](../architecture/editor/editor-document-model.md), [Project Versioning and Migration](../architecture/foundation/project-versioning-and-migration.md), [Scene Runtime](../architecture/runtime/scene-runtime.md)
 

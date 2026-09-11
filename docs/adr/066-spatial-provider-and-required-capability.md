@@ -4,9 +4,9 @@
 - **Date**: 2026-09-02
 - **Supersedes**: None
 - **Scope**: Spatial provider identity, capability requirements, profile resolution, activation preflight, optional fallback, runtime failure, and observability
-- **Issue**: [AUD-005.1](https://github.com/abdullahbodur/horo-engine/issues/577)
+- **Issue**: [AUD-005.1](https://github.com/HoroCore/horo-engine/issues/577)
 - **Jira**: [HORO-577](https://horo-engine.atlassian.net/browse/HORO-577)
-- **Parent**: [AUD-005](https://github.com/abdullahbodur/horo-engine/issues/576)
+- **Parent**: [AUD-005](https://github.com/HoroCore/horo-engine/issues/576)
 - **Related**: [ADR-062](062-audio-runtime-ownership-and-update-order.md), [ADR-063](063-audio-sample-format-and-channel-layout.md), [ADR-065](065-mixer-topology-and-constrained-dag.md)
 - **Normative document**: [Audio Architecture](../architecture/runtime/audio-architecture.md)
 

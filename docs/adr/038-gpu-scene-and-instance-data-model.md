@@ -4,7 +4,7 @@
 - **Date**: 2026-09-01
 - **Supersedes**: None
 - **Scope**: Persistent render-object identity, GPU instance records, bounded updates and lifecycle
-- **Issue**: [RND-014.1](https://github.com/abdullahbodur/horo-engine/issues/401)
+- **Issue**: [RND-014.1](https://github.com/HoroCore/horo-engine/issues/401)
 - **Jira**: [HORO-401](https://horo-engine.atlassian.net/browse/HORO-401)
 - **Related**: [ADR-010](010-job-waiting-and-operation-store-ownership.md),
   [ADR-011](011-vfx-effect-ownership-simulation-domain-and-renderer-boundary.md),

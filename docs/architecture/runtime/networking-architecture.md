@@ -535,6 +535,26 @@ Horo Engine products declare only the modes and network targets they can realize
 
 Networking integrates with Horo's diagnostic and metric infrastructure:
 
+- `NetworkFailureKind` maps each supported terminal path to exactly one declared
+  `horo.network` error descriptor. `NetworkFailureLayer` and
+  `NetworkFailureDisposition` provide backend-neutral branching for transport,
+  protocol, session, replication, and gameplay-dispatch outcomes; adapters never
+  branch on fallback message text.
+- `NetworkTerminalRecord` owns at most eight strictly ordered typed context fields.
+  Protocol-scoped close reasons carry both `ProtocolId` and `CloseReasonId`;
+  connection evidence is an opaque slot/generation projection, never a native
+  handle or authenticated peer identity.
+- Private adapters normalize native diagnostic text through a bounded inspection
+  boundary. No source byte, credential, token, payload, native code, or provider
+  type is retained in the public record. Disabling instrumentation removes only
+  evidence flags and cannot change the canonical terminal kind, disposition, or
+  lifecycle result.
+- Each owner-thread connection slot accepts exactly one immutable terminal result
+  for its current generation. Duplicate completion loses deterministically;
+  cancellation, shutdown, and success use the same publication gate. Replacement
+  requires the exact next non-wrapping handle generation, so late callbacks cannot
+  terminate a new connection.
+
 - **Counters**: `net.bytes_sent`, `net.bytes_received`, `net.packets_lost`, `net.packets_dropped`.
 - **Gauges**: `net.active_connections`, `net.inbound_queue_depth`, `net.outbound_queue_depth`, `net.rtt_ms`.
 - **Tracing**: Transport connection events and session handshakes log to the `LogCategory::Network` category. Payloads are scrubbed of sensitive data by default.
@@ -551,6 +571,10 @@ The networking subsystem requires targeted automated verification:
    - `SessionStateMachineTests`: `Negotiating` / `Authenticating` / `Activating` / `Active`; only Active reaches gameplay dispatch.
    - `SessionAdmissionTests`: protocol/schema compatibility, transcript binding, exposure/bind policy, principal creation, expiry and revocation.
    - `NetworkHandleTests`: stale handle -> `InvalidHandle`; send-after-close -> `ConnectionClosed`; duplicate `Close` is idempotent.
+   - `NetworkFailureTests`: complete canonical kind/layer/disposition mapping,
+     bounded typed context, private-detail redaction, instrumentation-disabled
+     parity, exactly-once terminal publication, cancel/shutdown ordering, stale
+     completion rejection and non-wrapping generation replacement.
    - `SendPayloadLifetimeTests`: caller buffer may be overwritten after `Send()` returns.
    - `ReplicationManagerTests`: ADR-175 safe-point capture and immutable publication; lost/duplicate dirty hints, stale identity, cancellation, shutdown, delta compression and interest queries.
 2. **Deterministic Transport Tests (`NetworkTransportNullTests`)**:

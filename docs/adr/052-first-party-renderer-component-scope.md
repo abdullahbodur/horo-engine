@@ -4,7 +4,7 @@
 - **Date**: 2026-09-01
 - **Supersedes**: None
 - **Scope**: Independently distributable first-party renderer artifacts, lifecycle ownership and no-renderer recovery
-- **Issue**: [RND-002.1](https://github.com/abdullahbodur/horo-engine/issues/152)
+- **Issue**: [RND-002.1](https://github.com/HoroCore/horo-engine/issues/152)
 - **Jira**: [HORO-152](https://horo-engine.atlassian.net/browse/HORO-152)
 - **Companion decisions**: [ADR-028](028-renderer-capability-limits-and-product-profiles.md), [ADR-029](029-opengl-core-profile-and-platform-policy.md), [ADR-030](030-metal-platform-and-feature-baseline.md), [ADR-031](031-vulkan-loader-platform-and-version-baseline.md), [ADR-032](032-d3d12-baseline-and-agility-sdk-policy.md)
 - **Normative documents**: [Renderer Distribution And Availability](../architecture/runtime/renderer-distribution-and-availability.md), [Renderer Module Package Manifest](../architecture/runtime/renderer-module-package-manifest.md), [Rendering Architecture](../architecture/runtime/rendering-architecture.md), [Render Backend Parity Contract](../architecture/runtime/render-backend-parity-contract.md), [System Design](../architecture/foundation/system-design.md)

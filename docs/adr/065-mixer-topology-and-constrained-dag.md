@@ -4,9 +4,9 @@
 - **Date**: 2026-09-02
 - **Supersedes**: None
 - **Scope**: Mixer bus hierarchy, sends and returns, feedback policy, deterministic processing order, graph compilation, publication, and retirement
-- **Issue**: [AUD-004.1](https://github.com/abdullahbodur/horo-engine/issues/562)
+- **Issue**: [AUD-004.1](https://github.com/HoroCore/horo-engine/issues/562)
 - **Jira**: [HORO-562](https://horo-engine.atlassian.net/browse/HORO-562)
-- **Parent**: [AUD-004](https://github.com/abdullahbodur/horo-engine/issues/561)
+- **Parent**: [AUD-004](https://github.com/HoroCore/horo-engine/issues/561)
 - **Related**: [ADR-062](062-audio-runtime-ownership-and-update-order.md), [ADR-063](063-audio-sample-format-and-channel-layout.md)
 - **Normative document**: [Audio Architecture](../architecture/runtime/audio-architecture.md)
 

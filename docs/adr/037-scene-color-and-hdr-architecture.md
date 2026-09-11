@@ -4,7 +4,7 @@
 - **Date**: 2026-09-01
 - **Supersedes**: None
 - **Scope**: Scene working color space, exposure, precision, output transforms and SDR/HDR boundaries
-- **Issue**: [RND-013.1](https://github.com/abdullahbodur/horo-engine/issues/391)
+- **Issue**: [RND-013.1](https://github.com/HoroCore/horo-engine/issues/391)
 - **Jira**: [HORO-391](https://horo-engine.atlassian.net/browse/HORO-391)
 - **Related**: [ADR-011](011-vfx-effect-ownership-simulation-domain-and-renderer-boundary.md),
   [ADR-015](015-accessibility-ownership-typed-transport-and-non-gating-policy.md),

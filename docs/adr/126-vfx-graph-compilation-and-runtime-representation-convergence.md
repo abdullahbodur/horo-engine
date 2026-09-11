@@ -4,7 +4,7 @@
 - **Date**: 2026-09-02
 - **Supersedes**: None
 - **Scope**: Stack/graph authoring convergence, canonical VFX compilation target, offline lowering, CPU/GPU kernel packages, cook validation, artifact identity/versioning, runtime loading and migration
-- **Issue**: [VFX-005.1](https://github.com/abdullahbodur/horo-engine/issues/1753)
+- **Issue**: [VFX-005.1](https://github.com/HoroCore/horo-engine/issues/1753)
 - **Jira**: [HORO-1710](https://horo-engine.atlassian.net/browse/HORO-1710)
 - **Related**: [ADR-008](008-error-model-exception-boundary-and-registry.md), [ADR-011](011-vfx-effect-ownership-simulation-domain-and-renderer-boundary.md), [ADR-028](028-renderer-capability-limits-and-product-profiles.md), [ADR-035](035-shader-source-and-intermediate-representation.md), [ADR-123](123-vfx-cpu-stage-order-determinism-and-gameplay-coupling.md), [ADR-124](124-vfx-gpu-simulation-readback-and-compute-fallback.md), [ADR-125](125-vfx-transparency-sorting-and-pass-placement.md)
 - **Normative documents**: [VFX and Particles Architecture](../architecture/runtime/vfx-and-particles-architecture.md), [Asset Pipeline](../architecture/runtime/asset-pipeline.md)

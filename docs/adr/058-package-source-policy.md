@@ -4,9 +4,9 @@
 - **Date**: 2026-09-02
 - **Supersedes**: None
 - **Scope**: Public, private, local, vendored and offline package-source identity, deterministic precedence, pinning, mirrors, credential isolation, development overrides and failure behavior
-- **Issue**: [PKG-001.3](https://github.com/abdullahbodur/horo-engine/issues/117)
+- **Issue**: [PKG-001.3](https://github.com/HoroCore/horo-engine/issues/117)
 - **Jira**: [HORO-117](https://horo-engine.atlassian.net/browse/HORO-117)
-- **Parent**: [PKG-001](https://github.com/abdullahbodur/horo-engine/issues/36)
+- **Parent**: [PKG-001](https://github.com/HoroCore/horo-engine/issues/36)
 - **Related**: [ADR-057](057-package-manifest-v1-typed-model.md), [ADR-002](002-credential-handling.md)
 - **Normative documents**: [Horo Package System](../architecture/packages/package-system.md), [Package Restore](../architecture/packages/package-restore.md), [Package Lifecycle](../architecture/packages/package-lifecycle.md), [Application Security](../architecture/security/application-security.md), [Configuration System](../architecture/foundation/configuration-system.md)
 

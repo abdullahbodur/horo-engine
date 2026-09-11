@@ -4,7 +4,7 @@
 - **Date**: 2026-09-02
 - **Supersedes**: None
 - **Scope**: Cinematic skeletal-pose composition, per-joint authority, Character movement/root ownership, gameplay control arbitration, pause behavior, typed conflicts, lifecycle and backend-neutral integration seams
-- **Issue**: [CIN-002.2](https://github.com/abdullahbodur/horo-engine/issues/1699)
+- **Issue**: [CIN-002.2](https://github.com/HoroCore/horo-engine/issues/1699)
 - **Jira**: [HORO-1658](https://horo-engine.atlassian.net/browse/HORO-1658)
 - **Related**: [ADR-014](014-sequencer-ownership-clock-authority-and-binding-boundary.md), [ADR-061](061-animation-ownership-update-order-and-clock.md), [ADR-089](089-character-controller-ownership-implementation-and-update-order.md), [ADR-090](090-character-dynamic-body-visibility-push-and-proxy-policy.md), [ADR-117](117-playback-ownership-frame-order-and-determinism.md)
 - **Normative documents**: [Cinematic Sequencer Architecture](../architecture/runtime/cinematic-sequencer-architecture.md), [Animation Architecture](../architecture/runtime/animation-architecture.md), [Character Controller Architecture](../architecture/runtime/character-controller-architecture.md), [Runtime Lifecycle](../architecture/runtime/runtime-lifecycle.md)

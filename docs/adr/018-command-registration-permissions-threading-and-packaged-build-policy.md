@@ -4,7 +4,7 @@
 - **Date**: 2026-08-28
 - **Supersedes**: None
 - **Scope**: Runtime debug console command registration, `DebugCommandDescriptor`, `CommandPermission` access levels, execution threading rules, packaged-build retail gating, and reconciliation with network administration and world streaming diagnostics
-- **Issue**: [DBG-001.1](https://github.com/abdullahbodur/horo-engine/issues/1842)
+- **Issue**: [DBG-001.1](https://github.com/HoroCore/horo-engine/issues/1842)
 - **Jira**: [HORO-1798](https://horo-engine.atlassian.net/browse/HORO-1798)
 - **Normative document**: [Runtime Debug Console And Development Overlays](../architecture/runtime/debug-console-and-overlays.md)
 
@@ -18,7 +18,7 @@ As the engine baseline evolves in Milestone 0 (M0), several architectural requir
 2. **Permissions & Security**: Access to commands must be governed by explicit capability tiers (`CommandPermission`) rather than coarse ad-hoc checks. Commands with side effects or cheat semantics must be restricted, audited, and strictly isolated from untrusted callers.
 3. **Threading & Lifecycle**: Commands must execute at deterministic safe points aligned with the engine frame lifecycle and structured concurrency rules ([ADR-010](../adr/010-job-waiting-and-operation-store-ownership.md)). Synchronous blocking on the main thread is forbidden for long-running operations.
 4. **Packaged-Build Policy**: Shipping and retail game builds must not leak internal developer commands, cheat vectors, or private symbol metadata. Developer commands must be stripped or compiled out at build time rather than relying solely on runtime boolean checks.
-5. **Subsystem Reconciliation**: Several planned subsystem capabilities—dedicated server administration ([NET-007.9](https://github.com/abdullahbodur/horo-engine/issues/1169)), authorized network debug controls ([NET-008.12](https://github.com/abdullahbodur/horo-engine/issues/1183)), and world streaming diagnostics ([WST-010.8](https://github.com/abdullahbodur/horo-engine/issues/1652))—rely on console infrastructure. Their structural assumptions must be explicitly reconciled.
+5. **Subsystem Reconciliation**: Several planned subsystem capabilities—dedicated server administration ([NET-007.9](https://github.com/HoroCore/horo-engine/issues/1169)), authorized network debug controls ([NET-008.12](https://github.com/HoroCore/horo-engine/issues/1183)), and world streaming diagnostics ([WST-010.8](https://github.com/HoroCore/horo-engine/issues/1652))—rely on console infrastructure. Their structural assumptions must be explicitly reconciled.
 
 [DBG-001.1] establishes the normative architectural decisions governing command registration, permissions, threading, and build-time gating.
 
@@ -254,7 +254,7 @@ This decision explicitly ratifies and reconciles the console command requirement
 +------------------------------------+------------------+-------------------------------+
 ```
 
-#### A. Dedicated Server Administration ([NET-007.9](https://github.com/abdullahbodur/horo-engine/issues/1169))
+#### A. Dedicated Server Administration ([NET-007.9](https://github.com/HoroCore/horo-engine/issues/1169))
 
 - **Role**: Server management commands (e.g. `net.kick`, `net.ban`, `net.change_map`, `net.server_status`, `net.set_max_players`).
 - **Classification**: `CommandPermission::Restricted`.
@@ -263,7 +263,7 @@ This decision explicitly ratifies and reconciles the console command requirement
   - Commands execute strictly on the Dedicated Server Main Thread at server tick safe points (`OwnerThreadNextFrame`). Commands cannot bypass Network Admission or Gameplay Authority.
   - Sensitive arguments (passwords, admin tokens, player IP addresses) must set `sensitive = true` and `CommandFlags::RedactArguments` to guarantee automatic redaction in logs and history.
 
-#### B. Authorized Network Debug Controls ([NET-008.12](https://github.com/abdullahbodur/horo-engine/issues/1183))
+#### B. Authorized Network Debug Controls ([NET-008.12](https://github.com/HoroCore/horo-engine/issues/1183))
 
 - **Role**: Simulation of network impairment and connection lifecycle (e.g. `net.simulate_latency`, `net.simulate_packet_loss`, `net.disconnect`, `net.request_resync`).
 - **Classification**: `CommandPermission::AdminCheat` (for mutations/impairments) and `CommandPermission::Developer` (for inspection).
@@ -272,7 +272,7 @@ This decision explicitly ratifies and reconciles the console command requirement
   - Commands targeting network sessions must use generation-safe session handles (`SessionHandle`); stale handles return typed errors without affecting replacement sessions.
   - Completely stripped from Retail Shipping client builds.
 
-#### C. World Streaming Diagnostics ([WST-010.8](https://github.com/abdullahbodur/horo-engine/issues/1652))
+#### C. World Streaming Diagnostics ([WST-010.8](https://github.com/HoroCore/horo-engine/issues/1652))
 
 - **Role**: Streaming cell residency inspection, memory usage query, forced residency changes (e.g. `wst.snapshot`, `wst.cell_status`, `wst.force_evict`).
 - **Classification**: Read-only queries are `CommandPermission::Developer`; forced eviction/loading mutations are `CommandPermission::AdminCheat`.

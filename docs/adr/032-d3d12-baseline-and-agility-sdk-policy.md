@@ -4,7 +4,7 @@
 - **Date**: 2026-08-31
 - **Supersedes**: None
 - **Scope**: D3D12 native admission, Agility activation and Windows baseline
-- **Issue**: [RND-007.1](https://github.com/abdullahbodur/horo-engine/issues/330)
+- **Issue**: [RND-007.1](https://github.com/HoroCore/horo-engine/issues/330)
 - **Jira**: [HORO-330](https://horo-engine.atlassian.net/browse/HORO-330)
 - **Normative document**: [Rendering Architecture](../architecture/runtime/rendering-architecture.md)
 

@@ -4,7 +4,7 @@
 - **Date**: 2026-09-02
 - **Supersedes**: None
 - **Scope**: Passthrough, spatial anchors, planes/meshes, environment hit tests, light estimation, camera/gaze/geometry/location-derived data classification, consent/permission, derived consumers, post-1.0 capability profiles, lifecycle, migration and validation
-- **Issue**: [XRA-006.1](https://github.com/abdullahbodur/horo-engine/issues/2157)
+- **Issue**: [XRA-006.1](https://github.com/HoroCore/horo-engine/issues/2157)
 - **Jira**: [HORO-2111](https://horo-engine.atlassian.net/browse/HORO-2111)
 - **Related**: [ADR-026](026-large-world-precision-and-floating-origin-strategy.md), [ADR-027](027-renderer-resource-identity-and-descriptors.md), [ADR-113](113-local-storage-user-profile-and-slot-ownership.md), [ADR-135](135-platform-identity-session-generation-privacy-and-consent.md), [ADR-157](157-xr-ownership-runtime-composition-and-capability-tier.md), [ADR-159](159-xr-action-tracking-and-input-projection-ownership.md), [ADR-160](160-xr-rendering-openxr-compositor-and-renderer-ownership.md), [ADR-161](161-xr-interaction-runtime-ui-locomotion-and-accessibility-ownership.md)
 - **Normative documents**: [XR Architecture](../architecture/runtime/vr-ar-architecture.md), [Application Security](../architecture/security/application-security.md), [Rendering Architecture](../architecture/runtime/rendering-architecture.md), [Platform Services Architecture](../architecture/runtime/platform-services-architecture.md)

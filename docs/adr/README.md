@@ -199,7 +199,7 @@ to the replacement.
   Companion decision, Normative document(s). Use `Jira` (not `JIRA`). Link the
   Jira key to the work item. Optional fields are omitted rather than left empty.
 - **Issue / Parent**: use the domain alias as the GitHub issue link text
-  (`[RND-011.1](https://github.com/abdullahbodur/horo-engine/issues/368)`).
+  (`[RND-011.1](https://github.com/HoroCore/horo-engine/issues/368)`).
   Do not show `#368` as the visible text or in a second parenthesis.
 - **Naming**: `NNN-lowercase-title-with-hyphens.md`
 - **IDs are stable**: a number is assigned once and is never reused for a

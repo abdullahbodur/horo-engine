@@ -1,10 +1,10 @@
 # Horo Engine
 
-[![Quality Gate Status](https://sonarcloud.io/api/project_badges/measure?project=abdullahbodur_horo-engine&metric=alert_status)](https://sonarcloud.io/summary/new_code?id=abdullahbodur_horo-engine)
-[![Coverage](https://sonarcloud.io/api/project_badges/measure?project=abdullahbodur_horo-engine&metric=coverage)](https://sonarcloud.io/summary/new_code?id=abdullahbodur_horo-engine)
-[![Bugs](https://sonarcloud.io/api/project_badges/measure?project=abdullahbodur_horo-engine&metric=bugs)](https://sonarcloud.io/summary/new_code?id=abdullahbodur_horo-engine)
-[![Code Smells](https://sonarcloud.io/api/project_badges/measure?project=abdullahbodur_horo-engine&metric=code_smells)](https://sonarcloud.io/summary/new_code?id=abdullahbodur_horo-engine)
-[![Vulnerabilities](https://sonarcloud.io/api/project_badges/measure?project=abdullahbodur_horo-engine&metric=vulnerabilities)](https://sonarcloud.io/summary/new_code?id=abdullahbodur_horo-engine)
+[![Quality Gate Status](https://sonarcloud.io/api/project_badges/measure?project=horocore_horo-engine&metric=alert_status)](https://sonarcloud.io/summary/new_code?id=horocore_horo-engine)
+[![Coverage](https://sonarcloud.io/api/project_badges/measure?project=horocore_horo-engine&metric=coverage)](https://sonarcloud.io/summary/new_code?id=horocore_horo-engine)
+[![Bugs](https://sonarcloud.io/api/project_badges/measure?project=horocore_horo-engine&metric=bugs)](https://sonarcloud.io/summary/new_code?id=horocore_horo-engine)
+[![Code Smells](https://sonarcloud.io/api/project_badges/measure?project=horocore_horo-engine&metric=code_smells)](https://sonarcloud.io/summary/new_code?id=horocore_horo-engine)
+[![Vulnerabilities](https://sonarcloud.io/api/project_badges/measure?project=horocore_horo-engine&metric=vulnerabilities)](https://sonarcloud.io/summary/new_code?id=horocore_horo-engine)
 
 > [!WARNING]
 > Horo Engine is under active development.

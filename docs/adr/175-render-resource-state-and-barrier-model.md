@@ -4,7 +4,7 @@
 - **Date**: 2026-09-08
 - **Supersedes**: None
 - **Scope**: Backend-neutral resource access state, transition synthesis, subresource tracking and queue ownership transfer
-- **Issue**: [RND-003.5](https://github.com/abdullahbodur/horo-engine/issues/300)
+- **Issue**: [RND-003.5](https://github.com/HoroCore/horo-engine/issues/300)
 - **Jira**: [HORO-300](https://horo-engine.atlassian.net/browse/HORO-300)
 - **Related**: [ADR-027](027-renderer-resource-identity-and-descriptors.md), [ADR-173](173-render-queue-submission-and-fence-contract.md)
 - **Normative document**: [Rendering Architecture](../architecture/runtime/rendering-architecture.md)

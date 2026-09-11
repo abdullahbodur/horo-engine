@@ -4,7 +4,7 @@
 - **Date**: 2026-09-02
 - **Supersedes**: None
 - **Scope**: Navigation read snapshots, topology/tile/overlay consistency, immediate bounded queries, asynchronous path work, completion publication, stale/unavailable/no-path outcomes, Scene transition, World Streaming replacement, cache identity, leases, budgets and shutdown
-- **Issue**: [NAV-004.1](https://github.com/abdullahbodur/horo-engine/issues/1255)
+- **Issue**: [NAV-004.1](https://github.com/HoroCore/horo-engine/issues/1255)
 - **Jira**: [HORO-1255](https://horo-engine.atlassian.net/browse/HORO-1255)
 - **Related**: [ADR-010](010-job-waiting-and-operation-store-ownership.md), [ADR-012](012-world-streaming-partition-authority-and-subsystem-boundaries.md), [ADR-016](016-navigation-target-ownership-and-dependency-boundary.md), [ADR-022](022-ai-fixed-tick-order-authority-and-simulation-budget.md), [ADR-026](026-large-world-precision-and-floating-origin-strategy.md), [ADR-105](105-navigation-asset-and-scene-ownership-boundary.md), [ADR-106](106-navigation-bake-ownership-transaction-and-cache.md)
 - **Normative documents**: [Navigation and AI Architecture](../architecture/runtime/navigation-and-ai-architecture.md), [Scene Runtime](../architecture/runtime/scene-runtime.md), [World Streaming](../architecture/runtime/world-streaming-architecture.md), [Concurrency and Job System](../architecture/foundation/concurrency-and-jobs.md), [Runtime Lifecycle](../architecture/runtime/runtime-lifecycle.md)

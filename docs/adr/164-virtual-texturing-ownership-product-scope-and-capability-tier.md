@@ -4,9 +4,9 @@
 - **Date**: 2026-09-02
 - **Supersedes**: None
 - **Scope**: Virtual Texturing public/runtime ownership, Assets/Materials/World Streaming/Renderer/producer boundaries, typed composition, capability tiers, product scope, lifecycle, unsupported paths and migration
-- **Issue**: [VTX-001.1](https://github.com/abdullahbodur/horo-engine/issues/2176)
+- **Issue**: [VTX-001.1](https://github.com/HoroCore/horo-engine/issues/2176)
 - **Jira**: [HORO-2130](https://horo-engine.atlassian.net/browse/HORO-2130)
-- **Parent**: [VTX-001](https://github.com/abdullahbodur/horo-engine/issues/2175)
+- **Parent**: [VTX-001](https://github.com/HoroCore/horo-engine/issues/2175)
 - **Related**: [ADR-008](008-error-model-exception-boundary-and-registry.md), [ADR-010](010-job-waiting-and-operation-store-ownership.md), [ADR-012](012-world-streaming-partition-authority-and-subsystem-boundaries.md), [ADR-027](027-renderer-resource-identity-and-descriptors.md), [ADR-028](028-renderer-capability-limits-and-product-profiles.md), [ADR-034](034-gpu-memory-and-residency-ownership.md), [ADR-054](054-extension-and-package-authority-boundary.md), [ADR-137](137-terrain-foliage-ownership-data-tier-and-lifecycle.md)
 - **Normative documents**: [Virtual Texturing Architecture](../architecture/runtime/virtual-texturing-architecture.md), [System Design](../architecture/foundation/system-design.md), [Asset Pipeline](../architecture/runtime/asset-pipeline.md), [Material and Shader Model](../architecture/runtime/material-and-shader-model.md), [World Streaming Architecture](../architecture/runtime/world-streaming-architecture.md), [Rendering Architecture](../architecture/runtime/rendering-architecture.md)
 

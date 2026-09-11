@@ -18,7 +18,7 @@ sudo apt install libx11-dev libxrandr-dev libxinerama-dev libxcursor-dev libxi-d
 ## Getting Started
 
 ```bash
-git clone https://github.com/abdullahbodur/horo-engine
+git clone https://github.com/HoroCore/horo-engine
 cd horo-engine
 pre-commit install   # install git hooks
 python3 scripts/dev.py build          # debug build
@@ -77,4 +77,4 @@ Key points:
 
 ## Questions
 
-Open a [GitHub Discussion](https://github.com/abdullahbodur/horo-engine/discussions) or a [GitHub Issue](https://github.com/abdullahbodur/horo-engine/issues) if you are unsure where to start.
+Open a [GitHub Discussion](https://github.com/HoroCore/horo-engine/discussions) or a [GitHub Issue](https://github.com/HoroCore/horo-engine/issues) if you are unsure where to start.

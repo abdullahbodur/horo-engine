@@ -3,9 +3,9 @@
 - **Status**: Accepted
 - **Date**: 2026-09-10
 - **Scope**: MCP controller, application-capability, transport and in-process adapter ownership; tool effect categories; protocol-independent execution semantics
-- **Issue**: [MCP-001.1](https://github.com/abdullahbodur/horo-engine/issues/232)
+- **Issue**: [MCP-001.1](https://github.com/HoroCore/horo-engine/issues/232)
 - **Jira**: [HORO-232](https://horo-engine.atlassian.net/browse/HORO-232)
-- **Parent**: [MCP-001](https://github.com/abdullahbodur/horo-engine/issues/218)
+- **Parent**: [MCP-001](https://github.com/HoroCore/horo-engine/issues/218)
 - **Related**: [ADR-018](018-command-registration-permissions-threading-and-packaged-build-policy.md), [ADR-019](019-cli-host-command-ownership-adapter-equivalence-and-horopak-boundary.md)
 - **Normative documents**: [MCP Architecture](../architecture/interfaces/mcp-architecture.md), [System Design](../architecture/foundation/system-design.md)
 

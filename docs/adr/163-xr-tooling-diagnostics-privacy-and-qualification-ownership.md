@@ -4,7 +4,7 @@
 - **Date**: 2026-09-02
 - **Supersedes**: None
 - **Scope**: XR project settings, setup UI, inspectors, commands, diagnostic snapshots/events/metrics/captures, privacy/cardinality, compatibility evidence, physical-device qualification, lifecycle, migration and validation
-- **Issue**: [XRA-007.1](https://github.com/abdullahbodur/horo-engine/issues/2167)
+- **Issue**: [XRA-007.1](https://github.com/HoroCore/horo-engine/issues/2167)
 - **Jira**: [HORO-2121](https://horo-engine.atlassian.net/browse/HORO-2121)
 - **Related**: [ADR-018](018-command-registration-permissions-threading-and-packaged-build-policy.md), [ADR-041](041-backend-neutral-renderer-diagnostics-model.md), [ADR-042](042-cpu-gpu-timestamps-and-pipeline-statistics.md), [ADR-049](049-render-graph-and-resource-inspector-ui.md), [ADR-157](157-xr-ownership-runtime-composition-and-capability-tier.md), [ADR-158](158-openxr-loader-backend-packaging-and-host-composition.md), [ADR-159](159-xr-action-tracking-and-input-projection-ownership.md), [ADR-160](160-xr-rendering-openxr-compositor-and-renderer-ownership.md), [ADR-162](162-mixed-reality-ownership-privacy-and-capability-tier.md)
 - **Normative documents**: [XR Architecture](../architecture/runtime/vr-ar-architecture.md), [Metrics and Profiling](../architecture/observability/observability-performance.md), [Application Security](../architecture/security/application-security.md), [Configuration System](../architecture/foundation/configuration-system.md)

@@ -4,7 +4,7 @@
 - **Date**: 2026-09-02
 - **Supersedes**: None
 - **Scope**: GPU particle authority, opt-in asynchronous readback, compute/readback capability admission, compute-less fallback, mixed CPU/GPU effects, shared budget accounting and failure semantics
-- **Issue**: [VFX-003.1](https://github.com/abdullahbodur/horo-engine/issues/1751)
+- **Issue**: [VFX-003.1](https://github.com/HoroCore/horo-engine/issues/1751)
 - **Jira**: [HORO-1708](https://horo-engine.atlassian.net/browse/HORO-1708)
 - **Related**: [ADR-008](008-error-model-exception-boundary-and-registry.md), [ADR-011](011-vfx-effect-ownership-simulation-domain-and-renderer-boundary.md), [ADR-012](012-world-streaming-partition-authority-and-subsystem-boundaries.md), [ADR-028](028-renderer-capability-limits-and-product-profiles.md), [ADR-034](034-gpu-memory-and-residency-ownership.md), [ADR-123](123-vfx-cpu-stage-order-determinism-and-gameplay-coupling.md)
 - **Normative documents**: [VFX and Particles Architecture](../architecture/runtime/vfx-and-particles-architecture.md), [Rendering Architecture](../architecture/runtime/rendering-architecture.md), [Render Backend Parity Contract](../architecture/runtime/render-backend-parity-contract.md)

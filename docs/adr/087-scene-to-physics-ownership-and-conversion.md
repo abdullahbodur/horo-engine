@@ -4,9 +4,9 @@
 - **Date**: 2026-09-02
 - **Supersedes**: None
 - **Scope**: Authored Physics component producers, stable body/collider/constraint binding, Physics-owned semantic conversion, scene activation participation, detached world candidates, atomic publication, rollback, reload, unload, errors, limits and qualification
-- **Issue**: [PHY-006.1](https://github.com/abdullahbodur/horo-engine/issues/887)
+- **Issue**: [PHY-006.1](https://github.com/HoroCore/horo-engine/issues/887)
 - **Jira**: [HORO-887](https://horo-engine.atlassian.net/browse/HORO-887)
-- **Parent**: [PHY-006](https://github.com/abdullahbodur/horo-engine/issues/833)
+- **Parent**: [PHY-006](https://github.com/HoroCore/horo-engine/issues/833)
 - **Related**: [ADR-008](008-error-model-exception-boundary-and-registry.md), [ADR-017](017-prefab-role-ownership-and-capability-tiers.md), [ADR-023](023-world-index-and-cell-format-architecture-decision.md), [ADR-061](061-animation-ownership-update-order-and-clock.md), [ADR-084](084-canonical-physics-solver-units-and-tolerances.md), [ADR-085](085-physics-shape-authoring-cook-and-runtime-boundary.md), [ADR-086](086-collision-layer-profile-and-query-channel-policy.md), [ADR-090](090-character-dynamic-body-visibility-push-and-proxy-policy.md)
 - **Normative documents**: [Scene Runtime](../architecture/runtime/scene-runtime.md), [Physics Architecture](../architecture/runtime/physics-architecture.md), [Runtime Lifecycle](../architecture/runtime/runtime-lifecycle.md), [Editor Document Model](../architecture/editor/editor-document-model.md), [Built-In Scene Primitives](../architecture/runtime/built-in-scene-primitives.md)
 

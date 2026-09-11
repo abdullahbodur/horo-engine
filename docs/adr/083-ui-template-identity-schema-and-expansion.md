@@ -4,9 +4,9 @@
 - **Date**: 2026-09-02
 - **Supersedes**: None
 - **Scope**: Runtime UI template assets, stable/local/instance identity, typed parameters and slots, nested references, insertion and linked instancing, deterministic expansion, update/rebase, detachment, cook/runtime projection, package ownership, failures, compatibility, limits, unload, and shutdown
-- **Issue**: [RUI-012.1](https://github.com/abdullahbodur/horo-engine/issues/810)
+- **Issue**: [RUI-012.1](https://github.com/HoroCore/horo-engine/issues/810)
 - **Jira**: [HORO-810](https://horo-engine.atlassian.net/browse/HORO-810)
-- **Parent**: [RUI-012](https://github.com/abdullahbodur/horo-engine/issues/781)
+- **Parent**: [RUI-012](https://github.com/HoroCore/horo-engine/issues/781)
 - **Related**: [ADR-054](054-extension-and-package-authority-boundary.md), [ADR-073](073-runtime-ui-ownership-scope-and-update-order.md), [ADR-074](074-runtime-ui-layout-units-and-measure-arrange.md), [ADR-076](076-runtime-ui-style-asset-token-and-inheritance.md), [ADR-079](079-runtime-ui-binding-provider-schema-identity-and-lifetime.md), [ADR-081](081-runtime-ui-and-localization-ownership-boundary.md)
 - **Normative documents**: [Game UI and HUD](../architecture/runtime/game-ui-and-hud.md), [Asset Pipeline](../architecture/runtime/asset-pipeline.md), [Prefab Architecture](../architecture/runtime/prefab-architecture.md), [Horo Package System](../architecture/packages/package-system.md)
 

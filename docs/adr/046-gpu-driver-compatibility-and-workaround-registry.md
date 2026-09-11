@@ -4,7 +4,7 @@
 - **Date**: 2026-09-01
 - **Supersedes**: None
 - **Scope**: Versioned GPU driver rules, restrictive capability resolution and private workaround selection
-- **Issue**: [RND-017.6](https://github.com/abdullahbodur/horo-engine/issues/438)
+- **Issue**: [RND-017.6](https://github.com/HoroCore/horo-engine/issues/438)
 - **Jira**: [HORO-438](https://horo-engine.atlassian.net/browse/HORO-438)
 - **Companion decisions**: [ADR-028](028-renderer-capability-limits-and-product-profiles.md), [ADR-029](029-opengl-core-profile-and-platform-policy.md), [ADR-030](030-metal-platform-and-feature-baseline.md), [ADR-031](031-vulkan-loader-platform-and-version-baseline.md), [ADR-032](032-d3d12-baseline-and-agility-sdk-policy.md), [ADR-041](041-backend-neutral-renderer-diagnostics-model.md)
 - **Normative documents**: [Configuration System](../architecture/foundation/configuration-system.md), [Rendering Architecture](../architecture/runtime/rendering-architecture.md), [Render Backend Parity Contract](../architecture/runtime/render-backend-parity-contract.md)

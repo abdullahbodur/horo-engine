@@ -4,7 +4,7 @@
 - **Date**: 2026-09-02
 - **Supersedes**: None
 - **Scope**: Replicated-state declaration, capture, transport and apply ownership; standalone/server/autonomous/simulated roles; stable schema and FieldId identity; compatibility, registration, lifecycle, malformed input and safe-point behavior
-- **Issue**: [NET-003.1](https://github.com/abdullahbodur/horo-engine/issues/1120)
+- **Issue**: [NET-003.1](https://github.com/HoroCore/horo-engine/issues/1120)
 - **Jira**: [HORO-1120](https://horo-engine.atlassian.net/browse/HORO-1120)
 - **Related**: [ADR-092](092-character-controller-determinism-and-state-composition.md), [ADR-097](097-default-real-time-transport-backend.md), [ADR-098](098-protocol-session-and-trust-policy.md)
 - **Normative documents**: [Multiplayer Replication Architecture](../architecture/runtime/multiplayer-replication-architecture.md), [Networking Architecture](../architecture/runtime/networking-architecture.md), [Scene Runtime](../architecture/runtime/scene-runtime.md), [Gameplay Behavior Authoring](../architecture/extensions/gameplay-behavior-authoring.md)

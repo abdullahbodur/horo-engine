@@ -4,7 +4,7 @@
 - **Date**: 2026-09-02
 - **Supersedes**: None
 - **Scope**: First production grounded NavMesh provider, exact dependency pin, module selection, licensing, native encapsulation, threading, determinism, tile-cache/crowd policy, non-ground navigation boundary, upgrades and migration
-- **Issue**: [NAV-001.4](https://github.com/abdullahbodur/horo-engine/issues/1227)
+- **Issue**: [NAV-001.4](https://github.com/HoroCore/horo-engine/issues/1227)
 - **Jira**: [HORO-1227](https://horo-engine.atlassian.net/browse/HORO-1227)
 - **Related**: [ADR-005](005-submodule-compatibility.md), [ADR-010](010-job-waiting-and-operation-store-ownership.md), [ADR-012](012-world-streaming-partition-authority-and-subsystem-boundaries.md), [ADR-016](016-navigation-target-ownership-and-dependency-boundary.md), [ADR-022](022-ai-fixed-tick-order-authority-and-simulation-budget.md), [ADR-026](026-large-world-precision-and-floating-origin-strategy.md), [ADR-109](109-avoidance-crowd-and-renderer-independent-budget.md)
 - **Normative documents**: [Navigation and AI Architecture](../architecture/runtime/navigation-and-ai-architecture.md), [Build System](../architecture/delivery/build-system.md), [Asset Pipeline](../architecture/runtime/asset-pipeline.md), [World Streaming](../architecture/runtime/world-streaming-architecture.md), [Concurrency and Jobs](../architecture/foundation/concurrency-and-jobs.md)

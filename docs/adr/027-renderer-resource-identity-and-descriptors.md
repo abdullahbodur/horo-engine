@@ -4,9 +4,9 @@
 - **Date**: 2026-08-31
 - **Supersedes**: None
 - **Scope**: Backend-neutral resident renderer resources
-- **Issue**: [RND-001.1](https://github.com/abdullahbodur/horo-engine/issues/290)
+- **Issue**: [RND-001.1](https://github.com/HoroCore/horo-engine/issues/290)
 - **Jira**: [HORO-290](https://horo-engine.atlassian.net/browse/HORO-290)
-- **Parent**: [RND-001](https://github.com/abdullahbodur/horo-engine/issues/13)
+- **Parent**: [RND-001](https://github.com/HoroCore/horo-engine/issues/13)
 - **Normative document**: [Rendering Architecture](../architecture/runtime/rendering-architecture.md)
 
 ## Context
@@ -39,16 +39,16 @@ is subordinate to this renderer-specific contract.
 
 The implementation tickets consume this decision without reopening it:
 
-- [RND-001.2](https://github.com/abdullahbodur/horo-engine/issues/291)
+- [RND-001.2](https://github.com/HoroCore/horo-engine/issues/291)
   implements the frontend registry, owner/slot/generation validation, state
   machine, bounded request handling, pins, and retirement;
-- [RND-001.3](https://github.com/abdullahbodur/horo-engine/issues/292)
+- [RND-001.3](https://github.com/HoroCore/horo-engine/issues/292)
   migrates mesh creation, upload, readiness, replacement, and residency onto
   buffer and mesh resources;
-- [RND-001.4](https://github.com/abdullahbodur/horo-engine/issues/293) and
-  [RND-001.5](https://github.com/abdullahbodur/horo-engine/issues/294) migrate
+- [RND-001.4](https://github.com/HoroCore/horo-engine/issues/293) and
+  [RND-001.5](https://github.com/HoroCore/horo-engine/issues/294) migrate
   OpenGL and Metal editor viewport resources without exposing native identity;
-- [RND-001.6](https://github.com/abdullahbodur/horo-engine/issues/295) qualifies
+- [RND-001.6](https://github.com/HoroCore/horo-engine/issues/295) qualifies
   the shared lifetime and parity contract against Null and supported native
   backends.
 

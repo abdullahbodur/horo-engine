@@ -194,4 +194,33 @@ namespace Horo::Animation::AnimationErrors {
                                                         ErrorSeverity::Error,
                                                         "Additive sampling lacks the exact immutable reference-pose binding.",
                                                         "Resolve the authored reference pose identity and current generation."};
+    const ErrorCodeDescriptor CompressionVersionUnsupported{AnimationDomain, ErrorCode{"animation.compression.version_unsupported"},
+                                                            ErrorSeverity::Error,
+                                                            "The animation compression contract version is unsupported.",
+                                                            "Recook the clip using the current compression contract."};
+    const ErrorCodeDescriptor CompressionAdmissionRejected{AnimationDomain, ErrorCode{"animation.compression.admission_rejected"},
+                                                           ErrorSeverity::Warning, "The animation compression owner is not accepting work.",
+                                                           "Retry only after the current owner resumes admission."};
+    const ErrorCodeDescriptor CompressionOperationCancelled{AnimationDomain, ErrorCode{"animation.compression.operation_cancelled"},
+                                                            ErrorSeverity::Warning,
+                                                            "Animation compression work was cancelled before publication.",
+                                                            "Submit a new cook against current immutable inputs."};
+    const ErrorCodeDescriptor CompressionReloadMismatch{AnimationDomain, ErrorCode{"animation.compression.reload_mismatch"},
+                                                        ErrorSeverity::Error,
+                                                        "The compression reload targets another source or profile compatibility.",
+                                                        "Publish incompatible source or profile bindings as a distinct artifact."};
+    const ErrorCodeDescriptor CompressionBindingStale{AnimationDomain, ErrorCode{"animation.compression.binding_stale"},
+                                                      ErrorSeverity::Warning,
+                                                      "Compression work targets a retired clip or skeleton publication.",
+                                                      "Resolve and cook against current immutable generations."};
+    const ErrorCodeDescriptor CompressionProfileMalformed{AnimationDomain, ErrorCode{"animation.compression.profile_malformed"},
+                                                          ErrorSeverity::Error, "The animation compression profile is malformed.",
+                                                          "Use finite non-negative thresholds and bounded non-zero limits."};
+    const ErrorCodeDescriptor CompressionUnsupported{AnimationDomain, ErrorCode{"animation.compression.unsupported"}, ErrorSeverity::Error,
+                                                     "The requested animation compression representation is unsupported.",
+                                                     "Select a supported typed tier and compression scheme."};
+    const ErrorCodeDescriptor CompressionBudgetExceeded{AnimationDomain, ErrorCode{"animation.compression.budget_exceeded"},
+                                                        ErrorSeverity::Warning,
+                                                        "Animation compression exceeded its captured finite work budget.",
+                                                        "Increase the bounded profile budget or reduce source data."};
 }  // namespace Horo::Animation::AnimationErrors

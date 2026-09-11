@@ -4,7 +4,7 @@
 - **Date**: 2026-09-01
 - **Supersedes**: None
 - **Scope**: Renderer incident evidence capture, durable manifests, privacy and bundle lifecycle
-- **Issue**: [RND-017.8](https://github.com/abdullahbodur/horo-engine/issues/440)
+- **Issue**: [RND-017.8](https://github.com/HoroCore/horo-engine/issues/440)
 - **Jira**: [HORO-440](https://horo-engine.atlassian.net/browse/HORO-440)
 - **Companion decisions**: [ADR-034](034-gpu-memory-and-residency-ownership.md), [ADR-041](041-backend-neutral-renderer-diagnostics-model.md), [ADR-042](042-cpu-gpu-timestamps-and-pipeline-statistics.md), [ADR-043](043-gpu-memory-and-resource-inspection.md), [ADR-044](044-render-markers-and-debug-labels.md), [ADR-045](045-backend-validation-and-debug-layer-integration.md), [ADR-046](046-gpu-driver-compatibility-and-workaround-registry.md), [ADR-047](047-renderdoc-pix-and-metal-capture-integration.md)
 - **Normative documents**: [Platform Abstraction](../architecture/foundation/platform-abstraction.md), [Rendering Architecture](../architecture/runtime/rendering-architecture.md), [Observability Architecture](../architecture/observability/observability.md), [Logging, Context, And Diagnostics](../architecture/observability/observability-logging.md)

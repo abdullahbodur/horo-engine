@@ -4,7 +4,7 @@
 - **Date**: 2026-09-02
 - **Supersedes**: None
 - **Scope**: Decal box/oriented-box placement, scene projection data, permanent/timed/event-driven lifetime, count admission, fade/removal authority, deferred-default and forward fallback policy
-- **Issue**: [VFX-006.1](https://github.com/abdullahbodur/horo-engine/issues/1754)
+- **Issue**: [VFX-006.1](https://github.com/HoroCore/horo-engine/issues/1754)
 - **Jira**: [HORO-1711](https://horo-engine.atlassian.net/browse/HORO-1711)
 - **Related**: [ADR-011](011-vfx-effect-ownership-simulation-domain-and-renderer-boundary.md), [ADR-012](012-world-streaming-partition-authority-and-subsystem-boundaries.md), [ADR-026](026-large-world-precision-and-floating-origin-strategy.md), [ADR-034](034-gpu-memory-and-residency-ownership.md), [ADR-036](036-raster-render-path-and-quality-architecture.md), [ADR-126](126-vfx-graph-compilation-and-runtime-representation-convergence.md)
 - **Normative documents**: [VFX and Particles Architecture](../architecture/runtime/vfx-and-particles-architecture.md), [Rendering Architecture](../architecture/runtime/rendering-architecture.md)

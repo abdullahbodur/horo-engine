@@ -52,27 +52,27 @@ capability milestone records the product checkpoint that requires the integrated
 outcome; it is not dependency order. Native `blocked by` relationships, not issue
 numbers or milestone numbers, own technical execution order.
 
-[AUD-001.12](https://github.com/abdullahbodur/horo-engine/issues/691) is the M0
+[AUD-001.12](https://github.com/HoroCore/horo-engine/issues/691) is the M0
 reconciliation checkpoint for this document. The parent capability milestones are:
 
 | Capability | Product checkpoint | Boundary summarized here |
 |---|---|---|
-| [AUD-001](https://github.com/abdullahbodur/horo-engine/issues/524) Real-time runtime, clock and commands | M3 — Alpha | Process/control/callback ownership, bounded transport, clocks, Null and teardown |
-| [AUD-002](https://github.com/abdullahbodur/horo-engine/issues/536) Assets, codecs and streaming | M4 — Beta | Audio/AST cook authority, resident/streamed media and codec contributions |
-| [AUD-003](https://github.com/abdullahbodur/horo-engine/issues/550) Voice playback and concurrency | M4 — Beta | Voice identity, admission, priority, virtualization and completion |
-| [AUD-004](https://github.com/abdullahbodur/horo-engine/issues/561) Mixer, automation and DSP | M5 — 1.0 | Constrained bus DAG, effects, ramps, latency, tails and publication |
-| [AUD-005](https://github.com/abdullahbodur/horo-engine/issues/576) Spatial audio | M5 — 1.0 | Core renderer plus typed optional/required provider policy |
-| [AUD-006](https://github.com/abdullahbodur/horo-engine/issues/586) Environmental audio | M5 — 1.0 | Basic raycast occlusion, material contribution, zones and environment sends |
-| [AUD-007](https://github.com/abdullahbodur/horo-engine/issues/594) Devices and backends | M5 — 1.0 | Qualified native desktop, SDL3 reference and Null peers |
-| [AUD-008](https://github.com/abdullahbodur/horo-engine/issues/606) Timeline and music transport | M5 — 1.0 | Sample-clock transport and cross-system scheduling; not adaptive-music policy |
-| [AUD-009](https://github.com/abdullahbodur/horo-engine/issues/615) Authoring and mixer tools | M5 — 1.0 | Production-path preview, asset/source/mixer/settings/debug workflows |
-| [AUD-010](https://github.com/abdullahbodur/horo-engine/issues/626) Diagnostics and qualification | M5 — 1.0 | Bounded metrics/faults, signal/RT tests and platform qualification |
-| [AUD-011](https://github.com/abdullahbodur/horo-engine/issues/637) Extension contracts | M5 — 1.0 | Versioned codec/DSP/spatial/acoustic/service capability and Audio RT ABI seams |
-| [AUD-012](https://github.com/abdullahbodur/horo-engine/issues/644) Capture and voice I/O | Post-1.0 | Reserved permission-aware capture/recording/NET/speech boundary |
-| [AUD-013](https://github.com/abdullahbodur/horo-engine/issues/654) Procedural audio | Post-1.0 | Reserved compiled sound-generator and editor graph boundary |
-| [AUD-014](https://github.com/abdullahbodur/horo-engine/issues/664) Advanced acoustics | Post-1.0 | Rooms, portals, diffraction, baked/geometric propagation and advanced reflections |
-| [AUD-015](https://github.com/abdullahbodur/horo-engine/issues/672) Adaptive music | Post-1.0 | Gameplay/package orchestration over the 1.0 music transport |
-| [AUD-016](https://github.com/abdullahbodur/horo-engine/issues/681) Middleware | Post-1.0 | Reserved event-bridge/backend-replacement, bank and distribution boundary |
+| [AUD-001](https://github.com/HoroCore/horo-engine/issues/524) Real-time runtime, clock and commands | M3 — Alpha | Process/control/callback ownership, bounded transport, clocks, Null and teardown |
+| [AUD-002](https://github.com/HoroCore/horo-engine/issues/536) Assets, codecs and streaming | M4 — Beta | Audio/AST cook authority, resident/streamed media and codec contributions |
+| [AUD-003](https://github.com/HoroCore/horo-engine/issues/550) Voice playback and concurrency | M4 — Beta | Voice identity, admission, priority, virtualization and completion |
+| [AUD-004](https://github.com/HoroCore/horo-engine/issues/561) Mixer, automation and DSP | M5 — 1.0 | Constrained bus DAG, effects, ramps, latency, tails and publication |
+| [AUD-005](https://github.com/HoroCore/horo-engine/issues/576) Spatial audio | M5 — 1.0 | Core renderer plus typed optional/required provider policy |
+| [AUD-006](https://github.com/HoroCore/horo-engine/issues/586) Environmental audio | M5 — 1.0 | Basic raycast occlusion, material contribution, zones and environment sends |
+| [AUD-007](https://github.com/HoroCore/horo-engine/issues/594) Devices and backends | M5 — 1.0 | Qualified native desktop, SDL3 reference and Null peers |
+| [AUD-008](https://github.com/HoroCore/horo-engine/issues/606) Timeline and music transport | M5 — 1.0 | Sample-clock transport and cross-system scheduling; not adaptive-music policy |
+| [AUD-009](https://github.com/HoroCore/horo-engine/issues/615) Authoring and mixer tools | M5 — 1.0 | Production-path preview, asset/source/mixer/settings/debug workflows |
+| [AUD-010](https://github.com/HoroCore/horo-engine/issues/626) Diagnostics and qualification | M5 — 1.0 | Bounded metrics/faults, signal/RT tests and platform qualification |
+| [AUD-011](https://github.com/HoroCore/horo-engine/issues/637) Extension contracts | M5 — 1.0 | Versioned codec/DSP/spatial/acoustic/service capability and Audio RT ABI seams |
+| [AUD-012](https://github.com/HoroCore/horo-engine/issues/644) Capture and voice I/O | Post-1.0 | Reserved permission-aware capture/recording/NET/speech boundary |
+| [AUD-013](https://github.com/HoroCore/horo-engine/issues/654) Procedural audio | Post-1.0 | Reserved compiled sound-generator and editor graph boundary |
+| [AUD-014](https://github.com/HoroCore/horo-engine/issues/664) Advanced acoustics | Post-1.0 | Rooms, portals, diffraction, baked/geometric propagation and advanced reflections |
+| [AUD-015](https://github.com/HoroCore/horo-engine/issues/672) Adaptive music | Post-1.0 | Gameplay/package orchestration over the 1.0 music transport |
+| [AUD-016](https://github.com/HoroCore/horo-engine/issues/681) Middleware | Post-1.0 | Reserved event-bridge/backend-replacement, bank and distribution boundary |
 
 The 1.0 extension ABI must be capable of hosting later packages, but passing its
 contract does not make AUD-012 through AUD-016 required 1.0 implementations.
@@ -411,7 +411,7 @@ cover this additive boundary.
 
 ## Audio Assets
 
-[AUD-002](https://github.com/abdullahbodur/horo-engine/issues/536) delivers this
+[AUD-002](https://github.com/HoroCore/horo-engine/issues/536) delivers this
 resident/streaming asset baseline by M4 — Beta as part of the 1.0 product.
 [ADR-064](../../adr/064-audio-asset-and-cook-boundary.md) is the single
 normative owner of the Audio/AST import, cook, cache, publication, and runtime
@@ -753,7 +753,7 @@ through the audio frontend; they do not edit backend state directly.
 
 ## Effects And DSP Boundary
 
-[AUD-004](https://github.com/abdullahbodur/horo-engine/issues/561) delivers the
+[AUD-004](https://github.com/HoroCore/horo-engine/issues/561) delivers the
 core mixer/DSP baseline for M5 — 1.0. Built-in nodes may use private C++ strategies;
 third-party nodes use ADR-069 rather than this illustrative virtual interface.
 
@@ -1299,7 +1299,7 @@ lock-free or wait-free queue consumed by the owning main-thread service.
 
 ## Streaming
 
-[AUD-002](https://github.com/abdullahbodur/horo-engine/issues/536) delivers the
+[AUD-002](https://github.com/HoroCore/horo-engine/issues/536) delivers the
 qualified resident/streaming baseline by M4 — Beta. Streaming is part of 1.0, not
 an optional Post-1.0 extension.
 
@@ -1321,7 +1321,7 @@ sample rate, channel layout, and streaming thresholds.
 
 ## Editor Tooling
 
-[AUD-009](https://github.com/abdullahbodur/horo-engine/issues/615) delivers these
+[AUD-009](https://github.com/HoroCore/horo-engine/issues/615) delivers these
 workflows for M5 — 1.0. Middleware/procedural/capture-specific authoring surfaces
 follow their Post-1.0 capability boundaries and are not implied by the core tools.
 
@@ -1343,7 +1343,7 @@ does not bypass real-time thread rules.
 
 ## Device Lifecycle
 
-[AUD-007](https://github.com/abdullahbodur/horo-engine/issues/594) delivers the
+[AUD-007](https://github.com/HoroCore/horo-engine/issues/594) delivers the
 qualified desktop backend/device baseline for M5 — 1.0.
 [ADR-067](../../adr/067-platform-audio-backend-strategy.md) is the single
 normative owner of output-backend roles, the supported 1.0 platform matrix,
@@ -1435,7 +1435,7 @@ there are no existing callers to migrate.
 
 ## Input Capture And Speech Boundary
 
-[AUD-012](https://github.com/abdullahbodur/horo-engine/issues/644) delivery is
+[AUD-012](https://github.com/HoroCore/horo-engine/issues/644) delivery is
 Post-1.0 and is not required for 1.0 qualification. ADR-070 defines its boundary at
 M0 so later integrations cannot move permissions, privacy, NET packets, speech, or
 editor-agent intent into Audio.
@@ -1556,7 +1556,7 @@ allocation; those subsystem behaviors are not implemented by raw storage pools.
 
 ## Null Backend
 
-The [AUD-001.10](https://github.com/abdullahbodur/horo-engine/issues/534) Null
+The [AUD-001.10](https://github.com/HoroCore/horo-engine/issues/534) Null
 backend is an M1 — Engine Prototype delivery and remains a required 1.0 test/
 headless peer. It validates resources, commands, handles, clock generations and
 lifecycle without opening a device, and advances the deterministic sample clock
@@ -1797,7 +1797,7 @@ mobile focus loss, and continue-everything for dedicated audio preview windows.
 
 ## Metrics
 
-[AUD-010](https://github.com/abdullahbodur/horo-engine/issues/626) delivers the
+[AUD-010](https://github.com/HoroCore/horo-engine/issues/626) delivers the
 bounded metrics, profiler correlation and qualification baseline for M5 — 1.0.
 Feature-specific Post-1.0 metrics extend this catalogue only when that feature is
 included; their architecture definitions are not evidence that the feature ships.

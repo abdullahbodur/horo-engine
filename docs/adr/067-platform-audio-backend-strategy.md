@@ -4,9 +4,9 @@
 - **Date**: 2026-09-02
 - **Supersedes**: None
 - **Scope**: Native and portability output-backend roles, 1.0 platform matrix, compile-time composition, runtime selection, capability parity, and qualification
-- **Issue**: [AUD-007.1](https://github.com/abdullahbodur/horo-engine/issues/595)
+- **Issue**: [AUD-007.1](https://github.com/HoroCore/horo-engine/issues/595)
 - **Jira**: [HORO-595](https://horo-engine.atlassian.net/browse/HORO-595)
-- **Parent**: [AUD-007](https://github.com/abdullahbodur/horo-engine/issues/594)
+- **Parent**: [AUD-007](https://github.com/HoroCore/horo-engine/issues/594)
 - **Related**: [ADR-062](062-audio-runtime-ownership-and-update-order.md), [ADR-063](063-audio-sample-format-and-channel-layout.md), [ADR-066](066-spatial-provider-and-required-capability.md)
 - **Normative documents**: [Audio Architecture](../architecture/runtime/audio-architecture.md), [Build System](../architecture/delivery/build-system.md)
 

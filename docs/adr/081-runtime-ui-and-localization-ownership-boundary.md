@@ -4,9 +4,9 @@
 - **Date**: 2026-09-02
 - **Supersedes**: None
 - **Scope**: Runtime UI and Localization ownership, catalogs, locale policy, formatting, localized references, shaping/layout, localized asset and font fallback, immutable snapshots, change notification, failure, compatibility, editor preview, unload, and shutdown
-- **Issue**: [RUI-010.1](https://github.com/abdullahbodur/horo-engine/issues/795)
+- **Issue**: [RUI-010.1](https://github.com/HoroCore/horo-engine/issues/795)
 - **Jira**: [HORO-795](https://horo-engine.atlassian.net/browse/HORO-795)
-- **Parent**: [RUI-010](https://github.com/abdullahbodur/horo-engine/issues/779)
+- **Parent**: [RUI-010](https://github.com/HoroCore/horo-engine/issues/779)
 - **Related**: [ADR-008](008-error-model-exception-boundary-and-registry.md), [ADR-054](054-extension-and-package-authority-boundary.md), [ADR-073](073-runtime-ui-ownership-scope-and-update-order.md), [ADR-074](074-runtime-ui-layout-units-and-measure-arrange.md), [ADR-075](075-runtime-ui-font-asset-family-and-fallback.md)
 - **Normative documents**: [Localization Architecture](../architecture/editor/localization.md), [Game UI and HUD](../architecture/runtime/game-ui-and-hud.md), [Runtime Lifecycle](../architecture/runtime/runtime-lifecycle.md), [Asset Pipeline](../architecture/runtime/asset-pipeline.md)
 

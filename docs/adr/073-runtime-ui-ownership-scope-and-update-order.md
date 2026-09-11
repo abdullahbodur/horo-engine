@@ -4,9 +4,9 @@
 - **Date**: 2026-09-02
 - **Supersedes**: None
 - **Scope**: Runtime UI service ownership, game/player/scene/viewport scopes, instance identity, activation, frame update order, input, pause/suspension, render extraction, unload, failure, compatibility, and shutdown
-- **Issue**: [RUI-001.1](https://github.com/abdullahbodur/horo-engine/issues/698)
+- **Issue**: [RUI-001.1](https://github.com/HoroCore/horo-engine/issues/698)
 - **Jira**: [HORO-698](https://horo-engine.atlassian.net/browse/HORO-698)
-- **Parent**: [RUI-001](https://github.com/abdullahbodur/horo-engine/issues/700)
+- **Parent**: [RUI-001](https://github.com/HoroCore/horo-engine/issues/700)
 - **Related**: [ADR-004](004-cli-core-gui-boundary.md), [ADR-033](033-presentation-and-display-ownership.md), [ADR-054](054-extension-and-package-authority-boundary.md)
 - **Normative documents**: [Game UI and HUD](../architecture/runtime/game-ui-and-hud.md), [Runtime Lifecycle](../architecture/runtime/runtime-lifecycle.md), [Scene Runtime](../architecture/runtime/scene-runtime.md), [Input Architecture](../architecture/runtime/input-architecture.md), [Rendering Architecture](../architecture/runtime/rendering-architecture.md)
 

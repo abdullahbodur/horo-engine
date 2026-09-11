@@ -4,9 +4,9 @@
 - **Date**: 2026-09-02
 - **Supersedes**: None
 - **Scope**: Authority, trust, binding, import resolution, marshalling, asynchronous work, permissions, errors, reload and shutdown for module APIs consumed by editor tooling and gameplay scripts
-- **Issue**: [EXT-005.1](https://github.com/abdullahbodur/horo-engine/issues/168)
+- **Issue**: [EXT-005.1](https://github.com/HoroCore/horo-engine/issues/168)
 - **Jira**: [HORO-168](https://horo-engine.atlassian.net/browse/HORO-168)
-- **Parent**: [EXT-005](https://github.com/abdullahbodur/horo-engine/issues/167)
+- **Parent**: [EXT-005](https://github.com/HoroCore/horo-engine/issues/167)
 - **Related**: [ADR-006](006-lua-5-4-gameplay-runtime.md), [ADR-008](008-error-model-exception-boundary-and-registry.md), [ADR-010](010-job-waiting-and-operation-store-ownership.md), [ADR-054](054-extension-and-package-authority-boundary.md), [ADR-055](055-extension-manifest-v1-typed-model.md)
 - **Normative documents**: [Extension Capability Roadmap](../architecture/extensions/extension-capability-roadmap.md), [Extension System](../architecture/extensions/plugin-system.md), [Gameplay Behavior Authoring](../architecture/extensions/gameplay-behavior-authoring.md), [Gameplay Module Boundary](../architecture/extensions/gameplay-module-boundary.md), [Package Lifecycle](../architecture/packages/package-lifecycle.md), [Application Security](../architecture/security/application-security.md)
 
@@ -87,7 +87,7 @@ projection over exactly one compatible service export. Textual namespace equalit
 does not make the identities interchangeable.
 
 The complete language-neutral export schema is owned by
-[EXT-005.2](https://github.com/abdullahbodur/horo-engine/issues/169). This ADR fixes
+[EXT-005.2](https://github.com/HoroCore/horo-engine/issues/169). This ADR fixes
 its boundary requirements:
 
 - the descriptor references stable Horo IDs, semantic versions and registered
@@ -134,7 +134,7 @@ record their type, generation and owning script context, and fail closed after
 revocation; they are not pointer encodings.
 
 The exact value algebra and async call ABI are owned by
-[EXT-005.3](https://github.com/abdullahbodur/horo-engine/issues/170). Runtime
+[EXT-005.3](https://github.com/HoroCore/horo-engine/issues/170). Runtime
 adapters may project the same values into idiomatic language forms only when the
 round trip preserves the logical value and error semantics.
 
@@ -178,7 +178,7 @@ context allowlist. No layer can grant a permission forbidden by an earlier layer
 Possessing a service/API ID or guessing a namespace never grants import authority.
 
 The detailed permission and context model is owned by
-[EXT-005.5](https://github.com/abdullahbodur/horo-engine/issues/172), but it must
+[EXT-005.5](https://github.com/HoroCore/horo-engine/issues/172), but it must
 preserve this intersection and revocation rule.
 
 ### 8. Tooling and gameplay contexts are different profiles
@@ -255,7 +255,7 @@ marks the newest update restart-required; repeated updates never accumulate an
 unbounded chain of loaded native libraries.
 
 Compatibility classification, migration evidence and recovery behavior are owned
-by [EXT-005.6](https://github.com/abdullahbodur/horo-engine/issues/173). Additive
+by [EXT-005.6](https://github.com/HoroCore/horo-engine/issues/173). Additive
 schema evolution may be compatible only when existing call shapes and semantics
 remain unchanged; breaking changes require a new major API contract and explicit
 consumer migration.
@@ -312,7 +312,7 @@ teardown and process shutdown.
 No test may pass while leaving a live binding to a released provider generation,
 an orphan operation, a callback into a destroyed VM, or provider-owned serialized
 identity. The full runtime/platform fixture matrix and performance evidence are
-owned by [EXT-005.7](https://github.com/abdullahbodur/horo-engine/issues/174).
+owned by [EXT-005.7](https://github.com/HoroCore/horo-engine/issues/174).
 
 ## Compatibility And Migration
 

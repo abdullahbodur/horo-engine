@@ -4,7 +4,7 @@
 - **Date**: 2026-09-01
 - **Supersedes**: None
 - **Scope**: External graphics-capture availability, operations, triggers, adapters and artifacts
-- **Issue**: [RND-017.7](https://github.com/abdullahbodur/horo-engine/issues/439)
+- **Issue**: [RND-017.7](https://github.com/HoroCore/horo-engine/issues/439)
 - **Jira**: [HORO-439](https://horo-engine.atlassian.net/browse/HORO-439)
 - **Companion decisions**: [ADR-041](041-backend-neutral-renderer-diagnostics-model.md), [ADR-042](042-cpu-gpu-timestamps-and-pipeline-statistics.md), [ADR-044](044-render-markers-and-debug-labels.md), [ADR-045](045-backend-validation-and-debug-layer-integration.md)
 - **Normative documents**: [Platform Abstraction](../architecture/foundation/platform-abstraction.md), [Rendering Architecture](../architecture/runtime/rendering-architecture.md), [Render Backend Parity Contract](../architecture/runtime/render-backend-parity-contract.md), [Observability Architecture](../architecture/observability/observability.md)

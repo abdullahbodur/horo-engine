@@ -4,7 +4,7 @@
 - **Date**: 2026-09-02
 - **Supersedes**: None
 - **Scope**: Runtime, play-in-editor and editor-viewport camera authority; cinematic cut admission and handoff; rendered-frame validity; tiered transition semantics; backend-neutral render extraction
-- **Issue**: [CIN-003.1](https://github.com/abdullahbodur/horo-engine/issues/1700)
+- **Issue**: [CIN-003.1](https://github.com/HoroCore/horo-engine/issues/1700)
 - **Jira**: [HORO-1659](https://horo-engine.atlassian.net/browse/HORO-1659)
 - **Related**: [ADR-014](014-sequencer-ownership-clock-authority-and-binding-boundary.md), [ADR-026](026-large-world-precision-and-floating-origin-strategy.md), [ADR-033](033-presentation-and-display-ownership.md), [ADR-040](040-reconstruction-frame-generation-and-latency-providers.md), [ADR-117](117-playback-ownership-frame-order-and-determinism.md)
 - **Normative documents**: [Cinematic Sequencer Architecture](../architecture/runtime/cinematic-sequencer-architecture.md), [Rendering Architecture](../architecture/runtime/rendering-architecture.md), [Runtime Lifecycle](../architecture/runtime/runtime-lifecycle.md)

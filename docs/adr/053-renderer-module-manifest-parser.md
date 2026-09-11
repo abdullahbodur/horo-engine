@@ -4,7 +4,7 @@
 - **Date**: 2026-09-02
 - **Supersedes**: None
 - **Scope**: Bounded parsing and semantic validation of signed first-party renderer manifests before native loading
-- **Issue**: [RND-002.2](https://github.com/abdullahbodur/horo-engine/issues/153)
+- **Issue**: [RND-002.2](https://github.com/HoroCore/horo-engine/issues/153)
 - **Jira**: [HORO-153](https://horo-engine.atlassian.net/browse/HORO-153)
 - **Related**: [ADR-052](052-first-party-renderer-component-scope.md)
 - **Normative documents**: [Renderer Module Package Manifest](../architecture/runtime/renderer-module-package-manifest.md), [Renderer Distribution And Availability](../architecture/runtime/renderer-distribution-and-availability.md), [Application Security](../architecture/security/application-security.md), [System Design](../architecture/foundation/system-design.md)

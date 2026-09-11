@@ -4,7 +4,7 @@
 - **Date**: 2026-09-02
 - **Supersedes**: None
 - **Scope**: Fracture authoring-document state, typed editor operations, generator transactions, bounded semantic history, source publication, cook separation, isolated preview, cancellation, replacement and shutdown
-- **Issue**: [DFR-005.1](https://github.com/abdullahbodur/horo-engine/issues/2029)
+- **Issue**: [DFR-005.1](https://github.com/HoroCore/horo-engine/issues/2029)
 - **Jira**: [HORO-1983](https://horo-engine.atlassian.net/browse/HORO-1983)
 - **Related**: [ADR-008](008-error-model-exception-boundary-and-registry.md), [ADR-010](010-job-waiting-and-operation-store-ownership.md), [ADR-018](018-command-registration-permissions-threading-and-packaged-build-policy.md), [ADR-056](056-external-editor-ui-boundary.md), [ADR-085](085-physics-shape-authoring-cook-and-runtime-boundary.md), [ADR-121](121-cinematic-editor-document-and-authoring-context.md), [ADR-129](129-vfx-editor-document-live-preview-and-module-authoring.md), [ADR-142](142-terrain-foliage-document-tool-undo-and-preview-ownership.md), [ADR-144](144-destruction-ownership-authority-state-and-runtime-geometry-boundary.md), [ADR-145](145-destruction-source-chunk-geometry-collision-and-cook-ownership.md), [ADR-146](146-destruction-runtime-activation-physics-cleanup-and-rollback.md)
 - **Normative documents**: [Editor Document Model](../architecture/editor/editor-document-model.md), [Editor Panel Host](../architecture/editor/editor-panel-host.md), [Destruction and Fracture Architecture](../architecture/runtime/destruction-and-fracture-architecture.md), [Asset Pipeline](../architecture/runtime/asset-pipeline.md), [Project Model](../architecture/editor/project-model.md)
