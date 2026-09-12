@@ -73,8 +73,9 @@ namespace Horo::Character::Detail {
 
     private:
         [[nodiscard]] Result<const Value *> ResolveSlot(const CharacterControllerHandle &handle) const {
-            const Value *value = storage_.Resolve(handle.slot.index, handle.slot.generation);
-            return value ? Result<const Value *>::Success(value) : Result<const Value *>::Failure(HandleError(handle));
+            if (const Value *value = storage_.Resolve(handle.slot.index, handle.slot.generation); value != nullptr)
+                return Result<const Value *>::Success(value);
+            return Result<const Value *>::Failure(HandleError(handle));
         }
 
         [[nodiscard]] Result<void> RemoveSlot(const CharacterControllerHandle &handle) {
