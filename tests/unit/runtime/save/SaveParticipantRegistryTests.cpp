@@ -1,7 +1,7 @@
 #include "Horo/Runtime/Save/SaveCaptureSnapshot.h"
 #include "Horo/Runtime/Save/SaveErrors.h"
 #include "SaveCaptureSnapshotTestUtils.h"
-#include "support/AllocationProbe.h"
+#include "AllocationProbe.h"
 
 #include <catch2/catch_test_macros.hpp>
 #include <memory>

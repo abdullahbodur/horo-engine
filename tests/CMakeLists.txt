@@ -1240,6 +1240,7 @@ add_executable(HoroRuntimeSaveParticipantRegistryTests
         unit/runtime/save/SaveParticipantRegistryTests.cpp
 )
 target_compile_features(HoroRuntimeSaveParticipantRegistryTests PRIVATE cxx_std_20)
+target_include_directories(HoroRuntimeSaveParticipantRegistryTests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/support)
 target_link_libraries(HoroRuntimeSaveParticipantRegistryTests PRIVATE HoroEngine::Runtime)
 add_executable(HoroRuntimeSaveCaptureSnapshotTests
         unit/runtime/save/SaveCaptureSnapshotTests.cpp
