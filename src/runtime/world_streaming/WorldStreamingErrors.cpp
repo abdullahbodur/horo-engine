@@ -513,4 +513,24 @@ namespace Horo::WorldStreaming::WorldStreamingErrors {
         Describe("world_streaming.object_ownership.lifecycle_unavailable", ErrorSeverity::Warning,
                  "The ownership authority is cancelling or closed to publication.",
                  "Finish retirement or publish to a new active mounted-world authority.", false);
+    const ErrorCodeDescriptor PartitionSettingsInvalid =
+        Describe("world_streaming.partition_settings.invalid", ErrorSeverity::Error,
+                 "A partition capability snapshot or project-settings request is malformed.",
+                 "Provide known profile, precision and package values with non-zero revisions and positive coherent limits.", true);
+    const ErrorCodeDescriptor PartitionSettingsUnsupported =
+        Describe("world_streaming.partition_settings.unsupported", ErrorSeverity::Error,
+                 "The requested precision or package mode is not supported by the selected profile and host.",
+                 "Select an explicitly supported precision and package representation; no fallback is applied.", true);
+    const ErrorCodeDescriptor PartitionSettingsCapacityExceeded =
+        Describe("world_streaming.partition_settings.capacity_exceeded", ErrorSeverity::Error,
+                 "Requested world-partition grid or storage limits exceed host capabilities.",
+                 "Reduce the project limits or choose a product artifact with sufficient declared capability.", true);
+    const ErrorCodeDescriptor PartitionSettingsStale =
+        Describe("world_streaming.partition_settings.stale", ErrorSeverity::Warning,
+                 "Project settings or host capability evidence is stale.",
+                 "Resolve the project settings again against the current immutable capability snapshot.", false);
+    const ErrorCodeDescriptor PartitionSettingsLifecycleUnavailable =
+        Describe("world_streaming.partition_settings.lifecycle_unavailable", ErrorSeverity::Warning,
+                 "Partition settings admission is cancelling or closed.",
+                 "Wait for a new active project settings owner before admitting dependent work.", false);
 }  // namespace Horo::WorldStreaming::WorldStreamingErrors

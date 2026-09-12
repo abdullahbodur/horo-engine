@@ -100,6 +100,19 @@ existing path-independent asset identity rather than a competing identifier.
 Serialized layout, cooked checksums, streaming volumes, and residency lifecycle
 state remain owned by their later contracts and are not inferred here.
 
+`WorldPartitionProjectSettings` is the immutable WST-001.9 admission result for
+grid size, canonical precision, LOD, descriptor/query capacities, and cell package
+mode. The project supplies an exact profile and settings revision; the host supplies
+one complete capability snapshot and revision. Resolution accepts the requested
+values exactly or returns a typed invalid, unsupported, or capacity failure. It does
+not clamp limits, select another package mode, install a provider, or mutate global
+configuration. Editor permits standalone `.wcell` or archive-chunk workflows;
+standalone, client, and server product profiles require the explicitly requested
+archive-chunk representation. A later capability or settings replacement makes the
+captured value stale for new work, while work that already owns a captured immutable
+settings value keeps its submission-time facts. Cancellation and shutdown close new
+admission explicitly.
+
 `WorldPartitionRegistry` is the explicit owner-thread publication boundary over
 those validated descriptors. Each successful complete publication advances one
 non-wrapping typed registry revision and atomically replaces the current immutable

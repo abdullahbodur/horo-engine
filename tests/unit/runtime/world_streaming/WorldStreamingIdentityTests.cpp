@@ -250,6 +250,11 @@ namespace Horo::WorldStreaming {
                 &WorldStreamingErrors::ObjectOwnershipOwnerStale,
                 &WorldStreamingErrors::ObjectOwnershipCapacityExceeded,
                 &WorldStreamingErrors::ObjectOwnershipLifecycleUnavailable,
+                &WorldStreamingErrors::PartitionSettingsInvalid,
+                &WorldStreamingErrors::PartitionSettingsUnsupported,
+                &WorldStreamingErrors::PartitionSettingsCapacityExceeded,
+                &WorldStreamingErrors::PartitionSettingsStale,
+                &WorldStreamingErrors::PartitionSettingsLifecycleUnavailable,
             };
             std::set<std::string_view> codes;
             for (const ErrorCodeDescriptor *descriptor : descriptors) {
