@@ -43,7 +43,12 @@ if(UNIX)
         "unreadable input"
         "${TEST_DIRECTORY}/unreadable.json"
         "extension.manifest.input_unreadable")
-    file(CHMOD "${TEST_DIRECTORY}/unreadable.json" PERMISSIONS OWNER_READ OWNER_WRITE)
+    execute_process(
+        COMMAND chmod u+rw "${TEST_DIRECTORY}/unreadable.json"
+        RESULT_VARIABLE restore_permissions_result)
+    if(NOT restore_permissions_result EQUAL 0)
+        message(FATAL_ERROR "Could not restore permissions on the unreadable manifest fixture")
+    endif()
 endif()
 
 execute_process(
