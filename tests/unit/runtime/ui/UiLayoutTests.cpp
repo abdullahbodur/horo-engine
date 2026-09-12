@@ -15,10 +15,9 @@ namespace {
 
 void *operator new(const std::size_t size) {
     layoutAllocations.fetch_add(1, std::memory_order_relaxed);
-    void *memory = std::malloc(size);
-    if (memory == nullptr)
-        throw std::bad_alloc{};
-    return memory;
+    if (void *memory = std::malloc(size); memory != nullptr)
+        return memory;
+    throw std::bad_alloc{};
 }
 
 void operator delete(void *memory) noexcept {
@@ -160,8 +159,15 @@ namespace Horo::Runtime::Ui {
         }
 
         template <typename Value> void RequireError(const Result<Value> &result, const ErrorCodeDescriptor &expected) {
-            REQUIRE(result.HasError());
-            REQUIRE(result.ErrorValue().code.Value() == expected.code.Value());
+            REQUIRE_FALSE(result.HasValue());
+            const auto &error = result.ErrorValue();
+            REQUIRE(error.code.Value() == expected.code.Value());
+        }
+
+        void PublishBaseline(UiLayoutEngine &engine, UiElementTree &tree, CountingEvaluator &evaluator) {
+            const auto baseline = engine.Update(tree, Request(evaluator));
+            REQUIRE(baseline.HasValue());
+            evaluator.ResetCounts();
         }
 
         TEST_CASE("Incremental layout publishes immutable authored-order geometry", "[runtime_ui][layout]") {
@@ -198,8 +204,7 @@ namespace Horo::Runtime::Ui {
             auto tree = Tree();
             auto engine = Engine();
             CountingEvaluator evaluator;
-            REQUIRE(engine.Update(tree, Request(evaluator)).HasValue());
-            evaluator.ResetCounts();
+            PublishBaseline(engine, tree, evaluator);
 
             const auto leaf = tree.Find(Stable<UiElementId>(3)).Value();
             const auto sibling = tree.Find(Stable<UiElementId>(4)).Value();
@@ -220,8 +225,7 @@ namespace Horo::Runtime::Ui {
             auto tree = Tree();
             auto engine = Engine();
             CountingEvaluator evaluator;
-            REQUIRE(engine.Update(tree, Request(evaluator)).HasValue());
-            evaluator.ResetCounts();
+            PublishBaseline(engine, tree, evaluator);
             const auto leaf = tree.Find(Stable<UiElementId>(3)).Value();
             REQUIRE(engine.Invalidate({leaf, tree.Revision(), UiLayoutDirtyKind::Arrange}).HasValue());
             REQUIRE(engine.Update(tree, Request(evaluator, 2)).HasValue());

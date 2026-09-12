@@ -323,13 +323,15 @@ namespace Horo::Runtime::Ui {
         }
 
         [[nodiscard]] std::shared_ptr<UiLayoutSnapshot::Storage> TryAcquire() noexcept {
-            for (std::size_t offset = 0; offset < slots.size(); ++offset) {
+            std::size_t offset = 0;
+            while (offset < slots.size()) {
                 const auto index = (nextSlot + offset) % slots.size();
                 std::uint64_t expected{};
                 if (slots[index]->leases.compare_exchange_strong(expected, 1)) {
                     nextSlot = (index + 1) % slots.size();
                     return slots[index];
                 }
+                ++offset;
             }
             return {};
         }
