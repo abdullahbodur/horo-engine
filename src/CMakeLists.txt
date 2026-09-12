@@ -293,6 +293,7 @@ target_include_directories(HoroRuntimeScene PUBLIC ${PROJECT_SOURCE_DIR}/include
 target_link_libraries(HoroRuntimeScene PUBLIC HoroEngine::Foundation HoroEngine::Runtime HoroEngine::GameplayApi HoroEngine::RuntimeUi)
 
 add_library(HoroNetworkRuntime STATIC
+        runtime/networking/HandshakeNegotiation.cpp
         runtime/networking/NetworkObjectMapping.cpp
 )
 add_library(HoroEngine::NetworkRuntime ALIAS HoroNetworkRuntime)
@@ -662,6 +663,7 @@ endif()
 add_library(HoroWorldStreaming STATIC
         runtime/world_streaming/NetworkStreamingAuthority.cpp
         runtime/world_streaming/OriginFrame.cpp
+        runtime/world_streaming/RuntimeEntityCellExitOperation.cpp
         runtime/world_streaming/CookedWorldIndexManifest.cpp
         runtime/world_streaming/FallbackStreamingProvider.cpp
         runtime/world_streaming/StreamingBudgetModel.cpp
@@ -682,6 +684,7 @@ add_library(HoroWorldStreaming STATIC
         runtime/world_streaming/StreamingSourceRange.cpp
         runtime/world_streaming/WorldCellQuantization.cpp
         runtime/world_streaming/WorldPartitionDescriptor.cpp
+        runtime/world_streaming/WorldLayerOwnershipModel.cpp
         runtime/world_streaming/WorldObjectOwnership.cpp
         runtime/world_streaming/WorldPartitionCapabilityProfile.cpp
         runtime/world_streaming/WorldPartitionRegistry.cpp
@@ -725,6 +728,10 @@ target_link_libraries(HoroInput PUBLIC HoroEngine::Foundation PRIVATE nlohmann_j
 add_library(HoroRenderApi STATIC
         runtime/renderer/api/RenderAdapter.cpp
         runtime/renderer/api/RenderAdapterErrors.cpp
+        runtime/renderer/api/RenderDisplay.cpp
+        runtime/renderer/api/RenderDisplayErrors.cpp
+        runtime/renderer/api/PresentMode.cpp
+        runtime/renderer/api/PresentModeErrors.cpp
         runtime/renderer/api/RenderGraph.cpp
         runtime/renderer/api/RenderGraphExecution.cpp
         runtime/renderer/api/RenderGraphExecutionErrors.cpp

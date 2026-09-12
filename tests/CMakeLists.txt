@@ -200,6 +200,7 @@ target_compile_features(HoroNetworkTransportNullTests PRIVATE cxx_std_20)
 target_link_libraries(HoroNetworkTransportNullTests PRIVATE HoroEngine::NetworkTransportNull)
 horo_register_catch_test(HoroNetworkTransportNullTests LABELS "unit;network;headless")
 add_executable(HoroNetworkRuntimeTests
+        unit/runtime/networking/HandshakeNegotiationTests.cpp
         unit/runtime/networking/NetworkObjectMappingTests.cpp
 )
 target_compile_features(HoroNetworkRuntimeTests PRIVATE cxx_std_20)
@@ -446,6 +447,7 @@ horo_register_catch_test(HoroTerrainApiTests LABELS "unit;terrain;headless")
 add_executable(HoroWorldStreamingTests
         unit/runtime/world_streaming/NetworkStreamingAuthorityTests.cpp
         unit/runtime/world_streaming/OriginFrameTests.cpp
+        unit/runtime/world_streaming/RuntimeEntityCellExitOperationTests.cpp
         unit/runtime/world_streaming/CookedWorldIndexManifestTests.cpp
         unit/runtime/world_streaming/FallbackStreamingProviderTests.cpp
         unit/runtime/world_streaming/StreamingBudgetModelTests.cpp
@@ -466,6 +468,7 @@ add_executable(HoroWorldStreamingTests
         unit/runtime/world_streaming/StreamingSourceRangeTests.cpp
         unit/runtime/world_streaming/WorldCellQuantizationTests.cpp
         unit/runtime/world_streaming/WorldPartitionDescriptorTests.cpp
+        unit/runtime/world_streaming/WorldLayerOwnershipModelTests.cpp
         unit/runtime/world_streaming/WorldObjectOwnershipTests.cpp
         unit/runtime/world_streaming/WorldPartitionCapabilityProfileTests.cpp
         unit/runtime/world_streaming/WorldPartitionRegistryTests.cpp
@@ -1212,6 +1215,16 @@ add_executable(HoroRenderAdapterTests
 )
 target_compile_features(HoroRenderAdapterTests PRIVATE cxx_std_20)
 target_link_libraries(HoroRenderAdapterTests PRIVATE HoroEngine::RenderApi)
+add_executable(HoroRenderDisplayTests
+        unit/runtime/renderer/RenderDisplayTests.cpp
+)
+target_compile_features(HoroRenderDisplayTests PRIVATE cxx_std_20)
+target_link_libraries(HoroRenderDisplayTests PRIVATE HoroEngine::RenderApi)
+add_executable(HoroPresentModeTests
+        unit/runtime/renderer/PresentModeTests.cpp
+)
+target_compile_features(HoroPresentModeTests PRIVATE cxx_std_20)
+target_link_libraries(HoroPresentModeTests PRIVATE HoroEngine::RenderApi)
 add_executable(HoroRenderResourceDescriptorTests
         unit/runtime/renderer/RenderResourceDescriptorTests.cpp
 )
@@ -1706,6 +1719,8 @@ set(HORO_CATCH_TEST_TARGETS
         HoroAssetSceneDropTests
         HoroRenderBackendRegistryTests
         HoroRenderAdapterTests
+        HoroRenderDisplayTests
+        HoroPresentModeTests
         HoroRenderGraphTests
         HoroRenderGraphLifetimeTests
         HoroTemporalHistoryTests
