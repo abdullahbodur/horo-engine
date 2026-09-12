@@ -25,6 +25,7 @@ namespace Horo::Extensions::Tests {
             REQUIRE(error.diagnostics.size() == 1);
             CHECK(error.diagnostics.front().code.Value() == diagnosticCode);
             CHECK(error.diagnostics.front().message == error.message);
+            CHECK(error.diagnostics.front().path == path);
             CHECK(error.diagnostics.front().location.source == "extension.json");
         }
     }  // namespace

@@ -235,6 +235,7 @@ namespace Horo::Extensions::ManifestParsing {
             .code = DiagnosticCode{std::string{diagnosticCode}},
             .severity = DiagnosticSeverity::Error,
             .message = message,
+            .path = std::string{path},
             .location = SourceLocation{.source = std::string{ManifestSource}, .line = line, .column = column},
         });
         return error;

@@ -1484,6 +1484,15 @@ add_test(NAME HoroExtensionManifestValidatorInvalid
 set_tests_properties(HoroExtensionManifestValidatorInvalid PROPERTIES
     LABELS "extensions;sdk;cli")
 
+add_test(NAME HoroExtensionManifestValidatorContracts
+    COMMAND "${CMAKE_COMMAND}"
+        "-DVALIDATOR=$<TARGET_FILE:horo-extension-validate>"
+        "-DTEST_DIRECTORY=${CMAKE_CURRENT_BINARY_DIR}/extension-validator-contracts"
+        "-DESCAPED_MANIFEST=${PROJECT_SOURCE_DIR}/tests/fixtures/extensions/manifest-validator-escaped-path.json"
+        -P "${PROJECT_SOURCE_DIR}/tests/cmake/VerifyExtensionValidatorContracts.cmake")
+set_tests_properties(HoroExtensionManifestValidatorContracts PROPERTIES
+    LABELS "extensions;sdk;cli")
+
 add_test(NAME HoroExtensionManifestValidatorRejectsUnknownSchema
     COMMAND "$<TARGET_FILE:horo-extension-validate>" --schema-version 2
         "${PROJECT_SOURCE_DIR}/tests/fixtures/extensions/manifest-validator-valid.json")

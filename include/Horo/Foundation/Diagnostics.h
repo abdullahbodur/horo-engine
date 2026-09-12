@@ -40,6 +40,7 @@ namespace Horo {
         DiagnosticCode code;
         DiagnosticSeverity severity = DiagnosticSeverity::Error;
         std::string message;
+        std::string path; /**< Optional machine-readable path within the diagnostic source. */
         SourceLocation location;
     };
 

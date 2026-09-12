@@ -136,7 +136,7 @@ namespace Horo::Extensions {
      * @brief Parses and validates an untrusted extension.json document without loading extension code.
      * @param jsonContent Encoded JSON content; the returned manifest owns every decoded value.
      * @param limits Resource limits enforced during syntax and schema decoding.
-     * @return Validated manifest, or an error whose diagnostic message starts with the exact JSON field path.
+     * @return Validated manifest, or an error whose diagnostic owns the exact JSON field path in `Diagnostic::path`.
      */
     [[nodiscard]] Result<ExtensionManifest> ParseExtensionManifest(std::string_view jsonContent,
                                                                    const ExtensionManifestLimits &limits = {});

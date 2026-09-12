@@ -310,11 +310,16 @@ struct Diagnostic {
     DiagnosticCode code;
     DiagnosticSeverity severity;
     std::string message;
+    std::string path;
     SourceLocation location;
     std::vector<DiagnosticNote> notes;
     SuggestedAction action;
 };
 ```
+
+`path` is an optional, machine-readable location within the source, such as a
+JSON field path or configuration key. Adapters consume this typed value and do
+not recover it by parsing the human-facing message.
 
 `SourceLocation` may identify:
 
