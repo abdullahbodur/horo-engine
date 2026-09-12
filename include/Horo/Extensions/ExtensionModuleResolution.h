@@ -57,11 +57,31 @@ namespace Horo::Extensions {
         }
     };
 
+    /** @brief Explicit resolution state for one declared cross-module service import. */
+    enum class ExtensionServiceImportStatus : std::uint8_t {
+        Bound,
+        Unavailable,
+        Incompatible,
+    };
+
+    /** @brief Immutable service binding selected from the validated package module graph. */
+    struct ResolvedExtensionServiceImport final {
+        std::string consumerModuleId; /**< Module that declared and exclusively owns this import. */
+        std::string importId;         /**< Stable import identity local to the consumer module. */
+        std::string serviceId;        /**< Exact exported service identity. */
+        std::string contractId;       /**< Exact typed callable contract identity. */
+        std::string providerModuleId; /**< Selected provider module, empty only when unavailable. */
+        std::string providerVersion;  /**< Selected service API version, empty only when unavailable. */
+        ExtensionServiceImportStatus status{ExtensionServiceImportStatus::Unavailable}; /**< Explicit binding outcome. */
+        bool required{true}; /**< Whether a non-bound outcome rejects composition. */
+    };
+
     /** @brief Immutable deterministic module order and contribution ownership for one activation attempt. */
     struct ExtensionModulePlan {
-        std::vector<std::string> moduleIds;                       /**< Dependency-first module identities. */
-        std::vector<ExtensionContributionManifest> contributions; /**< Contributions owned by selected modules. */
-        std::vector<std::string> selectedEntries;                 /**< Entry selected for each module ID at the same index. */
+        std::vector<std::string> moduleIds;                         /**< Dependency-first module identities. */
+        std::vector<ExtensionContributionManifest> contributions;   /**< Contributions owned by selected modules. */
+        std::vector<std::string> selectedEntries;                   /**< Entry selected for each module ID at the same index. */
+        std::vector<ResolvedExtensionServiceImport> serviceImports; /**< Stable consumer/import ordered binding snapshot. */
     };
 
     /**

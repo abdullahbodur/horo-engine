@@ -6,6 +6,7 @@
  */
 
 #include "Horo/Extensions/ApplicationCapabilityRegistry.h"
+#include "Horo/Extensions/ExtensionModuleResolution.h"
 #include "Horo/Foundation/CancellationToken.h"
 
 #include <concepts>
@@ -108,6 +109,7 @@ namespace Horo::Extensions {
         [[nodiscard]] void *BackendServiceObject(const std::shared_ptr<BackendServiceProviderState> &provider) noexcept;
         [[nodiscard]] Error AttributeBackendServiceError(const BackendServiceDescriptor &provider, Error cause);
         [[nodiscard]] Error BackendServiceCancellationError(const BackendServiceDescriptor &provider);
+        [[nodiscard]] Error BackendServiceImportError(ExtensionServiceImportStatus status);
     }  // namespace Detail
 
     /** @brief One-shot typed invocation handle bound to an admitted application capability lease. */
@@ -246,6 +248,24 @@ namespace Horo::Extensions {
                 return Result<BackendServiceCall<Service>>::Failure(resolved.ErrorValue());
             return Result<BackendServiceCall<Service>>::Success(
                 BackendServiceCall<Service>{std::move(resolved).Value(), std::move(authority)});
+        }
+
+        /**
+         * @brief Resolves a typed service only through one validated module-import binding.
+         * @param authority Exact admitted provider lease acquired for the consumer activation.
+         * @param binding Immutable binding emitted by `ResolveExtensionModules` for that consumer.
+         * @return One-shot typed call, or the binding's explicit unavailable/incompatible failure.
+         */
+        template <typename Service>
+        [[nodiscard]] Result<BackendServiceCall<Service>> ResolveImported(ApplicationCapabilityProviderLease authority,
+                                                                          const ResolvedExtensionServiceImport &binding) const {
+            if (binding.status != ExtensionServiceImportStatus::Bound)
+                return Result<BackendServiceCall<Service>>::Failure(Detail::BackendServiceImportError(binding.status));
+            if (authority.ConsumerModuleId() != binding.consumerModuleId || authority.Descriptor().providerId != binding.providerModuleId)
+                return Result<BackendServiceCall<Service>>::Failure(
+                    Detail::BackendServiceImportError(ExtensionServiceImportStatus::Incompatible));
+            return Resolve<Service>(std::move(authority), BackendServiceId{binding.serviceId},
+                                    BackendServiceContractId{binding.contractId});
         }
 
         /** @brief Idempotently revokes, cancels, drains, and shuts down every service. */

@@ -98,6 +98,16 @@ namespace Horo::Extensions::Tests {
                     .threadRule = threadRule};
         }
 
+        [[nodiscard]] ResolvedExtensionServiceImport BoundImport() {
+            return {.consumerModuleId = "com.example.consumer.backend",
+                    .importId = "com.example.math.import",
+                    .serviceId = "com.example.math",
+                    .contractId = "com.example.math.v1",
+                    .providerModuleId = "com.example.math-provider",
+                    .providerVersion = "1.0.0",
+                    .status = ExtensionServiceImportStatus::Bound};
+        }
+
         [[nodiscard]] ExtensionCapabilityAdmission Admission() {
             ExtensionAdmissionPolicy policy{.revision = 2, .availableCapabilities = {{"com.example.math.use"}}};
             ExtensionAdmissionRequest request{.extensionId = "com.example.consumer",
@@ -143,8 +153,8 @@ namespace Horo::Extensions::Tests {
         auto audit = std::make_shared<ArithmeticServiceAudit>();
         auto registration = fixture.services.Register(Descriptor(), std::make_unique<ArithmeticService>(audit));
         REQUIRE(registration.HasValue());
-        auto call = fixture.services.Resolve<ArithmeticService>(CapabilityLease(fixture.capabilities, fixture.admission),
-                                                                {"com.example.math"}, {"com.example.math.v1"});
+        auto call =
+            fixture.services.ResolveImported<ArithmeticService>(CapabilityLease(fixture.capabilities, fixture.admission), BoundImport());
         REQUIRE(call.HasValue());
         auto response = std::move(call).Value().Invoke(&ArithmeticService::Add, SumRequest{20, 22});
         REQUIRE(response.HasValue());
@@ -186,6 +196,21 @@ namespace Horo::Extensions::Tests {
         RequireErrorCode(fixture.services.Resolve<OtherService>(CapabilityLease(fixture.capabilities, fixture.admission),
                                                                 {"com.example.math"}, {"com.example.math.v1"}),
                          "backend_service_type_mismatch");
+        auto unavailableImport = BoundImport();
+        unavailableImport.status = ExtensionServiceImportStatus::Unavailable;
+        RequireErrorCode(fixture.services.ResolveImported<ArithmeticService>(CapabilityLease(fixture.capabilities, fixture.admission),
+                                                                             unavailableImport),
+                         "backend_service_unavailable");
+        auto wrongProvider = BoundImport();
+        wrongProvider.providerModuleId = "com.example.other-provider";
+        RequireErrorCode(fixture.services.ResolveImported<ArithmeticService>(CapabilityLease(fixture.capabilities, fixture.admission),
+                                                                             wrongProvider),
+                         "backend_service_contract_mismatch");
+        auto wrongConsumer = BoundImport();
+        wrongConsumer.consumerModuleId = "com.example.other-consumer";
+        RequireErrorCode(fixture.services.ResolveImported<ArithmeticService>(CapabilityLease(fixture.capabilities, fixture.admission),
+                                                                             wrongConsumer),
+                         "backend_service_contract_mismatch");
         auto call = fixture.services.Resolve<ArithmeticService>(CapabilityLease(fixture.capabilities, fixture.admission),
                                                                 {"com.example.math"}, {"com.example.math.v1"});
         REQUIRE(call.HasValue());

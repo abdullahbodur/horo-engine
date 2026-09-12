@@ -55,6 +55,9 @@ namespace Horo::Extensions::Tests {
         REQUIRE(resolved.HasValue());
         CHECK(resolved.Value().Descriptor().version == ApplicationCapabilityVersion{1, 2, 0});
         CHECK(resolved.Value().Descriptor().providerGeneration == 2);
+        CHECK(resolved.Value().ConsumerExtensionId() == "com.example.validator");
+        CHECK(resolved.Value().ConsumerModuleId() == "com.example.validator.backend");
+        CHECK(resolved.Value().ConsumerActivationGeneration() == 9);
     }
 
     TEST_CASE("Application capability registry reports unavailable and incompatible contracts explicitly",

@@ -257,29 +257,57 @@ namespace Horo::Extensions {
         }
 
         [[nodiscard]] Result<void> AddServiceDependencies(const ExtensionManifest &manifest, const ExportIndex &exports,
-                                                          DependencyIndex &dependencies) {
+                                                          DependencyIndex &dependencies,
+                                                          std::vector<ResolvedExtensionServiceImport> &bindings) {
+            std::set<std::pair<std::string, std::string>> importIds;
             for (const ExtensionModuleManifest &moduleManifest : manifest.modules) {
                 for (const ExtensionServiceImportManifest &serviceImport : moduleManifest.imports) {
+                    if (!importIds.emplace(moduleManifest.id, serviceImport.id).second)
+                        return Result<void>::Failure(
+                            MakeError(ExtensionErrors::ModuleResolutionFailed,
+                                      "Duplicate service import '" + serviceImport.id + "'. Involved modules: " + moduleManifest.id + '.'));
+                    ResolvedExtensionServiceImport binding{.consumerModuleId = moduleManifest.id,
+                                                           .importId = serviceImport.id,
+                                                           .serviceId = serviceImport.service,
+                                                           .contractId = serviceImport.contract,
+                                                           .required = serviceImport.required};
                     const auto found = exports.find(serviceImport.service);
-                    if (found == exports.end())
+                    if (found == exports.end()) {
+                        if (!serviceImport.required) {
+                            bindings.push_back(std::move(binding));
+                            continue;
+                        }
                         return Result<void>::Failure(
                             MakeError(ExtensionErrors::ModuleResolutionFailed, "Missing service export '" + serviceImport.service +
                                                                                    "'. Involved modules: " + moduleManifest.id + '.'));
+                    }
                     const ExportOwner &provider = found->second;
+                    binding.providerModuleId = provider.ownerModule->id;
+                    binding.providerVersion = provider.service->version;
+                    if (provider.ownerModule->id == moduleManifest.id)
+                        return Result<void>::Failure(
+                            MakeError(ExtensionErrors::ModuleResolutionFailed,
+                                      "A module cannot import its own service. Involved modules: " + moduleManifest.id + '.'));
                     if (provider.service->contract != serviceImport.contract ||
                         !IsCompatibleVersion(provider.service->version, serviceImport.minimumVersion)) {
+                        if (!serviceImport.required) {
+                            binding.status = ExtensionServiceImportStatus::Incompatible;
+                            bindings.push_back(std::move(binding));
+                            continue;
+                        }
                         const std::set<std::string, std::less<>> involved{moduleManifest.id, provider.ownerModule->id};
                         return Result<void>::Failure(MakeError(ExtensionErrors::ModuleResolutionFailed,
                                                                "Incompatible service export '" + serviceImport.service +
                                                                    "'. Involved modules: " + JoinModuleIds(involved) + '.'));
                     }
-                    if (provider.ownerModule->id == moduleManifest.id)
-                        return Result<void>::Failure(
-                            MakeError(ExtensionErrors::ModuleResolutionFailed,
-                                      "A module cannot import its own service. Involved modules: " + moduleManifest.id + '.'));
+                    binding.status = ExtensionServiceImportStatus::Bound;
+                    bindings.push_back(std::move(binding));
                     dependencies[moduleManifest.id].insert(provider.ownerModule->id);
                 }
             }
+            std::ranges::sort(bindings, [](const auto &left, const auto &right) {
+                return std::tie(left.consumerModuleId, left.importId) < std::tie(right.consumerModuleId, right.importId);
+            });
             return Result<void>::Success();
         }
 
@@ -403,9 +431,11 @@ namespace Horo::Extensions {
             return Result<void>::Success();
         }
 
-        [[nodiscard]] Result<ExtensionModulePlan> BuildCompatiblePlan(std::vector<std::string> &&order, const ExtensionManifest &manifest,
-                                                                      const ModuleIndex &modules, const ExtensionHostEnvironment &host) {
-            ExtensionModulePlan plan{.moduleIds = std::move(order)};
+        [[nodiscard]] Result<ExtensionModulePlan> BuildCompatiblePlan(std::vector<std::string> &&order,
+                                                                      std::vector<ResolvedExtensionServiceImport> &&bindings,
+                                                                      const ExtensionManifest &manifest, const ModuleIndex &modules,
+                                                                      const ExtensionHostEnvironment &host) {
+            ExtensionModulePlan plan{.moduleIds = std::move(order), .serviceImports = std::move(bindings)};
             plan.selectedEntries.reserve(plan.moduleIds.size());
             for (const std::string &moduleId : plan.moduleIds) {
                 const ExtensionModuleCompatibility compatibility =
@@ -418,6 +448,16 @@ namespace Horo::Extensions {
             }
 
             const std::set<std::string, std::less<>> selected(plan.moduleIds.begin(), plan.moduleIds.end());
+            std::erase_if(plan.serviceImports, [&selected](const ResolvedExtensionServiceImport &binding) {
+                return !selected.contains(binding.consumerModuleId);
+            });
+            for (ResolvedExtensionServiceImport &binding : plan.serviceImports) {
+                if (!binding.providerModuleId.empty() && !selected.contains(binding.providerModuleId)) {
+                    binding.providerModuleId.clear();
+                    binding.providerVersion.clear();
+                    binding.status = ExtensionServiceImportStatus::Unavailable;
+                }
+            }
             for (const ExtensionContributionManifest &contribution : manifest.contributions) {
                 if (selected.contains(contribution.owningModule))
                     plan.contributions.push_back(contribution);
@@ -454,9 +494,10 @@ namespace Horo::Extensions {
             return Result<ExtensionModulePlan>::Failure(exportsResult.ErrorValue());
 
         DependencyIndex dependencies;
+        std::vector<ResolvedExtensionServiceImport> bindings;
         if (auto result = AddDeclaredDependencies(manifest, modules, dependencies); result.HasError())
             return Result<ExtensionModulePlan>::Failure(result.ErrorValue());
-        if (auto result = AddServiceDependencies(manifest, exportsResult.Value(), dependencies); result.HasError())
+        if (auto result = AddServiceDependencies(manifest, exportsResult.Value(), dependencies, bindings); result.HasError())
             return Result<ExtensionModulePlan>::Failure(result.ErrorValue());
 
         auto orderResult = SortModules(dependencies);
@@ -466,6 +507,6 @@ namespace Horo::Extensions {
 
         if (auto profileResult = ApplyHostProfile(order, dependencies, modules, host.profile); profileResult.HasError())
             return Result<ExtensionModulePlan>::Failure(profileResult.ErrorValue());
-        return BuildCompatiblePlan(std::move(order), manifest, modules, host);
+        return BuildCompatiblePlan(std::move(order), std::move(bindings), manifest, modules, host);
     }
 }  // namespace Horo::Extensions

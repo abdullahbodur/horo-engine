@@ -144,7 +144,7 @@ namespace Horo::Extensions::Tests {
                 "roles": ["editor-presentation"],
                 "dependencies": ["com.example.hybrid.backend"],
                 "imports": [{"id": "com.example.hybrid.import", "service": "com.example.hybrid.service",
-                             "contract": "com.horo.example", "minimumVersion": "2.0.0"}]
+                             "contract": "com.horo.example", "minimumVersion": "2.0.0", "required": false}]
             }]
         })json");
 
@@ -158,6 +158,7 @@ namespace Horo::Extensions::Tests {
         CHECK(result.Value().modules.front().exports.front().id == "com.example.hybrid.service");
         CHECK(result.Value().modules.back().dependencies.front() == "com.example.hybrid.backend");
         CHECK(result.Value().modules.back().imports.front().minimumVersion == "2.0.0");
+        CHECK_FALSE(result.Value().modules.back().imports.front().required);
 
         auto unknownRole = ParseExtensionManifest(R"json({
             "id":"com.example.test","version":"1.0.0",

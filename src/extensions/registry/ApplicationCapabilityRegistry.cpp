@@ -93,6 +93,21 @@ namespace Horo::Extensions {
         return provider_->descriptor;
     }
 
+    /** @copydoc ApplicationCapabilityProviderLease::ConsumerExtensionId */
+    const std::string &ApplicationCapabilityProviderLease::ConsumerExtensionId() const noexcept {
+        return admission_.ExtensionId();
+    }
+
+    /** @copydoc ApplicationCapabilityProviderLease::ConsumerModuleId */
+    const std::string &ApplicationCapabilityProviderLease::ConsumerModuleId() const noexcept {
+        return admission_.ModuleId();
+    }
+
+    /** @copydoc ApplicationCapabilityProviderLease::ConsumerActivationGeneration */
+    std::uint64_t ApplicationCapabilityProviderLease::ConsumerActivationGeneration() const noexcept {
+        return admission_.ActivationGeneration();
+    }
+
     ApplicationCapabilityRegistry::ApplicationCapabilityRegistry() : state_(std::make_shared<ApplicationCapabilityRegistryState>()) {
         state_->providers.reserve(MaximumProviders);
     }

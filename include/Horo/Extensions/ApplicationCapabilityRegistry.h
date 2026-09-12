@@ -81,6 +81,15 @@ namespace Horo::Extensions {
         /** @brief Returns the exact provider publication selected for this call. */
         [[nodiscard]] const ApplicationCapabilityProviderDescriptor &Descriptor() const noexcept;
 
+        /** @brief Returns the consumer extension that owns this admitted call. */
+        [[nodiscard]] const std::string &ConsumerExtensionId() const noexcept;
+
+        /** @brief Returns the consumer module that owns this admitted call. */
+        [[nodiscard]] const std::string &ConsumerModuleId() const noexcept;
+
+        /** @brief Returns the consumer activation generation that owns this admitted call. */
+        [[nodiscard]] std::uint64_t ConsumerActivationGeneration() const noexcept;
+
     private:
         friend class ApplicationCapabilityRegistry;
         ApplicationCapabilityProviderLease(std::shared_ptr<const ApplicationCapabilityProviderState> provider,

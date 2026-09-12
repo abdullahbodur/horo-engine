@@ -549,6 +549,17 @@ operation returns. Ordinary host-driven revocation remains synchronous and requi
 providers to cooperate with cancellation, because releasing or timing out a still-
 executing in-process service would make its code and object lifetime unsafe.
 
+Module resolution emits an immutable `ResolvedExtensionServiceImport` for every
+declared service import. Required missing or incompatible imports reject the whole
+plan; optional imports remain explicit `Unavailable` or `Incompatible` records
+rather than falling through by load order. Bound records name the consumer-local
+import, exact service/contract, provider module and selected version, sorted by
+consumer and import identity. A module call uses `ResolveImported` with that record
+and an exact admitted provider lease; module code does not receive the registry or
+construct binding records. Provider revocation invalidates the one-shot call before
+entry, and a wrong-provider or stale binding cannot select another provider
+implicitly.
+
 ## Module Loading And ABI Boundary
 
 The generic module C ABI is a bootstrap/control boundary, not sufficient for every

@@ -86,6 +86,7 @@ namespace Horo::Extensions {
         std::string service;        /**< Required service export identity. */
         std::string contract;       /**< Required callable contract identity. */
         std::string minimumVersion; /**< Minimum compatible semantic API version. */
+        bool required{true};        /**< Whether absence or incompatibility rejects module composition. */
     };
 
     /** @brief One versioned native or declarative module exported by an extension package. */

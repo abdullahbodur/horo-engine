@@ -86,17 +86,49 @@ namespace Horo::Extensions::Tests {
         CHECK(interactive.Value().moduleIds ==
               std::vector<std::string>{"com.example.backend", "com.example.editor", "com.example.scripting"});
         CHECK(interactive.Value().contributions.size() == 2);
+        REQUIRE(interactive.Value().serviceImports.size() == 1);
+        CHECK(interactive.Value().serviceImports.front().status == ExtensionServiceImportStatus::Bound);
+        CHECK(interactive.Value().serviceImports.front().consumerModuleId == scripting.id);
+        CHECK(interactive.Value().serviceImports.front().providerModuleId == backend.id);
+        CHECK(interactive.Value().serviceImports.front().providerVersion == "2.1.0");
 
         std::ranges::reverse(manifest.modules);
         const auto reordered = ResolveExtensionModules(manifest, Host(ExtensionHostProfile::Interactive));
         REQUIRE(reordered.HasValue());
         CHECK(reordered.Value().moduleIds == interactive.Value().moduleIds);
+        CHECK(reordered.Value().serviceImports.front().providerModuleId == interactive.Value().serviceImports.front().providerModuleId);
 
         const auto headless = ResolveExtensionModules(manifest, Host(ExtensionHostProfile::Headless));
         REQUIRE(headless.HasValue());
         CHECK(headless.Value().moduleIds == std::vector<std::string>{"com.example.backend", "com.example.scripting"});
         REQUIRE(headless.Value().contributions.size() == 1);
         CHECK(headless.Value().contributions.front().owningModule == backend.id);
+    }
+
+    TEST_CASE("Extension module resolution records optional import failures without load-order fallback", "[Extensions][Resolution]") {
+        ExtensionModuleManifest provider = Module("com.example.provider", ExtensionModuleRole::BackendCapability);
+        provider.exports.push_back({.id = "com.example.service", .contract = "com.example.contract", .version = "1.4.0"});
+        ExtensionModuleManifest consumer = Module("com.example.consumer", ExtensionModuleRole::BackendCapability);
+        consumer.imports.push_back({.id = "com.example.missing-import",
+                                    .service = "com.example.missing",
+                                    .contract = "com.example.contract",
+                                    .minimumVersion = "1.0.0",
+                                    .required = false});
+        consumer.imports.push_back({.id = "com.example.incompatible-import",
+                                    .service = "com.example.service",
+                                    .contract = "com.example.contract",
+                                    .minimumVersion = "2.0.0",
+                                    .required = false});
+        ExtensionManifest manifest;
+        manifest.modules = {consumer, provider};
+
+        const auto resolved = ResolveExtensionModules(manifest, Host(ExtensionHostProfile::Headless));
+        REQUIRE(resolved.HasValue());
+        REQUIRE(resolved.Value().serviceImports.size() == 2);
+        CHECK(resolved.Value().serviceImports[0].status == ExtensionServiceImportStatus::Incompatible);
+        CHECK(resolved.Value().serviceImports[0].providerModuleId == provider.id);
+        CHECK(resolved.Value().serviceImports[1].status == ExtensionServiceImportStatus::Unavailable);
+        CHECK(resolved.Value().serviceImports[1].providerModuleId.empty());
     }
 
     TEST_CASE("Extension module resolution reports complete graph failures", "[Extensions][Resolution]") {

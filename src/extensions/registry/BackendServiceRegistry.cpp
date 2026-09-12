@@ -195,6 +195,13 @@ namespace Horo::Extensions {
                              std::format("Backend service call cancelled: {}@{} ({}).", provider.providerId, provider.providerGeneration,
                                          provider.serviceId.value));
         }
+
+        Error BackendServiceImportError(const ExtensionServiceImportStatus status) {
+            if (status == ExtensionServiceImportStatus::Unavailable)
+                return MakeError(ExtensionErrors::BackendServiceUnavailable, "The declared optional service import is unavailable.");
+            return MakeError(ExtensionErrors::BackendServiceContractMismatch,
+                             "The declared service import is incompatible with the admitted provider.");
+        }
     }  // namespace Detail
 
     BackendServiceRegistration::BackendServiceRegistration(std::weak_ptr<BackendServiceRegistryState> registry,

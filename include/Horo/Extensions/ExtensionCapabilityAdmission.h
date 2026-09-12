@@ -75,6 +75,15 @@ namespace Horo::Extensions {
         /** @brief Returns the exact capability admitted for this callback. */
         [[nodiscard]] const ExtensionCapabilityId &Capability() const noexcept;
 
+        /** @brief Returns the extension activation that owns this use lease. */
+        [[nodiscard]] const std::string &ExtensionId() const noexcept;
+
+        /** @brief Returns the module activation that owns this use lease. */
+        [[nodiscard]] const std::string &ModuleId() const noexcept;
+
+        /** @brief Returns the exact activation generation that owns this use lease. */
+        [[nodiscard]] std::uint64_t ActivationGeneration() const noexcept;
+
     private:
         friend class ExtensionCapabilityHandle;
 

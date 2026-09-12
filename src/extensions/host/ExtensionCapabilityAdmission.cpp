@@ -106,6 +106,21 @@ namespace Horo::Extensions {
         return capability_;
     }
 
+    /** @copydoc ExtensionCapabilityUseLease::ExtensionId */
+    const std::string &ExtensionCapabilityUseLease::ExtensionId() const noexcept {
+        return state_->extensionId;
+    }
+
+    /** @copydoc ExtensionCapabilityUseLease::ModuleId */
+    const std::string &ExtensionCapabilityUseLease::ModuleId() const noexcept {
+        return state_->moduleId;
+    }
+
+    /** @copydoc ExtensionCapabilityUseLease::ActivationGeneration */
+    std::uint64_t ExtensionCapabilityUseLease::ActivationGeneration() const noexcept {
+        return state_->activationGeneration;
+    }
+
     ExtensionCapabilityHandle::ExtensionCapabilityHandle(std::shared_ptr<const ExtensionCapabilityAdmissionState> state,
                                                          ExtensionCapabilityId capability)
         : state_(std::move(state)), capability_(std::move(capability)) {}
