@@ -275,7 +275,7 @@ ones that affect target ownership or would mislead a migration ticket.
 | `apps/horo-engine` | Partial | Process entry exists without the documented CLI/MCP composition. |
 | `apps/horopak` | Planned | Placeholder only. |
 | `tools/*` | Planned | Tool directories are placeholders only. |
-| `sdk/` | Partial | Gameplay SDK package files are generated from current CMake/scripts; the desired stable schema/template surface is incomplete. |
+| `sdk/` | Partial | Gameplay SDK package files and a self-contained versioned extension C ABI CMake package are generated from current CMake/scripts; the desired schema/template/tooling surface is incomplete. |
 | `tests/` | Implemented | Broad unit/integration/UI coverage exists; there is no `HoroEngine::TestSdk` production-style support target. |
 | `deprecated/` exclusion | Implemented | Root CMake does not discover or compile the deprecated tree. |
 
