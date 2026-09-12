@@ -40,7 +40,7 @@ namespace Horo::Network {
                 return value.IsValid();
             }))
                 return false;
-            return std::adjacent_find(valid.begin(), valid.end(), [](const Identity left, const Identity right) {
+            return std::ranges::adjacent_find(valid, [](const Identity left, const Identity right) {
                 return left.Value() >= right.Value();
             }) == valid.end();
         }
@@ -90,15 +90,16 @@ namespace Horo::Network {
         return HasNonZeroByte(bytes);
     }
 
-    AuthenticationSessionAdapter::AuthenticationSessionAdapter(NetworkTrustPolicySnapshot policy, AuthenticationChallenge challenge,
-                                                               const AuthenticationAuthorities authorities,
+    AuthenticationSessionAdapter::AuthenticationSessionAdapter(const NetworkTrustPolicySnapshot &policy,
+                                                               const AuthenticationChallenge &challenge,
+                                                               const AuthenticationAuthorities &authorities,
                                                                const std::uint64_t deadlineTick) noexcept
         : policy_(policy), challenge_(challenge), authorities_(authorities), deadlineTick_(deadlineTick) {}
 
     /** @copydoc AuthenticationSessionAdapter::Create */
     Result<AuthenticationSessionAdapter> AuthenticationSessionAdapter::Create(const NetworkTrustPolicySnapshot &policy,
                                                                               const AuthenticationChallenge &challenge,
-                                                                              const AuthenticationAuthorities authorities,
+                                                                              const AuthenticationAuthorities &authorities,
                                                                               const std::uint64_t deadlineTick) {
         if (!ValidPolicy(policy) || !ValidChallenge(challenge, policy) || deadlineTick == 0)
             return Result<AuthenticationSessionAdapter>::Failure(MakeError(NetworkErrors::AuthenticationInvalid));

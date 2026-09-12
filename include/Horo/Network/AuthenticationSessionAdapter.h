@@ -368,7 +368,8 @@ namespace Horo::Network {
          */
         [[nodiscard]] static Result<AuthenticationSessionAdapter> Create(const NetworkTrustPolicySnapshot &policy,
                                                                          const AuthenticationChallenge &challenge,
-                                                                         AuthenticationAuthorities authorities, std::uint64_t deadlineTick);
+                                                                         const AuthenticationAuthorities &authorities,
+                                                                         std::uint64_t deadlineTick);
 
         /**
          * @brief Verifies one bounded proof and atomically publishes a principal/channel handoff.
@@ -401,8 +402,8 @@ namespace Horo::Network {
         [[nodiscard]] AuthenticationDiagnostics Diagnostics() const noexcept;
 
     private:
-        AuthenticationSessionAdapter(NetworkTrustPolicySnapshot policy, AuthenticationChallenge challenge,
-                                     AuthenticationAuthorities authorities, std::uint64_t deadlineTick) noexcept;
+        AuthenticationSessionAdapter(const NetworkTrustPolicySnapshot &policy, const AuthenticationChallenge &challenge,
+                                     const AuthenticationAuthorities &authorities, std::uint64_t deadlineTick) noexcept;
         [[nodiscard]] bool Owns(ConnectionHandle connection, NetworkOperationGeneration sessionGeneration) const noexcept;
         [[nodiscard]] Result<AuthenticationResult> Reject(const ErrorCodeDescriptor &error, AuthenticationFailureClass failure);
         /** @brief Runs the ordered host-authority chain after cheap hostile-input validation. */
