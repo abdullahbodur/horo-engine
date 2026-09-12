@@ -1,16 +1,9 @@
 #include "Horo/Network/AuthenticationSessionAdapter.h"
 
-#include <algorithm>
-#include <ranges>
+#include "NetworkValidationInternal.h"
 
 namespace Horo::Network {
     namespace {
-        template <std::size_t Size> [[nodiscard]] bool HasNonZeroByte(const std::array<std::byte, Size> &bytes) noexcept {
-            return std::ranges::any_of(bytes, [](const std::byte value) {
-                return value != std::byte{};
-            });
-        }
-
         [[nodiscard]] bool ValidPolicy(const NetworkTrustPolicySnapshot &policy) noexcept {
             if (policy.contractVersion != AuthenticationContractVersion || !policy.id.IsValid() || policy.revision == 0 ||
                 policy.exposure >= NetworkExposure::Count || !policy.credential.IsValid() || !policy.certificate.IsValid() ||
@@ -22,27 +15,13 @@ namespace Horo::Network {
         [[nodiscard]] bool ValidChallenge(const AuthenticationChallenge &challenge, const NetworkTrustPolicySnapshot &policy) noexcept {
             return challenge.contractVersion == AuthenticationContractVersion && challenge.connection.IsValid() &&
                    challenge.sessionGeneration.IsValid() && challenge.policy == policy.id && challenge.policyRevision == policy.revision &&
-                   HasNonZeroByte(challenge.transcriptDigest) && HasNonZeroByte(challenge.clientNonce) &&
-                   HasNonZeroByte(challenge.serverNonce) && challenge.clientNonce != challenge.serverNonce;
+                   Detail::HasNonZeroByte(challenge.transcriptDigest) && Detail::HasNonZeroByte(challenge.clientNonce) &&
+                   Detail::HasNonZeroByte(challenge.serverNonce) && challenge.clientNonce != challenge.serverNonce;
         }
 
         [[nodiscard]] bool ValidStamp(const AuthenticationAuthorityStamp &stamp, const AuthenticationChallenge &challenge) noexcept {
             return stamp.connection == challenge.connection && stamp.sessionGeneration == challenge.sessionGeneration &&
                    stamp.authorityGeneration != 0;
-        }
-
-        template <typename Identity, std::size_t Capacity>
-        [[nodiscard]] bool ValidCanonicalIdentities(const std::array<Identity, Capacity> &values, const std::size_t count) noexcept {
-            if (count > Capacity)
-                return false;
-            const auto valid = std::span{values}.first(count);
-            if (!std::ranges::all_of(valid, [](const Identity value) {
-                return value.IsValid();
-            }))
-                return false;
-            return std::ranges::adjacent_find(valid, [](const Identity left, const Identity right) {
-                return left.Value() >= right.Value();
-            }) == valid.end();
         }
 
         [[nodiscard]] bool ExposureAllowsTrust(const NetworkExposure exposure, const NetworkTrustLevel trustLevel) noexcept {
@@ -73,21 +52,21 @@ namespace Horo::Network {
             if (policy.exposure == NetworkExposure::Remote && !transport.authenticatedPeer)
                 return false;
             return evidence.certificate.binding == policy.certificate && evidence.certificate.evidenceGeneration != 0 &&
-                   HasNonZeroByte(evidence.certificate.certificateDigest);
+                   Detail::HasNonZeroByte(evidence.certificate.certificateDigest);
         }
 
         [[nodiscard]] bool ValidPrincipal(const SessionPrincipal &principal, const NetworkTrustLevel trustLevel,
                                           const std::uint64_t nowTick) noexcept {
             return principal.principal.IsValid() && principal.session.IsValid() && principal.trustLevel == trustLevel &&
                    principal.provenance.IsValid() && principal.expiresAtTick > nowTick &&
-                   ValidCanonicalIdentities(principal.roles.values, principal.roles.count) &&
-                   ValidCanonicalIdentities(principal.capabilities.values, principal.capabilities.count);
+                   Detail::ValidCanonicalIdentities(principal.roles.values, principal.roles.count) &&
+                   Detail::ValidCanonicalIdentities(principal.capabilities.values, principal.capabilities.count);
         }
     }  // namespace
 
     /** @copydoc NetworkSessionId::IsValid */
     bool NetworkSessionId::IsValid() const noexcept {
-        return HasNonZeroByte(bytes);
+        return Detail::HasNonZeroByte(bytes);
     }
 
     AuthenticationSessionAdapter::AuthenticationSessionAdapter(const NetworkTrustPolicySnapshot &policy,
@@ -153,7 +132,8 @@ namespace Horo::Network {
             return Reject(NetworkErrors::AuthenticationRejected, AuthenticationFailureClass::Rejected);
         if (!ValidStamp(channel.Value().stamp, challenge_) || channel.Value().binding != policy_.privateKey ||
             channel.Value().channel != evidence.transport.channel ||
-            channel.Value().channelGeneration != evidence.transport.channelGeneration || !HasNonZeroByte(channel.Value().bindingDigest))
+            channel.Value().channelGeneration != evidence.transport.channelGeneration ||
+            !Detail::HasNonZeroByte(channel.Value().bindingDigest))
             return Reject(NetworkErrors::AuthenticationInvalid, AuthenticationFailureClass::Malformed);
 
         accepted_ = AuthenticationResult{challenge_.connection, challenge_.sessionGeneration, policy_.id,

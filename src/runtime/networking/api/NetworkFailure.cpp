@@ -32,6 +32,7 @@ namespace Horo::Network {
                 Classification{Replication, NetworkFailureDisposition::Incompatible, &NetworkErrors::ReplicationDescriptorIncompatible},
                 Classification{GameplayDispatch, NetworkFailureDisposition::RemoteRejection, &NetworkErrors::GameplayDispatchRejected},
                 Classification{Count, NetworkFailureDisposition::Fatal, &NetworkErrors::FatalFailure},
+                Classification{Session, NetworkFailureDisposition::RemoteRejection, &NetworkErrors::AuthenticationRejected},
             };
             const auto index = static_cast<std::size_t>(kind);
             return index < classifications.size() ? std::optional{classifications[index]} : std::nullopt;

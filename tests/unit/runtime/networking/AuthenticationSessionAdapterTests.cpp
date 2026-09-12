@@ -12,22 +12,13 @@
 #include <vector>
 
 namespace Horo::Network {
+    using TestSupport::Bytes;
     using TestSupport::Connection;
+    using TestSupport::Id;
     using TestSupport::RequireError;
     using TestSupport::Session;
 
     namespace {
-        template <typename Identity> [[nodiscard]] Identity Id(const std::uint64_t value) {
-            return Identity::Create(value).Value();
-        }
-
-        template <std::size_t Size> [[nodiscard]] std::array<std::byte, Size> Bytes(const std::uint8_t first) {
-            std::array<std::byte, Size> bytes{};
-            for (std::size_t index = 0; index < Size; ++index)
-                bytes[index] = static_cast<std::byte>(first + static_cast<std::uint8_t>(index));
-            return bytes;
-        }
-
         [[nodiscard]] AuthenticationAuthorityStamp Stamp(const std::uint64_t authorityGeneration) {
             return {Connection(), Session(), authorityGeneration};
         }

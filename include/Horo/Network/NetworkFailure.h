@@ -58,6 +58,7 @@ namespace Horo::Network {
         ReplicationIncompatible,
         GameplayDispatchRejected,
         FatalInternal,
+        SessionAuthenticationRejected,
         Count
     };
 

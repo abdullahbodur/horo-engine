@@ -4,7 +4,9 @@
 #include "Horo/Foundation/Result.h"
 #include "Horo/Network/NetworkLifecycle.h"
 
+#include <array>
 #include <catch2/catch_test_macros.hpp>
+#include <cstddef>
 #include <cstdint>
 
 namespace Horo::Network::TestSupport {
@@ -16,6 +18,17 @@ namespace Horo::Network::TestSupport {
     /** @brief Returns the shared non-zero session operation generation used by session-layer tests. */
     inline NetworkOperationGeneration Session(const std::uint64_t generation = 7) {
         return NetworkOperationGeneration::Create(generation).Value();
+    }
+
+    template <typename Identity> [[nodiscard]] Identity Id(const std::uint64_t value) {
+        return Identity::Create(value).Value();
+    }
+
+    template <std::size_t Size> [[nodiscard]] std::array<std::byte, Size> Bytes(const std::uint8_t first) {
+        std::array<std::byte, Size> bytes{};
+        for (std::size_t index = 0; index < Size; ++index)
+            bytes[index] = static_cast<std::byte>(first + static_cast<std::uint8_t>(index));
+        return bytes;
     }
 
     template <typename Identity> Identity WireIdentity(const std::uint16_t value) {
