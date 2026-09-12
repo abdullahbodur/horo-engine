@@ -62,7 +62,7 @@ namespace Horo::Extensions {
             if (Text::IsBlank(request.executable) || request.executable.find('\0') != std::string::npos || request.timeout.count() <= 0 ||
                 request.gracefulTermination.count() < 0 || request.maximumLineBytes == 0U)
                 return false;
-            return std::ranges::none_of(request.arguments, [](const std::string &argument) {
+            return std::ranges::none_of(request.arguments, [](const std::string_view argument) {
                 return argument.find('\0') != std::string::npos;
             });
         }
