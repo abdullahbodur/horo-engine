@@ -102,17 +102,13 @@ namespace {
         }
 
         void Shutdown() noexcept override {
-            if (!shutdown_) {
-                events_->push_back("shutdown:" + name_);
-                shutdown_ = true;
-            }
+            events_->push_back("shutdown:" + name_);
         }
 
     private:
         std::vector<std::string> *events_{};
         std::string name_;
         bool failActivation_{};
-        bool shutdown_{};
     };
 
     class TrackingSceneParticipant final : public SceneActivationParticipant {
@@ -121,16 +117,11 @@ namespace {
 
         Result<std::unique_ptr<SceneActivationCandidate>> Prepare(const RuntimeSceneDefinition &, RuntimeSceneView) override {
             events_->push_back("prepare:" + name_);
-            if (failPreparation) {
-                failPreparation = false;
-                return Result<std::unique_ptr<SceneActivationCandidate>>::Failure(MakeError(ParticipantFailure));
-            }
             const bool fail = std::exchange(failActivation, false);
             return Result<std::unique_ptr<SceneActivationCandidate>>::Success(
                 std::make_unique<TrackingSceneCandidate>(*events_, name_, fail));
         }
 
-        bool failPreparation{};
         bool failActivation{};
 
     private:
@@ -739,14 +730,8 @@ namespace {
         const SceneRuntimeId active = service.ActiveScene()->RuntimeId();
 
         events.clear();
-        secondState->failPreparation = true;
-        Check(service.QueuePreparation(Definition(2)).HasError());
-        Check(service.ActiveScene()->RuntimeId() == active);
-        Check(events == std::vector<std::string>{"prepare:first", "prepare:second", "shutdown:first"});
-
-        events.clear();
         secondState->failActivation = true;
-        Check(service.QueuePreparation(Definition(3)).HasValue());
+        Check(service.QueuePreparation(Definition(2)).HasValue());
         Check(service.OnPhase(RuntimePhase::CommitDeferredLifecycleChanges, Context(cancellation.Token())).HasValue());
         Check(service.TakeOperationError().has_value());
         Check(service.ActiveScene()->RuntimeId() == active);

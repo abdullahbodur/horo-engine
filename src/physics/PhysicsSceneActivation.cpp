@@ -2,6 +2,9 @@
 
 #include "Horo/Physics/CharacterWorld.h"
 
+#include <algorithm>
+#include <array>
+#include <functional>
 #include <limits>
 #include <new>
 #include <utility>
@@ -45,13 +48,14 @@ namespace Horo::Physics {
     /** @copydoc PhysicsSceneActivationParticipant::Prepare */
     Result<std::unique_ptr<Runtime::SceneActivationCandidate>> PhysicsSceneActivationParticipant::Prepare(
         const Runtime::RuntimeSceneDefinition &, const Runtime::RuntimeSceneView scene) {
-        if (!runtime_ || runtime_->State() != PhysicsRuntimeState::Ready || !scene.IsCurrent() || !scene.RuntimeId().IsValid() ||
-            settings_.collisionFilterGeneration == 0 || settings_.originGeneration == 0)
+        const std::array valid{runtime_->State() == PhysicsRuntimeState::Ready, scene.IsCurrent(), scene.RuntimeId().IsValid(),
+                               settings_.collisionFilterGeneration != 0, settings_.originGeneration != 0};
+        if (!std::ranges::all_of(valid, std::identity{}))
             return Result<std::unique_ptr<Runtime::SceneActivationCandidate>>::Failure(MakeError(PhysicsErrors::WorldInvalid));
-        if (nextWorldIdentity_ == 0 || nextWorldIdentity_ == std::numeric_limits<std::uint64_t>::max())
+        if (nextWorldIdentity_ == std::numeric_limits<std::uint64_t>::max())
             return Result<std::unique_ptr<Runtime::SceneActivationCandidate>>::Failure(MakeError(PhysicsErrors::GenerationExhausted));
 
-        const auto identity = PhysicsWorldId::Create(nextWorldIdentity_++);
+        const auto identity = PhysicsWorldId::Create(nextWorldIdentity_);
         if (identity.HasError())
             return Result<std::unique_ptr<Runtime::SceneActivationCandidate>>::Failure(identity.ErrorValue());
         auto physics = runtime_->PrepareWorld(settings_.physics);
@@ -63,8 +67,10 @@ namespace Horo::Physics {
         if (character.HasError())
             return Result<std::unique_ptr<Runtime::SceneActivationCandidate>>::Failure(character.ErrorValue());
         try {
-            return Result<std::unique_ptr<Runtime::SceneActivationCandidate>>::Success(
-                std::make_unique<PhysicsSceneCandidate>(std::move(physics).Value(), std::move(character).Value(), identity.Value()));
+            auto candidate =
+                std::make_unique<PhysicsSceneCandidate>(std::move(physics).Value(), std::move(character).Value(), identity.Value());
+            ++nextWorldIdentity_;
+            return Result<std::unique_ptr<Runtime::SceneActivationCandidate>>::Success(std::move(candidate));
         } catch (const std::bad_alloc &) {
             return Result<std::unique_ptr<Runtime::SceneActivationCandidate>>::Failure(MakeError(PhysicsErrors::CapacityExceeded));
         }

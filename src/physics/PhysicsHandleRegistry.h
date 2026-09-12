@@ -103,18 +103,16 @@ namespace Horo::Physics::Detail {
          * @return Borrowed mapping, or a stable malformed/foreign/stale/state error before native access.
          */
         [[nodiscard]] Result<Value *> Resolve(const Handle &handle) {
-            const auto resolved = ResolveIndex(handle);
-            if (resolved.HasError())
-                return Result<Value *>::Failure(resolved.ErrorValue());
-            return Result<Value *>::Success(storage_.Resolve(handle.slot.index, handle.slot.generation));
+            return storage_.ResolveOwned(handle, [this](const auto &candidate) {
+                return ValidateOwner(candidate);
+            }, HandleError);
         }
 
         /** @copydoc Resolve */
         [[nodiscard]] Result<const Value *> Resolve(const Handle &handle) const {
-            const auto resolved = ResolveIndex(handle);
-            if (resolved.HasError())
-                return Result<const Value *>::Failure(resolved.ErrorValue());
-            return Result<const Value *>::Success(storage_.Resolve(handle.slot.index, handle.slot.generation));
+            return storage_.ResolveOwned(handle, [this](const auto &candidate) {
+                return ValidateOwner(candidate);
+            }, HandleError);
         }
 
         /**
@@ -123,12 +121,9 @@ namespace Horo::Physics::Detail {
          * @return Success, or a stable malformed/foreign/stale/state error without changing storage.
          */
         [[nodiscard]] Result<void> Remove(const Handle &handle) {
-            const auto resolved = ResolveIndex(handle);
-            if (resolved.HasError())
-                return Result<void>::Failure(resolved.ErrorValue());
-
-            static_cast<void>(storage_.Remove(handle.slot.index, handle.slot.generation));
-            return Result<void>::Success();
+            return storage_.RemoveOwned(handle, [this](const auto &candidate) {
+                return ValidateOwner(candidate);
+            }, HandleError);
         }
 
         /** @brief Returns whether activation bound a world generation. */
@@ -158,15 +153,10 @@ namespace Horo::Physics::Detail {
             return storage_.AllSlotsExhausted() ? PhysicsErrors::GenerationExhausted : PhysicsErrors::CapacityExceeded;
         }
 
-        [[nodiscard]] Result<std::uint32_t> ResolveIndex(const Handle &handle) const {
+        [[nodiscard]] Result<void> ValidateOwner(const Handle &handle) const {
             if (!owner_.IsValid())
-                return Result<std::uint32_t>::Failure(MakeError(PhysicsErrors::InvalidState, "Physics registry owner is not active."));
-            const auto owner = ValidatePhysicsHandleOwner(handle, owner_);
-            if (owner.HasError())
-                return Result<std::uint32_t>::Failure(owner.ErrorValue());
-            if (storage_.Resolve(handle.slot.index, handle.slot.generation) == nullptr)
-                return Result<std::uint32_t>::Failure(HandleError(handle));
-            return Result<std::uint32_t>::Success(handle.slot.index);
+                return Result<void>::Failure(MakeError(PhysicsErrors::InvalidState, "Physics registry owner is not active."));
+            return ValidatePhysicsHandleOwner(handle, owner_);
         }
 
         [[nodiscard]] static Error HandleError(const Handle &handle) {

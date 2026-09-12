@@ -2,8 +2,11 @@
 
 #include "CharacterControllerRegistry.h"
 
-#include <atomic>
+#include <algorithm>
+#include <array>
+#include <functional>
 #include <limits>
+#include <mutex>
 #include <new>
 #include <thread>
 #include <utility>
@@ -16,17 +19,18 @@ namespace Horo::Character {
         };
 
         /** @brief Validates the immutable owner tuple selected before slot allocation. */
-        std::atomic<std::uint64_t> nextWorldIdentity{1};
+        std::mutex worldIdentityMutex;
+        std::uint64_t nextWorldIdentity{1};
 
         [[nodiscard]] Result<CharacterWorldDescriptor> CompleteWorldDescriptor(const CharacterWorldPreparationDescriptor &descriptor) {
-            if (descriptor.sceneGeneration == 0 || !descriptor.physicsWorld.IsValid() || descriptor.collisionFilterGeneration == 0 ||
-                descriptor.originGeneration == 0)
+            const std::array valid{descriptor.sceneGeneration != 0, descriptor.physicsWorld.IsValid(),
+                                   descriptor.collisionFilterGeneration != 0, descriptor.originGeneration != 0};
+            if (!std::ranges::all_of(valid, std::identity{}))
                 return Result<CharacterWorldDescriptor>::Failure(MakeError(CharacterErrors::WorldInvalid));
-            std::uint64_t identityValue = nextWorldIdentity.load(std::memory_order_relaxed);
-            do {
-                if (identityValue == 0 || identityValue == std::numeric_limits<std::uint64_t>::max())
-                    return Result<CharacterWorldDescriptor>::Failure(MakeError(CharacterErrors::GenerationExhausted));
-            } while (!nextWorldIdentity.compare_exchange_weak(identityValue, identityValue + 1, std::memory_order_relaxed));
+            const std::lock_guard identityLock{worldIdentityMutex};
+            if (nextWorldIdentity == std::numeric_limits<std::uint64_t>::max())
+                return Result<CharacterWorldDescriptor>::Failure(MakeError(CharacterErrors::GenerationExhausted));
+            const std::uint64_t identityValue = nextWorldIdentity++;
             const auto identity = CharacterWorldId::Create(identityValue);
             if (identity.HasError())
                 return Result<CharacterWorldDescriptor>::Failure(identity.ErrorValue());
@@ -107,8 +111,10 @@ namespace Horo::Character {
                 MakeError(CharacterErrors::InvalidState, "Controller creation requires prepared owner-thread mutation."));
         if (const auto valid = ValidateCharacterControllerDescriptor(descriptor); valid.HasError())
             return Result<CharacterControllerHandle>::Failure(valid.ErrorValue());
-        if (descriptor.sceneGeneration != impl_->descriptor.sceneGeneration || descriptor.characterWorld != impl_->descriptor.identity ||
-            descriptor.physicsWorld != impl_->descriptor.physicsWorld)
+        const std::array ownerMatches{descriptor.sceneGeneration == impl_->descriptor.sceneGeneration,
+                                      descriptor.characterWorld == impl_->descriptor.identity,
+                                      descriptor.physicsWorld == impl_->descriptor.physicsWorld};
+        if (!std::ranges::all_of(ownerMatches, std::identity{}))
             return Result<CharacterControllerHandle>::Failure(MakeError(CharacterErrors::HandleWorldMismatch));
         if (descriptor.maximumContacts > impl_->settings.Values().work.maximumContactsPerMovement)
             return Result<CharacterControllerHandle>::Failure(

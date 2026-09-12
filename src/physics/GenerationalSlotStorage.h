@@ -140,6 +140,35 @@ namespace Horo::Physics::Detail {
             return !entries_.empty() && exhaustedCount_ == entries_.size();
         }
 
+        /** @brief Resolves one domain handle after caller-provided owner validation and error translation. */
+        template <typename Handle, typename OwnerValidator, typename StaleError>
+        [[nodiscard]] Result<const Value *> ResolveOwned(const Handle &handle, OwnerValidator validateOwner, StaleError staleError) const {
+            const Result<void> owner = validateOwner(handle);
+            if (owner.HasError())
+                return Result<const Value *>::Failure(owner.ErrorValue());
+            const Value *value = Resolve(handle.slot.index, handle.slot.generation);
+            return value ? Result<const Value *>::Success(value) : Result<const Value *>::Failure(staleError(handle));
+        }
+
+        /** @copydoc ResolveOwned */
+        template <typename Handle, typename OwnerValidator, typename StaleError>
+        [[nodiscard]] Result<Value *> ResolveOwned(const Handle &handle, OwnerValidator validateOwner, StaleError staleError) {
+            const Result<void> owner = validateOwner(handle);
+            if (owner.HasError())
+                return Result<Value *>::Failure(owner.ErrorValue());
+            Value *value = Resolve(handle.slot.index, handle.slot.generation);
+            return value ? Result<Value *>::Success(value) : Result<Value *>::Failure(staleError(handle));
+        }
+
+        /** @brief Removes one domain handle after caller-provided owner validation and error translation. */
+        template <typename Handle, typename OwnerValidator, typename StaleError>
+        [[nodiscard]] Result<void> RemoveOwned(const Handle &handle, OwnerValidator validateOwner, StaleError staleError) {
+            const Result<void> owner = validateOwner(handle);
+            if (owner.HasError())
+                return owner;
+            return Remove(handle.slot.index, handle.slot.generation) ? Result<void>::Success() : Result<void>::Failure(staleError(handle));
+        }
+
     private:
         static constexpr std::uint32_t InvalidSlot = std::numeric_limits<std::uint32_t>::max();
 
@@ -156,3 +185,5 @@ namespace Horo::Physics::Detail {
         std::size_t exhaustedCount_{};
     };
 }  // namespace Horo::Physics::Detail
+
+#include "Horo/Foundation/Result.h"

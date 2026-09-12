@@ -184,26 +184,22 @@ namespace Horo::Character {
                   "[physics][character][world][thread]") {
             auto world = PreparedWorld(1);
             const auto descriptor = ControllerDescriptor(world->Descriptor());
-            std::optional<Error> activationError;
+            std::optional<Result<void>> activationResult;
             std::thread activation([&] {
-                const auto activated = world->Activate();
-                if (activated.HasError())
-                    activationError = activated.ErrorValue();
+                activationResult = world->Activate();
             });
             activation.join();
-            REQUIRE(activationError.has_value());
-            REQUIRE(activationError->code.Value() == CharacterErrors::InvalidState.code.Value());
+            REQUIRE(activationResult.has_value());
+            RequireError(*activationResult, CharacterErrors::InvalidState);
             REQUIRE(world->State() == CharacterWorldState::Prepared);
 
-            std::optional<Error> creationError;
+            std::optional<Result<CharacterControllerHandle>> creationResult;
             std::thread foreign([&] {
-                const auto created = world->CreateController(descriptor);
-                if (created.HasError())
-                    creationError = created.ErrorValue();
+                creationResult = world->CreateController(descriptor);
             });
             foreign.join();
-            REQUIRE(creationError.has_value());
-            REQUIRE(creationError->code.Value() == CharacterErrors::InvalidState.code.Value());
+            REQUIRE(creationResult.has_value());
+            RequireError(*creationResult, CharacterErrors::InvalidState);
             REQUIRE(world->ActiveControllerCount() == 0);
         }
 
