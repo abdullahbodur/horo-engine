@@ -21,14 +21,15 @@ namespace Horo::Runtime::Ui {
 
         /** @brief Reports whether one known event carries a logical pointer position. */
         [[nodiscard]] bool IsPointerEvent(const UiEventKind kind) noexcept {
+            using enum UiEventKind;
             switch (kind) {
-                case UiEventKind::PointerMove:
-                case UiEventKind::PointerPress:
-                case UiEventKind::PointerRelease:
+                case PointerMove:
+                case PointerPress:
+                case PointerRelease:
                     return true;
-                case UiEventKind::Submit:
-                case UiEventKind::Cancel:
-                case UiEventKind::Count:
+                case Submit:
+                case Cancel:
+                case Count:
                     return false;
             }
             return false;
@@ -40,6 +41,11 @@ namespace Horo::Runtime::Ui {
             explicit DispatchGuard(bool &dispatching) noexcept : dispatching_(dispatching) {
                 dispatching_ = true;
             }
+
+            DispatchGuard(const DispatchGuard &) = delete;
+            DispatchGuard &operator=(const DispatchGuard &) = delete;
+            DispatchGuard(DispatchGuard &&) = delete;
+            DispatchGuard &operator=(DispatchGuard &&) = delete;
 
             ~DispatchGuard() {
                 dispatching_ = false;
@@ -165,8 +171,7 @@ namespace Horo::Runtime::Ui {
         if (storage_->dispatching)
             return Result<UiEventDispatchResult>::Failure(DispatchError(UiErrors::EventDispatchReentrant));
         const bool eventValid = IsKnown(event.kind) && event.sequence != 0 && IsPointerEvent(event.kind) == event.hasLogicalPosition;
-        const bool routeValid = route.target.IsValid() && (!route.modalRoot || route.modalRoot->IsValid());
-        if (!eventValid || !routeValid)
+        if (const bool routeValid = route.target.IsValid() && (!route.modalRoot || route.modalRoot->IsValid()); !eventValid || !routeValid)
             return Result<UiEventDispatchResult>::Failure(DispatchError(UiErrors::EventDispatchInvalid));
         if (!storage_->Matches(tree, route))
             return Result<UiEventDispatchResult>::Failure(DispatchError(UiErrors::EventDispatchSourceStale));
