@@ -105,10 +105,7 @@ namespace Horo::Runtime {
             Register(registry, std::move(consumer), OrderRecordingAdapter(order, destructionCount));
             Register(registry, Descriptor("project.capture.z_provider", {Test::Id<SaveRecordId>(27)}, false),
                      OrderRecordingAdapter(order, destructionCount));
-            const SaveParticipantRegistrySnapshot participants = registry.Snapshot().Value();
-            auto builder = RuntimeSaveCaptureBuilder::Create(Provenance(participants), participants).Value();
-
-            REQUIRE(builder.CaptureParticipants().HasValue());
+            static_cast<void>(CaptureRegisteredParticipants(registry));
             CHECK(*order == std::vector<std::string>{"project.capture.z_provider", "project.capture.a_consumer"});
         }
 
@@ -157,9 +154,7 @@ namespace Horo::Runtime {
                      std::make_shared<CallbackCaptureAdapter>([](const CanonicalCaptureContext &, ICanonicalCaptureSink &) {
                 return Result<CanonicalCaptureDisposition>::Success(CanonicalCaptureDisposition::Omitted);
             }, destructionCount));
-            const SaveParticipantRegistrySnapshot participants = registry.Snapshot().Value();
-            auto builder = RuntimeSaveCaptureBuilder::Create(Provenance(participants), participants).Value();
-            REQUIRE(builder.CaptureParticipants().HasValue());
+            auto builder = CaptureRegisteredParticipants(registry);
 
             const RuntimeSaveSnapshot snapshot = builder.Seal().Value();
             REQUIRE(snapshot.Participants().size() == 2);

@@ -338,7 +338,7 @@ namespace Horo::Runtime {
     }
 
     /** @copydoc CanonicalStateParticipantRegistry::Register */
-    Result<SaveParticipantRegistration> CanonicalStateParticipantRegistry::Register(CanonicalStateParticipantDescriptor descriptor,
+    Result<SaveParticipantRegistration> CanonicalStateParticipantRegistry::Register(const CanonicalStateParticipantDescriptor &descriptor,
                                                                                     std::shared_ptr<const ICanonicalStateAdapter> adapter) {
         try {
             if (closed_)
@@ -362,9 +362,10 @@ namespace Horo::Runtime {
                         return Result<SaveParticipantRegistration>::Failure(MakeError(SaveErrors::ParticipantRecordOwnershipDuplicate));
                 }
             }
-            SaveParticipantRegistration registration{descriptor.participant, nextGeneration.Value()};
-            std::ranges::sort(descriptor.dependencies);
-            bindings_.push_back(SaveParticipantBinding{std::move(descriptor), std::move(adapter)});
+            CanonicalStateParticipantDescriptor ownedDescriptor = descriptor;
+            SaveParticipantRegistration registration{ownedDescriptor.participant, nextGeneration.Value()};
+            std::ranges::sort(ownedDescriptor.dependencies);
+            bindings_.push_back(SaveParticipantBinding{std::move(ownedDescriptor), std::move(adapter)});
             generation_ = nextGeneration.Value();
             return Result<SaveParticipantRegistration>::Success(std::move(registration));
         } catch (const std::bad_alloc &) {

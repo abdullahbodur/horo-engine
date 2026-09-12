@@ -162,6 +162,13 @@ namespace Horo::Runtime::CaptureTestSupport {
         };
     }
 
+    [[nodiscard]] inline RuntimeSaveCaptureBuilder CaptureRegisteredParticipants(CanonicalStateParticipantRegistry &registry) {
+        const SaveParticipantRegistrySnapshot participants = registry.Snapshot().Value();
+        auto builder = RuntimeSaveCaptureBuilder::Create(Provenance(participants), participants).Value();
+        REQUIRE(builder.CaptureParticipants().HasValue());
+        return builder;
+    }
+
     [[nodiscard]] inline CanonicalCaptureRecord CaptureRecord(const std::string_view participant, const SaveRecordId record,
                                                               const std::uint32_t schema = 1) {
         return {

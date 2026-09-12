@@ -1,51 +1,13 @@
 #include "Horo/Runtime/Save/SaveCaptureSnapshot.h"
 #include "Horo/Runtime/Save/SaveErrors.h"
 #include "SaveCaptureSnapshotTestUtils.h"
+#include "support/AllocationProbe.h"
 
-#include <atomic>
 #include <catch2/catch_test_macros.hpp>
-#include <cstdlib>
 #include <memory>
-#include <new>
 #include <string>
 #include <string_view>
 #include <vector>
-
-namespace {
-    std::atomic<bool> gFailNextAllocation{};
-
-    void *Allocate(const std::size_t size) {
-        if (gFailNextAllocation.exchange(false, std::memory_order_relaxed))
-            throw std::bad_alloc{};
-        if (void *memory = std::malloc(size))
-            return memory;
-        throw std::bad_alloc{};
-    }
-}  // namespace
-
-void *operator new(const std::size_t size) {
-    return Allocate(size);
-}
-
-void *operator new[](const std::size_t size) {
-    return Allocate(size);
-}
-
-void operator delete(void *memory) noexcept {
-    std::free(memory);
-}
-
-void operator delete[](void *memory) noexcept {
-    std::free(memory);
-}
-
-void operator delete(void *memory, std::size_t) noexcept {
-    std::free(memory);
-}
-
-void operator delete[](void *memory, std::size_t) noexcept {
-    std::free(memory);
-}
 
 namespace Horo::Runtime {
     namespace {
@@ -233,27 +195,50 @@ namespace Horo::Runtime {
             CHECK(snapshot.Find(Participant("horo.test.aa")) != nullptr);
         }
 
-        TEST_CASE("Allocation failure preserves registry membership and generation", "[unit][save][registry]") {
-            auto destructionCount = std::make_shared<int>();
-            CanonicalStateParticipantRegistry registry;
-            auto descriptor = Descriptor("a.b");
-            auto adapter = Adapter(destructionCount);
-            const std::uint64_t initialGeneration = registry.Generation();
-            gFailNextAllocation.store(true, std::memory_order_relaxed);
-            const auto registration = registry.Register(std::move(descriptor), std::move(adapter));
-            REQUIRE(registration.HasError());
-            CHECK(registration.ErrorValue().code.Value() == SaveErrors::ParticipantRegistryAllocationFailed.code.Value());
-            CHECK(registry.Generation() == initialGeneration);
-            CHECK(registry.Snapshot().Value().Bindings().empty());
+        TEST_CASE("Allocation failure preserves registry membership generation and leases", "[unit][save][registry]") {
+            bool reachedSuccessfulRegistration = false;
+            for (std::size_t successfulAllocations = 0; successfulAllocations < 64 && !reachedSuccessfulRegistration;
+                 ++successfulAllocations) {
+                auto destructionCount = std::make_shared<int>();
+                auto adapter = Adapter(destructionCount);
+                const auto descriptor = Descriptor("horo.test.allocation");
+                CanonicalStateParticipantRegistry registry;
+                const std::uint64_t generation = registry.Generation();
+                auto registration = [&] {
+                    Tests::AllocationProbe::ScopedFailure failure{successfulAllocations};
+                    return registry.Register(descriptor, adapter);
+                }();
+                reachedSuccessfulRegistration = registration.HasValue();
+                if (!reachedSuccessfulRegistration) {
+                    CHECK(registration.ErrorValue().code.Value() == SaveErrors::ParticipantRegistryAllocationFailed.code.Value());
+                    CHECK(registry.Generation() == generation);
+                    CHECK(registry.Snapshot().Value().Bindings().empty());
+                    CHECK(adapter.use_count() == 1);
+                }
+            }
+            REQUIRE(reachedSuccessfulRegistration);
 
-            REQUIRE(registry.Register(Descriptor("a.b"), Adapter(destructionCount)).HasValue());
-            const std::uint64_t publishedGeneration = registry.Generation();
-            gFailNextAllocation.store(true, std::memory_order_relaxed);
-            const auto snapshot = registry.Snapshot();
-            REQUIRE(snapshot.HasError());
-            CHECK(snapshot.ErrorValue().code.Value() == SaveErrors::ParticipantRegistryAllocationFailed.code.Value());
-            CHECK(registry.Generation() == publishedGeneration);
-            CHECK(registry.Snapshot().Value().Find(Participant("a.b")) != nullptr);
+            auto destructionCount = std::make_shared<int>();
+            auto adapter = Adapter(destructionCount);
+            CanonicalStateParticipantRegistry registry;
+            REQUIRE(registry.Register(Descriptor("horo.test.allocation"), adapter).HasValue());
+            const std::uint64_t generation = registry.Generation();
+            bool reachedSuccessfulSnapshot = false;
+            for (std::size_t successfulAllocations = 0; successfulAllocations < 64 && !reachedSuccessfulSnapshot;
+                 ++successfulAllocations) {
+                auto snapshot = [&] {
+                    Tests::AllocationProbe::ScopedFailure failure{successfulAllocations};
+                    return registry.Snapshot();
+                }();
+                reachedSuccessfulSnapshot = snapshot.HasValue();
+                if (!reachedSuccessfulSnapshot) {
+                    CHECK(snapshot.ErrorValue().code.Value() == SaveErrors::ParticipantRegistryAllocationFailed.code.Value());
+                    CHECK(registry.Generation() == generation);
+                    CHECK(adapter.use_count() == 2);
+                }
+            }
+            REQUIRE(reachedSuccessfulSnapshot);
+            CHECK(registry.Snapshot().Value().Find(Participant("horo.test.allocation")) != nullptr);
         }
 
         TEST_CASE("Participant registry enforces its explicit capacity", "[unit][save][registry]") {
@@ -276,21 +261,24 @@ namespace Horo::Runtime {
 
         TEST_CASE("Registry snapshots are immutable and retain exact adapter leases", "[unit][save][registry]") {
             auto destructionCount = std::make_shared<int>();
-            SaveParticipantRegistrySnapshot firstSnapshot;
+            SaveParticipantRegistrySnapshot retainedSnapshot;
             {
                 CanonicalStateParticipantRegistry registry;
                 REQUIRE(registry.Register(Descriptor("horo.test.second", "10112233-4455-6677-8899-aabbccddeeff"), Adapter(destructionCount))
                             .HasValue());
                 REQUIRE(registry.Register(Descriptor("horo.test.first"), Adapter(destructionCount)).HasValue());
-                firstSnapshot = registry.Snapshot().Value();
-                REQUIRE(firstSnapshot.Bindings()[0].Descriptor().participant.Value() == "horo.test.first");
-                REQUIRE(firstSnapshot.Bindings()[1].Descriptor().participant.Value() == "horo.test.second");
+                {
+                    const SaveParticipantRegistrySnapshot sourceSnapshot = registry.Snapshot().Value();
+                    retainedSnapshot = sourceSnapshot;
+                    REQUIRE(sourceSnapshot.Bindings()[0].Descriptor().participant.Value() == "horo.test.first");
+                    REQUIRE(sourceSnapshot.Bindings()[1].Descriptor().participant.Value() == "horo.test.second");
+                }
 
                 REQUIRE(registry.Unregister(Participant("horo.test.first")).Value());
                 const auto secondSnapshot = registry.Snapshot().Value();
-                REQUIRE(secondSnapshot.Generation() != firstSnapshot.Generation());
+                REQUIRE(secondSnapshot.Generation() != retainedSnapshot.Generation());
                 REQUIRE(secondSnapshot.Bindings().size() == 1);
-                REQUIRE(firstSnapshot.Bindings().size() == 2);
+                REQUIRE(retainedSnapshot.Bindings().size() == 2);
                 registry.Close();
                 REQUIRE(registry.IsClosed());
                 REQUIRE(registry.Snapshot().HasError());
@@ -299,7 +287,12 @@ namespace Horo::Runtime {
                 REQUIRE(*destructionCount == 0);
             }
             REQUIRE(*destructionCount == 0);
-            firstSnapshot = {};
+            CHECK(ParticipantIds(retainedSnapshot.Bindings()) == std::vector<std::string>{"horo.test.first", "horo.test.second"});
+            CHECK(ParticipantIds(retainedSnapshot.CaptureBindings()) ==
+                  std::vector<std::string>{"horo.test.first", "horo.test.second"});
+            CHECK(ParticipantIds(retainedSnapshot.RestoreBindings()) ==
+                  std::vector<std::string>{"horo.test.first", "horo.test.second"});
+            retainedSnapshot = {};
             REQUIRE(*destructionCount == 2);
         }
 
@@ -392,6 +385,27 @@ namespace Horo::Runtime {
             CHECK(ParticipantIds(snapshot.RestoreBindings()) == std::vector<std::string>{"horo.test.alpha", "horo.test.zeta"});
         }
 
+        TEST_CASE("Dependency plans break diamond ties by participant identity", "[unit][save][registry]") {
+            auto destructionCount = std::make_shared<int>();
+            CanonicalStateParticipantRegistry registry;
+            auto left = Descriptor("horo.test.b_left", "10112233-4455-6677-8899-aabbccddeeff");
+            left.dependencies = {Participant("horo.test.a_root")};
+            auto right = Descriptor("horo.test.c_right", "20112233-4455-6677-8899-aabbccddeeff");
+            right.dependencies = {Participant("horo.test.a_root")};
+            auto join = Descriptor("horo.test.z_join", "30112233-4455-6677-8899-aabbccddeeff");
+            join.dependencies = {Participant("horo.test.b_left"), Participant("horo.test.c_right")};
+            REQUIRE(registry.Register(std::move(join), Adapter(destructionCount)).HasValue());
+            REQUIRE(registry.Register(std::move(right), Adapter(destructionCount)).HasValue());
+            REQUIRE(registry.Register(Descriptor("horo.test.a_root", "40112233-4455-6677-8899-aabbccddeeff"), Adapter(destructionCount))
+                        .HasValue());
+            REQUIRE(registry.Register(std::move(left), Adapter(destructionCount)).HasValue());
+
+            const auto snapshot = registry.Snapshot().Value();
+            const std::vector<std::string> expected{"horo.test.a_root", "horo.test.b_left", "horo.test.c_right", "horo.test.z_join"};
+            CHECK(ParticipantIds(snapshot.CaptureBindings()) == expected);
+            CHECK(ParticipantIds(snapshot.RestoreBindings()) == expected);
+        }
+
         TEST_CASE("Optional absence and incompatible phases are explicit", "[unit][save][registry]") {
             auto destructionCount = std::make_shared<int>();
             CanonicalStateParticipantRegistry optional;
@@ -417,7 +431,7 @@ namespace Horo::Runtime {
             provider.roles = SaveParticipantRole::Capture;
             auto restoreConsumer = Descriptor("horo.test.restore_consumer", "20112233-4455-6677-8899-aabbccddeeff");
             restoreConsumer.dependencies = {
-                {provider.participant, SaveParticipantDependencyRequirement::Required, SaveParticipantDependencyPhase::Restore}};
+                {provider.participant, SaveParticipantDependencyRequirement::Optional, SaveParticipantDependencyPhase::Restore}};
             REQUIRE(incompatible.Register(std::move(provider), Adapter(destructionCount)).HasValue());
             REQUIRE(incompatible.Register(std::move(restoreConsumer), Adapter(destructionCount)).HasValue());
             const auto phaseFailure = incompatible.Snapshot();

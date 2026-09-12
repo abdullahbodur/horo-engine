@@ -200,10 +200,10 @@ namespace Horo::Runtime {
 
         /** @brief Validates and copies one descriptor and adapter lease. @param descriptor Inert metadata.
          * @param adapter Owned adapter lease bound by host composition.
-         * @return Registration evidence or a typed validation, duplicate, capacity, or lifecycle error.
+         * @return Registration evidence or a typed validation, duplicate, capacity, allocation, or lifecycle error.
          * @pre Called by the owning composition thread while the registry is quiescent.
          */
-        [[nodiscard]] Result<SaveParticipantRegistration> Register(CanonicalStateParticipantDescriptor descriptor,
+        [[nodiscard]] Result<SaveParticipantRegistration> Register(const CanonicalStateParticipantDescriptor &descriptor,
                                                                    std::shared_ptr<const ICanonicalStateAdapter> adapter);
 
         /** @brief Removes one live registration before shutdown. @param participant Identity to remove.
@@ -214,7 +214,7 @@ namespace Horo::Runtime {
         [[nodiscard]] Result<bool> Unregister(const SaveParticipantId &participant);
 
         /** @brief Validates the complete graph and publishes an owning immutable view.
-         * @return Identity-sorted bindings plus stable capture/restore plans, or a typed dependency/lifecycle error.
+         * @return Identity-sorted bindings plus stable plans, or a typed dependency, allocation, or lifecycle error.
          * @pre Called by the owning composition thread; concurrent registry mutation is forbidden.
          */
         [[nodiscard]] Result<SaveParticipantRegistrySnapshot> Snapshot() const;
