@@ -1,0 +1,31 @@
+{
+  "schemaVersion": 1,
+  "sdk": {
+    "id": "horo.extension-sdk",
+    "version": "@HORO_EXTENSION_SDK_VERSION@"
+  },
+  "hostAbi": {
+    "id": "horo-extension",
+    "minimum": {
+      "major": @HORO_EXTENSION_ABI_MAJOR_VERSION@,
+      "minor": @HORO_EXTENSION_ABI_MIN_HOST_MINOR@
+    },
+    "maximumExclusive": {
+      "major": @HORO_EXTENSION_ABI_MAX_HOST_MAJOR_EXCLUSIVE@,
+      "minor": 0
+    },
+    "published": {
+      "major": @HORO_EXTENSION_ABI_MAJOR_VERSION@,
+      "minor": @HORO_EXTENSION_ABI_PUBLISHED_MINOR@
+    }
+  },
+  "compileDependencies": [],
+  "supportedHosts": ["linux", "macos", "windows"],
+  "publicHeaders": ["include/Horo/Extensions/ExtensionAbi.h"],
+  "tools": ["bin/horo-scaffold-extension.py"],
+  "entryPoints": [
+    "horo_extension_query",
+    "horo_extension_load",
+    "horo_extension_unload"
+  ]
+}
