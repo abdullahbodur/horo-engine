@@ -143,8 +143,8 @@ namespace Horo::WorldStreaming {
                 {Snapshot(context, observation, StreamingCellStabilityPhase::Resident, observation.effectiveResidency, 0), false, false});
         }
 
-        const bool withinExitBoundary = observation.signedBoundaryDistanceMillimeters >= -policy.ExitMarginMillimeters();
-        if (hasDemand && (pinned || withinExitBoundary)) {
+        if (const bool withinExitBoundary = observation.signedBoundaryDistanceMillimeters >= -policy.ExitMarginMillimeters();
+            hasDemand && (pinned || withinExitBoundary)) {
             const bool boundaryHeld = !pinned && observation.signedBoundaryDistanceMillimeters < policy.EnterMarginMillimeters();
             return Result<StreamingCellStabilityDecision>::Success(
                 {Snapshot(context, observation, StreamingCellStabilityPhase::Resident, observation.effectiveResidency, 0), boundaryHeld,
@@ -154,8 +154,7 @@ namespace Horo::WorldStreaming {
         const auto &prior = *previous;
         const std::uint64_t lingerStarted = prior.phase == StreamingCellStabilityPhase::Lingering ? prior.lingerStartedAtServiceMilliseconds
                                                                                                   : context.serviceTimeMilliseconds;
-        const std::uint64_t elapsed = context.serviceTimeMilliseconds - lingerStarted;
-        if (elapsed >= policy.LingerMilliseconds())
+        if (const std::uint64_t elapsed = context.serviceTimeMilliseconds - lingerStarted; elapsed >= policy.LingerMilliseconds())
             return Result<StreamingCellStabilityDecision>::Success(
                 {Snapshot(context, observation, StreamingCellStabilityPhase::Unloaded, StreamingDesiredResidency::Unloaded, 0), false,
                  true});
