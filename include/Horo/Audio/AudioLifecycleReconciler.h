@@ -10,7 +10,6 @@
 #include <cstddef>
 #include <cstdint>
 #include <optional>
-#include <span>
 #include <variant>
 #include <vector>
 
@@ -178,12 +177,19 @@ namespace Horo::Audio {
         /**
          * @brief Publishes shutdown/rollback cancellations and commits Stopped after safe callback detachment.
          * @param backendDetached Whether native callback entry is impossible when one was attached.
-         * @return Success, repeated success after Stopped, or typed transition/capacity/detachment failure.
+         * @return Success, repeated success after Stopped, or typed transition/capacity/detachment failure. A capacity failure
+         * leaves Stopping and all pending ownership intact so existing terminal results can be acknowledged before retry.
          */
         [[nodiscard]] Result<void> CompleteShutdown(bool backendDetached);
 
-        /** @brief Returns retained terminal outcomes in stable admission order. @return Immutable control-owned view. */
-        [[nodiscard]] std::span<const AudioReconciledOperation> TerminalResults() const noexcept;
+        /** @brief Returns the retained terminal count. @return Number of outcomes awaiting acknowledgement. */
+        [[nodiscard]] std::size_t TerminalResultCount() const noexcept;
+        /**
+         * @brief Copies one retained terminal outcome without exposing invalidatable storage.
+         * @param index Zero-based stable admission-order index.
+         * @return Owned outcome copy, or null when index is out of range.
+         */
+        [[nodiscard]] std::optional<AudioReconciledOperation> TerminalResult(std::size_t index) const noexcept;
         /**
          * @brief Releases one terminal only after its external operation owner observed publication.
          * @param operation Exact retained scope and sequence, including its command epoch.
@@ -204,6 +210,13 @@ namespace Horo::Audio {
 
         /** @brief Constructs fully reserved storage after descriptor validation. */
         explicit AudioLifecycleReconciler(AudioLifecycleReconcilerDescriptor descriptor);
+        /** @brief Validates and applies one voice terminal from the closed terminal-event variant. */
+        [[nodiscard]] Result<void> ObserveTerminalValue(const AudioVoiceTerminalEvent &event);
+        /** @brief Validates and applies one resource terminal from the closed terminal-event variant. */
+        [[nodiscard]] Result<void> ObserveTerminalValue(const AudioResourceReleaseEvent &event);
+        /** @brief Publishes a validated exact terminal and retires its matching callback reference. */
+        [[nodiscard]] Result<void> PublishTerminal(AudioPendingOperation operation, AudioTrackedCallbackReference reference,
+                                                   AudioReconciliationReason reason);
         /** @brief Atomically moves matching pending operations into the retained terminal store. */
         [[nodiscard]] Result<void> ReconcileMatching(std::optional<AudioSceneContextHandle> scene, AudioReconciliationReason reason);
         /** @brief Checks an operation scope against the active runtime and command epoch. */

@@ -88,14 +88,14 @@ namespace Horo::Audio {
             REQUIRE(reconciler.Admit({Scope(otherScene), 4}).HasValue());
             ExpectError(reconciler.AcknowledgeSceneUnload(Scene(), 5), AudioErrors::HandleStale);
             CHECK(reconciler.Snapshot().callbackReferences == 3);
-            CHECK(reconciler.TerminalResults().empty());
+            CHECK(reconciler.TerminalResultCount() == 0);
 
             REQUIRE(reconciler.AcknowledgeSceneUnload(Scene(), 3).HasValue());
             CHECK(reconciler.Snapshot().pendingOperations == 2);
             CHECK(reconciler.Snapshot().callbackReferences == 1);
-            REQUIRE(reconciler.TerminalResults().size() == 1);
-            CHECK(reconciler.TerminalResults().front().operation.acceptedSequence == 1);
-            CHECK(reconciler.TerminalResults().front().reason == AudioReconciliationReason::CancelledBySceneUnload);
+            REQUIRE(reconciler.TerminalResultCount() == 1);
+            CHECK(reconciler.TerminalResult(0)->operation.acceptedSequence == 1);
+            CHECK(reconciler.TerminalResult(0)->reason == AudioReconciliationReason::CancelledBySceneUnload);
             ExpectError(reconciler.Admit({Scope(), 5}), AudioErrors::RuntimeInactive);
             REQUIRE(reconciler.Admit({Scope(otherScene), 5}).HasValue());
         }
@@ -110,7 +110,7 @@ namespace Horo::Audio {
             REQUIRE(reconciler.ObserveTerminal(finished).HasValue());
             CHECK(reconciler.Snapshot().pendingOperations == 0);
             CHECK(reconciler.Snapshot().callbackReferences == 0);
-            CHECK(reconciler.TerminalResults().front().reason == AudioReconciliationReason::Completed);
+            CHECK(reconciler.TerminalResult(0)->reason == AudioReconciliationReason::Completed);
             ExpectError(reconciler.ObserveTerminal(finished), AudioErrors::HandleStale);
             CHECK(reconciler.AcknowledgeTerminal({Scope(), 1}).Value());
             CHECK_FALSE(reconciler.AcknowledgeTerminal({Scope(), 1}).Value());
@@ -120,7 +120,7 @@ namespace Horo::Audio {
             const AudioTerminalEvent released = AudioResourceReleaseEvent{Scope(), 2, Storage(), 13};
             REQUIRE(reconciler.ObserveTerminal(released).HasValue());
             CHECK(reconciler.Snapshot().callbackReferences == 0);
-            CHECK(reconciler.TerminalResults().front().reason == AudioReconciliationReason::Completed);
+            CHECK(reconciler.TerminalResult(0)->reason == AudioReconciliationReason::Completed);
         }
 
         TEST_CASE("Audio device reset requires matching quiescence and detachment before replacement", "[unit][audio][lifecycle][reset]") {
@@ -143,8 +143,8 @@ namespace Horo::Audio {
             CHECK(snapshot.commandEpoch == 8);
             CHECK(snapshot.pendingOperations == 0);
             CHECK(snapshot.callbackReferences == 0);
-            REQUIRE(reconciler.TerminalResults().size() == 2);
-            CHECK(reconciler.TerminalResults()[0].reason == AudioReconciliationReason::CancelledByDeviceReset);
+            REQUIRE(reconciler.TerminalResultCount() == 2);
+            CHECK(reconciler.TerminalResult(0)->reason == AudioReconciliationReason::CancelledByDeviceReset);
             REQUIRE(reconciler.Admit({Scope(Scene(), 8), 1}).HasValue());
         }
 
@@ -163,7 +163,7 @@ namespace Horo::Audio {
             CHECK(reconciler.Snapshot().pendingOperations == 0);
             CHECK(reconciler.Snapshot().callbackReferences == 0);
             CHECK_FALSE(reconciler.Snapshot().callbackAttached);
-            CHECK(reconciler.TerminalResults().front().reason == AudioReconciliationReason::CancelledByShutdown);
+            CHECK(reconciler.TerminalResult(0)->reason == AudioReconciliationReason::CancelledByShutdown);
         }
 
         TEST_CASE("Audio partial startup and omitted callback compositions shut down safely", "[unit][audio][lifecycle][partial_start]") {
@@ -182,26 +182,39 @@ namespace Horo::Audio {
             REQUIRE(omitted.Admit({Scope(), 1}).HasValue());
             REQUIRE(omitted.BeginShutdown().HasValue());
             REQUIRE(omitted.CompleteShutdown(false).HasValue());
-            CHECK(omitted.TerminalResults().front().reason == AudioReconciliationReason::CancelledByShutdown);
+            CHECK(omitted.TerminalResult(0)->reason == AudioReconciliationReason::CancelledByShutdown);
         }
 
         TEST_CASE("Audio reconciliation capacity failure preserves pending ownership", "[unit][audio][lifecycle][capacity]") {
             auto descriptor = Descriptor();
-            descriptor.maximumTerminalResults = 1;
+            descriptor.maximumPendingOperations = 2;
+            descriptor.maximumTerminalResults = 2;
             auto reconciler = Active(descriptor);
             REQUIRE(reconciler.Admit({Scope(), 1}).HasValue());
-            REQUIRE(reconciler.Admit({Scope(Scene(8)), 2}).HasValue());
+            REQUIRE(reconciler.TrackCallbackReference({Scene(), Voice()}).HasValue());
+            REQUIRE(
+                reconciler
+                    .ObserveTerminal(AudioTerminalEvent{AudioVoiceTerminalEvent{Scope(), 1, Voice(), AudioVoiceTerminalReason::Finished}})
+                    .HasValue());
+            REQUIRE(reconciler.Admit({Scope(), 2}).HasValue());
+            REQUIRE(reconciler.Admit({Scope(Scene(8)), 3}).HasValue());
             REQUIRE(reconciler.BeginShutdown().HasValue());
             REQUIRE(reconciler.ObserveCallbackQuiesced(Quiesced()).HasValue());
             ExpectError(reconciler.CompleteShutdown(true), AudioErrors::HandleCapacityExhausted);
             CHECK(reconciler.Snapshot().state == AudioLifecycleState::Stopping);
             CHECK(reconciler.Snapshot().pendingOperations == 2);
-            CHECK(reconciler.TerminalResults().empty());
+            REQUIRE(reconciler.TerminalResultCount() == 1);
+            CHECK(reconciler.AcknowledgeTerminal({Scope(), 1}).Value());
+            REQUIRE(reconciler.CompleteShutdown(true).HasValue());
+            CHECK(reconciler.TerminalResultCount() == 2);
         }
 
         TEST_CASE("Audio lifecycle rejects malformed duplicate stale and over-capacity records", "[unit][audio][lifecycle][validation]") {
             auto invalid = Descriptor();
             invalid.maximumPendingOperations = 0;
+            ExpectError(AudioLifecycleReconciler::Create(invalid), AudioErrors::IdentityInvalid);
+            invalid = Descriptor();
+            invalid.maximumTerminalResults = invalid.maximumPendingOperations - 1;
             ExpectError(AudioLifecycleReconciler::Create(invalid), AudioErrors::IdentityInvalid);
 
             auto descriptor = Descriptor();

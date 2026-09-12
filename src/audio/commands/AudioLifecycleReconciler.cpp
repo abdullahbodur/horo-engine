@@ -45,6 +45,7 @@ namespace Horo::Audio {
     Result<AudioLifecycleReconciler> AudioLifecycleReconciler::Create(const AudioLifecycleReconcilerDescriptor &descriptor) {
         if (!descriptor.owner.IsValid() || descriptor.commandEpoch == 0 || !ValidCapacity(descriptor.maximumPendingOperations) ||
             !ValidCapacity(descriptor.maximumTerminalResults) || !ValidCapacity(descriptor.maximumCallbackReferences) ||
+            descriptor.maximumTerminalResults < descriptor.maximumPendingOperations ||
             (descriptor.callbackRequired &&
              (descriptor.clockDomain == 0 || !ValidCallbackEpoch(descriptor.callbackEpoch, descriptor.owner))))
             return Failure<AudioLifecycleReconciler>(AudioErrors::IdentityInvalid);
@@ -148,33 +149,36 @@ namespace Horo::Audio {
 
     /** @copydoc AudioLifecycleReconciler::ObserveTerminal */
     Result<void> AudioLifecycleReconciler::ObserveTerminal(const AudioTerminalEvent &event) {
-        AudioPendingOperation operation;
-        AudioReconciliationReason reason{AudioReconciliationReason::Completed};
-        if (const auto *voice = std::get_if<AudioVoiceTerminalEvent>(&event)) {
-            if (!ValidScope(voice->scope) || voice->acceptedSequence == 0 || !voice->voice.IsValid() ||
-                voice->voice.owner != descriptor_.owner || !ValidVoiceReason(voice->reason))
-                return Failure<void>(AudioErrors::EventQueueInvalid);
-            operation = {voice->scope, voice->acceptedSequence};
-            reason = ReconciliationReason(voice->reason);
-        } else {
-            const auto &release = std::get<AudioResourceReleaseEvent>(event);
-            if (!ValidScope(release.scope) || release.acceptedSequence == 0 || !ValidMemoryHandle(release.storage, descriptor_.owner) ||
-                release.completedEpoch == 0)
-                return Failure<void>(AudioErrors::EventQueueInvalid);
-            operation = {release.scope, release.acceptedSequence};
-        }
+        return std::visit([this](const auto &value) {
+            return ObserveTerminalValue(value);
+        }, event);
+    }
+
+    /** @copydoc AudioLifecycleReconciler::ObserveTerminalValue */
+    Result<void> AudioLifecycleReconciler::ObserveTerminalValue(const AudioVoiceTerminalEvent &event) {
+        if (!ValidScope(event.scope) || event.acceptedSequence == 0 || !event.voice.IsValid() || event.voice.owner != descriptor_.owner ||
+            !ValidVoiceReason(event.reason))
+            return Failure<void>(AudioErrors::EventQueueInvalid);
+        return PublishTerminal({event.scope, event.acceptedSequence}, {event.scope.scene, event.voice}, ReconciliationReason(event.reason));
+    }
+
+    /** @copydoc AudioLifecycleReconciler::ObserveTerminalValue */
+    Result<void> AudioLifecycleReconciler::ObserveTerminalValue(const AudioResourceReleaseEvent &event) {
+        if (!ValidScope(event.scope) || event.acceptedSequence == 0 || !ValidMemoryHandle(event.storage, descriptor_.owner) ||
+            event.completedEpoch == 0)
+            return Failure<void>(AudioErrors::EventQueueInvalid);
+        return PublishTerminal({event.scope, event.acceptedSequence}, {event.scope.scene, event.storage},
+                               AudioReconciliationReason::Completed);
+    }
+
+    /** @copydoc AudioLifecycleReconciler::PublishTerminal */
+    Result<void> AudioLifecycleReconciler::PublishTerminal(const AudioPendingOperation operation,
+                                                           const AudioTrackedCallbackReference reference,
+                                                           const AudioReconciliationReason reason) {
         const auto pending = std::ranges::find(pending_, operation);
         if (pending == pending_.end())
             return Failure<void>(AudioErrors::HandleStale);
-        const auto callbackReference = std::ranges::find_if(callbackReferences_, [&event](const auto &tracked) {
-            if (const auto *voice = std::get_if<AudioVoiceTerminalEvent>(&event)) {
-                const auto *trackedVoice = std::get_if<AudioVoiceHandle>(&tracked.reference);
-                return tracked.scene == voice->scope.scene && trackedVoice != nullptr && *trackedVoice == voice->voice;
-            }
-            const auto &release = std::get<AudioResourceReleaseEvent>(event);
-            const auto *trackedStorage = std::get_if<AudioMemoryHandle>(&tracked.reference);
-            return tracked.scene == release.scope.scene && trackedStorage != nullptr && *trackedStorage == release.storage;
-        });
+        const auto callbackReference = std::ranges::find(callbackReferences_, reference);
         if (callbackReference == callbackReferences_.end())
             return Failure<void>(AudioErrors::HandleStale);
         if (terminal_.size() == descriptor_.maximumTerminalResults)
@@ -299,9 +303,16 @@ namespace Horo::Audio {
         return Result<void>::Success();
     }
 
-    /** @copydoc AudioLifecycleReconciler::TerminalResults */
-    std::span<const AudioReconciledOperation> AudioLifecycleReconciler::TerminalResults() const noexcept {
-        return terminal_;
+    /** @copydoc AudioLifecycleReconciler::TerminalResultCount */
+    std::size_t AudioLifecycleReconciler::TerminalResultCount() const noexcept {
+        return terminal_.size();
+    }
+
+    /** @copydoc AudioLifecycleReconciler::TerminalResult */
+    std::optional<AudioReconciledOperation> AudioLifecycleReconciler::TerminalResult(const std::size_t index) const noexcept {
+        if (index >= terminal_.size())
+            return std::nullopt;
+        return terminal_[index];
     }
 
     /** @copydoc AudioLifecycleReconciler::AcknowledgeTerminal */
