@@ -429,6 +429,26 @@ shutdown are terminal and late or replacement-generation calls cannot alter the
 result. The seam does not parse native packets, authenticate principals, select a
 transport, activate gameplay or retain borrowed offer storage.
 
+`AuthenticationSessionAdapter` is the next owner-thread, backend-neutral seam. The
+host supplies its immutable `NetworkTrustPolicySnapshot`, fresh transcript-bound
+`AuthenticationChallenge`, absolute deadline and borrowed credential, certificate,
+private-key and peer-verification authorities. The adapter validates bounded response
+framing and normalized transport/certificate evidence before invoking any authority.
+Authentication proof bytes remain a synchronous borrow into the credential authority;
+they are never copied into adapter state, accepted output, errors or the redacted
+`AuthenticationDiagnostics` projection. Provider failures are translated to closed
+safe authentication classes without forwarding provider text.
+
+Every authority completion carries the exact connection and admission generation plus
+a non-zero authority generation. The accepted principal and private-key authority's
+`SecureChannelHandoff` are committed atomically only when all completion fences match,
+the principal is canonical and unexpired, and the handoff names the exact transport
+channel generation. Remote admission requires confidentiality, integrity,
+authenticated peer evidence and product-anchor trust; LAN requires paired or
+product-anchor trust. Only an explicitly configured, proven in-memory loopback may
+omit transport protection. Unavailable authorities, weaker trust, malformed evidence,
+timeout, cancellation and shutdown all fail closed and cannot publish late results.
+
 The canonical hello exchange includes:
 
 - Product/protocol family identity and minimum/maximum wire versions.
