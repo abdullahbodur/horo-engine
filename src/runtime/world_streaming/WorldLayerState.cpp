@@ -3,6 +3,8 @@
 #include "Horo/WorldStreaming/WorldStreamingErrors.h"
 #include "WorldStreamingInternal.h"
 
+#include <algorithm>
+#include <array>
 #include <iterator>
 #include <limits>
 
@@ -46,7 +48,7 @@ namespace Horo::WorldStreaming {
         };
 
         /** @brief Complete legal transition relation for valid layer-state records. */
-        constexpr TransitionRule kTransitionRules[]{
+        constexpr auto kTransitionRules = std::to_array<TransitionRule>({
             {WorldLayerState::Unloaded, WorldLayerStateRollbackDisposition::None, WorldLayerStateTransition::BeginLoad,
              WorldLayerState::Loading, WorldLayerStateRollbackDisposition::None, false, RevisionEffect::Advance},
             {WorldLayerState::Failed, WorldLayerStateRollbackDisposition::None, WorldLayerStateTransition::BeginLoad,
@@ -107,7 +109,7 @@ namespace Horo::WorldStreaming {
              WorldLayerState::Unloading, WorldLayerStateRollbackDisposition::CancellationPending, true, RevisionEffect::Preserve},
             {WorldLayerState::Unloading, WorldLayerStateRollbackDisposition::FailurePending, WorldLayerStateTransition::Cancel,
              WorldLayerState::Unloading, WorldLayerStateRollbackDisposition::FailurePending, true, RevisionEffect::Preserve},
-        };
+        });
 
         /** @brief Prove that state, disposition, and command select at most one transition rule. */
         consteval bool HasUniqueTransitionKeys() {
@@ -127,11 +129,9 @@ namespace Horo::WorldStreaming {
 
         /** @brief Check command-level permission while authority drains cancellation. */
         [[nodiscard]] bool AllowsDuringCancellation(const WorldLayerStateTransition transition) noexcept {
-            for (const auto &rule : kTransitionRules) {
-                if (rule.transition == transition && rule.allowedDuringCancellation)
-                    return true;
-            }
-            return false;
+            return std::ranges::any_of(kTransitionRules, [transition](const TransitionRule &rule) {
+                return rule.transition == transition && rule.allowedDuringCancellation;
+            });
         }
 
         /** @brief Resolve the unique rule for an exact valid state fact and command. */
