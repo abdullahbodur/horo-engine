@@ -1347,6 +1347,21 @@ failure, cancellation, replacement, and shutdown publish no batch; callers must 
 the retained operation fence before commit. World Streaming does not discover a provider,
 retry with another backend, or translate a missing hard dependency into an optional result.
 
+`StreamingCellActivationTransaction` is the WST-005.5 owner-safe publication
+boundary. The authority supplies the complete required Scene/provider participant
+set and transfers exactly one prepared, generation-fenced receipt for each entry.
+Preparation validates identities, immutable service revisions, exact operation
+fences, uniqueness and a mandatory receipt ceiling before any live state changes.
+The move-only transaction owns every receipt until it publishes all of them in
+canonical participant order at `CommitDeferredLifecycleChanges`, or rolls all of
+them back in reverse order. Publication is a bounded no-fail transfer; it performs
+no I/O, allocation, waiting or provider discovery. Commit revalidates the complete
+current operation snapshot, including its phase and outcome; matching only the
+operation handle and generation fence is insufficient. A stale fence, replacement,
+cancellation or shutdown before publication rolls back the complete set and leaves
+the active Scene unchanged. Calling another frame phase cannot publish and retains
+the prepared transaction for the declared Scene safe point.
+
 ```text
 Admitted I/O -> Integrity checks -> Independent bounded block decode
             -> Resident: detached CoreEcs plus async provider stages
