@@ -50,7 +50,7 @@ jobs:
     name: Test · ${{ matrix.name }}
     runs-on: ${{ matrix.runner }}
     needs: [format]
-    timeout-minutes: 25
+    timeout-minutes: ${{ matrix.timeout_minutes }}
     permissions:
       contents: read
       checks: write
@@ -60,16 +60,19 @@ jobs:
         include:
           - name: Linux / GCC
             runner: ubuntu-24.04
+            timeout_minutes: 25
             cc: gcc
             cxx: g++
             build_dir: build/ci
           - name: macOS / Clang
             runner: macos-latest
+            timeout_minutes: 25
             cc: clang
             cxx: clang++
             build_dir: build/ci
           - name: Windows / MSVC
             runner: windows-2022
+            timeout_minutes: 35
             cc: cl
             cxx: cl
             build_dir: build/ci
