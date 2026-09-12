@@ -16,6 +16,7 @@
 #include <compare>
 #include <cstddef>
 #include <cstdint>
+#include <limits>
 #include <span>
 #include <vector>
 
@@ -78,6 +79,9 @@ namespace Horo::Navigation {
 
         [[nodiscard]] constexpr auto operator<=>(const NavMeshTableRange &) const noexcept = default;
     };
+
+    /** @brief Sentinel stored for a polygon edge that has no neighboring polygon. */
+    inline constexpr std::uint32_t NavMeshBoundaryAdjacency = std::numeric_limits<std::uint32_t>::max();
 
     /** @brief Stable address for one independently validated horizontal tile layer. */
     struct NavMeshTileKey final {

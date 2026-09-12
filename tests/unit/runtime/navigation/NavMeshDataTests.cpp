@@ -239,6 +239,48 @@ namespace Horo::Navigation {
         RequireError(artifact.ResolveProviderPayload(tile, compatibility), NavigationErrors::NavMeshProviderPayloadUnavailable);
     }
 
+    TEST_CASE("Provider resolution considers every format for one provider fingerprint", "[unit][navigation][navmesh_artifact][provider]") {
+        ArtifactFixture fixture;
+        fixture.AddProviderPayload();
+        fixture.providerPayloads.front().formatVersion = 3;
+        fixture.providerPayloadBytes.push_back(std::byte{0x40});
+        fixture.providerPayloads.push_back({
+            .providerFingerprint = Digest(80),
+            .formatVersion = 4,
+            .byteOrder = NavMeshByteOrder::LittleEndian,
+            .compression = NavMeshCompression::None,
+            .byteOffset = 3,
+            .encodedBytes = 1,
+            .decodedBytes = 1,
+            .payloadDigest = ComputeSha256(std::span<const std::byte>{fixture.providerPayloadBytes}.subspan(3)),
+        });
+        fixture.tiles.front().providerPayloads = {0, 2};
+        fixture.header.providerPayloadCount = 2;
+        fixture.header.providerEncodedBytes = 4;
+        fixture.header.providerDecodedBytes = 4;
+
+        auto artifact = std::move(NavMeshData::Create(fixture.View())).Value();
+        const auto payload = artifact.ResolveProviderPayload({.x = -2, .z = 4, .layer = 1}, {.providerFingerprint = Digest(80),
+                                                                                             .formatVersion = 4,
+                                                                                             .byteOrder = NavMeshByteOrder::LittleEndian,
+                                                                                             .compression = NavMeshCompression::None});
+        REQUIRE(payload.HasValue());
+        REQUIRE(payload.Value().bytes.size() == 1);
+        REQUIRE(payload.Value().bytes.front() == std::byte{0x40});
+    }
+
+    TEST_CASE("Polygon adjacency accepts only the boundary sentinel or another polygon", "[unit][navigation][navmesh_artifact][polygon]") {
+        ArtifactFixture fixture;
+        fixture.header.polygonAdjacencyCount = 3;
+        fixture.tiles.front().polygonAdjacencies = {0, 3};
+        fixture.polygons.front().adjacencies = {0, 3};
+        fixture.polygonAdjacencies.assign(3, NavMeshBoundaryAdjacency);
+        REQUIRE(NavMeshData::Create(fixture.View()).HasValue());
+
+        fixture.polygonAdjacencies.back() = 1;
+        RequireError(NavMeshData::Create(fixture.View()), NavigationErrors::NavMeshArtifactCorrupt);
+    }
+
     TEST_CASE("NavMesh artifact rejects malformed tile bounds indices provenance checksums and provider lengths",
               "[unit][navigation][navmesh_artifact][hostile]") {
         ArtifactFixture fixture;
