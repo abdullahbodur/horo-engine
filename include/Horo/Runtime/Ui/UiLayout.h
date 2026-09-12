@@ -7,6 +7,7 @@
 
 #include "Horo/Runtime/Ui/UiElementTree.h"
 
+#include <array>
 #include <compare>
 #include <cstddef>
 #include <cstdint>
@@ -40,6 +41,14 @@ namespace Horo::Runtime::Ui {
         /** @brief Checks the logical extent. @return Whether this rectangle is valid. */
         [[nodiscard]] bool IsValid() const noexcept;
         [[nodiscard]] auto operator<=>(const UiLogicalRect &) const noexcept = default;
+    };
+
+    /** @brief Finite affine transform in canonical logical 1/64-DIP units. */
+    struct UiLogicalTransform final {
+        std::array<float, 6> values{1.0F, 0.0F, 0.0F, 1.0F, 0.0F, 0.0F}; /**< [m00, m01, m10, m11, tx, ty]. */
+        /** @brief Checks that all affine coefficients are finite. @return Whether the transform is representable. */
+        [[nodiscard]] bool IsValid() const noexcept;
+        [[nodiscard]] auto operator<=>(const UiLogicalTransform &) const noexcept = default;
     };
 
     struct UiLayoutContentRevisionTag;
