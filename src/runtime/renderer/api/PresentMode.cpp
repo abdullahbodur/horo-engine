@@ -27,13 +27,14 @@ namespace Horo::Render {
 
         /** @brief Validates the shape and uniqueness of required or ordered Auto intent. */
         [[nodiscard]] Result<void> ValidateRequest(const PresentModeRequest &request) {
+            using enum PresentModeRequestKind;
             if (request.preferences.empty() || request.preferences.size() > MaximumPresentModeEntries)
                 return Result<void>::Failure(MakeError(PresentModeErrors::InvalidRequest));
-            if (request.kind != PresentModeRequestKind::Required && request.kind != PresentModeRequestKind::Auto)
+            if (request.kind != Required && request.kind != Auto)
                 return Result<void>::Failure(MakeError(PresentModeErrors::UnsupportedModeFact));
             if (const Result<void> known = ValidateKnownModes(request.preferences); known.HasError())
                 return known;
-            if (request.kind == PresentModeRequestKind::Required && request.preferences.size() != 1)
+            if (request.kind == Required && request.preferences.size() != 1)
                 return Result<void>::Failure(MakeError(PresentModeErrors::InvalidRequest));
 
             for (std::size_t index = 0; index < request.preferences.size(); ++index) {
