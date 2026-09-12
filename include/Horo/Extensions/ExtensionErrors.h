@@ -63,4 +63,18 @@ namespace Horo::Extensions::ExtensionErrors {
     extern const ErrorCodeDescriptor PipelineStepInvocationFailed;
     /** @brief A pipeline run was cancelled and discarded all staged outputs. */
     extern const ErrorCodeDescriptor PipelineRunCancelled;
+    /** @brief A toolchain provider descriptor, authority, intent, or resolved process request is malformed. */
+    extern const ErrorCodeDescriptor ToolchainProviderRegistryInvalid;
+    /** @brief A toolchain provider contribution identity is already published. */
+    extern const ErrorCodeDescriptor ToolchainProviderRegistryDuplicate;
+    /** @brief The bounded toolchain provider registry is full. */
+    extern const ErrorCodeDescriptor ToolchainProviderRegistryCapacityExceeded;
+    /** @brief Toolchain provider registration and new invocation admission are closed. */
+    extern const ErrorCodeDescriptor ToolchainProviderRegistryShutdown;
+    /** @brief The exact requested toolchain provider generation is absent or revoked. */
+    extern const ErrorCodeDescriptor ToolchainProviderUnavailable;
+    /** @brief Host policy rejected a provider's logical invocation intent. */
+    extern const ErrorCodeDescriptor ToolchainPolicyRejected;
+    /** @brief An approved tool failed at the platform process boundary. */
+    extern const ErrorCodeDescriptor ToolchainInvocationFailed;
 }  // namespace Horo::Extensions::ExtensionErrors
