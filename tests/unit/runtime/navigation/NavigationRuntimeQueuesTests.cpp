@@ -120,6 +120,11 @@ namespace Horo::Navigation {
         auto queues = std::move(NavigationRuntimeQueues::Create(QueueDescriptor())).Value();
         NavigationRuntimeCommand invalid{NavigationSubmitPathCommand{.sequence = 0, .request = Request()}};
         REQUIRE(queues.TryEnqueueCommand(invalid) == NavigationQueueEnqueueResult::InvalidRecord);
+        NavigationRuntimeCommand cancellation{NavigationCancelRequestCommand{.sequence = 3, .handle = RequestHandle(), .world = World()}};
+        REQUIRE(queues.TryEnqueueCommand(cancellation) == NavigationQueueEnqueueResult::Enqueued);
+        const auto transferredCancellation = queues.TryDequeueCommand();
+        REQUIRE(transferredCancellation.has_value());
+        REQUIRE(std::get<NavigationCancelRequestCommand>(*transferredCancellation).handle == RequestHandle());
 
         queues.CloseAdmission();
         queues.CloseAdmission();

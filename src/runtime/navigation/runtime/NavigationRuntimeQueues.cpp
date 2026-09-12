@@ -155,8 +155,10 @@ namespace Horo::Navigation {
                 using Value = std::decay_t<decltype(value)>;
                 if constexpr (std::is_same_v<Value, NavigationSubmitPathCommand>)
                     return value.sequence != 0 && IsValidPathRequest(value.request);
+                else if constexpr (std::is_same_v<Value, NavigationCancelRequestCommand>)
+                    return value.sequence != 0 && value.world.IsValid() && value.handle.IsValid() && value.handle.world == value.world;
                 else
-                    return value.sequence != 0 && value.world.IsValid() && value.request.IsValid() && value.request.world == value.world;
+                    return false;
             }, command);
         }
 

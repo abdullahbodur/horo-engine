@@ -29,7 +29,7 @@ namespace Horo::Navigation {
     /** @brief Caller-to-owner cancellation intent for one already admitted request generation. */
     struct NavigationCancelRequestCommand final {
         std::uint64_t sequence{}; /**< Non-zero caller ordering identity. */
-        NavRequestHandle request; /**< Exact admitted request generation. */
+        NavRequestHandle handle;  /**< Exact admitted request generation. */
         NavigationWorldId world;  /**< Exact world expected by the caller. */
     };
 
