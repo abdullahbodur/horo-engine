@@ -1,5 +1,5 @@
 import json
-import subprocess
+import subprocess  # nosec B404 -- required to exercise the shipped CLI as a separate process.
 import sys
 from pathlib import Path
 
@@ -8,7 +8,8 @@ SCRIPT = Path(__file__).parents[2] / "scripts" / "scaffold_extension.py"
 
 
 def run_scaffolder(output: Path, shape: str, package_id: str = "com.example.tools"):
-    return subprocess.run(
+    # The executable and script are fixed, shell=False is implicit, and every value is one argv element.
+    return subprocess.run(  # nosec B603  # nosemgrep: python.lang.security.audit.dangerous-subprocess-use-audit
         [sys.executable, str(SCRIPT), "--shape", shape, "--id", package_id,
          "--name", "Example Tools", "--output", str(output)],
         check=False,
