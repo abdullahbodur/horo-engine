@@ -8,6 +8,7 @@
 #include <new>
 #include <thread>
 #include <utility>
+#include <vector>
 
 namespace Horo::Network {
     namespace {
@@ -30,14 +31,15 @@ namespace Horo::Network {
         }
     }  // namespace
 
-    struct NetworkIoServiceState final {
+    class NetworkIoServiceState final {
+    public:
         explicit NetworkIoServiceState(const NetworkIoServiceLimits &configuredLimits,
-                                       std::unique_ptr<std::optional<NetworkIoCompletion>[]> preparedRecords) noexcept
-            : limits(configuredLimits), records(std::move(preparedRecords)), ownerThread(std::this_thread::get_id()) {}
+                                       std::vector<std::optional<NetworkIoCompletion>> preparedRecords) noexcept
+            : limits(configuredLimits), records(std::move(preparedRecords)) {}
 
         [[nodiscard]] Result<void> Publish(NetworkIoCompletion completion, const std::uint64_t observedPollGeneration) {
             std::scoped_lock lock{queueMutex};
-            if (shuttingDown.load(std::memory_order_acquire))
+            if (shuttingDown.load())
                 return Fail<void>(NetworkErrors::TransportShuttingDown);
             if (!pollActive || observedPollGeneration != pollGeneration)
                 return Fail<void>(NetworkErrors::NetworkIoPollStale);
@@ -53,9 +55,12 @@ namespace Horo::Network {
             return Result<void>::Success();
         }
 
+    private:
+        friend class NetworkIoService;
+
         NetworkIoServiceLimits limits;
-        std::unique_ptr<std::optional<NetworkIoCompletion>[]> records;
-        const std::thread::id ownerThread;
+        std::vector<std::optional<NetworkIoCompletion>> records;
+        const std::thread::id ownerThread{std::this_thread::get_id()};
         mutable std::mutex queueMutex;
         std::atomic<bool> shuttingDown{false};
         std::size_t head{};
@@ -114,7 +119,8 @@ namespace Horo::Network {
         return state_->Publish(std::move(completion), pollGeneration_);
     }
 
-    NetworkIoService::NetworkIoService(std::unique_ptr<INetworkIoPollSource> backend, std::shared_ptr<NetworkIoServiceState> state) noexcept
+    NetworkIoService::NetworkIoService(ConstructionKey, std::unique_ptr<INetworkIoPollSource> backend,
+                                       std::shared_ptr<NetworkIoServiceState> state) noexcept
         : backend_(std::move(backend)), state_(std::move(state)) {}
 
     /** @copydoc NetworkIoService::Create */
@@ -123,10 +129,10 @@ namespace Horo::Network {
         if (!backend || !ValidLimits(limits))
             return Fail<std::unique_ptr<NetworkIoService>>(NetworkErrors::NetworkIoServiceInvalid);
         try {
-            auto records = std::make_unique<std::optional<NetworkIoCompletion>[]>(limits.maximumQueuedCompletions);
+            std::vector<std::optional<NetworkIoCompletion>> records(limits.maximumQueuedCompletions);
             auto state = std::make_shared<NetworkIoServiceState>(limits, std::move(records));
             return Result<std::unique_ptr<NetworkIoService>>::Success(
-                std::unique_ptr<NetworkIoService>{new NetworkIoService{std::move(backend), std::move(state)}});
+                std::make_unique<NetworkIoService>(ConstructionKey{}, std::move(backend), std::move(state)));
         } catch (const std::bad_alloc &) {
             return Fail<std::unique_ptr<NetworkIoService>>(NetworkErrors::NetworkIoServiceCapacityExceeded);
         }
@@ -142,17 +148,17 @@ namespace Horo::Network {
             return Fail<void>(NetworkErrors::NetworkIoServiceInvalid);
         if (cancellation.IsCancellationRequested())
             return Fail<void>(NetworkErrors::TransportOperationCancelled);
-        if (state_->shuttingDown.load(std::memory_order_acquire))
+        if (state_->shuttingDown.load())
             return Fail<void>(NetworkErrors::TransportShuttingDown);
 
-        std::unique_lock pollGuard{pollMutex_, std::try_to_lock};
-        if (!pollGuard.owns_lock())
+        std::unique_lock pollGuard{pollMutex_, std::defer_lock};
+        if (!pollGuard.try_lock())
             return Fail<void>(NetworkErrors::NetworkIoPollBusy);
 
         std::uint64_t generation{};
         {
             std::scoped_lock queueGuard{state_->queueMutex};
-            if (state_->shuttingDown.load(std::memory_order_acquire))
+            if (state_->shuttingDown.load())
                 return Fail<void>(NetworkErrors::TransportShuttingDown);
             if (state_->pollGeneration == std::numeric_limits<std::uint64_t>::max())
                 return Fail<void>(NetworkErrors::NetworkIoSequenceExhausted);
@@ -172,12 +178,13 @@ namespace Horo::Network {
     }
 
     /** @copydoc NetworkIoService::DrainOwnerThread */
-    Result<std::size_t> NetworkIoService::DrainOwnerThread(INetworkIoCompletionConsumer &consumer, const std::size_t maximumCompletions) {
+    Result<std::size_t> NetworkIoService::DrainOwnerThread(INetworkIoCompletionConsumer &consumer,
+                                                           const std::size_t maximumCompletions) const {
         if (std::this_thread::get_id() != state_->ownerThread)
             return Fail<std::size_t>(NetworkErrors::NetworkIoWrongThread);
         if (maximumCompletions == 0 || maximumCompletions > state_->limits.maximumCompletionsPerDrain)
             return Fail<std::size_t>(NetworkErrors::NetworkIoServiceInvalid);
-        if (state_->shuttingDown.load(std::memory_order_acquire))
+        if (state_->shuttingDown.load())
             return Fail<std::size_t>(NetworkErrors::TransportShuttingDown);
 
         std::size_t drained{};
@@ -200,11 +207,13 @@ namespace Horo::Network {
 
     /** @copydoc NetworkIoService::Shutdown */
     void NetworkIoService::Shutdown() noexcept {
-        if (state_->shuttingDown.exchange(true, std::memory_order_acq_rel))
+        if (state_->shuttingDown.exchange(true))
             return;
         backend_->RequestStop();
-        std::scoped_lock pollGuard{pollMutex_};
-        backend_->Shutdown();
+        {
+            std::scoped_lock pollGuard{pollMutex_};
+            backend_->Shutdown();
+        }
         std::scoped_lock queueGuard{state_->queueMutex};
         state_->pollActive = false;
         state_->remainingPollCompletions = 0;
@@ -223,6 +232,6 @@ namespace Horo::Network {
 
     /** @copydoc NetworkIoService::IsShuttingDown */
     bool NetworkIoService::IsShuttingDown() const noexcept {
-        return state_->shuttingDown.load(std::memory_order_acquire);
+        return state_->shuttingDown.load();
     }
 }  // namespace Horo::Network

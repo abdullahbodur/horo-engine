@@ -196,7 +196,7 @@ namespace Horo::Network {
          * @param maximumCompletions Positive call budget no larger than the configured drain bound.
          * @return Number consumed or typed wrong-thread, invalid, or shutdown failure.
          */
-        [[nodiscard]] Result<std::size_t> DrainOwnerThread(INetworkIoCompletionConsumer &consumer, std::size_t maximumCompletions);
+        [[nodiscard]] Result<std::size_t> DrainOwnerThread(INetworkIoCompletionConsumer &consumer, std::size_t maximumCompletions) const;
         /** @brief Stops admission, wakes and releases the backend, and discards undrained records; idempotent. */
         void Shutdown() noexcept;
         /** @brief Returns current bounded queue depth. @return Snapshot count under synchronization. */
@@ -205,7 +205,14 @@ namespace Horo::Network {
         [[nodiscard]] bool IsShuttingDown() const noexcept;
 
     private:
-        NetworkIoService(std::unique_ptr<INetworkIoPollSource> backend, std::shared_ptr<NetworkIoServiceState> state) noexcept;
+        struct ConstructionKey final {};
+
+    public:
+        /** @internal Factory-only constructor exposed for std::make_unique access. */
+        NetworkIoService(ConstructionKey, std::unique_ptr<INetworkIoPollSource> backend,
+                         std::shared_ptr<NetworkIoServiceState> state) noexcept;
+
+    private:
         std::unique_ptr<INetworkIoPollSource> backend_;
         std::shared_ptr<NetworkIoServiceState> state_;
         std::mutex pollMutex_;
