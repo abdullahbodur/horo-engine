@@ -27,7 +27,8 @@ namespace Horo::Runtime {
     template <typename Value, typename Less, typename Equal, typename WriteValue>
     Result<void> CanonicalValueWriter::WriteOrderedCollection(const std::span<const Value> values, Less less, Equal equal,
                                                               WriteValue writeValue) {
-        return WriteStaged([&](CanonicalValueWriter &staging) {
+        return WriteStaged([this, values, less = std::move(less), equal = std::move(equal),
+                            writeValue = std::move(writeValue)](CanonicalValueWriter &staging) {
             bool duplicate{};
             const auto ordered = CanonicalCodecDetail::OrderedUnique(values, less, equal, duplicate);
             if (duplicate)
@@ -49,7 +50,7 @@ namespace Horo::Runtime {
             admitted.HasError()) {
             return admitted;
         }
-        return WriteStaged([&](CanonicalValueWriter &staging) {
+        return WriteStaged([this, values](CanonicalValueWriter &staging) {
             auto written = staging.WriteUInt32(static_cast<std::uint32_t>(values.size()));
             for (const auto &value : values) {
                 if (written.HasError())
@@ -64,7 +65,7 @@ namespace Horo::Runtime {
     Result<void> CanonicalValueWriter::WriteOptional(const std::optional<CanonicalEncodedValue> &value) {
         if (auto admitted = AdmitComposite(value ? value->StructuralDepth() : 0); admitted.HasError())
             return admitted;
-        return WriteStaged([&](CanonicalValueWriter &staging) {
+        return WriteStaged([this, &value](CanonicalValueWriter &staging) {
             auto written = staging.WriteBool(value.has_value());
             if (written.HasValue() && value)
                 written = staging.AppendLengthDelimited(value->Bytes());
@@ -79,7 +80,7 @@ namespace Horo::Runtime {
             return admitted;
         if (!alternativeCount || index >= alternativeCount)
             return Fail(ErrorAt(SaveErrors::CanonicalCodecInvalid));
-        return WriteStaged([&](CanonicalValueWriter &staging) {
+        return WriteStaged([this, index, &value](CanonicalValueWriter &staging) {
             auto written = staging.WriteUInt32(index);
             if (written.HasValue())
                 written = staging.AppendLengthDelimited(value.Bytes());
