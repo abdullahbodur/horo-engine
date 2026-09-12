@@ -150,6 +150,7 @@ horo_configure_target_header_boundary(HoroNetworkApi PUBLIC_HEADERS
     Horo/Network/TransportBudget.h
 )
 horo_configure_target_header_boundary(HoroNetworkRuntime PUBLIC_HEADERS
+    Horo/Network/HandshakeNegotiation.h
     Horo/Network/NetworkObjectMapping.h
 )
 horo_configure_target_header_boundary(HoroNetworkTransportNull PUBLIC_HEADERS
@@ -384,6 +385,7 @@ horo_configure_target_header_boundary(HoroWorldStreaming PUBLIC_HEADERS
     Horo/WorldStreaming/StreamingSourceRange.h
     Horo/WorldStreaming/WorldCellQuantization.h
     Horo/WorldStreaming/WorldPartitionDescriptor.h
+    Horo/WorldStreaming/WorldLayerOwnershipModel.h
     Horo/WorldStreaming/WorldObjectOwnership.h
     Horo/WorldStreaming/WorldPartitionCapabilityProfile.h
     Horo/WorldStreaming/WorldPartitionRegistry.h
