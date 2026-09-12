@@ -164,6 +164,22 @@ Headless describes presentation, not navigation capability. Dedicated/headless h
 select Recast/Detour for real navigation, deliberately select Null for feature absence, or
 omit navigation entirely. `NullRenderer` does not select `NavigationNull`.
 
+### Foundation Qualification
+
+Navigation foundation changes are qualified against one shared provider-neutral
+contract. The deterministic test provider and the production Null and Recast/Detour
+providers must preserve the same capability validation, cooperative cancellation,
+and deterministic-result rules. Linux CI separately builds the narrow navigation
+target set with the default provider enabled and omitted; the ordinary platform
+matrix proves the enabled composition on Linux, macOS, and Windows.
+
+Runtime qualification repeatedly replaces active worlds while old worker leases and
+completion records remain retained. Each old lease must be logically revoked before
+its provider is reclaimed, and every stale completion must remain distinguishable by
+its exact Scene/world/topology fences and be drained without publication. Queue tests
+admit exactly the platform-specific `RequiredStorageBytes` projection and instrument
+all prepared command, query, and completion directions for zero frame-hot allocation.
+
 ## Subsystem Decoupling
 
 Editor viewport camera navigation remains in Gui; orbit/pan/fly/focus code never depends
