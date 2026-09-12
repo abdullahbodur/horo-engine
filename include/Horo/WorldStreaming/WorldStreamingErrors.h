@@ -306,6 +306,18 @@ namespace Horo::WorldStreaming::WorldStreamingErrors {
     extern const ErrorCodeDescriptor LayerOwnershipCapacityExceeded;
     /** @brief Layer admission is closed because its authority is cancelling or shut down. */
     extern const ErrorCodeDescriptor LayerOwnershipLifecycleUnavailable;
+    /** @brief A layer-filter policy, context, candidate, or output request is structurally invalid. */
+    extern const ErrorCodeDescriptor LayerFilterInvalid;
+    /** @brief A layer target, optional policy, flag set, or classification mapping is unsupported. */
+    extern const ErrorCodeDescriptor LayerFilterUnsupported;
+    /** @brief A filter pass no longer names the current world or policy revision. */
+    extern const ErrorCodeDescriptor LayerFilterStale;
+    /** @brief A filter input snapshot repeats one stable layer identity. */
+    extern const ErrorCodeDescriptor LayerFilterIdentityConflict;
+    /** @brief A filter pass exceeds its candidate or output decision ceiling. */
+    extern const ErrorCodeDescriptor LayerFilterCapacityExceeded;
+    /** @brief Layer filtering is unavailable because its authority is cancelling or closed. */
+    extern const ErrorCodeDescriptor LayerFilterLifecycleUnavailable;
     /** @brief A partition capability snapshot or project-settings request is structurally invalid. */
     extern const ErrorCodeDescriptor PartitionSettingsInvalid;
     /** @brief A precision or package mode is unsupported by the selected project profile or host. */
