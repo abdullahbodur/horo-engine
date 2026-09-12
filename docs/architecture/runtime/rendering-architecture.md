@@ -1581,6 +1581,25 @@ presentation resources. Host policy supplies intent, and the frontend publishes
 the resolved output contract after checking platform, surface, and effective
 device support. Requested settings and active output are separate values.
 
+`RenderDisplaySnapshot` is the narrow RenderApi handoff for Platform-owned display
+facts. A snapshot owns no native handles and carries a non-zero, strictly increasing
+platform revision. Display records are bounded and canonically ordered by stable
+machine-local `RenderDisplayId`; each record owns a sorted unique mode set, an exact
+current mode, explicit color-space/transfer/dynamic-range facts, tri-state HDR support,
+and optional finite luminance values in nits. Unknown HDR support and missing
+luminance remain explicit rather than being fabricated as unsupported or zero.
+Platform enumeration and monitor/window association remain outside RenderApi.
+
+The platform owner feeds complete snapshots through `RenderDisplaySnapshotFeed` at
+its owner-thread safe point. Publication validates the whole candidate before replacing
+the last committed value and returns a bounded immutable delta with typed Added,
+Removed, CurrentModeChanged, and CapabilitiesChanged reasons. Equal or stale revisions,
+unknown color/HDR values, contradictory modes, malformed bounds, and non-owner
+publication fail with typed results and leave the previous snapshot unchanged. There
+are no callbacks, worker jobs, or hidden polling threads; `Stop` idempotently closes
+admission and releases retained facts before Platform shutdown. Headless hosts simply
+omit this feed rather than inventing a display.
+
 Publish revisioned logical output candidates with owner-thread commands before
 layout/extraction; commit active output only after realizing the same candidate
 before native frame acquisition. Output-dependent extraction retains that
