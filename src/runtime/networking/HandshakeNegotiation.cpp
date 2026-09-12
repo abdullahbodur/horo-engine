@@ -30,7 +30,7 @@ namespace Horo::Network {
             return std::ranges::find(values, candidate) != values.end();
         }
 
-        [[nodiscard]] bool ValidFeatureSet(const ProtocolId protocol, const HandshakeFeatureSetView features) noexcept {
+        [[nodiscard]] bool ValidFeatureSet(const ProtocolId protocol, const HandshakeFeatureSetView &features) noexcept {
             if (features.supported.size() > MaximumHandshakeFeatures || features.required.size() > MaximumHandshakeFeatures)
                 return false;
             for (std::size_t index = 0; index < features.supported.size(); ++index) {
@@ -59,22 +59,22 @@ namespace Horo::Network {
         [[nodiscard]] Result<HandshakeCompression> SelectCompression(
             const std::array<bool, static_cast<std::size_t>(HandshakeCompression::Count)> &local, const HandshakeCompression localRequired,
             const std::array<bool, static_cast<std::size_t>(HandshakeCompression::Count)> &peer, const HandshakeCompression peerRequired) {
+            using enum HandshakeCompression;
+
             if (!HasCompression(peer) || !ValidRequiredCompression(peer, peerRequired))
                 return Failure<HandshakeCompression>(NetworkErrors::HandshakeInvalid);
-            if (localRequired != HandshakeCompression::Count && peerRequired != HandshakeCompression::Count &&
-                localRequired != peerRequired)
+            if (localRequired != Count && peerRequired != Count && localRequired != peerRequired)
                 return Failure<HandshakeCompression>(NetworkErrors::HandshakeIncompatible);
 
-            const auto required = localRequired != HandshakeCompression::Count ? localRequired : peerRequired;
-            if (required != HandshakeCompression::Count)
+            if (const auto required = localRequired != Count ? localRequired : peerRequired; required != Count)
                 return peer[CompressionIndex(required)] && local[CompressionIndex(required)]
                            ? Result<HandshakeCompression>::Success(required)
                            : Failure<HandshakeCompression>(NetworkErrors::HandshakeIncompatible);
 
             constexpr std::array preference{
-                HandshakeCompression::Zstandard,
-                HandshakeCompression::Lz4,
-                HandshakeCompression::None,
+                Zstandard,
+                Lz4,
+                None,
             };
             for (const HandshakeCompression candidate : preference) {
                 if (local[CompressionIndex(candidate)] && peer[CompressionIndex(candidate)])
@@ -134,8 +134,8 @@ namespace Horo::Network {
             return Failure<HandshakeSelection>(NetworkErrors::HandshakeIncompatible);
 
         const auto localSupported = std::span{local_.features.supported}.first(local_.features.supportedCount);
-        const auto localRequired = std::span{local_.features.required}.first(local_.features.requiredCount);
-        if (!IncludesAll(localSupported, compatibility.features.required) || !IncludesAll(compatibility.features.supported, localRequired))
+        if (const auto localRequired = std::span{local_.features.required}.first(local_.features.requiredCount);
+            !IncludesAll(localSupported, compatibility.features.required) || !IncludesAll(compatibility.features.supported, localRequired))
             return Failure<HandshakeSelection>(NetworkErrors::HandshakeIncompatible);
 
         NegotiatedFeatureSet negotiated;
@@ -198,13 +198,15 @@ namespace Horo::Network {
 
     /** @copydoc HandshakeNegotiator::Reject */
     Result<void> HandshakeNegotiator::Reject(const ConnectionHandle connection, const NetworkOperationGeneration sessionGeneration) {
+        using enum HandshakeState;
+
         if (!Owns(connection, sessionGeneration))
             return Failure<void>(NetworkErrors::NetworkLifecycleOperationStale);
-        if (state_ == HandshakeState::ShuttingDown)
+        if (state_ == ShuttingDown)
             return Failure<void>(NetworkErrors::SessionShuttingDown);
-        if (state_ != HandshakeState::AwaitingOffer)
+        if (state_ != AwaitingOffer)
             return Failure<void>(NetworkErrors::HandshakeStateInvalid);
-        state_ = HandshakeState::Rejected;
+        state_ = Rejected;
         return Result<void>::Success();
     }
 
@@ -218,11 +220,13 @@ namespace Horo::Network {
 
     /** @copydoc HandshakeNegotiator::Shutdown */
     bool HandshakeNegotiator::Shutdown() noexcept {
-        if (state_ == HandshakeState::ShuttingDown)
+        using enum HandshakeState;
+
+        if (state_ == ShuttingDown)
             return false;
-        if (state_ == HandshakeState::Accepted || state_ == HandshakeState::Rejected || state_ == HandshakeState::TimedOut)
+        if (state_ == Accepted || state_ == Rejected || state_ == TimedOut)
             return false;
-        state_ = HandshakeState::ShuttingDown;
+        state_ = ShuttingDown;
         return true;
     }
 
