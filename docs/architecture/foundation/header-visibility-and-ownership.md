@@ -622,4 +622,8 @@ operation store. Callers request cancellation without waiting; producers observe
 before entering `BeginCommit`. Once that atomic gate succeeds, cancellation is too
 late and terminal publication reports the actual committed, not-committed or unknown
 outcome. Completion callbacks are bounded, run outside the operation lock on the
-registering or terminalizing thread and must remain non-blocking.
+registering or terminalizing thread and must remain non-blocking. Admission also
+preallocates cancellation and abandonment failures plus callback storage. A terminal
+transition moves the final snapshot into retained immutable in-state storage before
+releasing observers, so destructor-driven abandonment and callback dispatch cannot
+lose terminal publication to a later allocation failure.

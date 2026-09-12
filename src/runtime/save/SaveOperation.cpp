@@ -3,9 +3,11 @@
 #include "Horo/Runtime/Save/SaveErrors.h"
 
 #include <algorithm>
+#include <array>
 #include <exception>
 #include <mutex>
 #include <new>
+#include <type_traits>
 #include <utility>
 #include <vector>
 
@@ -13,10 +15,13 @@ namespace Horo::Runtime {
     struct SaveOperationDetail::SharedState final {
         mutable std::mutex mutex;
         SaveOperationSnapshot snapshot;
+        std::optional<SaveOperationSnapshot> terminalSnapshot;
         CancellationToken parentCancellation;
         std::size_t maximumCompletionCallbacks{};
         std::vector<SaveOperationCompletionCallback> completionCallbacks;
         bool commitStarted{};
+        Error cancellationError;
+        Error deadlineError;
         Error abandonmentError;
     };
 
@@ -24,41 +29,27 @@ namespace Horo::Runtime {
         using SharedState = SaveOperationDetail::SharedState;
 
         struct CompletionDispatch final {
-            std::optional<SaveOperationSnapshot> snapshot;
+            std::shared_ptr<SharedState> state;
             std::vector<SaveOperationCompletionCallback> callbacks;
         };
 
+        static_assert(std::is_nothrow_move_constructible_v<SaveOperationSnapshot>);
+        static_assert(std::is_nothrow_move_assignable_v<SaveOperationSnapshot>);
+
+        [[nodiscard]] const SaveOperationSnapshot &CurrentSnapshot(const SharedState &state) noexcept {
+            return state.terminalSnapshot.has_value() ? *state.terminalSnapshot : state.snapshot;
+        }
+
+        [[nodiscard]] bool IsTerminal(const SharedState &state) noexcept {
+            return state.terminalSnapshot.has_value();
+        }
+
         [[nodiscard]] bool IsKnown(const SaveOperationKind kind) noexcept {
-            using enum SaveOperationKind;
-            switch (kind) {
-                case Save:
-                case Load:
-                case RefreshCatalog:
-                case Delete:
-                    return true;
-            }
-            return false;
+            return static_cast<std::uint8_t>(kind) <= static_cast<std::uint8_t>(SaveOperationKind::Delete);
         }
 
         [[nodiscard]] bool IsKnown(const SaveOperationStage stage) noexcept {
-            using enum SaveOperationStage;
-            switch (stage) {
-                case Queued:
-                case CapturingSnapshot:
-                case Serializing:
-                case FinalizingArchive:
-                case WritingTemporary:
-                case CommitStarted:
-                case VerifyingArchive:
-                case Migrating:
-                case PreparingRestore:
-                case ReadyToCommit:
-                case ApplyingState:
-                case RefreshingCatalog:
-                case Deleting:
-                    return true;
-            }
-            return false;
+            return static_cast<std::uint8_t>(stage) <= static_cast<std::uint8_t>(SaveOperationStage::Deleting);
         }
 
         [[nodiscard]] bool RequiresCommit(const SaveOperationKind kind) noexcept {
@@ -66,20 +57,22 @@ namespace Horo::Runtime {
         }
 
         [[nodiscard]] bool IsStageAllowed(const SaveOperationKind kind, const SaveOperationStage stage, const bool commitStarted) noexcept {
-            using enum SaveOperationStage;
-            switch (kind) {
-                case SaveOperationKind::Save:
-                    return stage == CapturingSnapshot || stage == Serializing || stage == FinalizingArchive || stage == WritingTemporary ||
-                           (stage == CommitStarted && commitStarted);
-                case SaveOperationKind::Load:
-                    return stage == VerifyingArchive || stage == Migrating || stage == PreparingRestore || stage == ReadyToCommit ||
-                           (stage == ApplyingState && commitStarted);
-                case SaveOperationKind::RefreshCatalog:
-                    return stage == RefreshingCatalog;
-                case SaveOperationKind::Delete:
-                    return stage == Deleting || (stage == CommitStarted && commitStarted);
-            }
-            return false;
+            constexpr auto stageBit = [](const SaveOperationStage value) {
+                return static_cast<std::uint16_t>(1U << static_cast<std::uint8_t>(value));
+            };
+            constexpr std::array<std::uint16_t, 4> allowedStages{
+                stageBit(SaveOperationStage::CapturingSnapshot) | stageBit(SaveOperationStage::Serializing) |
+                    stageBit(SaveOperationStage::FinalizingArchive) | stageBit(SaveOperationStage::WritingTemporary) |
+                    stageBit(SaveOperationStage::CommitStarted),
+                stageBit(SaveOperationStage::VerifyingArchive) | stageBit(SaveOperationStage::Migrating) |
+                    stageBit(SaveOperationStage::PreparingRestore) | stageBit(SaveOperationStage::ReadyToCommit) |
+                    stageBit(SaveOperationStage::ApplyingState),
+                stageBit(SaveOperationStage::RefreshingCatalog),
+                stageBit(SaveOperationStage::Deleting) | stageBit(SaveOperationStage::CommitStarted)};
+            constexpr std::uint16_t commitStages = stageBit(SaveOperationStage::CommitStarted) | stageBit(SaveOperationStage::ApplyingState);
+            const std::uint16_t selectedStage = stageBit(stage);
+            const bool allowedForKind = (allowedStages[static_cast<std::uint8_t>(kind)] & selectedStage) != 0;
+            return allowedForKind && (commitStarted || (commitStages & selectedStage) == 0);
         }
 
         [[nodiscard]] SaveOperationStage CommitStage(const SaveOperationKind kind) noexcept {
@@ -97,46 +90,42 @@ namespace Horo::Runtime {
             return SaveCancellationReason::None;
         }
 
-        [[nodiscard]] const ErrorCodeDescriptor &CancellationError(const SaveCancellationReason reason) noexcept {
-            return reason == SaveCancellationReason::Deadline ? SaveErrors::OperationDeadlineExceeded : SaveErrors::OperationCancelled;
-        }
-
         void MarkCancellationRequested(SharedState &state, const SaveCancellationReason reason) noexcept {
             state.snapshot.cancellationRequested = true;
             state.snapshot.cancellationReason = reason;
             ++state.snapshot.revision;
         }
 
-        [[nodiscard]] CompletionDispatch TerminalizeLocked(SharedState &state, const SaveOperationState terminalState,
-                                                           const SaveOperationCommitOutcome outcome,
-                                                           std::optional<Error> error = std::nullopt) {
-            state.snapshot.state = terminalState;
-            state.snapshot.commit = outcome;
-            state.snapshot.cancellable = false;
-            state.snapshot.terminalError = std::move(error);
+        [[nodiscard]] CompletionDispatch TerminalizeLocked(const std::shared_ptr<SharedState> &state,
+                                                           const SaveOperationState terminalState, const SaveOperationCommitOutcome outcome,
+                                                           std::optional<Error> error = std::nullopt) noexcept {
+            state->snapshot.state = terminalState;
+            state->snapshot.commit = outcome;
+            state->snapshot.cancellable = false;
+            state->snapshot.terminalError = std::move(error);
             if (terminalState == SaveOperationState::Completed)
-                state.snapshot.progress = {.completedUnits = 1, .totalUnits = 1};
-            ++state.snapshot.revision;
-
-            CompletionDispatch dispatch;
-            dispatch.snapshot = state.snapshot;
-            dispatch.callbacks = std::move(state.completionCallbacks);
-            return dispatch;
+                state->snapshot.progress = {.completedUnits = 1, .totalUnits = 1};
+            ++state->snapshot.revision;
+            state->terminalSnapshot.emplace(std::move(state->snapshot));
+            return CompletionDispatch{state, std::move(state->completionCallbacks)};
         }
 
-        [[nodiscard]] CompletionDispatch CancelLocked(SharedState &state, const SaveCancellationReason reason) {
-            if (!state.snapshot.cancellationRequested)
-                MarkCancellationRequested(state, reason);
-            return TerminalizeLocked(state, SaveOperationState::Cancelled, SaveOperationCommitOutcome::NotCommitted,
-                                     MakeError(CancellationError(reason)));
+        [[nodiscard]] CompletionDispatch CancelLocked(const std::shared_ptr<SharedState> &state,
+                                                      const SaveCancellationReason reason) noexcept {
+            if (!state->snapshot.cancellationRequested)
+                MarkCancellationRequested(*state, reason);
+            Error error =
+                reason == SaveCancellationReason::Deadline ? std::move(state->deadlineError) : std::move(state->cancellationError);
+            return TerminalizeLocked(state, SaveOperationState::Cancelled, SaveOperationCommitOutcome::NotCommitted, std::move(error));
         }
 
         void Dispatch(CompletionDispatch dispatch) noexcept {
-            if (!dispatch.snapshot.has_value())
+            if (!dispatch.state)
                 return;
+            const SaveOperationSnapshot &snapshot = *dispatch.state->terminalSnapshot;
             for (auto &callback : dispatch.callbacks) {
                 try {
-                    callback(*dispatch.snapshot);
+                    callback(snapshot);
                 } catch (...) {
                     // Completion observers are isolated from operation state and from one another.
                 }
@@ -148,7 +137,7 @@ namespace Horo::Runtime {
             if (!state)
                 return SaveCancellationRequestResult::InvalidHandle;
             std::lock_guard lock(state->mutex);
-            if (state->snapshot.IsTerminal())
+            if (IsTerminal(*state))
                 return SaveCancellationRequestResult::AlreadyTerminal;
             if (state->commitStarted)
                 return SaveCancellationRequestResult::TooLate;
@@ -162,14 +151,59 @@ namespace Horo::Runtime {
             return progress.totalUnits != 0 && progress.completedUnits <= progress.totalUnits;
         }
 
+        [[nodiscard]] int CompareFractions(std::uint64_t leftNumerator, std::uint64_t leftDenominator, std::uint64_t rightNumerator,
+                                           std::uint64_t rightDenominator) noexcept {
+            int direction = 1;
+            while (true) {
+                const std::uint64_t leftQuotient = leftNumerator / leftDenominator;
+                const std::uint64_t rightQuotient = rightNumerator / rightDenominator;
+                if (leftQuotient != rightQuotient)
+                    return direction * (leftQuotient < rightQuotient ? -1 : 1);
+
+                const std::uint64_t leftRemainder = leftNumerator % leftDenominator;
+                const std::uint64_t rightRemainder = rightNumerator % rightDenominator;
+                if (leftRemainder == 0 || rightRemainder == 0) {
+                    if (leftRemainder == rightRemainder)
+                        return 0;
+                    return direction * (leftRemainder == 0 ? -1 : 1);
+                }
+                leftNumerator = leftDenominator;
+                leftDenominator = leftRemainder;
+                rightNumerator = rightDenominator;
+                rightDenominator = rightRemainder;
+                direction = -direction;
+            }
+        }
+
         [[nodiscard]] bool IsProgressRegression(const SaveOperationSnapshot &snapshot, const SaveOperationStage stage,
                                                 const SaveOperationProgress progress) noexcept {
             if (snapshot.stage != stage)
                 return false;
-            const long double next = static_cast<long double>(progress.completedUnits) / static_cast<long double>(progress.totalUnits);
-            const long double current =
-                static_cast<long double>(snapshot.progress.completedUnits) / static_cast<long double>(snapshot.progress.totalUnits);
-            return next < current;
+            return CompareFractions(progress.completedUnits, progress.totalUnits, snapshot.progress.completedUnits,
+                                    snapshot.progress.totalUnits) < 0;
+        }
+
+        template <typename Apply>
+        [[nodiscard]] SaveOperationTransitionResult ApplyTransition(const std::shared_ptr<SharedState> &state,
+                                                                    const std::chrono::steady_clock::time_point now, Apply &&apply) {
+            if (!state)
+                return SaveOperationTransitionResult::AlreadyTerminal;
+            CompletionDispatch dispatch;
+            SaveOperationTransitionResult result = SaveOperationTransitionResult::Applied;
+            {
+                std::lock_guard lock(state->mutex);
+                if (IsTerminal(*state))
+                    return SaveOperationTransitionResult::AlreadyTerminal;
+                const SaveCancellationReason cancellation = PendingCancellation(*state, now);
+                if (!state->commitStarted && cancellation != SaveCancellationReason::None) {
+                    dispatch = CancelLocked(state, cancellation);
+                    result = SaveOperationTransitionResult::CancellationWon;
+                } else {
+                    result = std::forward<Apply>(apply)(*state, dispatch);
+                }
+            }
+            Dispatch(std::move(dispatch));
+            return result;
         }
     }  // namespace
 
@@ -182,7 +216,7 @@ namespace Horo::Runtime {
 
     /** @copydoc SaveOperationSnapshot::IsTerminal */
     bool SaveOperationSnapshot::IsTerminal() const noexcept {
-        return state == SaveOperationState::Completed || state == SaveOperationState::Failed || state == SaveOperationState::Cancelled;
+        return state >= SaveOperationState::Completed && state <= SaveOperationState::Cancelled;
     }
 
     SaveOperationHandle::SaveOperationHandle(std::shared_ptr<SaveOperationDetail::SharedState> state) noexcept : state_(std::move(state)) {}
@@ -197,7 +231,7 @@ namespace Horo::Runtime {
         if (!state_)
             return 0;
         std::lock_guard lock(state_->mutex);
-        return state_->snapshot.operation;
+        return CurrentSnapshot(*state_).operation;
     }
 
     /** @copydoc SaveOperationHandle::Snapshot */
@@ -205,7 +239,7 @@ namespace Horo::Runtime {
         if (!state_)
             return std::nullopt;
         std::lock_guard lock(state_->mutex);
-        return state_->snapshot;
+        return CurrentSnapshot(*state_);
     }
 
     /** @copydoc SaveOperationHandle::RequestCancellation */
@@ -220,11 +254,11 @@ namespace Horo::Runtime {
         if (!callback)
             return Result<void>::Failure(MakeError(SaveErrors::OperationCallbackInvalid));
 
-        std::optional<SaveOperationSnapshot> terminal;
+        const SaveOperationSnapshot *terminal = nullptr;
         {
             std::lock_guard lock(state_->mutex);
-            if (state_->snapshot.IsTerminal()) {
-                terminal = state_->snapshot;
+            if (IsTerminal(*state_)) {
+                terminal = std::addressof(*state_->terminalSnapshot);
             } else {
                 if (state_->completionCallbacks.size() >= state_->maximumCompletionCallbacks)
                     return Result<void>::Failure(MakeError(SaveErrors::OperationCallbackCapacityExceeded));
@@ -273,30 +307,16 @@ namespace Horo::Runtime {
     SaveOperationTransitionResult SaveOperationController::PublishProgress(const SaveOperationStage stage,
                                                                            const SaveOperationProgress progress,
                                                                            const std::chrono::steady_clock::time_point now) {
-        if (!state_)
-            return SaveOperationTransitionResult::AlreadyTerminal;
-        CompletionDispatch dispatch;
-        SaveOperationTransitionResult result = SaveOperationTransitionResult::Applied;
-        {
-            std::lock_guard lock(state_->mutex);
-            if (state_->snapshot.IsTerminal())
-                return SaveOperationTransitionResult::AlreadyTerminal;
-            const SaveCancellationReason cancellation = PendingCancellation(*state_, now);
-            if (!state_->commitStarted && cancellation != SaveCancellationReason::None) {
-                dispatch = CancelLocked(*state_, cancellation);
-                result = SaveOperationTransitionResult::CancellationWon;
-            } else if (!IsKnown(stage) || !IsStageAllowed(state_->snapshot.kind, stage, state_->commitStarted) ||
-                       !IsValidProgress(progress) || IsProgressRegression(state_->snapshot, stage, progress)) {
+        return ApplyTransition(state_, now, [stage, progress](SharedState &state, CompletionDispatch &) {
+            if (!IsKnown(stage) || !IsStageAllowed(state.snapshot.kind, stage, state.commitStarted) || !IsValidProgress(progress) ||
+                IsProgressRegression(state.snapshot, stage, progress))
                 return SaveOperationTransitionResult::InvalidTransition;
-            } else {
-                state_->snapshot.state = SaveOperationState::Running;
-                state_->snapshot.stage = stage;
-                state_->snapshot.progress = progress;
-                ++state_->snapshot.revision;
-            }
-        }
-        Dispatch(std::move(dispatch));
-        return result;
+            state.snapshot.state = SaveOperationState::Running;
+            state.snapshot.stage = stage;
+            state.snapshot.progress = progress;
+            ++state.snapshot.revision;
+            return SaveOperationTransitionResult::Applied;
+        });
     }
 
     /** @copydoc SaveOperationController::ObserveCancellation */
@@ -307,13 +327,13 @@ namespace Horo::Runtime {
         SaveCancellationObservation result = SaveCancellationObservation::NotRequested;
         {
             std::lock_guard lock(state_->mutex);
-            if (state_->snapshot.IsTerminal())
+            if (IsTerminal(*state_))
                 return SaveCancellationObservation::AlreadyTerminal;
             if (state_->commitStarted)
                 return SaveCancellationObservation::TooLate;
             const SaveCancellationReason cancellation = PendingCancellation(*state_, now);
             if (cancellation != SaveCancellationReason::None) {
-                dispatch = CancelLocked(*state_, cancellation);
+                dispatch = CancelLocked(state_, cancellation);
                 result = SaveCancellationObservation::Cancelled;
             }
         }
@@ -329,13 +349,13 @@ namespace Horo::Runtime {
         SaveCommitGateResult result = SaveCommitGateResult::Entered;
         {
             std::lock_guard lock(state_->mutex);
-            if (state_->snapshot.IsTerminal())
+            if (IsTerminal(*state_))
                 return SaveCommitGateResult::AlreadyTerminal;
             if (state_->commitStarted)
                 return SaveCommitGateResult::AlreadyEntered;
             const SaveCancellationReason cancellation = PendingCancellation(*state_, now);
             if (cancellation != SaveCancellationReason::None) {
-                dispatch = CancelLocked(*state_, cancellation);
+                dispatch = CancelLocked(state_, cancellation);
                 result = SaveCommitGateResult::CancellationWon;
             } else if (!RequiresCommit(state_->snapshot.kind)) {
                 return SaveCommitGateResult::NotRequired;
@@ -360,56 +380,29 @@ namespace Horo::Runtime {
     /** @copydoc SaveOperationController::Complete */
     SaveOperationTransitionResult SaveOperationController::Complete(const SaveOperationCommitOutcome outcome,
                                                                     const std::chrono::steady_clock::time_point now) {
-        if (!state_)
-            return SaveOperationTransitionResult::AlreadyTerminal;
-        CompletionDispatch dispatch;
-        SaveOperationTransitionResult result = SaveOperationTransitionResult::Applied;
-        {
-            std::lock_guard lock(state_->mutex);
-            if (state_->snapshot.IsTerminal())
-                return SaveOperationTransitionResult::AlreadyTerminal;
-            const SaveCancellationReason cancellation = PendingCancellation(*state_, now);
-            if (!state_->commitStarted && cancellation != SaveCancellationReason::None) {
-                dispatch = CancelLocked(*state_, cancellation);
-                result = SaveOperationTransitionResult::CancellationWon;
-            } else {
-                const bool validMutation =
-                    RequiresCommit(state_->snapshot.kind) && state_->commitStarted && outcome == SaveOperationCommitOutcome::Committed;
-                const bool validQuery =
-                    !RequiresCommit(state_->snapshot.kind) && !state_->commitStarted && outcome == SaveOperationCommitOutcome::NotCommitted;
-                if (!validMutation && !validQuery)
-                    return SaveOperationTransitionResult::InvalidTransition;
-                dispatch = TerminalizeLocked(*state_, SaveOperationState::Completed, outcome);
-            }
-        }
-        Dispatch(std::move(dispatch));
-        return result;
+        return ApplyTransition(state_, now, [this, outcome](SharedState &state, CompletionDispatch &dispatch) {
+            const bool validMutation =
+                RequiresCommit(state.snapshot.kind) && state.commitStarted && outcome == SaveOperationCommitOutcome::Committed;
+            const bool validQuery =
+                !RequiresCommit(state.snapshot.kind) && !state.commitStarted && outcome == SaveOperationCommitOutcome::NotCommitted;
+            if (!validMutation && !validQuery)
+                return SaveOperationTransitionResult::InvalidTransition;
+            dispatch = TerminalizeLocked(state_, SaveOperationState::Completed, outcome);
+            return SaveOperationTransitionResult::Applied;
+        });
     }
 
     /** @copydoc SaveOperationController::Fail */
     SaveOperationTransitionResult SaveOperationController::Fail(Error error, const SaveOperationCommitOutcome outcome,
                                                                 const std::chrono::steady_clock::time_point now) {
-        if (!state_)
-            return SaveOperationTransitionResult::AlreadyTerminal;
-        CompletionDispatch dispatch;
-        SaveOperationTransitionResult result = SaveOperationTransitionResult::Applied;
-        {
-            std::lock_guard lock(state_->mutex);
-            if (state_->snapshot.IsTerminal())
-                return SaveOperationTransitionResult::AlreadyTerminal;
-            const SaveCancellationReason cancellation = PendingCancellation(*state_, now);
-            if (!state_->commitStarted && cancellation != SaveCancellationReason::None) {
-                dispatch = CancelLocked(*state_, cancellation);
-                result = SaveOperationTransitionResult::CancellationWon;
-            } else if (outcome == SaveOperationCommitOutcome::Committed ||
-                       (!state_->commitStarted && outcome != SaveOperationCommitOutcome::NotCommitted)) {
+        return ApplyTransition(state_, now,
+                               [this, outcome, error = std::move(error)](SharedState &state, CompletionDispatch &dispatch) mutable {
+            if (outcome == SaveOperationCommitOutcome::Committed ||
+                (!state.commitStarted && outcome != SaveOperationCommitOutcome::NotCommitted))
                 return SaveOperationTransitionResult::InvalidTransition;
-            } else {
-                dispatch = TerminalizeLocked(*state_, SaveOperationState::Failed, outcome, std::move(error));
-            }
-        }
-        Dispatch(std::move(dispatch));
-        return result;
+            dispatch = TerminalizeLocked(state_, SaveOperationState::Failed, outcome, std::move(error));
+            return SaveOperationTransitionResult::Applied;
+        });
     }
 
     void SaveOperationController::Abandon() noexcept {
@@ -418,14 +411,14 @@ namespace Horo::Runtime {
         CompletionDispatch dispatch;
         try {
             std::lock_guard lock(state_->mutex);
-            if (!state_->snapshot.IsTerminal()) {
+            if (!IsTerminal(*state_)) {
                 const SaveCancellationReason cancellation = PendingCancellation(*state_, std::chrono::steady_clock::now());
                 if (!state_->commitStarted && cancellation != SaveCancellationReason::None) {
-                    dispatch = CancelLocked(*state_, cancellation);
+                    dispatch = CancelLocked(state_, cancellation);
                 } else {
                     const SaveOperationCommitOutcome outcome =
                         state_->commitStarted ? SaveOperationCommitOutcome::Unknown : SaveOperationCommitOutcome::NotCommitted;
-                    dispatch = TerminalizeLocked(*state_, SaveOperationState::Failed, outcome, std::move(state_->abandonmentError));
+                    dispatch = TerminalizeLocked(state_, SaveOperationState::Failed, outcome, std::move(state_->abandonmentError));
                 }
             }
         } catch (...) {
@@ -448,6 +441,8 @@ namespace Horo::Runtime {
             state->parentCancellation = std::move(descriptor.parentCancellation);
             state->maximumCompletionCallbacks = descriptor.maximumCompletionCallbacks;
             state->completionCallbacks.reserve(descriptor.maximumCompletionCallbacks);
+            state->cancellationError = MakeError(SaveErrors::OperationCancelled);
+            state->deadlineError = MakeError(SaveErrors::OperationDeadlineExceeded);
             state->abandonmentError = MakeError(SaveErrors::OperationAbandoned);
             return Result<SaveOperationController>::Success(SaveOperationController{std::move(state)});
         } catch (const std::bad_alloc &) {

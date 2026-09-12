@@ -5,7 +5,9 @@
 #include <barrier>
 #include <catch2/catch_test_macros.hpp>
 #include <chrono>
+#include <limits>
 #include <thread>
+#include <vector>
 
 namespace {
     using namespace Horo;
@@ -85,6 +87,11 @@ TEST_CASE("Save operation publishes exact typed progress without regression", "[
     CHECK(controller.PublishProgress(SaveOperationStage::Serializing, {0, 0}) == SaveOperationTransitionResult::InvalidTransition);
     CHECK(controller.PublishProgress(SaveOperationStage::PreparingRestore, {0, 1}) == SaveOperationTransitionResult::InvalidTransition);
     CHECK(Snapshot(handle).revision == progress.revision);
+
+    constexpr std::uint64_t maximum = std::numeric_limits<std::uint64_t>::max();
+    CHECK(controller.PublishProgress(SaveOperationStage::Serializing, {maximum - 1, maximum}) == SaveOperationTransitionResult::Applied);
+    CHECK(controller.PublishProgress(SaveOperationStage::Serializing, {maximum - 2, maximum - 1}) ==
+          SaveOperationTransitionResult::InvalidTransition);
 }
 
 TEST_CASE("Cancellation before commit wins and publishes one immutable terminal result", "[unit][runtime][save][operation]") {
@@ -150,10 +157,17 @@ TEST_CASE("Completion callbacks are bounded reentrant and immediate after termin
     auto controller = Operation(SaveOperationKind::RefreshCatalog, 41, 1);
     const auto handle = controller.Handle();
     std::atomic<int> calls{};
+    std::atomic<int> reentrantCalls{};
+    std::atomic<bool> reentrantRegistrationSucceeded{};
     REQUIRE(handle
-                .OnCompletion([handle, &calls](const SaveOperationSnapshot &terminal) {
+                .OnCompletion([handle, &calls, &reentrantCalls, &reentrantRegistrationSucceeded](const SaveOperationSnapshot &terminal) {
         CHECK(terminal.IsTerminal());
         CHECK(handle.Snapshot()->revision == terminal.revision);
+        reentrantRegistrationSucceeded = handle
+                                             .OnCompletion([&reentrantCalls](const SaveOperationSnapshot &nestedTerminal) {
+            if (nestedTerminal.IsTerminal())
+                ++reentrantCalls;
+        }).HasValue();
         ++calls;
     }).HasValue());
     const auto excess = handle.OnCompletion([](const SaveOperationSnapshot &) {
@@ -162,6 +176,8 @@ TEST_CASE("Completion callbacks are bounded reentrant and immediate after termin
     CHECK(excess.ErrorValue().code.Value() == SaveErrors::OperationCallbackCapacityExceeded.code.Value());
     CHECK(controller.Complete(SaveOperationCommitOutcome::NotCommitted) == SaveOperationTransitionResult::Applied);
     CHECK(calls.load() == 1);
+    CHECK(reentrantRegistrationSucceeded.load());
+    CHECK(reentrantCalls.load() == 1);
 
     REQUIRE(handle
                 .OnCompletion([&calls](const SaveOperationSnapshot &) {
@@ -169,6 +185,39 @@ TEST_CASE("Completion callbacks are bounded reentrant and immediate after termin
     }).HasValue());
     CHECK(calls.load() == 2);
     CHECK(handle.RequestCancellation() == SaveCancellationRequestResult::AlreadyTerminal);
+}
+
+TEST_CASE("Observer registration racing completion dispatches every accepted callback exactly once", "[unit][runtime][save][operation]") {
+    constexpr int observerCount = 32;
+    auto controller = Operation(SaveOperationKind::RefreshCatalog, 44, observerCount);
+    const auto handle = controller.Handle();
+    std::atomic<int> callbacks{};
+    std::atomic<int> invalidSnapshots{};
+    std::atomic<int> registrationFailures{};
+    std::barrier start{observerCount + 1};
+    std::vector<std::thread> observers;
+    observers.reserve(observerCount);
+    for (int observer = 0; observer < observerCount; ++observer) {
+        observers.emplace_back([&] {
+            start.arrive_and_wait();
+            const auto registered = handle.OnCompletion([&](const SaveOperationSnapshot &terminal) {
+                if (!terminal.IsTerminal() || !handle.Snapshot()->IsTerminal())
+                    ++invalidSnapshots;
+                ++callbacks;
+            });
+            if (registered.HasError())
+                ++registrationFailures;
+        });
+    }
+
+    start.arrive_and_wait();
+    CHECK(controller.Complete(SaveOperationCommitOutcome::NotCommitted) == SaveOperationTransitionResult::Applied);
+    for (auto &observer : observers)
+        observer.join();
+
+    CHECK(registrationFailures.load() == 0);
+    CHECK(invalidSnapshots.load() == 0);
+    CHECK(callbacks.load() == observerCount);
 }
 
 TEST_CASE("Post-gate failure preserves unknown publication evidence and the original cause", "[unit][runtime][save][operation]") {
@@ -192,11 +241,17 @@ TEST_CASE("Post-gate failure preserves unknown publication evidence and the orig
 TEST_CASE("Producer release terminalizes an abandoned operation", "[unit][runtime][save][operation]") {
     SaveOperationHandle handle;
     std::atomic<int> calls{};
+    std::atomic<int> reentrantCalls{};
     {
         auto controller = Operation();
         handle = controller.Handle();
         REQUIRE(handle
-                    .OnCompletion([&calls](const SaveOperationSnapshot &) {
+                    .OnCompletion([handle, &calls, &reentrantCalls](const SaveOperationSnapshot &terminal) {
+            if (terminal.IsTerminal() && handle.Snapshot()->revision == terminal.revision) {
+                static_cast<void>(handle.OnCompletion([&reentrantCalls](const SaveOperationSnapshot &) {
+                    ++reentrantCalls;
+                }));
+            }
             ++calls;
         }).HasValue());
     }
@@ -205,6 +260,7 @@ TEST_CASE("Producer release terminalizes an abandoned operation", "[unit][runtim
     CHECK(terminal.commit == SaveOperationCommitOutcome::NotCommitted);
     RequireError(terminal.terminalError, SaveErrors::OperationAbandoned);
     CHECK(calls.load() == 1);
+    CHECK(reentrantCalls.load() == 1);
 }
 
 TEST_CASE("Cancellation and completion races produce exactly one terminal callback", "[unit][runtime][save][operation]") {
