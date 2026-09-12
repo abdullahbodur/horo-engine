@@ -127,7 +127,7 @@ namespace Horo::Packages {
                                     {"actualDigest", FormatSha256(record.actualDigest)},
                                     {"byteSize", record.byteSize}};
             document["expectedDigest"] =
-                record.expectedDigest.has_value() ? nlohmann::json{FormatSha256(*record.expectedDigest)} : nlohmann::json{nullptr};
+                record.expectedDigest.has_value() ? nlohmann::json(FormatSha256(*record.expectedDigest)) : nlohmann::json(nullptr);
             return document.dump(2) + '\n';
         }
 
