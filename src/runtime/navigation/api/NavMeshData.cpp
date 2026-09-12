@@ -5,6 +5,7 @@
 #include <algorithm>
 #include <cmath>
 #include <limits>
+#include <memory>
 #include <tuple>
 #include <utility>
 
@@ -124,16 +125,16 @@ namespace Horo::Navigation {
 
         [[nodiscard]] Result<void> MeasureOwnedStorage(const NavMeshArtifactHeader &header, const NavMeshArtifactLimits &limits) {
             std::uint64_t bytes{};
-            const bool measured = AccumulateStorage(header.tileCount, sizeof(NavMeshTileDescriptor), bytes) &&
-                                  AccumulateStorage(header.vertexCount, sizeof(Math::Vec3), bytes) &&
-                                  AccumulateStorage(header.polygonCount, sizeof(NavMeshPolygon), bytes) &&
-                                  AccumulateStorage(header.polygonVertexIndexCount, sizeof(std::uint32_t), bytes) &&
-                                  AccumulateStorage(header.polygonAdjacencyCount, sizeof(std::uint32_t), bytes) &&
-                                  AccumulateStorage(header.offMeshLinkCount, sizeof(NavMeshOffMeshLink), bytes) &&
-                                  AccumulateStorage(header.provenanceCount, sizeof(NavMeshSourceProvenance), bytes) &&
-                                  AccumulateStorage(header.providerPayloadCount, sizeof(NavMeshProviderPayloadDescriptor), bytes) &&
-                                  CheckedAdd(bytes, header.providerEncodedBytes, bytes);
-            if (!measured || bytes > limits.maxOwnedBytes)
+            if (const bool measured = AccumulateStorage(header.tileCount, sizeof(NavMeshTileDescriptor), bytes) &&
+                                      AccumulateStorage(header.vertexCount, sizeof(Math::Vec3), bytes) &&
+                                      AccumulateStorage(header.polygonCount, sizeof(NavMeshPolygon), bytes) &&
+                                      AccumulateStorage(header.polygonVertexIndexCount, sizeof(std::uint32_t), bytes) &&
+                                      AccumulateStorage(header.polygonAdjacencyCount, sizeof(std::uint32_t), bytes) &&
+                                      AccumulateStorage(header.offMeshLinkCount, sizeof(NavMeshOffMeshLink), bytes) &&
+                                      AccumulateStorage(header.provenanceCount, sizeof(NavMeshSourceProvenance), bytes) &&
+                                      AccumulateStorage(header.providerPayloadCount, sizeof(NavMeshProviderPayloadDescriptor), bytes) &&
+                                      CheckedAdd(bytes, header.providerEncodedBytes, bytes);
+                !measured || bytes > limits.maxOwnedBytes)
                 return Failure<void>(NavigationErrors::NavMeshArtifactCapacityExceeded);
             return Result<void>::Success();
         }
@@ -158,8 +159,8 @@ namespace Horo::Navigation {
         }
 
         [[nodiscard]] Result<void> ValidateViewShape(const NavMeshArtifactView &artifact) {
-            const auto &header = artifact.header;
-            if (artifact.observedPayloadDigest != header.payloadDigest || artifact.tiles.size() != header.tileCount ||
+            if (const auto &header = artifact.header;
+                artifact.observedPayloadDigest != header.payloadDigest || artifact.tiles.size() != header.tileCount ||
                 artifact.observedTilePayloadDigests.size() != header.tileCount || artifact.tables.vertices.size() != header.vertexCount ||
                 artifact.tables.polygons.size() != header.polygonCount ||
                 artifact.tables.polygonVertexIndices.size() != header.polygonVertexIndexCount ||
@@ -257,9 +258,9 @@ namespace Horo::Navigation {
                 if (previous != nullptr && ProviderFormatKey(*previous) >= ProviderFormatKey(payload))
                     return ArtifactCorrupt();
 
-                const auto bytes = artifact.providerPayloadBytes.subspan(static_cast<std::size_t>(payload.byteOffset),
-                                                                         static_cast<std::size_t>(payload.encodedBytes));
-                if (ComputeSha256(bytes) != payload.payloadDigest)
+                if (const auto bytes = artifact.providerPayloadBytes.subspan(static_cast<std::size_t>(payload.byteOffset),
+                                                                             static_cast<std::size_t>(payload.encodedBytes));
+                    ComputeSha256(bytes) != payload.payloadDigest)
                     return ArtifactCorrupt();
                 previous = &payload;
             }
@@ -349,8 +350,8 @@ namespace Horo::Navigation {
                 previous = &tile;
             }
 
-            const auto &header = artifact.header;
-            if (cursors.vertices != header.vertexCount || cursors.polygons != header.polygonCount ||
+            if (const auto &header = artifact.header;
+                cursors.vertices != header.vertexCount || cursors.polygons != header.polygonCount ||
                 cursors.polygonVertexIndices != header.polygonVertexIndexCount ||
                 cursors.polygonAdjacencies != header.polygonAdjacencyCount || cursors.offMeshLinks != header.offMeshLinkCount ||
                 cursors.provenance != header.provenanceCount || cursors.providerPayloads != header.providerPayloadCount ||
@@ -428,7 +429,7 @@ namespace Horo::Navigation {
         if (found == tiles_.end() || found->key != key)
             return Failure<NavMeshTileView>(NavigationErrors::NavMeshTileUnknown);
         return Result<NavMeshTileView>::Success({
-            .descriptor = &*found,
+            .descriptor = std::to_address(found),
             .tables =
                 {
                     .vertices = Slice(std::span<const Math::Vec3>{vertices_}, found->vertices),
