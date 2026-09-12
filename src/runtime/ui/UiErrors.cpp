@@ -195,6 +195,47 @@ namespace Horo::Runtime::Ui::UiErrors {
                                         "completes.",
                                         false,
                                         false};
+    /** @copydoc LayoutInvalid */
+    const ErrorCodeDescriptor LayoutInvalid{UiDomain,
+                                            ErrorCode{"runtime_ui.layout.invalid"},
+                                            ErrorSeverity::Error,
+                                            "The Runtime UI layout request or result is invalid.",
+                                            "Provide finite bounded geometry, current handles, and one valid evaluator result per element.",
+                                            false,
+                                            false};
+    /** @copydoc LayoutSourceStale */
+    const ErrorCodeDescriptor LayoutSourceStale{UiDomain,
+                                                ErrorCode{"runtime_ui.layout.source_stale"},
+                                                ErrorSeverity::Error,
+                                                "The Runtime UI layout source evidence is stale or belongs to another owner.",
+                                                "Rebuild the candidate from the active tree, canvas, and exact immutable source revisions.",
+                                                true,
+                                                false};
+    /** @copydoc LayoutNonConvergent */
+    const ErrorCodeDescriptor LayoutNonConvergent{UiDomain,
+                                                  ErrorCode{"runtime_ui.layout.non_convergent"},
+                                                  ErrorSeverity::Error,
+                                                  "The Runtime UI layout did not converge within the bounded remeasure policy.",
+                                                  "Remove the cyclic intrinsic/percentage dependency reported by the affected element.",
+                                                  false,
+                                                  true};
+    /** @copydoc LayoutSnapshotStorageExhausted */
+    const ErrorCodeDescriptor
+        LayoutSnapshotStorageExhausted{UiDomain,
+                                       ErrorCode{"runtime_ui.layout_snapshot.storage_exhausted"},
+                                       ErrorSeverity::Error,
+                                       "Every bounded Runtime UI layout snapshot slot is still leased.",
+                                       "Retire an in-flight layout snapshot before retrying; never overwrite or allocate fallback storage.",
+                                       true,
+                                       false};
+    /** @copydoc LayoutLifecycleUnavailable */
+    const ErrorCodeDescriptor LayoutLifecycleUnavailable{UiDomain,
+                                                         ErrorCode{"runtime_ui.layout.lifecycle_unavailable"},
+                                                         ErrorSeverity::Error,
+                                                         "The Runtime UI layout engine is closed.",
+                                                         "Create a new engine for the active runtime canvas before submitting layout work.",
+                                                         false,
+                                                         false};
     /** @copydoc RenderSnapshotInvalid */
     const ErrorCodeDescriptor RenderSnapshotInvalid{UiDomain,
                                                     ErrorCode{"runtime_ui.render_snapshot.invalid"},
