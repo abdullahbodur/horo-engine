@@ -155,6 +155,8 @@ namespace {
         const auto &duplicated = document.Objects().back().components;
         REQUIRE(duplicated.navigationSurface->id != components.navigationSurface->id);
         REQUIRE(duplicated.navigationRegion->id != components.navigationRegion->id);
+        REQUIRE(duplicated.navigationSurface->id.Value() == 9);
+        REQUIRE(duplicated.navigationRegion->id.Value() == 12);
         REQUIRE(duplicated.navigationRegion->surface == duplicated.navigationSurface->id);
     }
 

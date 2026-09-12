@@ -315,22 +315,30 @@ namespace Horo::Editor {
             const std::span<const SceneObjectSnapshot> objects,
             const std::optional<std::pair<SceneObjectId, const SceneObjectComponentSet *>> replacement = std::nullopt,
             const SceneObjectComponentSet *appended = nullptr) {
-            std::vector<Runtime::NavigationSurfaceComponent> surfaces;
-            std::vector<Runtime::NavigationRegionComponent> regions;
-            surfaces.reserve(objects.size() + (appended != nullptr ? 1U : 0U));
-            regions.reserve(objects.size() + (appended != nullptr ? 1U : 0U));
+            std::vector<Runtime::NavigationSceneComponentView> views;
+            views.reserve(objects.size() + (appended != nullptr ? 1U : 0U));
             const auto collect = [&](const SceneObjectComponentSet &components) {
-                if (components.navigationSurface)
-                    surfaces.push_back(*components.navigationSurface);
-                if (components.navigationRegion)
-                    regions.push_back(*components.navigationRegion);
+                views.push_back({.surface = components.navigationSurface ? &*components.navigationSurface : nullptr,
+                                 .region = components.navigationRegion ? &*components.navigationRegion : nullptr});
             };
             for (const SceneObjectSnapshot &object : objects) {
                 collect(replacement && replacement->first == object.id ? *replacement->second : object.components);
             }
             if (appended != nullptr)
                 collect(*appended);
-            return Runtime::ValidateNavigationSceneComponents(surfaces, regions);
+            return Runtime::ValidateNavigationSceneComponentViews(views);
+        }
+
+        void ObserveNavigationComponentIds(const SceneObjectComponentSet &components, std::uint64_t &nextSurfaceId,
+                                           std::uint64_t &nextRegionId) noexcept {
+            const auto advance = [](const std::uint64_t observed, std::uint64_t &next) {
+                if (next != 0 && observed >= next)
+                    next = observed == std::numeric_limits<std::uint64_t>::max() ? 0 : observed + 1;
+            };
+            if (components.navigationSurface)
+                advance(components.navigationSurface->id.Value(), nextSurfaceId);
+            if (components.navigationRegion)
+                advance(components.navigationRegion->id.Value(), nextRegionId);
         }
 
         [[nodiscard]] std::size_t EstimateBehaviorMemoryBytes(const std::vector<Gameplay::BehaviorComponent> &behaviors) noexcept {
@@ -1140,10 +1148,13 @@ namespace Horo::Editor {
         objectIds.reserve(objects.size());
         std::uint64_t maximumObjectId = 0;
         std::uint64_t maximumBehaviorId = 0;
+        std::uint64_t nextNavigationSurfaceId = 1;
+        std::uint64_t nextNavigationRegionId = 1;
         for (const SceneObjectSnapshot &object : objects) {
             if (Result<void> valid = ValidateLoadedObject(object, objectIds, behaviorIds, maximumObjectId, maximumBehaviorId);
                 valid.HasError())
                 return valid;
+            ObserveNavigationComponentIds(object.components, nextNavigationSurfaceId, nextNavigationRegionId);
         }
         if (maximumObjectId == std::numeric_limits<std::uint64_t>::max() ||
             maximumBehaviorId == std::numeric_limits<std::uint64_t>::max()) {
@@ -1166,6 +1177,8 @@ namespace Horo::Editor {
         m_state = DocumentStateId{1};
         m_savedState = m_state;
         m_nextStateId = 2;
+        m_nextNavigationSurfaceId = nextNavigationSurfaceId;
+        m_nextNavigationRegionId = nextNavigationRegionId;
         m_nextObjectId = maximumObjectId + 1;
         m_nextBehaviorInstanceId = maximumBehaviorId + 1;
         m_nextPrefabInstanceId = maximumPrefabInstanceId.Value() + 1;
@@ -1272,6 +1285,7 @@ namespace Horo::Editor {
 
         const DocumentStateId beforeState = m_document.m_state;
         ApplyDelta(m_document.m_objects, delta);
+        ObserveNavigationComponentIds(command.components, m_document.m_nextNavigationSurfaceId, m_document.m_nextNavigationRegionId);
         ++m_document.m_nextObjectId;
         ++m_document.m_revision.value;
         m_document.m_state = DocumentStateId{m_document.m_nextStateId++};
@@ -1513,9 +1527,11 @@ namespace Horo::Editor {
                 {objectId, m_document.m_revision, m_document.m_state, DocumentChangeKind::ComponentChanged, {}, false});
         }
 
-        return CommitObject({NavigationComponentsChangedDelta{objectId, object->components.navigationSurface, candidate.navigationSurface,
-                                                              object->components.navigationRegion, candidate.navigationRegion},
-                             objectId, DocumentChangeKind::ComponentChanged});
+        SceneCommandDelta delta =
+            NavigationComponentsChangedDelta{objectId, object->components.navigationSurface, candidate.navigationSurface,
+                                             object->components.navigationRegion, candidate.navigationRegion};
+        ObserveNavigationComponentIds(candidate, m_document.m_nextNavigationSurfaceId, m_document.m_nextNavigationRegionId);
+        return CommitObject({std::move(delta), objectId, DocumentChangeKind::ComponentChanged});
     }
 
     /** @copydoc SceneDocumentCommandExecutor::Execute(const SetSceneNavigationSurfaceCommand&) */
@@ -1673,27 +1689,17 @@ namespace Horo::Editor {
         const SceneObjectId id{m_document.m_nextObjectId};
         SceneObjectComponentSet duplicatedComponents = source->components;
         if (duplicatedComponents.navigationSurface) {
-            std::uint64_t maximumSurfaceId = 0;
-            for (const SceneObjectSnapshot &object : m_document.m_objects) {
-                if (object.components.navigationSurface)
-                    maximumSurfaceId = std::max(maximumSurfaceId, object.components.navigationSurface->id.Value());
-            }
-            if (maximumSurfaceId == std::numeric_limits<std::uint64_t>::max())
+            if (m_document.m_nextNavigationSurfaceId == 0)
                 return Result<SceneCommandResult>::Failure(MakeError(Navigation::NavigationErrors::SceneComponentInvalid));
             const Navigation::SurfaceId sourceSurface = duplicatedComponents.navigationSurface->id;
-            duplicatedComponents.navigationSurface->id = Navigation::SurfaceId::Create(maximumSurfaceId + 1).Value();
+            duplicatedComponents.navigationSurface->id = Navigation::SurfaceId::Create(m_document.m_nextNavigationSurfaceId).Value();
             if (duplicatedComponents.navigationRegion && duplicatedComponents.navigationRegion->surface == sourceSurface)
                 duplicatedComponents.navigationRegion->surface = duplicatedComponents.navigationSurface->id;
         }
         if (duplicatedComponents.navigationRegion) {
-            std::uint64_t maximumRegionId = 0;
-            for (const SceneObjectSnapshot &object : m_document.m_objects) {
-                if (object.components.navigationRegion)
-                    maximumRegionId = std::max(maximumRegionId, object.components.navigationRegion->id.Value());
-            }
-            if (maximumRegionId == std::numeric_limits<std::uint64_t>::max())
+            if (m_document.m_nextNavigationRegionId == 0)
                 return Result<SceneCommandResult>::Failure(MakeError(Navigation::NavigationErrors::SceneComponentInvalid));
-            duplicatedComponents.navigationRegion->id = Navigation::NavigationRegionId::Create(maximumRegionId + 1).Value();
+            duplicatedComponents.navigationRegion->id = Navigation::NavigationRegionId::Create(m_document.m_nextNavigationRegionId).Value();
         }
         if (Result<void> navigation = ValidateSceneNavigationComponents(m_document.m_objects, std::nullopt, &duplicatedComponents);
             navigation.HasError()) {
@@ -1701,6 +1707,7 @@ namespace Horo::Editor {
         }
         for (Gameplay::BehaviorComponent &behavior : duplicatedComponents.behaviors)
             behavior.instanceId = Gameplay::BehaviorInstanceId{m_document.m_nextBehaviorInstanceId++};
+        ObserveNavigationComponentIds(duplicatedComponents, m_document.m_nextNavigationSurfaceId, m_document.m_nextNavigationRegionId);
         SceneCommandDelta delta = CreatedObjectDelta{
             .object = SceneObjectSnapshot{.id = id,
                                           .parent = source->parent,
@@ -1745,18 +1752,15 @@ namespace Horo::Editor {
             return IsEffectivelyLocked(m_document.m_objects, object);
         }))
             return Result<SceneCommandResult>::Failure(LockedObjectError());
-        std::vector<Runtime::NavigationSurfaceComponent> remainingSurfaces;
-        std::vector<Runtime::NavigationRegionComponent> remainingRegions;
+        std::vector<Runtime::NavigationSceneComponentView> remainingNavigation;
+        remainingNavigation.reserve(m_document.m_objects.size() - removedIds.size());
         for (const SceneObjectSnapshot &object : m_document.m_objects) {
             if (removedIds.contains(object.id.value))
                 continue;
-            if (object.components.navigationSurface)
-                remainingSurfaces.push_back(*object.components.navigationSurface);
-            if (object.components.navigationRegion)
-                remainingRegions.push_back(*object.components.navigationRegion);
+            remainingNavigation.push_back({.surface = object.components.navigationSurface ? &*object.components.navigationSurface : nullptr,
+                                           .region = object.components.navigationRegion ? &*object.components.navigationRegion : nullptr});
         }
-        if (Result<void> navigation = Runtime::ValidateNavigationSceneComponents(remainingSurfaces, remainingRegions);
-            navigation.HasError()) {
+        if (Result<void> navigation = Runtime::ValidateNavigationSceneComponentViews(remainingNavigation); navigation.HasError()) {
             return Result<SceneCommandResult>::Failure(navigation.ErrorValue());
         }
         const SceneObjectId primary = roots.front();

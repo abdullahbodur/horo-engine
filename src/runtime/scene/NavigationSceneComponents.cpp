@@ -58,27 +58,42 @@ namespace Horo::Runtime {
     /** @copydoc ValidateNavigationSceneComponents */
     Result<void> ValidateNavigationSceneComponents(const std::span<const NavigationSurfaceComponent> surfaces,
                                                    const std::span<const NavigationRegionComponent> regions) {
+        std::vector<NavigationSceneComponentView> views;
+        views.reserve(surfaces.size() + regions.size());
+        for (const NavigationSurfaceComponent &surface : surfaces)
+            views.push_back({.surface = &surface});
+        for (const NavigationRegionComponent &region : regions)
+            views.push_back({.region = &region});
+        return ValidateNavigationSceneComponentViews(views);
+    }
+
+    /** @copydoc ValidateNavigationSceneComponentViews */
+    Result<void> ValidateNavigationSceneComponentViews(const std::span<const NavigationSceneComponentView> components) {
         std::unordered_set<std::uint64_t> surfaceIds;
-        surfaceIds.reserve(surfaces.size());
-        for (const NavigationSurfaceComponent &surface : surfaces) {
-            if (Result<void> valid = ValidateNavigationSurfaceComponent(surface); valid.HasError())
+        surfaceIds.reserve(components.size());
+        for (const NavigationSceneComponentView component : components) {
+            if (component.surface == nullptr)
+                continue;
+            if (Result<void> valid = ValidateNavigationSurfaceComponent(*component.surface); valid.HasError())
                 return valid;
-            if (!surfaceIds.insert(surface.id.Value()).second) {
+            if (!surfaceIds.insert(component.surface->id.Value()).second) {
                 return Failure(Navigation::NavigationErrors::SceneComponentConflict,
                                "Navigation surface identities must be unique within one committed Scene snapshot.");
             }
         }
 
         std::unordered_set<std::uint64_t> regionIds;
-        regionIds.reserve(regions.size());
-        for (const NavigationRegionComponent &region : regions) {
-            if (Result<void> valid = ValidateNavigationRegionComponent(region); valid.HasError())
+        regionIds.reserve(components.size());
+        for (const NavigationSceneComponentView component : components) {
+            if (component.region == nullptr)
+                continue;
+            if (Result<void> valid = ValidateNavigationRegionComponent(*component.region); valid.HasError())
                 return valid;
-            if (!regionIds.insert(region.id.Value()).second) {
+            if (!regionIds.insert(component.region->id.Value()).second) {
                 return Failure(Navigation::NavigationErrors::SceneComponentConflict,
                                "Navigation region identities must be unique within one committed Scene snapshot.");
             }
-            if (!surfaceIds.contains(region.surface.Value())) {
+            if (!surfaceIds.contains(component.region->surface.Value())) {
                 return Failure(Navigation::NavigationErrors::SceneSurfaceMissing,
                                "Navigation regions must reference an exact surface in the same committed Scene snapshot.");
             }

@@ -81,6 +81,12 @@ namespace Horo::Runtime {
         [[nodiscard]] constexpr bool operator==(const NavigationRegionComponent &) const noexcept = default;
     };
 
+    /** @brief Borrowed Scene-object projection used to validate navigation components without copying payload storage. */
+    struct NavigationSceneComponentView final {
+        const NavigationSurfaceComponent *surface{}; /**< Optional surface owned by the immutable source snapshot. */
+        const NavigationRegionComponent *region{};   /**< Optional region owned by the immutable source snapshot. */
+    };
+
     /** @brief Validates one surface payload independently of Scene-wide identity references.
      * @param component Authored component value.
      * @return Success or NavigationErrors::SceneComponentInvalid.
@@ -101,4 +107,11 @@ namespace Horo::Runtime {
      */
     [[nodiscard]] Result<void> ValidateNavigationSceneComponents(std::span<const NavigationSurfaceComponent> surfaces,
                                                                  std::span<const NavigationRegionComponent> regions);
+
+    /**
+     * @brief Validates unique identities and references through borrowed component projections without payload copies.
+     * @param components Views whose pointers remain valid for the duration of this call.
+     * @return Success, or a typed invalid, conflict, or missing-surface diagnostic.
+     */
+    [[nodiscard]] Result<void> ValidateNavigationSceneComponentViews(std::span<const NavigationSceneComponentView> components);
 }  // namespace Horo::Runtime

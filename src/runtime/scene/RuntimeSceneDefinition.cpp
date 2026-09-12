@@ -193,15 +193,14 @@ namespace Horo::Runtime {
         std::ranges::sort(assetDependencies_, {}, [](const SceneAssetDependency &dependency) {
             return dependency.id;
         });
-        std::vector<NavigationSurfaceComponent> navigationSurfaces;
-        std::vector<NavigationRegionComponent> navigationRegions;
+        std::vector<NavigationSceneComponentView> navigationComponents;
+        navigationComponents.reserve(entities_.size());
         for (const RuntimeEntityDefinition &entity : entities_) {
-            if (entity.components.navigationSurface)
-                navigationSurfaces.push_back(*entity.components.navigationSurface);
-            if (entity.components.navigationRegion)
-                navigationRegions.push_back(*entity.components.navigationRegion);
+            navigationComponents.push_back(
+                {.surface = entity.components.navigationSurface ? &*entity.components.navigationSurface : nullptr,
+                 .region = entity.components.navigationRegion ? &*entity.components.navigationRegion : nullptr});
         }
-        if (Result<void> navigation = ValidateNavigationSceneComponents(navigationSurfaces, navigationRegions); navigation.HasError())
+        if (Result<void> navigation = ValidateNavigationSceneComponentViews(navigationComponents); navigation.HasError())
             return Result<RuntimeSceneDefinition>::Failure(navigation.ErrorValue());
 
         return Result<RuntimeSceneDefinition>::Success(

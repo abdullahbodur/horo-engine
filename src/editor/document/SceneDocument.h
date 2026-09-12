@@ -494,6 +494,8 @@ namespace Horo::Editor {
         std::uint64_t m_nextObjectId{1};
         std::uint64_t m_nextBehaviorInstanceId{1};
         std::uint64_t m_nextPrefabInstanceId{1};
+        std::uint64_t m_nextNavigationSurfaceId{1};
+        std::uint64_t m_nextNavigationRegionId{1};
     };
 
     /** @brief Sole mutation boundary for the minimum typed scene command set. */
