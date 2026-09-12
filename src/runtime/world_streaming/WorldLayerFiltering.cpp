@@ -37,15 +37,14 @@ namespace Horo::WorldStreaming {
                 return valid;
             if (candidate.ownership.owner.world != expectedWorld)
                 return Failure<void>(WorldStreamingErrors::LayerFilterStale);
-            const auto flags = static_cast<std::uint32_t>(candidate.flags);
-            if ((flags & ~KnownFlags) != 0)
+            if (const auto flags = static_cast<std::uint32_t>(candidate.flags); (flags & ~KnownFlags) != 0)
                 return Failure<void>(WorldStreamingErrors::LayerFilterUnsupported);
             if (HasFlag(candidate.flags, WorldLayerFlags::ServerOnly) && HasFlag(candidate.flags, WorldLayerFlags::ClientOnly))
                 return Failure<void>(WorldStreamingErrors::LayerFilterUnsupported);
-            const bool persistentFlag = HasFlag(candidate.flags, WorldLayerFlags::Persistent);
-            const bool persistentPolicy = candidate.ownership.residency == WorldLayerResidencyPolicy::Persistent;
-            if (persistentFlag != persistentPolicy)
+            if (const bool persistentPolicy = candidate.ownership.residency == WorldLayerResidencyPolicy::Persistent;
+                HasFlag(candidate.flags, WorldLayerFlags::Persistent) != persistentPolicy) {
                 return Failure<void>(WorldStreamingErrors::LayerFilterUnsupported);
+            }
             return Result<void>::Success();
         }
 
@@ -91,15 +90,17 @@ namespace Horo::WorldStreaming {
         [[nodiscard]] WorldLayerFilterDisposition Decide(const WorldLayerFilterPolicy &policy,
                                                          const WorldLayerFilterCandidate &candidate) noexcept {
             using enum WorldLayerExecutionTarget;
+            using enum WorldLayerFilterDisposition;
+            using enum WorldLayerFlags;
             if (policy.target != Editor && candidate.ownership.audience == WorldLayerAudience::EditorOnly)
-                return WorldLayerFilterDisposition::ExcludedEditorOnly;
-            if (policy.target == ClientRuntime && HasFlag(candidate.flags, WorldLayerFlags::ServerOnly))
-                return WorldLayerFilterDisposition::ExcludedServerOnly;
-            if (policy.target == DedicatedServerRuntime && HasFlag(candidate.flags, WorldLayerFlags::ClientOnly))
-                return WorldLayerFilterDisposition::ExcludedClientOnly;
-            if (policy.optional == WorldLayerOptionalPolicy::Exclude && HasFlag(candidate.flags, WorldLayerFlags::Optional))
-                return WorldLayerFilterDisposition::ExcludedOptional;
-            return WorldLayerFilterDisposition::Included;
+                return ExcludedEditorOnly;
+            if (policy.target == ClientRuntime && HasFlag(candidate.flags, ServerOnly))
+                return ExcludedServerOnly;
+            if (policy.target == DedicatedServerRuntime && HasFlag(candidate.flags, ClientOnly))
+                return ExcludedClientOnly;
+            if (policy.optional == WorldLayerOptionalPolicy::Exclude && HasFlag(candidate.flags, Optional))
+                return ExcludedOptional;
+            return Included;
         }
     }  // namespace
 
