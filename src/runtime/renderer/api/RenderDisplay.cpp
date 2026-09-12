@@ -69,11 +69,12 @@ namespace Horo::Render {
 
         /** @brief Validates closed color, transfer, and dynamic-range combinations. */
         [[nodiscard]] bool SupportedModeFacts(const RenderDisplayMode &mode) noexcept {
+            using enum RenderDisplayTransferFunction;
             if (!IsKnown(mode.colorSpace) || !IsKnown(mode.transfer) || !IsKnown(mode.dynamicRange))
                 return false;
             if (mode.dynamicRange == RenderDisplayDynamicRange::Standard)
-                return mode.transfer == RenderDisplayTransferFunction::Srgb || mode.transfer == RenderDisplayTransferFunction::Linear;
-            return mode.colorSpace == RenderDisplayColorSpace::Rec2020 && mode.transfer == RenderDisplayTransferFunction::Pq;
+                return mode.transfer == Srgb || mode.transfer == Linear;
+            return mode.colorSpace == RenderDisplayColorSpace::Rec2020 && mode.transfer == Pq;
         }
 
         /** @brief Validates one mode while preserving malformed versus unsupported failure semantics. */
@@ -124,7 +125,7 @@ namespace Horo::Render {
 
         /** @brief Adds one canonical change after capacity has been proven by snapshot bounds. */
         void AddChange(RenderDisplaySnapshotDiff &diff, const RenderDisplayId &display, const RenderDisplayChangeReason reason) {
-            diff.changes.push_back({display, reason});
+            diff.changes.emplace_back(display, reason);
         }
     }  // namespace
 
@@ -140,10 +141,9 @@ namespace Horo::Render {
     bool RenderDisplayId::IsValid() const noexcept {
         if (value_.empty() || value_.size() > MaxIdentityLength)
             return false;
-        for (const char value : value_)
-            if (!IsIdentityCharacter(static_cast<unsigned char>(value)))
-                return false;
-        return true;
+        return std::ranges::all_of(value_, [](const char value) {
+            return IsIdentityCharacter(static_cast<unsigned char>(value));
+        });
     }
 
     /** @copydoc ValidateRenderDisplaySnapshot */
@@ -175,35 +175,36 @@ namespace Horo::Render {
 
         RenderDisplaySnapshotDiff diff{previous.revision, current.revision, {}};
         diff.changes.reserve(previous.displays.size() + current.displays.size());
+        using enum RenderDisplayChangeReason;
         std::size_t previousIndex = 0;
         std::size_t currentIndex = 0;
         while (previousIndex < previous.displays.size() || currentIndex < current.displays.size()) {
             if (previousIndex == previous.displays.size()) {
-                AddChange(diff, current.displays[currentIndex++].id, RenderDisplayChangeReason::Added);
+                AddChange(diff, current.displays[currentIndex++].id, Added);
                 continue;
             }
             if (currentIndex == current.displays.size()) {
-                AddChange(diff, previous.displays[previousIndex++].id, RenderDisplayChangeReason::Removed);
+                AddChange(diff, previous.displays[previousIndex++].id, Removed);
                 continue;
             }
 
             const RenderDisplayProperties &oldDisplay = previous.displays[previousIndex];
             const RenderDisplayProperties &newDisplay = current.displays[currentIndex];
             if (oldDisplay.id < newDisplay.id) {
-                AddChange(diff, oldDisplay.id, RenderDisplayChangeReason::Removed);
+                AddChange(diff, oldDisplay.id, Removed);
                 ++previousIndex;
                 continue;
             }
             if (newDisplay.id < oldDisplay.id) {
-                AddChange(diff, newDisplay.id, RenderDisplayChangeReason::Added);
+                AddChange(diff, newDisplay.id, Added);
                 ++currentIndex;
                 continue;
             }
 
             if (oldDisplay.currentMode != newDisplay.currentMode)
-                AddChange(diff, newDisplay.id, RenderDisplayChangeReason::CurrentModeChanged);
+                AddChange(diff, newDisplay.id, CurrentModeChanged);
             if (!SameCapabilities(oldDisplay, newDisplay))
-                AddChange(diff, newDisplay.id, RenderDisplayChangeReason::CapabilitiesChanged);
+                AddChange(diff, newDisplay.id, CapabilitiesChanged);
             ++previousIndex;
             ++currentIndex;
         }
