@@ -91,6 +91,9 @@ namespace Horo::WorldStreaming {
         REQUIRE(candidate.Operation().fence.generation == IdentityFrom<StreamingGeneration>(1));
         REQUIRE(candidate.ChunkAsset() == Asset(4));
         REQUIRE(candidate.ManifestEntry().cell == Cell());
+        REQUIRE(candidate.ManifestEntry().uncompressedSize == 48);
+        REQUIRE(candidate.ManifestEntry().compressedSize == 128);
+        REQUIRE(candidate.ManifestEntry().payloadCrc32 == 99);
         REQUIRE(candidate.ManifestEntry().artifactHash == Hash());
         REQUIRE(candidate.Compression() == StreamingCellCompression::None);
         REQUIRE(candidate.Payloads().size() == 2);

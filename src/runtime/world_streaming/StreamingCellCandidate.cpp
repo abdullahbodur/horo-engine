@@ -155,7 +155,8 @@ namespace Horo::WorldStreaming {
 
     /** @copydoc StreamingCellCandidate::StreamingCellCandidate */
     StreamingCellCandidate::StreamingCellCandidate(StreamingCellOperationHandle operation, Assets::AssetId chunkAsset,
-                                                   CookedWorldCellManifestEntry manifestEntry, const StreamingCellCompression compression,
+                                                   StreamingCellCandidateManifestRecord manifestEntry,
+                                                   const StreamingCellCompression compression,
                                                    std::vector<StreamingCellPayloadHeader> payloads,
                                                    std::vector<StreamingCellId> hardDependencies) noexcept
         : operation_(std::move(operation)), chunkAsset_(std::move(chunkAsset)), manifestEntry_(std::move(manifestEntry)),
@@ -172,7 +173,7 @@ namespace Horo::WorldStreaming {
     }
 
     /** @copydoc StreamingCellCandidate::ManifestEntry */
-    const CookedWorldCellManifestEntry &StreamingCellCandidate::ManifestEntry() const noexcept {
+    const StreamingCellCandidateManifestRecord &StreamingCellCandidate::ManifestEntry() const noexcept {
         return manifestEntry_;
     }
 
@@ -217,8 +218,11 @@ namespace Horo::WorldStreaming {
             return Failure<StreamingCellCandidate>(WorldStreamingErrors::CellCandidateCapacityExceeded);
         std::vector<StreamingCellPayloadHeader> payloads{header.payloads.begin(), header.payloads.end()};
         std::vector<StreamingCellId> hardDependencies{manifestDependencies.begin(), manifestDependencies.end()};
+        const StreamingCellCandidateManifestRecord candidateRecord{manifestRecord.cell, manifestRecord.uncompressedSize,
+                                                                   manifestRecord.compressedSize, manifestRecord.payloadCrc32,
+                                                                   manifestRecord.artifactHash};
         return Result<StreamingCellCandidate>::Success(
-            StreamingCellCandidate{context.operation, descriptorCells[*descriptorIndex].package.chunkAsset, manifestRecord,
+            StreamingCellCandidate{context.operation, descriptorCells[*descriptorIndex].package.chunkAsset, candidateRecord,
                                    header.compression, std::move(payloads), std::move(hardDependencies)});
     }
 }  // namespace Horo::WorldStreaming

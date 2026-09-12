@@ -71,6 +71,17 @@ namespace Horo::WorldStreaming {
         std::span<const StreamingCellPayloadHeader> payloads; /**< Borrowed canonical TOC rows. */
     };
 
+    /** @brief Self-contained manifest integrity facts retained by one candidate. */
+    struct StreamingCellCandidateManifestRecord final {
+        StreamingCellId cell{};           /**< Exact resolved manifest cell. */
+        std::uint64_t uncompressedSize{}; /**< Exact aggregate decoded bytes. */
+        std::uint64_t compressedSize{};   /**< Exact complete encoded body bytes. */
+        std::uint32_t payloadCrc32{};     /**< Exact aggregate decoded payload CRC32. */
+        Sha256Digest artifactHash{};      /**< Exact canonical artifact SHA-256. */
+
+        [[nodiscard]] auto operator<=>(const StreamingCellCandidateManifestRecord &) const noexcept = default;
+    };
+
     /** @brief Explicit admission state for off-owner-thread candidate preparation. */
     enum class StreamingCellCandidateLifecycle : std::uint8_t {
         Active,
@@ -103,8 +114,8 @@ namespace Horo::WorldStreaming {
         [[nodiscard]] const StreamingCellOperationHandle &Operation() const noexcept;
         /** @brief Returns the manifest-owned package chunk identity copied at preparation. @return Stable asset identity. */
         [[nodiscard]] const Assets::AssetId &ChunkAsset() const noexcept;
-        /** @brief Returns the exact manifest integrity record copied at preparation. @return Immutable cooked record. */
-        [[nodiscard]] const CookedWorldCellManifestEntry &ManifestEntry() const noexcept;
+        /** @brief Returns self-contained manifest integrity facts copied at preparation. @return Immutable resolved record. */
+        [[nodiscard]] const StreamingCellCandidateManifestRecord &ManifestEntry() const noexcept;
         /** @brief Returns the validated compression codec. @return Explicit codec selected by the artifact. */
         [[nodiscard]] StreamingCellCompression Compression() const noexcept;
         /** @brief Returns canonical owned payload rows. @return View valid until this candidate is moved from or destroyed. */
@@ -118,12 +129,12 @@ namespace Horo::WorldStreaming {
                                                                             const StreamingCellHeaderView &);
 
         StreamingCellCandidate(StreamingCellOperationHandle operation, Assets::AssetId chunkAsset,
-                               CookedWorldCellManifestEntry manifestEntry, StreamingCellCompression compression,
+                               StreamingCellCandidateManifestRecord manifestEntry, StreamingCellCompression compression,
                                std::vector<StreamingCellPayloadHeader> payloads, std::vector<StreamingCellId> hardDependencies) noexcept;
 
         StreamingCellOperationHandle operation_{};
         Assets::AssetId chunkAsset_{};
-        CookedWorldCellManifestEntry manifestEntry_{};
+        StreamingCellCandidateManifestRecord manifestEntry_{};
         StreamingCellCompression compression_{StreamingCellCompression::None};
         std::vector<StreamingCellPayloadHeader> payloads_;
         std::vector<StreamingCellId> hardDependencies_;
