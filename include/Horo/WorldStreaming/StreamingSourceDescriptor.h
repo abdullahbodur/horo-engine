@@ -20,6 +20,7 @@ namespace Horo::WorldStreaming {
         Gameplay,
         NetworkRelevance,
         Preload,
+        Count,
     };
 
     /** @brief Finite non-negative base priority; ordering policy is owned by WST-002.5. */

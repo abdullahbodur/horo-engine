@@ -210,6 +210,16 @@ namespace Horo::WorldStreaming::WorldStreamingErrors {
     extern const ErrorCodeDescriptor SourceReductionIdentityConflict;
     /** @brief A desired-state reduction exceeds its bounded contributor ceiling. */
     extern const ErrorCodeDescriptor SourceReductionCapacityExceeded;
+    /** @brief A priority policy, ranking context, or candidate row is malformed. */
+    extern const ErrorCodeDescriptor PriorityPolicyInvalid;
+    /** @brief A priority contract version is not supported. */
+    extern const ErrorCodeDescriptor PriorityPolicyUnsupported;
+    /** @brief A priority ranking request exceeds its immutable candidate or output ceiling. */
+    extern const ErrorCodeDescriptor PriorityPolicyCapacityExceeded;
+    /** @brief Ranking evidence names a replaced policy publication. */
+    extern const ErrorCodeDescriptor PriorityPolicyStale;
+    /** @brief Priority ranking is closed by cancellation or shutdown. */
+    extern const ErrorCodeDescriptor PriorityPolicyLifecycleUnavailable;
     /** @brief A world-authoring contract, page descriptor, request, or authority snapshot is malformed. */
     extern const ErrorCodeDescriptor AuthoringContractInvalid;
     /** @brief The requested world-authoring contract schema version is unsupported. */
