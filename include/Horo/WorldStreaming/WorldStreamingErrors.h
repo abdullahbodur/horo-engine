@@ -302,4 +302,18 @@ namespace Horo::WorldStreaming::WorldStreamingErrors {
     extern const ErrorCodeDescriptor PartitionSettingsStale;
     /** @brief Settings-dependent work is unavailable because admission is cancelling or closed. */
     extern const ErrorCodeDescriptor PartitionSettingsLifecycleUnavailable;
+    /** @brief A cell asset request identity, fence, or mandatory limit is malformed. */
+    extern const ErrorCodeDescriptor CellAssetRequestInvalid;
+    /** @brief A cell asset request names a replaced candidate or mounted partition. */
+    extern const ErrorCodeDescriptor CellAssetRequestStale;
+    /** @brief A manifest dependency or registered cooked asset cannot be resolved. */
+    extern const ErrorCodeDescriptor CellAssetRequestUnavailable;
+    /** @brief The candidate dependency tree exceeds its explicit request ceiling. */
+    extern const ErrorCodeDescriptor CellAssetRequestCapacityExceeded;
+    /** @brief Asset request admission is cancelling, closed, or no longer controllable. */
+    extern const ErrorCodeDescriptor CellAssetRequestLifecycleUnavailable;
+    /** @brief The aggregate still has provider work in flight. */
+    extern const ErrorCodeDescriptor CellAssetRequestNotReady;
+    /** @brief The terminal aggregate result was already consumed. */
+    extern const ErrorCodeDescriptor CellAssetRequestConsumed;
 }  // namespace Horo::WorldStreaming::WorldStreamingErrors

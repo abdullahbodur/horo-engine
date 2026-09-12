@@ -34,6 +34,8 @@ workflows.
   replace ambient extrapolation with exact bounded camera/gameplay path projection.
 - [World Streaming Cell Candidate Migration](./world-streaming-cell-candidate-migration.md):
   prepare immutable generation-pinned cell candidates from validated manifest and header facts.
+- [World Streaming Cell Asset Request Migration](./world-streaming-cell-asset-request-migration.md):
+  join bounded candidate dependencies beneath one explicit cancellation root.
 - [XR Coordinate and Pose Contract Migration](./xr-coordinate-pose-migration.md):
   publish generation-fenced coordinate, validity, and time evidence without native
   backend leakage or implicit clock conversion.
