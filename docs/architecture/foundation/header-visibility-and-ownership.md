@@ -38,6 +38,9 @@ must finalize owner-thread retirements on the recorded provider thread; no deadl
 path destroys live provider code. Each registration supplies an opaque shared code
 lease, and the reverse-ordered retirement coordinator retains that lease through
 `Shutdown()`, service destruction, and any process-lifetime restart quarantine.
+Registry and registration owners are non-assignable lifetime boundaries; retirement
+operations return their infallible typed disposition directly rather than wrapping
+it in an error result with no failure state.
 
 `Horo/Vfx/VfxQualityPolicy.h` is owned by `HoroVfxApi`. It adds backend-neutral
 immutable capability/policy evidence and pure admission decisions; consumers keep

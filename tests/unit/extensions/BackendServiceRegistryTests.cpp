@@ -47,11 +47,6 @@ namespace Horo::Extensions::Tests {
             std::shared_ptr<Audit> audit_;
         };
 
-        class OtherService final {
-        public:
-            void Shutdown() noexcept {}
-        };
-
         class OrderedShutdownService final {
         public:
             OrderedShutdownService(std::shared_ptr<std::vector<int>> order, const int value) noexcept
@@ -108,25 +103,6 @@ namespace Horo::Extensions::Tests {
 
         private:
             std::shared_ptr<Audit> audit_;
-        };
-
-        class SelfStoppingService final {
-        public:
-            SelfStoppingService(BackendServiceRegistry &registry, std::shared_ptr<std::atomic_int> shutdownCount) noexcept
-                : registry_(registry), shutdownCount_(std::move(shutdownCount)) {}
-
-            [[nodiscard]] Result<SumResponse> Stop(const SumRequest &, const BackendServiceCallContext &) {
-                static_cast<void>(registry_.BeginShutdown());
-                return Result<SumResponse>::Success({42});
-            }
-
-            void Shutdown() noexcept {
-                ++*shutdownCount_;
-            }
-
-        private:
-            BackendServiceRegistry &registry_;
-            std::shared_ptr<std::atomic_int> shutdownCount_;
         };
 
         class UnresponsiveService final {
@@ -301,8 +277,8 @@ namespace Horo::Extensions::Tests {
         RequireErrorCode(fixture.services.Resolve<ArithmeticService>(CapabilityLease(fixture.capabilities, fixture.admission),
                                                                      {"com.example.math"}, {"com.example.other.v1"}),
                          "backend_service_contract_mismatch");
-        RequireErrorCode(fixture.services.Resolve<OtherService>(CapabilityLease(fixture.capabilities, fixture.admission),
-                                                                {"com.example.math"}, {"com.example.math.v1"}),
+        RequireErrorCode(fixture.services.Resolve<NoopService>(CapabilityLease(fixture.capabilities, fixture.admission),
+                                                               {"com.example.math"}, {"com.example.math.v1"}),
                          "backend_service_type_mismatch");
         auto call = ResolveService<ArithmeticService>(fixture.services, fixture.capabilities, fixture.admission);
         auto wrongThread = std::async(std::launch::async, [call = std::move(call)]() mutable {
@@ -319,7 +295,7 @@ namespace Horo::Extensions::Tests {
         auto work = StartAsyncCall<DrainingService>(fixture.services, fixture.capabilities, fixture.admission,
                                                     &DrainingService::WaitForCancellation);
         audit->entered.wait(false, std::memory_order_acquire);
-        REQUIRE(registration.Reset().HasValue());
+        CHECK(registration.Reset() == BackendServiceRetirementDisposition::ShutdownComplete);
         CHECK(audit->exited.load(std::memory_order_acquire));
         CHECK(audit->shutdownAfterExit.load(std::memory_order_acquire));
         RequireErrorCode(work.get(), "backend_service_cancelled");
@@ -341,14 +317,12 @@ namespace Horo::Extensions::Tests {
             return registration.Reset();
         });
         const auto retired = wrongThread.get();
-        REQUIRE(retired.HasValue());
-        CHECK(retired.Value() == BackendServiceRetirementDisposition::OwnerThreadFinalizationRequired);
+        CHECK(retired == BackendServiceRetirementDisposition::OwnerThreadFinalizationRequired);
         CHECK_FALSE(registration.IsRegistered());
         CHECK(audit->shutdownCount.load() == 0);
 
         const auto finalized = fixture.services.FinalizeRetiredOnOwnerThread();
-        REQUIRE(finalized.HasValue());
-        CHECK(finalized.Value() == BackendServiceRetirementDisposition::ShutdownComplete);
+        CHECK(finalized == BackendServiceRetirementDisposition::ShutdownComplete);
         CHECK(audit->shutdownCount.load() == 1);
         CHECK(audit->shutdownThread == ownerThread);
     }
@@ -369,7 +343,7 @@ namespace Horo::Extensions::Tests {
         RequireErrorCode(services.Register(Descriptor(), std::make_unique<ArithmeticService>(std::make_shared<ArithmeticServiceAudit>()),
                                            TestCodeLease()),
                          "backend_service_duplicate");
-        REQUIRE(services.BeginShutdown().HasValue());
+        CHECK(services.BeginShutdown() == BackendServiceRetirementDisposition::ShutdownComplete);
         CHECK(services.IsShutdown());
         CHECK(audit->shutdownCount.load() == 1);
         CHECK_FALSE(registration.IsRegistered());
@@ -389,7 +363,7 @@ namespace Horo::Extensions::Tests {
                 RegisterService(services, std::move(descriptor), std::make_unique<OrderedShutdownService>(order, index)));
         }
 
-        REQUIRE(services.BeginShutdown().HasValue());
+        CHECK(services.BeginShutdown() == BackendServiceRetirementDisposition::ShutdownComplete);
         CHECK(*order == std::vector<int>{3, 2, 1});
     }
 
@@ -410,50 +384,51 @@ namespace Horo::Extensions::Tests {
 
     TEST_CASE("Backend service defers self-initiated shutdown until its active call exits", "[Extensions][BackendService]") {
         Fixture fixture;
-        auto shutdownCount = std::make_shared<std::atomic_int>();
+        auto control = std::make_shared<NestedCallControl>();
+        control->shutdownOrder = std::make_shared<std::vector<int>>();
         auto registration =
-            RegisterService(fixture.services, Descriptor(), std::make_unique<SelfStoppingService>(fixture.services, shutdownCount));
-        auto call = ResolveService<SelfStoppingService>(fixture.services, fixture.capabilities, fixture.admission);
+            RegisterService(fixture.services, Descriptor(), std::make_unique<NestedSelfStoppingService>(fixture.services, control));
+        auto call = ResolveService<NestedSelfStoppingService>(fixture.services, fixture.capabilities, fixture.admission);
 
-        auto stopped = std::move(call).Invoke(&SelfStoppingService::Stop, SumRequest{});
+        auto stopped = std::move(call).Invoke(&NestedSelfStoppingService::Inner, SumRequest{});
         RequireErrorCode(stopped, "backend_service_cancelled");
-        CHECK(shutdownCount->load() == 1);
+        CHECK(control->shutdownCount.load() == 1);
         CHECK(fixture.services.IsShutdown());
     }
 
     TEST_CASE("Backend service retains an unresponsive provider and requires restart after its drain deadline",
               "[Extensions][BackendService]") {
-        ApplicationCapabilityRegistry capabilities;
-        auto capabilityRegistration = capabilities.Register({{"com.example.math.use"}, {1, 0, 0}, "com.example.math-provider", 7});
-        REQUIRE(capabilityRegistration.HasValue());
-        ExtensionCapabilityAdmission admission = Admission();
-        BackendServiceRegistry services({.drainDeadline = std::chrono::milliseconds{1}});
-        auto audit = std::make_shared<UnresponsiveService::Audit>();
-        auto codeOwner = std::make_shared<int>();
-        const std::weak_ptr<int> codeLifetime = codeOwner;
-        auto published =
-            services.Register(Descriptor(), std::make_unique<UnresponsiveService>(audit), BackendServiceCodeLease::Retain(codeOwner));
-        REQUIRE(published.HasValue());
-        BackendServiceRegistration registration = std::move(published).Value();
-        codeOwner.reset();
-        auto work = StartAsyncCall<UnresponsiveService>(services, capabilities, admission, &UnresponsiveService::IgnoreCancellation);
-        audit->entered.wait(false, std::memory_order_acquire);
+        std::weak_ptr<int> codeLifetime;
+        {
+            ApplicationCapabilityRegistry capabilities;
+            auto capabilityRegistration = capabilities.Register({{"com.example.math.use"}, {1, 0, 0}, "com.example.math-provider", 7});
+            REQUIRE(capabilityRegistration.HasValue());
+            ExtensionCapabilityAdmission admission = Admission();
+            BackendServiceRegistry services({.drainDeadline = std::chrono::milliseconds{1}});
+            auto audit = std::make_shared<UnresponsiveService::Audit>();
+            auto codeOwner = std::make_shared<int>();
+            codeLifetime = codeOwner;
+            auto published =
+                services.Register(Descriptor(), std::make_unique<UnresponsiveService>(audit), BackendServiceCodeLease::Retain(codeOwner));
+            REQUIRE(published.HasValue());
+            BackendServiceRegistration registration = std::move(published).Value();
+            codeOwner.reset();
+            auto work = StartAsyncCall<UnresponsiveService>(services, capabilities, admission, &UnresponsiveService::IgnoreCancellation);
+            audit->entered.wait(false, std::memory_order_acquire);
 
-        const auto retired = registration.Reset();
-        REQUIRE(retired.HasValue());
-        CHECK(retired.Value() == BackendServiceRetirementDisposition::RestartRequired);
-        CHECK_FALSE(registration.IsRegistered());
-        CHECK(audit->shutdownCount.load() == 0);
+            const auto retired = registration.Reset();
+            CHECK(retired == BackendServiceRetirementDisposition::RestartRequired);
+            CHECK_FALSE(registration.IsRegistered());
+            CHECK(audit->shutdownCount.load() == 0);
 
-        audit->release.store(true, std::memory_order_release);
-        audit->release.notify_all();
-        RequireErrorCode(work.get(), "backend_service_cancelled");
-        const auto finalized = services.FinalizeRetiredOnOwnerThread();
-        REQUIRE(finalized.HasValue());
-        CHECK(finalized.Value() == BackendServiceRetirementDisposition::RestartRequired);
-        CHECK(audit->shutdownCount.load() == 0);
-        CHECK_FALSE(codeLifetime.expired());
-        services = BackendServiceRegistry{};
+            audit->release.store(true, std::memory_order_release);
+            audit->release.notify_all();
+            RequireErrorCode(work.get(), "backend_service_cancelled");
+            const auto finalized = services.FinalizeRetiredOnOwnerThread();
+            CHECK(finalized == BackendServiceRetirementDisposition::RestartRequired);
+            CHECK(audit->shutdownCount.load() == 0);
+            CHECK_FALSE(codeLifetime.expired());
+        }
         CHECK_FALSE(codeLifetime.expired());
     }
 
@@ -467,15 +442,13 @@ namespace Horo::Extensions::Tests {
         audit->entered.wait(false, std::memory_order_acquire);
 
         const auto concurrentRetirement = services.BeginShutdown();
-        REQUIRE(concurrentRetirement.HasValue());
-        CHECK(concurrentRetirement.Value() == BackendServiceRetirementDisposition::RestartRequired);
+        CHECK(concurrentRetirement == BackendServiceRetirementDisposition::RestartRequired);
         CHECK(audit->count.load() == 0);
 
         audit->release.store(true, std::memory_order_release);
         audit->release.notify_all();
         const auto completedCallback = firstRetirement.get();
-        REQUIRE(completedCallback.HasValue());
-        CHECK(completedCallback.Value() == BackendServiceRetirementDisposition::RestartRequired);
+        CHECK(completedCallback == BackendServiceRetirementDisposition::RestartRequired);
         CHECK(audit->count.load() == 1);
     }
 
@@ -503,7 +476,7 @@ namespace Horo::Extensions::Tests {
         RequireErrorCode(std::move(outer).Invoke(&NestedSelfStoppingService::Outer, SumRequest{}), "backend_service_cancelled");
         CHECK(control->shutdownCount.load() == 1);
         CHECK(*shutdownOrder == std::vector<int>{2, 1});
-        REQUIRE(fixture.services.BeginShutdown().HasValue());
+        CHECK(fixture.services.BeginShutdown() == BackendServiceRetirementDisposition::ShutdownComplete);
         CHECK(control->shutdownCount.load() == 1);
     }
 }  // namespace Horo::Extensions::Tests

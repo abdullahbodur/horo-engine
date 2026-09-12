@@ -118,7 +118,7 @@ namespace Horo::Extensions {
         BackendServiceCallAdmission(const BackendServiceCallAdmission &) = delete;
         BackendServiceCallAdmission &operator=(const BackendServiceCallAdmission &) = delete;
         BackendServiceCallAdmission(BackendServiceCallAdmission &&other) noexcept = default;
-        BackendServiceCallAdmission &operator=(BackendServiceCallAdmission &&other) noexcept;
+        BackendServiceCallAdmission &operator=(BackendServiceCallAdmission &&other) noexcept = delete;
 
         /** @brief Returns the operation context valid for this admitted call. */
         [[nodiscard]] const BackendServiceCallContext &Context() const noexcept;
@@ -154,24 +154,17 @@ namespace Horo::Extensions {
 
         /**
          * @brief Invokes one mutable typed service operation exactly once.
+         * @tparam Operation Mutable or const member operation owned by the service contract.
          * @tparam Request Operation request type owned by the service contract.
-         * @tparam Response Operation response type owned by the service contract.
          * @param operation Typed member operation to invoke.
          * @param request Immutable request passed to the provider.
          * @param cancellation Caller-owned cooperative cancellation.
          * @return Typed response or attributed provider, cancellation, lifecycle, or thread failure.
          */
-        template <typename Request, typename Response>
-        [[nodiscard]] Result<Response> Invoke(Result<Response> (Service::*operation)(const Request &, const BackendServiceCallContext &),
-                                              const Request &request, CancellationToken cancellation = {}) && {
-            return InvokeImpl(operation, request, std::move(cancellation));
-        }
-
-        /** @brief Invokes one const typed service operation exactly once. */
-        template <typename Request, typename Response>
-        [[nodiscard]] Result<Response> Invoke(Result<Response> (Service::*operation)(const Request &, const BackendServiceCallContext &)
-                                                  const,
-                                              const Request &request, CancellationToken cancellation = {}) && {
+        template <typename Operation, typename Request>
+            requires std::invocable<Operation, Service &, const Request &, const BackendServiceCallContext &>
+        [[nodiscard]] auto Invoke(Operation operation, const Request &request, CancellationToken cancellation = {})
+            && -> std::invoke_result_t<Operation, Service &, const Request &, const BackendServiceCallContext &> {
             return InvokeImpl(operation, request, std::move(cancellation));
         }
 
@@ -216,13 +209,13 @@ namespace Horo::Extensions {
         BackendServiceRegistration(const BackendServiceRegistration &) = delete;
         BackendServiceRegistration &operator=(const BackendServiceRegistration &) = delete;
         BackendServiceRegistration(BackendServiceRegistration &&other) noexcept = default;
-        BackendServiceRegistration &operator=(BackendServiceRegistration &&other) noexcept;
+        BackendServiceRegistration &operator=(BackendServiceRegistration &&other) noexcept = delete;
 
         /**
          * @brief Revokes future calls, cancels and drains active work, then shuts down the service exactly once.
          * @return Completed, deferred owner-thread/self finalization, or restart-required retained retirement.
          */
-        [[nodiscard]] Result<BackendServiceRetirementDisposition> Reset() noexcept;
+        [[nodiscard]] BackendServiceRetirementDisposition Reset() noexcept;
 
         /** @brief Reports whether this registration still owns a discoverable service. */
         [[nodiscard]] bool IsRegistered() const noexcept;
@@ -245,8 +238,8 @@ namespace Horo::Extensions {
         ~BackendServiceRegistry();
         BackendServiceRegistry(const BackendServiceRegistry &) = delete;
         BackendServiceRegistry &operator=(const BackendServiceRegistry &) = delete;
-        BackendServiceRegistry(BackendServiceRegistry &&) noexcept = default;
-        BackendServiceRegistry &operator=(BackendServiceRegistry &&other) noexcept;
+        BackendServiceRegistry(BackendServiceRegistry &&) noexcept = delete;
+        BackendServiceRegistry &operator=(BackendServiceRegistry &&other) noexcept = delete;
 
         /**
          * @brief Publishes a typed service implementation without invoking provider code.
@@ -291,13 +284,13 @@ namespace Horo::Extensions {
          * @brief Idempotently revokes, cancels, drains, and shuts down every service.
          * @return Aggregate completed, deferred, or restart-required disposition.
          */
-        [[nodiscard]] Result<BackendServiceRetirementDisposition> BeginShutdown() noexcept;
+        [[nodiscard]] BackendServiceRetirementDisposition BeginShutdown() noexcept;
 
         /**
          * @brief Finalizes drained retired providers whose owner is the calling thread.
          * @return Aggregate disposition; RestartRequired remains sticky after a deadline breach.
          */
-        [[nodiscard]] Result<BackendServiceRetirementDisposition> FinalizeRetiredOnOwnerThread() noexcept;
+        [[nodiscard]] BackendServiceRetirementDisposition FinalizeRetiredOnOwnerThread() noexcept;
 
         /** @brief Reports whether registration and resolution are terminally closed. */
         [[nodiscard]] bool IsShutdown() const noexcept;
