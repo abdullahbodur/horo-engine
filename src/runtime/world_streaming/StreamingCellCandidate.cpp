@@ -64,7 +64,7 @@ namespace Horo::WorldStreaming {
 
         [[nodiscard]] Result<void> ValidateContext(const CookedWorldIndexManifest &manifest, const StreamingCellCandidateContext &context) {
             if (!IsKnown(context.lifecycle) || !context.operation.IsValid() || context.maximumPayloads == 0 ||
-                context.maximumCompressedBytes == 0 || context.maximumUncompressedBytes == 0)
+                context.maximumDependencies == 0 || context.maximumCompressedBytes == 0 || context.maximumUncompressedBytes == 0)
                 return Failure<void>(WorldStreamingErrors::CellCandidateInvalid);
             if (context.lifecycle != StreamingCellCandidateLifecycle::Active)
                 return Failure<void>(WorldStreamingErrors::CellCandidateLifecycleUnavailable);
@@ -153,9 +153,10 @@ namespace Horo::WorldStreaming {
     /** @copydoc StreamingCellCandidate::StreamingCellCandidate */
     StreamingCellCandidate::StreamingCellCandidate(StreamingCellOperationHandle operation, Assets::AssetId chunkAsset,
                                                    CookedWorldCellManifestEntry manifestEntry, const StreamingCellCompression compression,
-                                                   std::vector<StreamingCellPayloadHeader> payloads) noexcept
+                                                   std::vector<StreamingCellPayloadHeader> payloads,
+                                                   std::vector<StreamingCellId> hardDependencies) noexcept
         : operation_(std::move(operation)), chunkAsset_(std::move(chunkAsset)), manifestEntry_(std::move(manifestEntry)),
-          compression_(compression), payloads_(std::move(payloads)) {}
+          compression_(compression), payloads_(std::move(payloads)), hardDependencies_(std::move(hardDependencies)) {}
 
     /** @copydoc StreamingCellCandidate::Operation */
     const StreamingCellOperationHandle &StreamingCellCandidate::Operation() const noexcept {
@@ -182,6 +183,11 @@ namespace Horo::WorldStreaming {
         return payloads_;
     }
 
+    /** @copydoc StreamingCellCandidate::HardDependencies */
+    std::span<const StreamingCellId> StreamingCellCandidate::HardDependencies() const noexcept {
+        return hardDependencies_;
+    }
+
     /** @copydoc PrepareStreamingCellCandidate */
     Result<StreamingCellCandidate> PrepareStreamingCellCandidate(const CookedWorldIndexManifest &manifest,
                                                                  const StreamingCellCandidateContext &context,
@@ -199,8 +205,13 @@ namespace Horo::WorldStreaming {
             return Result<StreamingCellCandidate>::Failure(validPayloads.ErrorValue());
 
         const auto descriptorCells = manifest.Descriptor().Cells();
+        const auto manifestDependencies = manifest.HardDependencies(index);
+        if (manifestDependencies.size() > context.maximumDependencies)
+            return Failure<StreamingCellCandidate>(WorldStreamingErrors::CellCandidateCapacityExceeded);
         std::vector<StreamingCellPayloadHeader> payloads{header.payloads.begin(), header.payloads.end()};
+        std::vector<StreamingCellId> hardDependencies{manifestDependencies.begin(), manifestDependencies.end()};
         return Result<StreamingCellCandidate>::Success(StreamingCellCandidate{context.operation, descriptorCells[index].package.chunkAsset,
-                                                                              manifestRecord, header.compression, std::move(payloads)});
+                                                                              manifestRecord, header.compression, std::move(payloads),
+                                                                              std::move(hardDependencies)});
     }
 }  // namespace Horo::WorldStreaming

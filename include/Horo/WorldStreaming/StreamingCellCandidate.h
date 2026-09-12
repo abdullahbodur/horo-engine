@@ -85,6 +85,7 @@ namespace Horo::WorldStreaming {
         StreamingCellOperationKind operationKind{StreamingCellOperationKind::Load};      /**< Must identify load preparation. */
         StreamingCellOperationState operationState{StreamingCellOperationState::Queued}; /**< Must be Preparing. */
         std::uint32_t maximumPayloads{};          /**< Positive maximum TOC rows retained by a candidate. */
+        std::uint32_t maximumDependencies{};      /**< Maximum manifest hard dependencies copied into a candidate. */
         std::uint64_t maximumCompressedBytes{};   /**< Positive maximum aggregate encoded bytes. */
         std::uint64_t maximumUncompressedBytes{}; /**< Positive maximum aggregate decoded bytes. */
         StreamingCellCandidateLifecycle lifecycle{StreamingCellCandidateLifecycle::Closed}; /**< Submission lifecycle evidence. */
@@ -108,6 +109,8 @@ namespace Horo::WorldStreaming {
         [[nodiscard]] StreamingCellCompression Compression() const noexcept;
         /** @brief Returns canonical owned payload rows. @return View valid until this candidate is moved from or destroyed. */
         [[nodiscard]] std::span<const StreamingCellPayloadHeader> Payloads() const noexcept;
+        /** @brief Returns canonical manifest hard dependencies owned by this candidate. @return Immutable dependency view. */
+        [[nodiscard]] std::span<const StreamingCellId> HardDependencies() const noexcept;
 
     private:
         friend Result<StreamingCellCandidate> PrepareStreamingCellCandidate(const CookedWorldIndexManifest &,
@@ -116,13 +119,14 @@ namespace Horo::WorldStreaming {
 
         StreamingCellCandidate(StreamingCellOperationHandle operation, Assets::AssetId chunkAsset,
                                CookedWorldCellManifestEntry manifestEntry, StreamingCellCompression compression,
-                               std::vector<StreamingCellPayloadHeader> payloads) noexcept;
+                               std::vector<StreamingCellPayloadHeader> payloads, std::vector<StreamingCellId> hardDependencies) noexcept;
 
         StreamingCellOperationHandle operation_{};
         Assets::AssetId chunkAsset_{};
         CookedWorldCellManifestEntry manifestEntry_{};
         StreamingCellCompression compression_{StreamingCellCompression::None};
         std::vector<StreamingCellPayloadHeader> payloads_;
+        std::vector<StreamingCellId> hardDependencies_;
     };
 
     /**

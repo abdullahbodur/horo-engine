@@ -26,17 +26,21 @@ namespace Horo::WorldStreaming {
         }
 
         CookedWorldIndexManifest Manifest() {
-            const auto grid = WorldCellQuantizationPolicy::Create({}, 100, {-1, 1, -1, 1, -1, 1}, 1).Value();
+            const auto grid = WorldCellQuantizationPolicy::Create({}, 100, {-1, 3, -1, 1, -1, 1}, 1).Value();
             const std::array layers{
                 WorldLayerDescriptor{TestSupport::Layer(), "base", WorldLayerOwnership::WorldStreaming, WorldLayerFlags::Persistent, 1.0F}};
-            const std::array cells{WorldPartitionCellDescriptor{Cell(), {Asset(4)}}};
+            const std::array cells{WorldPartitionCellDescriptor{Cell(), {Asset(4)}}, WorldPartitionCellDescriptor{Cell(1), {Asset(5)}},
+                                   WorldPartitionCellDescriptor{Cell(2), {Asset(6)}}};
             auto descriptor = WorldPartitionDescriptor::Create({}, World(),
                                                                {Math::WorldCoordinate64::FromMillimeters(-100, -100, -100),
-                                                                Math::WorldCoordinate64::FromMillimeters(199, 199, 199)},
-                                                               grid, layers, cells, {2, 2, 16})
+                                                                Math::WorldCoordinate64::FromMillimeters(399, 199, 199)},
+                                                               grid, layers, cells, {2, 4, 16})
                                   .Value();
-            const std::array cooked{CookedWorldCellManifestCandidate{Cell(), 48, 128, 99, Hash(), {}}};
-            auto result = CookedWorldIndexManifest::Create(std::move(descriptor), cooked, {2, 2, 2, 256, 256});
+            const std::array dependency{Cell(1), Cell(2)};
+            const std::array cooked{CookedWorldCellManifestCandidate{Cell(), 48, 128, 99, Hash(), dependency},
+                                    CookedWorldCellManifestCandidate{Cell(1), 1, 1, 1, Hash(8), {}},
+                                    CookedWorldCellManifestCandidate{Cell(2), 1, 1, 2, Hash(9), {}}};
+            auto result = CookedWorldIndexManifest::Create(std::move(descriptor), cooked, {4, 4, 4, 256, 256});
             return std::move(result).Value();
         }
 
@@ -51,6 +55,7 @@ namespace Horo::WorldStreaming {
                     .operationKind = StreamingCellOperationKind::Load,
                     .operationState = StreamingCellOperationState::Preparing,
                     .maximumPayloads = 4,
+                    .maximumDependencies = 4,
                     .maximumCompressedBytes = 256,
                     .maximumUncompressedBytes = 256,
                     .lifecycle = StreamingCellCandidateLifecycle::Active};
@@ -90,6 +95,9 @@ namespace Horo::WorldStreaming {
         REQUIRE(candidate.Compression() == StreamingCellCompression::None);
         REQUIRE(candidate.Payloads().size() == 2);
         REQUIRE(candidate.Payloads()[0].version == 1);
+        REQUIRE(candidate.HardDependencies().size() == 2);
+        REQUIRE(candidate.HardDependencies()[0] == Cell(1));
+        REQUIRE(candidate.HardDependencies()[1] == Cell(2));
 
         static_assert(!std::is_copy_constructible_v<StreamingCellCandidate>);
         static_assert(std::is_move_constructible_v<StreamingCellCandidate>);
@@ -116,9 +124,9 @@ namespace Horo::WorldStreaming {
         RequireError(PrepareStreamingCellCandidate(manifest, Context(), wrongHash), WorldStreamingErrors::CellCandidateStale);
 
         auto missingContext = Context();
-        missingContext.operation = Operation(IdentityFrom<StreamingGeneration>(1), Cell(1));
+        missingContext.operation = Operation(IdentityFrom<StreamingGeneration>(1), Cell(3));
         auto missingHeader = Header(payloads);
-        missingHeader.cell = Cell(1);
+        missingHeader.cell = Cell(3);
         RequireError(PrepareStreamingCellCandidate(manifest, missingContext, missingHeader),
                      WorldStreamingErrors::CellCandidateUnavailable);
     }
@@ -129,6 +137,10 @@ namespace Horo::WorldStreaming {
         const auto payloads = Payloads();
         auto limited = Context();
         limited.maximumPayloads = 1;
+        RequireError(PrepareStreamingCellCandidate(manifest, limited, Header(payloads)),
+                     WorldStreamingErrors::CellCandidateCapacityExceeded);
+        limited = Context();
+        limited.maximumDependencies = 1;
         RequireError(PrepareStreamingCellCandidate(manifest, limited, Header(payloads)),
                      WorldStreamingErrors::CellCandidateCapacityExceeded);
         limited = Context();
