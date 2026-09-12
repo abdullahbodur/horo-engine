@@ -12,12 +12,7 @@ namespace Horo::WorldStreaming {
         using TestSupport::Layer;
         using TestSupport::RequireError;
         using TestSupport::World;
-
-        StreamingRuntimeOwnerToken WorldOwner(const std::uint64_t owner = 5, const std::uint64_t epoch = 1) {
-            return {.partition = World(),
-                    .epoch = IdentityFrom<PartitionEpoch>(epoch),
-                    .owner = IdentityFrom<StreamingRuntimeOwnerId>(owner)};
-        }
+        using TestSupport::WorldOwner;
 
         WorldLayerControlOwner StreamingOwner() {
             return {.world = WorldOwner(), .kind = WorldLayerControlOwnerKind::WorldStreaming};
