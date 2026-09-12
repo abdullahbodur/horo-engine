@@ -32,6 +32,13 @@ namespace Horo::WorldStreaming {
         Failed,
     };
 
+    /** @brief Pending cleanup outcome retained while a cancellation or failure rolls back in-flight work. */
+    enum class WorldLayerStateRollbackDisposition : std::uint8_t {
+        None,
+        CancellationPending,
+        FailurePending,
+    };
+
     /** @brief Typed command applied to one exact layer-state publication. */
     enum class WorldLayerStateTransition : std::uint8_t {
         BeginLoad,
@@ -60,9 +67,10 @@ namespace Horo::WorldStreaming {
 
     /** @brief Immutable state fact retaining the exact classification and control owner it applies to. */
     struct WorldLayerStateRecord final {
-        WorldLayerOwnershipDescriptor ownership{}; /**< Stable layer classification and exact control owner. */
-        WorldLayerStateRevision revision{};        /**< Monotonic state-machine revision. */
-        WorldLayerState state{};                   /**< Current ordered load/activation state. */
+        WorldLayerOwnershipDescriptor ownership{};                /**< Stable layer classification and exact control owner. */
+        WorldLayerStateRevision revision{};                       /**< Monotonic state-machine revision. */
+        WorldLayerState state{};                                  /**< Current ordered load/activation state. */
+        WorldLayerStateRollbackDisposition rollbackDisposition{}; /**< Outcome retained until cleanup completes. */
 
         /** @brief Checks the retained ownership and state representation. @return True when structurally usable. */
         [[nodiscard]] bool IsValid() const noexcept;
@@ -107,6 +115,8 @@ namespace Horo::WorldStreaming {
      * @param request Exact current fence and requested transition.
      * @param authorityState Current owner lifecycle gate.
      * @return Successor record or a typed invalid, stale, unsupported, illegal-transition, lifecycle, or exhaustion error.
+     * Repeated Cancel in a rollback state returns the exact current record without consuming a revision. Fail retains a pending
+     * disposition until explicit cleanup completion can safely publish Failed.
      * @post Failure leaves @p current unchanged.
      */
     [[nodiscard]] Result<WorldLayerStateRecord> AdvanceWorldLayerState(const WorldLayerStateRecord &current,
@@ -114,7 +124,7 @@ namespace Horo::WorldStreaming {
                                                                        WorldLayerStateAuthorityState authorityState);
 
     /**
-     * @brief Rebinds an unloaded or failed state record to an admitted ownership successor.
+     * @brief Rebinds a quiescent unloaded or cleanup-complete failed record to an admitted ownership successor.
      * @param current Current immutable layer-state fact.
      * @param replacement Exact successor classification/owner publication for the same stable layer.
      * @param expected Exact current state fence.

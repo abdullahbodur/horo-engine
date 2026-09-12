@@ -909,17 +909,22 @@ Every command compares the exact world, stable layer identity, ownership revisio
 and state revision before producing a new immutable record. Cancellation of Loading
 enters Unloading; cancellation of Activating enters Deactivating. The corresponding
 completion is still required before the last stable Unloaded or Loaded state is
-reported. Repeated cancellation during those rollback states is idempotent. Failure
-from an in-flight state is explicit. A cancelling authority rejects new load or
-activation work but permits the deactivation/unload path to drain. Closed rejects all
-transitions and never fabricates cleanup acknowledgement.
+reported. Repeated cancellation during those rollback states returns the exact record
+without advancing its revision, including when the revision is exhausted. Failure
+from Loading or Activating records `FailurePending` while entering Unloading or
+Deactivating. A failed deactivation must continue through Unloading, and only explicit
+unload completion may publish the quiescent Failed state. Failure received during an
+existing rollback upgrades its retained disposition without losing the remaining
+cleanup obligation. A cancelling authority rejects new load or activation work but
+permits the deactivation/unload path to drain. Closed rejects all transitions and
+never fabricates cleanup acknowledgement.
 
 Initial state admission is bounded and starts at Unloaded even for a Persistent
 layer; the owner must still publish real load completion. Ownership replacement is
-allowed only while the state is Unloaded or Failed and must pass the WST-006.1 exact
-successor validation. Invalid, unsupported, stale, over-capacity, illegal-transition,
-cancelling and closed inputs return typed results without modifying the current
-record.
+allowed only while the state is Unloaded or cleanup-complete Failed and must pass the
+WST-006.1 exact successor validation. Invalid, unsupported, stale, over-capacity,
+illegal-transition, cancelling and closed inputs return typed results without
+modifying the current record.
 
 ### Persistent, non-spatial and dynamic ownership policy
 

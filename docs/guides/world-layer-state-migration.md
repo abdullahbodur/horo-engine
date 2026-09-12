@@ -21,9 +21,12 @@ physical cell residency or publishing unacknowledged cleanup.
    state as retained work that still needs an explicit completion.
 4. During cancellation or shutdown, stop new load and activation work. Cancellation
    enters `Deactivating` or `Unloading`; publish the matching completion before the
-   last stable state. Do not infer completion from cell eviction.
-5. Replace layer ownership only from `Unloaded` or `Failed`, using the exact WST-006.1
-   ownership successor and current state fence.
+   last stable state. Repeated cancellation preserves the exact rollback record and
+   revision. Do not infer completion from cell eviction.
+5. Retain `FailurePending` when in-flight work fails. Finish deactivation and unload
+   before publishing `Failed`; the failure signal alone is not cleanup acknowledgement.
+6. Replace layer ownership only from `Unloaded` or cleanup-complete `Failed`, using
+   the exact WST-006.1 ownership successor and current state fence.
 
 ## Troubleshooting
 
@@ -43,9 +46,10 @@ resolve target filtering. Those actions remain at their existing owner boundarie
 
 ## Validation Record
 
-Focused coverage exercises the full load/activate/deactivate/unload path, cancellation
-rollback, shutdown drain, failure, stale fences, ownership replacement, capacity,
-unsupported transitions and revision exhaustion.
+Focused coverage exercises the exhaustive valid-state, command and authority matrix,
+the full load/activate/deactivate/unload path, idempotent cancellation at revision
+exhaustion, failure cleanup, stale fences, ownership replacement, capacity and
+unsupported transitions.
 
 ## References
 
