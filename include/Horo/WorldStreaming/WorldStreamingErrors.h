@@ -152,6 +152,18 @@ namespace Horo::WorldStreaming::WorldStreamingErrors {
     extern const ErrorCodeDescriptor CookedManifestIdentityConflict;
     /** @brief A cooked cell dependency is invalid, duplicated, self-referential, or absent from the manifest. */
     extern const ErrorCodeDescriptor CookedManifestDependencyInvalid;
+    /** @brief A cell candidate context, fixed header, or payload table is malformed. */
+    extern const ErrorCodeDescriptor CellCandidateInvalid;
+    /** @brief A cell candidate requests an unsupported format, provider contract, or operation phase. */
+    extern const ErrorCodeDescriptor CellCandidateUnsupported;
+    /** @brief A cell candidate does not match its exact manifest record, operation, partition, or generation. */
+    extern const ErrorCodeDescriptor CellCandidateStale;
+    /** @brief Cell candidate header or payload storage exceeds a mandatory caller ceiling. */
+    extern const ErrorCodeDescriptor CellCandidateCapacityExceeded;
+    /** @brief The requested manifest cell is absent from the immutable cooked index. */
+    extern const ErrorCodeDescriptor CellCandidateUnavailable;
+    /** @brief Candidate preparation is closed by cancellation or shutdown. */
+    extern const ErrorCodeDescriptor CellCandidateLifecycleUnavailable;
     /** @brief A spatial-assignment request is empty, malformed, or has unordered/out-of-partition bounds. */
     extern const ErrorCodeDescriptor SpatialAssignmentInvalid;
     /** @brief A spatial-assignment request repeats one stable authored-object address. */
