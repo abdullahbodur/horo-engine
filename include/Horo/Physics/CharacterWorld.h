@@ -14,11 +14,23 @@
 #include <memory>
 
 namespace Horo::Character {
-    /** @brief Immutable owner generations selected for one detached Character-world candidate. */
+    /** @brief Immutable external generations required to prepare one detached Character-world candidate. */
+    struct CharacterWorldPreparationDescriptor final {
+        std::uint64_t sceneGeneration{};           /**< Exact scene generation that owns the world. */
+        Physics::PhysicsWorldId physicsWorld;      /**< Exact paired Physics-world generation. */
+        std::uint64_t collisionFilterGeneration{}; /**< Exact project collision-filter generation. */
+        std::uint64_t originGeneration{};          /**< Exact local-origin generation. */
+
+        [[nodiscard]] constexpr auto operator<=>(const CharacterWorldPreparationDescriptor &) const noexcept = default;
+    };
+
+    /** @brief Immutable complete owner generations retained by one prepared Character world. */
     struct CharacterWorldDescriptor final {
-        std::uint64_t sceneGeneration{};      /**< Exact scene generation that owns the world. */
-        CharacterWorldId identity;            /**< Process-local Character-world generation. */
-        Physics::PhysicsWorldId physicsWorld; /**< Exact paired Physics-world generation. */
+        std::uint64_t sceneGeneration{};           /**< Exact scene generation that owns the world. */
+        CharacterWorldId identity;                 /**< Internally issued, never-reused process-local generation. */
+        Physics::PhysicsWorldId physicsWorld;      /**< Exact paired Physics-world generation. */
+        std::uint64_t collisionFilterGeneration{}; /**< Exact project collision-filter generation. */
+        std::uint64_t originGeneration{};          /**< Exact local-origin generation. */
 
         [[nodiscard]] constexpr auto operator<=>(const CharacterWorldDescriptor &) const noexcept = default;
     };
@@ -42,12 +54,12 @@ namespace Horo::Character {
     public:
         /**
          * @brief Creates an unpublished world candidate and reserves its complete controller capacity.
-         * @param descriptor Exact scene, Character-world, and Physics-world owner generations.
+         * @param descriptor Exact external owner generations; the Character-world identity is issued internally.
          * @param settings Validated immutable settings snapshot copied into the candidate.
          * @return Prepared world, or a stable world/capacity error after complete rollback.
          * @post Success publishes no controller or scene state and retains no caller-owned storage.
          */
-        [[nodiscard]] static Result<std::unique_ptr<CharacterWorld>> Prepare(const CharacterWorldDescriptor &descriptor,
+        [[nodiscard]] static Result<std::unique_ptr<CharacterWorld>> Prepare(const CharacterWorldPreparationDescriptor &descriptor,
                                                                              const CharacterWorldSettings &settings);
 
         /** @brief Drains controller records and retires the world if its aggregate owner omitted explicit shutdown. */
@@ -65,8 +77,7 @@ namespace Horo::Character {
          * @brief Installs one validated owned controller descriptor into bounded world storage.
          * @param descriptor Inert descriptor bound to this world's exact owner generations.
          * @return Stable handle, or a typed descriptor/world/capacity/generation error.
-         * @pre The aggregate owner serializes this call during candidate preparation or a declared
-         * controller-lifecycle safe point. Concurrent fixed-tick admission is not supported.
+         * @pre The world is prepared and the call occurs on its preparation thread.
          * @post Failure preserves every existing controller and slot generation.
          */
         [[nodiscard]] Result<CharacterControllerHandle> CreateController(const CharacterControllerDescriptor &descriptor);
@@ -75,8 +86,7 @@ namespace Horo::Character {
          * @brief Removes one exact live controller generation and releases its owned record.
          * @param handle Handle issued by this world for a currently resident controller.
          * @return Success, or a typed malformed/foreign/stale/lifecycle error without mutation.
-         * @pre The aggregate owner serializes this call during candidate preparation or a declared
-         * controller-lifecycle safe point. Concurrent fixed-tick admission is not supported.
+         * @pre The world is prepared and the call occurs on its preparation thread.
          */
         [[nodiscard]] Result<void> DestroyController(const CharacterControllerHandle &handle);
 

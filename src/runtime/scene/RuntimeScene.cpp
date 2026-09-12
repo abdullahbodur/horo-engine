@@ -366,6 +366,16 @@ namespace Horo::Runtime {
         Shutdown();
     }
 
+    /** @copydoc RuntimeSceneService::AddActivationParticipant */
+    Result<void> RuntimeSceneService::AddActivationParticipant(std::unique_ptr<SceneActivationParticipant> participant) {
+        if (!participant)
+            return Result<void>::Failure(MakeError(SceneErrors::InvalidCandidate, "Scene activation participant is null."));
+        if (started_ || shutdown_ || transition_ != TransitionKind::None || preparation_ || pending_)
+            return Result<void>::Failure(MakeError(SceneErrors::OperationInProgress));
+        participants_.push_back(std::move(participant));
+        return Result<void>::Success();
+    }
+
     /** @copydoc RuntimeSceneService::QueuePreparation */
     Result<void> RuntimeSceneService::QueuePreparation(RuntimeSceneDefinition definition, const RuntimeSceneConfig config) {
         if (shutdown_)
@@ -410,6 +420,10 @@ namespace Horo::Runtime {
                 return Result<void>::Failure(candidate.ErrorValue());
             ++nextRuntimeId_;
             pending_ = std::move(candidate).Value();
+            if (const Result<void> prepared = PrepareParticipants(definition); prepared.HasError()) {
+                pending_.reset();
+                return prepared;
+            }
             transition_ = TransitionKind::Activate;
             return Result<void>::Success();
         }
@@ -441,6 +455,7 @@ namespace Horo::Runtime {
         if (structuralCommands_)
             return Result<void>::Failure(MakeError(SceneErrors::OperationInProgress));
         CancelPreparation(false);
+        ShutdownCandidates(pendingCandidates_);
         pending_.reset();
         transition_ = None;
         if (!active_)
@@ -506,7 +521,9 @@ namespace Horo::Runtime {
         structuralCommands_.reset();
         structuralResult_.reset();
         operationError_.reset();
+        ShutdownCandidates(pendingCandidates_);
         pending_.reset();
+        ShutdownCandidates(activeCandidates_);
         active_.reset();
         transition_ = TransitionKind::None;
         started_ = false;
@@ -606,6 +623,12 @@ namespace Horo::Runtime {
         }
         ++nextRuntimeId_;
         pending_ = std::move(candidate).Value();
+        if (const Result<void> prepared = PrepareParticipants(preparation_->definition); prepared.HasError()) {
+            operationError_ = prepared.ErrorValue();
+            pending_.reset();
+            preparation_.reset();
+            return;
+        }
         preparation_.reset();
         transition_ = TransitionKind::Activate;
     }
@@ -633,11 +656,50 @@ namespace Horo::Runtime {
             else
                 structuralResult_ = std::move(committed).Value();
         }
-        if (transition_ == Activate)
-            active_ = std::move(pending_);
-        else if (transition_ == Unload)
+        if (transition_ == Activate) {
+            std::size_t activated{};
+            for (; activated < pendingCandidates_.size(); ++activated) {
+                if (const Result<void> result = pendingCandidates_[activated]->Activate(); result.HasError()) {
+                    operationError_ = result.ErrorValue();
+                    ShutdownCandidates(pendingCandidates_);
+                    pending_.reset();
+                    transition_ = None;
+                    return Result<void>::Success();
+                }
+            }
+            ShutdownCandidates(activeCandidates_);
             active_.reset();
+            active_ = std::move(pending_);
+            activeCandidates_ = std::move(pendingCandidates_);
+        } else if (transition_ == Unload) {
+            ShutdownCandidates(activeCandidates_);
+            active_.reset();
+        }
         transition_ = None;
         return Result<void>::Success();
+    }
+
+    Result<void> RuntimeSceneService::PrepareParticipants(const RuntimeSceneDefinition &definition) {
+        ShutdownCandidates(pendingCandidates_);
+        pendingCandidates_.reserve(participants_.size());
+        for (const auto &participant : participants_) {
+            auto prepared = participant->Prepare(definition, pending_->View());
+            if (prepared.HasError()) {
+                ShutdownCandidates(pendingCandidates_);
+                return Result<void>::Failure(prepared.ErrorValue());
+            }
+            if (!prepared.Value()) {
+                ShutdownCandidates(pendingCandidates_);
+                return Result<void>::Failure(MakeError(SceneErrors::InvalidCandidate, "Participant returned a null candidate."));
+            }
+            pendingCandidates_.push_back(std::move(prepared).Value());
+        }
+        return Result<void>::Success();
+    }
+
+    void RuntimeSceneService::ShutdownCandidates(std::vector<std::unique_ptr<SceneActivationCandidate>> &candidates) noexcept {
+        for (auto candidate = candidates.rbegin(); candidate != candidates.rend(); ++candidate)
+            (*candidate)->Shutdown();
+        candidates.clear();
     }
 }  // namespace Horo::Runtime

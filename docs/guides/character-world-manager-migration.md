@@ -12,10 +12,11 @@ parallel.
 During aggregate scene candidate preparation:
 
 1. Capture and validate one immutable `CharacterWorldSettings` snapshot.
-2. Select the exact scene generation, process-local `CharacterWorldId`, and paired
-   `PhysicsWorldId` in a `CharacterWorldDescriptor`.
+2. Supply the exact scene, paired `PhysicsWorldId`, collision-filter, and local-origin
+   generations in a `CharacterWorldPreparationDescriptor`. The manager issues a
+   never-reused process-local `CharacterWorldId`; callers cannot select or recycle it.
 3. Call `CharacterWorld::Prepare`. This allocates the complete controller slot table
-   and returns an unpublished candidate.
+   and returns an unpublished candidate with its completed owner descriptor.
 4. Create candidate controllers with descriptors bound to the same three owner
    generations. A failure leaves existing slots and generations unchanged.
 5. Call `Activate` only when the Scene, Physics, and Character candidates can be
@@ -34,6 +35,13 @@ remain stale. A slot at the generation ceiling is permanently retired; replace t
 Character world when all slots report `CharacterErrors::GenerationExhausted`.
 
 `ControllerDescriptor` returns an owned copy rather than a pointer into slot
-storage. Controller creation and destruction must be serialized during candidate
-preparation or an aggregate-owner lifecycle safe point. Tick-addressed concurrent
-command ingestion is introduced separately by CHR-001.4.
+storage. Controller creation and destruction are admitted only on the preparation
+thread while the world remains unpublished. Active-world changes are rejected
+until the tick-addressed safe-point command ingestion introduced by CHR-001.4 is
+available.
+
+Production hosts inject `PhysicsSceneActivationParticipant` into
+`RuntimeSceneService`. The aggregate service prepares detached paired Physics and
+Character worlds, preserves the old bundle when either participant preparation or
+activation fails, and shuts Character down before Physics during replacement,
+unload, and host shutdown.

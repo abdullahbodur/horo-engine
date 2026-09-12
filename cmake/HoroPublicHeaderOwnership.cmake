@@ -248,6 +248,7 @@ horo_configure_target_header_boundary(HoroPhysics PUBLIC_HEADERS
     Horo/Physics/PhysicsMetrics.h
     Horo/Physics/PhysicsPose.h
     Horo/Physics/PhysicsQuery.h
+    Horo/Physics/PhysicsSceneActivation.h
     Horo/Physics/PhysicsShapeDescriptor.h
     Horo/Physics/PhysicsStepPolicy.h
     Horo/Physics/PhysicsTickPipeline.h

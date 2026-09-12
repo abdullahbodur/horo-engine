@@ -443,6 +443,7 @@ add_library(HoroPhysics STATIC
         physics/CharacterControllerRegistry.h
         physics/CharacterWorld.cpp
         physics/CharacterWorldSettings.cpp
+        physics/GenerationalSlotStorage.h
         physics/PhysicsBodyDescriptor.cpp
         physics/PhysicsCapabilities.cpp
         physics/PhysicsCollisionSchema.cpp
@@ -457,6 +458,7 @@ add_library(HoroPhysics STATIC
         physics/PhysicsMetrics.cpp
         physics/PhysicsPose.cpp
         physics/PhysicsQuery.cpp
+        physics/PhysicsSceneActivation.cpp
         physics/PhysicsShapeDescriptor.cpp
         physics/PhysicsStepPolicy.cpp
         physics/PhysicsWorld.cpp
@@ -466,7 +468,7 @@ add_library(HoroPhysics STATIC
 )
 add_library(HoroEngine::Physics ALIAS HoroPhysics)
 target_compile_features(HoroPhysics PUBLIC cxx_std_20)
-target_link_libraries(HoroPhysics PUBLIC HoroEngine::Foundation HoroEngine::Assets)
+target_link_libraries(HoroPhysics PUBLIC HoroEngine::Foundation HoroEngine::Assets HoroEngine::RuntimeScene)
 if(HORO_BUILD_PHYSICS_NATIVE)
     target_sources(HoroPhysics PRIVATE
         physics/CanonicalPhysicsRuntime.cpp

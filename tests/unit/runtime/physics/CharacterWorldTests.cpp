@@ -1,9 +1,11 @@
 #include "CharacterControllerRegistry.h"
 #include "Horo/Physics/CharacterWorld.h"
+#include "PhysicsTestUtils.h"
 
 #include <catch2/catch_test_macros.hpp>
 #include <cstdint>
 #include <limits>
+#include <thread>
 #include <utility>
 
 namespace Horo::Character {
@@ -20,8 +22,8 @@ namespace Horo::Character {
             return result.Value();
         }
 
-        [[nodiscard]] CharacterWorldDescriptor WorldDescriptor() {
-            return {61, WorldId(), PhysicsWorldId()};
+        [[nodiscard]] CharacterWorldPreparationDescriptor WorldDescriptor() {
+            return {61, PhysicsWorldId(), 91, 101};
         }
 
         [[nodiscard]] CharacterWorldSettings Settings(const std::uint32_t maximumControllers = 2) {
@@ -40,7 +42,7 @@ namespace Horo::Character {
             };
         }
 
-        [[nodiscard]] CharacterControllerDescriptor ControllerDescriptor(const CharacterWorldDescriptor &world = WorldDescriptor()) {
+        [[nodiscard]] CharacterControllerDescriptor ControllerDescriptor(const CharacterWorldDescriptor &world) {
             CharacterControllerDescriptor descriptor;
             descriptor.sceneGeneration = world.sceneGeneration;
             descriptor.characterWorld = world.identity;
@@ -51,10 +53,7 @@ namespace Horo::Character {
             return descriptor;
         }
 
-        template <typename ResultType> void RequireError(const ResultType &result, const ErrorCodeDescriptor &expected) {
-            REQUIRE(result.HasError());
-            REQUIRE(result.ErrorValue().code.Value() == expected.code.Value());
-        }
+        using Physics::Test::RequireError;
 
         [[nodiscard]] std::unique_ptr<CharacterWorld> PreparedWorld(const std::uint32_t maximumControllers = 2) {
             const auto settings = Settings(maximumControllers);
@@ -69,7 +68,11 @@ namespace Horo::Character {
             auto prepared = CharacterWorld::Prepare(owner, settings);
             REQUIRE(prepared.HasValue());
             REQUIRE(prepared.Value()->State() == CharacterWorldState::Prepared);
-            REQUIRE(prepared.Value()->Descriptor() == owner);
+            REQUIRE(prepared.Value()->Descriptor().sceneGeneration == owner.sceneGeneration);
+            REQUIRE(prepared.Value()->Descriptor().physicsWorld == owner.physicsWorld);
+            REQUIRE(prepared.Value()->Descriptor().collisionFilterGeneration == owner.collisionFilterGeneration);
+            REQUIRE(prepared.Value()->Descriptor().originGeneration == owner.originGeneration);
+            REQUIRE(prepared.Value()->Descriptor().identity.IsValid());
             REQUIRE(prepared.Value()->Settings().Identity() == settings.Identity());
             REQUIRE(prepared.Value()->ControllerCapacity() == 2);
             REQUIRE(prepared.Value()->ActiveControllerCount() == 0);
@@ -78,17 +81,20 @@ namespace Horo::Character {
             invalid.sceneGeneration = 0;
             RequireError(CharacterWorld::Prepare(invalid, settings), CharacterErrors::WorldInvalid);
             invalid = owner;
-            invalid.identity = {};
+            invalid.collisionFilterGeneration = 0;
             RequireError(CharacterWorld::Prepare(invalid, settings), CharacterErrors::WorldInvalid);
             invalid = owner;
             invalid.physicsWorld = {};
+            RequireError(CharacterWorld::Prepare(invalid, settings), CharacterErrors::WorldInvalid);
+            invalid = owner;
+            invalid.originGeneration = 0;
             RequireError(CharacterWorld::Prepare(invalid, settings), CharacterErrors::WorldInvalid);
         }
 
         TEST_CASE("Character world deterministically reuses slots without aliasing stale handles",
                   "[physics][character][world][capacity]") {
             auto world = PreparedWorld();
-            const auto descriptor = ControllerDescriptor();
+            const auto descriptor = ControllerDescriptor(world->Descriptor());
             const auto first = world->CreateController(descriptor);
             const auto second = world->CreateController(descriptor);
             REQUIRE(first.HasValue());
@@ -113,15 +119,15 @@ namespace Horo::Character {
         TEST_CASE("Character world rejects malformed foreign and over-budget controller creation transactionally",
                   "[physics][character][world]") {
             auto world = PreparedWorld();
-            auto descriptor = ControllerDescriptor();
+            auto descriptor = ControllerDescriptor(world->Descriptor());
             descriptor.capsule.radiusMeters = 0;
             RequireError(world->CreateController(descriptor), CharacterErrors::DescriptorInvalid);
             REQUIRE(world->ActiveControllerCount() == 0);
 
-            descriptor = ControllerDescriptor();
+            descriptor = ControllerDescriptor(world->Descriptor());
             descriptor.characterWorld = WorldId(72);
             RequireError(world->CreateController(descriptor), CharacterErrors::HandleWorldMismatch);
-            descriptor = ControllerDescriptor();
+            descriptor = ControllerDescriptor(world->Descriptor());
             descriptor.physicsWorld = PhysicsWorldId(82);
             RequireError(world->CreateController(descriptor), CharacterErrors::HandleWorldMismatch);
             REQUIRE(world->ActiveControllerCount() == 0);
@@ -133,19 +139,22 @@ namespace Horo::Character {
             REQUIRE(settings.HasValue());
             auto prepared = CharacterWorld::Prepare(WorldDescriptor(), settings.Value());
             REQUIRE(prepared.HasValue());
-            RequireError(prepared.Value()->CreateController(ControllerDescriptor()), CharacterErrors::CapacityExceeded);
+            RequireError(prepared.Value()->CreateController(ControllerDescriptor(prepared.Value()->Descriptor())),
+                         CharacterErrors::CapacityExceeded);
             REQUIRE(prepared.Value()->ActiveControllerCount() == 0);
         }
 
         TEST_CASE("Character world activation and shutdown are explicit terminal lifecycle operations",
                   "[physics][character][world][lifecycle]") {
             auto world = PreparedWorld();
-            const auto handle = world->CreateController(ControllerDescriptor());
+            const auto descriptor = ControllerDescriptor(world->Descriptor());
+            const auto handle = world->CreateController(descriptor);
             REQUIRE(handle.HasValue());
             REQUIRE(world->Activate().HasValue());
             REQUIRE(world->State() == CharacterWorldState::Active);
             RequireError(world->Activate(), CharacterErrors::InvalidState);
-            REQUIRE(world->CreateController(ControllerDescriptor()).HasValue());
+            RequireError(world->CreateController(descriptor), CharacterErrors::InvalidState);
+            RequireError(world->DestroyController(handle.Value()), CharacterErrors::InvalidState);
 
             world->Shutdown();
             REQUIRE(world->State() == CharacterWorldState::Destroyed);
@@ -153,8 +162,49 @@ namespace Horo::Character {
             world->Shutdown();
             RequireError(world->ControllerDescriptor(handle.Value()), CharacterErrors::InvalidState);
             RequireError(world->DestroyController(handle.Value()), CharacterErrors::InvalidState);
-            RequireError(world->CreateController(ControllerDescriptor()), CharacterErrors::InvalidState);
+            RequireError(world->CreateController(descriptor), CharacterErrors::InvalidState);
             RequireError(world->Activate(), CharacterErrors::InvalidState);
+        }
+
+        TEST_CASE("Character worlds issue distinct owner generations and reject cross-world aliases",
+                  "[physics][character][world][identity]") {
+            auto first = PreparedWorld(1);
+            auto second = PreparedWorld(1);
+            REQUIRE(first->Descriptor().identity != second->Descriptor().identity);
+            const auto firstHandle = first->CreateController(ControllerDescriptor(first->Descriptor()));
+            const auto secondHandle = second->CreateController(ControllerDescriptor(second->Descriptor()));
+            REQUIRE(firstHandle.HasValue());
+            REQUIRE(secondHandle.HasValue());
+            REQUIRE(firstHandle.Value().slot == secondHandle.Value().slot);
+            RequireError(first->ControllerDescriptor(secondHandle.Value()), CharacterErrors::HandleWorldMismatch);
+            RequireError(second->ControllerDescriptor(firstHandle.Value()), CharacterErrors::HandleWorldMismatch);
+        }
+
+        TEST_CASE("Character world rejects prepared mutation from a foreign thread without changing storage",
+                  "[physics][character][world][thread]") {
+            auto world = PreparedWorld(1);
+            const auto descriptor = ControllerDescriptor(world->Descriptor());
+            std::optional<Error> activationError;
+            std::thread activation([&] {
+                const auto activated = world->Activate();
+                if (activated.HasError())
+                    activationError = activated.ErrorValue();
+            });
+            activation.join();
+            REQUIRE(activationError.has_value());
+            REQUIRE(activationError->code.Value() == CharacterErrors::InvalidState.code.Value());
+            REQUIRE(world->State() == CharacterWorldState::Prepared);
+
+            std::optional<Error> creationError;
+            std::thread foreign([&] {
+                const auto created = world->CreateController(descriptor);
+                if (created.HasError())
+                    creationError = created.ErrorValue();
+            });
+            foreign.join();
+            REQUIRE(creationError.has_value());
+            REQUIRE(creationError->code.Value() == CharacterErrors::InvalidState.code.Value());
+            REQUIRE(world->ActiveControllerCount() == 0);
         }
 
         struct TrackedRecord final {
@@ -194,8 +244,9 @@ namespace Horo::Character {
             using Registry = Detail::CharacterControllerRegistry<TrackedRecord>;
             auto created = Registry::Create(61, WorldId(), {.maximumSlots = 1, .maximumGeneration = 2});
             REQUIRE(created.HasValue());
-            auto registry = std::move(created).Value();
             std::uint32_t live{};
+            auto registry = std::move(created).Value();
+            RequireError(created.Value().Acquire(TrackedRecord{live}), CharacterErrors::CapacityExceeded);
             const auto first = registry.Acquire(TrackedRecord{live});
             REQUIRE(first.HasValue());
             REQUIRE(live == 1);

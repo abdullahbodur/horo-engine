@@ -2,7 +2,10 @@
 
 #include "CharacterControllerRegistry.h"
 
+#include <atomic>
+#include <limits>
 #include <new>
+#include <thread>
 #include <utility>
 
 namespace Horo::Character {
@@ -13,10 +16,35 @@ namespace Horo::Character {
         };
 
         /** @brief Validates the immutable owner tuple selected before slot allocation. */
-        [[nodiscard]] Result<void> ValidateWorldDescriptor(const CharacterWorldDescriptor &descriptor) {
-            if (descriptor.sceneGeneration == 0 || !descriptor.identity.IsValid() || !descriptor.physicsWorld.IsValid())
-                return Result<void>::Failure(MakeError(CharacterErrors::WorldInvalid));
+        std::atomic<std::uint64_t> nextWorldIdentity{1};
+
+        [[nodiscard]] Result<CharacterWorldDescriptor> CompleteWorldDescriptor(const CharacterWorldPreparationDescriptor &descriptor) {
+            if (descriptor.sceneGeneration == 0 || !descriptor.physicsWorld.IsValid() || descriptor.collisionFilterGeneration == 0 ||
+                descriptor.originGeneration == 0)
+                return Result<CharacterWorldDescriptor>::Failure(MakeError(CharacterErrors::WorldInvalid));
+            std::uint64_t identityValue = nextWorldIdentity.load(std::memory_order_relaxed);
+            do {
+                if (identityValue == 0 || identityValue == std::numeric_limits<std::uint64_t>::max())
+                    return Result<CharacterWorldDescriptor>::Failure(MakeError(CharacterErrors::GenerationExhausted));
+            } while (!nextWorldIdentity.compare_exchange_weak(identityValue, identityValue + 1, std::memory_order_relaxed));
+            const auto identity = CharacterWorldId::Create(identityValue);
+            if (identity.HasError())
+                return Result<CharacterWorldDescriptor>::Failure(identity.ErrorValue());
+            return Result<CharacterWorldDescriptor>::Success({descriptor.sceneGeneration, identity.Value(), descriptor.physicsWorld,
+                                                              descriptor.collisionFilterGeneration, descriptor.originGeneration});
+        }
+
+        [[nodiscard]] Result<void> RequireOwnerThread(const std::thread::id ownerThread) {
+            if (ownerThread != std::this_thread::get_id())
+                return Result<void>::Failure(
+                    MakeError(CharacterErrors::InvalidState, "Character world mutation requires its preparation thread."));
             return Result<void>::Success();
+        }
+
+        [[nodiscard]] Result<void> RequirePreparedMutation(const CharacterWorldState state, const std::thread::id ownerThread) {
+            if (state != CharacterWorldState::Prepared)
+                return Result<void>::Failure(MakeError(CharacterErrors::InvalidState));
+            return RequireOwnerThread(ownerThread);
         }
     }  // namespace
 
@@ -28,24 +56,27 @@ namespace Horo::Character {
         CharacterWorldDescriptor descriptor;
         CharacterWorldSettings settings;
         Detail::CharacterControllerRegistry<CharacterControllerRecord> controllers;
+        std::thread::id ownerThread{std::this_thread::get_id()};
         CharacterWorldState state{CharacterWorldState::Prepared};
     };
 
     /** @copydoc CharacterWorld::Prepare */
-    Result<std::unique_ptr<CharacterWorld>> CharacterWorld::Prepare(const CharacterWorldDescriptor &descriptor,
+    Result<std::unique_ptr<CharacterWorld>> CharacterWorld::Prepare(const CharacterWorldPreparationDescriptor &descriptor,
                                                                     const CharacterWorldSettings &settings) {
-        if (const auto valid = ValidateWorldDescriptor(descriptor); valid.HasError())
-            return Result<std::unique_ptr<CharacterWorld>>::Failure(valid.ErrorValue());
+        const auto completed = CompleteWorldDescriptor(descriptor);
+        if (completed.HasError())
+            return Result<std::unique_ptr<CharacterWorld>>::Failure(completed.ErrorValue());
+        const CharacterWorldDescriptor owner = completed.Value();
 
         auto registry =
-            Detail::CharacterControllerRegistry<CharacterControllerRecord>::Create(descriptor.sceneGeneration, descriptor.identity,
+            Detail::CharacterControllerRegistry<CharacterControllerRecord>::Create(owner.sceneGeneration, owner.identity,
                                                                                    {.maximumSlots =
                                                                                         settings.Values().capacities.maximumControllers});
         if (registry.HasError())
             return Result<std::unique_ptr<CharacterWorld>>::Failure(registry.ErrorValue());
 
         try {
-            auto impl = std::make_unique<Impl>(descriptor, settings, std::move(registry).Value());
+            auto impl = std::make_unique<Impl>(owner, settings, std::move(registry).Value());
             return Result<std::unique_ptr<CharacterWorld>>::Success(std::unique_ptr<CharacterWorld>{new CharacterWorld(std::move(impl))});
         } catch (const std::bad_alloc &) {
             return Result<std::unique_ptr<CharacterWorld>>::Failure(
@@ -63,16 +94,17 @@ namespace Horo::Character {
 
     /** @copydoc CharacterWorld::Activate */
     Result<void> CharacterWorld::Activate() {
-        if (impl_->state != CharacterWorldState::Prepared)
-            return Result<void>::Failure(MakeError(CharacterErrors::InvalidState));
+        if (const auto ready = RequirePreparedMutation(impl_->state, impl_->ownerThread); ready.HasError())
+            return ready;
         impl_->state = CharacterWorldState::Active;
         return Result<void>::Success();
     }
 
     /** @copydoc CharacterWorld::CreateController */
     Result<CharacterControllerHandle> CharacterWorld::CreateController(const CharacterControllerDescriptor &descriptor) {
-        if (impl_->state == CharacterWorldState::Destroyed)
-            return Result<CharacterControllerHandle>::Failure(MakeError(CharacterErrors::InvalidState));
+        if (const auto ready = RequirePreparedMutation(impl_->state, impl_->ownerThread); ready.HasError())
+            return Result<CharacterControllerHandle>::Failure(
+                MakeError(CharacterErrors::InvalidState, "Controller creation requires prepared owner-thread mutation."));
         if (const auto valid = ValidateCharacterControllerDescriptor(descriptor); valid.HasError())
             return Result<CharacterControllerHandle>::Failure(valid.ErrorValue());
         if (descriptor.sceneGeneration != impl_->descriptor.sceneGeneration || descriptor.characterWorld != impl_->descriptor.identity ||
@@ -86,8 +118,9 @@ namespace Horo::Character {
 
     /** @copydoc CharacterWorld::DestroyController */
     Result<void> CharacterWorld::DestroyController(const CharacterControllerHandle &handle) {
-        if (impl_->state == CharacterWorldState::Destroyed)
-            return Result<void>::Failure(MakeError(CharacterErrors::InvalidState));
+        if (const auto ready = RequirePreparedMutation(impl_->state, impl_->ownerThread); ready.HasError())
+            return Result<void>::Failure(
+                MakeError(CharacterErrors::InvalidState, "Controller destruction requires prepared owner-thread mutation."));
         return impl_->controllers.Remove(handle);
     }
 
