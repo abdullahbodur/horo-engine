@@ -164,6 +164,18 @@ namespace Horo::WorldStreaming::WorldStreamingErrors {
     extern const ErrorCodeDescriptor CellCandidateUnavailable;
     /** @brief Candidate preparation is closed by cancellation or shutdown. */
     extern const ErrorCodeDescriptor CellCandidateLifecycleUnavailable;
+    /** @brief A cell activation identity, fence, requirement or receipt is malformed. */
+    extern const ErrorCodeDescriptor CellActivationInvalid;
+    /** @brief A prepared receipt or commit command names another operation, generation or service revision. */
+    extern const ErrorCodeDescriptor CellActivationStale;
+    /** @brief The required Scene/provider receipt set is missing, duplicated or otherwise incomplete. */
+    extern const ErrorCodeDescriptor CellActivationIncomplete;
+    /** @brief A required receipt set exceeds its mandatory admission ceiling. */
+    extern const ErrorCodeDescriptor CellActivationCapacityExceeded;
+    /** @brief Cell activation admission or publication is closed by cancellation, shutdown or terminal ownership. */
+    extern const ErrorCodeDescriptor CellActivationLifecycleUnavailable;
+    /** @brief Publication was requested outside CommitDeferredLifecycleChanges. */
+    extern const ErrorCodeDescriptor CellActivationSafePointUnavailable;
     /** @brief A spatial-assignment request is empty, malformed, or has unordered/out-of-partition bounds. */
     extern const ErrorCodeDescriptor SpatialAssignmentInvalid;
     /** @brief A spatial-assignment request repeats one stable authored-object address. */
@@ -292,6 +304,18 @@ namespace Horo::WorldStreaming::WorldStreamingErrors {
     extern const ErrorCodeDescriptor ObjectOwnershipCapacityExceeded;
     /** @brief Ownership admission is closed because its authority is cancelling or shut down. */
     extern const ErrorCodeDescriptor ObjectOwnershipLifecycleUnavailable;
+    /** @brief A runtime-entity cell-exit request, context, handle, or capacity is malformed. */
+    extern const ErrorCodeDescriptor RuntimeEntityCellExitInvalid;
+    /** @brief A runtime-entity cell-exit policy, successor, or transition value is unsupported. */
+    extern const ErrorCodeDescriptor RuntimeEntityCellExitUnsupported;
+    /** @brief A cell-exit command or source observation does not name the current entity and cell generation. */
+    extern const ErrorCodeDescriptor RuntimeEntityCellExitStale;
+    /** @brief The bounded cell-exit owner cannot admit another in-flight transaction. */
+    extern const ErrorCodeDescriptor RuntimeEntityCellExitCapacityExceeded;
+    /** @brief Runtime-entity cell-exit admission is cancelling or closed. */
+    extern const ErrorCodeDescriptor RuntimeEntityCellExitLifecycleUnavailable;
+    /** @brief A known runtime-entity cell-exit transition is illegal from the current phase. */
+    extern const ErrorCodeDescriptor RuntimeEntityCellExitTransitionInvalid;
     /** @brief A partition capability snapshot or project-settings request is structurally invalid. */
     extern const ErrorCodeDescriptor PartitionSettingsInvalid;
     /** @brief A precision or package mode is unsupported by the selected project profile or host. */
@@ -302,4 +326,18 @@ namespace Horo::WorldStreaming::WorldStreamingErrors {
     extern const ErrorCodeDescriptor PartitionSettingsStale;
     /** @brief Settings-dependent work is unavailable because admission is cancelling or closed. */
     extern const ErrorCodeDescriptor PartitionSettingsLifecycleUnavailable;
+    /** @brief A cell asset request identity, fence, or mandatory limit is malformed. */
+    extern const ErrorCodeDescriptor CellAssetRequestInvalid;
+    /** @brief A cell asset request names a replaced candidate or mounted partition. */
+    extern const ErrorCodeDescriptor CellAssetRequestStale;
+    /** @brief A manifest dependency or registered cooked asset cannot be resolved. */
+    extern const ErrorCodeDescriptor CellAssetRequestUnavailable;
+    /** @brief The candidate dependency tree exceeds its explicit request ceiling. */
+    extern const ErrorCodeDescriptor CellAssetRequestCapacityExceeded;
+    /** @brief Asset request admission is cancelling, closed, or no longer controllable. */
+    extern const ErrorCodeDescriptor CellAssetRequestLifecycleUnavailable;
+    /** @brief The aggregate still has provider work in flight. */
+    extern const ErrorCodeDescriptor CellAssetRequestNotReady;
+    /** @brief The terminal aggregate result was already consumed. */
+    extern const ErrorCodeDescriptor CellAssetRequestConsumed;
 }  // namespace Horo::WorldStreaming::WorldStreamingErrors

@@ -34,6 +34,8 @@ workflows.
   replace ambient extrapolation with exact bounded camera/gameplay path projection.
 - [World Streaming Cell Candidate Migration](./world-streaming-cell-candidate-migration.md):
   prepare immutable generation-pinned cell candidates from validated manifest and header facts.
+- [World Streaming Cell Asset Request Migration](./world-streaming-cell-asset-request-migration.md):
+  join bounded candidate dependencies beneath one explicit cancellation root.
 - [XR Coordinate and Pose Contract Migration](./xr-coordinate-pose-migration.md):
   publish generation-fenced coordinate, validity, and time evidence without native
   backend leakage or implicit clock conversion.
@@ -63,6 +65,8 @@ workflows.
   adopt generation-fenced listener and connection transitions, deadlines, and exactly-once terminal results.
 - [Transport Budget Migration](./transport-budget-migration.md):
   enforce versioned connection, queue, byte, rate, and sustained-overload limits before backend mutation.
+- [Deterministic Network Transport Migration](./deterministic-network-transport-migration.md):
+  compose explicit network-disabled, loopback, and seeded impairment modes with bounded caller-thread delivery.
 
 ## Writing a Guide
 
