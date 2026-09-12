@@ -325,12 +325,32 @@ namespace Horo::Extensions::ExtensionErrors {
         .userActionable = false,
     };
 
+    const ErrorCodeDescriptor ToolchainProviderRegistryInvalid{
+        .domain = Domain,
+        .code = ErrorCode{"toolchain_provider_registry_invalid"},
+        .defaultSeverity = ErrorSeverity::Error,
+        .summary = "The toolchain provider registry input is invalid.",
+        .remediationHint = "Provide canonical bounded provider, tool, authority, and invocation values.",
+        .retryable = false,
+        .userActionable = false,
+    };
+
     const ErrorCodeDescriptor PipelineStepRegistryDuplicate{
         .domain = Domain,
         .code = ErrorCode{"pipeline_step_registry_duplicate"},
         .defaultSeverity = ErrorSeverity::Error,
         .summary = "The pipeline step or output producer is already registered.",
         .remediationHint = "Publish one provider per step identity and one producer per generated artifact.",
+        .retryable = false,
+        .userActionable = false,
+    };
+
+    const ErrorCodeDescriptor ToolchainProviderRegistryDuplicate{
+        .domain = Domain,
+        .code = ErrorCode{"toolchain_provider_registry_duplicate"},
+        .defaultSeverity = ErrorSeverity::Error,
+        .summary = "The toolchain provider contribution is already registered.",
+        .remediationHint = "Publish only one active provider generation for each contribution identity.",
         .retryable = false,
         .userActionable = false,
     };
@@ -345,12 +365,32 @@ namespace Horo::Extensions::ExtensionErrors {
         .userActionable = false,
     };
 
+    const ErrorCodeDescriptor ToolchainProviderRegistryCapacityExceeded{
+        .domain = Domain,
+        .code = ErrorCode{"toolchain_provider_registry_capacity_exceeded"},
+        .defaultSeverity = ErrorSeverity::Error,
+        .summary = "The toolchain provider registry capacity was exceeded.",
+        .remediationHint = "Reduce the explicitly composed provider set.",
+        .retryable = false,
+        .userActionable = false,
+    };
+
     const ErrorCodeDescriptor PipelineStepRegistryShutdown{
         .domain = Domain,
         .code = ErrorCode{"pipeline_step_registry_shutdown"},
         .defaultSeverity = ErrorSeverity::Error,
         .summary = "The pipeline-step registry is shutting down.",
         .remediationHint = "Do not register or begin pipeline runs after host shutdown starts.",
+        .retryable = false,
+        .userActionable = false,
+    };
+
+    const ErrorCodeDescriptor ToolchainProviderRegistryShutdown{
+        .domain = Domain,
+        .code = ErrorCode{"toolchain_provider_registry_shutdown"},
+        .defaultSeverity = ErrorSeverity::Error,
+        .summary = "The toolchain provider registry is shutting down.",
+        .remediationHint = "Do not register or invoke providers after host shutdown starts.",
         .retryable = false,
         .userActionable = false,
     };
@@ -402,6 +442,35 @@ namespace Horo::Extensions::ExtensionErrors {
         .summary = "The pipeline run was cancelled.",
         .remediationHint = "Retry the pipeline when its owning operation remains active.",
         .retryable = true,
+        .userActionable = false,
+    };
+    const ErrorCodeDescriptor ToolchainProviderUnavailable{
+        .domain = Domain,
+        .code = ErrorCode{"toolchain_provider_unavailable"},
+        .defaultSeverity = ErrorSeverity::Error,
+        .summary = "The requested toolchain provider generation is unavailable.",
+        .remediationHint = "Resolve a currently registered provider authority before invoking a tool.",
+        .retryable = true,
+        .userActionable = false,
+    };
+
+    const ErrorCodeDescriptor ToolchainPolicyRejected{
+        .domain = Domain,
+        .code = ErrorCode{"toolchain_policy_rejected"},
+        .defaultSeverity = ErrorSeverity::Error,
+        .summary = "Host policy rejected the requested toolchain invocation.",
+        .remediationHint = "Use an approved logical tool and arguments for the active host policy.",
+        .retryable = false,
+        .userActionable = true,
+    };
+
+    const ErrorCodeDescriptor ToolchainInvocationFailed{
+        .domain = Domain,
+        .code = ErrorCode{"toolchain_invocation_failed"},
+        .defaultSeverity = ErrorSeverity::Error,
+        .summary = "The approved tool failed at the platform process boundary.",
+        .remediationHint = "Inspect the attributed provider, tool, output, and preserved platform error.",
+        .retryable = false,
         .userActionable = false,
     };
 }  // namespace Horo::Extensions::ExtensionErrors
