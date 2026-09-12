@@ -360,6 +360,21 @@ namespace Horo::Editor {
                 advance(components.navigationLink->id.Value(), nextLinkId);
         }
 
+        /** @brief Retargets navigation references that point to a duplicated object's local surface. */
+        void RetargetLocalNavigationSurface(SceneObjectComponentSet &components, const Navigation::SurfaceId sourceSurface,
+                                            const Navigation::SurfaceId duplicatedSurface) {
+            if (components.navigationRegion && components.navigationRegion->surface == sourceSurface)
+                components.navigationRegion->surface = duplicatedSurface;
+            if (components.navigationModifier && components.navigationModifier->surface == sourceSurface)
+                components.navigationModifier->surface = duplicatedSurface;
+            if (!components.navigationLink)
+                return;
+            if (components.navigationLink->start.surface == sourceSurface)
+                components.navigationLink->start.surface = duplicatedSurface;
+            if (components.navigationLink->end.surface == sourceSurface)
+                components.navigationLink->end.surface = duplicatedSurface;
+        }
+
         /** @brief Assigns fresh navigation identities and retargets references local to a duplicated object. */
         [[nodiscard]] Result<void> RegenerateDuplicatedNavigationIdentities(SceneObjectComponentSet &components,
                                                                             const std::uint64_t nextSurfaceId,
@@ -371,16 +386,7 @@ namespace Horo::Editor {
                     return Result<void>::Failure(MakeError(Navigation::NavigationErrors::SceneComponentInvalid));
                 const Navigation::SurfaceId sourceSurface = components.navigationSurface->id;
                 components.navigationSurface->id = Navigation::SurfaceId::Create(nextSurfaceId).Value();
-                if (components.navigationRegion && components.navigationRegion->surface == sourceSurface)
-                    components.navigationRegion->surface = components.navigationSurface->id;
-                if (components.navigationModifier && components.navigationModifier->surface == sourceSurface)
-                    components.navigationModifier->surface = components.navigationSurface->id;
-                if (components.navigationLink) {
-                    if (components.navigationLink->start.surface == sourceSurface)
-                        components.navigationLink->start.surface = components.navigationSurface->id;
-                    if (components.navigationLink->end.surface == sourceSurface)
-                        components.navigationLink->end.surface = components.navigationSurface->id;
-                }
+                RetargetLocalNavigationSurface(components, sourceSurface, components.navigationSurface->id);
             }
             if (components.navigationRegion) {
                 if (nextRegionId == 0)
