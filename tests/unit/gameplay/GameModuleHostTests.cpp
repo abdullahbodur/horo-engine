@@ -33,6 +33,19 @@ namespace {
 
     void DestroyTestBehavior(void *, IBehaviorInstance *) noexcept {}
 
+    class RestartOnlyModule final : public IGameModule {
+    public:
+        Result<void> Register(GameRegistrationContext &) override {
+            return Result<void>::Success();
+        }
+
+        Result<void> Start(GameRuntimeContext &) override {
+            return Result<void>::Success();
+        }
+
+        void Stop(GameRuntimeContext &) noexcept override {}
+    };
+
     struct ValidBundleStorage {
         BehaviorDescriptor behavior;
         GeneratedBehaviorFactoryBinding binding;
@@ -117,6 +130,19 @@ TEST_CASE("game module host validates fingerprint and keeps factories alive thro
     REQUIRE(view.Value().localTransform->translation.x == 3.0F);
 
     runtime.Value()->Shutdown();
+
+    auto reloadSnapshot = loaded.Value()->PrepareReload();
+    REQUIRE(reloadSnapshot.HasValue());
+    REQUIRE(loaded.Value()->Cancellation().IsCancellationRequested());
+    REQUIRE(loaded.Value()->ActiveServices().empty());
+    REQUIRE(loaded.Value()->Capabilities().empty());
+    REQUIRE(reloadSnapshot.Value().schemaVersion == 1);
+    REQUIRE(reloadSnapshot.Value().payload.empty());
+    loaded.Value().reset();
+
+    auto replacement = host.Load(HORO_TEST_GAME_MODULE_PATH, Expectation());
+    REQUIRE(replacement.HasValue());
+    REQUIRE(replacement.Value()->RestoreReload(reloadSnapshot.Value()).HasValue());
 }
 
 TEST_CASE("game module host validates an independent shadow artifact and removes it after unload") {
@@ -173,4 +199,12 @@ TEST_CASE("generated gameplay bundle validation rejects incomplete bindings and 
     const auto diagnostics = ValidateGeneratedGameplayDescriptorBundle(storage.bundle, expected);
     REQUIRE(diagnostics.HasError());
     REQUIRE(diagnostics.ErrorValue().code.Value() == GameplayErrors::GeneratedDescriptorDiagnosticsPresent.code.Value());
+}
+
+TEST_CASE("native reload requires an explicit module quiescence implementation") {
+    RestartOnlyModule module;
+    GameRuntimeContext context;
+    auto snapshot = module.PrepareReload(context);
+    REQUIRE(snapshot.HasError());
+    REQUIRE(snapshot.ErrorValue().code.Value() == GameplayErrors::GameplayReloadRestartRequired.code.Value());
 }

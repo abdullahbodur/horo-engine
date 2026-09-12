@@ -147,6 +147,7 @@ namespace Horo::Editor {
         std::optional<Application::GameplayBuildSessionId> m_gameplayBuildSession;
         bool m_playAfterGameplayBuild{false};
         float m_nativeBuildDebounceSeconds{-1.0F};
+        bool m_nativeGameplayReloadPending{false};
         std::optional<std::filesystem::path> m_defaultScenePath;
         std::optional<SceneFileFingerprint> m_sceneFingerprint;
         std::optional<Error> m_initializationError;
@@ -302,6 +303,7 @@ namespace Horo::Editor {
         void RefreshGameplayRegistry();
         void RefreshAvailableBehaviorProjection();
         void ApplyPendingGameplayRegistry();
+        void ApplyNativeGameplayReload();
         void ReimportContentBrowserAsset(const std::filesystem::path &absolutePath);
         void RevealContentBrowserEntry(const std::filesystem::path &absolutePath);
         void OpenDiagnosticSource(const DiagnosticSourceRequest &source);

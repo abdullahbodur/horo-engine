@@ -20,6 +20,7 @@ namespace {
     struct Recorder {
         std::vector<std::string> calls;
         std::size_t destroyed{};
+        std::size_t reloadStateBytes{1};
     };
 
     class RecordingBehavior final : public IBehaviorInstance {
@@ -72,6 +73,20 @@ namespace {
 
         void OnDestroy(BehaviorContext &) override {
             recorder_->calls.emplace_back("destroy");
+        }
+
+        Result<std::vector<std::byte>> CaptureReloadState() const override {
+            std::vector<std::byte> state(recorder_->reloadStateBytes);
+            if (!state.empty())
+                state.front() = published_ ? std::byte{1} : std::byte{0};
+            return Result<std::vector<std::byte>>::Success(std::move(state));
+        }
+
+        Result<void> RestoreReloadState(const std::span<const std::byte> state) override {
+            if (state.size() != 1)
+                return Result<void>::Failure(MakeError(GameplayErrors::GameplayReloadRestoreFailed));
+            published_ = state.front() == std::byte{1};
+            return Result<void>::Success();
         }
 
     private:
@@ -160,4 +175,41 @@ TEST_CASE("behavior runtime rejects duplicate attachments unless the descriptor 
     auto runtime = BehaviorRuntime::Create(*scene.Value(), registry);
     REQUIRE(runtime.HasError());
     REQUIRE(recorder.destroyed == 1);
+}
+
+TEST_CASE("behavior runtime restores bounded instance state without restarting an established instance") {
+    Recorder originalRecorder;
+    BehaviorRegistry originalRegistry = Registry(originalRecorder);
+    auto scene = RuntimeScene::Create(Definition(), SceneRuntimeId{13});
+    REQUIRE(scene.HasValue());
+    auto original = BehaviorRuntime::Create(*scene.Value(), originalRegistry);
+    REQUIRE(original.HasValue());
+    REQUIRE(original.Value()->FixedUpdate({}, FixedDeltaTime{1.0 / 60.0}).HasValue());
+    auto snapshot = original.Value()->CaptureReloadSnapshot();
+    REQUIRE(snapshot.HasValue());
+    original.Value()->Shutdown();
+
+    Recorder replacementRecorder;
+    BehaviorRegistry replacementRegistry = Registry(replacementRecorder);
+    auto replacement = BehaviorRuntime::Create(*scene.Value(), replacementRegistry);
+    REQUIRE(replacement.HasValue());
+    REQUIRE(replacement.Value()->RestoreReloadSnapshot(snapshot.Value()).HasValue());
+    REQUIRE(replacement.Value()->FixedUpdate({}, FixedDeltaTime{1.0 / 60.0}).HasValue());
+    REQUIRE(std::ranges::count(replacementRecorder.calls, "start") == 0);
+    REQUIRE(std::ranges::count(replacementRecorder.calls, "fixed") == 1);
+}
+
+TEST_CASE("behavior runtime rejects an oversized reload payload without shutting down the active generation") {
+    Recorder recorder;
+    recorder.reloadStateBytes = MaximumBehaviorReloadStateBytes + 1;
+    BehaviorRegistry registry = Registry(recorder);
+    auto scene = RuntimeScene::Create(Definition(), SceneRuntimeId{14});
+    REQUIRE(scene.HasValue());
+    auto runtime = BehaviorRuntime::Create(*scene.Value(), registry);
+    REQUIRE(runtime.HasValue());
+
+    auto snapshot = runtime.Value()->CaptureReloadSnapshot();
+    REQUIRE(snapshot.HasError());
+    REQUIRE(snapshot.ErrorValue().code.Value() == GameplayErrors::GameplayReloadSnapshotInvalid.code.Value());
+    REQUIRE(runtime.Value()->FixedUpdate({}, FixedDeltaTime{1.0 / 60.0}).HasValue());
 }

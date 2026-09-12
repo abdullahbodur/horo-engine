@@ -13,6 +13,7 @@
 #include <filesystem>
 #include <memory>
 #include <optional>
+#include <string>
 #include <string_view>
 #include <vector>
 
@@ -23,6 +24,13 @@ namespace Horo::Editor {
         Error error;
     };
 
+    /** @brief Preserved old-generation artifact identity used only for native reload rollback. */
+    struct NativeGameplayRollbackArtifact {
+        std::filesystem::path path;
+        std::string moduleId;
+        std::uint64_t descriptorRevision{};
+    };
+
     /** @brief Owns discovered project behavior programs and their frozen registry snapshot. */
     class ProjectGameplayRegistry final {
         struct ConstructionToken {};
@@ -30,6 +38,14 @@ namespace Horo::Editor {
     public:
         /** @brief Discovers bounded Lua behavior assets below `<project>/assets/scripts`. */
         [[nodiscard]] static std::unique_ptr<ProjectGameplayRegistry> Discover(const std::filesystem::path &projectRoot);
+        /**
+         * @brief Loads one host-preserved old artifact for transactional rollback.
+         * @param projectRoot Absolute project root used for shadow storage and Lua discovery.
+         * @param artifact Preserved library path and exact old-generation identity.
+         * @return Owning combined registry with diagnostics when restoration cannot be prepared.
+         */
+        [[nodiscard]] static std::unique_ptr<ProjectGameplayRegistry> DiscoverRollback(const std::filesystem::path &projectRoot,
+                                                                                       const NativeGameplayRollbackArtifact &artifact);
 
         explicit ProjectGameplayRegistry(ConstructionToken) noexcept {}
 
@@ -46,6 +62,26 @@ namespace Horo::Editor {
         [[nodiscard]] std::vector<ProjectGameplayDiagnostic> ReloadChangedLuaSources();
         /** @brief Consumes a native artifact-manifest create, replace, or remove transition. */
         [[nodiscard]] bool ConsumeNativeArtifactChange();
+        /**
+         * @brief Copies the active shadow artifact before unload so rollback cannot observe overwritten build output.
+         * @param destination Absolute editor-owned rollback directory.
+         * @return Preserved generation identity or a typed file/ownership failure.
+         */
+        [[nodiscard]] Result<NativeGameplayRollbackArtifact> PreserveNativeArtifactForRollback(
+            const std::filesystem::path &destination) const;
+        /**
+         * @brief Requests cancellation, proves module quiescence, captures state, and stops the old generation.
+         * @return Bounded snapshot only when native unload is safe.
+         */
+        [[nodiscard]] Result<Gameplay::GameModuleReloadSnapshot> PrepareNativeReload();
+        /**
+         * @brief Restores captured module state into this newly loaded generation.
+         * @param snapshot State captured from the previous compatible generation.
+         * @return Success or a typed restore failure.
+         */
+        [[nodiscard]] Result<void> RestoreNativeReload(const Gameplay::GameModuleReloadSnapshot &snapshot);
+        /** @brief Reports whether a native generation is loaded. */
+        [[nodiscard]] bool HasNativeModule() const noexcept;
 
     private:
         struct LuaSourceStat {
@@ -73,6 +109,8 @@ namespace Horo::Editor {
         std::vector<std::filesystem::path> luaSources_;
         std::vector<LuaSourceStat> luaSourceStats_;
         std::filesystem::path nativeManifestPath_;
+        std::string nativeModuleId_;
+        std::uint64_t nativeDescriptorRevision_{};
         std::optional<std::filesystem::file_time_type> nativeManifestWriteTime_;
         Gameplay::BehaviorRegistry registry_;
         std::vector<ProjectGameplayDiagnostic> diagnostics_;

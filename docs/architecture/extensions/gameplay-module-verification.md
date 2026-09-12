@@ -154,6 +154,12 @@ Required tests cover:
 Required tests cover:
 
 - native reload precondition and restart fallback
+- cancellation before module quiescence and bounded module snapshot restore
+- behavior snapshot matching by stable instance/type identity without replaying
+  `OnStart` for an established instance
+- preservation, unload, and shadow-load restoration of the previous native
+  artifact
+- candidate rejection followed by rollback against the unchanged runtime scene
 - iteration tier tests verify fast/medium/slow reload behavior and fallback
   restart diagnostics
 - live preview reduced-scope activation rejects behaviors or systems whose

@@ -111,3 +111,27 @@ TEST_CASE("project gameplay registry reports native sources without a published 
     REQUIRE(registry->HasBlockingDiagnostics());
     REQUIRE(registry->Diagnostics().front().source == project.root / ".horo" / "local" / "gameplay_module.json");
 }
+
+TEST_CASE("project gameplay registry preserves and restores an unloaded native generation") {
+    TemporaryProject project;
+    const std::uint64_t revision = Tests::ReadDescriptorRevision(HORO_TEST_GAME_MODULE_REVISION_PATH);
+    const std::string manifest = "{\n  \"schemaVersion\": 1,\n  \"moduleId\": \"game.tests\",\n  \"buildFingerprint\": \"" +
+                                 std::string{Gameplay::CurrentGameplayBuildFingerprint()} +
+                                 "\",\n  \"descriptorRevision\": " + std::to_string(revision) + ",\n  \"artifactPath\": \"" +
+                                 std::filesystem::path{HORO_TEST_GAME_MODULE_PATH}.string() + "\"\n}\n";
+    Write(project.root / ".horo" / "local" / "gameplay_module.json", manifest);
+
+    auto registry = Editor::ProjectGameplayRegistry::Discover(project.root);
+    REQUIRE_FALSE(registry->HasBlockingDiagnostics());
+    auto preserved = registry->PreserveNativeArtifactForRollback(project.root / ".horo" / "local" / "rollback");
+    REQUIRE(preserved.HasValue());
+    REQUIRE(std::filesystem::is_regular_file(preserved.Value().path));
+    auto snapshot = registry->PrepareNativeReload();
+    REQUIRE(snapshot.HasValue());
+    registry.reset();
+
+    auto rollback = Editor::ProjectGameplayRegistry::DiscoverRollback(project.root, preserved.Value());
+    REQUIRE_FALSE(rollback->HasBlockingDiagnostics());
+    REQUIRE(rollback->HasNativeModule());
+    REQUIRE(rollback->RestoreNativeReload(snapshot.Value()).HasValue());
+}

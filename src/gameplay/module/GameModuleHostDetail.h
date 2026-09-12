@@ -17,6 +17,8 @@ namespace Horo::Gameplay {
         ~Impl();
 
         [[nodiscard]] Result<void> RegisterAndStart(std::span<const GameplayCapabilityId> hostCapabilities);
+        [[nodiscard]] Result<GameModuleReloadSnapshot> PrepareReload();
+        [[nodiscard]] Result<void> RestoreReload(const GameModuleReloadSnapshot &snapshot);
         void Shutdown() noexcept;
 
         std::unique_ptr<Platform::DynamicLibrary> library;
@@ -34,6 +36,7 @@ namespace Horo::Gameplay {
         std::filesystem::path loadedArtifactPath;
         bool removeArtifactOnUnload{};
         bool startAttempted{};
+        bool reloadPrepared{};
         bool shutdown{};
     };
 }  // namespace Horo::Gameplay

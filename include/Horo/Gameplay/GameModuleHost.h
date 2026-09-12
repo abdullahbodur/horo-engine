@@ -46,6 +46,17 @@ namespace Horo::Gameplay {
         [[nodiscard]] std::span<const GameplayCapabilityId> Capabilities() const noexcept;
         /** @brief Returns the cancellation token revoked before module shutdown or replacement. */
         [[nodiscard]] CancellationToken Cancellation() const noexcept;
+        /**
+         * @brief Cancels and quiesces module-owned work, captures state, and stops callbacks before unload.
+         * @return Bounded module snapshot only when the generation proves it is safe to unload.
+         */
+        [[nodiscard]] Result<GameModuleReloadSnapshot> PrepareReload();
+        /**
+         * @brief Restores compatible state into this newly started module generation.
+         * @param snapshot State captured from the previous compatible generation.
+         * @return Success or a typed restore failure.
+         */
+        [[nodiscard]] Result<void> RestoreReload(const GameModuleReloadSnapshot &snapshot);
 
     private:
         friend class GameModuleHost;
@@ -77,9 +88,9 @@ namespace Horo::Gameplay {
          * @param expectation Manifest identity selected by the active engine/toolchain build.
          * @return Independently loaded candidate; its shadow artifact is removed after unload.
          *
-         * The currently active module can remain loaded while this candidate is validated. The
-         * caller still owns the fixed-tick safe-point swap and must destroy every old behavior
-         * instance before releasing the previous LoadedGameModule.
+         * A native hot-reload caller must invoke this only after behavior instances and the
+         * previous LoadedGameModule have been destroyed. The host does not implicitly sequence
+         * generations or make two project modules safe to coexist.
          */
         [[nodiscard]] Result<std::unique_ptr<LoadedGameModule>> LoadShadowCopy(const std::filesystem::path &libraryPath,
                                                                                const std::filesystem::path &shadowRoot,

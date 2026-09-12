@@ -129,6 +129,18 @@ namespace {
         }
 
         void Stop(GameRuntimeContext &) noexcept override {}
+
+        Result<GameModuleReloadSnapshot> PrepareReload(GameRuntimeContext &context) override {
+            if (!context.cancellation.IsCancellationRequested())
+                return Result<GameModuleReloadSnapshot>::Failure(MakeError(GameplayErrors::GameplayReloadRestartRequired));
+            return Result<GameModuleReloadSnapshot>::Success({1, {}});
+        }
+
+        Result<void> RestoreReload(const GameModuleReloadSnapshot &snapshot, GameRuntimeContext &) override {
+            if (snapshot.schemaVersion != 1 || !snapshot.payload.empty())
+                return Result<void>::Failure(MakeError(GameplayErrors::GameplayReloadRestoreFailed));
+            return Result<void>::Success();
+        }
     };
 
 }  // namespace

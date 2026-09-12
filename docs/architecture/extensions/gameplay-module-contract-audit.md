@@ -91,7 +91,7 @@ Status terms mean:
 | Schema evolution and unknown payloads | Partial | Project component envelopes retain bounded opaque bytes independently from native layout and expose current, missing, newer, unsupported-old, or deterministic migration-required inspection. Behavior field migration and lossless scene parsing of unsupported encodings remain absent. |
 | Editor discovery | Implemented | Project discovery validates a bounded manifest, shadow-loads native code, discovers bounded Lua sources, freezes one combined registry, and gates Play on diagnostics. |
 | Lua source reload | Implemented | Compatible program replacement occurs in place; incompatible replacements retain the previous valid program. Existing runtime instances keep their program binding. |
-| Native code reload | Partial | Candidate activation occurs at a fixed-tick boundary and runtime reconstruction can roll back. Candidate module `Start` occurs during discovery, old and new modules overlap, runtime-only behavior state is not snapshotted, and there is no job/callback quiesce proof. |
+| Native code reload | Implemented | Manifest changes are deferred to the fixed-tick safe point. The editor preserves the old artifact, snapshots bounded behavior/module state, requires cancellation plus an opt-in job/callback quiescence proof, unloads old code before candidate discovery, and restores the preserved generation on failure without mutating authoring state. Unsafe modules return restart-required. |
 | Packaged-player loading | Missing | No packaged-runtime composition, shipping manifest, signature policy enforcement, or packaged-player caller was found. |
 | Game components | Implemented | Project code registers stable component and property identities, schema versions, authoring metadata, payload encoding, and deterministic forward migration edges through `GameRegistrationContext`. The host copies, sorts, and freezes metadata before startup; inspection never mutates opaque persistent bytes. |
 | Game systems and services | Implemented | Typed identities, bounded descriptors, exact-generation factories, dependency and capability graphs, phase/access validation, deterministic schedules, affinity checks, cancellation, rollback, and reverse shutdown are public contracts with focused runtime evidence. |
@@ -102,7 +102,7 @@ Status terms mean:
 
 ## Exact ABI Assumptions
 
-`GameModule.h` defines boundary version `4` and requires these symbols:
+`GameModule.h` defines boundary version `5` and requires these symbols:
 
 ```text
 GetGameModuleDescriptor
@@ -125,7 +125,7 @@ The boundary relies on all of the following assumptions:
 2. C linkage stabilizes only the four exported names. Struct layout, virtual
    dispatch, `Result<void>`, and factory signatures remain C++ ABI.
 3. Exact `sizeof` equality is required for descriptor and bundle structures.
-   Structure growth is not append-compatible within boundary version `4`.
+   Structure growth is not append-compatible within boundary version `5`.
 4. Descriptor strings, registration arrays, descriptors, and factory function
    pointers are borrowed from the loaded library. They are valid only while the
    library remains loaded.
@@ -146,9 +146,12 @@ The boundary relies on all of the following assumptions:
 9. The generated bundle revision is a deterministic, non-zero SHA-256-derived
    identity over the module ID, sorted annotations, and declared source content.
    No revision migration or compatibility range exists.
-10. `GameRuntimeContext` is currently empty. Module `Start` therefore receives no
-    scene, assets, jobs, diagnostics, configuration, or mediated platform
-    capabilities.
+10. `GameRuntimeContext` carries a generation-scoped cancellation token plus
+    active service and capability views. It does not expose scenes, assets, raw
+    job ownership, diagnostics, configuration, or direct platform capabilities.
+11. `PrepareReload` and `RestoreReload` are virtual C++ ABI surface. A module must
+    be rebuilt for boundary version `5`; snapshots are bounded opaque bytes with
+    a module-owned schema version and no cross-module compatibility promise.
 
 ## Generated Descriptor And Build Contract
 

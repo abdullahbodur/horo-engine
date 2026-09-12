@@ -285,6 +285,62 @@ namespace Horo::Gameplay {
         return Result<void>::Success();
     }
 
+    /** @copydoc BehaviorRuntime::CaptureReloadSnapshot */
+    Result<BehaviorRuntimeReloadSnapshot> BehaviorRuntime::CaptureReloadSnapshot() const {
+        if (!impl_ || impl_->shutdown)
+            return Result<BehaviorRuntimeReloadSnapshot>::Failure(MakeError(GameplayErrors::GameplayReloadSnapshotInvalid));
+        BehaviorRuntimeReloadSnapshot snapshot;
+        snapshot.instances.reserve(impl_->instances.size());
+        std::size_t totalBytes = 0;
+        for (const Impl::Instance &instance : impl_->instances) {
+            Result<std::vector<std::byte>> captured = Result<std::vector<std::byte>>::Success({});
+            try {
+                captured = instance.implementation->CaptureReloadState();
+            } catch (...) {
+                return Result<BehaviorRuntimeReloadSnapshot>::Failure(
+                    MakeError(GameplayErrors::GameplayReloadSnapshotInvalid, "Behavior reload capture threw an exception."));
+            }
+            if (captured.HasError())
+                return Result<BehaviorRuntimeReloadSnapshot>::Failure(captured.ErrorValue());
+            std::vector<std::byte> payload = std::move(captured).Value();
+            if (payload.size() > MaximumBehaviorReloadStateBytes || totalBytes > MaximumBehaviorReloadSnapshotBytes - payload.size())
+                return Result<BehaviorRuntimeReloadSnapshot>::Failure(MakeError(GameplayErrors::GameplayReloadSnapshotInvalid));
+            totalBytes += payload.size();
+            snapshot.instances.push_back({instance.component.instanceId, instance.component.typeId, std::move(payload), instance.started});
+        }
+        return Result<BehaviorRuntimeReloadSnapshot>::Success(std::move(snapshot));
+    }
+
+    /** @copydoc BehaviorRuntime::RestoreReloadSnapshot */
+    Result<void> BehaviorRuntime::RestoreReloadSnapshot(const BehaviorRuntimeReloadSnapshot &snapshot) {
+        if (!impl_ || impl_->shutdown || snapshot.instances.size() != impl_->instances.size())
+            return Result<void>::Failure(MakeError(GameplayErrors::GameplayReloadSnapshotInvalid));
+        std::unordered_map<std::uint64_t, const BehaviorInstanceReloadState *> states;
+        states.reserve(snapshot.instances.size());
+        std::size_t totalBytes = 0;
+        for (const BehaviorInstanceReloadState &state : snapshot.instances) {
+            if (!state.instanceId.IsValid() || !state.typeId.IsValid() || state.payload.size() > MaximumBehaviorReloadStateBytes ||
+                totalBytes > MaximumBehaviorReloadSnapshotBytes - state.payload.size() ||
+                !states.emplace(state.instanceId.value, &state).second)
+                return Result<void>::Failure(MakeError(GameplayErrors::GameplayReloadSnapshotInvalid));
+            totalBytes += state.payload.size();
+        }
+        for (Impl::Instance &instance : impl_->instances) {
+            const auto found = states.find(instance.component.instanceId.value);
+            if (found == states.end() || found->second->typeId != instance.component.typeId)
+                return Result<void>::Failure(MakeError(GameplayErrors::GameplayReloadSnapshotInvalid));
+            try {
+                if (Result<void> restored = instance.implementation->RestoreReloadState(found->second->payload); restored.HasError())
+                    return restored;
+            } catch (...) {
+                return Result<void>::Failure(
+                    MakeError(GameplayErrors::GameplayReloadRestoreFailed, "Behavior reload restore threw an exception."));
+            }
+            instance.started = found->second->started;
+        }
+        return Result<void>::Success();
+    }
+
     /** @copydoc BehaviorRuntime::Shutdown */
     void BehaviorRuntime::Shutdown() noexcept {
         if (!impl_ || impl_->shutdown)

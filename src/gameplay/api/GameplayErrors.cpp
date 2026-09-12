@@ -230,6 +230,33 @@ namespace Horo::Gameplay::GameplayErrors {
         .retryable = false,
         .userActionable = false,
     };
+    const ErrorCodeDescriptor GameplayReloadRestartRequired{
+        .domain = GameplayDomain,
+        .code = ErrorCode{"gameplay.reload_restart_required"},
+        .defaultSeverity = ErrorSeverity::Warning,
+        .summary = "The gameplay module cannot prove that native unload is safe.",
+        .remediationHint = "Stop Play and restart the editor before activating the replacement module.",
+        .retryable = false,
+        .userActionable = true,
+    };
+    const ErrorCodeDescriptor GameplayReloadSnapshotInvalid{
+        .domain = GameplayDomain,
+        .code = ErrorCode{"gameplay.reload_snapshot_invalid"},
+        .defaultSeverity = ErrorSeverity::Error,
+        .summary = "The native gameplay reload snapshot is invalid or exceeds its bound.",
+        .remediationHint = "Fix the module reload adapter and retry from the last working generation.",
+        .retryable = false,
+        .userActionable = true,
+    };
+    const ErrorCodeDescriptor GameplayReloadRestoreFailed{
+        .domain = GameplayDomain,
+        .code = ErrorCode{"gameplay.reload_restore_failed"},
+        .defaultSeverity = ErrorSeverity::Error,
+        .summary = "The replacement gameplay generation could not restore captured state.",
+        .remediationHint = "Restore the previous generation or stop Play without discarding authored data.",
+        .retryable = true,
+        .userActionable = true,
+    };
     const ErrorCodeDescriptor InvalidBehaviorTypeId{
         .domain = GameplayDomain,
         .code = ErrorCode{"gameplay.behavior_type_id_invalid"},

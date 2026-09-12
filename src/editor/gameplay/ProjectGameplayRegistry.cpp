@@ -96,6 +96,22 @@ namespace Horo::Editor {
         return result;
     }
 
+    /** @copydoc ProjectGameplayRegistry::DiscoverRollback */
+    std::unique_ptr<ProjectGameplayRegistry> ProjectGameplayRegistry::DiscoverRollback(const std::filesystem::path &projectRoot,
+                                                                                       const NativeGameplayRollbackArtifact &artifact) {
+        auto result = std::make_unique<ProjectGameplayRegistry>(ConstructionToken{});
+        result->nativeManifestPath_ = projectRoot / ".horo" / "local" / "gameplay_module.json";
+        std::error_code manifestError;
+        if (std::filesystem::is_regular_file(result->nativeManifestPath_, manifestError)) {
+            const auto writeTime = std::filesystem::last_write_time(result->nativeManifestPath_, manifestError);
+            if (!manifestError)
+                result->nativeManifestWriteTime_ = writeTime;
+        }
+        result->LoadNativeModule(projectRoot, artifact.path, artifact.moduleId, artifact.descriptorRevision);
+        result->DiscoverLuaPrograms(projectRoot);
+        return result;
+    }
+
     void ProjectGameplayRegistry::DiscoverNativeModule(const std::filesystem::path &projectRoot) {
         const std::filesystem::path nativeManifestPath = projectRoot / ".horo" / "local" / "gameplay_module.json";
         nativeManifestPath_ = nativeManifestPath;
@@ -160,6 +176,8 @@ namespace Horo::Editor {
             return;
         }
         nativeModule_ = std::move(loaded).Value();
+        nativeModuleId_ = std::string{moduleId};
+        nativeDescriptorRevision_ = descriptorRevision;
         for (const Gameplay::BehaviorRegistration &registration : nativeModule_->Registry().Registrations()) {
             if (Result<void> registered = registry_.Register(registration); registered.HasError()) {
                 diagnostics_.emplace_back(artifactPath, registered.ErrorValue());
@@ -273,5 +291,42 @@ namespace Horo::Editor {
             return false;
         nativeManifestWriteTime_ = writeTime;
         return true;
+    }
+
+    /** @copydoc ProjectGameplayRegistry::PreserveNativeArtifactForRollback */
+    Result<NativeGameplayRollbackArtifact> ProjectGameplayRegistry::PreserveNativeArtifactForRollback(
+        const std::filesystem::path &destination) const {
+        if (!nativeModule_ || nativeModuleId_.empty() || nativeDescriptorRevision_ == 0 || !destination.is_absolute())
+            return Result<NativeGameplayRollbackArtifact>::Failure(ManifestError("no active native generation can be preserved."));
+        std::error_code error;
+        std::filesystem::create_directories(destination, error);
+        if (error)
+            return Result<NativeGameplayRollbackArtifact>::Failure(ManifestError(error.message()));
+        const std::filesystem::path preserved = destination / ("rollback-" + std::to_string(nativeDescriptorRevision_) + "-" +
+                                                               nativeModule_->LoadedArtifactPath().filename().string());
+        std::filesystem::copy_file(nativeModule_->LoadedArtifactPath(), preserved, std::filesystem::copy_options::overwrite_existing,
+                                   error);
+        if (error)
+            return Result<NativeGameplayRollbackArtifact>::Failure(ManifestError(error.message()));
+        return Result<NativeGameplayRollbackArtifact>::Success({preserved, nativeModuleId_, nativeDescriptorRevision_});
+    }
+
+    /** @copydoc ProjectGameplayRegistry::PrepareNativeReload */
+    Result<Gameplay::GameModuleReloadSnapshot> ProjectGameplayRegistry::PrepareNativeReload() {
+        if (!nativeModule_)
+            return Result<Gameplay::GameModuleReloadSnapshot>::Failure(ManifestError("no active native generation is loaded."));
+        return nativeModule_->PrepareReload();
+    }
+
+    /** @copydoc ProjectGameplayRegistry::RestoreNativeReload */
+    Result<void> ProjectGameplayRegistry::RestoreNativeReload(const Gameplay::GameModuleReloadSnapshot &snapshot) {
+        if (!nativeModule_)
+            return Result<void>::Failure(ManifestError("no replacement native generation is loaded."));
+        return nativeModule_->RestoreReload(snapshot);
+    }
+
+    /** @copydoc ProjectGameplayRegistry::HasNativeModule */
+    bool ProjectGameplayRegistry::HasNativeModule() const noexcept {
+        return nativeModule_ != nullptr;
     }
 }  // namespace Horo::Editor

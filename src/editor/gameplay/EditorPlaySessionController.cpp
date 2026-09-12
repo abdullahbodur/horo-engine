@@ -128,25 +128,58 @@ namespace Horo::Editor {
     /** @copydoc EditorPlaySessionController::ReloadBehaviors */
     Result<void> EditorPlaySessionController::ReloadBehaviors(const Gameplay::BehaviorRegistry &candidate,
                                                               const Gameplay::BehaviorRegistry &rollback) {
-        if (!scene_ || (state_ != EditorPlaySessionState::Playing && state_ != EditorPlaySessionState::Paused))
-            return Result<void>::Failure(InvalidTransition("Behavior reload requires an active play session."));
+        auto snapshot = QuiesceForReload();
+        if (snapshot.HasError())
+            return Result<void>::Failure(snapshot.ErrorValue());
+        if (Result<void> replacement = RestoreAfterReload(candidate, snapshot.Value()); replacement.HasValue())
+            return Result<void>::Success();
+        Error candidateError = lastError_.value_or(MakeError(Gameplay::GameplayErrors::GameplayReloadRestoreFailed));
+        if (Result<void> restored = RestoreAfterReload(rollback, snapshot.Value()); restored.HasValue())
+            return Result<void>::Failure(std::move(candidateError));
+        Fail(lastError_.value_or(MakeError(Gameplay::GameplayErrors::GameplayReloadRestoreFailed)));
+        return Result<void>::Failure(std::move(candidateError));
+    }
 
+    /** @copydoc EditorPlaySessionController::QuiesceForReload */
+    Result<EditorPlayReloadSnapshot> EditorPlaySessionController::QuiesceForReload() {
+        if (!scene_ || !behaviors_ || (state_ != EditorPlaySessionState::Playing && state_ != EditorPlaySessionState::Paused))
+            return Result<EditorPlayReloadSnapshot>::Failure(InvalidTransition("Native reload requires an active play session."));
+        auto captured = behaviors_->CaptureReloadSnapshot();
+        if (captured.HasError())
+            return Result<EditorPlayReloadSnapshot>::Failure(captured.ErrorValue());
+        EditorPlayReloadSnapshot snapshot{std::move(captured).Value(), state_};
+        state_ = EditorPlaySessionState::Reloading;
         behaviors_->Shutdown();
         behaviors_.reset();
-        Result<std::unique_ptr<Gameplay::BehaviorRuntime>> replacement = Gameplay::BehaviorRuntime::Create(*scene_, candidate);
-        if (replacement.HasValue()) {
-            behaviors_ = std::move(replacement).Value();
-            return Result<void>::Success();
-        }
+        return Result<EditorPlayReloadSnapshot>::Success(std::move(snapshot));
+    }
 
-        Error candidateError = replacement.ErrorValue();
-        Result<std::unique_ptr<Gameplay::BehaviorRuntime>> restored = Gameplay::BehaviorRuntime::Create(*scene_, rollback);
-        if (restored.HasValue()) {
-            behaviors_ = std::move(restored).Value();
-            return Result<void>::Failure(std::move(candidateError));
+    /** @copydoc EditorPlaySessionController::RestoreAfterReload */
+    Result<void> EditorPlaySessionController::RestoreAfterReload(const Gameplay::BehaviorRegistry &registry,
+                                                                 const EditorPlayReloadSnapshot &snapshot) {
+        if (!scene_ || state_ != EditorPlaySessionState::Reloading || behaviors_)
+            return Result<void>::Failure(InvalidTransition("No quiesced native reload transaction is active."));
+        auto replacement = Gameplay::BehaviorRuntime::Create(*scene_, registry);
+        if (replacement.HasError()) {
+            lastError_ = replacement.ErrorValue();
+            return Result<void>::Failure(replacement.ErrorValue());
         }
-        Fail(restored.ErrorValue());
-        return Result<void>::Failure(std::move(candidateError));
+        behaviors_ = std::move(replacement).Value();
+        if (Result<void> restored = behaviors_->RestoreReloadSnapshot(snapshot.behaviors); restored.HasError()) {
+            Error error = restored.ErrorValue();
+            behaviors_->Shutdown();
+            behaviors_.reset();
+            lastError_ = error;
+            return Result<void>::Failure(std::move(error));
+        }
+        lastError_.reset();
+        state_ = snapshot.priorState;
+        return Result<void>::Success();
+    }
+
+    /** @copydoc EditorPlaySessionController::DegradeAfterReload */
+    void EditorPlaySessionController::DegradeAfterReload(Error error) noexcept {
+        Fail(std::move(error));
     }
 
     EditorPlaySessionState EditorPlaySessionController::State() const noexcept {
@@ -155,7 +188,7 @@ namespace Horo::Editor {
 
     bool EditorPlaySessionController::IsActive() const noexcept {
         using enum EditorPlaySessionState;
-        return state_ == Starting || state_ == Playing || state_ == Paused || state_ == Stopping;
+        return state_ == Starting || state_ == Playing || state_ == Paused || state_ == Reloading || state_ == Stopping;
     }
 
     Runtime::RuntimeScene *EditorPlaySessionController::Scene() noexcept {

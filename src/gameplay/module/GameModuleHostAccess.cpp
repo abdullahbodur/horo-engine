@@ -53,17 +53,27 @@ namespace Horo::Gameplay {
 
     /** @copydoc LoadedGameModule::ActiveServices */
     std::span<const GameplayServiceId> LoadedGameModule::ActiveServices() const noexcept {
-        return impl_->projectServices->ActiveServices();
+        return impl_->runtimeContext.activeServices;
     }
 
     /** @copydoc LoadedGameModule::Capabilities */
     std::span<const GameplayCapabilityId> LoadedGameModule::Capabilities() const noexcept {
-        return impl_->projectServices->Capabilities();
+        return impl_->runtimeContext.capabilities;
     }
 
     /** @copydoc LoadedGameModule::Cancellation */
     CancellationToken LoadedGameModule::Cancellation() const noexcept {
-        return impl_->projectServices->Cancellation();
+        return impl_->runtimeContext.cancellation;
+    }
+
+    /** @copydoc LoadedGameModule::PrepareReload */
+    Result<GameModuleReloadSnapshot> LoadedGameModule::PrepareReload() {
+        return impl_->PrepareReload();
+    }
+
+    /** @copydoc LoadedGameModule::RestoreReload */
+    Result<void> LoadedGameModule::RestoreReload(const GameModuleReloadSnapshot &snapshot) {
+        return impl_->RestoreReload(snapshot);
     }
 
     /** @copydoc GameModuleHost::GameModuleHost */
