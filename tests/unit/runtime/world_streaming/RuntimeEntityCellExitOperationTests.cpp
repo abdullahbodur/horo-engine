@@ -184,6 +184,10 @@ namespace Horo::WorldStreaming {
             context = Context(request.sourceOwnership);
             request.handle.entity = IdentityFrom<RuntimeSpawnedObjectId>(23);
             RequireError(RuntimeEntityCellExitOperation::Create(request, context), WorldStreamingErrors::RuntimeEntityCellExitStale);
+
+            request = HandoffRequest();
+            context = Context(*request.destination);
+            RequireError(RuntimeEntityCellExitOperation::Create(request, context), WorldStreamingErrors::RuntimeEntityCellExitStale);
         }
 
         TEST_CASE("Cell-exit creation rejects malformed and non-runtime source authority",

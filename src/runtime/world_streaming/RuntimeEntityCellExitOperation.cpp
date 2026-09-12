@@ -38,7 +38,7 @@ namespace Horo::WorldStreaming {
 
         [[nodiscard]] Result<void> ValidateCurrentAuthority(const RuntimeEntityCellExitRequest &request,
                                                             const RuntimeEntityCellExitAdmissionContext &context) {
-            if (!IsRuntimeCellOwnership(request.sourceOwnership) || !IsRuntimeCellOwnership(context.currentOwnership))
+            if (!IsRuntimeCellOwnership(request.sourceOwnership))
                 return Internal::Failure<void>(WorldStreamingErrors::RuntimeEntityCellExitUnsupported);
 
             if (request.handle.entity != request.sourceOwnership.runtimeSpawned ||
