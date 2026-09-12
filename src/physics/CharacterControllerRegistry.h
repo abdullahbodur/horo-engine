@@ -16,6 +16,12 @@ namespace Horo::Character::Detail {
     /** @brief Testable registry limits; production uses the full non-wrapping generation range. */
     using CharacterControllerRegistryLimits = Physics::Detail::GenerationalSlotStorageLimits;
 
+    /** @brief Allocation-free Character registry count snapshot. */
+    struct CharacterControllerRegistryStatistics final {
+        std::size_t capacity{};
+        std::size_t active{};
+    };
+
     /** @brief Owns one bounded mapping from Character handles to target-private controller records. */
     template <typename Value> class CharacterControllerRegistry final {
         static_assert(std::is_nothrow_move_constructible_v<Value>, "Character registry values must move without throwing.");
@@ -62,12 +68,9 @@ namespace Horo::Character::Detail {
             storage_.Drain();
         }
 
-        [[nodiscard]] std::size_t Capacity() const noexcept {
-            return storage_.Capacity();
-        }
-
-        [[nodiscard]] std::size_t ActiveCount() const noexcept {
-            return storage_.ActiveCount();
+        /** @brief Returns current capacity and occupancy together. */
+        [[nodiscard]] CharacterControllerRegistryStatistics Statistics() const noexcept {
+            return {storage_.Capacity(), storage_.ActiveCount()};
         }
 
     private:

@@ -254,7 +254,7 @@ namespace Horo::Character {
             REQUIRE(live == 1);
             drainable.Drain();
             REQUIRE(live == 0);
-            REQUIRE(drainable.ActiveCount() == 0);
+            REQUIRE(drainable.Statistics().active == 0);
         }
 
     }  // namespace

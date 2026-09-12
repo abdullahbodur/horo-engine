@@ -162,11 +162,11 @@ namespace Horo::Character {
 
     /** @copydoc CharacterWorld::ActiveControllerCount */
     std::size_t CharacterWorld::ActiveControllerCount() const noexcept {
-        return impl_->controllers.ActiveCount();
+        return impl_->controllers.Statistics().active;
     }
 
     /** @copydoc CharacterWorld::ControllerCapacity */
     std::size_t CharacterWorld::ControllerCapacity() const noexcept {
-        return impl_->controllers.Capacity();
+        return impl_->controllers.Statistics().capacity;
     }
 }  // namespace Horo::Character
