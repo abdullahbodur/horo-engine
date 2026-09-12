@@ -72,6 +72,8 @@ namespace Horo::Network::NetworkErrors {
     extern const ErrorCodeDescriptor TransportShuttingDown;
     /** @brief Host-scoped network I/O service construction or call bounds are invalid. */
     extern const ErrorCodeDescriptor NetworkIoServiceInvalid;
+    /** @brief Prepared network I/O service storage could not be allocated. */
+    extern const ErrorCodeDescriptor NetworkIoServiceCapacityExceeded;
     /** @brief A backend completion violates the closed immutable handoff contract. */
     extern const ErrorCodeDescriptor NetworkIoCompletionInvalid;
     /** @brief The prepared completion queue or current poll budget is exhausted. */

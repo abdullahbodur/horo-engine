@@ -19,8 +19,11 @@
 #include <span>
 
 namespace Horo::Network {
+    /** @brief Absolute prepared completion capacity accepted by one host-scoped service. */
     inline constexpr std::size_t MaximumNetworkIoQueuedCompletions = 4096;
+    /** @brief Absolute normalized completion budget accepted by one backend poll. */
     inline constexpr std::size_t MaximumNetworkIoCompletionsPerPoll = 1024;
+    /** @brief Absolute callback budget accepted by one owner-thread drain. */
     inline constexpr std::size_t MaximumNetworkIoCompletionsPerDrain = 1024;
 
     /** @brief Closed completion vocabulary transferred from transport I/O to its declared owner thread. */

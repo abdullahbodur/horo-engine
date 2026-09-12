@@ -277,6 +277,15 @@ namespace Horo::Network::NetworkErrors {
         .retryable = false,
         .userActionable = true,
     };
+    const ErrorCodeDescriptor NetworkIoServiceCapacityExceeded{
+        .domain = NetworkDomain,
+        .code = ErrorCode{"network.io.service_capacity_exceeded"},
+        .defaultSeverity = ErrorSeverity::Error,
+        .summary = "The network I/O service could not reserve its declared finite storage.",
+        .remediationHint = "Reduce the prepared completion capacity or release host memory before composing the service.",
+        .retryable = true,
+        .userActionable = false,
+    };
     const ErrorCodeDescriptor NetworkIoCompletionInvalid{
         .domain = NetworkDomain,
         .code = ErrorCode{"network.io.completion_invalid"},
