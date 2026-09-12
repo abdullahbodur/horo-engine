@@ -48,7 +48,7 @@ own codec, transport and session-admission boundaries.
 
 ## Validation Record
 
-`HoroNetworkApiTests` covers valid highest-version selection, canonical feature
+`HoroNetworkRuntimeTests` covers valid highest-version selection, canonical feature
 intersection, non-downgrade behavior, malformed and oversized offers, schema/version
 incompatibility, transport limit propagation, replacement generations, cancellation,
 deadline boundaries, explicit rejection and idempotent shutdown.
