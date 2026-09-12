@@ -47,7 +47,9 @@ namespace Horo::WorldStreaming {
         [[nodiscard]] Result<std::vector<StreamingCellActivationRequirement>> CanonicalizeRequirements(
             const std::span<const StreamingCellActivationRequirement> required, const std::size_t receiptCount,
             const std::size_t maximumReceipts) {
-            if (required.empty() || required.size() > maximumReceipts || receiptCount > maximumReceipts)
+            if (required.empty())
+                return Internal::Failure<std::vector<StreamingCellActivationRequirement>>(WorldStreamingErrors::CellActivationIncomplete);
+            if (required.size() > maximumReceipts || receiptCount > maximumReceipts)
                 return Internal::Failure<std::vector<StreamingCellActivationRequirement>>(
                     WorldStreamingErrors::CellActivationCapacityExceeded);
             if (required.size() != receiptCount)
@@ -72,7 +74,7 @@ namespace Horo::WorldStreaming {
                     return static_cast<bool>(right);
                 if (!right)
                     return false;
-                return RequirementLess(left->Requirement(), right->Requirement());
+                return left->Requirement().participant < right->Requirement().participant;
             });
             for (std::size_t index{}; index < receipts.size(); ++index) {
                 if (!receipts[index] || !IsValid(receipts[index]->Requirement()))

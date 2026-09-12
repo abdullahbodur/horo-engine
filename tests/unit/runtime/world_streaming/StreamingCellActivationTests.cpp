@@ -160,6 +160,13 @@ namespace Horo::WorldStreaming {
             const auto operation = Activating();
             const std::vector required{Requirement(10), Requirement(20)};
 
+            ReceiptLog emptyLog;
+            const std::vector<StreamingCellActivationRequirement> empty;
+            RequireError(StreamingCellActivationTransaction::Prepare(Context(operation), empty,
+                                                                     Receipts(empty, operation.Handle(), emptyLog)),
+                         WorldStreamingErrors::CellActivationIncomplete);
+            REQUIRE(emptyLog.rolledBack.empty());
+
             ReceiptLog incompleteLog;
             const std::vector incomplete{Requirement(10)};
             RequireError(StreamingCellActivationTransaction::Prepare(Context(operation), required,
