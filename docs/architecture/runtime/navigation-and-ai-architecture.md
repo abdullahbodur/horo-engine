@@ -1594,6 +1594,15 @@ tasks. It owns the `Idle -> Running -> Succeeded | Failed | Cancelled` transitio
 one immutable terminal result, detached operation context, and post-terminal
 cleanup claim. Decision-plan execution and concrete task adapters remain later work.
 
+Headless hosts that deliberately omit gameplay AI compose `NullAiRuntime`. Its
+availability is always false and every task admission returns the typed
+`ai.runtime.unavailable` failure without starting a lifecycle or fabricating a
+successful decision. Focused lifecycle tests use a renderer-, audio-, editor-,
+and Scene-independent deterministic harness over small admitted blackboard schemas,
+typed agent/task generations, and declared scripted outcomes. The harness hashes
+canonical integer bytes and transition facts with fixed FNV-1a and exposes explicit
+cancellation, stale-completion, and capacity-rejection fault points.
+
 1. **Standard Execution Context**:
    - AI tasks evaluate through `BehaviorExecutionContext` (extending `BehaviorContext`), granting controlled access to scene resources, typed blackboard views, input, command buffers, and cancellation tokens.
    - `AIDecisionSystem` is the sole scheduling authority in `AiDecisionEvaluate` (ADR-021 `AiDecision`). `AiControllerComponent` and eligible `BehaviorComponent` attachments are inert plan bindings discovered by that system; components do not own runners. Generic `OnFixedUpdate` behaviors still run later in `Gameplay` / `CharacterControllerLocomotion`.

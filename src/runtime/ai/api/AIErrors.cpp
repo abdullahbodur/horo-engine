@@ -77,6 +77,24 @@ namespace Horo::AI::AIErrors {
         .retryable = false,
         .userActionable = false,
     };
+    const ErrorCodeDescriptor RuntimeUnavailable{
+        .domain = AiDomain,
+        .code = ErrorCode{"ai.runtime.unavailable"},
+        .defaultSeverity = ErrorSeverity::Error,
+        .summary = "The selected composition provides no gameplay-AI runtime.",
+        .remediationHint = "Compose an explicit gameplay-AI runtime or handle capability absence without fabricating a decision.",
+        .retryable = false,
+        .userActionable = true,
+    };
+    const ErrorCodeDescriptor TaskCapacityExceeded{
+        .domain = AiDomain,
+        .code = ErrorCode{"ai.task.capacity_exceeded"},
+        .defaultSeverity = ErrorSeverity::Error,
+        .summary = "The gameplay-AI task execution capacity is exhausted.",
+        .remediationHint = "Reduce admitted task work or select a larger bounded AI task capacity before activation.",
+        .retryable = true,
+        .userActionable = false,
+    };
     const ErrorCodeDescriptor BlackboardSchemaInvalid{
         .domain = AiDomain,
         .code = ErrorCode{"ai.blackboard.schema_invalid"},

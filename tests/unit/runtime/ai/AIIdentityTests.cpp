@@ -143,6 +143,8 @@ namespace Horo::AI {
                 &AIErrors::TaskContextInvalid,
                 &AIErrors::TaskTransitionInvalid,
                 &AIErrors::TaskFailureInvalid,
+                &AIErrors::RuntimeUnavailable,
+                &AIErrors::TaskCapacityExceeded,
                 &AIErrors::BlackboardSchemaInvalid,
                 &AIErrors::BlackboardLimitExceeded,
                 &AIErrors::BlackboardValueTypeMismatch,
