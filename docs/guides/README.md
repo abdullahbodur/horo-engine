@@ -61,6 +61,8 @@ workflows.
   normalize bounded private transport polling into owner-thread completion handoff.
 - [Network Lifecycle Migration](./network-lifecycle-migration.md):
   adopt generation-fenced listener and connection transitions, deadlines, and exactly-once terminal results.
+- [Transport Budget Migration](./transport-budget-migration.md):
+  enforce versioned connection, queue, byte, rate, and sustained-overload limits before backend mutation.
 
 ## Writing a Guide
 

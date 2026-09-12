@@ -144,6 +144,7 @@ horo_configure_target_header_boundary(HoroNetworkApi PUBLIC_HEADERS
     Horo/Network/ReplicationDescriptorRegistry.h
     Horo/Network/ReplicationIdentity.h
     Horo/Network/TransportCapabilities.h
+    Horo/Network/TransportBudget.h
 )
 horo_configure_target_header_boundary(HoroNetworkRuntime PUBLIC_HEADERS
     Horo/Network/NetworkObjectMapping.h

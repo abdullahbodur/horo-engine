@@ -321,6 +321,18 @@ let a late DNS, connect, close, or native callback revive a replacement. The
 registry is owner-thread-only; private transport threads publish through
 `NetworkIoService` and never mutate lifecycle state directly.
 
+`TransportBudgetController` is the owner-thread admission boundary before payload
+copy or native send-queue mutation. Host composition prepares finite connection
+and queued-work storage, then installs a complete immutable versioned policy.
+Reliable traffic is rejected explicitly under overload; replaceable state may
+coalesce by stable key or be discarded as an explicit result. Per-connection and
+global byte, message, rate, and connection limits are enforced together. Repeated
+input in one tick cannot amplify saturation work, while distinct saturated ticks
+may require lifecycle-owned connection close. Policy replacement is atomic and
+revision-fenced, queued completions are generation-fenced, and shutdown closes
+admission before discarding bounded outstanding work. The controller owns no
+payload, socket, transport thread, or connection lifecycle transition.
+
 `PollEvents()` may be called only on the simulation/main thread during `NetworkPoll`. It drains the transport-owned inbound queue into `ITransportEventConsumer` callbacks. Those callbacks must not block, allocate unboundedly, or re-enter the transport.
 
 ## Threading Model and Frame Schedule Phases

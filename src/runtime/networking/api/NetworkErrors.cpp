@@ -3,7 +3,12 @@
 namespace Horo::Network::NetworkErrors {
     namespace {
         const ErrorDomainId NetworkDomain{"horo.network"};
-    }
+
+        [[nodiscard]] ErrorCodeDescriptor BudgetError(const char *code, const ErrorSeverity severity, const std::string_view summary,
+                                                      const std::string_view remediation, const bool retryable, const bool userActionable) {
+            return {NetworkDomain, ErrorCode{code}, severity, summary, remediation, retryable, userActionable};
+        }
+    }  // namespace
 
     const ErrorCodeDescriptor
         NetworkAddressInvalid{NetworkDomain,
@@ -148,6 +153,25 @@ namespace Horo::Network::NetworkErrors {
                                               "Apply the queue's explicit overload policy or retry after bounded drain.",
                                               true,
                                               false};
+    const ErrorCodeDescriptor TransportBudgetInvalid =
+        BudgetError("network.transport.budget_invalid", ErrorSeverity::Error, "Transport budget policy or admission input is malformed.",
+                    "Use a version-one higher revision, positive finite bounds, a monotonic tick, and valid traffic metadata.", false,
+                    true);
+    const ErrorCodeDescriptor TransportBudgetCapacityExceeded =
+        BudgetError("network.transport.budget_capacity_exceeded", ErrorSeverity::Error, "Transport budget capacity was exceeded.",
+                    "Reject admission or atomically install a validated policy within the prepared hard ceilings.", true, false);
+    const ErrorCodeDescriptor TransportBudgetPolicyStale =
+        BudgetError("network.transport.budget_policy_stale", ErrorSeverity::Warning, "The transport budget policy revision was replaced.",
+                    "Rebase the complete candidate on the exact current policy revision before retrying.", true, false);
+    const ErrorCodeDescriptor TransportReliableBackpressure =
+        BudgetError("network.transport.reliable_backpressure", ErrorSeverity::Warning,
+                    "The bounded transport budget rejected required reliable work.",
+                    "Retain ownership outside the transport only under a separate bounded retry policy, or close the saturated peer.", true,
+                    false);
+    const ErrorCodeDescriptor TransportBudgetTicketStale =
+        BudgetError("network.transport.budget_ticket_stale", ErrorSeverity::Warning,
+                    "The queued transport work ticket is released or stale.",
+                    "Discard the late completion and use only the exact ticket retained for currently queued work.", false, false);
 
     const ErrorCodeDescriptor IdentityInvalid{
         .domain = NetworkDomain,

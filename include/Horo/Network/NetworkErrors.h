@@ -66,6 +66,16 @@ namespace Horo::Network::NetworkErrors {
     extern const ErrorCodeDescriptor TransportCapabilityUnavailable;
     /** @brief A channel, message, or deadline requirement exceeds the candidate's finite limits. */
     extern const ErrorCodeDescriptor TransportLimitExceeded;
+    /** @brief Transport budget policy, traffic metadata, or tick input is malformed. */
+    extern const ErrorCodeDescriptor TransportBudgetInvalid;
+    /** @brief A policy or submission exceeds prepared transport budget capacity. */
+    extern const ErrorCodeDescriptor TransportBudgetCapacityExceeded;
+    /** @brief A policy update was based on a replaced active revision. */
+    extern const ErrorCodeDescriptor TransportBudgetPolicyStale;
+    /** @brief Required reliable work was rejected without being silently discarded. */
+    extern const ErrorCodeDescriptor TransportReliableBackpressure;
+    /** @brief A queued-work completion names a released or replaced ticket generation. */
+    extern const ErrorCodeDescriptor TransportBudgetTicketStale;
     /** @brief Caller-owned cancellation rejected transport admission before queue mutation. */
     extern const ErrorCodeDescriptor TransportOperationCancelled;
     /** @brief Caller-owned shutdown state rejected transport admission before queue mutation. */
