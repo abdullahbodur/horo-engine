@@ -171,8 +171,13 @@ namespace Horo::Navigation {
 
         lifecycle.BeginShutdown();
         lifecycle.BeginShutdown();
-        REQUIRE(lifecycle.State() == NavigationWorldLifecycleState::Closed);
+        REQUIRE(lifecycle.State() == NavigationWorldLifecycleState::ShuttingDown);
         RequireError(lifecycle.Stage(staged, Backend(destructions)), NavigationErrors::CapabilityUnavailable);
+        {
+            auto released = std::move(lease);
+            REQUIRE(released.IsRevoked());
+        }
+        REQUIRE(lifecycle.CollectRetired() == NavigationWorldLifecycleState::Closed);
     }
 
     TEST_CASE("Shutdown cancellation is nonblocking and closes after retained leases drain", "[unit][navigation][headless][lifecycle]") {
