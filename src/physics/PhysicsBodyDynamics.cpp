@@ -4,7 +4,6 @@
 
 #include <cmath>
 #include <tuple>
-#include <type_traits>
 
 namespace Horo::Physics {
     namespace {
@@ -28,59 +27,79 @@ namespace Horo::Physics {
             return mode == PhysicsVelocityControlMode::Set || mode == PhysicsVelocityControlMode::Add;
         }
 
-        /** @brief Validates one closed dynamics payload and body-specific speed policy. */
-        [[nodiscard]] Result<void> ValidatePayload(const PhysicsBodyDynamicsPayload &payload, const PhysicsMotionSafety &motionSafety,
-                                                   const float localHalfExtentMeters) {
-            return std::visit([&motionSafety, localHalfExtentMeters](const auto &value) -> Result<void> {
-                using T = std::decay_t<decltype(value)>;
-                if constexpr (std::is_same_v<T, PhysicsLinearForce>) {
-                    if (!BoundedVector(value.newtons, MaximumPhysicsForceNewtons) ||
-                        (value.applicationPoint.has_value() && !BoundedVector(*value.applicationPoint, localHalfExtentMeters)))
-                        return Result<void>::Failure(
-                            MakeError(PhysicsErrors::DescriptorInvalid, "Linear force or application point is invalid."));
-                } else if constexpr (std::is_same_v<T, PhysicsLinearImpulse>) {
-                    if (!BoundedVector(value.newtonSeconds, MaximumPhysicsImpulseNewtonSeconds) ||
-                        (value.applicationPoint.has_value() && !BoundedVector(*value.applicationPoint, localHalfExtentMeters)))
-                        return Result<void>::Failure(
-                            MakeError(PhysicsErrors::DescriptorInvalid, "Linear impulse or application point is invalid."));
-                } else if constexpr (std::is_same_v<T, PhysicsTorque>) {
-                    if (!BoundedVector(value.newtonMeters, MaximumPhysicsTorqueNewtonMeters))
-                        return Result<void>::Failure(MakeError(PhysicsErrors::DescriptorInvalid, "Torque is invalid."));
-                } else if constexpr (std::is_same_v<T, PhysicsAngularImpulse>) {
-                    if (!BoundedVector(value.newtonMeterSeconds, MaximumPhysicsAngularImpulseNewtonMeterSeconds))
-                        return Result<void>::Failure(MakeError(PhysicsErrors::DescriptorInvalid, "Angular impulse is invalid."));
-                } else if constexpr (std::is_same_v<T, PhysicsLinearVelocityControl>) {
-                    if (!KnownVelocityMode(value.mode))
-                        return Result<void>::Failure(
-                            MakeError(PhysicsErrors::OperationUnsupported, "Unknown linear velocity control mode."));
-                    if (!BoundedMagnitude(value.metersPerSecond, motionSafety.maximumLinearSpeed))
-                        return Result<void>::Failure(
-                            MakeError(PhysicsErrors::DescriptorInvalid, "Linear velocity control exceeds its admitted limit."));
-                } else if constexpr (std::is_same_v<T, PhysicsAngularVelocityControl>) {
-                    if (!KnownVelocityMode(value.mode))
-                        return Result<void>::Failure(
-                            MakeError(PhysicsErrors::OperationUnsupported, "Unknown angular velocity control mode."));
-                    if (!BoundedMagnitude(value.radiansPerSecond, motionSafety.maximumAngularSpeed))
-                        return Result<void>::Failure(
-                            MakeError(PhysicsErrors::DescriptorInvalid, "Angular velocity control exceeds its admitted limit."));
-                } else if constexpr (std::is_same_v<T, PhysicsGravityScaleControl>) {
-                    if (!std::isfinite(value.scale) || value.scale < 0.0F || value.scale > MaximumPhysicsGravityScale)
-                        return Result<void>::Failure(
-                            MakeError(PhysicsErrors::DescriptorInvalid, "Gravity scale must be finite and within profile bounds."));
-                }
-                return Result<void>::Success();
-            }, payload);
+        /** @brief Checks an optional absolute world-local application point. */
+        [[nodiscard]] bool ValidApplicationPoint(const std::optional<Math::Vec3> &point, const float localHalfExtentMeters) noexcept {
+            return !point.has_value() || BoundedVector(*point, localHalfExtentMeters);
         }
+
+        /** @brief Low-branch visitor for the closed dynamics payload vocabulary. */
+        struct DynamicsPayloadValidator final {
+            const PhysicsMotionSafety &motionSafety;
+            float localHalfExtentMeters;
+
+            [[nodiscard]] Result<void> operator()(const PhysicsLinearForce &value) const {
+                if (!BoundedVector(value.newtons, MaximumPhysicsForceNewtons))
+                    return Result<void>::Failure(MakeError(PhysicsErrors::DescriptorInvalid, "Linear force exceeds profile bounds."));
+                if (!ValidApplicationPoint(value.applicationPoint, localHalfExtentMeters))
+                    return Result<void>::Failure(
+                        MakeError(PhysicsErrors::DescriptorInvalid, "Force application point is outside local world bounds."));
+                return Result<void>::Success();
+            }
+
+            [[nodiscard]] Result<void> operator()(const PhysicsLinearImpulse &value) const {
+                if (!BoundedVector(value.newtonSeconds, MaximumPhysicsImpulseNewtonSeconds))
+                    return Result<void>::Failure(MakeError(PhysicsErrors::DescriptorInvalid, "Linear impulse exceeds profile bounds."));
+                if (!ValidApplicationPoint(value.applicationPoint, localHalfExtentMeters))
+                    return Result<void>::Failure(
+                        MakeError(PhysicsErrors::DescriptorInvalid, "Impulse application point is outside local world bounds."));
+                return Result<void>::Success();
+            }
+
+            [[nodiscard]] Result<void> operator()(const PhysicsTorque &value) const {
+                if (!BoundedVector(value.newtonMeters, MaximumPhysicsTorqueNewtonMeters))
+                    return Result<void>::Failure(MakeError(PhysicsErrors::DescriptorInvalid, "Torque exceeds profile bounds."));
+                return Result<void>::Success();
+            }
+
+            [[nodiscard]] Result<void> operator()(const PhysicsAngularImpulse &value) const {
+                if (!BoundedVector(value.newtonMeterSeconds, MaximumPhysicsAngularImpulseNewtonMeterSeconds))
+                    return Result<void>::Failure(MakeError(PhysicsErrors::DescriptorInvalid, "Angular impulse exceeds profile bounds."));
+                return Result<void>::Success();
+            }
+
+            [[nodiscard]] Result<void> operator()(const PhysicsLinearVelocityControl &value) const {
+                if (!KnownVelocityMode(value.mode))
+                    return Result<void>::Failure(MakeError(PhysicsErrors::OperationUnsupported, "Unknown linear velocity control mode."));
+                if (!BoundedMagnitude(value.metersPerSecond, motionSafety.maximumLinearSpeed))
+                    return Result<void>::Failure(
+                        MakeError(PhysicsErrors::DescriptorInvalid, "Linear velocity control exceeds its admitted limit."));
+                return Result<void>::Success();
+            }
+
+            [[nodiscard]] Result<void> operator()(const PhysicsAngularVelocityControl &value) const {
+                if (!KnownVelocityMode(value.mode))
+                    return Result<void>::Failure(MakeError(PhysicsErrors::OperationUnsupported, "Unknown angular velocity control mode."));
+                if (!BoundedMagnitude(value.radiansPerSecond, motionSafety.maximumAngularSpeed))
+                    return Result<void>::Failure(
+                        MakeError(PhysicsErrors::DescriptorInvalid, "Angular velocity control exceeds its admitted limit."));
+                return Result<void>::Success();
+            }
+
+            [[nodiscard]] Result<void> operator()(const PhysicsGravityScaleControl &value) const {
+                if (!std::isfinite(value.scale) || value.scale < 0.0F || value.scale > MaximumPhysicsGravityScale)
+                    return Result<void>::Failure(
+                        MakeError(PhysicsErrors::DescriptorInvalid, "Gravity scale must be finite and within profile bounds."));
+                return Result<void>::Success();
+            }
+        };
     }  // namespace
 
     /** @copydoc PhysicsBodyDynamicsOrderLess */
     bool PhysicsBodyDynamicsOrderLess(const PhysicsBodyDynamicsCommand &left, const PhysicsBodyDynamicsCommand &right) noexcept {
-        return std::tuple{left.protocolVersion, left.simulationTick,  left.body.world.Value(),
-                          left.sceneGeneration, left.body.slot.index, left.body.slot.generation,
-                          left.source,          left.sourceSequence} <
-               std::tuple{right.protocolVersion, right.simulationTick,  right.body.world.Value(),
-                          right.sceneGeneration, right.body.slot.index, right.body.slot.generation,
-                          right.source,          right.sourceSequence};
+        return std::tuple{left.protocolVersion, left.simulationTick,       left.body.world.Value(), left.sceneGeneration,
+                          left.body.slot.index, left.body.slot.generation, left.source.Value(),     left.sourceSequence} <
+               std::tuple{right.protocolVersion, right.simulationTick,       right.body.world.Value(), right.sceneGeneration,
+                          right.body.slot.index, right.body.slot.generation, right.source.Value(),     right.sourceSequence};
     }
 
     /** @copydoc ValidatePhysicsBodyDynamicsCommand */
@@ -112,6 +131,6 @@ namespace Horo::Physics {
         if (!std::isfinite(localHalfExtentMeters) || localHalfExtentMeters <= 0.0F ||
             localHalfExtentMeters > MaximumPhysicsLocalHalfExtentMeters)
             return Result<void>::Failure(MakeError(PhysicsErrors::DescriptorInvalid, "Local world bounds are invalid."));
-        return ValidatePayload(command.payload, motionSafety, localHalfExtentMeters);
+        return std::visit(DynamicsPayloadValidator{motionSafety, localHalfExtentMeters}, command.payload);
     }
 }  // namespace Horo::Physics

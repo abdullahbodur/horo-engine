@@ -40,13 +40,13 @@ namespace Horo::Physics {
         Add
     };
 
-    /** @brief Force integrated by the exact owning fixed tick; an optional point is in world-local meters. */
+    /** @brief Force integrated by the exact tick; point is absolute in the world's local-origin frame. */
     struct PhysicsLinearForce final {
         Math::Vec3 newtons{};                       /**< Signed world-axis force components. */
         std::optional<Math::Vec3> applicationPoint; /**< Empty selects center of mass. */
     };
 
-    /** @brief Instantaneous linear impulse; an optional point is in world-local meters. */
+    /** @brief Instantaneous impulse; point is absolute in the world's local-origin frame, never body-relative. */
     struct PhysicsLinearImpulse final {
         Math::Vec3 newtonSeconds{};                 /**< Signed world-axis impulse components. */
         std::optional<Math::Vec3> applicationPoint; /**< Empty selects center of mass. */

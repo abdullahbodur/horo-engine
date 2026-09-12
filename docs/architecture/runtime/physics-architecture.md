@@ -344,8 +344,8 @@ never ordering inputs.
 Linear force and torque are SI rates integrated exactly once by the owning fixed
 tick. Linear and angular impulses are instantaneous SI changes and are never scaled
 by render delta or applied a second time during presentation. An optional force or
-impulse application point is expressed in the active world's local meter space;
-absence means center of mass. Gravity scale multiplies the world's immutable gravity
+impulse application point is an absolute coordinate in the active world's local-origin
+meter frame, never a body-relative offset; absence means center of mass. Gravity scale multiplies the world's immutable gravity
 vector and does not mutate world settings. Version one admits finite non-negative
 gravity scales through `100`.
 
