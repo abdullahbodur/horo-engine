@@ -25,12 +25,12 @@ namespace Horo::Gameplay::Detail {
         }
 
         [[nodiscard]] bool HasValidEditorMetadata(const GameAssetEditorRepresentation &editor) {
-            const auto boundedText = [](const std::string &value) {
+            const auto boundedText = [](const std::string_view value) {
                 return !value.empty() && value.size() <= MaximumGameAssetEditorTextBytes;
             };
-            const std::array valid{boundedText(editor.displayName), boundedText(editor.category), boundedText(editor.iconName),
-                                   editor.fields.size() <= MaximumGameAssetFields};
-            if (!std::ranges::all_of(valid, std::identity{}))
+            if (const std::array valid{boundedText(editor.displayName), boundedText(editor.category), boundedText(editor.iconName),
+                                       editor.fields.size() <= MaximumGameAssetFields};
+                !std::ranges::all_of(valid, std::identity{}))
                 return false;
             std::unordered_set<std::string_view> ids;
             ids.reserve(editor.fields.size());
@@ -60,14 +60,10 @@ namespace Horo::Gameplay::Detail {
 
     Result<void> ValidateGameAssetRegistration(const GameAssetTypeRegistration &registration, const std::string_view moduleId) {
         const GameAssetTypeDescriptor &descriptor = registration.descriptor;
-        const std::array valid{descriptor.typeId.IsValid(),
-                               BelongsToModule(descriptor.typeId.Value(), moduleId),
-                               descriptor.schemaVersion != 0,
-                               HasValidSourceExtensions(descriptor),
-                               HasValidCookTargets(descriptor),
-                               HasValidEditorMetadata(descriptor.editor),
-                               HasCompleteHandlers(registration.handler)};
-        if (!std::ranges::all_of(valid, std::identity{}))
+        if (const std::array valid{descriptor.typeId.IsValid(), BelongsToModule(descriptor.typeId.Value(), moduleId),
+                                   descriptor.schemaVersion != 0, HasValidSourceExtensions(descriptor), HasValidCookTargets(descriptor),
+                                   HasValidEditorMetadata(descriptor.editor), HasCompleteHandlers(registration.handler)};
+            !std::ranges::all_of(valid, std::identity{}))
             return Result<void>::Failure(MakeError(GameplayErrors::InvalidGameAssetDescriptor));
         return Result<void>::Success();
     }

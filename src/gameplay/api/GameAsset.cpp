@@ -44,10 +44,10 @@ namespace Horo::Gameplay {
 
     /** @copydoc ValidateSerializedGameAsset */
     Result<void> ValidateSerializedGameAsset(const SerializedGameAsset &asset) {
-        const std::array valid{asset.typeId.IsValid(), asset.schemaVersion != 0, asset.payload.size() <= MaximumGameAssetPayloadBytes,
-                               asset.encoding == GameAssetPayloadEncoding::CanonicalJson ||
-                                   asset.encoding == GameAssetPayloadEncoding::Binary};
-        if (!std::ranges::all_of(valid, std::identity{}))
+        if (const std::array valid{asset.typeId.IsValid(), asset.schemaVersion != 0, asset.payload.size() <= MaximumGameAssetPayloadBytes,
+                                   asset.encoding == GameAssetPayloadEncoding::CanonicalJson ||
+                                       asset.encoding == GameAssetPayloadEncoding::Binary};
+            !std::ranges::all_of(valid, std::identity{}))
             return Result<void>::Failure(MakeError(GameplayErrors::InvalidSerializedGameAsset));
         return Result<void>::Success();
     }

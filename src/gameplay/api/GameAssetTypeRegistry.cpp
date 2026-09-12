@@ -19,7 +19,7 @@ namespace Horo::Gameplay {
         }
 
         template <typename Output, typename Action>
-        [[nodiscard]] Result<Output> UseRegistration(Result<const GameAssetTypeRegistration *> resolved, Action &&action) {
+        [[nodiscard]] Result<Output> UseRegistration(const Result<const GameAssetTypeRegistration *> &resolved, Action &&action) {
             if (resolved.HasError())
                 return Result<Output>::Failure(resolved.ErrorValue());
             return std::forward<Action>(action)(*resolved.Value());
@@ -97,17 +97,18 @@ namespace Horo::Gameplay {
 
     /** @copydoc GameAssetTypeRegistry::Inspect */
     Result<GameAssetInspection> GameAssetTypeRegistry::Inspect(const SerializedGameAsset &asset) const {
+        using enum GameAssetInspectionStatus;
         if (const Result<void> valid = ValidateSerializedGameAsset(asset); valid.HasError())
             return Result<GameAssetInspection>::Failure(valid.ErrorValue());
         const GameAssetTypeRegistration *registration = Find(asset.typeId);
         if (registration == nullptr)
-            return Result<GameAssetInspection>::Success({.status = GameAssetInspectionStatus::MissingDescriptor});
+            return Result<GameAssetInspection>::Success({.status = MissingDescriptor});
         const GameAssetTypeDescriptor &descriptor = registration->descriptor;
-        GameAssetInspectionStatus status = GameAssetInspectionStatus::Current;
+        GameAssetInspectionStatus status = Current;
         if (asset.schemaVersion < descriptor.schemaVersion)
-            status = GameAssetInspectionStatus::OlderSchema;
+            status = OlderSchema;
         else if (asset.schemaVersion > descriptor.schemaVersion)
-            status = GameAssetInspectionStatus::NewerSchema;
+            status = NewerSchema;
         return Result<GameAssetInspection>::Success({.status = status, .descriptor = descriptor});
     }
 
@@ -151,7 +152,8 @@ namespace Horo::Gameplay {
     /** @copydoc GameAssetTypeRegistry::Import */
     Result<SerializedGameAsset> GameAssetTypeRegistry::Import(const GameAssetTypeId &typeId, const GameAssetImportInput &input,
                                                               const CancellationToken &cancellation) const {
-        return UseRegistration<SerializedGameAsset>(GetRegistrationForProcessing(typeId), [&](const auto &registration) {
+        return UseRegistration<SerializedGameAsset>(GetRegistrationForProcessing(typeId),
+                                                    [this, &input, &cancellation](const auto &registration) {
             if (!HandlesExtension(registration.descriptor, input.sourceExtension) || input.sourceBytes.size() > limits_.maximumInputBytes)
                 return Result<SerializedGameAsset>::Failure(MakeError(GameplayErrors::InvalidGameAssetProcessingInput));
             return ValidateProcessedAsset(Invoke<decltype(registration.handler.importAsset), GameAssetImportInput,
@@ -165,7 +167,8 @@ namespace Horo::Gameplay {
     /** @copydoc GameAssetTypeRegistry::Serialize */
     Result<SerializedGameAsset> GameAssetTypeRegistry::Serialize(const GameAssetTypeId &typeId, const GameAssetSerializationInput &input,
                                                                  const CancellationToken &cancellation) const {
-        return UseRegistration<SerializedGameAsset>(GetRegistrationForProcessing(typeId), [&](const auto &registration) {
+        return UseRegistration<SerializedGameAsset>(GetRegistrationForProcessing(typeId),
+                                                    [this, &input, &cancellation](const auto &registration) {
             if (input.editorPayload.size() > limits_.maximumInputBytes ||
                 (input.encoding != GameAssetPayloadEncoding::CanonicalJson && input.encoding != GameAssetPayloadEncoding::Binary))
                 return Result<SerializedGameAsset>::Failure(MakeError(GameplayErrors::InvalidGameAssetProcessingInput));
