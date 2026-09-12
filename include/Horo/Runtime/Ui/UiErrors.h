@@ -54,6 +54,16 @@ namespace Horo::Runtime::Ui::UiErrors {
     extern const ErrorCodeDescriptor StructuralCommandConflict;
     /** @brief A retained element tree is retiring, stopped, or otherwise unavailable for the request. */
     extern const ErrorCodeDescriptor ElementTreeLifecycleUnavailable;
+    /** @brief A layout request, geometry value, evaluator result, or dirty target is malformed. */
+    extern const ErrorCodeDescriptor LayoutInvalid;
+    /** @brief Layout source identity or revision evidence does not match the active tree/canvas. */
+    extern const ErrorCodeDescriptor LayoutSourceStale;
+    /** @brief Arrange-time dependency resolution changed more than the one bounded remeasure permits. */
+    extern const ErrorCodeDescriptor LayoutNonConvergent;
+    /** @brief Every preallocated immutable layout snapshot slot remains leased. */
+    extern const ErrorCodeDescriptor LayoutSnapshotStorageExhausted;
+    /** @brief The layout engine is retiring or stopped and rejects new work. */
+    extern const ErrorCodeDescriptor LayoutLifecycleUnavailable;
     /** @brief Immutable Runtime UI render snapshot evidence or table topology is malformed. */
     extern const ErrorCodeDescriptor RenderSnapshotInvalid;
     /** @brief A Runtime UI draw command contains invalid geometry, paint, or table references. */

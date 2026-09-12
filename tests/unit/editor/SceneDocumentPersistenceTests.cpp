@@ -148,38 +148,56 @@ namespace {
             .rotation = Math::Quaternion::FromEulerRadians({0.1F, 0.2F, 0.3F}),
             .scale = {1.5F, 2.0F, 0.5F},
         };
-        const auto created = commands
-                                 .Execute(
-                                     CreateSceneObjectCommand{
-                                         .name = "Persisted Box",
-                                         .localTransform = transform,
-                                         .primitiveMesh = PrimitiveMeshDescriptor::Defaults(Runtime::PrimitiveMeshType::Box),
-                                         .components =
-                                             SceneObjectComponentSet{
-                                                 .camera =
-                                                     Runtime::CameraComponent{.nearPlane = 0.25F, .farPlane = 500.0F, .enabled = false},
-                                                 .light = Runtime::LightComponent{.kind = Runtime::LightKind::Point, .intensity = 3.0F},
-                                                 .triggerVolume = Runtime::TriggerVolumeComponent{Runtime::ColliderShapeType::Sphere},
-                                                 .audioSource = Runtime::AudioSourceComponent{.gain = 0.75F, .spatial = false},
-                                                 .behaviors =
-                                                     {
-                                                         Gameplay::BehaviorComponent{
-                                                             .instanceId = Gameplay::BehaviorInstanceId{44},
-                                                             .typeId =
-                                                                 Gameplay::BehaviorTypeId::Parse("game.tests.persisted_behavior").Value(),
-                                                             .schemaVersion = 3,
-                                                             .enabled = false,
-                                                             .fields =
-                                                                 {
-                                                                     Gameplay::BehaviorField{"speed", 2.5},
-                                                                     Gameplay::
-                                                                         BehaviorField{"label", std::string{"Unknown payload survives"}},
-                                                                     Gameplay::BehaviorField{"offset", Math::Vec3{1.0F, 2.0F, 3.0F}},
-                                                                 },
-                                                         },
-                                                     },
-                                             },
-                                     });
+        const auto created =
+            commands.Execute(
+                CreateSceneObjectCommand{
+                    .name = "Persisted Box",
+                    .localTransform = transform,
+                    .primitiveMesh = PrimitiveMeshDescriptor::Defaults(Runtime::PrimitiveMeshType::Box),
+                    .components =
+                        SceneObjectComponentSet{
+                            .camera = Runtime::CameraComponent{.nearPlane = 0.25F, .farPlane = 500.0F, .enabled = false},
+                            .light = Runtime::LightComponent{.kind = Runtime::LightKind::Point, .intensity = 3.0F},
+                            .triggerVolume = Runtime::TriggerVolumeComponent{Runtime::ColliderShapeType::Sphere},
+                            .audioSource = Runtime::AudioSourceComponent{.gain = 0.75F, .spatial = false},
+                            .navigationSurface =
+                                Runtime::NavigationSurfaceComponent{
+                                    .id = Navigation::SurfaceId::Create(19).Value(),
+                                    .definition = Assets::AssetId::Parse("aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee").Value(),
+                                    .schemaVersion = 1,
+                                    .generation = 4,
+                                    .bakeScope = Runtime::NavigationBakeScope::LocalBounds,
+                                    .localBounds =
+                                        Runtime::NavigationLocalBounds{.center = {1.0F, 0.0F, -2.0F}, .halfExtents = {8.0F, 2.0F, 5.0F}},
+                                    .profiles = {Navigation::NavigationAgentProfileId::Create(6).Value()},
+                                },
+                            .navigationRegion =
+                                Runtime::NavigationRegionComponent{
+                                    .id = Navigation::NavigationRegionId::Create(27).Value(),
+                                    .surface = Navigation::SurfaceId::Create(19).Value(),
+                                    .generation = 3,
+                                    .localBounds = {.center = {-1.0F, 0.5F, 2.0F}, .halfExtents = {3.0F, 1.0F, 4.0F}},
+                                    .sourceSelection = Runtime::NavigationRegionSourceSelection::StaticCollisionInBounds,
+                                    .mode = Runtime::NavigationRegionMode::Exclude,
+                                },
+                            .behaviors =
+                                {
+                                    Gameplay::BehaviorComponent{
+                                        .instanceId = Gameplay::BehaviorInstanceId{44},
+                                        .typeId = Gameplay::BehaviorTypeId::Parse("game.tests.persisted_behavior").Value(),
+                                        .schemaVersion =
+                                            3,
+                                        .enabled = false,
+                                        .fields =
+                                            {
+                                                Gameplay::BehaviorField{"speed", 2.5},
+                                                Gameplay::BehaviorField{"label", std::string{"Unknown payload survives"}},
+                                                Gameplay::BehaviorField{"offset", Math::Vec3{1.0F, 2.0F, 3.0F}},
+                                            },
+                                    },
+                                },
+                        },
+                });
         REQUIRE((created.HasValue()));
         const auto prefabAsset = Assets::AssetId::Parse("11112222-3333-4444-8888-9999aaaabbbb");
         REQUIRE(prefabAsset.HasValue());
