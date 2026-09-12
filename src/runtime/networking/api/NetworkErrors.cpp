@@ -229,6 +229,61 @@ namespace Horo::Network::NetworkErrors {
         .retryable = false,
         .userActionable = true,
     };
+    const ErrorCodeDescriptor ReplicationRoleContextInvalid{
+        .domain = NetworkDomain,
+        .code = ErrorCode{"network.replication.role_context_invalid"},
+        .defaultSeverity = ErrorSeverity::Error,
+        .summary = "The pinned replication role context is malformed or mixes unrelated identity generations.",
+        .remediationHint = "Use one valid session, object, schema version, role, peer, and owner binding from the same immutable snapshot.",
+        .retryable = false,
+        .userActionable = true,
+    };
+    const ErrorCodeDescriptor ReplicationAuthorityDenied{
+        .domain = NetworkDomain,
+        .code = ErrorCode{"network.replication.authority_denied"},
+        .defaultSeverity = ErrorSeverity::Error,
+        .summary = "The current world role cannot originate canonical replicated state.",
+        .remediationHint =
+            "Submit an allowed typed command to the authority server; client ownership never grants canonical write authority.",
+        .retryable = false,
+        .userActionable = false,
+    };
+    const ErrorCodeDescriptor ReplicationRoleTransitionStale{
+        .domain = NetworkDomain,
+        .code = ErrorCode{"network.replication.role_transition_stale"},
+        .defaultSeverity = ErrorSeverity::Warning,
+        .summary = "The replication role transition revision is stale or does not match the pending safe point.",
+        .remediationHint = "Rebuild the complete transition from the current immutable role binding.",
+        .retryable = true,
+        .userActionable = false,
+    };
+    const ErrorCodeDescriptor ReplicationRoleTransitionPending{
+        .domain = NetworkDomain,
+        .code = ErrorCode{"network.replication.role_transition_pending"},
+        .defaultSeverity = ErrorSeverity::Warning,
+        .summary = "A replication role transition is already staged.",
+        .remediationHint = "Commit or discard the staged transition at the owner safe point before staging another.",
+        .retryable = true,
+        .userActionable = false,
+    };
+    const ErrorCodeDescriptor ReplicationRoleWrongThread{
+        .domain = NetworkDomain,
+        .code = ErrorCode{"network.replication.role_wrong_thread"},
+        .defaultSeverity = ErrorSeverity::Error,
+        .summary = "Replication role state was accessed from a non-owner thread.",
+        .remediationHint = "Transfer the complete command to the runtime owner-thread safe point.",
+        .retryable = true,
+        .userActionable = false,
+    };
+    const ErrorCodeDescriptor ReplicationRoleShuttingDown{
+        .domain = NetworkDomain,
+        .code = ErrorCode{"network.replication.role_shutting_down"},
+        .defaultSeverity = ErrorSeverity::Error,
+        .summary = "Replication role state is shutting down.",
+        .remediationHint = "Reject late work and bind it only to a new active session/object generation.",
+        .retryable = false,
+        .userActionable = false,
+    };
     const ErrorCodeDescriptor TransportCapabilityDescriptorInvalid{
         .domain = NetworkDomain,
         .code = ErrorCode{"network.transport.capability_descriptor_invalid"},
@@ -470,6 +525,51 @@ namespace Horo::Network::NetworkErrors {
         .defaultSeverity = ErrorSeverity::Error,
         .summary = "The handshake operation is invalid for its current lifecycle state.",
         .remediationHint = "Retain the first terminal result and start a new connection and session generation for another attempt.",
+        .retryable = false,
+        .userActionable = false,
+    };
+    const ErrorCodeDescriptor AuthenticationInvalid{
+        .domain = NetworkDomain,
+        .code = ErrorCode{"network.authentication.invalid"},
+        .defaultSeverity = ErrorSeverity::Error,
+        .summary = "Network authentication input is malformed.",
+        .remediationHint = "Use the exact bounded challenge contract and generation-bound host authority outputs.",
+        .retryable = false,
+        .userActionable = false,
+    };
+    const ErrorCodeDescriptor AuthenticationIncompatible{
+        .domain = NetworkDomain,
+        .code = ErrorCode{"network.authentication.incompatible"},
+        .defaultSeverity = ErrorSeverity::Error,
+        .summary = "Network authentication conflicts with immutable trust policy.",
+        .remediationHint = "Use the exact policy revision, transcript, and exposure-specific protection requirements.",
+        .retryable = false,
+        .userActionable = true,
+    };
+    const ErrorCodeDescriptor AuthenticationTrustUnavailable{
+        .domain = NetworkDomain,
+        .code = ErrorCode{"network.authentication.trust_unavailable"},
+        .defaultSeverity = ErrorSeverity::Error,
+        .summary = "A required host trust authority is unavailable.",
+        .remediationHint = "Restore the configured credential, certificate, peer-verification, and private-key providers.",
+        .retryable = true,
+        .userActionable = true,
+    };
+    const ErrorCodeDescriptor AuthenticationRejected{
+        .domain = NetworkDomain,
+        .code = ErrorCode{"network.authentication.rejected"},
+        .defaultSeverity = ErrorSeverity::Error,
+        .summary = "Host trust policy rejected network authentication.",
+        .remediationHint = "Present only this safe failure class; keep provider, account, proof, certificate, and key detail private.",
+        .retryable = false,
+        .userActionable = true,
+    };
+    const ErrorCodeDescriptor AuthenticationStateInvalid{
+        .domain = NetworkDomain,
+        .code = ErrorCode{"network.authentication.state_invalid"},
+        .defaultSeverity = ErrorSeverity::Warning,
+        .summary = "Network authentication is not legal from its current state.",
+        .remediationHint = "Retain the first terminal result and begin a new authentication generation when required.",
         .retryable = false,
         .userActionable = false,
     };

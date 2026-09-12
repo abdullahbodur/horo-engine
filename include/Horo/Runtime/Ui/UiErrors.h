@@ -64,6 +64,32 @@ namespace Horo::Runtime::Ui::UiErrors {
     extern const ErrorCodeDescriptor LayoutSnapshotStorageExhausted;
     /** @brief The layout engine is retiring or stopped and rejects new work. */
     extern const ErrorCodeDescriptor LayoutLifecycleUnavailable;
+    /** @brief Hit-test projection, geometry, pointer, ray, or canvas evidence is malformed. */
+    extern const ErrorCodeDescriptor HitTestInvalid;
+    /** @brief Hit-test ownership, tree, canvas, or interaction evidence is stale or mismatched. */
+    extern const ErrorCodeDescriptor HitTestSourceStale;
+    /** @brief The queried interaction generation is not the last successfully presented generation. */
+    extern const ErrorCodeDescriptor HitTestNotPresented;
+    /** @brief Every preallocated immutable hit-test snapshot slot remains leased. */
+    extern const ErrorCodeDescriptor HitTestSnapshotStorageExhausted;
+    /** @brief The hit-test store is retiring or stopped and rejects publication. */
+    extern const ErrorCodeDescriptor HitTestLifecycleUnavailable;
+    /** @brief Routed-event identities, kind, sequence, or modal handle are malformed. */
+    extern const ErrorCodeDescriptor EventDispatchInvalid;
+    /** @brief Routed-event owner, tree, document, target, or interaction evidence is stale. */
+    extern const ErrorCodeDescriptor EventDispatchSourceStale;
+    /** @brief The targeted element is outside the active inclusive modal root. */
+    extern const ErrorCodeDescriptor EventDispatchModalBoundaryViolation;
+    /** @brief The frozen route exceeded its preallocated root-inclusive depth. */
+    extern const ErrorCodeDescriptor EventDispatchCapacityExceeded;
+    /** @brief A handler structurally changed or destroyed the frozen event route. */
+    extern const ErrorCodeDescriptor EventDispatchRouteInvalidated;
+    /** @brief A handler attempted nested dispatch through the same dispatcher. */
+    extern const ErrorCodeDescriptor EventDispatchReentrant;
+    /** @brief A routed handler or default action threw across the callback boundary. */
+    extern const ErrorCodeDescriptor EventDispatchHandlerFailed;
+    /** @brief The event dispatcher is retiring, stopped, or changing lifecycle during dispatch. */
+    extern const ErrorCodeDescriptor EventDispatchLifecycleUnavailable;
     /** @brief Immutable Runtime UI render snapshot evidence or table topology is malformed. */
     extern const ErrorCodeDescriptor RenderSnapshotInvalid;
     /** @brief A Runtime UI draw command contains invalid geometry, paint, or table references. */

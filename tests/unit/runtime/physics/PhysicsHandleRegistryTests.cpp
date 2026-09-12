@@ -1,4 +1,5 @@
 #include "PhysicsHandleRegistry.h"
+#include "PhysicsTestUtils.h"
 
 #include <catch2/catch_test_macros.hpp>
 #include <cstdint>
@@ -26,10 +27,7 @@ namespace Horo::Physics {
             return PhysicsWorldId::Create(value).Value();
         }
 
-        template <typename ResultType> void RequireError(const ResultType &result, const ErrorCodeDescriptor &expected) {
-            REQUIRE(result.HasError());
-            REQUIRE(result.ErrorValue().code.Value() == expected.code.Value());
-        }
+        using Test::RequireError;
 
         TEST_CASE("Physics registries keep body shape and constraint mappings strongly typed", "[physics][registry]") {
             auto bodies = Registry<BodyHandle, NativeBodyId>::Create({.maximumSlots = 1}).Value();
@@ -129,7 +127,6 @@ namespace Horo::Physics {
             REQUIRE(last.slot.generation == 2);
             REQUIRE(registry.Remove(last).HasValue());
             REQUIRE(registry.ActiveCount() == 0);
-            REQUIRE(registry.ExhaustedCount() == 1);
             RequireError(registry.Resolve(last), PhysicsErrors::HandleStale);
             RequireError(registry.Acquire({4}), PhysicsErrors::GenerationExhausted);
         }

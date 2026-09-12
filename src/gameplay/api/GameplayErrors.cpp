@@ -5,6 +5,78 @@ namespace Horo::Gameplay::GameplayErrors {
         const ErrorDomainId GameplayDomain{"horo.gameplay"};
     }
 
+    const ErrorCodeDescriptor InvalidGameAssetTypeId{
+        .domain = GameplayDomain,
+        .code = ErrorCode{"gameplay.asset_type_id_invalid"},
+        .defaultSeverity = ErrorSeverity::Error,
+        .summary = "The game-owned asset type ID is invalid.",
+        .remediationHint = "Use a lowercase game.<module>.<asset_type> identifier.",
+        .retryable = false,
+        .userActionable = true,
+    };
+    const ErrorCodeDescriptor InvalidGameAssetDescriptor{
+        .domain = GameplayDomain,
+        .code = ErrorCode{"gameplay.asset_descriptor_invalid"},
+        .defaultSeverity = ErrorSeverity::Error,
+        .summary = "The game-owned asset descriptor is incomplete or invalid.",
+        .remediationHint = "Declare bounded editor metadata, source extensions, cook targets, and complete callbacks.",
+        .retryable = false,
+        .userActionable = true,
+    };
+    const ErrorCodeDescriptor InvalidSerializedGameAsset{
+        .domain = GameplayDomain,
+        .code = ErrorCode{"gameplay.serialized_asset_invalid"},
+        .defaultSeverity = ErrorSeverity::Error,
+        .summary = "The serialized game-owned asset envelope is invalid.",
+        .remediationHint = "Repair its stable identity, schema version, encoding, or bounded opaque payload.",
+        .retryable = false,
+        .userActionable = true,
+    };
+    const ErrorCodeDescriptor DuplicateGameAssetType{
+        .domain = GameplayDomain,
+        .code = ErrorCode{"gameplay.asset_type_duplicate"},
+        .defaultSeverity = ErrorSeverity::Error,
+        .summary = "A game-owned asset type ID is duplicated.",
+        .remediationHint = "Give every project-owned asset type one unique stable ID.",
+        .retryable = false,
+        .userActionable = true,
+    };
+    const ErrorCodeDescriptor GameAssetRegistryFrozen{
+        .domain = GameplayDomain,
+        .code = ErrorCode{"gameplay.asset_registry_frozen"},
+        .defaultSeverity = ErrorSeverity::Error,
+        .summary = "The game-owned asset registry is frozen.",
+        .remediationHint = "Register complete asset metadata before module startup.",
+        .retryable = false,
+        .userActionable = false,
+    };
+    const ErrorCodeDescriptor GameAssetHandlerUnavailable{
+        .domain = GameplayDomain,
+        .code = ErrorCode{"gameplay.asset_handler_unavailable"},
+        .defaultSeverity = ErrorSeverity::Error,
+        .summary = "The game-owned asset handler is unavailable.",
+        .remediationHint = "Restore compatible project code before importing, editing, or cooking this asset.",
+        .retryable = true,
+        .userActionable = true,
+    };
+    const ErrorCodeDescriptor InvalidGameAssetProcessingInput{
+        .domain = GameplayDomain,
+        .code = ErrorCode{"gameplay.asset_processing_input_invalid"},
+        .defaultSeverity = ErrorSeverity::Error,
+        .summary = "The game-owned asset processing input is invalid or unsupported.",
+        .remediationHint = "Use a declared source extension, current schema, supported target, and bounded input.",
+        .retryable = false,
+        .userActionable = true,
+    };
+    const ErrorCodeDescriptor GameAssetProcessingFailed{
+        .domain = GameplayDomain,
+        .code = ErrorCode{"gameplay.asset_processing_failed"},
+        .defaultSeverity = ErrorSeverity::Error,
+        .summary = "A game-owned asset processing callback failed its boundary contract.",
+        .remediationHint = "Fix the project callback and retry without replacing the preserved authored payload.",
+        .retryable = false,
+        .userActionable = true,
+    };
     const ErrorCodeDescriptor InvalidComponentTypeId{
         .domain = GameplayDomain,
         .code = ErrorCode{"gameplay.component_type_id_invalid"},
@@ -229,6 +301,33 @@ namespace Horo::Gameplay::GameplayErrors {
         .remediationHint = "Dispatch the callback on its declared affinity or mark a genuinely thread-safe callback as Any.",
         .retryable = false,
         .userActionable = false,
+    };
+    const ErrorCodeDescriptor GameplayReloadRestartRequired{
+        .domain = GameplayDomain,
+        .code = ErrorCode{"gameplay.reload_restart_required"},
+        .defaultSeverity = ErrorSeverity::Warning,
+        .summary = "The gameplay module cannot prove that native unload is safe.",
+        .remediationHint = "Stop Play and restart the editor before activating the replacement module.",
+        .retryable = false,
+        .userActionable = true,
+    };
+    const ErrorCodeDescriptor GameplayReloadSnapshotInvalid{
+        .domain = GameplayDomain,
+        .code = ErrorCode{"gameplay.reload_snapshot_invalid"},
+        .defaultSeverity = ErrorSeverity::Error,
+        .summary = "The native gameplay reload snapshot is invalid or exceeds its bound.",
+        .remediationHint = "Fix the module reload adapter and retry from the last working generation.",
+        .retryable = false,
+        .userActionable = true,
+    };
+    const ErrorCodeDescriptor GameplayReloadRestoreFailed{
+        .domain = GameplayDomain,
+        .code = ErrorCode{"gameplay.reload_restore_failed"},
+        .defaultSeverity = ErrorSeverity::Error,
+        .summary = "The replacement gameplay generation could not restore captured state.",
+        .remediationHint = "Restore the previous generation or stop Play without discarding authored data.",
+        .retryable = true,
+        .userActionable = true,
     };
     const ErrorCodeDescriptor InvalidBehaviorTypeId{
         .domain = GameplayDomain,

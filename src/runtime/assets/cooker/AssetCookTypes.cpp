@@ -7,7 +7,6 @@
 #include <cstring>
 #include <span>
 #include <string>
-#include <string_view>
 #include <vector>
 
 using namespace Horo::Assets::CookErrors;
@@ -17,40 +16,6 @@ namespace Horo::Assets {
         constexpr std::array<char, 8> Magic{'H', 'O', 'R', 'O', 'A', 'S', 'T', '\0'};
         constexpr std::uint32_t CurrentFormatVersion = 1;
         constexpr std::size_t FixedHeaderSize = 8 + 4 + 2 + 2 + 16 + 32 + 32 + 32 + 8;
-
-        [[nodiscard]] bool IsLowerAlpha(const char c) noexcept {
-            return c >= 'a' && c <= 'z';
-        }
-
-        [[nodiscard]] bool IsDigit(const char c) noexcept {
-            return c >= '0' && c <= '9';
-        }
-
-        [[nodiscard]] bool IsSegmentChar(const char c) noexcept {
-            return IsLowerAlpha(c) || IsDigit(c) || c == '-';
-        }
-
-        [[nodiscard]] bool IsValidTargetId(const std::string_view text) noexcept {
-            if (text.empty())
-                return false;
-            bool hasSeparator = false;
-            std::size_t segmentStart = 0;
-            for (std::size_t i = 0; i <= text.size(); ++i) {
-                const bool atEnd = i == text.size();
-                if (!atEnd && text[i] != '-')
-                    continue;
-                if (const std::size_t len = i - segmentStart; len == 0 || !IsLowerAlpha(text[segmentStart]))
-                    return false;
-                for (std::size_t j = segmentStart + 1; j < i; ++j) {
-                    if (!IsSegmentChar(text[j]) || text[j] == '-')
-                        return false;
-                }
-                segmentStart = i + 1;
-                if (!atEnd)
-                    hasSeparator = true;
-            }
-            return hasSeparator;
-        }
 
         void WriteU32LE(std::vector<std::uint8_t> &out, const std::uint32_t value) {
             out.push_back(static_cast<std::uint8_t>(value & 0xFFU));
@@ -101,18 +66,6 @@ namespace Horo::Assets {
             return Result<AssetCookArtifact>::Failure(MakeError(MalformedArtifact, "Cooked artifact is malformed."));
         }
     }  // namespace
-
-    /** @copydoc AssetCookTargetId::Parse */
-    Result<AssetCookTargetId> AssetCookTargetId::Parse(const std::string_view text) {
-        if (!IsValidTargetId(text))
-            return Result<AssetCookTargetId>::Failure(MakeError(InvalidTarget, "Cook target ID is not canonical."));
-        return Result<AssetCookTargetId>::Success(AssetCookTargetId(std::string(text)));
-    }
-
-    /** @copydoc AssetCookTargetId::Value */
-    const std::string &AssetCookTargetId::Value() const noexcept {
-        return value_;
-    }
 
     /** @copydoc EncodeCookedArtifact */
     Result<std::vector<std::uint8_t>> EncodeCookedArtifact(const AssetCookArtifact &artifact, const AssetCookLimits &limits) {

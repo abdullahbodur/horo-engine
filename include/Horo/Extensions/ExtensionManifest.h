@@ -86,6 +86,7 @@ namespace Horo::Extensions {
         std::string service;        /**< Required service export identity. */
         std::string contract;       /**< Required callable contract identity. */
         std::string minimumVersion; /**< Minimum compatible semantic API version. */
+        bool required{true};        /**< Whether absence or incompatibility rejects module composition. */
     };
 
     /** @brief One versioned native or declarative module exported by an extension package. */
@@ -136,7 +137,9 @@ namespace Horo::Extensions {
      * @brief Parses and validates an untrusted extension.json document without loading extension code.
      * @param jsonContent Encoded JSON content; the returned manifest owns every decoded value.
      * @param limits Resource limits enforced during syntax and schema decoding.
-     * @return Validated manifest, or an error whose diagnostic message starts with the exact JSON field path.
+     * @return Validated manifest, or an error whose diagnostic owns the exact JSON field path in `Diagnostic::path`.
+     * @details Diagnostic paths use dot notation for identifier keys, bracket-quoted JSON strings for all other keys,
+     *          and numeric brackets for array elements.
      */
     [[nodiscard]] Result<ExtensionManifest> ParseExtensionManifest(std::string_view jsonContent,
                                                                    const ExtensionManifestLimits &limits = {});

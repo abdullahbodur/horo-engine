@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <catch2/catch_test_macros.hpp>
 #include <memory>
+#include <stdexcept>
 #include <string>
 #include <vector>
 
@@ -20,6 +21,11 @@ namespace {
     struct Recorder {
         std::vector<std::string> calls;
         std::size_t destroyed{};
+        std::size_t reloadStateBytes{1};
+        bool throwOnCreate{};
+        bool throwOnEnable{};
+        bool throwOnDisable{};
+        bool throwOnDestroy{};
     };
 
     class RecordingBehavior final : public IBehaviorInstance {
@@ -28,10 +34,14 @@ namespace {
 
         void OnCreate(BehaviorContext &) override {
             recorder_->calls.emplace_back("create");
+            if (recorder_->throwOnCreate)
+                throw std::runtime_error{"OnCreate failure"};
         }
 
         void OnEnable(BehaviorContext &) override {
             recorder_->calls.emplace_back("enable");
+            if (recorder_->throwOnEnable)
+                throw std::runtime_error{"OnEnable failure"};
         }
 
         void OnStart(BehaviorContext &) override {
@@ -68,10 +78,28 @@ namespace {
 
         void OnDisable(BehaviorContext &) override {
             recorder_->calls.emplace_back("disable");
+            if (recorder_->throwOnDisable)
+                throw std::runtime_error{"OnDisable failure"};
         }
 
         void OnDestroy(BehaviorContext &) override {
             recorder_->calls.emplace_back("destroy");
+            if (recorder_->throwOnDestroy)
+                throw std::runtime_error{"OnDestroy failure"};
+        }
+
+        Result<std::vector<std::byte>> CaptureReloadState() const override {
+            std::vector<std::byte> state(recorder_->reloadStateBytes);
+            if (!state.empty())
+                state.front() = published_ ? std::byte{1} : std::byte{0};
+            return Result<std::vector<std::byte>>::Success(std::move(state));
+        }
+
+        Result<void> RestoreReloadState(const std::span<const std::byte> state) override {
+            if (state.size() != 1)
+                return Result<void>::Failure(MakeError(GameplayErrors::GameplayReloadRestoreFailed));
+            published_ = state.front() == std::byte{1};
+            return Result<void>::Success();
         }
 
     private:
@@ -160,4 +188,82 @@ TEST_CASE("behavior runtime rejects duplicate attachments unless the descriptor 
     auto runtime = BehaviorRuntime::Create(*scene.Value(), registry);
     REQUIRE(runtime.HasError());
     REQUIRE(recorder.destroyed == 1);
+}
+
+TEST_CASE("behavior runtime contains activation exceptions and releases partial instances") {
+    Recorder createFailure;
+    createFailure.throwOnCreate = true;
+    BehaviorRegistry createRegistry = Registry(createFailure);
+    auto createScene = RuntimeScene::Create(Definition(), SceneRuntimeId{15});
+    REQUIRE(createScene.HasValue());
+    const auto createResult = BehaviorRuntime::Create(*createScene.Value(), createRegistry);
+    REQUIRE(createResult.HasError());
+    CHECK(createResult.ErrorValue().code.Value() == GameplayErrors::GameplayFactoryFailed.code.Value());
+    CHECK(createFailure.destroyed == 1);
+    CHECK(std::ranges::count(createFailure.calls, "destroy") == 1);
+
+    Recorder enableFailure;
+    enableFailure.throwOnEnable = true;
+    BehaviorRegistry enableRegistry = Registry(enableFailure);
+    auto enableScene = RuntimeScene::Create(Definition(), SceneRuntimeId{16});
+    REQUIRE(enableScene.HasValue());
+    const auto enableResult = BehaviorRuntime::Create(*enableScene.Value(), enableRegistry);
+    REQUIRE(enableResult.HasError());
+    CHECK(enableResult.ErrorValue().code.Value() == GameplayErrors::GameplayFactoryFailed.code.Value());
+    CHECK(enableFailure.destroyed == 1);
+    CHECK(std::ranges::count(enableFailure.calls, "disable") == 1);
+    CHECK(std::ranges::count(enableFailure.calls, "destroy") == 1);
+}
+
+TEST_CASE("behavior runtime reports rollback callback exceptions after releasing the factory instance") {
+    Recorder recorder;
+    recorder.throwOnEnable = true;
+    recorder.throwOnDisable = true;
+    recorder.throwOnDestroy = true;
+    BehaviorRegistry registry = Registry(recorder);
+    auto scene = RuntimeScene::Create(Definition(), SceneRuntimeId{17});
+    REQUIRE(scene.HasValue());
+    const auto result = BehaviorRuntime::Create(*scene.Value(), registry);
+    REQUIRE(result.HasError());
+    CHECK(result.ErrorValue().code.Value() == GameplayErrors::GameplayFactoryFailed.code.Value());
+    CHECK(recorder.destroyed == 1);
+    CHECK(std::ranges::count(recorder.calls, "disable") == 1);
+    CHECK(std::ranges::count(recorder.calls, "destroy") == 1);
+}
+
+TEST_CASE("behavior runtime restores bounded instance state without restarting an established instance") {
+    Recorder originalRecorder;
+    BehaviorRegistry originalRegistry = Registry(originalRecorder);
+    auto scene = RuntimeScene::Create(Definition(), SceneRuntimeId{13});
+    REQUIRE(scene.HasValue());
+    auto original = BehaviorRuntime::Create(*scene.Value(), originalRegistry);
+    REQUIRE(original.HasValue());
+    REQUIRE(original.Value()->FixedUpdate({}, FixedDeltaTime{1.0 / 60.0}).HasValue());
+    auto snapshot = original.Value()->CaptureReloadSnapshot();
+    REQUIRE(snapshot.HasValue());
+    original.Value()->Shutdown();
+
+    Recorder replacementRecorder;
+    BehaviorRegistry replacementRegistry = Registry(replacementRecorder);
+    auto replacement = BehaviorRuntime::Create(*scene.Value(), replacementRegistry);
+    REQUIRE(replacement.HasValue());
+    REQUIRE(replacement.Value()->RestoreReloadSnapshot(snapshot.Value()).HasValue());
+    REQUIRE(replacement.Value()->FixedUpdate({}, FixedDeltaTime{1.0 / 60.0}).HasValue());
+    REQUIRE(std::ranges::count(replacementRecorder.calls, "start") == 0);
+    REQUIRE(std::ranges::count(replacementRecorder.calls, "fixed") == 1);
+}
+
+TEST_CASE("behavior runtime rejects an oversized reload payload without shutting down the active generation") {
+    Recorder recorder;
+    recorder.reloadStateBytes = MaximumBehaviorReloadStateBytes + 1;
+    BehaviorRegistry registry = Registry(recorder);
+    auto scene = RuntimeScene::Create(Definition(), SceneRuntimeId{14});
+    REQUIRE(scene.HasValue());
+    auto runtime = BehaviorRuntime::Create(*scene.Value(), registry);
+    REQUIRE(runtime.HasValue());
+
+    auto snapshot = runtime.Value()->CaptureReloadSnapshot();
+    REQUIRE(snapshot.HasError());
+    REQUIRE(snapshot.ErrorValue().code.Value() == GameplayErrors::GameplayReloadSnapshotInvalid.code.Value());
+    REQUIRE(runtime.Value()->FixedUpdate({}, FixedDeltaTime{1.0 / 60.0}).HasValue());
 }

@@ -154,6 +154,22 @@ Required tests cover:
 Required tests cover:
 
 - native reload precondition and restart fallback
+- the default module reload contract returns restart-required
+- external behavior and system runtimes pin their exact native generation and
+  block retirement until those leases are released
+- cancellation before module quiescence and bounded module snapshot restore
+- throwing behavior activation and cleanup callbacks remain contained while every
+  partial factory instance is released
+- behavior snapshot matching by stable instance/type identity without replaying
+  `OnStart` for an established instance
+- preservation, unload, and shadow-load restoration of the previous native
+  artifact
+- rollback artifact cleanup on success, failure, early exit, and ownership transfer
+- native candidate and rollback activation reuse the exact captured in-memory Lua
+  generation even when source files change during the transaction
+- candidate rejection followed by rollback against the unchanged runtime scene
+- failed retirement quarantines source watching, refresh, reload, and new Play
+  admission until workspace teardown
 - iteration tier tests verify fast/medium/slow reload behavior and fallback
   restart diagnostics
 - live preview reduced-scope activation rejects behaviors or systems whose

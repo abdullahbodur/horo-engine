@@ -56,6 +56,18 @@ namespace Horo::Network::NetworkErrors {
     extern const ErrorCodeDescriptor ReplicationSchemaUnknown;
     /** @brief Descriptor snapshot construction exceeded its explicit finite capacity. */
     extern const ErrorCodeDescriptor ReplicationCapacityExceeded;
+    /** @brief A pinned replication role, peer, object, schema, or record context is malformed. */
+    extern const ErrorCodeDescriptor ReplicationRoleContextInvalid;
+    /** @brief A client role attempted to originate authority-server canonical state. */
+    extern const ErrorCodeDescriptor ReplicationAuthorityDenied;
+    /** @brief A role transition was based on a stale revision or committed at the wrong safe point. */
+    extern const ErrorCodeDescriptor ReplicationRoleTransitionStale;
+    /** @brief A second role transition was staged before the prior transition committed. */
+    extern const ErrorCodeDescriptor ReplicationRoleTransitionPending;
+    /** @brief Replication role state was accessed from a thread other than its owner. */
+    extern const ErrorCodeDescriptor ReplicationRoleWrongThread;
+    /** @brief Replication role state rejected work after shutdown. */
+    extern const ErrorCodeDescriptor ReplicationRoleShuttingDown;
     /** @brief Transport capability evidence or a bounded requirement is malformed. */
     extern const ErrorCodeDescriptor TransportCapabilityDescriptorInvalid;
     /** @brief Transport capability evidence changed after the caller captured its revision. */
@@ -120,6 +132,16 @@ namespace Horo::Network::NetworkErrors {
     extern const ErrorCodeDescriptor HandshakeIncompatible;
     /** @brief A handshake operation is not legal from the current terminal or negotiating state. */
     extern const ErrorCodeDescriptor HandshakeStateInvalid;
+    /** @brief Authentication policy, challenge, evidence, proof framing, or authority output is malformed. */
+    extern const ErrorCodeDescriptor AuthenticationInvalid;
+    /** @brief Authentication input conflicts with the immutable challenge or exposure security floor. */
+    extern const ErrorCodeDescriptor AuthenticationIncompatible;
+    /** @brief A required host-owned credential, certificate, key, or peer-trust authority is unavailable. */
+    extern const ErrorCodeDescriptor AuthenticationTrustUnavailable;
+    /** @brief A host-owned authority rejected authentication without disclosing private provider detail. */
+    extern const ErrorCodeDescriptor AuthenticationRejected;
+    /** @brief Authentication is not legal from the current terminal or authenticating state. */
+    extern const ErrorCodeDescriptor AuthenticationStateInvalid;
     /** @brief Message framing or codec metadata is malformed or non-canonical. */
     extern const ErrorCodeDescriptor MessageEnvelopeInvalid;
     /** @brief Declared message framing exceeds an explicit finite bound. */

@@ -33,8 +33,10 @@ namespace Horo::Runtime {
             DiagnosticPolicy{&SaveErrors::ParticipantRecordOwnershipDuplicate, Participant},
             DiagnosticPolicy{&SaveErrors::ParticipantRegistryClosed, Lifecycle},
             DiagnosticPolicy{&SaveErrors::ParticipantRegistryCapacityExceeded, Quota},
+            DiagnosticPolicy{&SaveErrors::ParticipantRegistryAllocationFailed, Quota},
             DiagnosticPolicy{&SaveErrors::ParticipantDependencyMissing, Participant},
             DiagnosticPolicy{&SaveErrors::ParticipantDependencyCycle, Participant},
+            DiagnosticPolicy{&SaveErrors::ParticipantDependencyPhaseIncompatible, Participant},
             DiagnosticPolicy{&SaveErrors::ParticipantRegistryGenerationExhausted, Lifecycle},
             DiagnosticPolicy{&SaveErrors::CaptureContextInvalid, Validation},
             DiagnosticPolicy{&SaveErrors::CaptureRegistryStale, Lifecycle},
@@ -52,6 +54,17 @@ namespace Horo::Runtime {
             DiagnosticPolicy{&SaveErrors::ArchiveFramingLimitExceeded, Quota},
             DiagnosticPolicy{&SaveErrors::ArchivePayloadTruncated, Corruption},
             DiagnosticPolicy{&SaveErrors::ArchiveChunkHashMismatch, Corruption},
+            DiagnosticPolicy{&SaveErrors::CanonicalCodecInvalid, Validation},
+            DiagnosticPolicy{&SaveErrors::CanonicalCodecCorrupt, Corruption},
+            DiagnosticPolicy{&SaveErrors::CanonicalCodecLimitExceeded, Quota},
+            DiagnosticPolicy{&SaveErrors::CanonicalCodecDuplicate, Validation},
+            DiagnosticPolicy{&SaveErrors::CanonicalCodecNonFinite, Validation},
+            DiagnosticPolicy{&SaveErrors::CanonicalCodecUtf8Invalid, Validation},
+            DiagnosticPolicy{&SaveErrors::CanonicalCodecConfigurationInvalid, Validation},
+            DiagnosticPolicy{&SaveErrors::CanonicalCodecAllocationFailed, Quota},
+            DiagnosticPolicy{&SaveErrors::ReferenceInvalid, Validation},
+            DiagnosticPolicy{&SaveErrors::ReferenceCorrupt, Corruption},
+            DiagnosticPolicy{&SaveErrors::ReferenceResolutionInvalid, Validation},
             DiagnosticPolicy{&SaveErrors::SaveRootConfigurationInvalid, Storage},
             DiagnosticPolicy{&SaveErrors::SaveRootPlatformUnsupported, Storage},
             DiagnosticPolicy{&SaveErrors::SaveRootUnavailable, Storage},
@@ -63,6 +76,14 @@ namespace Horo::Runtime {
             DiagnosticPolicy{&SaveErrors::SlotMetadataLimitExceeded, Quota},
             DiagnosticPolicy{&SaveErrors::SlotDisplayMetadataInvalid, Validation},
             DiagnosticPolicy{&SaveErrors::SlotGenerationConflict, Lifecycle},
+            DiagnosticPolicy{&SaveErrors::OperationInvalid, Validation},
+            DiagnosticPolicy{&SaveErrors::OperationAllocationFailed, Quota},
+            DiagnosticPolicy{&SaveErrors::OperationTransitionInvalid, Lifecycle},
+            DiagnosticPolicy{&SaveErrors::OperationCallbackCapacityExceeded, Quota},
+            DiagnosticPolicy{&SaveErrors::OperationCallbackInvalid, Validation},
+            DiagnosticPolicy{&SaveErrors::OperationCancelled, Cancellation},
+            DiagnosticPolicy{&SaveErrors::OperationDeadlineExceeded, Cancellation},
+            DiagnosticPolicy{&SaveErrors::OperationAbandoned, Lifecycle},
             DiagnosticPolicy{&SaveErrors::CompositionUnsupported, Compatibility},
             DiagnosticPolicy{&SaveErrors::CompositionInvalid, Validation},
             DiagnosticPolicy{&SaveErrors::CompositionCapacityExceeded, Quota},
@@ -237,12 +258,15 @@ namespace Horo::Runtime {
             if (!lead.has_value() || index + lead->continuationCount >= text.size())
                 return std::nullopt;
             std::uint32_t codepoint = lead->codepoint;
-            for (std::size_t offset = 1; offset <= lead->continuationCount; ++offset) {
-                const auto continuation = ByteAt(text, index + offset);
+            const bool validContinuation = std::ranges::all_of(text.substr(index + 1, lead->continuationCount), [&](const char encoded) {
+                const auto continuation = static_cast<std::byte>(static_cast<unsigned char>(encoded));
                 if ((continuation & std::byte{0xc0}) != std::byte{0x80})
-                    return std::nullopt;
+                    return false;
                 codepoint = (codepoint << 6U) | std::to_integer<std::uint8_t>(continuation & std::byte{0x3f});
-            }
+                return true;
+            });
+            if (!validContinuation)
+                return std::nullopt;
             return CanonicalScalar(codepoint, lead->continuationCount) ? std::optional{lead->continuationCount + 1} : std::nullopt;
         }
 

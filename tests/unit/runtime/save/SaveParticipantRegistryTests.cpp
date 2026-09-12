@@ -1,3 +1,4 @@
+#include "AllocationProbe.h"
 #include "Horo/Runtime/Save/SaveCaptureSnapshot.h"
 #include "Horo/Runtime/Save/SaveErrors.h"
 #include "SaveCaptureSnapshotTestUtils.h"
@@ -6,6 +7,7 @@
 #include <memory>
 #include <string>
 #include <string_view>
+#include <vector>
 
 namespace Horo::Runtime {
     namespace {
@@ -37,6 +39,14 @@ namespace Horo::Runtime {
 
         std::shared_ptr<const ICanonicalStateAdapter> Adapter(const std::shared_ptr<int> &destructionCount) {
             return std::make_shared<CaptureTestSupport::CountingCaptureAdapter>(destructionCount);
+        }
+
+        std::vector<std::string> ParticipantIds(const std::span<const SaveParticipantBinding> bindings) {
+            std::vector<std::string> identities;
+            identities.reserve(bindings.size());
+            for (const SaveParticipantBinding &binding : bindings)
+                identities.push_back(binding.Descriptor().participant.Value());
+            return identities;
         }
 
         /** @brief Verifies that registry admission rejects one invalid descriptor. */
@@ -101,6 +111,49 @@ namespace Horo::Runtime {
             invalid = Descriptor("horo.test.duplicate_dependency");
             invalid.dependencies = {Participant("horo.test.provider"), Participant("horo.test.provider")};
             RequireInvalidDescriptor(registry, std::move(invalid), destructionCount);
+            invalid = Descriptor("horo.test.unknown_dependency_requirement");
+            invalid.dependencies = {{Participant("horo.test.provider"), static_cast<SaveParticipantDependencyRequirement>(0xffU)}};
+            RequireInvalidDescriptor(registry, std::move(invalid), destructionCount);
+            invalid = Descriptor("horo.test.unknown_dependency_phase");
+            invalid.dependencies = {{Participant("horo.test.provider"), SaveParticipantDependencyRequirement::Required,
+                                     static_cast<SaveParticipantDependencyPhase>(0xffU)}};
+            RequireInvalidDescriptor(registry, std::move(invalid), destructionCount);
+            invalid = Descriptor("horo.test.excess_dependencies");
+            invalid.dependencies.assign(MaximumSaveParticipantCount + 1, Participant("horo.test.provider"));
+            RequireInvalidDescriptor(registry, std::move(invalid), destructionCount);
+        }
+
+        TEST_CASE("Dependency uniqueness is scoped by provider and operation phase", "[unit][save][registry]") {
+            auto destructionCount = std::make_shared<int>();
+            CanonicalStateParticipantRegistry registry;
+            auto consumer = Descriptor("horo.test.consumer");
+            consumer.dependencies = {
+                {Participant("horo.test.provider"), SaveParticipantDependencyRequirement::Optional,
+                 SaveParticipantDependencyPhase::Capture},
+                {Participant("horo.test.provider"), SaveParticipantDependencyRequirement::Required,
+                 SaveParticipantDependencyPhase::Restore},
+            };
+            REQUIRE(registry.Register(std::move(consumer), Adapter(destructionCount)).HasValue());
+            const auto missing = registry.Snapshot();
+            REQUIRE(missing.HasError());
+            CHECK(missing.ErrorValue().code.Value() == SaveErrors::ParticipantDependencyMissing.code.Value());
+            CHECK(missing.ErrorValue().message.find("restore") != std::string::npos);
+
+            auto provider = Descriptor("horo.test.provider", "10112233-4455-6677-8899-aabbccddeeff");
+            REQUIRE(registry.Register(std::move(provider), Adapter(destructionCount)).HasValue());
+            const auto snapshot = registry.Snapshot().Value();
+            CHECK(ParticipantIds(snapshot.CaptureBindings()) == std::vector<std::string>{"horo.test.provider", "horo.test.consumer"});
+            CHECK(ParticipantIds(snapshot.RestoreBindings()) == std::vector<std::string>{"horo.test.provider", "horo.test.consumer"});
+
+            CanonicalStateParticipantRegistry overlapping;
+            auto invalid = Descriptor("horo.test.overlap");
+            invalid.dependencies = {
+                {Participant("horo.test.provider"), SaveParticipantDependencyRequirement::Required,
+                 SaveParticipantDependencyPhase::CaptureAndRestore},
+                {Participant("horo.test.provider"), SaveParticipantDependencyRequirement::Optional,
+                 SaveParticipantDependencyPhase::Capture},
+            };
+            RequireInvalidDescriptor(overlapping, std::move(invalid), destructionCount);
         }
 
         TEST_CASE("Participant registration is unique bounded and generation checked", "[unit][save][registry]") {
@@ -123,8 +176,68 @@ namespace Horo::Runtime {
             REQUIRE(snapshot.Value().Find(Participant("horo.test.scene")) != nullptr);
             REQUIRE(snapshot.Value().Find(Participant("horo.test.absent")) == nullptr);
             REQUIRE(SaveParticipantRegistrySnapshot{}.Bindings().empty());
+            REQUIRE(SaveParticipantRegistrySnapshot{}.CaptureBindings().empty());
+            REQUIRE(SaveParticipantRegistrySnapshot{}.RestoreBindings().empty());
             REQUIRE_FALSE(SaveParticipantRegistrySnapshot{}.IsValid());
             REQUIRE_FALSE(registry.Unregister(Participant("horo.test.absent")).Value());
+        }
+
+        TEST_CASE("Snapshot ordering and lookup share the canonical participant key", "[unit][save][registry]") {
+            auto destructionCount = std::make_shared<int>();
+            CanonicalStateParticipantRegistry registry;
+            REQUIRE(registry.Register(Descriptor("horo.test.aa", "10112233-4455-6677-8899-aabbccddeeff"), Adapter(destructionCount))
+                        .HasValue());
+            REQUIRE(registry.Register(Descriptor("horo.test.a.z", "20112233-4455-6677-8899-aabbccddeeff"), Adapter(destructionCount))
+                        .HasValue());
+            const auto snapshot = registry.Snapshot().Value();
+            CHECK(ParticipantIds(snapshot.Bindings()) == std::vector<std::string>{"horo.test.a.z", "horo.test.aa"});
+            CHECK(snapshot.Find(Participant("horo.test.a.z")) != nullptr);
+            CHECK(snapshot.Find(Participant("horo.test.aa")) != nullptr);
+        }
+
+        TEST_CASE("Allocation failure preserves registry membership generation and leases", "[unit][save][registry]") {
+            bool reachedSuccessfulRegistration = false;
+            for (std::size_t successfulAllocations = 0; successfulAllocations < 64 && !reachedSuccessfulRegistration;
+                 ++successfulAllocations) {
+                auto destructionCount = std::make_shared<int>();
+                auto adapter = Adapter(destructionCount);
+                const auto descriptor = Descriptor("horo.test.allocation");
+                CanonicalStateParticipantRegistry registry;
+                const std::uint64_t generation = registry.Generation();
+                auto registration = [&] {
+                    Tests::AllocationProbe::ScopedFailure failure{successfulAllocations};
+                    return registry.Register(descriptor, adapter);
+                }();
+                reachedSuccessfulRegistration = registration.HasValue();
+                if (!reachedSuccessfulRegistration) {
+                    CHECK(registration.ErrorValue().code.Value() == SaveErrors::ParticipantRegistryAllocationFailed.code.Value());
+                    CHECK(registry.Generation() == generation);
+                    CHECK(registry.Snapshot().Value().Bindings().empty());
+                    CHECK(adapter.use_count() == 1);
+                }
+            }
+            REQUIRE(reachedSuccessfulRegistration);
+
+            auto destructionCount = std::make_shared<int>();
+            auto adapter = Adapter(destructionCount);
+            CanonicalStateParticipantRegistry registry;
+            REQUIRE(registry.Register(Descriptor("horo.test.allocation"), adapter).HasValue());
+            const std::uint64_t generation = registry.Generation();
+            bool reachedSuccessfulSnapshot = false;
+            for (std::size_t successfulAllocations = 0; successfulAllocations < 64 && !reachedSuccessfulSnapshot; ++successfulAllocations) {
+                auto snapshot = [&] {
+                    Tests::AllocationProbe::ScopedFailure failure{successfulAllocations};
+                    return registry.Snapshot();
+                }();
+                reachedSuccessfulSnapshot = snapshot.HasValue();
+                if (!reachedSuccessfulSnapshot) {
+                    CHECK(snapshot.ErrorValue().code.Value() == SaveErrors::ParticipantRegistryAllocationFailed.code.Value());
+                    CHECK(registry.Generation() == generation);
+                    CHECK(adapter.use_count() == 2);
+                }
+            }
+            REQUIRE(reachedSuccessfulSnapshot);
+            CHECK(registry.Snapshot().Value().Find(Participant("horo.test.allocation")) != nullptr);
         }
 
         TEST_CASE("Participant registry enforces its explicit capacity", "[unit][save][registry]") {
@@ -147,21 +260,24 @@ namespace Horo::Runtime {
 
         TEST_CASE("Registry snapshots are immutable and retain exact adapter leases", "[unit][save][registry]") {
             auto destructionCount = std::make_shared<int>();
-            SaveParticipantRegistrySnapshot firstSnapshot;
+            SaveParticipantRegistrySnapshot retainedSnapshot;
             {
                 CanonicalStateParticipantRegistry registry;
                 REQUIRE(registry.Register(Descriptor("horo.test.second", "10112233-4455-6677-8899-aabbccddeeff"), Adapter(destructionCount))
                             .HasValue());
                 REQUIRE(registry.Register(Descriptor("horo.test.first"), Adapter(destructionCount)).HasValue());
-                firstSnapshot = registry.Snapshot().Value();
-                REQUIRE(firstSnapshot.Bindings()[0].Descriptor().participant.Value() == "horo.test.first");
-                REQUIRE(firstSnapshot.Bindings()[1].Descriptor().participant.Value() == "horo.test.second");
+                {
+                    const SaveParticipantRegistrySnapshot sourceSnapshot = registry.Snapshot().Value();
+                    retainedSnapshot = sourceSnapshot;
+                    REQUIRE(sourceSnapshot.Bindings()[0].Descriptor().participant.Value() == "horo.test.first");
+                    REQUIRE(sourceSnapshot.Bindings()[1].Descriptor().participant.Value() == "horo.test.second");
+                }
 
                 REQUIRE(registry.Unregister(Participant("horo.test.first")).Value());
                 const auto secondSnapshot = registry.Snapshot().Value();
-                REQUIRE(secondSnapshot.Generation() != firstSnapshot.Generation());
+                REQUIRE(secondSnapshot.Generation() != retainedSnapshot.Generation());
                 REQUIRE(secondSnapshot.Bindings().size() == 1);
-                REQUIRE(firstSnapshot.Bindings().size() == 2);
+                REQUIRE(retainedSnapshot.Bindings().size() == 2);
                 registry.Close();
                 REQUIRE(registry.IsClosed());
                 REQUIRE(registry.Snapshot().HasError());
@@ -170,7 +286,10 @@ namespace Horo::Runtime {
                 REQUIRE(*destructionCount == 0);
             }
             REQUIRE(*destructionCount == 0);
-            firstSnapshot = {};
+            CHECK(ParticipantIds(retainedSnapshot.Bindings()) == std::vector<std::string>{"horo.test.first", "horo.test.second"});
+            CHECK(ParticipantIds(retainedSnapshot.CaptureBindings()) == std::vector<std::string>{"horo.test.first", "horo.test.second"});
+            CHECK(ParticipantIds(retainedSnapshot.RestoreBindings()) == std::vector<std::string>{"horo.test.first", "horo.test.second"});
+            retainedSnapshot = {};
             REQUIRE(*destructionCount == 2);
         }
 
@@ -180,16 +299,28 @@ namespace Horo::Runtime {
             auto dependent = Descriptor("horo.test.dependent");
             dependent.dependencies = {Participant("horo.test.provider")};
             REQUIRE(missing.Register(std::move(dependent), Adapter(destructionCount)).HasValue());
-            REQUIRE(missing.Snapshot().ErrorValue().code.Value() == SaveErrors::ParticipantDependencyMissing.code.Value());
+            const auto missingResult = missing.Snapshot();
+            REQUIRE(missingResult.HasError());
+            REQUIRE(missingResult.ErrorValue().code.Value() == SaveErrors::ParticipantDependencyMissing.code.Value());
+            CHECK(missingResult.ErrorValue().message.find("horo.test.dependent") != std::string::npos);
+            CHECK(missingResult.ErrorValue().message.find("horo.test.provider") != std::string::npos);
 
             CanonicalStateParticipantRegistry cyclic;
             auto first = Descriptor("horo.test.first");
             first.dependencies = {Participant("horo.test.second")};
             auto second = Descriptor("horo.test.second", "10112233-4455-6677-8899-aabbccddeeff");
             second.dependencies = {Participant("horo.test.first")};
+            auto downstream = Descriptor("horo.test.downstream", "20112233-4455-6677-8899-aabbccddeeff");
+            downstream.dependencies = {Participant("horo.test.first")};
             REQUIRE(cyclic.Register(std::move(first), Adapter(destructionCount)).HasValue());
             REQUIRE(cyclic.Register(std::move(second), Adapter(destructionCount)).HasValue());
-            REQUIRE(cyclic.Snapshot().ErrorValue().code.Value() == SaveErrors::ParticipantDependencyCycle.code.Value());
+            REQUIRE(cyclic.Register(std::move(downstream), Adapter(destructionCount)).HasValue());
+            const auto cyclicResult = cyclic.Snapshot();
+            REQUIRE(cyclicResult.HasError());
+            REQUIRE(cyclicResult.ErrorValue().code.Value() == SaveErrors::ParticipantDependencyCycle.code.Value());
+            CHECK(cyclicResult.ErrorValue().message.find("horo.test.first") != std::string::npos);
+            CHECK(cyclicResult.ErrorValue().message.find("horo.test.second") != std::string::npos);
+            CHECK(cyclicResult.ErrorValue().message.find("horo.test.downstream") == std::string::npos);
 
             CanonicalStateParticipantRegistry acyclic;
             auto consumer = Descriptor("horo.test.consumer");
@@ -198,6 +329,122 @@ namespace Horo::Runtime {
                         .HasValue());
             REQUIRE(acyclic.Register(std::move(consumer), Adapter(destructionCount)).HasValue());
             REQUIRE(acyclic.Snapshot().HasValue());
+        }
+
+        TEST_CASE("Capture and restore plans are stable across registration order", "[unit][save][registry]") {
+            auto destructionCount = std::make_shared<int>();
+            const auto buildPlan = [&destructionCount](const bool reverse) {
+                CanonicalStateParticipantRegistry registry;
+                auto consumer = Descriptor("horo.test.a_consumer", "10112233-4455-6677-8899-aabbccddeeff");
+                consumer.dependencies = {Participant("horo.test.z_provider"), Participant("horo.test.m_independent")};
+                auto independent = Descriptor("horo.test.m_independent", "20112233-4455-6677-8899-aabbccddeeff");
+                auto provider = Descriptor("horo.test.z_provider", "30112233-4455-6677-8899-aabbccddeeff");
+                if (reverse) {
+                    REQUIRE(registry.Register(std::move(provider), Adapter(destructionCount)).HasValue());
+                    REQUIRE(registry.Register(std::move(independent), Adapter(destructionCount)).HasValue());
+                    REQUIRE(registry.Register(std::move(consumer), Adapter(destructionCount)).HasValue());
+                } else {
+                    REQUIRE(registry.Register(std::move(consumer), Adapter(destructionCount)).HasValue());
+                    REQUIRE(registry.Register(std::move(independent), Adapter(destructionCount)).HasValue());
+                    REQUIRE(registry.Register(std::move(provider), Adapter(destructionCount)).HasValue());
+                }
+                return registry.Snapshot().Value();
+            };
+
+            const auto first = buildPlan(false);
+            const auto second = buildPlan(true);
+            CHECK(ParticipantIds(first.Bindings()) == ParticipantIds(second.Bindings()));
+            CHECK(ParticipantIds(first.CaptureBindings()) == ParticipantIds(second.CaptureBindings()));
+            CHECK(ParticipantIds(first.RestoreBindings()) == ParticipantIds(second.RestoreBindings()));
+            CHECK(ParticipantIds(first.CaptureBindings()) ==
+                  std::vector<std::string>{"horo.test.m_independent", "horo.test.z_provider", "horo.test.a_consumer"});
+            CHECK(ParticipantIds(first.RestoreBindings()) ==
+                  std::vector<std::string>{"horo.test.m_independent", "horo.test.z_provider", "horo.test.a_consumer"});
+            REQUIRE(first.Bindings().front().Descriptor().dependencies.size() == 2);
+            CHECK(first.Bindings().front().Descriptor().dependencies[0].participant.Value() == "horo.test.m_independent");
+            CHECK(first.Bindings().front().Descriptor().dependencies[1].participant.Value() == "horo.test.z_provider");
+        }
+
+        TEST_CASE("Phase-specific dependencies produce independent acyclic plans", "[unit][save][registry]") {
+            auto destructionCount = std::make_shared<int>();
+            CanonicalStateParticipantRegistry registry;
+            auto alpha = Descriptor("horo.test.alpha");
+            alpha.dependencies = {
+                {Participant("horo.test.zeta"), SaveParticipantDependencyRequirement::Required, SaveParticipantDependencyPhase::Capture}};
+            auto zeta = Descriptor("horo.test.zeta", "10112233-4455-6677-8899-aabbccddeeff");
+            zeta.dependencies = {
+                {Participant("horo.test.alpha"), SaveParticipantDependencyRequirement::Required, SaveParticipantDependencyPhase::Restore}};
+            REQUIRE(registry.Register(std::move(zeta), Adapter(destructionCount)).HasValue());
+            REQUIRE(registry.Register(std::move(alpha), Adapter(destructionCount)).HasValue());
+
+            const auto snapshot = registry.Snapshot().Value();
+            CHECK(ParticipantIds(snapshot.CaptureBindings()) == std::vector<std::string>{"horo.test.zeta", "horo.test.alpha"});
+            CHECK(ParticipantIds(snapshot.RestoreBindings()) == std::vector<std::string>{"horo.test.alpha", "horo.test.zeta"});
+        }
+
+        TEST_CASE("Dependency plans break diamond ties by participant identity", "[unit][save][registry]") {
+            auto destructionCount = std::make_shared<int>();
+            CanonicalStateParticipantRegistry registry;
+            auto left = Descriptor("horo.test.b_left", "10112233-4455-6677-8899-aabbccddeeff");
+            left.dependencies = {Participant("horo.test.a_root")};
+            auto right = Descriptor("horo.test.c_right", "20112233-4455-6677-8899-aabbccddeeff");
+            right.dependencies = {Participant("horo.test.a_root")};
+            auto join = Descriptor("horo.test.z_join", "30112233-4455-6677-8899-aabbccddeeff");
+            join.dependencies = {Participant("horo.test.b_left"), Participant("horo.test.c_right")};
+            REQUIRE(registry.Register(std::move(join), Adapter(destructionCount)).HasValue());
+            REQUIRE(registry.Register(std::move(right), Adapter(destructionCount)).HasValue());
+            REQUIRE(registry.Register(Descriptor("horo.test.a_root", "40112233-4455-6677-8899-aabbccddeeff"), Adapter(destructionCount))
+                        .HasValue());
+            REQUIRE(registry.Register(std::move(left), Adapter(destructionCount)).HasValue());
+
+            const auto snapshot = registry.Snapshot().Value();
+            const std::vector<std::string> expected{"horo.test.a_root", "horo.test.b_left", "horo.test.c_right", "horo.test.z_join"};
+            CHECK(ParticipantIds(snapshot.CaptureBindings()) == expected);
+            CHECK(ParticipantIds(snapshot.RestoreBindings()) == expected);
+        }
+
+        TEST_CASE("Optional absence and incompatible phases are explicit", "[unit][save][registry]") {
+            auto destructionCount = std::make_shared<int>();
+            CanonicalStateParticipantRegistry optional;
+            auto consumer = Descriptor("horo.test.optional_consumer");
+            consumer.dependencies = {
+                {Participant("horo.test.absent"), SaveParticipantDependencyRequirement::Optional, SaveParticipantDependencyPhase::Capture}};
+            REQUIRE(optional.Register(std::move(consumer), Adapter(destructionCount)).HasValue());
+            REQUIRE(optional.Snapshot().HasValue());
+
+            CanonicalStateParticipantRegistry exclusiveRoles;
+            auto captureOnly = Descriptor("horo.test.capture_only", "30112233-4455-6677-8899-aabbccddeeff");
+            captureOnly.roles = SaveParticipantRole::Capture;
+            auto restoreOnly = Descriptor("horo.test.restore_only", "40112233-4455-6677-8899-aabbccddeeff");
+            restoreOnly.roles = SaveParticipantRole::Restore;
+            REQUIRE(exclusiveRoles.Register(std::move(captureOnly), Adapter(destructionCount)).HasValue());
+            REQUIRE(exclusiveRoles.Register(std::move(restoreOnly), Adapter(destructionCount)).HasValue());
+            const auto exclusiveSnapshot = exclusiveRoles.Snapshot().Value();
+            CHECK(ParticipantIds(exclusiveSnapshot.CaptureBindings()) == std::vector<std::string>{"horo.test.capture_only"});
+            CHECK(ParticipantIds(exclusiveSnapshot.RestoreBindings()) == std::vector<std::string>{"horo.test.restore_only"});
+
+            CanonicalStateParticipantRegistry incompatible;
+            auto provider = Descriptor("horo.test.capture_provider", "10112233-4455-6677-8899-aabbccddeeff");
+            provider.roles = SaveParticipantRole::Capture;
+            auto restoreConsumer = Descriptor("horo.test.restore_consumer", "20112233-4455-6677-8899-aabbccddeeff");
+            restoreConsumer.dependencies = {
+                {provider.participant, SaveParticipantDependencyRequirement::Optional, SaveParticipantDependencyPhase::Restore}};
+            REQUIRE(incompatible.Register(std::move(provider), Adapter(destructionCount)).HasValue());
+            REQUIRE(incompatible.Register(std::move(restoreConsumer), Adapter(destructionCount)).HasValue());
+            const auto phaseFailure = incompatible.Snapshot();
+            REQUIRE(phaseFailure.HasError());
+            CHECK(phaseFailure.ErrorValue().code.Value() == SaveErrors::ParticipantDependencyPhaseIncompatible.code.Value());
+            CHECK(phaseFailure.ErrorValue().message.find("horo.test.capture_provider") != std::string::npos);
+            CHECK(phaseFailure.ErrorValue().message.find("horo.test.restore_consumer") != std::string::npos);
+
+            CanonicalStateParticipantRegistry invalidDeclaration;
+            auto invalidCaptureOnly = Descriptor("horo.test.capture_only", "50112233-4455-6677-8899-aabbccddeeff");
+            invalidCaptureOnly.roles = SaveParticipantRole::Capture;
+            invalidCaptureOnly.dependencies = {
+                {Participant("horo.test.other"), SaveParticipantDependencyRequirement::Optional, SaveParticipantDependencyPhase::Restore}};
+            const auto invalid = invalidDeclaration.Register(std::move(invalidCaptureOnly), Adapter(destructionCount));
+            REQUIRE(invalid.HasError());
+            CHECK(invalid.ErrorValue().code.Value() == SaveErrors::ParticipantDependencyPhaseIncompatible.code.Value());
         }
 
         TEST_CASE("Descriptors remain inert until explicit registry operations", "[unit][save][registry]") {

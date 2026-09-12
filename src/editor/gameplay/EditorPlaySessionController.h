@@ -18,8 +18,15 @@ namespace Horo::Editor {
         Starting,
         Playing,
         Paused,
+        Reloading,
         Stopping,
         Failed,
+    };
+
+    /** @brief Runtime-only play state retained across one native gameplay replacement. */
+    struct EditorPlayReloadSnapshot {
+        Gameplay::BehaviorRuntimeReloadSnapshot behaviors;
+        EditorPlaySessionState priorState{EditorPlaySessionState::Playing};
     };
 
     /** @brief Owns a runtime clone and gameplay runner without mutating its authoring document. */
@@ -47,6 +54,23 @@ namespace Horo::Editor {
          * @return Success when the candidate activates; failure keeps the previous registry active when rollback succeeds.
          */
         [[nodiscard]] Result<void> ReloadBehaviors(const Gameplay::BehaviorRegistry &candidate, const Gameplay::BehaviorRegistry &rollback);
+        /**
+         * @brief Captures behavior state and destroys every old-generation behavior at the fixed-tick safe point.
+         * @return Reload state or a typed failure that leaves the active runtime intact.
+         */
+        [[nodiscard]] Result<EditorPlayReloadSnapshot> QuiesceForReload();
+        /**
+         * @brief Recreates behaviors from a loaded generation and restores the captured runtime-only state.
+         * @param registry Frozen behavior registry owned by the active generation.
+         * @param snapshot State captured before the old generation was unloaded.
+         * @return Success or a typed activation/restore failure while the session remains quiesced.
+         */
+        [[nodiscard]] Result<void> RestoreAfterReload(const Gameplay::BehaviorRegistry &registry, const EditorPlayReloadSnapshot &snapshot);
+        /**
+         * @brief Enters a safe failed state when neither replacement nor rollback can restore Play.
+         * @param error Actionable terminal reload failure.
+         */
+        void DegradeAfterReload(Error error) noexcept;
 
         [[nodiscard]] EditorPlaySessionState State() const noexcept;
         [[nodiscard]] bool IsActive() const noexcept;

@@ -22,7 +22,11 @@
   "compileDependencies": [],
   "supportedHosts": ["linux", "macos", "windows"],
   "publicHeaders": ["include/Horo/Extensions/ExtensionAbi.h"],
-  "tools": ["bin/horo-scaffold-extension.py"],
+  "schemas": ["share/horo/extension-sdk/extension-manifest-v1.schema.json"],
+  "tools": [
+    "bin/horo-extension-validate@CMAKE_EXECUTABLE_SUFFIX@",
+    "bin/horo-scaffold-extension.py"
+  ],
   "entryPoints": [
     "horo_extension_query",
     "horo_extension_load",
