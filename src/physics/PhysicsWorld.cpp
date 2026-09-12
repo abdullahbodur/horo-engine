@@ -11,6 +11,7 @@
 #include <functional>
 #include <limits>
 #include <new>
+#include <optional>
 #include <thread>
 #include <utility>
 #include <vector>
@@ -56,17 +57,44 @@ namespace Horo::Physics {
         Impl &operator=(const Impl &) = delete;
 
         ~Impl() {
-            Shutdown();
+            Retire(PhysicsWorldLifecycleCause::ProcessShutdown);
         }
 
-        void Shutdown() noexcept {
+        void Retire(const PhysicsWorldLifecycleCause cause) noexcept {
             if (state == PhysicsWorldState::Destroyed)
                 return;
             Detail::DestroyCanonicalWorld(native);
             native = {};
             state = PhysicsWorldState::Destroyed;
+            lifecycleCause = cause;
+            lastFailure.reset();
+            commandHead = 0;
+            commandCount = 0;
+            statistics.pendingCommands = 0;
             std::erase(runtime->identities, &identity);
             runtime->ReleaseNativeWhenIdle();
+        }
+
+        void Fail(Error error) {
+            state = PhysicsWorldState::Failed;
+            lifecycleCause = PhysicsWorldLifecycleCause::FatalSolverError;
+            lastFailure = std::move(error);
+        }
+
+        void ClearForReset() noexcept {
+            identity = {};
+            commandHead = 0;
+            commandCount = 0;
+            activeTick = 0;
+            commandOrderDirty = false;
+            stepping = false;
+            while (publicationLock.test_and_set())
+                std::this_thread::yield();
+            published = {};
+            publicationLock.clear();
+            statistics = {};
+            lastFailure.reset();
+            lifecycleCause = PhysicsWorldLifecycleCause::Reset;
         }
 
         [[nodiscard]] PhysicsStructuralCommand &CommandAt(const std::uint32_t offset) noexcept {
@@ -102,6 +130,8 @@ namespace Horo::Physics {
         mutable std::atomic_flag publicationLock = ATOMIC_FLAG_INIT;
         PhysicsPublishedTick published;
         PhysicsTickStatistics statistics;
+        PhysicsWorldLifecycleCause lifecycleCause{PhysicsWorldLifecycleCause::None};
+        std::optional<Error> lastFailure;
     };
 
     namespace {
@@ -425,9 +455,56 @@ namespace Horo::Physics {
         return Result<void>::Success();
     }
 
+    /** @copydoc PhysicsWorld::Reset */
+    Result<void> PhysicsWorld::Reset() {
+        using enum PhysicsWorldState;
+        if (impl_->runtime->ownerThread != std::this_thread::get_id())
+            return Result<void>::Failure(MakeError(PhysicsErrors::ThreadAffinityViolation));
+        if (impl_->runtime->state != PhysicsRuntimeState::Ready || impl_->state == Destroyed || impl_->stepping)
+            return Result<void>::Failure(MakeError(PhysicsErrors::InvalidState));
+        if (impl_->state == PreparedSolver || impl_->state == PreparedNull) {
+            impl_->lifecycleCause = PhysicsWorldLifecycleCause::Reset;
+            impl_->lastFailure.reset();
+            return Result<void>::Success();
+        }
+
+        Detail::DestroyCanonicalWorld(impl_->native);
+        impl_->native = {};
+        impl_->ClearForReset();
+        if (impl_->runtime->mode == PhysicsRuntimeMode::Null) {
+            impl_->state = PreparedNull;
+            return Result<void>::Success();
+        }
+
+        try {
+            const Result<Detail::CanonicalWorldHandle> created = Detail::CreateCanonicalWorld(impl_->runtime->native, impl_->settings);
+            if (created.HasError()) {
+                impl_->state = Failed;
+                impl_->lastFailure = created.ErrorValue();
+                return Result<void>::Failure(created.ErrorValue());
+            }
+            impl_->native = created.Value();
+            impl_->state = PreparedSolver;
+            return Result<void>::Success();
+        } catch (const std::bad_alloc &) {
+            Error error = MakeError(PhysicsErrors::CapacityExceeded, "Unable to rebuild Physics world ownership state during reset.");
+            impl_->state = Failed;
+            impl_->lastFailure = error;
+            return Result<void>::Failure(std::move(error));
+        }
+    }
+
+    /** @copydoc PhysicsWorld::UnloadScene */
+    Result<void> PhysicsWorld::UnloadScene() {
+        if (impl_->runtime->ownerThread != std::this_thread::get_id())
+            return Result<void>::Failure(MakeError(PhysicsErrors::ThreadAffinityViolation));
+        impl_->Retire(PhysicsWorldLifecycleCause::SceneUnload);
+        return Result<void>::Success();
+    }
+
     /** @copydoc PhysicsWorld::Shutdown */
     void PhysicsWorld::Shutdown() noexcept {
-        impl_->Shutdown();
+        impl_->Retire(PhysicsWorldLifecycleCause::ProcessShutdown);
     }
 
     /** @copydoc PhysicsWorld::State */
@@ -443,6 +520,16 @@ namespace Horo::Physics {
     /** @copydoc PhysicsWorld::Settings */
     const PhysicsWorldSettings &PhysicsWorld::Settings() const noexcept {
         return impl_->settings;
+    }
+
+    /** @copydoc PhysicsWorld::LifecycleCause */
+    PhysicsWorldLifecycleCause PhysicsWorld::LifecycleCause() const noexcept {
+        return impl_->lifecycleCause;
+    }
+
+    /** @copydoc PhysicsWorld::LastFailure */
+    const std::optional<Error> &PhysicsWorld::LastFailure() const noexcept {
+        return impl_->lastFailure;
     }
 
     /** @copydoc PhysicsWorld::QueueStructuralCommand */
@@ -509,15 +596,17 @@ namespace Horo::Physics {
         if (input.solverJobs.jobCount != 0) {
             const Result<void> jobs = RunSolverJobs(*impl_->runtime->solverJobs, input.solverJobs);
             if (jobs.HasError()) {
-                impl_->state = PhysicsWorldState::Failed;
-                return jobs;
+                impl_->Fail(jobs.ErrorValue());
+                return Result<void>::Failure(jobs.ErrorValue());
             }
         }
 
         if (const auto stepped =
                 Detail::StepCanonicalWorld(impl_->native, static_cast<float>(impl_->settings.Values().world.fixedDeltaSeconds));
-            stepped.HasError())
-            return stepped;
+            stepped.HasError()) {
+            impl_->Fail(stepped.ErrorValue());
+            return Result<void>::Failure(stepped.ErrorValue());
+        }
 
         ObservePhase(input, IntegrateBodies);
         ObservePhase(input, WriteRuntimeTransforms);
