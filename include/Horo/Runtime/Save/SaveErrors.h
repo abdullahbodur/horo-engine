@@ -32,10 +32,14 @@ namespace Horo::Runtime::SaveErrors {
     extern const ErrorCodeDescriptor ParticipantRegistryClosed;
     /** @brief The bounded participant registry has no remaining capacity. */
     extern const ErrorCodeDescriptor ParticipantRegistryCapacityExceeded;
+    /** @brief Participant registry binding or immutable snapshot storage could not be allocated. */
+    extern const ErrorCodeDescriptor ParticipantRegistryAllocationFailed;
     /** @brief A participant declares a dependency absent from the registry snapshot. */
     extern const ErrorCodeDescriptor ParticipantDependencyMissing;
     /** @brief Participant dependencies contain a cycle. */
     extern const ErrorCodeDescriptor ParticipantDependencyCycle;
+    /** @brief A dependency names a capture/restore phase unsupported by either participant. */
+    extern const ErrorCodeDescriptor ParticipantDependencyPhaseIncompatible;
     /** @brief The registry generation cannot advance without reusing a value. */
     extern const ErrorCodeDescriptor ParticipantRegistryGenerationExhausted;
     /** @brief Capture evidence or operation bounds are missing, zero, or outside qualified maxima. */
@@ -70,6 +74,22 @@ namespace Horo::Runtime::SaveErrors {
     extern const ErrorCodeDescriptor ArchivePayloadTruncated;
     /** @brief A selected decoded chunk does not match its manifest checksum. */
     extern const ErrorCodeDescriptor ArchiveChunkHashMismatch;
+    /** @brief A caller supplied an invalid value or schema argument to the canonical encoder. */
+    extern const ErrorCodeDescriptor CanonicalCodecInvalid;
+    /** @brief Untrusted canonical wire bytes are malformed, noncanonical, truncated, or contain trailing data. */
+    extern const ErrorCodeDescriptor CanonicalCodecCorrupt;
+    /** @brief Canonical value input or output exceeds an explicit codec bound. */
+    extern const ErrorCodeDescriptor CanonicalCodecLimitExceeded;
+    /** @brief A canonical map, set, or record contains a duplicate encoded identity. */
+    extern const ErrorCodeDescriptor CanonicalCodecDuplicate;
+    /** @brief A canonical floating-point value is non-finite. */
+    extern const ErrorCodeDescriptor CanonicalCodecNonFinite;
+    /** @brief Canonical string bytes are not a valid UTF-8 scalar sequence. */
+    extern const ErrorCodeDescriptor CanonicalCodecUtf8Invalid;
+    /** @brief Trusted canonical codec limits are zero or internally contradictory. */
+    extern const ErrorCodeDescriptor CanonicalCodecConfigurationInvalid;
+    /** @brief Canonical codec owned storage could not be allocated within admitted bounds. */
+    extern const ErrorCodeDescriptor CanonicalCodecAllocationFailed;
     /** @brief Product save-root inputs are missing, relative, or structurally invalid. */
     extern const ErrorCodeDescriptor SaveRootConfigurationInvalid;
     /** @brief The selected save-root platform convention is not supported. */
@@ -92,6 +112,22 @@ namespace Horo::Runtime::SaveErrors {
     extern const ErrorCodeDescriptor SlotDisplayMetadataInvalid;
     /** @brief A replacement changed logical slot identity or reused the committed generation. */
     extern const ErrorCodeDescriptor SlotGenerationConflict;
+    /** @brief An asynchronous save operation descriptor or handle is invalid. */
+    extern const ErrorCodeDescriptor OperationInvalid;
+    /** @brief Asynchronous save operation state or callback storage could not be allocated. */
+    extern const ErrorCodeDescriptor OperationAllocationFailed;
+    /** @brief An asynchronous save operation progress or terminal transition is invalid. */
+    extern const ErrorCodeDescriptor OperationTransitionInvalid;
+    /** @brief The bounded completion callback capacity is exhausted. */
+    extern const ErrorCodeDescriptor OperationCallbackCapacityExceeded;
+    /** @brief A completion callback is empty and cannot be registered. */
+    extern const ErrorCodeDescriptor OperationCallbackInvalid;
+    /** @brief Cooperative cancellation won before the operation commit gate. */
+    extern const ErrorCodeDescriptor OperationCancelled;
+    /** @brief The operation deadline elapsed before the commit gate. */
+    extern const ErrorCodeDescriptor OperationDeadlineExceeded;
+    /** @brief The operation producer was released without publishing a terminal result. */
+    extern const ErrorCodeDescriptor OperationAbandoned;
     /** @brief The selected save composition explicitly does not support persistence. */
     extern const ErrorCodeDescriptor CompositionUnsupported;
     /** @brief Deterministic composition limits or a submitted request are malformed. */

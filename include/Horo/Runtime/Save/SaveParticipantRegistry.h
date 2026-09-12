@@ -12,9 +12,13 @@
 #include <cstdint>
 #include <memory>
 #include <span>
+#include <utility>
 #include <vector>
 
 namespace Horo::Runtime {
+    namespace SaveParticipantRegistryDetail {
+        struct SnapshotStorage;
+    }
     struct CanonicalCaptureContext;
     class ICanonicalCaptureSink;
     enum class CanonicalCaptureDisposition : std::uint8_t;
@@ -34,6 +38,41 @@ namespace Horo::Runtime {
         None = 0,
         Capture = 1U << 0U,
         Restore = 1U << 1U,
+    };
+
+    /** @brief Whether an absent participant dependency rejects plan publication. */
+    enum class SaveParticipantDependencyRequirement : std::uint8_t {
+        Required,
+        Optional
+    };
+
+    /** @brief Operation phase in which one participant must precede another. */
+    enum class SaveParticipantDependencyPhase : std::uint8_t {
+        Capture,
+        Restore,
+        CaptureAndRestore
+    };
+
+    /** @brief Typed dependency edge used to build deterministic capture and restore plans. */
+    struct SaveParticipantDependency final {
+        SaveParticipantId participant; /**< Stable dependency identity. */
+        SaveParticipantDependencyRequirement requirement{SaveParticipantDependencyRequirement::Required}; /**< Absence policy. */
+        SaveParticipantDependencyPhase phase{SaveParticipantDependencyPhase::CaptureAndRestore};          /**< Ordered phase. */
+
+        SaveParticipantDependency() = default;
+
+        /** @brief Creates one typed edge while preserving the former identity-only required-both spelling.
+         * @param value Stable participant identity.
+         * @param dependencyRequirement Whether absence rejects plan publication.
+         * @param dependencyPhase Operation phase ordered by this edge.
+         */
+        SaveParticipantDependency(
+            SaveParticipantId value,
+            SaveParticipantDependencyRequirement dependencyRequirement = SaveParticipantDependencyRequirement::Required,
+            SaveParticipantDependencyPhase dependencyPhase = SaveParticipantDependencyPhase::CaptureAndRestore)
+            : participant(std::move(value)), requirement(dependencyRequirement), phase(dependencyPhase) {}
+
+        [[nodiscard]] auto operator<=>(const SaveParticipantDependency &) const noexcept = default;
     };
 
     /** @brief Combines participant roles without converting them to loosely typed integers. */
@@ -70,7 +109,7 @@ namespace Horo::Runtime {
         SaveParticipantRole roles{SaveParticipantRole::None};           /**< Declared capture/restore roles. */
         bool required{true};                                            /**< Whether absence rejects restore. */
         SaveParticipantLimits limits;                                   /**< Finite participant-local cost declaration. */
-        std::vector<SaveParticipantId> dependencies;                    /**< Required participant identities. */
+        std::vector<SaveParticipantDependency> dependencies;            /**< Required/optional phase-specific ordering edges. */
         std::vector<SaveRecordId> ownedRecords;                         /**< Exclusive stable semantic record identities. */
 
         [[nodiscard]] auto operator<=>(const CanonicalStateParticipantDescriptor &) const noexcept = default;
@@ -133,6 +172,10 @@ namespace Horo::Runtime {
         [[nodiscard]] std::uint64_t Generation() const noexcept;
         /** @brief Returns bindings in stable participant-identity order. @return Borrowed immutable bindings. */
         [[nodiscard]] std::span<const SaveParticipantBinding> Bindings() const noexcept;
+        /** @brief Returns capture-capable bindings in stable dependency order. @return Borrowed immutable capture plan. */
+        [[nodiscard]] std::span<const SaveParticipantBinding> CaptureBindings() const noexcept;
+        /** @brief Returns restore-capable bindings in stable dependency order. @return Borrowed immutable restore plan. */
+        [[nodiscard]] std::span<const SaveParticipantBinding> RestoreBindings() const noexcept;
         /** @brief Finds one pinned binding. @param participant Stable participant identity.
          * @return Borrowed binding, or null when this generation does not contain it.
          */
@@ -140,10 +183,11 @@ namespace Horo::Runtime {
 
     private:
         friend class CanonicalStateParticipantRegistry;
-        SaveParticipantRegistrySnapshot(std::uint64_t generation, std::shared_ptr<const std::vector<SaveParticipantBinding>> bindings);
+        SaveParticipantRegistrySnapshot(std::uint64_t generation,
+                                        std::shared_ptr<const SaveParticipantRegistryDetail::SnapshotStorage> storage);
 
         std::uint64_t generation_{};
-        std::shared_ptr<const std::vector<SaveParticipantBinding>> bindings_;
+        std::shared_ptr<const SaveParticipantRegistryDetail::SnapshotStorage> storage_;
     };
 
     /** @brief Host-owned explicit participant composition registry with bounded immutable snapshots. */
@@ -156,10 +200,10 @@ namespace Horo::Runtime {
 
         /** @brief Validates and copies one descriptor and adapter lease. @param descriptor Inert metadata.
          * @param adapter Owned adapter lease bound by host composition.
-         * @return Registration evidence or a typed validation, duplicate, capacity, or lifecycle error.
+         * @return Registration evidence or a typed validation, duplicate, capacity, allocation, or lifecycle error.
          * @pre Called by the owning composition thread while the registry is quiescent.
          */
-        [[nodiscard]] Result<SaveParticipantRegistration> Register(CanonicalStateParticipantDescriptor descriptor,
+        [[nodiscard]] Result<SaveParticipantRegistration> Register(const CanonicalStateParticipantDescriptor &descriptor,
                                                                    std::shared_ptr<const ICanonicalStateAdapter> adapter);
 
         /** @brief Removes one live registration before shutdown. @param participant Identity to remove.
@@ -170,7 +214,7 @@ namespace Horo::Runtime {
         [[nodiscard]] Result<bool> Unregister(const SaveParticipantId &participant);
 
         /** @brief Validates the complete graph and publishes an owning immutable view.
-         * @return Stable-ID-sorted snapshot or a typed missing-dependency/cycle/lifecycle error.
+         * @return Identity-sorted bindings plus stable plans, or a typed dependency, allocation, or lifecycle error.
          * @pre Called by the owning composition thread; concurrent registry mutation is forbidden.
          */
         [[nodiscard]] Result<SaveParticipantRegistrySnapshot> Snapshot() const;
@@ -185,8 +229,6 @@ namespace Horo::Runtime {
         [[nodiscard]] std::uint64_t Generation() const noexcept;
 
     private:
-        [[nodiscard]] Result<void> AdvanceGeneration();
-
         std::vector<SaveParticipantBinding> bindings_;
         std::uint64_t generation_{1};
         bool closed_{false};

@@ -1,0 +1,14 @@
+{
+  "schemaVersion": 1,
+  "id": "com.horo.fixture.validator",
+  "version": "1.0.0",
+  "modules": [
+    {
+      "id": "com.horo.fixture.validator.backend",
+      "version": "1.0.0",
+      "kind": "native",
+      "roles": ["backend-capability"],
+      "abi": {"major": 1, "minimumMinor": 1}
+    }
+  ]
+}

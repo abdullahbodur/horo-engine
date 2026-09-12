@@ -25,6 +25,7 @@ namespace Horo::Extensions::Tests {
             REQUIRE(error.diagnostics.size() == 1);
             CHECK(error.diagnostics.front().code.Value() == diagnosticCode);
             CHECK(error.diagnostics.front().message == error.message);
+            CHECK(error.diagnostics.front().path == path);
             CHECK(error.diagnostics.front().location.source == "extension.json");
         }
     }  // namespace
@@ -98,6 +99,11 @@ namespace Horo::Extensions::Tests {
         SECTION("unknown root field") {
             auto result = ParseExtensionManifest(R"json({"futureAuthority":true})json");
             RequireError(result, "$.futureAuthority", "extension.manifest.unknown_field");
+        }
+
+        SECTION("separator keys use unambiguous bracket notation") {
+            auto result = ParseExtensionManifest(R"json({"future.authority":true})json");
+            RequireError(result, R"path($["future.authority"])path", "extension.manifest.unknown_field");
         }
 
         SECTION("unknown nested field") {

@@ -36,6 +36,7 @@
 #if defined(HORO_HAS_OPENTELEMETRY)
 #include "Horo/Foundation/Telemetry/OpenTelemetrySink.h"
 #endif
+#include "Horo/Physics/PhysicsSceneActivation.h"
 #include "Horo/Platform/ExternalProcess.h"
 #include "Horo/Runtime/Input.h"
 #include "Horo/Runtime/Render/RenderFrontend.h"
@@ -1047,8 +1048,24 @@ namespace Horo::Editor {
                                                   migrationTransactions,
                                                   p.rendererAvailability,
                                                   projectOpenContributors};
+            const auto physicsSettings = Physics::PhysicsWorldSettings::Capture({});
+            const auto characterSettings = Character::CharacterWorldSettings::Capture({});
+            auto physicsRuntime = Physics::PhysicsRuntime::Create(Physics::PhysicsRuntimeMode::Null);
+            if (physicsSettings.HasError() || characterSettings.HasError() || physicsRuntime.HasError()) {
+                LOG_ERROR("editor.runtime", "Scene Physics composition could not be prepared.");
+                return std::nullopt;
+            }
+            Physics::PhysicsSceneActivationAuthority physicsSceneAuthority;
             auto runtimeScene = std::make_unique<Runtime::RuntimeSceneService>();
             Runtime::RuntimeSceneService *runtimeSceneService = runtimeScene.get();
+            auto physicsParticipant = std::make_unique<
+                Physics::PhysicsSceneActivationParticipant>(*physicsRuntime.Value(), physicsSceneAuthority,
+                                                            Physics::PhysicsSceneActivationSettings{physicsSettings.Value(),
+                                                                                                    characterSettings.Value()});
+            if (const Result<void> added = runtimeScene->AddActivationParticipant(std::move(physicsParticipant)); added.HasError()) {
+                LOG_ERROR("editor.runtime", "Scene Physics participant registration failed: %s", added.ErrorValue().message.c_str());
+                return std::nullopt;
+            }
             ScreenRegistry screenRegistry;
             RegisterWelcomeScreen(screenRegistry);
             RegisterProjectCreationScreen(screenRegistry);

@@ -6,10 +6,6 @@
 
 namespace Horo::Gameplay::Detail {
     namespace {
-        [[nodiscard]] bool BelongsToModule(const std::string_view value, const std::string_view moduleId) noexcept {
-            return value.size() > moduleId.size() + 1 && value.starts_with(moduleId) && value[moduleId.size()] == '.';
-        }
-
         [[nodiscard]] bool HasValidDescriptorShape(const GameplayServiceRegistration &registration, const std::string_view moduleId) {
             const GameplayServiceDescriptor &descriptor = registration.descriptor;
             return descriptor.id.IsValid() && BelongsToModule(descriptor.id.Value(), moduleId) && registration.factory.create != nullptr &&

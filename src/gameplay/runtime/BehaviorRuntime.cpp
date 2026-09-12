@@ -102,8 +102,10 @@ namespace Horo::Gameplay {
             }
         };
 
-        Impl(Runtime::RuntimeScene &scene, const BehaviorRegistry &registry, const BehaviorRuntimeLimits limits)
-            : scene(scene), registry(registry), limits(limits), events(limits.maximumQueuedEvents) {}
+        Impl(Runtime::RuntimeScene &scene, const BehaviorRegistry &registry, const BehaviorRuntimeLimits limits,
+             std::shared_ptr<void> generationLease)
+            : scene(scene), registry(registry), limits(limits), events(limits.maximumQueuedEvents),
+              generationLease(std::move(generationLease)) {}
 
         [[nodiscard]] Result<void> InstantiateEntityBehaviors(const Runtime::RuntimeEntityView &entity,
                                                               std::unordered_map<std::string_view, std::size_t> &multiplicity) {
@@ -154,11 +156,20 @@ namespace Horo::Gameplay {
             for (Instance &instance : instances) {
                 ContextBackend backend{*this, instance, {}, commands, false};
                 BehaviorContext context{backend};
-                instance.implementation->OnCreate(context);
                 instance.created = true;
+                try {
+                    instance.implementation->OnCreate(context);
+                } catch (...) {  // NOSONAR(cpp:S2738) Native project callbacks may throw arbitrary exception types.
+                    return Result<void>::Failure(MakeError(GameplayErrors::GameplayFactoryFailed, "Behavior OnCreate threw an exception."));
+                }
                 if (instance.component.enabled) {
-                    instance.implementation->OnEnable(context);
                     instance.enabledCallbackActive = true;
+                    try {
+                        instance.implementation->OnEnable(context);
+                    } catch (...) {  // NOSONAR(cpp:S2738) Native project callbacks may throw arbitrary exception types.
+                        return Result<void>::Failure(
+                            MakeError(GameplayErrors::GameplayFactoryFailed, "Behavior OnEnable threw an exception."));
+                    }
                 }
             }
             if (!commands.Empty()) {
@@ -169,28 +180,35 @@ namespace Horo::Gameplay {
             return Result<void>::Success();
         }
 
-        void RollbackInstance(Instance &instance) {
+        [[nodiscard]] bool RollbackInstance(Instance &instance) noexcept {
+            bool complete = true;
             if (instance.created) {
                 Runtime::SceneCommandBuffer commands;
                 ContextBackend backend{*this, instance, {}, commands, false};
                 BehaviorContext context{backend};
-                try {
-                    if (instance.enabledCallbackActive)
+                if (instance.enabledCallbackActive) {
+                    try {
                         instance.implementation->OnDisable(context);
+                    } catch (...) {  // NOSONAR(cpp:S1181) Project callback containment must complete destruction.
+                        complete = false;
+                    }
+                }
+                try {
                     instance.implementation->OnDestroy(context);
-                } catch (const std::exception &exception) {  // NOSONAR(cpp:S1181) User behavior code is an exception containment boundary.
-                    LOG_WARN("gameplay.runtime", "Behavior rollback exception: %s", exception.what());
-                } catch (...) {  // NOSONAR(cpp:S1181)
-                    LOG_WARN("gameplay.runtime", "Behavior rollback unknown exception.");
+                } catch (...) {  // NOSONAR(cpp:S1181) Project callback containment must release the factory instance.
+                    complete = false;
                 }
             }
             instance.registration->factory.destroy(instance.registration->factory.userData, instance.implementation);
+            instance.destroyed = true;
+            return complete;
         }
 
         Runtime::RuntimeScene &scene;
         const BehaviorRegistry &registry;
         BehaviorRuntimeLimits limits;
         EventQueue events;
+        std::shared_ptr<void> generationLease;
         std::vector<Instance> instances;
         bool shutdown{};
     };
@@ -200,11 +218,18 @@ namespace Horo::Gameplay {
     /** @copydoc BehaviorRuntime::Create */
     Result<std::unique_ptr<BehaviorRuntime>> BehaviorRuntime::Create(Runtime::RuntimeScene &scene, const BehaviorRegistry &registry,
                                                                      const BehaviorRuntimeLimits limits) {
-        auto impl = std::make_unique<Impl>(scene, registry, limits);
+        auto generationLease = registry.AcquireGenerationLease();
+        if (generationLease.HasError())
+            return Result<std::unique_ptr<BehaviorRuntime>>::Failure(generationLease.ErrorValue());
+        auto impl = std::make_unique<Impl>(scene, registry, limits, std::move(generationLease).Value());
         if (Result<void> built = impl->BuildInstances(); built.HasError()) {
+            bool rollbackComplete = true;
             for (auto iterator = impl->instances.rbegin(); iterator != impl->instances.rend(); ++iterator) {
-                impl->RollbackInstance(*iterator);
+                rollbackComplete = impl->RollbackInstance(*iterator) && rollbackComplete;
             }
+            if (!rollbackComplete)
+                return Result<std::unique_ptr<BehaviorRuntime>>::Failure(
+                    MakeError(GameplayErrors::GameplayFactoryFailed, "Behavior activation failed and rollback callbacks threw."));
             return Result<std::unique_ptr<BehaviorRuntime>>::Failure(built.ErrorValue());
         }
         return Result<std::unique_ptr<BehaviorRuntime>>::Success(
@@ -275,13 +300,77 @@ namespace Horo::Gameplay {
         Impl::ContextBackend backend{*impl_, *found, {}, commands, false};
         BehaviorContext context{backend};
         if (enabled) {
-            found->implementation->OnEnable(context);
             found->enabledCallbackActive = true;
+            try {
+                found->implementation->OnEnable(context);
+            } catch (...) {  // NOSONAR(cpp:S2738) Native project callbacks may throw arbitrary exception types.
+                return Result<void>::Failure(MakeError(GameplayErrors::GameplayFactoryFailed, "Behavior OnEnable threw an exception."));
+            }
         } else {
-            found->implementation->OnDisable(context);
+            try {
+                found->implementation->OnDisable(context);
+            } catch (...) {  // NOSONAR(cpp:S2738) Native project callbacks may throw arbitrary exception types.
+                return Result<void>::Failure(MakeError(GameplayErrors::GameplayFactoryFailed, "Behavior OnDisable threw an exception."));
+            }
             found->enabledCallbackActive = false;
         }
         found->component.enabled = enabled;
+        return Result<void>::Success();
+    }
+
+    /** @copydoc BehaviorRuntime::CaptureReloadSnapshot */
+    Result<BehaviorRuntimeReloadSnapshot> BehaviorRuntime::CaptureReloadSnapshot() const {
+        if (!impl_ || impl_->shutdown)
+            return Result<BehaviorRuntimeReloadSnapshot>::Failure(MakeError(GameplayErrors::GameplayReloadSnapshotInvalid));
+        BehaviorRuntimeReloadSnapshot snapshot;
+        snapshot.instances.reserve(impl_->instances.size());
+        std::size_t totalBytes = 0;
+        for (const Impl::Instance &instance : impl_->instances) {
+            Result<std::vector<std::byte>> captured = Result<std::vector<std::byte>>::Success({});
+            try {
+                captured = instance.implementation->CaptureReloadState();
+            } catch (...) {  // NOSONAR(cpp:S2738) Native project callbacks may throw arbitrary exception types.
+                return Result<BehaviorRuntimeReloadSnapshot>::Failure(
+                    MakeError(GameplayErrors::GameplayReloadSnapshotInvalid, "Behavior reload capture threw an exception."));
+            }
+            if (captured.HasError())
+                return Result<BehaviorRuntimeReloadSnapshot>::Failure(captured.ErrorValue());
+            std::vector<std::byte> payload = std::move(captured).Value();
+            if (payload.size() > MaximumBehaviorReloadStateBytes || totalBytes > MaximumBehaviorReloadSnapshotBytes - payload.size())
+                return Result<BehaviorRuntimeReloadSnapshot>::Failure(MakeError(GameplayErrors::GameplayReloadSnapshotInvalid));
+            totalBytes += payload.size();
+            snapshot.instances.emplace_back(instance.component.instanceId, instance.component.typeId, std::move(payload), instance.started);
+        }
+        return Result<BehaviorRuntimeReloadSnapshot>::Success(std::move(snapshot));
+    }
+
+    /** @copydoc BehaviorRuntime::RestoreReloadSnapshot */
+    Result<void> BehaviorRuntime::RestoreReloadSnapshot(const BehaviorRuntimeReloadSnapshot &snapshot) {
+        if (!impl_ || impl_->shutdown || snapshot.instances.size() != impl_->instances.size())
+            return Result<void>::Failure(MakeError(GameplayErrors::GameplayReloadSnapshotInvalid));
+        std::unordered_map<std::uint64_t, const BehaviorInstanceReloadState *> states;
+        states.reserve(snapshot.instances.size());
+        std::size_t totalBytes = 0;
+        for (const BehaviorInstanceReloadState &state : snapshot.instances) {
+            if (!state.instanceId.IsValid() || !state.typeId.IsValid() || state.payload.size() > MaximumBehaviorReloadStateBytes ||
+                totalBytes > MaximumBehaviorReloadSnapshotBytes - state.payload.size() ||
+                !states.emplace(state.instanceId.value, &state).second)
+                return Result<void>::Failure(MakeError(GameplayErrors::GameplayReloadSnapshotInvalid));
+            totalBytes += state.payload.size();
+        }
+        for (Impl::Instance &instance : impl_->instances) {
+            const auto found = states.find(instance.component.instanceId.value);
+            if (found == states.end() || found->second->typeId != instance.component.typeId)
+                return Result<void>::Failure(MakeError(GameplayErrors::GameplayReloadSnapshotInvalid));
+            try {
+                if (Result<void> restored = instance.implementation->RestoreReloadState(found->second->payload); restored.HasError())
+                    return restored;
+            } catch (...) {  // NOSONAR(cpp:S2738) Native project callbacks may throw arbitrary exception types.
+                return Result<void>::Failure(
+                    MakeError(GameplayErrors::GameplayReloadRestoreFailed, "Behavior reload restore threw an exception."));
+            }
+            instance.started = found->second->started;
+        }
         return Result<void>::Success();
     }
 
@@ -290,21 +379,9 @@ namespace Horo::Gameplay {
         if (!impl_ || impl_->shutdown)
             return;
         impl_->shutdown = true;
-        Runtime::SceneCommandBuffer commands;
         for (auto iterator = impl_->instances.rbegin(); iterator != impl_->instances.rend(); ++iterator) {
-            Impl::ContextBackend backend{*impl_, *iterator, {}, commands, false};
-            BehaviorContext context{backend};
-            try {
-                if (iterator->enabledCallbackActive)
-                    iterator->implementation->OnDisable(context);
-                iterator->implementation->OnDestroy(context);
-            } catch (const std::exception &exception) {
-                LOG_WARN("gameplay.runtime", "Behavior shutdown exception: %s", exception.what());
-            } catch (...) {
-                LOG_WARN("gameplay.runtime", "Behavior shutdown unknown exception.");
-            }
-            iterator->registration->factory.destroy(iterator->registration->factory.userData, iterator->implementation);
-            iterator->destroyed = true;
+            if (!impl_->RollbackInstance(*iterator))
+                LOG_WARN("gameplay.runtime", "Behavior shutdown callback threw; factory instance was still released.");
         }
         impl_->instances.clear();
         impl_->events.current.clear();

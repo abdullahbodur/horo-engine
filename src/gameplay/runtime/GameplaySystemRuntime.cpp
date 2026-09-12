@@ -56,7 +56,10 @@ namespace Horo::Gameplay {
                                                                                  const std::span<const GameplayServiceId> activeServices,
                                                                                  const std::span<const GameplayCapabilityId> capabilities,
                                                                                  const CancellationToken parentCancellation) {
-        auto impl = std::make_unique<Impl>(registry, activeServices, capabilities, parentCancellation);
+        auto generationLease = registry.AcquireGenerationLease();
+        if (generationLease.HasError())
+            return Result<std::unique_ptr<GameplaySystemRuntime>>::Failure(generationLease.ErrorValue());
+        auto impl = std::make_unique<Impl>(registry, activeServices, capabilities, parentCancellation, std::move(generationLease).Value());
         if (Result<void> built = impl->Build(); built.HasError()) {
             impl->Rollback();
             return Result<std::unique_ptr<GameplaySystemRuntime>>::Failure(built.ErrorValue());

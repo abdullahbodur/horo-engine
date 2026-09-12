@@ -670,19 +670,28 @@ The build publishes that header as a self-contained, versioned
 `HoroEngine::ExtensionSdk` header target, machine-readable SDK-to-host ABI range
 metadata, and the project license. It has no engine-library or third-party link
 dependencies and is verified by an external C consumer copied away from the
-engine build tree. Its scaffolder generates portable GUI-only, backend/library,
-script-provider, and hybrid C projects. Every generated module owns a separate
-ABI entry unit and contract test. Hybrid presentation and script adapters import
-the backend's typed service instead of duplicating backend authority. Generated
-projects use only `HoroEngine::ExtensionSdk`, relative project paths, and CPack
-ZIP configuration. The generated manifest template resolves the native module
-suffix during CMake configuration and records the installed `bin/` path; hosted
-regression coverage extracts the ZIP and activates every scaffold shape through
-the real extension host. Scaffolding rejects a base identity when any shape-derived
-module/service/import identity would exceed the manifest limit or any generated
-module, contract-test, or archive filename would exceed the portable 255-byte
-component limit. Manifest schemas, validation, and distribution commands
-remain separately versioned SDK deliverables.
+engine build tree. Configuration recreates the exact versioned SDK staging root,
+and reused-build regression coverage verifies its complete artifact set so removed
+or renamed files cannot survive publication. Its scaffolder generates portable
+GUI-only, backend/library, script-provider, and hybrid C projects. Every generated
+module owns a separate ABI entry unit and contract test. Hybrid presentation and
+script adapters import the backend's typed service instead of duplicating backend
+authority. Generated projects use only `HoroEngine::ExtensionSdk`, relative project
+paths, and CPack ZIP configuration. The generated manifest template resolves the
+native module suffix during CMake configuration and records the installed `bin/`
+path; hosted regression coverage extracts the ZIP and activates every scaffold
+shape through the real extension host. Scaffolding rejects a base identity when
+any shape-derived module/service/import identity would exceed the manifest limit
+or any generated module, contract-test, or archive filename would exceed the
+portable 255-byte component limit. Manifest schemas, validation, and distribution
+commands remain separately versioned SDK deliverables.
+
+The SDK also stages a platform-native `horo-extension-validate` executable and
+the matching V1 authoring schema. The command calls the same bounded manifest
+parser as `ExtensionHost`, emits deterministic human or JSON diagnostics with
+exact field paths, rejects unsupported requested schema versions, and never
+loads module code. The schema supports editor completion; the executable remains
+the behavioral authority for cross-field and identity-reference rules.
 
 Project gameplay modules may use the SDK-generation C++ boundary documented in
 [Gameplay Module Boundary](./gameplay-module-boundary.md). That boundary is

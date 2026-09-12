@@ -5,6 +5,7 @@ include_guard(GLOBAL)
 message(STATUS "Configuring target-specific public header boundaries")
 
 horo_configure_target_header_boundary(HoroFoundation PUBLIC_HEADERS
+    Horo/Foundation/AssetCookTargetId.h
     Horo/Foundation/BuildOutputStore.h
     Horo/Foundation/CancellationToken.h
     Horo/Foundation/Configuration.h
@@ -37,6 +38,7 @@ horo_configure_target_header_boundary(HoroFoundation PUBLIC_HEADERS
     Horo/Foundation/Telemetry/Telemetry.h
     Horo/Foundation/Time.h
     Horo/Foundation/TransparentString.h
+    Horo/Foundation/Utf8.h
     Horo/Math/SceneMath.h
     Horo/Math/WorldCoordinate64.h
 )
@@ -97,6 +99,7 @@ horo_configure_target_header_boundary(HoroPackages PUBLIC_HEADERS
     Horo/Packages/PackageLockfile.h
     Horo/Packages/PackagePath.h
     Horo/Packages/PackageArchive.h
+    Horo/Packages/PackageCache.h
     Horo/Packages/PackageFileManifest.h
 )
 horo_configure_target_header_boundary(HoroProjectMigrations)
@@ -113,7 +116,9 @@ horo_configure_target_header_boundary(HoroRuntime PUBLIC_HEADERS
     Horo/Runtime/Save/SaveCaptureSnapshot.h
     Horo/Runtime/Save/SaveArchiveMetadata.h
     Horo/Runtime/Save/SaveArchiveFraming.h
+    Horo/Runtime/Save/SaveCanonicalCodec.h
     Horo/Runtime/Save/SaveSlotMetadata.h
+    Horo/Runtime/Save/SaveOperation.h
     Horo/Runtime/Save/SaveTestCompositions.h
 )
 horo_configure_target_header_boundary(HoroRuntimeUi PUBLIC_HEADERS
@@ -163,6 +168,8 @@ horo_configure_target_header_boundary(HoroGameplayApi PUBLIC_HEADERS
     Horo/Gameplay/BehaviorTypes.h
     Horo/Gameplay/Component.h
     Horo/Gameplay/ComponentRegistry.h
+    Horo/Gameplay/GameAsset.h
+    Horo/Gameplay/GameAssetTypeRegistry.h
     Horo/Gameplay/GameServiceRegistry.h
     Horo/Gameplay/GameModule.h
     Horo/Gameplay/GameplayErrors.h
@@ -243,6 +250,7 @@ horo_configure_target_header_boundary(HoroInput PUBLIC_HEADERS
 horo_configure_target_header_boundary(HoroPhysics PUBLIC_HEADERS
     Horo/Physics/CharacterControllerContracts.h
     Horo/Physics/CharacterErrors.h
+    Horo/Physics/CharacterWorld.h
     Horo/Physics/CharacterWorldSettings.h
     Horo/Physics/PhysicsBodyDescriptor.h
     Horo/Physics/PhysicsBodyDynamics.h
@@ -265,6 +273,10 @@ horo_configure_target_header_boundary(HoroPhysics PUBLIC_HEADERS
     Horo/Physics/PhysicsWorldBudgets.h
     Horo/Physics/PhysicsWorldDescriptor.h
     Horo/Physics/PhysicsWorldSettings.h
+)
+
+horo_configure_target_header_boundary(HoroPhysicsSceneIntegration PUBLIC_HEADERS
+    Horo/Physics/PhysicsSceneActivation.h
 )
 horo_configure_target_header_boundary(HoroAI PUBLIC_HEADERS
     Horo/AI/AIErrors.h
@@ -386,7 +398,9 @@ horo_configure_target_header_boundary(HoroWorldStreaming PUBLIC_HEADERS
     Horo/WorldStreaming/StreamingSourceRange.h
     Horo/WorldStreaming/WorldCellQuantization.h
     Horo/WorldStreaming/WorldPartitionDescriptor.h
+    Horo/WorldStreaming/WorldLayerFiltering.h
     Horo/WorldStreaming/WorldLayerOwnershipModel.h
+    Horo/WorldStreaming/WorldLayerState.h
     Horo/WorldStreaming/WorldObjectOwnership.h
     Horo/WorldStreaming/WorldPartitionCapabilityProfile.h
     Horo/WorldStreaming/WorldPartitionRegistry.h

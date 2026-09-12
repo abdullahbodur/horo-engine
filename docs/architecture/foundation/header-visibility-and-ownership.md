@@ -169,6 +169,20 @@ finding through a module-owned descriptor, then return
 `Result<ValidationResult>`. Existing non-validation `Result<T>` APIs and
 `Error::diagnostics` callers do not change.
 
+## GAM-001.5 Migration Notes
+
+`HoroEngine::Foundation` owns the canonical
+`Horo/Foundation/AssetCookTargetId.h` public contract shared by Assets and
+GameplayApi. Existing asset-pipeline consumers may keep including
+`Horo/Assets/AssetCook.h` and using `Horo::Assets::AssetCookTargetId`; that name
+is an alias to the single Foundation-owned type, so persisted cook-target text
+and the existing 16-bit envelope limit remain compatible. Gameplay descriptors
+use the same type but admission retains its narrower 96-byte project-module
+boundary. New direct consumers link Foundation and include the owning header;
+they must not introduce a second parser or stringly typed target identity. The
+generated Foundation public-header consumer and Assets/Gameplay callers cover
+the ownership migration.
+
 ## CIN-001.4 Migration Notes
 
 `HoroEngine::CinematicModel` owns the new `Horo/Cinematic/CurveSampling.h`
@@ -631,3 +645,48 @@ backend type crosses the boundary. Callers that previously inferred readiness fr
 source validity must now retain an exact registry snapshot, call `ValidatePCGGraph`,
 and hand the returned generation-fenced dependency order to the later compiler. There
 is no compatibility path for ambient runtime discovery or best-effort fallback.
+
+## Runtime Save Operation Boundary
+
+`[SAV-001.6]` adds `Horo/Runtime/Save/SaveOperation.h` to `HoroEngine::Runtime`.
+The public contract reuses the application-owned Foundation `OperationId` and exposes
+only typed save stages, exact bounded progress, immutable terminal evidence,
+cooperative cancellation and completion observation. It owns no scheduler, storage,
+filesystem, cloud, scene, editor, UI or backend capability. The generated standalone
+Runtime public-header consumer compiles the contract through its registered owner.
+
+Runtime save producers create the move-only controller only after application
+operation admission, retain it until exactly one terminal result is published and
+hand copyable handles to polling or callback consumers. Existing ad hoc save-job IDs
+must migrate to the application `OperationStore` identity instead of creating another
+operation store. Callers request cancellation without waiting; producers observe it
+before entering `BeginCommit`. Once that atomic gate succeeds, cancellation is too
+late and terminal publication reports the actual committed, not-committed or unknown
+outcome. Completion callbacks are bounded, run outside the operation lock on the
+registering or terminalizing thread and must remain non-blocking. Admission also
+preallocates cancellation and abandonment failures plus callback storage. A terminal
+transition moves the final snapshot into retained immutable in-state storage before
+releasing observers, so destructor-driven abandonment and callback dispatch cannot
+lose terminal publication to a later allocation failure. Admission allocation failure
+has its own typed identity. Each operation kind has a closed monotonic stage order and
+an exact completed predecessor for `BeginCommit`; pre-commit stages cannot be published
+after the gate. Handles retain shared state across user callbacks, and producer
+replacement detaches prior state before abandonment dispatch so reentrant release or
+move assignment cannot invalidate callback evidence or orphan the installed operation.
+
+## Runtime Save Participant Ordering Boundary
+
+`[SAV-001.8]` extends the existing `SaveParticipantRegistry.h` contract without
+changing target ownership. Dependency edges now carry required/optional policy and
+an exact capture, restore or combined phase. Registry snapshots retain their
+identity-sorted canonical binding view and additionally publish stable topological
+capture and restore plans. Equivalent participant sets therefore produce the same
+orders regardless of registration timing, addresses or unordered-container order.
+Non-overlapping capture and restore edges to one provider remain distinct, while
+overlapping declarations are invalid. Registry allocation failures are typed and do
+not advance the published generation without the corresponding membership change.
+
+Existing `SaveParticipantId` dependency initializers retain their required-both
+meaning; callers that intended optional or phase-specific behavior must migrate to
+an explicit `SaveParticipantDependency` value. The generated Runtime public-header
+consumer continues to cover the extended Foundation-only surface.
