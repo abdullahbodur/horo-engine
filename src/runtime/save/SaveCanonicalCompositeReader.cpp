@@ -19,14 +19,12 @@ namespace Horo::Runtime {
 
     /** @copydoc CanonicalValueReader::ReadValueCollection */
     Result<std::vector<CanonicalDecodedValue>> CanonicalValueReader::ReadValueCollection(const ValueCollectionOrder order) {
-        auto admitted = AdmitComposite();
-        if (admitted.HasError())
+        if (auto admitted = AdmitComposite(); admitted.HasError())
             return Result<std::vector<CanonicalDecodedValue>>::Failure(admitted.ErrorValue());
         auto count = ReadLength(limits_.maximumCollectionElements);
         if (count.HasError())
             return Result<std::vector<CanonicalDecodedValue>>::Failure(count.ErrorValue());
-        auto charged = AdmitElements(count.Value(), sizeof(CanonicalDecodedValue), sizeof(std::uint32_t));
-        if (charged.HasError())
+        if (auto charged = AdmitElements(count.Value(), sizeof(CanonicalDecodedValue), sizeof(std::uint32_t)); charged.HasError())
             return Result<std::vector<CanonicalDecodedValue>>::Failure(charged.ErrorValue());
         Error allocationFailure = ErrorAt(SaveErrors::CanonicalCodecAllocationFailed);
         try {
@@ -54,8 +52,7 @@ namespace Horo::Runtime {
 
     /** @copydoc CanonicalValueReader::ReadOptional */
     Result<std::optional<CanonicalDecodedValue>> CanonicalValueReader::ReadOptional() {
-        auto admitted = AdmitComposite();
-        if (admitted.HasError())
+        if (auto admitted = AdmitComposite(); admitted.HasError())
             return Result<std::optional<CanonicalDecodedValue>>::Failure(admitted.ErrorValue());
         auto present = ReadBool();
         if (present.HasError())
@@ -74,8 +71,7 @@ namespace Horo::Runtime {
 
     /** @copydoc CanonicalValueReader::ReadVariant */
     Result<std::pair<std::uint32_t, CanonicalDecodedValue>> CanonicalValueReader::ReadVariant(const std::uint32_t alternativeCount) {
-        auto admitted = AdmitComposite();
-        if (admitted.HasError())
+        if (auto admitted = AdmitComposite(); admitted.HasError())
             return Result<std::pair<std::uint32_t, CanonicalDecodedValue>>::Failure(admitted.ErrorValue());
         auto index = ReadUInt32();
         if (index.HasError())
@@ -95,15 +91,14 @@ namespace Horo::Runtime {
 
     /** @copydoc CanonicalValueReader::ReadMap */
     Result<std::vector<CanonicalDecodedMapEntry>> CanonicalValueReader::ReadMap() {
-        auto admitted = AdmitComposite();
-        if (admitted.HasError())
+        if (auto admitted = AdmitComposite(); admitted.HasError())
             return Result<std::vector<CanonicalDecodedMapEntry>>::Failure(admitted.ErrorValue());
         auto count = ReadLength(limits_.maximumCollectionElements);
         if (count.HasError())
             return Result<std::vector<CanonicalDecodedMapEntry>>::Failure(count.ErrorValue());
-        auto charged = AdmitElements(count.Value(), sizeof(CanonicalDecodedMapEntry), 2 * sizeof(std::uint32_t));
-        if (charged.HasError())
+        if (auto charged = AdmitElements(count.Value(), sizeof(CanonicalDecodedMapEntry), 2 * sizeof(std::uint32_t)); charged.HasError()) {
             return Result<std::vector<CanonicalDecodedMapEntry>>::Failure(charged.ErrorValue());
+        }
         Error allocationFailure = ErrorAt(SaveErrors::CanonicalCodecAllocationFailed);
         try {
             std::vector<CanonicalDecodedMapEntry> entries;
@@ -117,7 +112,7 @@ namespace Horo::Runtime {
                     return Result<std::vector<CanonicalDecodedMapEntry>>::Failure(value.ErrorValue());
                 if (!entries.empty() && !CanonicalCodecDetail::BytesLess(entries.back().key.bytes_, key.Value().bytes_))
                     return Result<std::vector<CanonicalDecodedMapEntry>>::Failure(ErrorAt(SaveErrors::CanonicalCodecCorrupt));
-                entries.push_back({std::move(key).Value(), std::move(value).Value()});
+                entries.emplace_back(std::move(key).Value(), std::move(value).Value());
             }
             return Result<std::vector<CanonicalDecodedMapEntry>>::Success(std::move(entries));
         } catch (const std::bad_alloc &) {
@@ -132,15 +127,14 @@ namespace Horo::Runtime {
 
     /** @copydoc CanonicalValueReader::ReadRecord */
     Result<std::vector<CanonicalDecodedField>> CanonicalValueReader::ReadRecord() {
-        auto admitted = AdmitComposite();
-        if (admitted.HasError())
+        if (auto admitted = AdmitComposite(); admitted.HasError())
             return Result<std::vector<CanonicalDecodedField>>::Failure(admitted.ErrorValue());
         auto count = ReadLength(limits_.maximumFields);
         if (count.HasError())
             return Result<std::vector<CanonicalDecodedField>>::Failure(count.ErrorValue());
-        auto charged = AdmitElements(count.Value(), sizeof(CanonicalDecodedField), 2 * sizeof(std::uint32_t));
-        if (charged.HasError())
+        if (auto charged = AdmitElements(count.Value(), sizeof(CanonicalDecodedField), 2 * sizeof(std::uint32_t)); charged.HasError()) {
             return Result<std::vector<CanonicalDecodedField>>::Failure(charged.ErrorValue());
+        }
         Error allocationFailure = ErrorAt(SaveErrors::CanonicalCodecAllocationFailed);
         try {
             std::vector<CanonicalDecodedField> fields;
@@ -152,14 +146,13 @@ namespace Horo::Runtime {
                 auto id = CanonicalFieldId::Create(rawId.Value());
                 if (id.HasError() || (!fields.empty() && !(fields.back().id < id.Value())))
                     return Result<std::vector<CanonicalDecodedField>>::Failure(ErrorAt(SaveErrors::CanonicalCodecCorrupt));
-                auto pathCharge = Charge(sizeof(CanonicalPathNode));
-                if (pathCharge.HasError())
+                if (auto pathCharge = Charge(sizeof(CanonicalPathNode)); pathCharge.HasError())
                     return Result<std::vector<CanonicalDecodedField>>::Failure(pathCharge.ErrorValue());
-                auto childPath = std::make_shared<CanonicalPathNode>(CanonicalPathNode{id.Value(), path_, path_ ? path_->depth + 1 : 1});
+                auto childPath = std::make_shared<CanonicalPathNode>(id.Value(), path_, path_ ? path_->depth + 1 : 1);
                 auto value = ReadChild(std::move(childPath));
                 if (value.HasError())
                     return Result<std::vector<CanonicalDecodedField>>::Failure(value.ErrorValue());
-                fields.push_back({id.Value(), std::move(value).Value()});
+                fields.emplace_back(id.Value(), std::move(value).Value());
             }
             return Result<std::vector<CanonicalDecodedField>>::Success(std::move(fields));
         } catch (const std::bad_alloc &) {

@@ -210,7 +210,7 @@ namespace Horo::Runtime {
         auto bits = ReadUInt32();
         if (bits.HasError())
             return Result<float>::Failure(bits.ErrorValue());
-        const float value = std::bit_cast<float>(bits.Value());
+        const auto value = std::bit_cast<float>(bits.Value());
         return std::isfinite(value) && bits.Value() != 0x80000000U ? Result<float>::Success(value)
                                                                    : Result<float>::Failure(ErrorAt(SaveErrors::CanonicalCodecCorrupt));
     }
@@ -220,7 +220,7 @@ namespace Horo::Runtime {
         auto bits = ReadUInt64();
         if (bits.HasError())
             return Result<double>::Failure(bits.ErrorValue());
-        const double value = std::bit_cast<double>(bits.Value());
+        const auto value = std::bit_cast<double>(bits.Value());
         return std::isfinite(value) && bits.Value() != 0x8000000000000000ULL
                    ? Result<double>::Success(value)
                    : Result<double>::Failure(ErrorAt(SaveErrors::CanonicalCodecCorrupt));
@@ -234,8 +234,7 @@ namespace Horo::Runtime {
         auto encoded = ReadExactBytes(size.Value());
         if (encoded.HasError())
             return Result<std::vector<std::byte>>::Failure(encoded.ErrorValue());
-        auto charged = Charge(size.Value());
-        if (charged.HasError())
+        if (auto charged = Charge(size.Value()); charged.HasError())
             return Result<std::vector<std::byte>>::Failure(charged.ErrorValue());
         Error allocationFailure = ErrorAt(SaveErrors::CanonicalCodecAllocationFailed);
         try {
@@ -250,12 +249,12 @@ namespace Horo::Runtime {
         auto bytes = ReadBytes(limits_.maximumStringBytes);
         if (bytes.HasError())
             return Result<std::string>::Failure(std::move(bytes).ErrorValue());
-        auto charged = Charge(bytes.Value().size());
-        if (charged.HasError())
+        if (auto charged = Charge(bytes.Value().size()); charged.HasError())
             return Result<std::string>::Failure(charged.ErrorValue());
         Error allocationFailure = ErrorAt(SaveErrors::CanonicalCodecAllocationFailed);
         try {
-            std::string value{reinterpret_cast<const char *>(bytes.Value().data()), bytes.Value().size()};
+            std::string value{reinterpret_cast<const char *>(bytes.Value().data()),  // NOSONAR: text construction requires a char view.
+                              bytes.Value().size()};
             return IsValidUtf8ScalarSequence(value) ? Result<std::string>::Success(std::move(value))
                                                     : Result<std::string>::Failure(ErrorAt(SaveErrors::CanonicalCodecCorrupt));
         } catch (const std::bad_alloc &) {

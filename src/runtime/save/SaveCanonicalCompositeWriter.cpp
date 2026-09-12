@@ -45,8 +45,11 @@ namespace Horo::Runtime {
 
     /** @copydoc CanonicalValueWriter::WriteSequence */
     Result<void> CanonicalValueWriter::WriteSequence(const std::span<const CanonicalEncodedValue> values) {
-        auto admitted = AdmitCollection(CanonicalCodecDetail::MaximumDepth(values), values.size(), limits_.maximumCollectionElements);
-        return admitted.HasError() ? admitted : WriteStaged([&](CanonicalValueWriter &staging) {
+        if (auto admitted = AdmitCollection(CanonicalCodecDetail::MaximumDepth(values), values.size(), limits_.maximumCollectionElements);
+            admitted.HasError()) {
+            return admitted;
+        }
+        return WriteStaged([&](CanonicalValueWriter &staging) {
             auto written = staging.WriteUInt32(static_cast<std::uint32_t>(values.size()));
             for (const auto &value : values) {
                 if (written.HasError())
@@ -59,8 +62,7 @@ namespace Horo::Runtime {
 
     /** @copydoc CanonicalValueWriter::WriteOptional */
     Result<void> CanonicalValueWriter::WriteOptional(const std::optional<CanonicalEncodedValue> &value) {
-        auto admitted = AdmitComposite(value ? value->StructuralDepth() : 0);
-        if (admitted.HasError())
+        if (auto admitted = AdmitComposite(value ? value->StructuralDepth() : 0); admitted.HasError())
             return admitted;
         return WriteStaged([&](CanonicalValueWriter &staging) {
             auto written = staging.WriteBool(value.has_value());
@@ -73,8 +75,7 @@ namespace Horo::Runtime {
     /** @copydoc CanonicalValueWriter::WriteVariant */
     Result<void> CanonicalValueWriter::WriteVariant(const std::uint32_t index, const std::uint32_t alternativeCount,
                                                     const CanonicalEncodedValue &value) {
-        auto admitted = AdmitComposite(value.StructuralDepth());
-        if (admitted.HasError())
+        if (auto admitted = AdmitComposite(value.StructuralDepth()); admitted.HasError())
             return admitted;
         if (!alternativeCount || index >= alternativeCount)
             return Fail(ErrorAt(SaveErrors::CanonicalCodecInvalid));
@@ -91,8 +92,9 @@ namespace Horo::Runtime {
         std::size_t childDepth{};
         for (const auto &entry : entries)
             childDepth = std::max({childDepth, entry.key.StructuralDepth(), entry.value.StructuralDepth()});
-        auto admitted = AdmitCollection(childDepth, entries.size(), limits_.maximumCollectionElements);
-        return admitted.HasError() ? admitted : WriteOrderedCollection(entries, [](const auto *left, const auto *right) {
+        if (auto admitted = AdmitCollection(childDepth, entries.size(), limits_.maximumCollectionElements); admitted.HasError())
+            return admitted;
+        return WriteOrderedCollection(entries, [](const auto *left, const auto *right) {
             return CanonicalCodecDetail::BytesLess(left->key.Bytes(), right->key.Bytes());
         }, [](const auto &left, const auto &right) {
             return CanonicalCodecDetail::BytesEqual(left.key.Bytes(), right.key.Bytes());
@@ -104,8 +106,11 @@ namespace Horo::Runtime {
 
     /** @copydoc CanonicalValueWriter::WriteSet */
     Result<void> CanonicalValueWriter::WriteSet(const std::span<const CanonicalEncodedValue> values) {
-        auto admitted = AdmitCollection(CanonicalCodecDetail::MaximumDepth(values), values.size(), limits_.maximumCollectionElements);
-        return admitted.HasError() ? admitted : WriteOrderedCollection(values, [](const auto *left, const auto *right) {
+        if (auto admitted = AdmitCollection(CanonicalCodecDetail::MaximumDepth(values), values.size(), limits_.maximumCollectionElements);
+            admitted.HasError()) {
+            return admitted;
+        }
+        return WriteOrderedCollection(values, [](const auto *left, const auto *right) {
             return CanonicalCodecDetail::BytesLess(left->Bytes(), right->Bytes());
         }, [](const auto &left, const auto &right) {
             return CanonicalCodecDetail::BytesEqual(left.Bytes(), right.Bytes());
@@ -119,8 +124,9 @@ namespace Horo::Runtime {
         std::size_t childDepth{};
         for (const auto &field : fields)
             childDepth = std::max(childDepth, field.value.StructuralDepth());
-        auto admitted = AdmitCollection(childDepth, fields.size(), limits_.maximumFields);
-        return admitted.HasError() ? admitted : WriteOrderedCollection(fields, [](const auto *left, const auto *right) {
+        if (auto admitted = AdmitCollection(childDepth, fields.size(), limits_.maximumFields); admitted.HasError())
+            return admitted;
+        return WriteOrderedCollection(fields, [](const auto *left, const auto *right) {
             return left->id < right->id;
         }, [](const auto &left, const auto &right) {
             return left.id == right.id;
