@@ -1,6 +1,7 @@
 #include "Horo/Navigation/Backends/NullProvider.h"
 #include "Horo/Navigation/NavigationErrors.h"
 #include "navigation/DeterministicNavigationProvider.h"
+#include "navigation/NavigationProviderContract.h"
 #include "navigation/NavigationTestAssertions.h"
 
 #include <array>
@@ -41,6 +42,8 @@ namespace Horo::Navigation {
         REQUIRE(QueryNavigationSupport(capabilities, NavigationQueryKind::Path, NavigationQualityLevel::Balanced) ==
                 NavigationSupport::Available);
         RequireError(provider->FindPath(Request({1.0F, 2.0F, 3.0F}, {7.0F, 2.0F, 9.0F}), {}), NavigationErrors::NoNavigationData);
+        TestSupport::RequireNavigationProviderContract(*provider, Request(),
+                                                       TestSupport::NavigationProviderFixtureOutcome::NoNavigationData);
     }
 
     TEST_CASE("Deterministic navigation fixture returns exact declared path bits", "[unit][navigation][headless]") {
@@ -50,6 +53,9 @@ namespace Horo::Navigation {
             .path = {.points = {{1.0F, 0.0F, 2.0F}, {3.5F, 0.0F, 4.25F}, {5.0F, 0.0F, 8.0F}}, .lengthMeters = 7.25F},
         };
         const TestSupport::DeterministicNavigationQueryBackend provider{std::span{&fixture, 1}};
+
+        TestSupport::RequireNavigationProviderContract(provider, Request(fixture.start, fixture.destination),
+                                                       TestSupport::NavigationProviderFixtureOutcome::Path);
 
         const auto first = provider.FindPath(Request(fixture.start, fixture.destination), {});
         const auto second = provider.FindPath(Request(fixture.start, fixture.destination), {});
