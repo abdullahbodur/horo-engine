@@ -674,6 +674,30 @@ PinnedPackage
 QuarantinedPackage
 ```
 
+`PackageCacheStore` accepts only an absolute cache root resolved by the host and
+uses the host's durable filesystem service for same-filesystem publication and
+process-safe digest locks. A verified archive is written to staging, made
+read-only, atomically moved to `by-hash/sha256/<digest>/archive.horopkg`, then
+read back and independently verified before publication succeeds. A concurrent
+publish, read, or cleanup for the same digest fails with a retryable busy result;
+loaded archives own their byte snapshot, so later cleanup cannot invalidate a
+consumer.
+
+Reads reject links, non-regular files, oversized bytes, malformed archives, and
+digest mismatches. Readable corrupt entries are atomically moved out of the
+active namespace into a reason-specific quarantine directory. Failed downloads
+may be quarantined directly without constructing a validated archive. Each
+quarantine entry contains the inert artifact and a bounded diagnostic record
+with only its stable reason, expected and actual digests, and byte count; source
+URLs, credentials, and host paths are excluded. The diagnostic is published
+before the artifact, so an interrupted quarantine never exposes failed bytes as
+a cache hit.
+
+Cleanup takes the same digest lock, restores only the owner permission required
+for deletion, and durably removes the archive. Missing entries are idempotent
+successes. Staging and quarantine retention policy remains host-owned; neither
+location is searched as a package source or treated as verified content.
+
 Failed extraction or verification moves data to quarantine, not to the active
 cache. Cache garbage collection obeys leases, pins, disk budget, and project
 references.

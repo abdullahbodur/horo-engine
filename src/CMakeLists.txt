@@ -134,6 +134,7 @@ target_compile_features(HoroPlatformServices PUBLIC cxx_std_20)
 target_link_libraries(HoroPlatformServices PUBLIC HoroEngine::Foundation)
 
 add_library(HoroPackages STATIC
+        packages/cache/PackageCache.cpp
         packages/resolver/PackageDependencyResolver.cpp
         packages/resolver/PackageLockfile.cpp
         packages/validation/PackagePath.cpp
