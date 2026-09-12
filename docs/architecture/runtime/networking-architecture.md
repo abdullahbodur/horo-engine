@@ -286,6 +286,25 @@ The transport owns:
 
 `NetworkRuntime` does not know the queue's mutex, lock-free, or ring-buffer implementation. The architecture requires a bounded thread-safe queue. Spinlock versus mutex is a backend implementation choice, not a public contract.
 
+`NetworkIoService` is the reusable Horo-owned normalization boundary inside one
+concrete transport. The transport still owns and schedules its I/O thread; the
+service owns the injected private polling source and its prepared completion
+FIFO. `PollBackend` gives the source a generation-scoped producer with an exact
+per-call budget. A producer retained after that call is stale and cannot publish.
+The source may contain native sockets or provider state in its private concrete
+type, but normalized completions contain only Horo handles, packet leases and
+typed terminal records.
+
+The service binds owner-thread identity at construction. `DrainOwnerThread` is
+the only consumer callback boundary, removes one record under synchronization,
+then releases the lock before invoking the borrowed callback. Consumers are
+never retained. Queue exhaustion rejects publication explicitly; it does not
+grow storage, invoke application code on the I/O thread or silently drop a
+record. Shutdown closes producer admission before requesting the private source
+to wake, serializes against the final poll, discards unobserved records and then
+releases the backend. This contract does not create a process-global I/O loop or
+move connection lifecycle authority out of the concrete transport.
+
 `PollEvents()` may be called only on the simulation/main thread during `NetworkPoll`. It drains the transport-owned inbound queue into `ITransportEventConsumer` callbacks. Those callbacks must not block, allocate unboundedly, or re-enter the transport.
 
 ## Threading Model and Frame Schedule Phases

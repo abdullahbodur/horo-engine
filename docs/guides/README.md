@@ -55,6 +55,8 @@ workflows.
 - [Perception Descriptor Registry Migration](./perception-descriptor-registry-migration.md):
   compose stable sense, stimulus, and listener descriptors into an immutable
   capability-resolved sensing-job snapshot.
+- [Network I/O Service Migration](./network-io-service-migration.md):
+  normalize bounded private transport polling into owner-thread completion handoff.
 
 ## Writing a Guide
 

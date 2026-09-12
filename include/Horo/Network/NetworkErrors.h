@@ -70,6 +70,20 @@ namespace Horo::Network::NetworkErrors {
     extern const ErrorCodeDescriptor TransportOperationCancelled;
     /** @brief Caller-owned shutdown state rejected transport admission before queue mutation. */
     extern const ErrorCodeDescriptor TransportShuttingDown;
+    /** @brief Host-scoped network I/O service construction or call bounds are invalid. */
+    extern const ErrorCodeDescriptor NetworkIoServiceInvalid;
+    /** @brief A backend completion violates the closed immutable handoff contract. */
+    extern const ErrorCodeDescriptor NetworkIoCompletionInvalid;
+    /** @brief The prepared completion queue or current poll budget is exhausted. */
+    extern const ErrorCodeDescriptor NetworkIoCompletionQueueFull;
+    /** @brief Another transport thread is already polling this host-scoped service. */
+    extern const ErrorCodeDescriptor NetworkIoPollBusy;
+    /** @brief A retained completion producer belongs to a poll call that already returned. */
+    extern const ErrorCodeDescriptor NetworkIoPollStale;
+    /** @brief Completion drain was attempted from a thread other than the declared owner. */
+    extern const ErrorCodeDescriptor NetworkIoWrongThread;
+    /** @brief The service cannot advance a poll or completion sequence without wrapping. */
+    extern const ErrorCodeDescriptor NetworkIoSequenceExhausted;
     /** @brief Protocol identity contributions or version ranges are malformed. */
     extern const ErrorCodeDescriptor ProtocolIdentityDescriptorInvalid;
     /** @brief A protocol-scoped stable identity is registered more than once. */
