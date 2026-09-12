@@ -13,6 +13,7 @@ add_library(HoroFoundation STATIC
         foundation/math/SceneMath.cpp
         foundation/math/WorldCoordinate64.cpp
         foundation/text/String.cpp
+        foundation/text/Utf8.cpp
         foundation/logging/Logger.cpp
         foundation/logging/LogContext.cpp
         foundation/logging/StructuredLogStore.cpp
@@ -38,6 +39,7 @@ target_include_directories(HoroFoundation
         PRIVATE
         $<TARGET_PROPERTY:nlohmann_json::nlohmann_json,INTERFACE_INCLUDE_DIRECTORIES>
 )
+target_link_libraries(HoroFoundation PRIVATE utf8proc)
 
 add_library(HoroSecurity STATIC
         security/SecurityErrors.cpp
@@ -695,7 +697,7 @@ add_library(HoroPrefabAuthoring STATIC
 )
 add_library(HoroEngine::PrefabAuthoring ALIAS HoroPrefabAuthoring)
 target_compile_features(HoroPrefabAuthoring PUBLIC cxx_std_20)
-target_link_libraries(HoroPrefabAuthoring PUBLIC HoroEngine::Prefab HoroEngine::Application PRIVATE utf8proc)
+target_link_libraries(HoroPrefabAuthoring PUBLIC HoroEngine::Prefab HoroEngine::Application)
 
 add_library(HoroInput STATIC
         runtime/input/Input.cpp

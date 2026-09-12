@@ -37,6 +37,7 @@ horo_configure_target_header_boundary(HoroFoundation PUBLIC_HEADERS
     Horo/Foundation/Telemetry/Telemetry.h
     Horo/Foundation/Time.h
     Horo/Foundation/TransparentString.h
+    Horo/Foundation/Utf8.h
     Horo/Math/SceneMath.h
     Horo/Math/WorldCoordinate64.h
 )

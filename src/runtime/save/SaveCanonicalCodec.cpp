@@ -1,5 +1,6 @@
 #include "Horo/Runtime/Save/SaveCanonicalCodec.h"
 
+#include "Horo/Foundation/Utf8.h"
 #include "Horo/Runtime/Save/SaveErrors.h"
 
 #include <algorithm>
@@ -7,67 +8,61 @@
 #include <bit>
 #include <cmath>
 #include <limits>
+#include <new>
 #include <ranges>
 #include <type_traits>
-#include <utf8proc.h>
 
 namespace Horo::Runtime {
+    struct CanonicalReadState final {
+        std::size_t decodedBytes{};
+    };
+
     namespace {
-        [[nodiscard]] bool HasValidLimits(const CanonicalCodecLimits &limits) noexcept {
-            return limits.maximumBytes != 0 && limits.maximumStringBytes != 0 && limits.maximumCollectionElements != 0 &&
-                   limits.maximumFields != 0 && limits.maximumNestingDepth != 0 && limits.maximumStringBytes <= limits.maximumBytes;
+        bool ValidLimits(const CanonicalCodecLimits &v) noexcept {
+            return v.maximumBytes && v.maximumDecodedBytes && v.maximumStringBytes && v.maximumCollectionElements && v.maximumFields &&
+                   v.maximumNestingDepth && v.maximumStringBytes <= v.maximumBytes &&
+                   v.maximumCollectionElements <= std::numeric_limits<std::uint32_t>::max() &&
+                   v.maximumFields <= std::numeric_limits<std::uint32_t>::max();
         }
 
-        [[nodiscard]] bool IsValidUtf8(const std::string_view value) noexcept {
-            if (value.size() > static_cast<std::size_t>(std::numeric_limits<utf8proc_ssize_t>::max()))
-                return false;
-            const auto *cursor = reinterpret_cast<const utf8proc_uint8_t *>(value.data());
-            auto remaining = static_cast<utf8proc_ssize_t>(value.size());
-            while (remaining > 0) {
-                utf8proc_int32_t codepoint{};
-                const utf8proc_ssize_t decoded = utf8proc_iterate(cursor, remaining, &codepoint);
-                if (decoded <= 0)
-                    return false;
-                cursor += decoded;
-                remaining -= decoded;
-            }
-            return true;
+        template <typename U> std::array<std::byte, sizeof(U)> Little(const U value) noexcept {
+            static_assert(std::is_unsigned_v<U>);
+            std::array<std::byte, sizeof(U)> out{};
+            for (std::size_t i = 0; i < out.size(); ++i)
+                out[i] = static_cast<std::byte>(value >> (i * 8U));
+            return out;
         }
 
-        template <typename Unsigned>
-        [[nodiscard]] std::array<std::byte, sizeof(Unsigned)> EncodeLittleEndian(const Unsigned value) noexcept {
-            static_assert(std::is_unsigned_v<Unsigned>);
-            std::array<std::byte, sizeof(Unsigned)> bytes{};
-            for (std::size_t index = 0; index < bytes.size(); ++index)
-                bytes[index] = static_cast<std::byte>(value >> (index * 8U));
-            return bytes;
+        template <typename U> U FromLittle(const std::array<std::byte, sizeof(U)> &bytes) noexcept {
+            U out{};
+            for (std::size_t i = 0; i < bytes.size(); ++i)
+                out |= static_cast<U>(std::to_integer<std::uint8_t>(bytes[i])) << (i * 8U);
+            return out;
         }
 
-        template <typename Unsigned> [[nodiscard]] Unsigned DecodeLittleEndian(const std::span<const std::byte> bytes) noexcept {
-            static_assert(std::is_unsigned_v<Unsigned>);
-            Unsigned value{};
-            for (std::size_t index = 0; index < sizeof(Unsigned); ++index)
-                value |= static_cast<Unsigned>(std::to_integer<std::uint8_t>(bytes[index])) << (index * 8U);
-            return value;
+        bool Less(const std::span<const std::byte> a, const std::span<const std::byte> b) noexcept {
+            return std::ranges::lexicographical_compare(a, b);
         }
 
-        [[nodiscard]] bool ByteLess(const std::vector<std::byte> &left, const std::vector<std::byte> &right) noexcept {
-            return std::ranges::lexicographical_compare(left, right);
+        bool Same(const std::span<const std::byte> a, const std::span<const std::byte> b) noexcept {
+            return std::ranges::equal(a, b);
         }
 
-        [[nodiscard]] bool SameBytes(const std::vector<std::byte> &left, const std::vector<std::byte> &right) noexcept {
-            return std::ranges::equal(left, right);
+        std::size_t MaxDepth(const std::span<const CanonicalEncodedValue> values) noexcept {
+            std::size_t depth{};
+            for (const auto &value : values)
+                depth = std::max(depth, value.StructuralDepth());
+            return depth;
         }
     }  // namespace
 
     /** @copydoc CanonicalFieldId::Create */
     Result<CanonicalFieldId> CanonicalFieldId::Create(const ValueType value) {
-        if (value == 0)
-            return Result<CanonicalFieldId>::Failure(MakeError(SaveErrors::CanonicalCodecInvalid));
-        return Result<CanonicalFieldId>::Success(CanonicalFieldId{value});
+        return value ? Result<CanonicalFieldId>::Success(CanonicalFieldId{value})
+                     : Result<CanonicalFieldId>::Failure(MakeError(SaveErrors::CanonicalCodecInvalid));
     }
 
-    /** @copydoc CanonicalValueWriter::CanonicalValueWriter(CanonicalCodecLimits) */
+    /** @copydoc CanonicalValueWriter::CanonicalValueWriter */
     CanonicalValueWriter::CanonicalValueWriter(const CanonicalCodecLimits limits) : limits_(limits) {}
 
     CanonicalValueWriter::CanonicalValueWriter(const CanonicalCodecLimits limits, std::vector<CanonicalFieldId> path)
@@ -80,518 +75,751 @@ namespace Horo::Runtime {
         return CanonicalValueWriter{limits_, std::move(path)};
     }
 
-    CanonicalCodecFailure CanonicalValueWriter::Failure(const ErrorCodeDescriptor &descriptor) const {
-        return {.error = MakeError(descriptor), .context = {.fieldPath = path_, .byteOffset = bytes_.size()}};
+    Error CanonicalValueWriter::ErrorAt(const ErrorCodeDescriptor &descriptor) const {
+        Error error = MakeError(descriptor);
+        std::string source{"canonical"};
+        for (const auto field : path_)
+            source += "/field:" + std::to_string(field.Value());
+        error.diagnostics.push_back(
+            {DiagnosticCode{"save.canonical_codec.location"},
+             DiagnosticSeverity::Error,
+             std::string{descriptor.summary},
+             {std::move(source), 0,
+              static_cast<std::uint32_t>(std::min(bytes_.size(), static_cast<std::size_t>(std::numeric_limits<std::uint32_t>::max())))}});
+        return error;
     }
 
-    CanonicalCodecResult<void> CanonicalValueWriter::Append(const std::span<const std::byte> value) {
-        if (!HasValidLimits(limits_) || path_.size() > limits_.maximumNestingDepth || value.size() > limits_.maximumBytes ||
-            bytes_.size() > limits_.maximumBytes - value.size())
-            return CanonicalCodecResult<void>::Failure(Failure(SaveErrors::CanonicalCodecLimitExceeded));
-        bytes_.insert(bytes_.end(), value.begin(), value.end());
-        return CanonicalCodecResult<void>::Success();
+    Result<void> CanonicalValueWriter::Fail(Error error) {
+        if (!failure_)
+            failure_ = std::move(error);
+        return Result<void>::Failure(*failure_);
     }
 
-    CanonicalCodecResult<void> CanonicalValueWriter::WriteLength(const std::size_t value) {
-        if (value > std::numeric_limits<std::uint32_t>::max())
-            return CanonicalCodecResult<void>::Failure(Failure(SaveErrors::CanonicalCodecLimitExceeded));
-        return WriteUInt32(static_cast<std::uint32_t>(value));
+    Result<void> CanonicalValueWriter::Append(const std::span<const std::byte> value) {
+        if (failure_)
+            return Result<void>::Failure(*failure_);
+        if (!ValidLimits(limits_))
+            return Fail(ErrorAt(SaveErrors::CanonicalCodecConfigurationInvalid));
+        if (value.size() > limits_.maximumBytes || bytes_.size() > limits_.maximumBytes - value.size())
+            return Fail(ErrorAt(SaveErrors::CanonicalCodecLimitExceeded));
+        try {
+            bytes_.insert(bytes_.end(), value.begin(), value.end());
+        } catch (const std::bad_alloc &) {
+            return Fail(ErrorAt(SaveErrors::CanonicalCodecAllocationFailed));
+        }
+        return Result<void>::Success();
     }
 
-    CanonicalCodecResult<void> CanonicalValueWriter::ValidateCollectionSize(const std::size_t count) const {
-        if (!HasValidLimits(limits_) || count > limits_.maximumCollectionElements || count > std::numeric_limits<std::uint32_t>::max())
-            return CanonicalCodecResult<void>::Failure(Failure(SaveErrors::CanonicalCodecLimitExceeded));
-        return CanonicalCodecResult<void>::Success();
+    template <typename U> Result<void> CanonicalValueWriter::WriteUnsigned(const U value) {
+        const auto bytes = Little(value);
+        return Append(bytes);
+    }
+
+    template <typename S> Result<void> CanonicalValueWriter::WriteSigned(const S value) {
+        return WriteUnsigned(std::bit_cast<std::make_unsigned_t<S>>(value));
+    }
+
+    Result<void> CanonicalValueWriter::AppendLengthDelimited(const std::span<const std::byte> value) {
+        if (value.size() > std::numeric_limits<std::uint32_t>::max() || limits_.maximumBytes < sizeof(std::uint32_t) ||
+            value.size() > limits_.maximumBytes - sizeof(std::uint32_t) ||
+            bytes_.size() > limits_.maximumBytes - sizeof(std::uint32_t) - value.size())
+            return Fail(ErrorAt(SaveErrors::CanonicalCodecLimitExceeded));
+        auto result = WriteUInt32(static_cast<std::uint32_t>(value.size()));
+        return result.HasError() ? result : Append(value);
+    }
+
+    Result<void> CanonicalValueWriter::AdmitComposite(const std::size_t childDepth) {
+        if (childDepth >= limits_.maximumNestingDepth)
+            return Fail(ErrorAt(SaveErrors::CanonicalCodecLimitExceeded));
+        structuralDepth_ = std::max(structuralDepth_, childDepth + 1);
+        return Result<void>::Success();
     }
 
     /** @copydoc CanonicalValueWriter::WriteBool */
-    CanonicalCodecResult<void> CanonicalValueWriter::WriteBool(const bool value) {
-        return WriteUInt8(value ? 1U : 0U);
+    Result<void> CanonicalValueWriter::WriteBool(bool v) {
+        return WriteUInt8(v ? 1 : 0);
     }
 
     /** @copydoc CanonicalValueWriter::WriteUInt8 */
-    CanonicalCodecResult<void> CanonicalValueWriter::WriteUInt8(const std::uint8_t value) {
-        return Append(std::span{reinterpret_cast<const std::byte *>(&value), 1});
+    Result<void> CanonicalValueWriter::WriteUInt8(std::uint8_t v) {
+        return Append(std::as_bytes(std::span{&v, 1}));
     }
 
     /** @copydoc CanonicalValueWriter::WriteUInt16 */
-    CanonicalCodecResult<void> CanonicalValueWriter::WriteUInt16(const std::uint16_t value) {
-        const auto bytes = EncodeLittleEndian(value);
-        return Append(bytes);
+    Result<void> CanonicalValueWriter::WriteUInt16(std::uint16_t v) {
+        return WriteUnsigned(v);
     }
 
     /** @copydoc CanonicalValueWriter::WriteUInt32 */
-    CanonicalCodecResult<void> CanonicalValueWriter::WriteUInt32(const std::uint32_t value) {
-        const auto bytes = EncodeLittleEndian(value);
-        return Append(bytes);
+    Result<void> CanonicalValueWriter::WriteUInt32(std::uint32_t v) {
+        return WriteUnsigned(v);
     }
 
     /** @copydoc CanonicalValueWriter::WriteUInt64 */
-    CanonicalCodecResult<void> CanonicalValueWriter::WriteUInt64(const std::uint64_t value) {
-        const auto bytes = EncodeLittleEndian(value);
-        return Append(bytes);
+    Result<void> CanonicalValueWriter::WriteUInt64(std::uint64_t v) {
+        return WriteUnsigned(v);
     }
 
     /** @copydoc CanonicalValueWriter::WriteInt8 */
-    CanonicalCodecResult<void> CanonicalValueWriter::WriteInt8(const std::int8_t value) {
-        return WriteUInt8(std::bit_cast<std::uint8_t>(value));
+    Result<void> CanonicalValueWriter::WriteInt8(std::int8_t v) {
+        return WriteSigned(v);
     }
 
     /** @copydoc CanonicalValueWriter::WriteInt16 */
-    CanonicalCodecResult<void> CanonicalValueWriter::WriteInt16(const std::int16_t value) {
-        return WriteUInt16(std::bit_cast<std::uint16_t>(value));
+    Result<void> CanonicalValueWriter::WriteInt16(std::int16_t v) {
+        return WriteSigned(v);
     }
 
     /** @copydoc CanonicalValueWriter::WriteInt32 */
-    CanonicalCodecResult<void> CanonicalValueWriter::WriteInt32(const std::int32_t value) {
-        return WriteUInt32(std::bit_cast<std::uint32_t>(value));
+    Result<void> CanonicalValueWriter::WriteInt32(std::int32_t v) {
+        return WriteSigned(v);
     }
 
     /** @copydoc CanonicalValueWriter::WriteInt64 */
-    CanonicalCodecResult<void> CanonicalValueWriter::WriteInt64(const std::int64_t value) {
-        return WriteUInt64(std::bit_cast<std::uint64_t>(value));
+    Result<void> CanonicalValueWriter::WriteInt64(std::int64_t v) {
+        return WriteSigned(v);
     }
 
     /** @copydoc CanonicalValueWriter::WriteFloat32 */
-    CanonicalCodecResult<void> CanonicalValueWriter::WriteFloat32(float value) {
-        static_assert(std::numeric_limits<float>::is_iec559 && sizeof(float) == sizeof(std::uint32_t));
-        if (!std::isfinite(value))
-            return CanonicalCodecResult<void>::Failure(Failure(SaveErrors::CanonicalCodecNonFinite));
-        if (value == 0.0F)
-            value = 0.0F;
-        return WriteUInt32(std::bit_cast<std::uint32_t>(value));
+    Result<void> CanonicalValueWriter::WriteFloat32(float v) {
+        if (!std::isfinite(v))
+            return Fail(ErrorAt(SaveErrors::CanonicalCodecNonFinite));
+        if (v == 0)
+            v = 0;
+        return WriteUInt32(std::bit_cast<std::uint32_t>(v));
     }
 
     /** @copydoc CanonicalValueWriter::WriteFloat64 */
-    CanonicalCodecResult<void> CanonicalValueWriter::WriteFloat64(double value) {
-        static_assert(std::numeric_limits<double>::is_iec559 && sizeof(double) == sizeof(std::uint64_t));
-        if (!std::isfinite(value))
-            return CanonicalCodecResult<void>::Failure(Failure(SaveErrors::CanonicalCodecNonFinite));
-        if (value == 0.0)
-            value = 0.0;
-        return WriteUInt64(std::bit_cast<std::uint64_t>(value));
+    Result<void> CanonicalValueWriter::WriteFloat64(double v) {
+        if (!std::isfinite(v))
+            return Fail(ErrorAt(SaveErrors::CanonicalCodecNonFinite));
+        if (v == 0)
+            v = 0;
+        return WriteUInt64(std::bit_cast<std::uint64_t>(v));
     }
 
     /** @copydoc CanonicalValueWriter::WriteUtf8 */
-    CanonicalCodecResult<void> CanonicalValueWriter::WriteUtf8(const std::string_view value) {
-        if (value.size() > limits_.maximumStringBytes)
-            return CanonicalCodecResult<void>::Failure(Failure(SaveErrors::CanonicalCodecLimitExceeded));
-        if (!IsValidUtf8(value))
-            return CanonicalCodecResult<void>::Failure(Failure(SaveErrors::CanonicalCodecUtf8Invalid));
-        auto length = WriteLength(value.size());
-        if (length.HasError())
-            return length;
-        return Append(std::as_bytes(std::span{value.data(), value.size()}));
+    Result<void> CanonicalValueWriter::WriteUtf8(const std::string_view v) {
+        if (v.size() > limits_.maximumStringBytes)
+            return Fail(ErrorAt(SaveErrors::CanonicalCodecLimitExceeded));
+        if (!IsValidUtf8ScalarSequence(v))
+            return Fail(ErrorAt(SaveErrors::CanonicalCodecUtf8Invalid));
+        return AppendLengthDelimited(std::as_bytes(std::span{v.data(), v.size()}));
     }
 
     /** @copydoc CanonicalValueWriter::WriteBytes */
-    CanonicalCodecResult<void> CanonicalValueWriter::WriteBytes(const std::span<const std::byte> value) {
-        auto length = WriteLength(value.size());
-        if (length.HasError())
-            return length;
-        return Append(value);
+    Result<void> CanonicalValueWriter::WriteBytes(const std::span<const std::byte> v) {
+        return AppendLengthDelimited(v);
     }
 
     /** @copydoc CanonicalValueWriter::WriteVec2 */
-    CanonicalCodecResult<void> CanonicalValueWriter::WriteVec2(const Math::Vec2 value) {
-        auto result = WriteFloat32(value.x);
-        return result.HasError() ? result : WriteFloat32(value.y);
+    Result<void> CanonicalValueWriter::WriteVec2(Math::Vec2 v) {
+        auto r = WriteFloat32(v.x);
+        return r.HasError() ? r : WriteFloat32(v.y);
     }
 
     /** @copydoc CanonicalValueWriter::WriteVec3 */
-    CanonicalCodecResult<void> CanonicalValueWriter::WriteVec3(const Math::Vec3 value) {
-        auto result = WriteVec2({value.x, value.y});
-        return result.HasError() ? result : WriteFloat32(value.z);
+    Result<void> CanonicalValueWriter::WriteVec3(Math::Vec3 v) {
+        auto r = WriteVec2({v.x, v.y});
+        return r.HasError() ? r : WriteFloat32(v.z);
     }
 
     /** @copydoc CanonicalValueWriter::WriteVec4 */
-    CanonicalCodecResult<void> CanonicalValueWriter::WriteVec4(const Math::Vec4 value) {
-        auto result = WriteVec3({value.x, value.y, value.z});
-        return result.HasError() ? result : WriteFloat32(value.w);
+    Result<void> CanonicalValueWriter::WriteVec4(Math::Vec4 v) {
+        auto r = WriteVec3({v.x, v.y, v.z});
+        return r.HasError() ? r : WriteFloat32(v.w);
     }
 
     /** @copydoc CanonicalValueWriter::WriteQuaternion */
-    CanonicalCodecResult<void> CanonicalValueWriter::WriteQuaternion(const Math::Quaternion value) {
-        return WriteVec4({value.x, value.y, value.z, value.w});
+    Result<void> CanonicalValueWriter::WriteQuaternion(Math::Quaternion v) {
+        return WriteVec4({v.x, v.y, v.z, v.w});
     }
 
-    /** @copydoc CanonicalValueWriter::WriteSequenceSize */
-    CanonicalCodecResult<void> CanonicalValueWriter::WriteSequenceSize(const std::size_t count) {
-        auto admitted = ValidateCollectionSize(count);
-        return admitted.HasError() ? admitted : WriteLength(count);
+    /** @copydoc CanonicalValueWriter::WriteSequence */
+    Result<void> CanonicalValueWriter::WriteSequence(const std::span<const CanonicalEncodedValue> values) {
+        if (values.size() > limits_.maximumCollectionElements)
+            return Fail(ErrorAt(SaveErrors::CanonicalCodecLimitExceeded));
+        auto depth = AdmitComposite(MaxDepth(values));
+        if (depth.HasError())
+            return depth;
+        try {
+            CanonicalValueWriter staging{limits_, path_};
+            auto r = staging.WriteUInt32(static_cast<std::uint32_t>(values.size()));
+            for (const auto &v : values) {
+                if (r.HasError())
+                    break;
+                r = staging.AppendLengthDelimited(v.Bytes());
+            }
+            if (r.HasError())
+                return Fail(r.ErrorValue());
+            auto sealed = std::move(staging).Finalize();
+            return sealed.HasError() ? Fail(sealed.ErrorValue()) : Append(sealed.Value().Bytes());
+        } catch (const std::bad_alloc &) {
+            return Fail(ErrorAt(SaveErrors::CanonicalCodecAllocationFailed));
+        }
     }
 
-    /** @copydoc CanonicalValueWriter::WriteOptionalPresence */
-    CanonicalCodecResult<void> CanonicalValueWriter::WriteOptionalPresence(const bool present) {
-        return WriteBool(present);
+    /** @copydoc CanonicalValueWriter::WriteOptional */
+    Result<void> CanonicalValueWriter::WriteOptional(const std::optional<CanonicalEncodedValue> &value) {
+        auto d = AdmitComposite(value ? value->StructuralDepth() : 0);
+        if (d.HasError())
+            return d;
+        try {
+            CanonicalValueWriter staging{limits_, path_};
+            auto r = staging.WriteBool(value.has_value());
+            if (r.HasValue() && value)
+                r = staging.AppendLengthDelimited(value->Bytes());
+            if (r.HasError())
+                return Fail(r.ErrorValue());
+            auto s = std::move(staging).Finalize();
+            return s.HasError() ? Fail(s.ErrorValue()) : Append(s.Value().Bytes());
+        } catch (const std::bad_alloc &) {
+            return Fail(ErrorAt(SaveErrors::CanonicalCodecAllocationFailed));
+        }
     }
 
-    /** @copydoc CanonicalValueWriter::WriteVariantIndex */
-    CanonicalCodecResult<void> CanonicalValueWriter::WriteVariantIndex(const std::uint32_t index) {
-        return WriteUInt32(index);
+    /** @copydoc CanonicalValueWriter::WriteVariant */
+    Result<void> CanonicalValueWriter::WriteVariant(std::uint32_t index, std::uint32_t count, const CanonicalEncodedValue &value) {
+        if (!count || index >= count)
+            return Fail(ErrorAt(SaveErrors::CanonicalCodecInvalid));
+        auto d = AdmitComposite(value.StructuralDepth());
+        if (d.HasError())
+            return d;
+        try {
+            CanonicalValueWriter staging{limits_, path_};
+            auto r = staging.WriteUInt32(index);
+            if (r.HasValue())
+                r = staging.AppendLengthDelimited(value.Bytes());
+            if (r.HasError())
+                return Fail(r.ErrorValue());
+            auto s = std::move(staging).Finalize();
+            return s.HasError() ? Fail(s.ErrorValue()) : Append(s.Value().Bytes());
+        } catch (const std::bad_alloc &) {
+            return Fail(ErrorAt(SaveErrors::CanonicalCodecAllocationFailed));
+        }
     }
 
     /** @copydoc CanonicalValueWriter::WriteMap */
-    CanonicalCodecResult<void> CanonicalValueWriter::WriteMap(const std::span<const CanonicalMapEntry> entries) {
-        auto admitted = ValidateCollectionSize(entries.size());
-        if (admitted.HasError())
-            return admitted;
-        std::vector<CanonicalMapEntry> ordered{entries.begin(), entries.end()};
-        std::ranges::sort(ordered, [](const auto &left, const auto &right) {
-            return ByteLess(left.key, right.key);
-        });
-        for (std::size_t index = 1; index < ordered.size(); ++index) {
-            if (SameBytes(ordered[index - 1].key, ordered[index].key))
-                return CanonicalCodecResult<void>::Failure(Failure(SaveErrors::CanonicalCodecDuplicate));
+    Result<void> CanonicalValueWriter::WriteMap(const std::span<const CanonicalMapEntry> entries) {
+        if (entries.size() > limits_.maximumCollectionElements)
+            return Fail(ErrorAt(SaveErrors::CanonicalCodecLimitExceeded));
+        std::size_t child{};
+        for (const auto &e : entries)
+            child = std::max({child, e.key.StructuralDepth(), e.value.StructuralDepth()});
+        auto d = AdmitComposite(child);
+        if (d.HasError())
+            return d;
+        try {
+            std::vector<const CanonicalMapEntry *> order;
+            order.reserve(entries.size());
+            for (const auto &e : entries)
+                order.push_back(&e);
+            std::ranges::sort(order, [](const auto *left, const auto *right) {
+                return Less(left->key.Bytes(), right->key.Bytes());
+            });
+            for (std::size_t i = 1; i < order.size(); ++i)
+                if (Same(order[i - 1]->key.Bytes(), order[i]->key.Bytes()))
+                    return Fail(ErrorAt(SaveErrors::CanonicalCodecDuplicate));
+            CanonicalValueWriter staging{limits_, path_};
+            auto r = staging.WriteUInt32(static_cast<std::uint32_t>(order.size()));
+            for (const auto *p : order) {
+                if (r.HasError())
+                    break;
+                r = staging.AppendLengthDelimited(p->key.Bytes());
+                if (r.HasValue())
+                    r = staging.AppendLengthDelimited(p->value.Bytes());
+            }
+            if (r.HasError())
+                return Fail(r.ErrorValue());
+            auto s = std::move(staging).Finalize();
+            return s.HasError() ? Fail(s.ErrorValue()) : Append(s.Value().Bytes());
+        } catch (const std::bad_alloc &) {
+            return Fail(ErrorAt(SaveErrors::CanonicalCodecAllocationFailed));
         }
-        auto result = WriteLength(ordered.size());
-        for (const CanonicalMapEntry &entry : ordered) {
-            if (result.HasError())
-                return result;
-            result = WriteBytes(entry.key);
-            if (result.HasError())
-                return result;
-            result = WriteBytes(entry.value);
-        }
-        return result;
     }
 
     /** @copydoc CanonicalValueWriter::WriteSet */
-    CanonicalCodecResult<void> CanonicalValueWriter::WriteSet(const std::span<const std::vector<std::byte>> elements) {
-        auto admitted = ValidateCollectionSize(elements.size());
-        if (admitted.HasError())
-            return admitted;
-        std::vector<std::vector<std::byte>> ordered{elements.begin(), elements.end()};
-        std::ranges::sort(ordered, ByteLess);
-        for (std::size_t index = 1; index < ordered.size(); ++index) {
-            if (SameBytes(ordered[index - 1], ordered[index]))
-                return CanonicalCodecResult<void>::Failure(Failure(SaveErrors::CanonicalCodecDuplicate));
+    Result<void> CanonicalValueWriter::WriteSet(const std::span<const CanonicalEncodedValue> values) {
+        if (values.size() > limits_.maximumCollectionElements)
+            return Fail(ErrorAt(SaveErrors::CanonicalCodecLimitExceeded));
+        auto d = AdmitComposite(MaxDepth(values));
+        if (d.HasError())
+            return d;
+        try {
+            std::vector<const CanonicalEncodedValue *> order;
+            order.reserve(values.size());
+            for (const auto &v : values)
+                order.push_back(&v);
+            std::ranges::sort(order, [](const auto *left, const auto *right) {
+                return Less(left->Bytes(), right->Bytes());
+            });
+            for (std::size_t i = 1; i < order.size(); ++i)
+                if (Same(order[i - 1]->Bytes(), order[i]->Bytes()))
+                    return Fail(ErrorAt(SaveErrors::CanonicalCodecDuplicate));
+            CanonicalValueWriter staging{limits_, path_};
+            auto r = staging.WriteUInt32(static_cast<std::uint32_t>(order.size()));
+            for (const auto *p : order) {
+                if (r.HasError())
+                    break;
+                r = staging.AppendLengthDelimited(p->Bytes());
+            }
+            if (r.HasError())
+                return Fail(r.ErrorValue());
+            auto s = std::move(staging).Finalize();
+            return s.HasError() ? Fail(s.ErrorValue()) : Append(s.Value().Bytes());
+        } catch (const std::bad_alloc &) {
+            return Fail(ErrorAt(SaveErrors::CanonicalCodecAllocationFailed));
         }
-        auto result = WriteLength(ordered.size());
-        for (const auto &element : ordered) {
-            if (result.HasError())
-                return result;
-            result = WriteBytes(element);
-        }
-        return result;
     }
 
     /** @copydoc CanonicalValueWriter::WriteRecord */
-    CanonicalCodecResult<void> CanonicalValueWriter::WriteRecord(const std::span<const CanonicalRecordField> fields) {
-        if (fields.size() > limits_.maximumFields || fields.size() > std::numeric_limits<std::uint32_t>::max())
-            return CanonicalCodecResult<void>::Failure(Failure(SaveErrors::CanonicalCodecLimitExceeded));
-        std::vector<CanonicalRecordField> ordered{fields.begin(), fields.end()};
-        std::ranges::sort(ordered, {}, &CanonicalRecordField::id);
-        for (std::size_t index = 1; index < ordered.size(); ++index) {
-            if (ordered[index - 1].id == ordered[index].id)
-                return CanonicalCodecResult<void>::Failure(Failure(SaveErrors::CanonicalCodecDuplicate));
+    Result<void> CanonicalValueWriter::WriteRecord(const std::span<const CanonicalRecordField> fields) {
+        if (fields.size() > limits_.maximumFields)
+            return Fail(ErrorAt(SaveErrors::CanonicalCodecLimitExceeded));
+        std::size_t child{};
+        for (const auto &f : fields)
+            child = std::max(child, f.value.StructuralDepth());
+        auto d = AdmitComposite(child);
+        if (d.HasError())
+            return d;
+        try {
+            std::vector<const CanonicalRecordField *> order;
+            order.reserve(fields.size());
+            for (const auto &f : fields)
+                order.push_back(&f);
+            std::ranges::sort(order, [](const auto *left, const auto *right) {
+                return left->id < right->id;
+            });
+            for (std::size_t i = 1; i < order.size(); ++i)
+                if (order[i - 1]->id == order[i]->id)
+                    return Fail(ErrorAt(SaveErrors::CanonicalCodecDuplicate));
+            CanonicalValueWriter staging{limits_, path_};
+            auto r = staging.WriteUInt32(static_cast<std::uint32_t>(order.size()));
+            for (const auto *p : order) {
+                if (r.HasError())
+                    break;
+                r = staging.WriteUInt32(p->id.Value());
+                if (r.HasValue())
+                    r = staging.AppendLengthDelimited(p->value.Bytes());
+            }
+            if (r.HasError())
+                return Fail(r.ErrorValue());
+            auto s = std::move(staging).Finalize();
+            return s.HasError() ? Fail(s.ErrorValue()) : Append(s.Value().Bytes());
+        } catch (const std::bad_alloc &) {
+            return Fail(ErrorAt(SaveErrors::CanonicalCodecAllocationFailed));
         }
-        auto result = WriteLength(ordered.size());
-        for (const CanonicalRecordField &field : ordered) {
-            if (result.HasError())
-                return result;
-            result = WriteUInt32(field.id.Value());
-            if (result.HasError())
-                return result;
-            result = WriteBytes(field.value);
+    }
+
+    /** @copydoc CanonicalValueWriter::Finalize */
+    Result<CanonicalEncodedValue> CanonicalValueWriter::Finalize() && {
+        if (failure_)
+            return Result<CanonicalEncodedValue>::Failure(*failure_);
+        if (!ValidLimits(limits_))
+            return Result<CanonicalEncodedValue>::Failure(ErrorAt(SaveErrors::CanonicalCodecConfigurationInvalid));
+        return Result<CanonicalEncodedValue>::Success(CanonicalEncodedValue{std::move(bytes_), structuralDepth_});
+    }
+
+    CanonicalValueReader::CanonicalValueReader(std::span<const std::byte> b, CanonicalCodecLimits l, std::shared_ptr<CanonicalReadState> s,
+                                               std::size_t d, std::vector<CanonicalFieldId> p)
+        : bytes_(b), limits_(l), state_(std::move(s)), depth_(d), path_(std::move(p)) {}
+
+    /** @copydoc CanonicalValueReader::Create */
+    Result<CanonicalValueReader> CanonicalValueReader::Create(std::span<const std::byte> b, CanonicalCodecLimits l) {
+        if (!ValidLimits(l))
+            return Result<CanonicalValueReader>::Failure(MakeError(SaveErrors::CanonicalCodecConfigurationInvalid));
+        if (b.size() > l.maximumBytes)
+            return Result<CanonicalValueReader>::Failure(MakeError(SaveErrors::CanonicalCodecLimitExceeded));
+        try {
+            return Result<CanonicalValueReader>::Success(CanonicalValueReader{b, l, std::make_shared<CanonicalReadState>(), 0, {}});
+        } catch (const std::bad_alloc &) {
+            return Result<CanonicalValueReader>::Failure(MakeError(SaveErrors::CanonicalCodecAllocationFailed));
         }
-        return result;
     }
 
-    /** @copydoc CanonicalValueReader::CanonicalValueReader(std::span<const std::byte>, CanonicalCodecLimits) */
-    CanonicalValueReader::CanonicalValueReader(const std::span<const std::byte> bytes, const CanonicalCodecLimits limits)
-        : bytes_(bytes), limits_(limits) {}
-
-    CanonicalValueReader::CanonicalValueReader(const std::span<const std::byte> bytes, const CanonicalCodecLimits limits,
-                                               std::vector<CanonicalFieldId> path)
-        : bytes_(bytes), limits_(limits), path_(std::move(path)) {}
-
-    /** @copydoc CanonicalValueReader::ForField */
-    CanonicalValueReader CanonicalValueReader::ForField(const CanonicalRecordField &field) const {
-        auto path = path_;
-        path.push_back(field.id);
-        return CanonicalValueReader{field.value, limits_, std::move(path)};
+    /** @copydoc CanonicalDecodedValue::OpenReader */
+    Result<CanonicalValueReader> CanonicalDecodedValue::OpenReader() const {
+        try {
+            return Result<CanonicalValueReader>::Success(CanonicalValueReader{bytes_, limits_, state_, depth_, path_});
+        } catch (const std::bad_alloc &) {
+            return Result<CanonicalValueReader>::Failure(MakeError(SaveErrors::CanonicalCodecAllocationFailed));
+        }
     }
 
-    CanonicalCodecFailure CanonicalValueReader::Failure(const ErrorCodeDescriptor &descriptor) const {
-        return {.error = MakeError(descriptor), .context = {.fieldPath = path_, .byteOffset = offset_}};
+    Error CanonicalValueReader::ErrorAt(const ErrorCodeDescriptor &d) const {
+        Error e = MakeError(d);
+        std::string s{"canonical"};
+        for (auto f : path_)
+            s += "/field:" + std::to_string(f.Value());
+        e.diagnostics.push_back(
+            {DiagnosticCode{"save.canonical_codec.location"},
+             DiagnosticSeverity::Error,
+             std::string{d.summary},
+             {std::move(s), 0,
+              static_cast<std::uint32_t>(std::min(offset_, static_cast<std::size_t>(std::numeric_limits<std::uint32_t>::max())))}});
+        return e;
     }
 
-    CanonicalCodecResult<std::span<const std::byte>> CanonicalValueReader::Read(const std::size_t count) {
-        if (!HasValidLimits(limits_) || path_.size() > limits_.maximumNestingDepth || bytes_.size() > limits_.maximumBytes ||
-            count > bytes_.size() - std::min(offset_, bytes_.size()))
-            return CanonicalCodecResult<std::span<const std::byte>>::Failure(Failure(SaveErrors::CanonicalCodecInvalid));
-        const auto value = bytes_.subspan(offset_, count);
-        offset_ += count;
-        return CanonicalCodecResult<std::span<const std::byte>>::Success(value);
+    Result<void> CanonicalValueReader::Charge(std::size_t n) {
+        if (state_->decodedBytes > limits_.maximumDecodedBytes || n > limits_.maximumDecodedBytes - state_->decodedBytes)
+            return Result<void>::Failure(ErrorAt(SaveErrors::CanonicalCodecLimitExceeded));
+        state_->decodedBytes += n;
+        return Result<void>::Success();
     }
 
-    CanonicalCodecResult<std::size_t> CanonicalValueReader::ReadLength(const std::size_t maximum) {
-        auto value = ReadUInt32();
-        if (value.HasError())
-            return CanonicalCodecResult<std::size_t>::Failure(value.ErrorValue());
-        if (value.Value() > maximum)
-            return CanonicalCodecResult<std::size_t>::Failure(Failure(SaveErrors::CanonicalCodecLimitExceeded));
-        return CanonicalCodecResult<std::size_t>::Success(value.Value());
+    Result<void> CanonicalValueReader::ChargeElements(const std::size_t count, const std::size_t elementSize) {
+        if (elementSize != 0 && count > std::numeric_limits<std::size_t>::max() / elementSize)
+            return Result<void>::Failure(ErrorAt(SaveErrors::CanonicalCodecLimitExceeded));
+        return Charge(count * elementSize);
+    }
+
+    Result<void> CanonicalValueReader::AdmitComposite() const {
+        return depth_ < limits_.maximumNestingDepth ? Result<void>::Success()
+                                                    : Result<void>::Failure(ErrorAt(SaveErrors::CanonicalCodecLimitExceeded));
+    }
+
+    /** @copydoc CanonicalValueReader::ReadExactBytes */
+    Result<std::span<const std::byte>> CanonicalValueReader::ReadExactBytes(std::size_t n) {
+        if (n > bytes_.size() - std::min(offset_, bytes_.size()))
+            return Result<std::span<const std::byte>>::Failure(ErrorAt(SaveErrors::CanonicalCodecCorrupt));
+        auto v = bytes_.subspan(offset_, n);
+        offset_ += n;
+        return Result<std::span<const std::byte>>::Success(v);
+    }
+
+    template <typename U> Result<U> CanonicalValueReader::ReadUnsigned() {
+        auto v = ReadExactBytes(sizeof(U));
+        if (v.HasError())
+            return Result<U>::Failure(v.ErrorValue());
+        std::array<std::byte, sizeof(U)> a{};
+        std::ranges::copy(v.Value(), a.begin());
+        return Result<U>::Success(FromLittle<U>(a));
+    }
+
+    template <typename S> Result<S> CanonicalValueReader::ReadSigned() {
+        auto v = ReadUnsigned<std::make_unsigned_t<S>>();
+        return v.HasError() ? Result<S>::Failure(v.ErrorValue()) : Result<S>::Success(std::bit_cast<S>(v.Value()));
     }
 
     /** @copydoc CanonicalValueReader::ReadUInt8 */
-    CanonicalCodecResult<std::uint8_t> CanonicalValueReader::ReadUInt8() {
-        auto bytes = Read(1);
-        if (bytes.HasError())
-            return CanonicalCodecResult<std::uint8_t>::Failure(bytes.ErrorValue());
-        return CanonicalCodecResult<std::uint8_t>::Success(std::to_integer<std::uint8_t>(bytes.Value().front()));
+    Result<std::uint8_t> CanonicalValueReader::ReadUInt8() {
+        auto v = ReadExactBytes(1);
+        return v.HasError() ? Result<std::uint8_t>::Failure(v.ErrorValue())
+                            : Result<std::uint8_t>::Success(std::to_integer<std::uint8_t>(v.Value()[0]));
     }
 
     /** @copydoc CanonicalValueReader::ReadUInt16 */
-    CanonicalCodecResult<std::uint16_t> CanonicalValueReader::ReadUInt16() {
-        auto bytes = Read(2);
-        return bytes.HasError() ? CanonicalCodecResult<std::uint16_t>::Failure(bytes.ErrorValue())
-                                : CanonicalCodecResult<std::uint16_t>::Success(DecodeLittleEndian<std::uint16_t>(bytes.Value()));
+    Result<std::uint16_t> CanonicalValueReader::ReadUInt16() {
+        return ReadUnsigned<std::uint16_t>();
     }
 
     /** @copydoc CanonicalValueReader::ReadUInt32 */
-    CanonicalCodecResult<std::uint32_t> CanonicalValueReader::ReadUInt32() {
-        auto bytes = Read(4);
-        return bytes.HasError() ? CanonicalCodecResult<std::uint32_t>::Failure(bytes.ErrorValue())
-                                : CanonicalCodecResult<std::uint32_t>::Success(DecodeLittleEndian<std::uint32_t>(bytes.Value()));
+    Result<std::uint32_t> CanonicalValueReader::ReadUInt32() {
+        return ReadUnsigned<std::uint32_t>();
     }
 
     /** @copydoc CanonicalValueReader::ReadUInt64 */
-    CanonicalCodecResult<std::uint64_t> CanonicalValueReader::ReadUInt64() {
-        auto bytes = Read(8);
-        return bytes.HasError() ? CanonicalCodecResult<std::uint64_t>::Failure(bytes.ErrorValue())
-                                : CanonicalCodecResult<std::uint64_t>::Success(DecodeLittleEndian<std::uint64_t>(bytes.Value()));
-    }
-
-    /** @copydoc CanonicalValueReader::ReadBool */
-    CanonicalCodecResult<bool> CanonicalValueReader::ReadBool() {
-        auto value = ReadUInt8();
-        if (value.HasError())
-            return CanonicalCodecResult<bool>::Failure(value.ErrorValue());
-        if (value.Value() > 1)
-            return CanonicalCodecResult<bool>::Failure(Failure(SaveErrors::CanonicalCodecInvalid));
-        return CanonicalCodecResult<bool>::Success(value.Value() == 1);
+    Result<std::uint64_t> CanonicalValueReader::ReadUInt64() {
+        return ReadUnsigned<std::uint64_t>();
     }
 
     /** @copydoc CanonicalValueReader::ReadInt8 */
-    CanonicalCodecResult<std::int8_t> CanonicalValueReader::ReadInt8() {
-        auto value = ReadUInt8();
-        return value.HasError() ? CanonicalCodecResult<std::int8_t>::Failure(value.ErrorValue())
-                                : CanonicalCodecResult<std::int8_t>::Success(std::bit_cast<std::int8_t>(value.Value()));
+    Result<std::int8_t> CanonicalValueReader::ReadInt8() {
+        return ReadSigned<std::int8_t>();
     }
 
     /** @copydoc CanonicalValueReader::ReadInt16 */
-    CanonicalCodecResult<std::int16_t> CanonicalValueReader::ReadInt16() {
-        auto value = ReadUInt16();
-        return value.HasError() ? CanonicalCodecResult<std::int16_t>::Failure(value.ErrorValue())
-                                : CanonicalCodecResult<std::int16_t>::Success(std::bit_cast<std::int16_t>(value.Value()));
+    Result<std::int16_t> CanonicalValueReader::ReadInt16() {
+        return ReadSigned<std::int16_t>();
     }
 
     /** @copydoc CanonicalValueReader::ReadInt32 */
-    CanonicalCodecResult<std::int32_t> CanonicalValueReader::ReadInt32() {
-        auto value = ReadUInt32();
-        return value.HasError() ? CanonicalCodecResult<std::int32_t>::Failure(value.ErrorValue())
-                                : CanonicalCodecResult<std::int32_t>::Success(std::bit_cast<std::int32_t>(value.Value()));
+    Result<std::int32_t> CanonicalValueReader::ReadInt32() {
+        return ReadSigned<std::int32_t>();
     }
 
     /** @copydoc CanonicalValueReader::ReadInt64 */
-    CanonicalCodecResult<std::int64_t> CanonicalValueReader::ReadInt64() {
-        auto value = ReadUInt64();
-        return value.HasError() ? CanonicalCodecResult<std::int64_t>::Failure(value.ErrorValue())
-                                : CanonicalCodecResult<std::int64_t>::Success(std::bit_cast<std::int64_t>(value.Value()));
+    Result<std::int64_t> CanonicalValueReader::ReadInt64() {
+        return ReadSigned<std::int64_t>();
+    }
+
+    /** @copydoc CanonicalValueReader::ReadBool */
+    Result<bool> CanonicalValueReader::ReadBool() {
+        auto v = ReadUInt8();
+        if (v.HasError())
+            return Result<bool>::Failure(v.ErrorValue());
+        return v.Value() < 2 ? Result<bool>::Success(v.Value() == 1) : Result<bool>::Failure(ErrorAt(SaveErrors::CanonicalCodecCorrupt));
     }
 
     /** @copydoc CanonicalValueReader::ReadFloat32 */
-    CanonicalCodecResult<float> CanonicalValueReader::ReadFloat32() {
-        auto bits = ReadUInt32();
-        if (bits.HasError())
-            return CanonicalCodecResult<float>::Failure(bits.ErrorValue());
-        const float value = std::bit_cast<float>(bits.Value());
-        if (!std::isfinite(value))
-            return CanonicalCodecResult<float>::Failure(Failure(SaveErrors::CanonicalCodecNonFinite));
-        if (bits.Value() == 0x80000000U)
-            return CanonicalCodecResult<float>::Failure(Failure(SaveErrors::CanonicalCodecInvalid));
-        return CanonicalCodecResult<float>::Success(value);
+    Result<float> CanonicalValueReader::ReadFloat32() {
+        auto b = ReadUInt32();
+        if (b.HasError())
+            return Result<float>::Failure(b.ErrorValue());
+        float v = std::bit_cast<float>(b.Value());
+        if (!std::isfinite(v) || b.Value() == 0x80000000U)
+            return Result<float>::Failure(ErrorAt(SaveErrors::CanonicalCodecCorrupt));
+        return Result<float>::Success(v);
     }
 
     /** @copydoc CanonicalValueReader::ReadFloat64 */
-    CanonicalCodecResult<double> CanonicalValueReader::ReadFloat64() {
-        auto bits = ReadUInt64();
-        if (bits.HasError())
-            return CanonicalCodecResult<double>::Failure(bits.ErrorValue());
-        const double value = std::bit_cast<double>(bits.Value());
-        if (!std::isfinite(value))
-            return CanonicalCodecResult<double>::Failure(Failure(SaveErrors::CanonicalCodecNonFinite));
-        if (bits.Value() == 0x8000000000000000ULL)
-            return CanonicalCodecResult<double>::Failure(Failure(SaveErrors::CanonicalCodecInvalid));
-        return CanonicalCodecResult<double>::Success(value);
+    Result<double> CanonicalValueReader::ReadFloat64() {
+        auto b = ReadUInt64();
+        if (b.HasError())
+            return Result<double>::Failure(b.ErrorValue());
+        double v = std::bit_cast<double>(b.Value());
+        if (!std::isfinite(v) || b.Value() == 0x8000000000000000ULL)
+            return Result<double>::Failure(ErrorAt(SaveErrors::CanonicalCodecCorrupt));
+        return Result<double>::Success(v);
+    }
+
+    Result<std::size_t> CanonicalValueReader::ReadLength(std::size_t max) {
+        auto n = ReadUInt32();
+        if (n.HasError())
+            return Result<std::size_t>::Failure(n.ErrorValue());
+        return n.Value() <= max ? Result<std::size_t>::Success(n.Value())
+                                : Result<std::size_t>::Failure(ErrorAt(SaveErrors::CanonicalCodecLimitExceeded));
     }
 
     /** @copydoc CanonicalValueReader::ReadBytes */
-    CanonicalCodecResult<std::vector<std::byte>> CanonicalValueReader::ReadBytes() {
-        auto length = ReadLength(limits_.maximumBytes);
-        if (length.HasError())
-            return CanonicalCodecResult<std::vector<std::byte>>::Failure(length.ErrorValue());
-        auto bytes = Read(length.Value());
-        if (bytes.HasError())
-            return CanonicalCodecResult<std::vector<std::byte>>::Failure(bytes.ErrorValue());
-        return CanonicalCodecResult<std::vector<std::byte>>::Success({bytes.Value().begin(), bytes.Value().end()});
+    Result<std::vector<std::byte>> CanonicalValueReader::ReadBytes(std::size_t max) {
+        auto n = ReadLength(max);
+        if (n.HasError())
+            return Result<std::vector<std::byte>>::Failure(n.ErrorValue());
+        auto v = ReadExactBytes(n.Value());
+        if (v.HasError())
+            return Result<std::vector<std::byte>>::Failure(v.ErrorValue());
+        auto charged = Charge(n.Value());
+        if (charged.HasError())
+            return Result<std::vector<std::byte>>::Failure(charged.ErrorValue());
+        try {
+            return Result<std::vector<std::byte>>::Success({v.Value().begin(), v.Value().end()});
+        } catch (const std::bad_alloc &) {
+            return Result<std::vector<std::byte>>::Failure(ErrorAt(SaveErrors::CanonicalCodecAllocationFailed));
+        }
     }
 
     /** @copydoc CanonicalValueReader::ReadUtf8 */
-    CanonicalCodecResult<std::string> CanonicalValueReader::ReadUtf8() {
-        auto length = ReadLength(limits_.maximumStringBytes);
-        if (length.HasError())
-            return CanonicalCodecResult<std::string>::Failure(length.ErrorValue());
-        auto bytes = Read(length.Value());
-        if (bytes.HasError())
-            return CanonicalCodecResult<std::string>::Failure(bytes.ErrorValue());
-        std::string value{reinterpret_cast<const char *>(bytes.Value().data()), bytes.Value().size()};
-        if (!IsValidUtf8(value))
-            return CanonicalCodecResult<std::string>::Failure(Failure(SaveErrors::CanonicalCodecUtf8Invalid));
-        return CanonicalCodecResult<std::string>::Success(std::move(value));
+    Result<std::string> CanonicalValueReader::ReadUtf8() {
+        auto b = ReadBytes(limits_.maximumStringBytes);
+        if (b.HasError())
+            return Result<std::string>::Failure(b.ErrorValue());
+        auto charged = Charge(b.Value().size());
+        if (charged.HasError())
+            return Result<std::string>::Failure(charged.ErrorValue());
+        try {
+            std::string s{reinterpret_cast<const char *>(b.Value().data()), b.Value().size()};
+            return IsValidUtf8ScalarSequence(s) ? Result<std::string>::Success(std::move(s))
+                                                : Result<std::string>::Failure(ErrorAt(SaveErrors::CanonicalCodecCorrupt));
+        } catch (const std::bad_alloc &) {
+            return Result<std::string>::Failure(ErrorAt(SaveErrors::CanonicalCodecAllocationFailed));
+        }
     }
 
     /** @copydoc CanonicalValueReader::ReadVec2 */
-    CanonicalCodecResult<Math::Vec2> CanonicalValueReader::ReadVec2() {
+    Result<Math::Vec2> CanonicalValueReader::ReadVec2() {
         auto x = ReadFloat32();
         if (x.HasError())
-            return CanonicalCodecResult<Math::Vec2>::Failure(x.ErrorValue());
+            return Result<Math::Vec2>::Failure(x.ErrorValue());
         auto y = ReadFloat32();
-        return y.HasError() ? CanonicalCodecResult<Math::Vec2>::Failure(y.ErrorValue())
-                            : CanonicalCodecResult<Math::Vec2>::Success({x.Value(), y.Value()});
+        return y.HasError() ? Result<Math::Vec2>::Failure(y.ErrorValue()) : Result<Math::Vec2>::Success({x.Value(), y.Value()});
     }
 
     /** @copydoc CanonicalValueReader::ReadVec3 */
-    CanonicalCodecResult<Math::Vec3> CanonicalValueReader::ReadVec3() {
+    Result<Math::Vec3> CanonicalValueReader::ReadVec3() {
         auto xy = ReadVec2();
         if (xy.HasError())
-            return CanonicalCodecResult<Math::Vec3>::Failure(xy.ErrorValue());
+            return Result<Math::Vec3>::Failure(xy.ErrorValue());
         auto z = ReadFloat32();
-        return z.HasError() ? CanonicalCodecResult<Math::Vec3>::Failure(z.ErrorValue())
-                            : CanonicalCodecResult<Math::Vec3>::Success({xy.Value().x, xy.Value().y, z.Value()});
+        return z.HasError() ? Result<Math::Vec3>::Failure(z.ErrorValue())
+                            : Result<Math::Vec3>::Success({xy.Value().x, xy.Value().y, z.Value()});
     }
 
     /** @copydoc CanonicalValueReader::ReadVec4 */
-    CanonicalCodecResult<Math::Vec4> CanonicalValueReader::ReadVec4() {
+    Result<Math::Vec4> CanonicalValueReader::ReadVec4() {
         auto xyz = ReadVec3();
         if (xyz.HasError())
-            return CanonicalCodecResult<Math::Vec4>::Failure(xyz.ErrorValue());
+            return Result<Math::Vec4>::Failure(xyz.ErrorValue());
         auto w = ReadFloat32();
-        return w.HasError() ? CanonicalCodecResult<Math::Vec4>::Failure(w.ErrorValue())
-                            : CanonicalCodecResult<Math::Vec4>::Success({xyz.Value().x, xyz.Value().y, xyz.Value().z, w.Value()});
+        return w.HasError() ? Result<Math::Vec4>::Failure(w.ErrorValue())
+                            : Result<Math::Vec4>::Success({xyz.Value().x, xyz.Value().y, xyz.Value().z, w.Value()});
     }
 
     /** @copydoc CanonicalValueReader::ReadQuaternion */
-    CanonicalCodecResult<Math::Quaternion> CanonicalValueReader::ReadQuaternion() {
-        auto value = ReadVec4();
-        return value.HasError()
-                   ? CanonicalCodecResult<Math::Quaternion>::Failure(value.ErrorValue())
-                   : CanonicalCodecResult<Math::Quaternion>::Success({value.Value().x, value.Value().y, value.Value().z, value.Value().w});
+    Result<Math::Quaternion> CanonicalValueReader::ReadQuaternion() {
+        auto v = ReadVec4();
+        return v.HasError() ? Result<Math::Quaternion>::Failure(v.ErrorValue())
+                            : Result<Math::Quaternion>::Success({v.Value().x, v.Value().y, v.Value().z, v.Value().w});
     }
 
-    /** @copydoc CanonicalValueReader::ReadSequenceSize */
-    CanonicalCodecResult<std::size_t> CanonicalValueReader::ReadSequenceSize() {
-        return ReadLength(limits_.maximumCollectionElements);
+    Result<CanonicalDecodedValue> CanonicalValueReader::ReadChild(std::vector<CanonicalFieldId> path) {
+        auto n = ReadLength(limits_.maximumBytes);
+        if (n.HasError())
+            return Result<CanonicalDecodedValue>::Failure(n.ErrorValue());
+        auto b = ReadExactBytes(n.Value());
+        if (b.HasError())
+            return Result<CanonicalDecodedValue>::Failure(b.ErrorValue());
+        return Result<CanonicalDecodedValue>::Success(CanonicalDecodedValue{b.Value(), limits_, state_, depth_ + 1, std::move(path)});
     }
 
-    /** @copydoc CanonicalValueReader::ReadOptionalPresence */
-    CanonicalCodecResult<bool> CanonicalValueReader::ReadOptionalPresence() {
-        return ReadBool();
+    /** @copydoc CanonicalValueReader::ReadSequence */
+    Result<std::vector<CanonicalDecodedValue>> CanonicalValueReader::ReadSequence() {
+        auto admitted = AdmitComposite();
+        if (admitted.HasError())
+            return Result<std::vector<CanonicalDecodedValue>>::Failure(admitted.ErrorValue());
+        auto n = ReadLength(limits_.maximumCollectionElements);
+        if (n.HasError())
+            return Result<std::vector<CanonicalDecodedValue>>::Failure(n.ErrorValue());
+        if (auto c = ChargeElements(n.Value(), sizeof(CanonicalDecodedValue)); c.HasError())
+            return Result<std::vector<CanonicalDecodedValue>>::Failure(c.ErrorValue());
+        try {
+            std::vector<CanonicalDecodedValue> v;
+            v.reserve(n.Value());
+            for (std::size_t i = 0; i < n.Value(); ++i) {
+                auto x = ReadChild(path_);
+                if (x.HasError())
+                    return Result<std::vector<CanonicalDecodedValue>>::Failure(x.ErrorValue());
+                v.push_back(std::move(x).Value());
+            }
+            return Result<std::vector<CanonicalDecodedValue>>::Success(std::move(v));
+        } catch (const std::bad_alloc &) {
+            return Result<std::vector<CanonicalDecodedValue>>::Failure(ErrorAt(SaveErrors::CanonicalCodecAllocationFailed));
+        }
     }
 
-    /** @copydoc CanonicalValueReader::ReadVariantIndex */
-    CanonicalCodecResult<std::uint32_t> CanonicalValueReader::ReadVariantIndex(const std::uint32_t alternativeCount) {
-        if (alternativeCount == 0)
-            return CanonicalCodecResult<std::uint32_t>::Failure(Failure(SaveErrors::CanonicalCodecInvalid));
-        auto index = ReadUInt32();
-        if (index.HasError())
-            return index;
-        if (index.Value() >= alternativeCount)
-            return CanonicalCodecResult<std::uint32_t>::Failure(Failure(SaveErrors::CanonicalCodecInvalid));
-        return index;
+    /** @copydoc CanonicalValueReader::ReadOptional */
+    Result<std::optional<CanonicalDecodedValue>> CanonicalValueReader::ReadOptional() {
+        auto admitted = AdmitComposite();
+        if (admitted.HasError())
+            return Result<std::optional<CanonicalDecodedValue>>::Failure(admitted.ErrorValue());
+        auto p = ReadBool();
+        if (p.HasError())
+            return Result<std::optional<CanonicalDecodedValue>>::Failure(p.ErrorValue());
+        if (!p.Value())
+            return Result<std::optional<CanonicalDecodedValue>>::Success(std::nullopt);
+        try {
+            auto v = ReadChild(path_);
+            return v.HasError() ? Result<std::optional<CanonicalDecodedValue>>::Failure(v.ErrorValue())
+                                : Result<std::optional<CanonicalDecodedValue>>::Success(std::move(v).Value());
+        } catch (const std::bad_alloc &) {
+            return Result<std::optional<CanonicalDecodedValue>>::Failure(ErrorAt(SaveErrors::CanonicalCodecAllocationFailed));
+        }
+    }
+
+    /** @copydoc CanonicalValueReader::ReadVariant */
+    Result<std::pair<std::uint32_t, CanonicalDecodedValue>> CanonicalValueReader::ReadVariant(std::uint32_t count) {
+        auto admitted = AdmitComposite();
+        if (admitted.HasError())
+            return Result<std::pair<std::uint32_t, CanonicalDecodedValue>>::Failure(admitted.ErrorValue());
+        auto i = ReadUInt32();
+        if (i.HasError())
+            return Result<std::pair<std::uint32_t, CanonicalDecodedValue>>::Failure(i.ErrorValue());
+        if (!count || i.Value() >= count)
+            return Result<std::pair<std::uint32_t, CanonicalDecodedValue>>::Failure(ErrorAt(SaveErrors::CanonicalCodecCorrupt));
+        try {
+            auto v = ReadChild(path_);
+            return v.HasError() ? Result<std::pair<std::uint32_t, CanonicalDecodedValue>>::Failure(v.ErrorValue())
+                                : Result<std::pair<std::uint32_t, CanonicalDecodedValue>>::Success({i.Value(), std::move(v).Value()});
+        } catch (const std::bad_alloc &) {
+            return Result<std::pair<std::uint32_t, CanonicalDecodedValue>>::Failure(ErrorAt(SaveErrors::CanonicalCodecAllocationFailed));
+        }
     }
 
     /** @copydoc CanonicalValueReader::ReadMap */
-    CanonicalCodecResult<std::vector<CanonicalMapEntry>> CanonicalValueReader::ReadMap() {
-        auto count = ReadSequenceSize();
+    Result<std::vector<CanonicalDecodedMapEntry>> CanonicalValueReader::ReadMap() {
+        auto admitted = AdmitComposite();
+        if (admitted.HasError())
+            return Result<std::vector<CanonicalDecodedMapEntry>>::Failure(admitted.ErrorValue());
+        auto count = ReadLength(limits_.maximumCollectionElements);
         if (count.HasError())
-            return CanonicalCodecResult<std::vector<CanonicalMapEntry>>::Failure(count.ErrorValue());
-        constexpr std::size_t kMinimumEncodedEntryBytes = 8;
-        if (count.Value() > (bytes_.size() - offset_) / kMinimumEncodedEntryBytes)
-            return CanonicalCodecResult<std::vector<CanonicalMapEntry>>::Failure(Failure(SaveErrors::CanonicalCodecInvalid));
-        std::vector<CanonicalMapEntry> entries;
-        entries.reserve(count.Value());
-        for (std::size_t index = 0; index < count.Value(); ++index) {
-            auto key = ReadBytes();
-            if (key.HasError())
-                return CanonicalCodecResult<std::vector<CanonicalMapEntry>>::Failure(key.ErrorValue());
-            auto value = ReadBytes();
-            if (value.HasError())
-                return CanonicalCodecResult<std::vector<CanonicalMapEntry>>::Failure(value.ErrorValue());
-            if (!entries.empty() && !ByteLess(entries.back().key, key.Value()))
-                return CanonicalCodecResult<std::vector<CanonicalMapEntry>>::Failure(Failure(
-                    SameBytes(entries.back().key, key.Value()) ? SaveErrors::CanonicalCodecDuplicate : SaveErrors::CanonicalCodecInvalid));
-            entries.push_back({std::move(key).Value(), std::move(value).Value()});
+            return Result<std::vector<CanonicalDecodedMapEntry>>::Failure(count.ErrorValue());
+        auto charged = ChargeElements(count.Value(), sizeof(CanonicalDecodedMapEntry));
+        if (charged.HasError())
+            return Result<std::vector<CanonicalDecodedMapEntry>>::Failure(charged.ErrorValue());
+        try {
+            std::vector<CanonicalDecodedMapEntry> entries;
+            entries.reserve(count.Value());
+            for (std::size_t index = 0; index < count.Value(); ++index) {
+                auto key = ReadChild(path_);
+                if (key.HasError())
+                    return Result<std::vector<CanonicalDecodedMapEntry>>::Failure(key.ErrorValue());
+                auto value = ReadChild(path_);
+                if (value.HasError())
+                    return Result<std::vector<CanonicalDecodedMapEntry>>::Failure(value.ErrorValue());
+                if (!entries.empty() && !Less(entries.back().key.bytes_, key.Value().bytes_))
+                    return Result<std::vector<CanonicalDecodedMapEntry>>::Failure(ErrorAt(SaveErrors::CanonicalCodecCorrupt));
+                entries.push_back({std::move(key).Value(), std::move(value).Value()});
+            }
+            return Result<std::vector<CanonicalDecodedMapEntry>>::Success(std::move(entries));
+        } catch (const std::bad_alloc &) {
+            return Result<std::vector<CanonicalDecodedMapEntry>>::Failure(ErrorAt(SaveErrors::CanonicalCodecAllocationFailed));
         }
-        return CanonicalCodecResult<std::vector<CanonicalMapEntry>>::Success(std::move(entries));
     }
 
     /** @copydoc CanonicalValueReader::ReadSet */
-    CanonicalCodecResult<std::vector<std::vector<std::byte>>> CanonicalValueReader::ReadSet() {
-        auto count = ReadSequenceSize();
+    Result<std::vector<CanonicalDecodedValue>> CanonicalValueReader::ReadSet() {
+        auto admitted = AdmitComposite();
+        if (admitted.HasError())
+            return Result<std::vector<CanonicalDecodedValue>>::Failure(admitted.ErrorValue());
+        auto count = ReadLength(limits_.maximumCollectionElements);
         if (count.HasError())
-            return CanonicalCodecResult<std::vector<std::vector<std::byte>>>::Failure(count.ErrorValue());
-        constexpr std::size_t kMinimumEncodedElementBytes = 4;
-        if (count.Value() > (bytes_.size() - offset_) / kMinimumEncodedElementBytes)
-            return CanonicalCodecResult<std::vector<std::vector<std::byte>>>::Failure(Failure(SaveErrors::CanonicalCodecInvalid));
-        std::vector<std::vector<std::byte>> elements;
-        elements.reserve(count.Value());
-        for (std::size_t index = 0; index < count.Value(); ++index) {
-            auto element = ReadBytes();
-            if (element.HasError())
-                return CanonicalCodecResult<std::vector<std::vector<std::byte>>>::Failure(element.ErrorValue());
-            if (!elements.empty() && !ByteLess(elements.back(), element.Value()))
-                return CanonicalCodecResult<std::vector<std::vector<std::byte>>>::Failure(Failure(
-                    SameBytes(elements.back(), element.Value()) ? SaveErrors::CanonicalCodecDuplicate : SaveErrors::CanonicalCodecInvalid));
-            elements.push_back(std::move(element).Value());
+            return Result<std::vector<CanonicalDecodedValue>>::Failure(count.ErrorValue());
+        auto charged = ChargeElements(count.Value(), sizeof(CanonicalDecodedValue));
+        if (charged.HasError())
+            return Result<std::vector<CanonicalDecodedValue>>::Failure(charged.ErrorValue());
+        try {
+            std::vector<CanonicalDecodedValue> values;
+            values.reserve(count.Value());
+            for (std::size_t index = 0; index < count.Value(); ++index) {
+                auto value = ReadChild(path_);
+                if (value.HasError())
+                    return Result<std::vector<CanonicalDecodedValue>>::Failure(value.ErrorValue());
+                if (!values.empty() && !Less(values.back().bytes_, value.Value().bytes_))
+                    return Result<std::vector<CanonicalDecodedValue>>::Failure(ErrorAt(SaveErrors::CanonicalCodecCorrupt));
+                values.push_back(std::move(value).Value());
+            }
+            return Result<std::vector<CanonicalDecodedValue>>::Success(std::move(values));
+        } catch (const std::bad_alloc &) {
+            return Result<std::vector<CanonicalDecodedValue>>::Failure(ErrorAt(SaveErrors::CanonicalCodecAllocationFailed));
         }
-        return CanonicalCodecResult<std::vector<std::vector<std::byte>>>::Success(std::move(elements));
     }
 
     /** @copydoc CanonicalValueReader::ReadRecord */
-    CanonicalCodecResult<std::vector<CanonicalRecordField>> CanonicalValueReader::ReadRecord() {
+    Result<std::vector<CanonicalDecodedField>> CanonicalValueReader::ReadRecord() {
+        auto admitted = AdmitComposite();
+        if (admitted.HasError())
+            return Result<std::vector<CanonicalDecodedField>>::Failure(admitted.ErrorValue());
         auto count = ReadLength(limits_.maximumFields);
         if (count.HasError())
-            return CanonicalCodecResult<std::vector<CanonicalRecordField>>::Failure(count.ErrorValue());
-        constexpr std::size_t kMinimumEncodedFieldBytes = 8;
-        if (count.Value() > (bytes_.size() - offset_) / kMinimumEncodedFieldBytes)
-            return CanonicalCodecResult<std::vector<CanonicalRecordField>>::Failure(Failure(SaveErrors::CanonicalCodecInvalid));
-        std::vector<CanonicalRecordField> fields;
-        fields.reserve(count.Value());
-        for (std::size_t index = 0; index < count.Value(); ++index) {
-            auto idValue = ReadUInt32();
-            if (idValue.HasError())
-                return CanonicalCodecResult<std::vector<CanonicalRecordField>>::Failure(idValue.ErrorValue());
-            auto id = CanonicalFieldId::Create(idValue.Value());
-            if (id.HasError())
-                return CanonicalCodecResult<std::vector<CanonicalRecordField>>::Failure(Failure(SaveErrors::CanonicalCodecInvalid));
-            auto value = ReadBytes();
-            if (value.HasError())
-                return CanonicalCodecResult<std::vector<CanonicalRecordField>>::Failure(value.ErrorValue());
-            if (!fields.empty() && fields.back().id >= id.Value())
-                return CanonicalCodecResult<std::vector<CanonicalRecordField>>::Failure(
-                    Failure(fields.back().id == id.Value() ? SaveErrors::CanonicalCodecDuplicate : SaveErrors::CanonicalCodecInvalid));
-            fields.push_back({std::move(id).Value(), std::move(value).Value()});
+            return Result<std::vector<CanonicalDecodedField>>::Failure(count.ErrorValue());
+        auto charged = ChargeElements(count.Value(), sizeof(CanonicalDecodedField));
+        if (charged.HasError())
+            return Result<std::vector<CanonicalDecodedField>>::Failure(charged.ErrorValue());
+        try {
+            std::vector<CanonicalDecodedField> fields;
+            fields.reserve(count.Value());
+            for (std::size_t index = 0; index < count.Value(); ++index) {
+                auto rawId = ReadUInt32();
+                if (rawId.HasError())
+                    return Result<std::vector<CanonicalDecodedField>>::Failure(rawId.ErrorValue());
+                auto id = CanonicalFieldId::Create(rawId.Value());
+                if (id.HasError() || (!fields.empty() && !(fields.back().id < id.Value())))
+                    return Result<std::vector<CanonicalDecodedField>>::Failure(ErrorAt(SaveErrors::CanonicalCodecCorrupt));
+                auto childPath = path_;
+                childPath.push_back(id.Value());
+                auto value = ReadChild(std::move(childPath));
+                if (value.HasError())
+                    return Result<std::vector<CanonicalDecodedField>>::Failure(value.ErrorValue());
+                fields.push_back({id.Value(), std::move(value).Value()});
+            }
+            return Result<std::vector<CanonicalDecodedField>>::Success(std::move(fields));
+        } catch (const std::bad_alloc &) {
+            return Result<std::vector<CanonicalDecodedField>>::Failure(ErrorAt(SaveErrors::CanonicalCodecAllocationFailed));
         }
-        return CanonicalCodecResult<std::vector<CanonicalRecordField>>::Success(std::move(fields));
     }
 
     /** @copydoc CanonicalValueReader::RequireFinished */
-    CanonicalCodecResult<void> CanonicalValueReader::RequireFinished() const {
-        if (!HasValidLimits(limits_) || bytes_.size() > limits_.maximumBytes || offset_ != bytes_.size())
-            return CanonicalCodecResult<void>::Failure(Failure(SaveErrors::CanonicalCodecInvalid));
-        return CanonicalCodecResult<void>::Success();
+    Result<void> CanonicalValueReader::RequireFinished() const {
+        return offset_ == bytes_.size() ? Result<void>::Success() : Result<void>::Failure(ErrorAt(SaveErrors::CanonicalCodecCorrupt));
     }
 }  // namespace Horo::Runtime

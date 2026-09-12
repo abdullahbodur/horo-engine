@@ -70,8 +70,10 @@ namespace Horo::Runtime::SaveErrors {
     extern const ErrorCodeDescriptor ArchivePayloadTruncated;
     /** @brief A selected decoded chunk does not match its manifest checksum. */
     extern const ErrorCodeDescriptor ArchiveChunkHashMismatch;
-    /** @brief Canonical value bytes are malformed, noncanonical, truncated, or contain trailing data. */
+    /** @brief A caller supplied an invalid value or schema argument to the canonical encoder. */
     extern const ErrorCodeDescriptor CanonicalCodecInvalid;
+    /** @brief Untrusted canonical wire bytes are malformed, noncanonical, truncated, or contain trailing data. */
+    extern const ErrorCodeDescriptor CanonicalCodecCorrupt;
     /** @brief Canonical value input or output exceeds an explicit codec bound. */
     extern const ErrorCodeDescriptor CanonicalCodecLimitExceeded;
     /** @brief A canonical map, set, or record contains a duplicate encoded identity. */
@@ -80,6 +82,10 @@ namespace Horo::Runtime::SaveErrors {
     extern const ErrorCodeDescriptor CanonicalCodecNonFinite;
     /** @brief Canonical string bytes are not a valid UTF-8 scalar sequence. */
     extern const ErrorCodeDescriptor CanonicalCodecUtf8Invalid;
+    /** @brief Trusted canonical codec limits are zero or internally contradictory. */
+    extern const ErrorCodeDescriptor CanonicalCodecConfigurationInvalid;
+    /** @brief Canonical codec owned storage could not be allocated within admitted bounds. */
+    extern const ErrorCodeDescriptor CanonicalCodecAllocationFailed;
     /** @brief Product save-root inputs are missing, relative, or structurally invalid. */
     extern const ErrorCodeDescriptor SaveRootConfigurationInvalid;
     /** @brief The selected save-root platform convention is not supported. */
