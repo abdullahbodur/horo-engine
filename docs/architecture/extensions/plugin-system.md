@@ -329,6 +329,19 @@ succeeds. Provider failure, cancellation, malformed output, unregistration, or
 shutdown discards the transaction-local staging set and cannot expose partial
 output.
 
+`ToolchainProviderRegistry` is the host-owned `toolchain.provider` invocation
+gateway. A publication declares canonical provider identity, activation
+generation, and the logical tools it may request; it never declares executable
+paths or receives the platform process runner. A provider submits a bounded
+logical tool and argument intent. Host policy resolves that intent into the
+complete shell-free platform request, including the executable, final arguments,
+working directory, environment, timeout, termination grace, output bounds, and
+output callback. The registry then invokes only `IExternalProcessRunner`,
+preserves provider/tool attribution, and wraps policy or platform failures with
+their typed cause. Releasing a publication or beginning shutdown revokes future
+calls and requests cancellation of every admitted process for that exact
+generation.
+
 `editor.status_item` contributions are declarative bounded snapshots; they do
 not receive ImGui callbacks. The shell owns validation, active-panel visibility,
 width admission, overflow, localization, modal input exclusion, and typed
@@ -542,6 +555,65 @@ discoverability while already leased calls retain their admission lease. The
 registry exposes no concrete service pointer; capability-specific host adapters
 own invocation, scheduling, cancellation, and result storage.
 
+`BackendServiceRegistry` is the typed in-process adapter boundary behind those
+capability leases. The composition root publishes one stable service and contract
+identity bound to the exact capability provider version and generation. Callers
+resolve a one-shot typed operation handle, never the provider object or a reusable
+factory. The registry enforces the declared caller/owner-thread rule before entry,
+combines caller cancellation with provider-generation cancellation, attributes
+typed provider failures without flattening their cause, and owns reverse-order
+revocation. Revocation removes discovery first, cancels and drains admitted calls,
+then invokes the provider's `Shutdown()` exactly once. The contract depends only
+on Extensions and Foundation, so the same service is usable in graphical and
+headless composition without editor or renderer construction. External module C
+function tables remain behind a host-owned typed adapter and do not cross this C++
+boundary directly.
+
+Provider operations do not own host lifecycle, but a defensive re-entrant shutdown
+request cannot wait on its own call. That provider is marked revoked and cancelled
+immediately; its final call guard wakes one registry-owned retirement coordinator
+after the operation returns. The coordinator processes the retired queue in reverse
+registration order and stops at the first deferred provider, so an earlier provider
+cannot overtake a later nested or active call. Ordinary host-driven revocation closes
+admission and requests cancellation for every provider before the coordinator waits
+on the registry's finite shared drain deadline.
+
+`Shutdown()` runs in an explicit `Finalizing` state. Completion is published only
+after the callback returns, and concurrent retirement observes the same deadline
+rather than treating callback entry as completion. Owner-thread services remain at
+the head of the retired queue until `FinalizeRetiredOnOwnerThread` runs on their
+recorded thread. Every registration also carries an opaque shared executable-code
+lease. A deadline breach makes `RestartRequired` sticky and retains the service,
+code lease, and registry state in a process-lifetime quarantine; teardown never
+destroys or unloads code that may still be active or awaiting safe destruction.
+The application composition owns one backend-service registry per process. Once
+that registry enters process-lifetime quarantine, replacement is a process restart;
+attempting to quarantine a second registry fails fast instead of creating an
+unbounded collection of executable-code leases.
+
+Module resolution emits an opaque immutable `ResolvedExtensionServiceImport` for
+every declared service import. Required missing or incompatible imports reject the
+whole plan; optional imports remain explicit `Unavailable` or `Incompatible`
+records rather than falling through by load order. Headless filtering considers
+only required edges when deciding whether an excluded presentation module blocks a
+surviving module; an optional binding to an excluded provider becomes
+`Unavailable`. Bound records name the consumer package/module and local import,
+exact service/contract, provider module and selected version, sorted by consumer
+and import identity. Callers can inspect but cannot construct or mutate these
+records.
+
+The host combines that static record with an admitted application-capability lease
+through `BindImport`. Binding compares the exact consumer activation, canonical
+service version, and the provider's explicit module-to-provider identity and
+generation before returning a move-only `BackendServiceImportBinding`.
+`ResolveImported` consumes that token exactly once. Consumer revocation, capability
+unpublication, backend-provider replacement, or registry shutdown invalidates the
+token before provider entry and never falls through to another provider. Provider
+descriptors therefore use the typed `provider = {moduleId, providerId, generation}`
+record; callers migrating from the earlier flat fields must supply the owning
+module explicitly. Module code receives only the resulting call adapter, never a
+registry or a token constructor.
+
 ## Module Loading And ABI Boundary
 
 The generic module C ABI is a bootstrap/control boundary, not sufficient for every
@@ -598,19 +670,28 @@ The build publishes that header as a self-contained, versioned
 `HoroEngine::ExtensionSdk` header target, machine-readable SDK-to-host ABI range
 metadata, and the project license. It has no engine-library or third-party link
 dependencies and is verified by an external C consumer copied away from the
-engine build tree. Its scaffolder generates portable GUI-only, backend/library,
-script-provider, and hybrid C projects. Every generated module owns a separate
-ABI entry unit and contract test. Hybrid presentation and script adapters import
-the backend's typed service instead of duplicating backend authority. Generated
-projects use only `HoroEngine::ExtensionSdk`, relative project paths, and CPack
-ZIP configuration. The generated manifest template resolves the native module
-suffix during CMake configuration and records the installed `bin/` path; hosted
-regression coverage extracts the ZIP and activates every scaffold shape through
-the real extension host. Scaffolding rejects a base identity when any shape-derived
-module/service/import identity would exceed the manifest limit or any generated
-module, contract-test, or archive filename would exceed the portable 255-byte
-component limit. Manifest schemas, validation, and distribution commands
-remain separately versioned SDK deliverables.
+engine build tree. Configuration recreates the exact versioned SDK staging root,
+and reused-build regression coverage verifies its complete artifact set so removed
+or renamed files cannot survive publication. Its scaffolder generates portable
+GUI-only, backend/library, script-provider, and hybrid C projects. Every generated
+module owns a separate ABI entry unit and contract test. Hybrid presentation and
+script adapters import the backend's typed service instead of duplicating backend
+authority. Generated projects use only `HoroEngine::ExtensionSdk`, relative project
+paths, and CPack ZIP configuration. The generated manifest template resolves the
+native module suffix during CMake configuration and records the installed `bin/`
+path; hosted regression coverage extracts the ZIP and activates every scaffold
+shape through the real extension host. Scaffolding rejects a base identity when
+any shape-derived module/service/import identity would exceed the manifest limit
+or any generated module, contract-test, or archive filename would exceed the
+portable 255-byte component limit. Manifest schemas, validation, and distribution
+commands remain separately versioned SDK deliverables.
+
+The SDK also stages a platform-native `horo-extension-validate` executable and
+the matching V1 authoring schema. The command calls the same bounded manifest
+parser as `ExtensionHost`, emits deterministic human or JSON diagnostics with
+exact field paths, rejects unsupported requested schema versions, and never
+loads module code. The schema supports editor completion; the executable remains
+the behavioral authority for cross-field and identity-reference rules.
 
 Project gameplay modules may use the SDK-generation C++ boundary documented in
 [Gameplay Module Boundary](./gameplay-module-boundary.md). That boundary is

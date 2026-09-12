@@ -454,11 +454,17 @@ namespace Horo::Extensions {
                 return ParseModuleServiceEntries(moduleObject, path, "imports", "import", imports,
                                                  [this](const Json &encoded, const std::string_view elementPath,
                                                         ExtensionServiceImportManifest &value) {
-                    if (!AllowFields(encoded, elementPath, {"id", "service", "contract", "minimumVersion"}) ||
+                    if (!AllowFields(encoded, elementPath, {"id", "service", "contract", "minimumVersion", "required"}) ||
                         !ReadId(encoded, "id", elementPath, value.id) || !ReadId(encoded, "service", elementPath, value.service) ||
                         !ReadId(encoded, "contract", elementPath, value.contract) ||
                         !ReadString(encoded, "minimumVersion", elementPath, value.minimumVersion, MaximumSemanticVersionBytes, true))
                         return false;
+                    if (const auto required = encoded.find("required"); required != encoded.end()) {
+                        if (!required->is_boolean())
+                            return Reject(ChildPath(elementPath, "required"), "extension.manifest.invalid_type",
+                                          "Service import required policy must be a boolean.");
+                        value.required = required->get<bool>();
+                    }
                     return IsCanonicalSemanticVersion(value.minimumVersion) ||
                            Reject(ChildPath(elementPath, "minimumVersion"), "extension.manifest.invalid_version",
                                   "Service import minimum version must be canonical semantic version text.");

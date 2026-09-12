@@ -7,11 +7,19 @@
 
 #include "Horo/Gameplay/GameplayRegistration.h"
 
+#include <atomic>
+#include <memory>
 #include <span>
 #include <string>
 #include <vector>
 
+namespace Horo::Gameplay::Detail {
+    struct GenerationLeaseBinding;
+}
+
 namespace Horo::Gameplay {
+    class GameplaySystemRuntime;
+
     /** @brief Host-owned system registry frozen before any runtime scene activates. */
     class SystemRegistry final {
     public:
@@ -40,8 +48,16 @@ namespace Horo::Gameplay {
         [[nodiscard]] const GameplaySystemRegistration *Find(const GameplaySystemId &id) const noexcept;
 
     private:
+        friend class GameplaySystemRuntime;
+        friend struct Detail::GenerationLeaseBinding;
+
+        /** @brief Pins an owning native module generation for an external runtime, when applicable. */
+        [[nodiscard]] Result<std::shared_ptr<void>> AcquireGenerationLease() const;
+
         std::string moduleId_;
         std::vector<GameplaySystemRegistration> registrations_;
+        std::weak_ptr<void> generationLease_;
+        const std::atomic_bool *generationLeaseAdmission_{};
         bool frozen_{false};
     };
 }  // namespace Horo::Gameplay

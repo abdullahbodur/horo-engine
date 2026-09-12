@@ -54,6 +54,15 @@ namespace Horo::Runtime::CaptureTestSupport {
         std::shared_ptr<int> destructionCount_;
     };
 
+    [[nodiscard]] inline std::shared_ptr<const ICanonicalStateAdapter> OrderRecordingAdapter(
+        std::shared_ptr<std::vector<std::string>> order, std::shared_ptr<int> destructionCount) {
+        return std::make_shared<
+            CallbackCaptureAdapter>([order = std::move(order)](const CanonicalCaptureContext &context, ICanonicalCaptureSink &) {
+            order->push_back(context.participant.Value());
+            return Result<CanonicalCaptureDisposition>::Success(CanonicalCaptureDisposition::Omitted);
+        }, std::move(destructionCount));
+    }
+
     class SegmentedTestPayload final : public IImmutableCanonicalPayload {
     public:
         explicit SegmentedTestPayload(std::vector<std::vector<std::byte>> segments,
@@ -151,6 +160,13 @@ namespace Horo::Runtime::CaptureTestSupport {
             .sceneRevision = 12,
             .registryGeneration = participants.Generation(),
         };
+    }
+
+    [[nodiscard]] inline RuntimeSaveCaptureBuilder CaptureRegisteredParticipants(CanonicalStateParticipantRegistry &registry) {
+        const SaveParticipantRegistrySnapshot participants = registry.Snapshot().Value();
+        auto builder = RuntimeSaveCaptureBuilder::Create(Provenance(participants), participants).Value();
+        REQUIRE(builder.CaptureParticipants().HasValue());
+        return builder;
     }
 
     [[nodiscard]] inline CanonicalCaptureRecord CaptureRecord(const std::string_view participant, const SaveRecordId record,

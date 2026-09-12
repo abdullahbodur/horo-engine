@@ -10,6 +10,18 @@
 #endif
 
 namespace Horo::Gameplay {
+    /** @copydoc IGameModule::PrepareReload */
+    Result<GameModuleReloadSnapshot> IGameModule::PrepareReload(GameRuntimeContext &) {
+        return Result<GameModuleReloadSnapshot>::Failure(MakeError(GameplayErrors::GameplayReloadRestartRequired));
+    }
+
+    /** @copydoc IGameModule::RestoreReload */
+    Result<void> IGameModule::RestoreReload(const GameModuleReloadSnapshot &snapshot, GameRuntimeContext &) {
+        if (snapshot.schemaVersion != GameModuleReloadSnapshotSchemaVersion || !snapshot.payload.empty())
+            return Result<void>::Failure(MakeError(GameplayErrors::GameplayReloadRestoreFailed));
+        return Result<void>::Success();
+    }
+
     namespace {
         constexpr std::size_t MaximumModuleIdentityBytes = 256;
 

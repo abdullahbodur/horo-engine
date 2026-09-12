@@ -889,6 +889,75 @@ requests fail without partial publication. The contract owns no editor document,
 state, gameplay script, network session or service pointer and performs no registration
 or lifecycle callback.
 
+### Editor, runtime and platform layer filtering
+
+`WorldLayerFilterPolicy` and `FilterWorldLayers` form the inert WST-006.3 target
+projection boundary. One policy selects Editor, client runtime or dedicated-server
+runtime and explicitly includes or excludes layers marked Optional. The input is a
+canonical immutable sequence of WST-006.1 ownership facts plus the corresponding
+version-one manifest flags. The result and every decision repeat the exact mounted
+`StreamingRuntimeOwnerToken`, source `StreamingLayerId` and ownership revision;
+filtering never renumbers, hashes, aliases or otherwise replaces a source identity,
+and a cached decision cannot be reused across owner, partition or epoch replacement.
+
+Editor includes editor-only, server-only and client-only authored layers so those
+sources remain inspectable. Runtime targets exclude editor-only content. Client
+runtime additionally excludes ServerOnly layers, while dedicated-server runtime
+excludes ClientOnly layers. Optional exclusion applies after audience and target-role
+filtering so each omitted layer has one stable observable reason. Persistent manifest
+flags must agree with the WST-006.1 residency policy, and ServerOnly plus ClientOnly
+is contradictory. A default-constructed decision is explicitly Unresolved and is
+never interpreted as included content.
+
+The caller supplies storage for every decision and a mandatory candidate ceiling.
+The function validates the complete strictly identity-ordered input, exact mounted
+world, filter-policy identity/revision, known flags and output capacity before writing
+the first row. Duplicate, unsorted, invalid, unsupported, stale, over-capacity,
+cancelling and closed requests therefore leave output untouched. The filter performs
+no I/O, package mutation, cell scheduling, layer-state transition or fallback to a
+different target policy. A later policy or world replacement makes old evidence stale
+for new passes; already owned immutable decisions retain their captured meaning.
+Policy replacement preserves stable policy identity, requires its exact non-wrapping
+revision successor and is rejected during cancellation or after shutdown.
+### Layer Loaded and Activated state
+
+`WorldLayerStateRecord` is the inert WST-006.2 state-machine publication for one
+exact layer ownership revision. It retains the stable `StreamingLayerId`, mounted
+world lifetime and ownership revision from WST-006.1 plus a separate non-wrapping
+`WorldLayerStateRevision`. It deliberately carries no `StreamingCellId`, cell
+generation, provider handle or entity pointer: a layer can be Loaded or Activated
+independently from the current physical residency of any particular cell.
+
+The ordered normal path is `Unloaded -> Loading -> Loaded -> Activating ->
+Activated`. Teardown reverses the published guarantees through `Deactivating ->
+Loaded -> Unloading -> Unloaded`. Loaded means the layer's non-cell state and
+control contract are prepared; Activated means its behavior is published. Neither
+state proves that all spatial cells are resident, and cell residency cannot imply
+layer activation.
+
+Every command compares the exact world, stable layer identity, ownership revision
+and state revision before producing a new immutable record. Cancellation of Loading
+enters Unloading; cancellation of Activating enters Deactivating. The corresponding
+completion is still required before the last stable Unloaded or Loaded state is
+reported. Repeated cancellation during those rollback states returns the exact record
+without advancing its revision, including when the revision is exhausted. Failure
+from Loading or Activating records `FailurePending` while entering Unloading or
+Deactivating. A failed deactivation must continue through Unloading, and only explicit
+unload completion may publish the quiescent Failed state. Failure received during an
+existing rollback upgrades its retained disposition without losing the remaining
+cleanup obligation. A cancelling authority rejects new load or activation work but
+permits the deactivation/unload path to drain. Closed rejects all transitions and
+never fabricates cleanup acknowledgement.
+
+Initial state admission is bounded and starts at Unloaded even for a Persistent
+layer; the owner must still publish real load completion. Ownership replacement is
+allowed only while the state is Unloaded or cleanup-complete Failed and must pass the
+WST-006.1 exact successor validation. A control-owner change additionally forwards
+the exact current handoff authorization and independently validated target lifetime;
+state quiescence never substitutes for ownership authority. Invalid, unsupported,
+stale, over-capacity, illegal-transition, cancelling and closed inputs return typed
+results without modifying the current record.
+
 ### Persistent, non-spatial and dynamic ownership policy
 
 `WorldObjectOwnershipDescriptor` is the inert WST-001.7 policy fact that separates

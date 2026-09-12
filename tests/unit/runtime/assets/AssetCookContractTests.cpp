@@ -76,6 +76,10 @@ TEST_CASE("Cook Target Ids Accept Canonical And Reject Invalid Text", "[unit][ru
     REQUIRE((AssetCookTargetId::Parse("..").HasError()));              // root-escape-like
     REQUIRE((AssetCookTargetId::Parse("/").HasError()));               // root-escape-like
     REQUIRE((AssetCookTargetId::Parse("headless-0null").HasError()));  // segment must start with letter
+
+    const std::string maximumTarget = "a-" + std::string(MaximumAssetCookTargetIdBytes - 2, 'a');
+    REQUIRE((AssetCookTargetId::Parse(maximumTarget).HasValue()));
+    REQUIRE((AssetCookTargetId::Parse(maximumTarget + "a").HasError()));
 }
 
 TEST_CASE("Cook Target Ids Are Ordered And Comparable", "[unit][runtime][assets][cook]") {

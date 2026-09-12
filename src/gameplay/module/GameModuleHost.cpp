@@ -73,7 +73,7 @@ namespace Horo::Gameplay {
         auto loaded = Platform::LoadDynamicLibrary(libraryPath.string());
         if (loaded.HasError())
             return Result<std::unique_ptr<LoadedGameModule>>::Failure(loaded.ErrorValue());
-        auto impl = std::make_unique<LoadedGameModule::Impl>();
+        auto impl = std::make_shared<LoadedGameModule::Impl>();
         impl->library = std::move(loaded).Value();
         impl->loadedArtifactPath = libraryPath;
 

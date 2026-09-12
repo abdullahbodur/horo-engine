@@ -358,6 +358,23 @@ viewport `RuntimeUiInputContextId`. It hit-tests the last successfully presented
 interaction revision. Split-screen focus/capture is independent unless an explicit
 game-instance modal policy blocks multiple contexts.
 
+After targeting, `UiEventDispatcher` freezes one bounded root path from exact
+instance, canvas, document, retained-tree and presented-interaction evidence. It
+routes capture from the inclusive root or active modal root toward the target,
+invokes the target once, then bubbles over the frozen ancestors. Handled,
+propagation-stop and default-prevention are independent typed outcomes; a handled
+event does not silently imply either of the other two. An exclusive modal root is
+an inclusive route boundary, and a target outside it fails rather than leaking to
+the lower tree.
+
+The dispatcher preallocates route storage and is non-reentrant. It retains no
+handler, element record or tree reference beyond the synchronous call. Structural
+mutation is admitted only through the retained tree's owner safe point; if a
+handler commits a replacement or destroys an element, the frozen tree revision is
+invalidated, remaining callbacks and the default action are suppressed, and the
+caller receives a typed failure. Handler exceptions are contained at the callback
+boundary. Retirement closes admission and shutdown is idempotent.
+
 [ADR-078](../../adr/078-runtime-ui-input-context-and-player-routing.md) keeps device,
 input user, local player, logical viewport and UI context identities separate. Each
 context declares a single-player, shared-player, game-instance or unassigned-join

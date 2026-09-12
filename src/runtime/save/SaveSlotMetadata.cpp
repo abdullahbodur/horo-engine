@@ -1,10 +1,7 @@
 #include "Horo/Runtime/Save/SaveSlotMetadata.h"
 
+#include "Horo/Foundation/Utf8.h"
 #include "Horo/Runtime/Save/SaveErrors.h"
-
-#include <limits>
-#include <string_view>
-#include <utf8proc.h>
 
 namespace Horo::Runtime {
     namespace {
@@ -37,23 +34,6 @@ namespace Horo::Runtime {
             return false;
         }
 
-        /** @brief Validates UTF-8 without allocation after the caller has enforced its byte bound. */
-        [[nodiscard]] bool IsValidUtf8(const std::string_view text) noexcept {
-            if (text.size() > static_cast<std::size_t>(std::numeric_limits<utf8proc_ssize_t>::max()))
-                return false;
-            const auto *cursor = reinterpret_cast<const utf8proc_uint8_t *>(text.data());
-            auto remaining = static_cast<utf8proc_ssize_t>(text.size());
-            while (remaining > 0) {
-                utf8proc_int32_t codepoint{};
-                const auto decoded = utf8proc_iterate(cursor, remaining, &codepoint);
-                if (decoded <= 0)
-                    return false;
-                cursor += decoded;
-                remaining -= decoded;
-            }
-            return true;
-        }
-
         /** @brief Reports whether optional catalog content identities are absent or usable. */
         [[nodiscard]] bool HasValidOptionalIdentities(const SaveSlotPublicationMetadata &metadata) noexcept {
             return (!metadata.checkpoint || metadata.checkpoint->IsValid()) && (!metadata.thumbnail || metadata.thumbnail->IsValid());
@@ -83,7 +63,7 @@ namespace Horo::Runtime {
             return Result<void>::Failure(MakeError(SaveErrors::SlotMetadataInvalid));
         if (metadata.projectBuildId.size() > limits.maximumBuildIdBytes)
             return Result<void>::Failure(MakeError(SaveErrors::SlotMetadataLimitExceeded));
-        if (!IsValidUtf8(metadata.projectBuildId))
+        if (!IsValidUtf8ScalarSequence(metadata.projectBuildId))
             return Result<void>::Failure(MakeError(SaveErrors::SlotMetadataInvalid));
         return Result<void>::Success();
     }
@@ -93,7 +73,7 @@ namespace Horo::Runtime {
         if (limits.maximumDisplayNameBytes == 0 || limits.maximumDisplaySummaryBytes == 0 ||
             metadata.displayName.size() > limits.maximumDisplayNameBytes || metadata.summary.size() > limits.maximumDisplaySummaryBytes)
             return Result<void>::Failure(MakeError(SaveErrors::SlotDisplayMetadataInvalid));
-        if (!IsValidUtf8(metadata.displayName) || !IsValidUtf8(metadata.summary))
+        if (!IsValidUtf8ScalarSequence(metadata.displayName) || !IsValidUtf8ScalarSequence(metadata.summary))
             return Result<void>::Failure(MakeError(SaveErrors::SlotDisplayMetadataInvalid));
         return Result<void>::Success();
     }
