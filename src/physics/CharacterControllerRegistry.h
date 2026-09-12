@@ -52,19 +52,13 @@ namespace Horo::Character::Detail {
         /** @brief Resolves one exact live record to a borrow bounded by registry mutation or destruction. */
         [[nodiscard]] Result<const Value *> Resolve(const CharacterControllerHandle &handle) const {
             const Result<void> owner = ValidateCharacterControllerHandleOwner(handle, sceneGeneration_, world_);
-            if (owner.HasError())
-                return Result<const Value *>::Failure(owner.ErrorValue());
-            const Value *value = storage_.Resolve(handle.slot.index, handle.slot.generation);
-            return value ? Result<const Value *>::Success(value) : Result<const Value *>::Failure(HandleError(handle));
+            return owner.HasError() ? Result<const Value *>::Failure(owner.ErrorValue()) : ResolveSlot(handle);
         }
 
         /** @brief Removes one exact live generation and recycles or permanently retires its slot. */
         [[nodiscard]] Result<void> Remove(const CharacterControllerHandle &handle) {
             const Result<void> owner = ValidateCharacterControllerHandleOwner(handle, sceneGeneration_, world_);
-            if (owner.HasError())
-                return owner;
-            return storage_.Remove(handle.slot.index, handle.slot.generation) ? Result<void>::Success()
-                                                                              : Result<void>::Failure(HandleError(handle));
+            return owner.HasError() ? owner : RemoveSlot(handle);
         }
 
         /** @brief Destroys every resident record without allocating; the registry is terminal afterward. */
@@ -78,6 +72,16 @@ namespace Horo::Character::Detail {
         }
 
     private:
+        [[nodiscard]] Result<const Value *> ResolveSlot(const CharacterControllerHandle &handle) const {
+            const Value *value = storage_.Resolve(handle.slot.index, handle.slot.generation);
+            return value ? Result<const Value *>::Success(value) : Result<const Value *>::Failure(HandleError(handle));
+        }
+
+        [[nodiscard]] Result<void> RemoveSlot(const CharacterControllerHandle &handle) {
+            return storage_.Remove(handle.slot.index, handle.slot.generation) ? Result<void>::Success()
+                                                                              : Result<void>::Failure(HandleError(handle));
+        }
+
         [[nodiscard]] const ErrorCodeDescriptor &FullError() const noexcept {
             return storage_.AllSlotsExhausted() ? CharacterErrors::GenerationExhausted : CharacterErrors::CapacityExceeded;
         }

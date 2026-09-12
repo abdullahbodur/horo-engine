@@ -29,20 +29,32 @@ namespace Horo::Physics {
             return {1, {}, 0.0, 0, {}, false, cancellation};
         }
 
-        TEST_CASE("Physics scene participant recreation preserves process-runtime world identity monotonicity",
-                  "[physics][scene][activation][identity]") {
+        /** @brief Creates the null runtime required by scene activation tests. */
+        [[nodiscard]] std::unique_ptr<PhysicsRuntime> RequireRuntime() {
             auto runtime = PhysicsRuntime::Create(PhysicsRuntimeMode::Null);
             REQUIRE(runtime.HasValue());
-            PhysicsSceneActivationAuthority authority;
-            const auto definition = Definition();
+            return std::move(runtime).Value();
+        }
+
+        /** @brief Instantiates one runtime scene from a validated test definition. */
+        [[nodiscard]] std::unique_ptr<Runtime::RuntimeScene> RequireScene(const Runtime::RuntimeSceneDefinition &definition) {
             auto scene = Runtime::RuntimeScene::Create(definition, Runtime::SceneRuntimeId{1});
             REQUIRE(scene.HasValue());
+            return std::move(scene).Value();
+        }
 
-            PhysicsSceneActivationParticipant first{*runtime.Value(), authority, Settings()};
-            auto firstCandidate = first.Prepare(definition, scene.Value()->View());
+        TEST_CASE("Physics scene participant recreation preserves process-runtime world identity monotonicity",
+                  "[physics][scene][activation][identity]") {
+            auto runtime = RequireRuntime();
+            PhysicsSceneActivationAuthority authority;
+            const auto definition = Definition();
+            auto scene = RequireScene(definition);
+
+            PhysicsSceneActivationParticipant first{*runtime, authority, Settings()};
+            auto firstCandidate = first.Prepare(definition, scene->View());
             REQUIRE(firstCandidate.HasValue());
-            PhysicsSceneActivationParticipant replacement{*runtime.Value(), authority, Settings()};
-            auto replacementCandidate = replacement.Prepare(definition, scene.Value()->View());
+            PhysicsSceneActivationParticipant replacement{*runtime, authority, Settings()};
+            auto replacementCandidate = replacement.Prepare(definition, scene->View());
             REQUIRE(replacementCandidate.HasValue());
             REQUIRE(firstCandidate.Value()->ValidatePublication().HasValue());
             REQUIRE(replacementCandidate.Value()->ValidatePublication().HasValue());
@@ -53,14 +65,12 @@ namespace Horo::Physics {
 
         TEST_CASE("Physics scene candidate rejects authoritative generation changes before publication",
                   "[physics][scene][activation][generation]") {
-            auto runtime = PhysicsRuntime::Create(PhysicsRuntimeMode::Null);
-            REQUIRE(runtime.HasValue());
+            auto runtime = RequireRuntime();
             PhysicsSceneActivationAuthority authority;
             const auto definition = Definition();
-            auto scene = Runtime::RuntimeScene::Create(definition, Runtime::SceneRuntimeId{1});
-            REQUIRE(scene.HasValue());
-            PhysicsSceneActivationParticipant participant{*runtime.Value(), authority, Settings()};
-            auto candidate = participant.Prepare(definition, scene.Value()->View());
+            auto scene = RequireScene(definition);
+            PhysicsSceneActivationParticipant participant{*runtime, authority, Settings()};
+            auto candidate = participant.Prepare(definition, scene->View());
             REQUIRE(candidate.HasValue());
 
             REQUIRE(authority.AdvanceOriginGeneration().HasValue());
@@ -69,11 +79,10 @@ namespace Horo::Physics {
         }
 
         TEST_CASE("Runtime scene replaces and tears down real Physics aggregate candidates", "[physics][scene][activation][replacement]") {
-            auto runtime = PhysicsRuntime::Create(PhysicsRuntimeMode::Null);
-            REQUIRE(runtime.HasValue());
+            auto runtime = RequireRuntime();
             PhysicsSceneActivationAuthority authority;
             Runtime::RuntimeSceneService scenes;
-            auto participant = std::make_unique<PhysicsSceneActivationParticipant>(*runtime.Value(), authority, Settings());
+            auto participant = std::make_unique<PhysicsSceneActivationParticipant>(*runtime, authority, Settings());
             REQUIRE(scenes.AddActivationParticipant(std::move(participant)).HasValue());
             CancellationSource cancellation;
             REQUIRE(scenes.Startup(cancellation.Token()).HasValue());
