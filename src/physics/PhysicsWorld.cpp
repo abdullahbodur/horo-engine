@@ -17,6 +17,27 @@
 #include <vector>
 
 namespace Horo::Physics {
+    namespace {
+        /** @brief Provides non-throwing mutual exclusion for the bounded publication snapshot copy. */
+        class PublicationGuard final {
+        public:
+            explicit PublicationGuard(std::atomic_flag &lock) noexcept : lock_(lock) {
+                while (lock_.test_and_set())
+                    std::this_thread::yield();
+            }
+
+            PublicationGuard(const PublicationGuard &) = delete;
+            PublicationGuard &operator=(const PublicationGuard &) = delete;
+
+            ~PublicationGuard() {
+                lock_.clear();
+            }
+
+        private:
+            std::atomic_flag &lock_;
+        };
+    }  // namespace
+
     /** @brief Shared only by the process wrapper and its worlds; identity pointers are owner-thread, stable-address registrations. */
     struct PhysicsRuntime::Impl final {
         explicit Impl(const PhysicsRuntimeMode selectedMode, JobSystem *solverJobSystem)
@@ -68,6 +89,7 @@ namespace Horo::Physics {
             state = PhysicsWorldState::Destroyed;
             lifecycleCause = cause;
             lastFailure.reset();
+            std::ranges::fill(commands, PhysicsStructuralCommand{});
             commandHead = 0;
             commandCount = 0;
             statistics.pendingCommands = 0;
@@ -83,18 +105,47 @@ namespace Horo::Physics {
 
         void ClearForReset() noexcept {
             identity = {};
+            std::ranges::fill(commands, PhysicsStructuralCommand{});
             commandHead = 0;
             commandCount = 0;
             activeTick = 0;
             commandOrderDirty = false;
             stepping = false;
-            while (publicationLock.test_and_set())
-                std::this_thread::yield();
-            published = {};
-            publicationLock.clear();
+            {
+                PublicationGuard publicationGuard{publicationLock};
+                published = {};
+            }
             statistics = {};
             lastFailure.reset();
             lifecycleCause = PhysicsWorldLifecycleCause::Reset;
+        }
+
+        [[nodiscard]] Result<void> Reinitialize() {
+            using enum PhysicsWorldState;
+            Detail::DestroyCanonicalWorld(native);
+            native = {};
+            ClearForReset();
+            if (runtime->mode == PhysicsRuntimeMode::Null) {
+                state = PreparedNull;
+                return Result<void>::Success();
+            }
+
+            try {
+                const Result<Detail::CanonicalWorldHandle> created = Detail::CreateCanonicalWorld(runtime->native, settings);
+                if (created.HasError()) {
+                    state = Failed;
+                    lastFailure = created.ErrorValue();
+                    return Result<void>::Failure(created.ErrorValue());
+                }
+                native = created.Value();
+                state = PreparedSolver;
+                return Result<void>::Success();
+            } catch (const std::bad_alloc &) {
+                Error error = MakeError(PhysicsErrors::CapacityExceeded, "Unable to rebuild Physics world ownership state during reset.");
+                state = Failed;
+                lastFailure = error;
+                return Result<void>::Failure(std::move(error));
+            }
         }
 
         [[nodiscard]] PhysicsStructuralCommand &CommandAt(const std::uint32_t offset) noexcept {
@@ -135,25 +186,6 @@ namespace Horo::Physics {
     };
 
     namespace {
-        /** @brief Provides non-throwing mutual exclusion for the bounded publication snapshot copy. */
-        class PublicationGuard final {
-        public:
-            explicit PublicationGuard(std::atomic_flag &lock) noexcept : lock_(lock) {
-                while (lock_.test_and_set())
-                    std::this_thread::yield();
-            }
-
-            PublicationGuard(const PublicationGuard &) = delete;
-            PublicationGuard &operator=(const PublicationGuard &) = delete;
-
-            ~PublicationGuard() {
-                lock_.clear();
-            }
-
-        private:
-            std::atomic_flag &lock_;
-        };
-
         /** @brief Restores one owner-thread boolean state when a guarded scope exits. */
         class BooleanResetGuard final {
         public:
@@ -468,30 +500,7 @@ namespace Horo::Physics {
             return Result<void>::Success();
         }
 
-        Detail::DestroyCanonicalWorld(impl_->native);
-        impl_->native = {};
-        impl_->ClearForReset();
-        if (impl_->runtime->mode == PhysicsRuntimeMode::Null) {
-            impl_->state = PreparedNull;
-            return Result<void>::Success();
-        }
-
-        try {
-            const Result<Detail::CanonicalWorldHandle> created = Detail::CreateCanonicalWorld(impl_->runtime->native, impl_->settings);
-            if (created.HasError()) {
-                impl_->state = Failed;
-                impl_->lastFailure = created.ErrorValue();
-                return Result<void>::Failure(created.ErrorValue());
-            }
-            impl_->native = created.Value();
-            impl_->state = PreparedSolver;
-            return Result<void>::Success();
-        } catch (const std::bad_alloc &) {
-            Error error = MakeError(PhysicsErrors::CapacityExceeded, "Unable to rebuild Physics world ownership state during reset.");
-            impl_->state = Failed;
-            impl_->lastFailure = error;
-            return Result<void>::Failure(std::move(error));
-        }
+        return impl_->Reinitialize();
     }
 
     /** @copydoc PhysicsWorld::UnloadScene */
