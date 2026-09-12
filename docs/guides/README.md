@@ -32,6 +32,8 @@ workflows.
   replace boundary flapping and unload cooldowns with fenced hysteresis and linger decisions.
 - [World Streaming Velocity Prefetch Migration](./world-streaming-prefetch-migration.md):
   replace ambient extrapolation with exact bounded camera/gameplay path projection.
+- [World Streaming Cell Candidate Migration](./world-streaming-cell-candidate-migration.md):
+  prepare immutable generation-pinned cell candidates from validated manifest and header facts.
 - [XR Coordinate and Pose Contract Migration](./xr-coordinate-pose-migration.md):
   publish generation-fenced coordinate, validity, and time evidence without native
   backend leakage or implicit clock conversion.

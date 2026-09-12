@@ -355,6 +355,7 @@ horo_configure_target_header_boundary(HoroWorldStreaming PUBLIC_HEADERS
     Horo/WorldStreaming/FallbackStreamingProvider.h
     Horo/WorldStreaming/StreamingBudgetModel.h
     Horo/WorldStreaming/StreamingCellOperation.h
+    Horo/WorldStreaming/StreamingCellCandidate.h
     Horo/WorldStreaming/StreamingCellState.h
     Horo/WorldStreaming/StreamingCellStability.h
     Horo/WorldStreaming/StreamingSchedulerAdmission.h

@@ -1323,6 +1323,19 @@ Decode retains the ADR-023 byte validation/transaction contract and participates
 the runtime fencing, reservation and provider barriers above. Foundation JobSystem
 workers stage immutable/private data; only the owner advances cell state.
 
+`StreamingCellCandidate` is the WST-005.3 boundary between parsed artifact facts and
+later block/provider preparation. A worker resolves the exact cell against one
+immutable `CookedWorldIndexManifest`, compares the fixed-header integrity and size
+facts with that manifest, validates canonical bounded TOC rows, and copies them into
+one move-only candidate. The candidate owns the package `AssetId`, self-contained
+manifest integrity facts, canonical hard dependencies, payload rows and full
+`StreamingCellOperationHandle`; it retains no parser or manifest spans or
+manifest-relative dependency offsets. Only Load work in Preparing phase may create
+it. Cancellation and shutdown close new preparation, and a replacement generation
+cannot publish an older candidate. This boundary performs no I/O, decompression,
+provider invocation, owner-thread transition or partial publication. The owner revalidates the exact
+operation fence before the later atomic commit.
+
 ```text
 Admitted I/O -> Integrity checks -> Independent bounded block decode
             -> Resident: detached CoreEcs plus async provider stages

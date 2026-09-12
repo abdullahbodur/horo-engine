@@ -311,6 +311,30 @@ namespace Horo::WorldStreaming::WorldStreamingErrors {
         Describe("world_streaming.cooked_manifest.dependency_invalid", ErrorSeverity::Error,
                  "A cooked cell dependency is invalid, duplicated, self-referential, or absent from the manifest.",
                  "Emit unique required cell identities that belong to the same cooked partition.", true);
+    const ErrorCodeDescriptor CellCandidateInvalid =
+        Describe("world_streaming.cell_candidate.invalid", ErrorSeverity::Error,
+                 "A cell candidate context, fixed header, or payload table is malformed.",
+                 "Reparse the complete canonical cell header and submit valid bounded load-operation evidence.", true);
+    const ErrorCodeDescriptor CellCandidateUnsupported =
+        Describe("world_streaming.cell_candidate.unsupported", ErrorSeverity::Error,
+                 "A cell candidate requests an unsupported format, provider contract, or operation phase.",
+                 "Recook the cell for this runtime format or use an explicitly supported optional provider payload.", true);
+    const ErrorCodeDescriptor CellCandidateStale =
+        Describe("world_streaming.cell_candidate.stale", ErrorSeverity::Warning,
+                 "A cell candidate does not match its exact manifest record, operation, partition, or generation.",
+                 "Discard the candidate and prepare again from the current manifest and load-operation fence.", false);
+    const ErrorCodeDescriptor CellCandidateCapacityExceeded =
+        Describe("world_streaming.cell_candidate.capacity_exceeded", ErrorSeverity::Error,
+                 "Cell candidate header or payload storage exceeds a mandatory caller ceiling.",
+                 "Reject the artifact or admit it under explicitly larger streaming reservations.", true);
+    const ErrorCodeDescriptor CellCandidateUnavailable =
+        Describe("world_streaming.cell_candidate.unavailable", ErrorSeverity::Error,
+                 "The requested cell is absent from the immutable cooked world index.",
+                 "Resolve a cell declared by the pinned manifest publication before starting I/O.", false);
+    const ErrorCodeDescriptor CellCandidateLifecycleUnavailable =
+        Describe("world_streaming.cell_candidate.lifecycle_unavailable", ErrorSeverity::Warning,
+                 "Candidate preparation is closed by cancellation or shutdown.",
+                 "Retire the submitted operation or prepare under a new active owner lifetime.", false);
     const ErrorCodeDescriptor SpatialAssignmentInvalid =
         Describe("world_streaming.spatial_assignment.invalid", ErrorSeverity::Error,
                  "A spatial-assignment request is empty, malformed, or outside the partition content bounds.",
