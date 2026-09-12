@@ -196,6 +196,33 @@ namespace Horo::Extensions::Tests {
             CHECK(result.ErrorValue().code.Value() == code);
         }
 
+        template <typename Service>
+        [[nodiscard]] BackendServiceRegistration RegisterService(BackendServiceRegistry &registry, BackendServiceDescriptor descriptor,
+                                                                 std::unique_ptr<Service> service) {
+            auto registered = registry.Register(std::move(descriptor), std::move(service));
+            REQUIRE(registered.HasValue());
+            return std::move(registered).Value();
+        }
+
+        template <typename Service>
+        [[nodiscard]] BackendServiceCall<Service> ResolveService(BackendServiceRegistry &services,
+                                                                 ApplicationCapabilityRegistry &capabilities,
+                                                                 ExtensionCapabilityAdmission &admission) {
+            auto call = services.Resolve<Service>(CapabilityLease(capabilities, admission), {"com.example.math"}, {"com.example.math.v1"});
+            REQUIRE(call.HasValue());
+            return std::move(call).Value();
+        }
+
+        template <typename Service, typename Operation>
+        [[nodiscard]] std::future<Result<SumResponse>> StartAsyncCall(BackendServiceRegistry &services,
+                                                                      ApplicationCapabilityRegistry &capabilities,
+                                                                      ExtensionCapabilityAdmission &admission, Operation operation) {
+            auto call = ResolveService<Service>(services, capabilities, admission);
+            return std::async(std::launch::async, [call = std::move(call), operation]() mutable {
+                return std::move(call).Invoke(operation, SumRequest{});
+            });
+        }
+
         struct Fixture final {
             Fixture() {
                 auto published = capabilities.Register({{"com.example.math.use"}, {1, 0, 0}, "com.example.math-provider", 7});
@@ -213,12 +240,9 @@ namespace Horo::Extensions::Tests {
     TEST_CASE("Backend-only service performs typed attributed calls without presentation dependencies", "[Extensions][BackendService]") {
         Fixture fixture;
         auto audit = std::make_shared<ArithmeticServiceAudit>();
-        auto registration = fixture.services.Register(Descriptor(), std::make_unique<ArithmeticService>(audit));
-        REQUIRE(registration.HasValue());
-        auto call = fixture.services.Resolve<ArithmeticService>(CapabilityLease(fixture.capabilities, fixture.admission),
-                                                                {"com.example.math"}, {"com.example.math.v1"});
-        REQUIRE(call.HasValue());
-        auto response = std::move(call).Value().Invoke(&ArithmeticService::Add, SumRequest{20, 22});
+        auto registration = RegisterService(fixture.services, Descriptor(), std::make_unique<ArithmeticService>(audit));
+        auto call = ResolveService<ArithmeticService>(fixture.services, fixture.capabilities, fixture.admission);
+        auto response = std::move(call).Invoke(&ArithmeticService::Add, SumRequest{20, 22});
         REQUIRE(response.HasValue());
         CHECK(response.Value().value == 42);
         CHECK(audit->observedProvider == "com.example.math-provider");
@@ -226,42 +250,34 @@ namespace Horo::Extensions::Tests {
 
     TEST_CASE("Backend service preserves typed provider errors and caller cancellation", "[Extensions][BackendService]") {
         Fixture fixture;
-        auto registration =
-            fixture.services.Register(Descriptor(), std::make_unique<ArithmeticService>(std::make_shared<ArithmeticServiceAudit>()));
-        REQUIRE(registration.HasValue());
-        auto failure = fixture.services.Resolve<ArithmeticService>(CapabilityLease(fixture.capabilities, fixture.admission),
-                                                                   {"com.example.math"}, {"com.example.math.v1"});
-        REQUIRE(failure.HasValue());
-        auto failed = std::move(failure).Value().Invoke(&ArithmeticService::Fail, SumRequest{});
+        auto registration = RegisterService(fixture.services, Descriptor(),
+                                            std::make_unique<ArithmeticService>(std::make_shared<ArithmeticServiceAudit>()));
+        auto failure = ResolveService<ArithmeticService>(fixture.services, fixture.capabilities, fixture.admission);
+        auto failed = std::move(failure).Invoke(&ArithmeticService::Fail, SumRequest{});
         RequireErrorCode(failed, "backend_service_invocation_failed");
         REQUIRE(failed.ErrorValue().cause);
         CHECK(failed.ErrorValue().cause.Get()->code.Value() == "contribution_rejected");
 
         CancellationSource cancellation;
         cancellation.RequestCancellation();
-        auto cancelled = fixture.services.Resolve<ArithmeticService>(CapabilityLease(fixture.capabilities, fixture.admission),
-                                                                     {"com.example.math"}, {"com.example.math.v1"});
-        REQUIRE(cancelled.HasValue());
-        RequireErrorCode(std::move(cancelled).Value().Invoke(&ArithmeticService::Add, SumRequest{}, cancellation.Token()),
+        auto cancelled = ResolveService<ArithmeticService>(fixture.services, fixture.capabilities, fixture.admission);
+        RequireErrorCode(std::move(cancelled).Invoke(&ArithmeticService::Add, SumRequest{}, cancellation.Token()),
                          "backend_service_cancelled");
     }
 
     TEST_CASE("Backend service rejects mismatched contracts types and threads before provider invocation", "[Extensions][BackendService]") {
         Fixture fixture;
         auto audit = std::make_shared<ArithmeticServiceAudit>();
-        auto registration = fixture.services.Register(Descriptor(BackendServiceThreadRule::ProviderOwnerThread),
-                                                      std::make_unique<ArithmeticService>(audit));
-        REQUIRE(registration.HasValue());
+        auto registration = RegisterService(fixture.services, Descriptor(BackendServiceThreadRule::ProviderOwnerThread),
+                                            std::make_unique<ArithmeticService>(audit));
         RequireErrorCode(fixture.services.Resolve<ArithmeticService>(CapabilityLease(fixture.capabilities, fixture.admission),
                                                                      {"com.example.math"}, {"com.example.other.v1"}),
                          "backend_service_contract_mismatch");
         RequireErrorCode(fixture.services.Resolve<OtherService>(CapabilityLease(fixture.capabilities, fixture.admission),
                                                                 {"com.example.math"}, {"com.example.math.v1"}),
                          "backend_service_type_mismatch");
-        auto call = fixture.services.Resolve<ArithmeticService>(CapabilityLease(fixture.capabilities, fixture.admission),
-                                                                {"com.example.math"}, {"com.example.math.v1"});
-        REQUIRE(call.HasValue());
-        auto wrongThread = std::async(std::launch::async, [call = std::move(call).Value()]() mutable {
+        auto call = ResolveService<ArithmeticService>(fixture.services, fixture.capabilities, fixture.admission);
+        auto wrongThread = std::async(std::launch::async, [call = std::move(call)]() mutable {
             return std::move(call).Invoke(&ArithmeticService::Add, SumRequest{});
         });
         RequireErrorCode(wrongThread.get(), "backend_service_thread_violation");
@@ -271,15 +287,9 @@ namespace Horo::Extensions::Tests {
     TEST_CASE("Backend service revocation cancels and drains work before shutdown", "[Extensions][BackendService]") {
         Fixture fixture;
         auto audit = std::make_shared<DrainingService::Audit>();
-        auto published = fixture.services.Register<DrainingService>(Descriptor(), std::make_unique<DrainingService>(audit));
-        REQUIRE(published.HasValue());
-        BackendServiceRegistration registration = std::move(published).Value();
-        auto call = fixture.services.Resolve<DrainingService>(CapabilityLease(fixture.capabilities, fixture.admission),
-                                                              {"com.example.math"}, {"com.example.math.v1"});
-        REQUIRE(call.HasValue());
-        auto work = std::async(std::launch::async, [call = std::move(call).Value()]() mutable {
-            return std::move(call).Invoke(&DrainingService::WaitForCancellation, SumRequest{});
-        });
+        BackendServiceRegistration registration = RegisterService(fixture.services, Descriptor(), std::make_unique<DrainingService>(audit));
+        auto work = StartAsyncCall<DrainingService>(fixture.services, fixture.capabilities, fixture.admission,
+                                                    &DrainingService::WaitForCancellation);
         while (!audit->entered.load(std::memory_order_acquire))
             std::this_thread::yield();
         REQUIRE(registration.Reset().HasValue());
@@ -296,10 +306,9 @@ namespace Horo::Extensions::Tests {
         Fixture fixture;
         const std::thread::id ownerThread = std::this_thread::get_id();
         auto audit = std::make_shared<OwnerThreadShutdownService::Audit>();
-        auto published = fixture.services.Register(Descriptor(BackendServiceThreadRule::ProviderOwnerThread),
-                                                   std::make_unique<OwnerThreadShutdownService>(audit));
-        REQUIRE(published.HasValue());
-        BackendServiceRegistration registration = std::move(published).Value();
+        BackendServiceRegistration registration =
+            RegisterService(fixture.services, Descriptor(BackendServiceThreadRule::ProviderOwnerThread),
+                            std::make_unique<OwnerThreadShutdownService>(audit));
 
         auto wrongThread = std::async(std::launch::async, [&registration] {
             return registration.Reset();
@@ -325,14 +334,13 @@ namespace Horo::Extensions::Tests {
                                            std::make_unique<ArithmeticService>(std::make_shared<ArithmeticServiceAudit>())),
                          "backend_service_invalid");
         auto audit = std::make_shared<ArithmeticServiceAudit>();
-        auto registration = services.Register(Descriptor(), std::make_unique<ArithmeticService>(audit));
-        REQUIRE(registration.HasValue());
+        auto registration = RegisterService(services, Descriptor(), std::make_unique<ArithmeticService>(audit));
         RequireErrorCode(services.Register(Descriptor(), std::make_unique<ArithmeticService>(std::make_shared<ArithmeticServiceAudit>())),
                          "backend_service_duplicate");
         REQUIRE(services.BeginShutdown().HasValue());
         CHECK(services.IsShutdown());
         CHECK(audit->shutdownCount.load() == 1);
-        CHECK_FALSE(registration.Value().IsRegistered());
+        CHECK_FALSE(registration.IsRegistered());
         RequireErrorCode(services.Register(Descriptor(), std::make_unique<ArithmeticService>(std::make_shared<ArithmeticServiceAudit>())),
                          "backend_service_shutdown");
     }
@@ -344,9 +352,8 @@ namespace Horo::Extensions::Tests {
         for (int index = 1; index <= 3; ++index) {
             auto descriptor = Descriptor();
             descriptor.serviceId.value += std::to_string(index);
-            auto registered = services.Register(std::move(descriptor), std::make_unique<OrderedShutdownService>(order, index));
-            REQUIRE(registered.HasValue());
-            registrations.push_back(std::move(registered).Value());
+            registrations.push_back(
+                RegisterService(services, std::move(descriptor), std::make_unique<OrderedShutdownService>(order, index)));
         }
 
         REQUIRE(services.BeginShutdown().HasValue());
@@ -360,9 +367,7 @@ namespace Horo::Extensions::Tests {
         for (std::size_t index = 0; index < BackendServiceRegistry::MaximumServices; ++index) {
             auto descriptor = Descriptor();
             descriptor.serviceId.value = "com.example.service" + std::to_string(index);
-            auto registered = services.Register(std::move(descriptor), std::make_unique<NoopService>());
-            REQUIRE(registered.HasValue());
-            registrations.push_back(std::move(registered).Value());
+            registrations.push_back(RegisterService(services, std::move(descriptor), std::make_unique<NoopService>()));
         }
         auto overflow = Descriptor();
         overflow.serviceId.value = "com.example.overflow";
@@ -372,13 +377,11 @@ namespace Horo::Extensions::Tests {
     TEST_CASE("Backend service defers self-initiated shutdown until its active call exits", "[Extensions][BackendService]") {
         Fixture fixture;
         auto shutdownCount = std::make_shared<std::atomic_int>();
-        auto registration = fixture.services.Register(Descriptor(), std::make_unique<SelfStoppingService>(fixture.services, shutdownCount));
-        REQUIRE(registration.HasValue());
-        auto call = fixture.services.Resolve<SelfStoppingService>(CapabilityLease(fixture.capabilities, fixture.admission),
-                                                                  {"com.example.math"}, {"com.example.math.v1"});
-        REQUIRE(call.HasValue());
+        auto registration =
+            RegisterService(fixture.services, Descriptor(), std::make_unique<SelfStoppingService>(fixture.services, shutdownCount));
+        auto call = ResolveService<SelfStoppingService>(fixture.services, fixture.capabilities, fixture.admission);
 
-        auto stopped = std::move(call).Value().Invoke(&SelfStoppingService::Stop, SumRequest{});
+        auto stopped = std::move(call).Invoke(&SelfStoppingService::Stop, SumRequest{});
         RequireErrorCode(stopped, "backend_service_cancelled");
         CHECK(shutdownCount->load() == 1);
         CHECK(fixture.services.IsShutdown());
@@ -392,15 +395,8 @@ namespace Horo::Extensions::Tests {
         ExtensionCapabilityAdmission admission = Admission();
         BackendServiceRegistry services({.drainDeadline = std::chrono::milliseconds{1}});
         auto audit = std::make_shared<UnresponsiveService::Audit>();
-        auto published = services.Register(Descriptor(), std::make_unique<UnresponsiveService>(audit));
-        REQUIRE(published.HasValue());
-        BackendServiceRegistration registration = std::move(published).Value();
-        auto call =
-            services.Resolve<UnresponsiveService>(CapabilityLease(capabilities, admission), {"com.example.math"}, {"com.example.math.v1"});
-        REQUIRE(call.HasValue());
-        auto work = std::async(std::launch::async, [call = std::move(call).Value()]() mutable {
-            return std::move(call).Invoke(&UnresponsiveService::IgnoreCancellation, SumRequest{});
-        });
+        BackendServiceRegistration registration = RegisterService(services, Descriptor(), std::make_unique<UnresponsiveService>(audit));
+        auto work = StartAsyncCall<UnresponsiveService>(services, capabilities, admission, &UnresponsiveService::IgnoreCancellation);
         while (!audit->entered.load(std::memory_order_acquire))
             std::this_thread::yield();
 
@@ -422,8 +418,8 @@ namespace Horo::Extensions::Tests {
               "[Extensions][BackendService]") {
         Fixture fixture;
         auto control = std::make_shared<NestedCallControl>();
-        auto registration = fixture.services.Register(Descriptor(), std::make_unique<NestedSelfStoppingService>(fixture.services, control));
-        REQUIRE(registration.HasValue());
+        auto registration =
+            RegisterService(fixture.services, Descriptor(), std::make_unique<NestedSelfStoppingService>(fixture.services, control));
         control->invokeInner = [&fixture] {
             auto inner = fixture.services.Resolve<NestedSelfStoppingService>(CapabilityLease(fixture.capabilities, fixture.admission),
                                                                              {"com.example.math"}, {"com.example.math.v1"});
@@ -431,11 +427,9 @@ namespace Horo::Extensions::Tests {
                 return Result<SumResponse>::Failure(inner.ErrorValue());
             return std::move(inner).Value().Invoke(&NestedSelfStoppingService::Inner, SumRequest{});
         };
-        auto outer = fixture.services.Resolve<NestedSelfStoppingService>(CapabilityLease(fixture.capabilities, fixture.admission),
-                                                                         {"com.example.math"}, {"com.example.math.v1"});
-        REQUIRE(outer.HasValue());
+        auto outer = ResolveService<NestedSelfStoppingService>(fixture.services, fixture.capabilities, fixture.admission);
 
-        RequireErrorCode(std::move(outer).Value().Invoke(&NestedSelfStoppingService::Outer, SumRequest{}), "backend_service_cancelled");
+        RequireErrorCode(std::move(outer).Invoke(&NestedSelfStoppingService::Outer, SumRequest{}), "backend_service_cancelled");
         CHECK(control->shutdownCount.load() == 1);
         REQUIRE(fixture.services.BeginShutdown().HasValue());
         CHECK(control->shutdownCount.load() == 1);

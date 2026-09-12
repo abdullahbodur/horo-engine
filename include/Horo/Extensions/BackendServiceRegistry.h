@@ -209,10 +209,10 @@ namespace Horo::Extensions {
 
     private:
         friend class BackendServiceRegistry;
-        BackendServiceRegistration(std::weak_ptr<BackendServiceRegistryState> registry,
+        BackendServiceRegistration(std::shared_ptr<BackendServiceRegistryState> registry,
                                    std::shared_ptr<BackendServiceProviderState> provider) noexcept;
 
-        std::weak_ptr<BackendServiceRegistryState> registry_;
+        std::shared_ptr<BackendServiceRegistryState> registry_;
         std::shared_ptr<BackendServiceProviderState> provider_;
     };
 
