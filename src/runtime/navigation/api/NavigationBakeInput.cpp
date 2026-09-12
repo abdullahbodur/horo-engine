@@ -416,6 +416,43 @@ namespace Horo::Navigation {
                 partition.modifierCount = static_cast<std::uint32_t>(std::distance(first, last));
             }
         }
+
+        [[nodiscard]] Result<CanonicalBakeStorage> ResolveCanonicalStorage(const NavigationAreaRegistry &areas,
+                                                                           const std::span<const NavigationAgentProfileDescriptor> profiles,
+                                                                           const std::span<const NavigationBakeSurfaceInput> surfaces,
+                                                                           const std::span<const NavigationBakeModifierInput> modifiers,
+                                                                           const NavigationSourceGeometrySnapshot &geometry,
+                                                                           const NavigationBakeInputLimits &limits) {
+            auto resolvedProfiles = ResolveProfiles(profiles);
+            if (resolvedProfiles.HasError())
+                return Result<CanonicalBakeStorage>::Failure(resolvedProfiles.ErrorValue());
+            auto orderedSurfaces = ResolveSurfaces(surfaces, resolvedProfiles.Value(), geometry);
+            if (orderedSurfaces.HasError())
+                return Result<CanonicalBakeStorage>::Failure(orderedSurfaces.ErrorValue());
+            auto triangleCapacity = ResolveTriangleCapacity(limits, areas, geometry, resolvedProfiles.Value().size(),
+                                                            orderedSurfaces.Value().size(), modifiers.size());
+            if (triangleCapacity.HasError())
+                return Result<CanonicalBakeStorage>::Failure(triangleCapacity.ErrorValue());
+
+            CanonicalBakeStorage storage;
+            storage.profiles = std::move(resolvedProfiles).Value();
+            storage.areas.reserve(std::min<std::size_t>(areas.Areas().size(), limits.maxAreas));
+            storage.partitions.reserve(orderedSurfaces.Value().size());
+            storage.triangles.reserve(
+                static_cast<std::size_t>(PotentialTriangleCount(orderedSurfaces.Value(), geometry, triangleCapacity.Value())));
+            storage.modifiers.reserve(modifiers.size());
+            if (auto gathered =
+                    GatherCanonicalTriangles(areas, geometry, orderedSurfaces.Value(), limits, triangleCapacity.Value(), storage);
+                gathered.HasError())
+                return Result<CanonicalBakeStorage>::Failure(gathered.ErrorValue());
+            if (auto resolved = ResolveModifiers(modifiers, areas, limits, storage); resolved.HasError())
+                return Result<CanonicalBakeStorage>::Failure(resolved.ErrorValue());
+            BindModifierRanges(storage);
+
+            if (const auto capacity = ValidateCapacity(limits, geometry, storage); capacity.HasError())
+                return Result<CanonicalBakeStorage>::Failure(capacity.ErrorValue());
+            return Result<CanonicalBakeStorage>::Success(std::move(storage));
+        }
     }  // namespace
 
     struct NavigationBakeInputSnapshot::ConstructionState final {
@@ -444,34 +481,10 @@ namespace Horo::Navigation {
                 modifiers.size() > limits.maxModifiers)
                 return Failure<NavigationBakeInputSnapshot>(NavigationErrors::BakeInputCapacityExceeded);
 
-            auto resolvedProfiles = ResolveProfiles(profiles);
-            if (resolvedProfiles.HasError())
-                return Result<NavigationBakeInputSnapshot>::Failure(resolvedProfiles.ErrorValue());
-            auto orderedSurfaces = ResolveSurfaces(surfaces, resolvedProfiles.Value(), geometry);
-            if (orderedSurfaces.HasError())
-                return Result<NavigationBakeInputSnapshot>::Failure(orderedSurfaces.ErrorValue());
-            auto triangleCapacity = ResolveTriangleCapacity(limits, areas, geometry, resolvedProfiles.Value().size(),
-                                                            orderedSurfaces.Value().size(), modifiers.size());
-            if (triangleCapacity.HasError())
-                return Result<NavigationBakeInputSnapshot>::Failure(triangleCapacity.ErrorValue());
-
-            CanonicalBakeStorage storage;
-            storage.profiles = std::move(resolvedProfiles).Value();
-            storage.areas.reserve(std::min<std::size_t>(areas.Areas().size(), limits.maxAreas));
-            storage.partitions.reserve(orderedSurfaces.Value().size());
-            storage.triangles.reserve(
-                static_cast<std::size_t>(PotentialTriangleCount(orderedSurfaces.Value(), geometry, triangleCapacity.Value())));
-            storage.modifiers.reserve(modifiers.size());
-            if (auto gathered =
-                    GatherCanonicalTriangles(areas, geometry, orderedSurfaces.Value(), limits, triangleCapacity.Value(), storage);
-                gathered.HasError())
-                return Result<NavigationBakeInputSnapshot>::Failure(gathered.ErrorValue());
-            if (auto resolved = ResolveModifiers(modifiers, areas, limits, storage); resolved.HasError())
-                return Result<NavigationBakeInputSnapshot>::Failure(resolved.ErrorValue());
-            BindModifierRanges(storage);
-
-            if (const auto capacity = ValidateCapacity(limits, geometry, storage); capacity.HasError())
-                return Result<NavigationBakeInputSnapshot>::Failure(capacity.ErrorValue());
+            auto resolvedStorage = ResolveCanonicalStorage(areas, profiles, surfaces, modifiers, geometry, limits);
+            if (resolvedStorage.HasError())
+                return Result<NavigationBakeInputSnapshot>::Failure(resolvedStorage.ErrorValue());
+            auto storage = std::move(resolvedStorage).Value();
             ConstructionState state{.revisions = revisions,
                                     .limits = limits,
                                     .fingerprint =
@@ -487,46 +500,6 @@ namespace Horo::Navigation {
         } catch (const std::bad_alloc &) {
             return Failure<NavigationBakeInputSnapshot>(NavigationErrors::BakeInputCapacityExceeded);
         }
-    }
-
-    /** @copydoc NavigationBakeInputSnapshot::Revisions */
-    const NavigationBakeInputRevisions &NavigationBakeInputSnapshot::Revisions() const noexcept {
-        return revisions_;
-    }
-
-    /** @copydoc NavigationBakeInputSnapshot::Limits */
-    const NavigationBakeInputLimits &NavigationBakeInputSnapshot::Limits() const noexcept {
-        return limits_;
-    }
-
-    /** @copydoc NavigationBakeInputSnapshot::Fingerprint */
-    const Sha256Digest &NavigationBakeInputSnapshot::Fingerprint() const noexcept {
-        return fingerprint_;
-    }
-
-    /** @copydoc NavigationBakeInputSnapshot::Profiles */
-    std::span<const NavigationResolvedBakeProfile> NavigationBakeInputSnapshot::Profiles() const noexcept {
-        return profiles_;
-    }
-
-    /** @copydoc NavigationBakeInputSnapshot::Areas */
-    std::span<const NavigationResolvedBakeArea> NavigationBakeInputSnapshot::Areas() const noexcept {
-        return areas_;
-    }
-
-    /** @copydoc NavigationBakeInputSnapshot::Partitions */
-    std::span<const NavigationTileBuildPartition> NavigationBakeInputSnapshot::Partitions() const noexcept {
-        return partitions_;
-    }
-
-    /** @copydoc NavigationBakeInputSnapshot::Triangles */
-    std::span<const NavigationTileBuildTriangle> NavigationBakeInputSnapshot::Triangles() const noexcept {
-        return triangles_;
-    }
-
-    /** @copydoc NavigationBakeInputSnapshot::Modifiers */
-    std::span<const NavigationTileBuildModifier> NavigationBakeInputSnapshot::Modifiers() const noexcept {
-        return modifiers_;
     }
 
     /** @copydoc NavigationBakeInputSnapshot::ValidatePublication */

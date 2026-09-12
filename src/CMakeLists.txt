@@ -621,6 +621,7 @@ add_library(HoroNavigationApi STATIC
         runtime/navigation/api/NavigationAgentProfiles.cpp
         runtime/navigation/api/NavigationBakeFingerprint.cpp
         runtime/navigation/api/NavigationBakeInput.cpp
+        runtime/navigation/api/NavigationBakeInputSnapshot.cpp
         runtime/navigation/api/NavigationCapabilities.cpp
         runtime/navigation/api/NavigationErrors.cpp
         runtime/navigation/api/NavigationIdentity.cpp

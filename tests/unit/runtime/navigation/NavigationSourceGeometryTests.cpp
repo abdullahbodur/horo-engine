@@ -30,9 +30,8 @@ namespace Horo::Navigation {
             NavigationSourceRevision revision{Id<NavigationSourceRevision>(1)};
             Sha256Digest digest{Digest(1)};
             Math::Transform transform{};
-            std::vector<Math::Vec3> vertices{{0.0F, 0.0F, 0.0F}, {1.0F, 0.0F, 0.0F}, {0.0F, 0.0F, 1.0F}};
-            std::vector<NavigationSourceTriangleInput> triangles{
-                {.vertexIndices = {0, 1, 2}, .area = Id<NavigationAreaId>(1), .materialSlot = {.value = 7}}};
+            std::vector<Math::Vec3> vertices{TestSupport::UnitTriangleVertices()};
+            std::vector<NavigationSourceTriangleInput> triangles{TestSupport::UnitTriangle(Id<NavigationAreaId>(1), 7)};
 
             [[nodiscard]] NavigationSourceContributionInput View() const {
                 return {
