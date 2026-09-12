@@ -98,8 +98,7 @@ namespace Horo::WorldStreaming {
     /** @brief Lifecycle and optional exact handoff evidence for ownership replacement. */
     struct WorldLayerStateOwnershipReplacementContext final {
         WorldLayerStateAuthorityState authorityState{WorldLayerStateAuthorityState::Closed}; /**< Current lifecycle gate. */
-        std::optional<WorldLayerControlHandoffReceipt> authorizedHandoff{}; /**< Current-owner authorization for a handoff. */
-        std::optional<WorldLayerControlOwner> validatedHandoffTarget{};     /**< Independently fresh target owner lifetime. */
+        std::optional<WorldLayerValidatedHandoffContext> handoff{}; /**< Current authorization and fresh target evidence. */
     };
 
     /** @brief Exact state-machine command and compare-and-swap fence. */

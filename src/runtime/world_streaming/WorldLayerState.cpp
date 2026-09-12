@@ -227,14 +227,16 @@ namespace Horo::WorldStreaming {
 
         const WorldLayerOwnershipAdmissionContext ownershipContext{.expectedWorld = expected.world,
                                                                    .current = current.ownership,
-                                                                   .authorizedHandoff = context.authorizedHandoff,
-                                                                   .validatedHandoffTarget = context.validatedHandoffTarget,
+                                                                   .handoff = context.handoff,
                                                                    .layerCount = 1,
                                                                    .layerCapacity = 1,
                                                                    .state = WorldLayerOwnershipAuthorityState::Active};
-        const WorldLayerOwnershipRequest ownershipRequest{.candidate = replacement,
-                                                          .expectedRevision = current.ownership.revision,
-                                                          .handoff = context.authorizedHandoff};
+        const WorldLayerOwnershipRequest
+            ownershipRequest{.candidate = replacement,
+                             .expectedRevision = current.ownership.revision,
+                             .handoff = context.handoff.has_value()
+                                            ? std::optional<WorldLayerControlHandoffReceipt>{context.handoff->authorization}
+                                            : std::optional<WorldLayerControlHandoffReceipt>{}};
         if (const auto admitted = ValidateWorldLayerOwnershipAdmission(ownershipRequest, ownershipContext); admitted.HasError())
             return Result<WorldLayerStateRecord>::Failure(admitted.ErrorValue());
 

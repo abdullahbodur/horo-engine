@@ -56,11 +56,11 @@ namespace Horo::WorldStreaming {
                 .generation = IdentityFrom<WorldLayerControlHandoffGeneration>(1),
                 .currentOwner = current.ownership.owner,
                 .targetOwner = target,
+                .layer = current.ownership.layer,
                 .expectedRevision = current.ownership.revision,
             };
             return {.authorityState = WorldLayerStateAuthorityState::Active,
-                    .authorizedHandoff = receipt,
-                    .validatedHandoffTarget = target};
+                    .handoff = WorldLayerValidatedHandoffContext{.authorization = receipt, .validatedTarget = target}};
         }
 
         void Advance(WorldLayerStateRecord &record, const WorldLayerStateTransition transition,
