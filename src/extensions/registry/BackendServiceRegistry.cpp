@@ -156,8 +156,7 @@ namespace Horo::Extensions {
                                  BackendServiceRetirementDisposition::RestartRequired},
                 EarlyDisposition{IsExecuting(provider.get()), BackendServiceRetirementDisposition::DeferredUntilCallExit},
             };
-            const auto early = std::ranges::find(earlyDispositions, true, &EarlyDisposition::applies);
-            if (early != earlyDispositions.end())
+            if (const auto early = std::ranges::find(earlyDispositions, true, &EarlyDisposition::applies); early != earlyDispositions.end())
                 return early->disposition;
             if (provider->activeCalls != 0U) {
                 const std::array deadlines{std::chrono::steady_clock::now(), deadline};
@@ -201,36 +200,34 @@ namespace Horo::Extensions {
         [[nodiscard]] BackendServiceRetirementDisposition ProgressRetirements(const std::shared_ptr<BackendServiceRegistryState> &registry,
                                                                               const std::chrono::steady_clock::time_point deadline,
                                                                               const bool waitForDrain) noexcept {
+            using enum BackendServiceRetirementDisposition;
             if (registry->stagingShutdown.load(std::memory_order_acquire))
-                return BackendServiceRetirementDisposition::DeferredUntilCallExit;
+                return DeferredUntilCallExit;
             std::unique_lock coordinator{registry->retirementMutex, std::defer_lock};
-            const std::array coordinatorDeadlines{std::chrono::steady_clock::now(), deadline};
-            if (!coordinator.try_lock_until(coordinatorDeadlines[static_cast<std::size_t>(waitForDrain)])) {
+            if (const std::array coordinatorDeadlines{std::chrono::steady_clock::now(), deadline};
+                !coordinator.try_lock_until(coordinatorDeadlines[static_cast<std::size_t>(waitForDrain)])) {
                 if (waitForDrain)
                     registry->restartRequired.store(true, std::memory_order_release);
-                constexpr std::array dispositions{BackendServiceRetirementDisposition::DeferredUntilCallExit,
-                                                  BackendServiceRetirementDisposition::RestartRequired};
+                constexpr std::array dispositions{DeferredUntilCallExit, RestartRequired};
                 return dispositions[static_cast<std::size_t>(waitForDrain)];
             }
-            constexpr std::array initialDispositions{BackendServiceRetirementDisposition::ShutdownComplete,
-                                                     BackendServiceRetirementDisposition::RestartRequired};
+            constexpr std::array initialDispositions{ShutdownComplete, RestartRequired};
             auto aggregate = initialDispositions[static_cast<std::size_t>(registry->restartRequired.load(std::memory_order_acquire))];
             for (;;) {
                 std::shared_ptr<BackendServiceProviderState> provider;
                 {
                     std::scoped_lock lock{registry->mutex};
                     if (registry->retiredProviders.empty())
-                        break;
+                        return aggregate;
                     provider = registry->retiredProviders.front();
                 }
                 const auto disposition = StopProvider(registry, provider, deadline, waitForDrain);
                 aggregate = std::max(aggregate, disposition);
-                if (disposition != BackendServiceRetirementDisposition::ShutdownComplete)
-                    break;
+                if (disposition != ShutdownComplete)
+                    return aggregate;
                 std::scoped_lock lock{registry->mutex};
                 std::erase(registry->retiredProviders, provider);
             }
-            return aggregate;
         }
 
         [[nodiscard]] BackendServiceRetirementDisposition RetireProvider(
@@ -250,7 +247,7 @@ namespace Horo::Extensions {
 
         void QuarantineForRestart(const std::shared_ptr<BackendServiceRegistryState> &registry) noexcept {
             static std::mutex mutex;
-            static BackendServiceRegistryState *quarantinedRegistry{};
+            static const BackendServiceRegistryState *quarantinedRegistry{};
             std::scoped_lock lock{mutex};
             if (registry->quarantined)
                 return;
@@ -326,9 +323,8 @@ namespace Horo::Extensions {
                 &ExtensionErrors::BackendServiceCancelled,
                 &ExtensionErrors::BackendServiceCapacityExceeded,
             };
-            const auto failure = std::ranges::find(failures, true);
-            if (failure != failures.end()) {
-                const std::size_t index = static_cast<std::size_t>(failure - failures.begin());
+            if (const auto failure = std::ranges::find(failures, true); failure != failures.end()) {
+                const auto index = static_cast<std::size_t>(failure - failures.begin());
                 if (errors[index] == &ExtensionErrors::BackendServiceCancelled)
                     return Result<BackendServiceCallAdmission>::Failure(BackendServiceCancellationError(provider->descriptor));
                 return Result<BackendServiceCallAdmission>::Failure(MakeError(*errors[index]));
@@ -422,8 +418,8 @@ namespace Horo::Extensions {
 
     BackendServiceImportBinding::BackendServiceImportBinding(std::shared_ptr<BackendServiceProviderState> provider,
                                                              ApplicationCapabilityProviderLease authority,
-                                                             ResolvedExtensionServiceImport import) noexcept
-        : provider_(std::move(provider)), authority_(std::move(authority)), import_(std::move(import)) {}
+                                                             ResolvedExtensionServiceImport binding) noexcept
+        : provider_(std::move(provider)), authority_(std::move(authority)), import_(std::move(binding)) {}
 
     BackendServiceRegistry::BackendServiceRegistry(BackendServiceRegistryConfig config)
         : state_(std::make_shared<BackendServiceRegistryState>()) {
@@ -443,9 +439,9 @@ namespace Horo::Extensions {
     Result<BackendServiceRegistration> BackendServiceRegistry::RegisterErased(BackendServiceDescriptor descriptor,
                                                                               Detail::BackendServiceOwnedImplementation implementation,
                                                                               const void *typeTag, const ShutdownFunction shutdown) {
-        const std::array invalid{!ValidDescriptor(descriptor), implementation.service == nullptr,
-                                 implementation.codeLease.owner_ == nullptr, typeTag == nullptr, shutdown == nullptr};
-        if (std::ranges::find(invalid, true) != invalid.end())
+        if (const std::array invalid{!ValidDescriptor(descriptor), implementation.service == nullptr,
+                                     implementation.codeLease.owner_ == nullptr, typeTag == nullptr, shutdown == nullptr};
+            std::ranges::find(invalid, true) != invalid.end())
             return Result<BackendServiceRegistration>::Failure(MakeError(ExtensionErrors::BackendServiceInvalid));
         std::scoped_lock lock{state_->mutex};
         const auto duplicate = std::ranges::find_if(state_->providers, [&descriptor](const auto &provider) {
@@ -461,8 +457,7 @@ namespace Horo::Extensions {
                                   state_->providers.size() + state_->retiredProviders.size() >= MaximumServices};
         constexpr std::array errors{&ExtensionErrors::BackendServiceShutdown, &ExtensionErrors::BackendServiceDuplicate,
                                     &ExtensionErrors::BackendServiceCapacityExceeded};
-        const auto failure = std::ranges::find(failures, true);
-        if (failure != failures.end())
+        if (const auto failure = std::ranges::find(failures, true); failure != failures.end())
             return Result<BackendServiceRegistration>::Failure(MakeError(*errors[static_cast<std::size_t>(failure - failures.begin())]));
 
         auto provider = std::make_shared<BackendServiceProviderState>();
@@ -479,42 +474,42 @@ namespace Horo::Extensions {
 
     /** @copydoc BackendServiceRegistry::BindImport */
     Result<BackendServiceImportBinding> BackendServiceRegistry::BindImport(ApplicationCapabilityProviderLease authority,
-                                                                           const ResolvedExtensionServiceImport &import) const {
-        if (import.Status() != ExtensionServiceImportStatus::Bound) {
-            const ErrorCodeDescriptor &error = import.Status() == ExtensionServiceImportStatus::Unavailable
+                                                                           const ResolvedExtensionServiceImport &binding) const {
+        if (binding.Status() != ExtensionServiceImportStatus::Bound) {
+            const ErrorCodeDescriptor &error = binding.Status() == ExtensionServiceImportStatus::Unavailable
                                                    ? ExtensionErrors::BackendServiceUnavailable
                                                    : ExtensionErrors::BackendServiceContractMismatch;
             return Result<BackendServiceImportBinding>::Failure(
-                Detail::BackendServiceImportError(import, error, "The declared import did not resolve to a provider."));
+                Detail::BackendServiceImportError(binding, error, "The declared import did not resolve to a provider."));
         }
         if (!authority.IsUsable()) {
             return Result<BackendServiceImportBinding>::Failure(
-                Detail::BackendServiceImportError(import, ExtensionErrors::BackendServiceUnavailable,
+                Detail::BackendServiceImportError(binding, ExtensionErrors::BackendServiceUnavailable,
                                                   "The consumer admission or capability publication is no longer active."));
         }
 
         const ApplicationCapabilityProviderDescriptor &provider = authority.Descriptor();
-        const ExtensionActivationIdentity &consumer = authority.Consumer();
-        if (consumer.ExtensionId() != import.ConsumerExtensionId() || consumer.ModuleId() != import.ConsumerModuleId()) {
+        if (const ExtensionActivationIdentity &consumer = authority.Consumer();
+            consumer.ExtensionId() != binding.ConsumerExtensionId() || consumer.ModuleId() != binding.ConsumerModuleId()) {
             return Result<BackendServiceImportBinding>::Failure(
-                Detail::BackendServiceImportError(import, ExtensionErrors::BackendServiceContractMismatch,
+                Detail::BackendServiceImportError(binding, ExtensionErrors::BackendServiceContractMismatch,
                                                   std::format("Admitted consumer is '{}/{}' at generation {}.", consumer.ExtensionId(),
                                                               consumer.ModuleId(), consumer.Generation()),
                                                   &provider));
         }
 
-        if (provider.provider.moduleId != import.ProviderModuleId()) {
+        if (provider.provider.moduleId != binding.ProviderModuleId()) {
             return Result<BackendServiceImportBinding>::Failure(
-                Detail::BackendServiceImportError(import, ExtensionErrors::BackendServiceContractMismatch,
+                Detail::BackendServiceImportError(binding, ExtensionErrors::BackendServiceContractMismatch,
                                                   std::format("Admitted provider mapping is '{} -> {}' at generation {}.",
                                                               provider.provider.moduleId, provider.provider.providerId,
                                                               provider.provider.generation),
                                                   &provider));
         }
-        const std::optional<ApplicationCapabilityVersion> declaredVersion = ParseProviderVersion(import.ProviderVersion());
-        if (!declaredVersion.has_value() || *declaredVersion != provider.version) {
+        if (const std::optional<ApplicationCapabilityVersion> declaredVersion = ParseProviderVersion(binding.ProviderVersion());
+            !declaredVersion.has_value() || *declaredVersion != provider.version) {
             return Result<BackendServiceImportBinding>::Failure(
-                Detail::BackendServiceImportError(import, ExtensionErrors::BackendServiceContractMismatch,
+                Detail::BackendServiceImportError(binding, ExtensionErrors::BackendServiceContractMismatch,
                                                   std::format("Admitted provider version is {}.{}.{} at generation {}.",
                                                               provider.version.major, provider.version.minor, provider.version.patch,
                                                               provider.provider.generation),
@@ -522,13 +517,13 @@ namespace Horo::Extensions {
         }
 
         auto resolved =
-            ResolveErased(provider, BackendServiceId{import.ServiceId()}, BackendServiceContractId{import.ContractId()}, nullptr);
+            ResolveErased(provider, BackendServiceId{binding.ServiceId()}, BackendServiceContractId{binding.ContractId()}, nullptr);
         if (resolved.HasError()) {
             return Result<BackendServiceImportBinding>::Failure(
-                Detail::AttributeBackendServiceImportError(import, resolved.ErrorValue(), "Live provider binding failed.", &provider));
+                Detail::AttributeBackendServiceImportError(binding, resolved.ErrorValue(), "Live provider binding failed.", &provider));
         }
         return Result<BackendServiceImportBinding>::Success(
-            BackendServiceImportBinding{std::move(resolved).Value(), std::move(authority), import});
+            BackendServiceImportBinding{std::move(resolved).Value(), std::move(authority), binding});
     }
 
     /** @copydoc BackendServiceRegistry::Resolve */
@@ -576,9 +571,9 @@ namespace Horo::Extensions {
                                                                            "The backend service registry is shutting down.",
                                                                            &binding.authority_.Descriptor()));
         }
-        const bool live = binding.provider_->registered.load(std::memory_order_acquire) &&
-                          std::ranges::find(state_->providers, binding.provider_) != state_->providers.end();
-        if (!live) {
+        if (const bool live = binding.provider_->registered.load(std::memory_order_acquire) &&
+                              std::ranges::find(state_->providers, binding.provider_) != state_->providers.end();
+            !live) {
             return Result<void>::Failure(
                 Detail::BackendServiceImportError(binding.import_, ExtensionErrors::BackendServiceUnavailable,
                                                   "The exact provider generation selected by the binding is no longer published.",
