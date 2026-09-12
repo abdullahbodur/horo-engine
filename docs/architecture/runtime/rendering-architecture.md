@@ -1581,6 +1581,41 @@ presentation resources. Host policy supplies intent, and the frontend publishes
 the resolved output contract after checking platform, surface, and effective
 device support. Requested settings and active output are separate values.
 
+`RenderDisplaySnapshot` is the narrow RenderApi handoff for Platform-owned display
+facts. A snapshot owns no native handles and carries a non-zero, strictly increasing
+platform revision. Display records are bounded and canonically ordered by stable
+machine-local `RenderDisplayId`; each record owns a sorted unique mode set, an exact
+current mode, explicit color-space/transfer/dynamic-range facts, tri-state HDR support,
+and optional finite luminance values in nits. Unknown HDR support and missing
+luminance remain explicit rather than being fabricated as unsupported or zero.
+Platform enumeration and monitor/window association remain outside RenderApi.
+
+The platform owner feeds complete snapshots through `RenderDisplaySnapshotFeed` at
+its owner-thread safe point. Publication validates the whole candidate before replacing
+the last committed value and returns a bounded immutable delta with typed Added,
+Removed, CurrentModeChanged, and CapabilitiesChanged reasons. Equal or stale revisions,
+unknown color/HDR values, contradictory modes, malformed bounds, and non-owner
+publication fail with typed results and leave the previous snapshot unchanged. There
+are no callbacks, worker jobs, or hidden polling threads; `Stop` idempotently closes
+admission and releases retained facts before Platform shutdown. Headless hosts simply
+omit this feed rather than inventing a display.
+
+`PresentMode` remains the single native-free pacing-mode vocabulary used by backend
+configuration and negotiation. Host intent is either one explicitly required mode or
+a bounded unique Auto preference order. Backend capabilities are a bounded, canonical
+sorted set. `NegotiatePresentMode` is pure and deterministic: an explicit request only
+succeeds on an exact match, while Auto examines only the host-provided order and records
+the requested mode, resolved mode, selected preference index, and degraded fallback
+status. Empty, duplicate, unordered, unknown, unsupported, and no-match inputs return
+typed failures; negotiation never invents FIFO, tearing, latency, or frames-in-flight
+policy.
+
+The negotiation value owns no surface, callback, worker, or native resource, so it has
+no independent thread, cancellation, or shutdown lifecycle. The application host owns
+the immutable request and invokes negotiation before a renderer-owned surface lifecycle
+applies the resolved value. Surface reconfiguration, pacing, HDR, and backend-native
+translation remain in their owning downstream contracts.
+
 Publish revisioned logical output candidates with owner-thread commands before
 layout/extraction; commit active output only after realizing the same candidate
 before native frame acquisition. Output-dependent extraction retains that
