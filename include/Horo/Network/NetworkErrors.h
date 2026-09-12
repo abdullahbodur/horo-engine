@@ -114,6 +114,12 @@ namespace Horo::Network::NetworkErrors {
     extern const ErrorCodeDescriptor ProtocolVersionIncompatible;
     /** @brief Protocol identity registry construction exceeded an explicit finite bound. */
     extern const ErrorCodeDescriptor ProtocolIdentityCapacityExceeded;
+    /** @brief Handshake policy or peer input is malformed or exceeds its finite bounds. */
+    extern const ErrorCodeDescriptor HandshakeInvalid;
+    /** @brief Explicit protocol, feature, compression, schema, or transport requirements have no compatible selection. */
+    extern const ErrorCodeDescriptor HandshakeIncompatible;
+    /** @brief A handshake operation is not legal from the current terminal or negotiating state. */
+    extern const ErrorCodeDescriptor HandshakeStateInvalid;
     /** @brief Message framing or codec metadata is malformed or non-canonical. */
     extern const ErrorCodeDescriptor MessageEnvelopeInvalid;
     /** @brief Declared message framing exceeds an explicit finite bound. */
