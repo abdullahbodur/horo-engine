@@ -116,7 +116,8 @@ namespace Horo::Navigation {
     /** @copydoc NavigationWorldLifecycle::Stage */
     Result<void> NavigationWorldLifecycle::Stage(const NavigationWorldActivationDescriptor &descriptor,
                                                  std::unique_ptr<INavigationQueryBackend> backend) {
-        if (state_ == NavigationWorldLifecycleState::ShuttingDown || state_ == NavigationWorldLifecycleState::Closed || staged_)
+        using enum NavigationWorldLifecycleState;
+        if (state_ == ShuttingDown || state_ == Closed || staged_)
             return Failure<void>(NavigationErrors::CapabilityUnavailable);
         if (!descriptor.IsValid() || !backend || !ValidateNavigationProviderCapabilities(backend->Capabilities()))
             return Failure<void>(NavigationErrors::CapabilityDescriptorInvalid);
@@ -133,7 +134,8 @@ namespace Horo::Navigation {
     /** @copydoc NavigationWorldLifecycle::CommitAtSafePoint */
     Result<void> NavigationWorldLifecycle::CommitAtSafePoint(const NavigationSceneRuntimeId expectedScene,
                                                              const NavigationSceneGeneration expectedGeneration) {
-        if (state_ == NavigationWorldLifecycleState::ShuttingDown || state_ == NavigationWorldLifecycleState::Closed || !staged_)
+        using enum NavigationWorldLifecycleState;
+        if (state_ == ShuttingDown || state_ == Closed || !staged_)
             return Failure<void>(NavigationErrors::CapabilityUnavailable);
         if (staged_->descriptor.scene != expectedScene || staged_->descriptor.sceneGeneration != expectedGeneration)
             return Failure<void>(NavigationErrors::StaleSnapshot);
@@ -143,35 +145,38 @@ namespace Horo::Navigation {
         if (active_)
             RetireActive();
         active_ = std::move(staged_);
-        state_ = NavigationWorldLifecycleState::Active;
+        state_ = Active;
         return Result<void>::Success();
     }
 
     /** @copydoc NavigationWorldLifecycle::Pause */
     Result<void> NavigationWorldLifecycle::Pause(const NavigationWorldId world) noexcept {
+        using enum NavigationWorldLifecycleState;
         if (!active_ || active_->descriptor.world != world)
             return Failure<void>(NavigationErrors::InvalidWorld);
-        if (state_ != NavigationWorldLifecycleState::Active && state_ != NavigationWorldLifecycleState::Paused)
+        if (state_ != Active && state_ != Paused)
             return Failure<void>(NavigationErrors::CapabilityUnavailable);
-        state_ = NavigationWorldLifecycleState::Paused;
+        state_ = Paused;
         return Result<void>::Success();
     }
 
     /** @copydoc NavigationWorldLifecycle::Resume */
     Result<void> NavigationWorldLifecycle::Resume(const NavigationWorldId world) noexcept {
+        using enum NavigationWorldLifecycleState;
         if (!active_ || active_->descriptor.world != world)
             return Failure<void>(NavigationErrors::InvalidWorld);
-        if (state_ != NavigationWorldLifecycleState::Paused)
+        if (state_ != Paused)
             return Failure<void>(NavigationErrors::CapabilityUnavailable);
-        state_ = NavigationWorldLifecycleState::Active;
+        state_ = Active;
         return Result<void>::Success();
     }
 
     /** @copydoc NavigationWorldLifecycle::Unload */
     Result<void> NavigationWorldLifecycle::Unload(const NavigationWorldId world) noexcept {
+        using enum NavigationWorldLifecycleState;
         if (!active_ || active_->descriptor.world != world)
             return Failure<void>(NavigationErrors::InvalidWorld);
-        if (state_ == NavigationWorldLifecycleState::ShuttingDown || state_ == NavigationWorldLifecycleState::Closed)
+        if (state_ == ShuttingDown || state_ == Closed)
             return Failure<void>(NavigationErrors::CapabilityUnavailable);
         if (!CanRetireActive())
             return Failure<void>(NavigationErrors::CapacityExceeded);
@@ -180,15 +185,16 @@ namespace Horo::Navigation {
             staged_.reset();
         }
         RetireActive();
-        state_ = NavigationWorldLifecycleState::Empty;
+        state_ = Empty;
         return Result<void>::Success();
     }
 
     /** @copydoc NavigationWorldLifecycle::BeginShutdown */
     void NavigationWorldLifecycle::BeginShutdown() noexcept {
-        if (state_ == NavigationWorldLifecycleState::Closed)
+        using enum NavigationWorldLifecycleState;
+        if (state_ == Closed)
             return;
-        state_ = NavigationWorldLifecycleState::ShuttingDown;
+        state_ = ShuttingDown;
         if (staged_) {
             Revoke(staged_);
             staged_.reset();
@@ -202,13 +208,14 @@ namespace Horo::Navigation {
 
     /** @copydoc NavigationWorldLifecycle::CollectRetired */
     NavigationWorldLifecycleState NavigationWorldLifecycle::CollectRetired() noexcept {
+        using enum NavigationWorldLifecycleState;
         std::erase_if(retired_, [](const auto &record) {
             return record.use_count() == 1;
         });
-        if (state_ == NavigationWorldLifecycleState::ShuttingDown && active_ && active_.use_count() == 1)
+        if (state_ == ShuttingDown && active_ && active_.use_count() == 1)
             active_.reset();
-        if (state_ == NavigationWorldLifecycleState::ShuttingDown && !active_ && !staged_ && retired_.empty())
-            state_ = NavigationWorldLifecycleState::Closed;
+        if (state_ == ShuttingDown && !active_ && !staged_ && retired_.empty())
+            state_ = Closed;
         return state_;
     }
 
@@ -258,6 +265,8 @@ namespace Horo::Navigation {
 
     /** @copydoc NavigationWorldLifecycle::RetireActive */
     void NavigationWorldLifecycle::RetireActive() noexcept {
+        if (!active_)
+            return;
         Revoke(active_);
         if (active_.use_count() > 1)
             retired_.push_back(active_);

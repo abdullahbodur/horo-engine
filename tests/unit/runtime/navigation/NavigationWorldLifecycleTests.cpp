@@ -55,6 +55,8 @@ namespace Horo::Navigation {
     }  // namespace
 
     TEST_CASE("Navigation world activation validates bounded owner storage", "[unit][navigation][headless][lifecycle]") {
+        NavigationWorldReadLease inert;
+        REQUIRE_FALSE(inert.IsValid());
         RequireError(NavigationWorldLifecycle::Create(0), NavigationErrors::CapabilityDescriptorInvalid);
         RequireError(NavigationWorldLifecycle::Create(NavigationWorldLifecycle::MaximumRetiredWorlds + 1U),
                      NavigationErrors::CapabilityDescriptorInvalid);

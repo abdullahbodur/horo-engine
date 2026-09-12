@@ -8,6 +8,7 @@
 #include "Horo/Foundation/CancellationToken.h"
 #include "Horo/Foundation/Result.h"
 #include "Horo/Navigation/NavigationBackend.h"
+#include "Horo/Navigation/NavigationIdentity.h"
 
 #include <compare>
 #include <cstddef>
@@ -48,6 +49,8 @@ namespace Horo::Navigation {
      */
     class NavigationWorldReadLease final {
     public:
+        /** @brief Construct an inert lease suitable for later move assignment. */
+        NavigationWorldReadLease() noexcept = default;
         /** @brief Copy a provider lifetime pin. @param other Valid or moved-from source lease. */
         NavigationWorldReadLease(const NavigationWorldReadLease &other) noexcept;
         /** @brief Replace this lifetime pin with a copy. @param other Valid or moved-from source lease. @return This lease. */
@@ -158,7 +161,7 @@ namespace Horo::Navigation {
         /** @brief Check whether replacing the active record preserves the configured retirement bound. */
         [[nodiscard]] bool CanRetireActive() const noexcept;
         /** @brief Permanently close admission and request cooperative cancellation for one record. */
-        void Revoke(const std::shared_ptr<Detail::NavigationWorldRecord> &record) noexcept;
+        static void Revoke(const std::shared_ptr<Detail::NavigationWorldRecord> &record) noexcept;
         /** @brief Move the active owner pin into retirement when worker leases still exist. */
         void RetireActive() noexcept;
 
