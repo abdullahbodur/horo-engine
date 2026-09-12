@@ -360,6 +360,46 @@ namespace Horo::Editor {
                 advance(components.navigationLink->id.Value(), nextLinkId);
         }
 
+        /** @brief Assigns fresh navigation identities and retargets references local to a duplicated object. */
+        [[nodiscard]] Result<void> RegenerateDuplicatedNavigationIdentities(SceneObjectComponentSet &components,
+                                                                            const std::uint64_t nextSurfaceId,
+                                                                            const std::uint64_t nextRegionId,
+                                                                            const std::uint64_t nextModifierId,
+                                                                            const std::uint64_t nextLinkId) {
+            if (components.navigationSurface) {
+                if (nextSurfaceId == 0)
+                    return Result<void>::Failure(MakeError(Navigation::NavigationErrors::SceneComponentInvalid));
+                const Navigation::SurfaceId sourceSurface = components.navigationSurface->id;
+                components.navigationSurface->id = Navigation::SurfaceId::Create(nextSurfaceId).Value();
+                if (components.navigationRegion && components.navigationRegion->surface == sourceSurface)
+                    components.navigationRegion->surface = components.navigationSurface->id;
+                if (components.navigationModifier && components.navigationModifier->surface == sourceSurface)
+                    components.navigationModifier->surface = components.navigationSurface->id;
+                if (components.navigationLink) {
+                    if (components.navigationLink->start.surface == sourceSurface)
+                        components.navigationLink->start.surface = components.navigationSurface->id;
+                    if (components.navigationLink->end.surface == sourceSurface)
+                        components.navigationLink->end.surface = components.navigationSurface->id;
+                }
+            }
+            if (components.navigationRegion) {
+                if (nextRegionId == 0)
+                    return Result<void>::Failure(MakeError(Navigation::NavigationErrors::SceneComponentInvalid));
+                components.navigationRegion->id = Navigation::NavigationRegionId::Create(nextRegionId).Value();
+            }
+            if (components.navigationModifier) {
+                if (nextModifierId == 0)
+                    return Result<void>::Failure(MakeError(Navigation::NavigationErrors::SceneComponentInvalid));
+                components.navigationModifier->id = Navigation::NavigationModifierId::Create(nextModifierId).Value();
+            }
+            if (components.navigationLink) {
+                if (nextLinkId == 0)
+                    return Result<void>::Failure(MakeError(Navigation::NavigationErrors::SceneComponentInvalid));
+                components.navigationLink->id = Navigation::NavigationLinkId::Create(nextLinkId).Value();
+            }
+            return Result<void>::Success();
+        }
+
         [[nodiscard]] std::size_t EstimateBehaviorMemoryBytes(const std::vector<Gameplay::BehaviorComponent> &behaviors) noexcept {
             std::size_t total = behaviors.size() * sizeof(Gameplay::BehaviorComponent);
             for (const Gameplay::BehaviorComponent &behavior : behaviors) {
@@ -1748,38 +1788,12 @@ namespace Horo::Editor {
 
         const SceneObjectId id{m_document.m_nextObjectId};
         SceneObjectComponentSet duplicatedComponents = source->components;
-        if (duplicatedComponents.navigationSurface) {
-            if (m_document.m_nextNavigationSurfaceId == 0)
-                return Result<SceneCommandResult>::Failure(MakeError(Navigation::NavigationErrors::SceneComponentInvalid));
-            const Navigation::SurfaceId sourceSurface = duplicatedComponents.navigationSurface->id;
-            duplicatedComponents.navigationSurface->id = Navigation::SurfaceId::Create(m_document.m_nextNavigationSurfaceId).Value();
-            if (duplicatedComponents.navigationRegion && duplicatedComponents.navigationRegion->surface == sourceSurface)
-                duplicatedComponents.navigationRegion->surface = duplicatedComponents.navigationSurface->id;
-            if (duplicatedComponents.navigationModifier && duplicatedComponents.navigationModifier->surface == sourceSurface)
-                duplicatedComponents.navigationModifier->surface = duplicatedComponents.navigationSurface->id;
-            if (duplicatedComponents.navigationLink) {
-                if (duplicatedComponents.navigationLink->start.surface == sourceSurface)
-                    duplicatedComponents.navigationLink->start.surface = duplicatedComponents.navigationSurface->id;
-                if (duplicatedComponents.navigationLink->end.surface == sourceSurface)
-                    duplicatedComponents.navigationLink->end.surface = duplicatedComponents.navigationSurface->id;
-            }
-        }
-        if (duplicatedComponents.navigationRegion) {
-            if (m_document.m_nextNavigationRegionId == 0)
-                return Result<SceneCommandResult>::Failure(MakeError(Navigation::NavigationErrors::SceneComponentInvalid));
-            duplicatedComponents.navigationRegion->id = Navigation::NavigationRegionId::Create(m_document.m_nextNavigationRegionId).Value();
-        }
-        if (duplicatedComponents.navigationModifier) {
-            if (m_document.m_nextNavigationModifierId == 0)
-                return Result<SceneCommandResult>::Failure(MakeError(Navigation::NavigationErrors::SceneComponentInvalid));
-            duplicatedComponents.navigationModifier->id =
-                Navigation::NavigationModifierId::Create(m_document.m_nextNavigationModifierId).Value();
-        }
-        if (duplicatedComponents.navigationLink) {
-            if (m_document.m_nextNavigationLinkId == 0)
-                return Result<SceneCommandResult>::Failure(MakeError(Navigation::NavigationErrors::SceneComponentInvalid));
-            duplicatedComponents.navigationLink->id = Navigation::NavigationLinkId::Create(m_document.m_nextNavigationLinkId).Value();
-        }
+        if (Result<void> regenerated =
+                RegenerateDuplicatedNavigationIdentities(duplicatedComponents, m_document.m_nextNavigationSurfaceId,
+                                                         m_document.m_nextNavigationRegionId, m_document.m_nextNavigationModifierId,
+                                                         m_document.m_nextNavigationLinkId);
+            regenerated.HasError())
+            return Result<SceneCommandResult>::Failure(regenerated.ErrorValue());
         if (Result<void> navigation = ValidateSceneNavigationComponents(m_document.m_objects, std::nullopt, &duplicatedComponents);
             navigation.HasError()) {
             return Result<SceneCommandResult>::Failure(navigation.ErrorValue());

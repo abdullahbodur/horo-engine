@@ -35,25 +35,42 @@ namespace Horo::Runtime {
             }, primitive.parameters);
         }
 
+        /** @brief Validates camera values without adding camera-specific branching to component-set validation. */
+        [[nodiscard]] bool ValidCamera(const CameraComponent &camera) noexcept {
+            return std::isfinite(camera.verticalFieldOfViewRadians) && std::isfinite(camera.orthographicHeight) &&
+                   std::isfinite(camera.nearPlane) && std::isfinite(camera.farPlane) && camera.nearPlane > 0 &&
+                   camera.farPlane > camera.nearPlane &&
+                   (camera.projection != CameraProjection::Perspective ||
+                    (camera.verticalFieldOfViewRadians > 0 && camera.verticalFieldOfViewRadians < Math::Pi)) &&
+                   (camera.projection != CameraProjection::Orthographic || camera.orthographicHeight > 0);
+        }
+
+        /** @brief Validates light values without adding light-specific branching to component-set validation. */
+        [[nodiscard]] bool ValidLight(const LightComponent &light) noexcept {
+            return Math::IsFinite(light.color) && std::isfinite(light.intensity) && std::isfinite(light.range) &&
+                   std::isfinite(light.innerConeRadians) && std::isfinite(light.outerConeRadians) && light.intensity >= 0 &&
+                   light.color.x >= 0 && light.color.y >= 0 && light.color.z >= 0 && light.range >= 0 && light.innerConeRadians >= 0 &&
+                   light.outerConeRadians >= light.innerConeRadians && light.outerConeRadians <= Math::Pi;
+        }
+
+        /** @brief Validates behavior payloads and enforces unique instance identities. */
+        [[nodiscard]] bool ValidBehaviors(const std::span<const Gameplay::BehaviorComponent> behaviors) {
+            std::vector<Gameplay::BehaviorInstanceId> behaviorIds;
+            behaviorIds.reserve(behaviors.size());
+            for (const Gameplay::BehaviorComponent &behavior : behaviors) {
+                if (Gameplay::ValidateBehaviorComponent(behavior).HasError() ||
+                    std::ranges::find(behaviorIds, behavior.instanceId) != behaviorIds.end())
+                    return false;
+                behaviorIds.push_back(behavior.instanceId);
+            }
+            return true;
+        }
+
         [[nodiscard]] bool ValidComponents(const RuntimeComponentSet &components) noexcept {
-            if (components.camera) {
-                const CameraComponent &camera = *components.camera;
-                if (!std::isfinite(camera.verticalFieldOfViewRadians) || !std::isfinite(camera.orthographicHeight) ||
-                    !std::isfinite(camera.nearPlane) || !std::isfinite(camera.farPlane) || camera.nearPlane <= 0 ||
-                    camera.farPlane <= camera.nearPlane ||
-                    (camera.projection == CameraProjection::Perspective &&
-                     (camera.verticalFieldOfViewRadians <= 0 || camera.verticalFieldOfViewRadians >= Math::Pi)) ||
-                    (camera.projection == CameraProjection::Orthographic && camera.orthographicHeight <= 0))
-                    return false;
-            }
-            if (components.light) {
-                const LightComponent &light = *components.light;
-                if (!Math::IsFinite(light.color) || !std::isfinite(light.intensity) || !std::isfinite(light.range) ||
-                    !std::isfinite(light.innerConeRadians) || !std::isfinite(light.outerConeRadians) || light.intensity < 0 ||
-                    light.color.x < 0 || light.color.y < 0 || light.color.z < 0 || light.range < 0 || light.innerConeRadians < 0 ||
-                    light.outerConeRadians < light.innerConeRadians || light.outerConeRadians > Math::Pi)
-                    return false;
-            }
+            if (components.camera && !ValidCamera(*components.camera))
+                return false;
+            if (components.light && !ValidLight(*components.light))
+                return false;
             if (components.audioSource && (!std::isfinite(components.audioSource->gain) || components.audioSource->gain < 0))
                 return false;
             if (components.uiCanvas && Ui::ValidateUiCanvasAssetReference(components.uiCanvas->canvas).HasError())
@@ -66,15 +83,7 @@ namespace Horo::Runtime {
                 return false;
             if (components.navigationLink && ValidateNavigationLinkComponent(*components.navigationLink).HasError())
                 return false;
-            std::vector<Gameplay::BehaviorInstanceId> behaviorIds;
-            behaviorIds.reserve(components.behaviors.size());
-            for (const Gameplay::BehaviorComponent &behavior : components.behaviors) {
-                if (Gameplay::ValidateBehaviorComponent(behavior).HasError() ||
-                    std::ranges::find(behaviorIds, behavior.instanceId) != behaviorIds.end())
-                    return false;
-                behaviorIds.push_back(behavior.instanceId);
-            }
-            return true;
+            return ValidBehaviors(components.behaviors);
         }
 
         /** @brief Validates navigation identities and cross-component references across the complete scene. */

@@ -177,8 +177,8 @@ namespace Horo::Runtime {
     /** @copydoc ValidateNavigationModifierComponent */
     Result<void> ValidateNavigationModifierComponent(const NavigationModifierComponent &component) {
         const auto *box = std::get_if<NavigationLocalBounds>(&component.volume);
-        const auto *cylinder = std::get_if<NavigationCylinderVolume>(&component.volume);
-        if (!component.id.IsValid() || !component.surface.IsValid() || component.schemaVersion != 1 || component.generation == 0 ||
+        if (const auto *cylinder = std::get_if<NavigationCylinderVolume>(&component.volume);
+            !component.id.IsValid() || !component.surface.IsValid() || component.schemaVersion != 1 || component.generation == 0 ||
             component.operation >= NavigationModifierOperation::Count || (box == nullptr && cylinder == nullptr) ||
             (box != nullptr && !IsValid(*box)) || (cylinder != nullptr && !IsValid(*cylinder))) {
             return Failure(Navigation::NavigationErrors::SceneComponentInvalid,
@@ -189,10 +189,11 @@ namespace Horo::Runtime {
         const bool validCost =
             component.traversalCost.has_value() && std::isfinite(*component.traversalCost) && *component.traversalCost >= 0.0F;
         using enum NavigationModifierOperation;
-        const bool policyValid = (component.operation == Exclude && !component.area.has_value() && !component.traversalCost.has_value()) ||
-                                 (component.operation == OverrideArea && validArea && !component.traversalCost.has_value()) ||
-                                 (component.operation == OverrideAreaAndCost && validArea && validCost);
-        if (!policyValid) {
+        if (const bool policyValid =
+                (component.operation == Exclude && !component.area.has_value() && !component.traversalCost.has_value()) ||
+                (component.operation == OverrideArea && validArea && !component.traversalCost.has_value()) ||
+                (component.operation == OverrideAreaAndCost && validArea && validCost);
+            !policyValid) {
             return Failure(Navigation::NavigationErrors::SceneComponentInvalid,
                            "Navigation modifier area and traversal cost must match the selected operation exactly.");
         }
@@ -205,9 +206,9 @@ namespace Horo::Runtime {
             return endpoint.surface.IsValid() && Math::IsFinite(endpoint.localPosition) && std::isfinite(endpoint.connectionRadiusMeters) &&
                    endpoint.connectionRadiusMeters > 0.0F;
         };
-        const bool sameEndpoint =
-            component.start.surface == component.end.surface && component.start.localPosition == component.end.localPosition;
-        if (!component.id.IsValid() || component.schemaVersion != 1 || component.generation == 0 || !validEndpoint(component.start) ||
+        if (const bool sameEndpoint =
+                component.start.surface == component.end.surface && component.start.localPosition == component.end.localPosition;
+            !component.id.IsValid() || component.schemaVersion != 1 || component.generation == 0 || !validEndpoint(component.start) ||
             !validEndpoint(component.end) || sameEndpoint || component.kind >= NavigationLinkKind::Count ||
             component.direction >= NavigationLinkDirection::Count || !IsValidProfileSet(component.profiles) ||
             !std::isfinite(component.traversalCost) || component.traversalCost < 0.0F)
