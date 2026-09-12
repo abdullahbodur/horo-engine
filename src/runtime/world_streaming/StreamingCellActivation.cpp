@@ -191,7 +191,7 @@ namespace Horo::WorldStreaming {
     }
 
     StreamingCellActivationTransaction::StreamingCellActivationTransaction(
-        const StreamingCellActivationContext context, std::vector<StreamingCellActivationRequirement> requirements,
+        const StreamingCellActivationContext &context, std::vector<StreamingCellActivationRequirement> requirements,
         std::vector<std::unique_ptr<IStreamingCellActivationReceipt>> receipts) noexcept
         : context_(context), requirements_(std::move(requirements)), receipts_(std::move(receipts)),
           state_(StreamingCellActivationState::Prepared) {}

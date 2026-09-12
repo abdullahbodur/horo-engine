@@ -135,7 +135,7 @@ namespace Horo::WorldStreaming {
         [[nodiscard]] std::span<const StreamingCellActivationRequirement> Requirements() const noexcept;
 
     private:
-        StreamingCellActivationTransaction(StreamingCellActivationContext context,
+        StreamingCellActivationTransaction(const StreamingCellActivationContext &context,
                                            std::vector<StreamingCellActivationRequirement> requirements,
                                            std::vector<std::unique_ptr<IStreamingCellActivationReceipt>> receipts) noexcept;
 
