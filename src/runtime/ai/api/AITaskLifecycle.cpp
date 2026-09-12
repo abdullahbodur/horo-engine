@@ -92,31 +92,28 @@ namespace Horo::AI {
 
     /** @copydoc AiTaskLifecycle::CompleteSuccess */
     Result<AiTaskTransitionDisposition> AiTaskLifecycle::CompleteSuccess(const AgentHandle activeAgent) {
-        if (IsTerminal(state_))
-            return Result<AiTaskTransitionDisposition>::Success(AiTaskTransitionDisposition::AlreadyTerminal);
-        const auto canPublish = CanPublishCompletion(activeAgent);
-        if (canPublish.HasError())
-            return Result<AiTaskTransitionDisposition>::Failure(canPublish.ErrorValue());
-        if (!canPublish.Value())
-            return Result<AiTaskTransitionDisposition>::Success(AiTaskTransitionDisposition::AlreadyTerminal);
-        state_ = AiTaskState::Succeeded;
-        terminalResult_.emplace(AiTaskTerminalResult{.state = AiTaskState::Succeeded});
-        return Result<AiTaskTransitionDisposition>::Success(AiTaskTransitionDisposition::Applied);
+        return Complete(activeAgent, std::nullopt);
     }
 
     /** @copydoc AiTaskLifecycle::CompleteFailure */
     Result<AiTaskTransitionDisposition> AiTaskLifecycle::CompleteFailure(const AgentHandle activeAgent, AiTaskFailureDetail failure) {
+        return Complete(activeAgent, std::move(failure));
+    }
+
+    /** @copydoc AiTaskLifecycle::Complete */
+    Result<AiTaskTransitionDisposition> AiTaskLifecycle::Complete(const AgentHandle activeAgent,
+                                                                  std::optional<AiTaskFailureDetail> failure) {
         if (IsTerminal(state_))
             return Result<AiTaskTransitionDisposition>::Success(AiTaskTransitionDisposition::AlreadyTerminal);
-        if (!IsValid(failure))
+        if (failure.has_value() && !IsValid(*failure))
             return Failure<AiTaskTransitionDisposition>(AIErrors::TaskFailureInvalid);
-        const auto canPublish = CanPublishCompletion(activeAgent);
-        if (canPublish.HasError())
-            return Result<AiTaskTransitionDisposition>::Failure(canPublish.ErrorValue());
-        if (!canPublish.Value())
+        const auto boundary = CheckExecutionBoundary(activeAgent);
+        if (boundary.HasError())
+            return Result<AiTaskTransitionDisposition>::Failure(boundary.ErrorValue());
+        if (boundary.Value() != AiTaskResumeDisposition::Ready)
             return Result<AiTaskTransitionDisposition>::Success(AiTaskTransitionDisposition::AlreadyTerminal);
-        state_ = AiTaskState::Failed;
-        terminalResult_.emplace(AiTaskTerminalResult{.state = AiTaskState::Failed, .failure = std::move(failure)});
+        state_ = failure.has_value() ? AiTaskState::Failed : AiTaskState::Succeeded;
+        terminalResult_.emplace(AiTaskTerminalResult{.state = state_, .failure = std::move(failure)});
         return Result<AiTaskTransitionDisposition>::Success(AiTaskTransitionDisposition::Applied);
     }
 
@@ -174,14 +171,6 @@ namespace Horo::AI {
             return Result<AiTaskResumeDisposition>::Success(AiTaskResumeDisposition::BecameTerminal);
         }
         return Result<AiTaskResumeDisposition>::Success(AiTaskResumeDisposition::Ready);
-    }
-
-    /** @copydoc AiTaskLifecycle::CanPublishCompletion */
-    Result<bool> AiTaskLifecycle::CanPublishCompletion(const AgentHandle activeAgent) {
-        const auto boundary = CheckExecutionBoundary(activeAgent);
-        if (boundary.HasError())
-            return Result<bool>::Failure(boundary.ErrorValue());
-        return Result<bool>::Success(boundary.Value() == AiTaskResumeDisposition::Ready);
     }
 
     void AiTaskLifecycle::PublishCancelled(const AiTaskCancellationReason reason) noexcept {
