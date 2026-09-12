@@ -72,6 +72,18 @@ namespace Horo::Runtime {
             }
             return true;
         }
+
+        /** @brief Validates navigation identities and cross-component references across the complete scene. */
+        [[nodiscard]] Result<void> ValidateNavigationComponents(const std::span<const RuntimeEntityDefinition> entities) {
+            std::vector<NavigationSceneComponentView> navigationComponents;
+            navigationComponents.reserve(entities.size());
+            for (const RuntimeEntityDefinition &entity : entities) {
+                navigationComponents.push_back(
+                    {.surface = entity.components.navigationSurface ? &*entity.components.navigationSurface : nullptr,
+                     .region = entity.components.navigationRegion ? &*entity.components.navigationRegion : nullptr});
+            }
+            return ValidateNavigationSceneComponentViews(navigationComponents);
+        }
     }  // namespace
 
     /** @copydoc RuntimeSceneDefinition::RuntimeSceneDefinition */
@@ -193,14 +205,7 @@ namespace Horo::Runtime {
         std::ranges::sort(assetDependencies_, {}, [](const SceneAssetDependency &dependency) {
             return dependency.id;
         });
-        std::vector<NavigationSceneComponentView> navigationComponents;
-        navigationComponents.reserve(entities_.size());
-        for (const RuntimeEntityDefinition &entity : entities_) {
-            navigationComponents.push_back(
-                {.surface = entity.components.navigationSurface ? &*entity.components.navigationSurface : nullptr,
-                 .region = entity.components.navigationRegion ? &*entity.components.navigationRegion : nullptr});
-        }
-        if (Result<void> navigation = ValidateNavigationSceneComponentViews(navigationComponents); navigation.HasError())
+        if (Result<void> navigation = ValidateNavigationComponents(entities_); navigation.HasError())
             return Result<RuntimeSceneDefinition>::Failure(navigation.ErrorValue());
 
         return Result<RuntimeSceneDefinition>::Success(

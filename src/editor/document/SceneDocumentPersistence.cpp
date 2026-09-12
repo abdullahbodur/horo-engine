@@ -378,6 +378,44 @@ namespace Horo::Editor {
             return Result<PrimitiveMeshDescriptor>::Success(std::move(descriptor));
         }
 
+        /** @brief Appends optional navigation authoring payloads without increasing the core component serializer's branching. */
+        void AppendNavigationComponents(Json &value, const SceneObjectComponentSet &components) {
+            if (components.navigationSurface) {
+                const Runtime::NavigationSurfaceComponent &surface = *components.navigationSurface;
+                Json profiles = Json::array();
+                for (const Navigation::NavigationAgentProfileId profile : surface.profiles)
+                    profiles.push_back(profile.Value());
+                value["navigationSurface"] = {
+                    {"id", surface.id.Value()},
+                    {"definition", surface.definition.ToString()},
+                    {"schemaVersion", surface.schemaVersion},
+                    {"generation", surface.generation},
+                    {"bakeScope", surface.bakeScope == Runtime::NavigationBakeScope::ObjectSubtree ? "object_subtree" : "local_bounds"},
+                    {"localBounds", surface.localBounds ? Json{{"center", Vec3Json(surface.localBounds->center)},
+                                                               {"halfExtents", Vec3Json(surface.localBounds->halfExtents)}}
+                                                        : Json(nullptr)},
+                    {"profiles", std::move(profiles)},
+                    {"enabled", surface.enabled},
+                };
+            }
+            if (components.navigationRegion) {
+                const Runtime::NavigationRegionComponent &region = *components.navigationRegion;
+                value["navigationRegion"] = {
+                    {"id", region.id.Value()},
+                    {"surface", region.surface.Value()},
+                    {"schemaVersion", region.schemaVersion},
+                    {"generation", region.generation},
+                    {"localBounds",
+                     {{"center", Vec3Json(region.localBounds.center)}, {"halfExtents", Vec3Json(region.localBounds.halfExtents)}}},
+                    {"sourceSelection", region.sourceSelection == Runtime::NavigationRegionSourceSelection::ExplicitContributors
+                                            ? "explicit_contributors"
+                                            : "static_collision_in_bounds"},
+                    {"mode", region.mode == Runtime::NavigationRegionMode::Include ? "include" : "exclude"},
+                    {"enabled", region.enabled},
+                };
+            }
+        }
+
         [[nodiscard]] Json ComponentsJson(const SceneObjectComponentSet &components) {
             Json value = Json::object();
             if (components.camera.has_value()) {
@@ -425,40 +463,7 @@ namespace Horo::Editor {
                     {"enabled", audio.enabled},
                 };
             }
-            if (components.navigationSurface) {
-                const Runtime::NavigationSurfaceComponent &surface = *components.navigationSurface;
-                Json profiles = Json::array();
-                for (const Navigation::NavigationAgentProfileId profile : surface.profiles)
-                    profiles.push_back(profile.Value());
-                value["navigationSurface"] = {
-                    {"id", surface.id.Value()},
-                    {"definition", surface.definition.ToString()},
-                    {"schemaVersion", surface.schemaVersion},
-                    {"generation", surface.generation},
-                    {"bakeScope", surface.bakeScope == Runtime::NavigationBakeScope::ObjectSubtree ? "object_subtree" : "local_bounds"},
-                    {"localBounds", surface.localBounds ? Json{{"center", Vec3Json(surface.localBounds->center)},
-                                                               {"halfExtents", Vec3Json(surface.localBounds->halfExtents)}}
-                                                        : Json(nullptr)},
-                    {"profiles", std::move(profiles)},
-                    {"enabled", surface.enabled},
-                };
-            }
-            if (components.navigationRegion) {
-                const Runtime::NavigationRegionComponent &region = *components.navigationRegion;
-                value["navigationRegion"] = {
-                    {"id", region.id.Value()},
-                    {"surface", region.surface.Value()},
-                    {"schemaVersion", region.schemaVersion},
-                    {"generation", region.generation},
-                    {"localBounds",
-                     {{"center", Vec3Json(region.localBounds.center)}, {"halfExtents", Vec3Json(region.localBounds.halfExtents)}}},
-                    {"sourceSelection", region.sourceSelection == Runtime::NavigationRegionSourceSelection::ExplicitContributors
-                                            ? "explicit_contributors"
-                                            : "static_collision_in_bounds"},
-                    {"mode", region.mode == Runtime::NavigationRegionMode::Include ? "include" : "exclude"},
-                    {"enabled", region.enabled},
-                };
-            }
+            AppendNavigationComponents(value, components);
             if (!components.behaviors.empty()) {
                 Json behaviors = Json::array();
                 for (const Gameplay::BehaviorComponent &behavior : components.behaviors) {
