@@ -25,14 +25,14 @@ void operator delete(void *memory) noexcept {
 }
 
 void operator delete(void *memory, std::size_t) noexcept {
-    operator delete(memory);
+    std::free(memory);
 }
 
 namespace Horo::Runtime::Ui {
     namespace {
         SerializedUiId StableBytes(const std::uint8_t marker) {
             SerializedUiId bytes{};
-            bytes.back() = marker;
+            *bytes.rbegin() = marker;
             return bytes;
         }
 
@@ -222,9 +222,9 @@ namespace Horo::Runtime::Ui {
         }
 
         TEST_CASE("Arrange-only dirtiness does not measure clean elements", "[runtime_ui][layout][incremental]") {
-            auto tree = Tree();
-            auto engine = Engine();
             CountingEvaluator evaluator;
+            auto engine = Engine();
+            auto tree = Tree();
             PublishBaseline(engine, tree, evaluator);
             const auto leaf = tree.Find(Stable<UiElementId>(3)).Value();
             REQUIRE(engine.Invalidate({leaf, tree.Revision(), UiLayoutDirtyKind::Arrange}).HasValue());
