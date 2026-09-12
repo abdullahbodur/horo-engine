@@ -8,12 +8,12 @@
 
 namespace Horo::Network {
     namespace {
-        template <typename T> [[nodiscard]] Result<T> Fail(const ErrorCodeDescriptor &descriptor) {
-            return Result<T>::Failure(MakeError(descriptor));
-        }
-
         [[nodiscard]] bool AddFits(const std::size_t current, const std::size_t added, const std::size_t maximum) noexcept {
             return added <= maximum && current <= maximum - added;
+        }
+
+        template <typename T> [[nodiscard]] Result<T> Fail(const ErrorCodeDescriptor &descriptor) {
+            return Result<T>::Failure(MakeError(descriptor));
         }
 
         [[nodiscard]] bool ValidatePolicy(const TransportBudgetCapacity &capacity, const TransportLimitPolicyV1 &policy) noexcept {
