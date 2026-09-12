@@ -593,6 +593,14 @@ sinks. A successful registration transfers the importer context to the host
 adapter even if a later contribution causes the package transaction to fail.
 The host then invokes the module destroy callback exactly once.
 
+The build publishes that header as a self-contained, versioned
+`HoroEngineExtensionSdk` CMake package. The package exposes only the
+`HoroEngine::ExtensionSdk` header target, machine-readable SDK-to-host ABI range
+metadata, and the project license. It has no engine-library or third-party link
+dependencies and is verified by an external C consumer copied away from the
+engine build tree. Manifest schemas, scaffolding, validation, and distribution
+commands remain separately versioned SDK deliverables.
+
 Project gameplay modules may use the SDK-generation C++ boundary documented in
 [Gameplay Module Boundary](./gameplay-module-boundary.md). That boundary is
 rebuilt with the project and SDK generation; it is not the same compatibility

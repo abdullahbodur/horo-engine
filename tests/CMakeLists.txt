@@ -24,6 +24,19 @@ add_test(NAME HoroGameplayManifestRevisionValidationTest
 set_tests_properties(HoroGameplayManifestRevisionValidationTest PROPERTIES
     LABELS "gameplay;cmake")
 
+add_test(NAME HoroExtensionSdkExternalConsumerTest
+    COMMAND "${CMAKE_COMMAND}"
+        "-DHORO_EXTENSION_SDK_PACKAGE_DIR=${HORO_EXTENSION_SDK_PACKAGE_DIR}"
+        "-DHORO_EXTENSION_SDK_VERSION=${HORO_EXTENSION_SDK_VERSION}"
+        "-DHORO_ENGINE_SOURCE_DIR=${PROJECT_SOURCE_DIR}"
+        "-DHORO_TEST_BINARY_DIR=${CMAKE_CURRENT_BINARY_DIR}/extension-sdk-consumer"
+        "-DCMAKE_GENERATOR=${CMAKE_GENERATOR}"
+        "-DCMAKE_GENERATOR_PLATFORM=${CMAKE_GENERATOR_PLATFORM}"
+        "-DCMAKE_GENERATOR_TOOLSET=${CMAKE_GENERATOR_TOOLSET}"
+        -P "${PROJECT_SOURCE_DIR}/tests/cmake/RunExtensionSdkConsumerTest.cmake")
+set_tests_properties(HoroExtensionSdkExternalConsumerTest PROPERTIES
+    LABELS "extensions;sdk;cmake")
+
 # One translation unit per registered public header verifies that consumers can
 # compile the contract using only its owning target's usage requirements.
 horo_add_public_header_consumer_targets()
@@ -166,6 +179,12 @@ add_executable(HoroNetworkApiTests
 target_compile_features(HoroNetworkApiTests PRIVATE cxx_std_20)
 target_link_libraries(HoroNetworkApiTests PRIVATE HoroEngine::NetworkApi)
 horo_register_catch_test(HoroNetworkApiTests LABELS "unit;network;headless")
+add_executable(HoroNetworkTransportNullTests
+        unit/runtime/networking/DeterministicTransportTests.cpp
+)
+target_compile_features(HoroNetworkTransportNullTests PRIVATE cxx_std_20)
+target_link_libraries(HoroNetworkTransportNullTests PRIVATE HoroEngine::NetworkTransportNull)
+horo_register_catch_test(HoroNetworkTransportNullTests LABELS "unit;network;headless")
 add_executable(HoroNetworkRuntimeTests
         unit/runtime/networking/NetworkObjectMappingTests.cpp
 )
@@ -413,6 +432,7 @@ add_executable(HoroWorldStreamingTests
         unit/runtime/world_streaming/StreamingBudgetModelTests.cpp
         unit/runtime/world_streaming/StreamingCellOperationTests.cpp
         unit/runtime/world_streaming/StreamingCellCandidateTests.cpp
+        unit/runtime/world_streaming/StreamingCellAssetRequestTests.cpp
         unit/runtime/world_streaming/StreamingCellStateTests.cpp
         unit/runtime/world_streaming/StreamingCellStabilityTests.cpp
         unit/runtime/world_streaming/StreamingSchedulerAdmissionTests.cpp
@@ -1277,6 +1297,11 @@ add_executable(HoroRuntimeUiRenderSnapshotTests
 )
 target_compile_features(HoroRuntimeUiRenderSnapshotTests PRIVATE cxx_std_20)
 target_link_libraries(HoroRuntimeUiRenderSnapshotTests PRIVATE HoroEngine::RuntimeUi)
+add_executable(HoroRuntimeUiLayoutTests
+        unit/runtime/ui/UiLayoutTests.cpp
+)
+target_compile_features(HoroRuntimeUiLayoutTests PRIVATE cxx_std_20)
+target_link_libraries(HoroRuntimeUiLayoutTests PRIVATE HoroEngine::RuntimeUi)
 add_executable(HoroRuntimeSaveArchiveMetadataTests
         unit/runtime/save/SaveArchiveMetadataTests.cpp
 )
@@ -1676,6 +1701,7 @@ set(HORO_CATCH_TEST_TARGETS
         HoroRuntimeUiDiagnosticsTests
         HoroRuntimeUiElementTreeTests
         HoroRuntimeUiRenderSnapshotTests
+        HoroRuntimeUiLayoutTests
         HoroRuntimeSaveArchiveMetadataTests
         HoroRuntimeSaveArchiveFramingTests
         HoroRuntimeSaveSlotMetadataTests

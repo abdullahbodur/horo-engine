@@ -99,6 +99,17 @@ The network subsystem is organized into four distinct CMake targets with strict 
 - **Must Not Depend On**: `HoroEngine::Platform`, OS sockets, or a network I/O thread.
 - **Purpose**: Unit testing, CI verification, single-player offline simulation, and synthetic latency/loss testing harnesses. `PollEvents()` and `Send()` run on the caller thread against in-memory queues.
 
+The backend has three explicit modes: network-disabled rejection, in-memory
+loopback, and a versioned seeded impairment scenario. Scenario evaluation uses a
+fixed integer generator and stable draw order for latency, jitter, loss,
+duplication, and reordering. Fragmentation copies into prepared fixed slices, and
+all scheduled delivery, payload, connection, message, byte, and rate work remains
+bounded. Exact connection and queue-ticket generations fence replacement and late
+delivery. Disconnect and shutdown are explicit caller-thread lifecycle events.
+Null/simulated evidence qualifies deterministic orchestration only; it never
+qualifies native sockets, encryption, latency, or production throughput and is
+never an implicit fallback from a failed production backend.
+
 ### 4. `HoroEngine::NetworkTransportGNS`
 
 - **Role**: Production direct-IP reliable and unreliable message transport implemented with open-source GameNetworkingSockets.
