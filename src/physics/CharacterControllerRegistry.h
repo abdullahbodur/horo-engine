@@ -70,20 +70,18 @@ namespace Horo::Character::Detail {
 
         /** @brief Resolves one exact live record to a borrow bounded by registry mutation or destruction. */
         [[nodiscard]] Result<const Value *> Resolve(const CharacterControllerHandle &handle) const {
-            const auto index = ResolveIndex(handle);
-            if (index.HasError())
-                return Result<const Value *>::Failure(index.ErrorValue());
-            return Result<const Value *>::Success(storage_.Resolve(handle.slot.index, handle.slot.generation));
+            if (const auto owner = ValidateCharacterControllerHandleOwner(handle, sceneGeneration_, world_); owner.HasError())
+                return Result<const Value *>::Failure(owner.ErrorValue());
+            const Value *value = storage_.Resolve(handle.slot.index, handle.slot.generation);
+            return value ? Result<const Value *>::Success(value) : Result<const Value *>::Failure(HandleError(handle));
         }
 
         /** @brief Removes one exact live generation and recycles or permanently retires its slot. */
         [[nodiscard]] Result<void> Remove(const CharacterControllerHandle &handle) {
-            const auto index = ResolveIndex(handle);
-            if (index.HasError())
-                return Result<void>::Failure(index.ErrorValue());
-
-            static_cast<void>(storage_.Remove(handle.slot.index, handle.slot.generation));
-            return Result<void>::Success();
+            if (const auto owner = ValidateCharacterControllerHandleOwner(handle, sceneGeneration_, world_); owner.HasError())
+                return owner;
+            return storage_.Remove(handle.slot.index, handle.slot.generation) ? Result<void>::Success()
+                                                                              : Result<void>::Failure(HandleError(handle));
         }
 
         /** @brief Destroys every resident record without allocating; the registry is terminal afterward. */
@@ -99,10 +97,6 @@ namespace Horo::Character::Detail {
             return storage_.ActiveCount();
         }
 
-        [[nodiscard]] std::size_t ExhaustedCount() const noexcept {
-            return storage_.ExhaustedCount();
-        }
-
     private:
         CharacterControllerRegistry(const std::uint64_t sceneGeneration, const CharacterWorldId world,
                                     const CharacterControllerRegistryLimits limits)
@@ -110,14 +104,6 @@ namespace Horo::Character::Detail {
 
         [[nodiscard]] const ErrorCodeDescriptor &FullError() const noexcept {
             return storage_.AllSlotsExhausted() ? CharacterErrors::GenerationExhausted : CharacterErrors::CapacityExceeded;
-        }
-
-        [[nodiscard]] Result<std::uint32_t> ResolveIndex(const CharacterControllerHandle &handle) const {
-            if (const auto owner = ValidateCharacterControllerHandleOwner(handle, sceneGeneration_, world_); owner.HasError())
-                return Result<std::uint32_t>::Failure(owner.ErrorValue());
-            if (storage_.Resolve(handle.slot.index, handle.slot.generation) == nullptr)
-                return Result<std::uint32_t>::Failure(HandleError(handle));
-            return Result<std::uint32_t>::Success(handle.slot.index);
         }
 
         [[nodiscard]] static Error HandleError(const CharacterControllerHandle &handle) {
