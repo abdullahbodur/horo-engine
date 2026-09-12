@@ -50,7 +50,7 @@ namespace Horo::Physics {
         return std::this_thread::get_id() == ownerThread_ && evidence == current_;
     }
 
-    Result<void> PhysicsSceneActivationAuthority::Advance(std::uint64_t &generation) {
+    Result<void> PhysicsSceneActivationAuthority::Advance(std::uint64_t &generation) const {
         if (std::this_thread::get_id() != ownerThread_)
             return Result<void>::Failure(MakeError(PhysicsErrors::ThreadAffinityViolation));
         if (generation == std::numeric_limits<std::uint64_t>::max())
@@ -78,9 +78,10 @@ namespace Horo::Physics {
     /** @copydoc PhysicsSceneActivationParticipant::Prepare */
     Result<std::unique_ptr<Runtime::SceneActivationCandidate>> PhysicsSceneActivationParticipant::Prepare(
         const Runtime::RuntimeSceneDefinition &, const Runtime::RuntimeSceneView scene) {
-        const std::array valid{runtime_->State() == PhysicsRuntimeState::Ready, scene.IsCurrent(), scene.RuntimeId().IsValid()};
-        if (!std::ranges::all_of(valid, std::identity{}))
+        if (const std::array valid{runtime_->State() == PhysicsRuntimeState::Ready, scene.IsCurrent(), scene.RuntimeId().IsValid()};
+            !std::ranges::all_of(valid, std::identity{})) {
             return Result<std::unique_ptr<Runtime::SceneActivationCandidate>>::Failure(MakeError(PhysicsErrors::WorldInvalid));
+        }
 
         const PhysicsSceneActivationEvidence evidence = authority_->Capture();
         const auto identity = runtime_->IssueWorldIdentity();

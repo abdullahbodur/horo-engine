@@ -426,7 +426,8 @@ namespace Horo::Physics {
     }
 
     /** @copydoc PhysicsRuntime::IssueWorldIdentity */
-    Result<PhysicsWorldId> PhysicsRuntime::IssueWorldIdentity() {
+    Result<PhysicsWorldId> PhysicsRuntime::IssueWorldIdentity() {  // NOSONAR: issuing an identity mutates the runtime authority behind its
+                                                                   // pimpl.
         if (impl_->ownerThread != std::this_thread::get_id())
             return Result<PhysicsWorldId>::Failure(MakeError(PhysicsErrors::ThreadAffinityViolation));
         if (impl_->state != PhysicsRuntimeState::Ready)

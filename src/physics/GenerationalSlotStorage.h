@@ -44,6 +44,10 @@ namespace Horo::Physics::Detail {
             freeHead_ = 0;
         }
 
+        ~GenerationalSlotStorage() noexcept {
+            Drain();
+        }
+
         GenerationalSlotStorage(const GenerationalSlotStorage &) = delete;
         GenerationalSlotStorage &operator=(const GenerationalSlotStorage &) = delete;
 

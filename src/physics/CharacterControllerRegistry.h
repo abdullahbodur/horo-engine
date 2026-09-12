@@ -32,6 +32,10 @@ namespace Horo::Character::Detail {
         CharacterControllerRegistry(std::uint64_t sceneGeneration, CharacterWorldId world, CharacterControllerRegistryLimits limits)
             : sceneGeneration_(sceneGeneration), world_(world), storage_(limits) {}
 
+        ~CharacterControllerRegistry() noexcept {
+            Drain();
+        }
+
         CharacterControllerRegistry(const CharacterControllerRegistry &) = delete;
         CharacterControllerRegistry &operator=(const CharacterControllerRegistry &) = delete;
 
@@ -51,14 +55,16 @@ namespace Horo::Character::Detail {
 
         /** @brief Resolves one exact live record to a borrow bounded by registry mutation or destruction. */
         [[nodiscard]] Result<const Value *> Resolve(const CharacterControllerHandle &handle) const {
-            const Result<void> owner = ValidateCharacterControllerHandleOwner(handle, sceneGeneration_, world_);
-            return owner.HasError() ? Result<const Value *>::Failure(owner.ErrorValue()) : ResolveSlot(handle);
+            if (const Result<void> owner = ValidateCharacterControllerHandleOwner(handle, sceneGeneration_, world_); owner.HasError())
+                return Result<const Value *>::Failure(owner.ErrorValue());
+            return ResolveSlot(handle);
         }
 
         /** @brief Removes one exact live generation and recycles or permanently retires its slot. */
         [[nodiscard]] Result<void> Remove(const CharacterControllerHandle &handle) {
-            const Result<void> owner = ValidateCharacterControllerHandleOwner(handle, sceneGeneration_, world_);
-            return owner.HasError() ? owner : RemoveSlot(handle);
+            if (const Result<void> owner = ValidateCharacterControllerHandleOwner(handle, sceneGeneration_, world_); owner.HasError())
+                return owner;
+            return RemoveSlot(handle);
         }
 
         /** @brief Destroys every resident record without allocating; the registry is terminal afterward. */

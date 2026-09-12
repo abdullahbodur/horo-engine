@@ -40,7 +40,7 @@ namespace Horo::Physics {
 
     private:
         /** @brief Advances one owner-thread generation without wrapping. */
-        [[nodiscard]] Result<void> Advance(std::uint64_t &generation);
+        [[nodiscard]] Result<void> Advance(std::uint64_t &generation) const;
 
         std::thread::id ownerThread_;
         PhysicsSceneActivationEvidence current_{1, 1};

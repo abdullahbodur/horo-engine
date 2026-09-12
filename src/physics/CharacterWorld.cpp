@@ -18,19 +18,28 @@ namespace Horo::Character {
             CharacterControllerDescriptor descriptor;
         };
 
-        /** @brief Validates the immutable owner tuple selected before slot allocation. */
-        std::mutex worldIdentityMutex;
-        std::uint64_t nextWorldIdentity{1};
+        /** @brief Process-owned synchronization and non-wrapping Character world identity source. */
+        struct CharacterWorldIdentityAuthority final {
+            std::mutex mutex;
+            std::uint64_t next{1};
+        };
+
+        [[nodiscard]] CharacterWorldIdentityAuthority &WorldIdentityAuthority() {
+            static CharacterWorldIdentityAuthority authority;
+            return authority;
+        }
 
         [[nodiscard]] Result<CharacterWorldDescriptor> CompleteWorldDescriptor(const CharacterWorldPreparationDescriptor &descriptor) {
-            const std::array valid{descriptor.sceneGeneration != 0, descriptor.physicsWorld.IsValid(),
-                                   descriptor.collisionFilterGeneration != 0, descriptor.originGeneration != 0};
-            if (!std::ranges::all_of(valid, std::identity{}))
+            if (const std::array valid{descriptor.sceneGeneration != 0, descriptor.physicsWorld.IsValid(),
+                                       descriptor.collisionFilterGeneration != 0, descriptor.originGeneration != 0};
+                !std::ranges::all_of(valid, std::identity{})) {
                 return Result<CharacterWorldDescriptor>::Failure(MakeError(CharacterErrors::WorldInvalid));
-            const std::lock_guard identityLock{worldIdentityMutex};
-            if (nextWorldIdentity == std::numeric_limits<std::uint64_t>::max())
+            }
+            CharacterWorldIdentityAuthority &authority = WorldIdentityAuthority();
+            const std::lock_guard identityLock{authority.mutex};
+            if (authority.next == std::numeric_limits<std::uint64_t>::max())
                 return Result<CharacterWorldDescriptor>::Failure(MakeError(CharacterErrors::GenerationExhausted));
-            const std::uint64_t identityValue = nextWorldIdentity++;
+            const std::uint64_t identityValue = authority.next++;
             const auto identity = CharacterWorldId::Create(identityValue);
             if (identity.HasError())
                 return Result<CharacterWorldDescriptor>::Failure(identity.ErrorValue());
@@ -78,7 +87,8 @@ namespace Horo::Character {
                                                                                     {.maximumSlots =
                                                                                          settings.Values().capacities.maximumControllers}};
             auto impl = std::make_unique<Impl>(owner, settings, std::move(registry));
-            return Result<std::unique_ptr<CharacterWorld>>::Success(std::unique_ptr<CharacterWorld>{new CharacterWorld(std::move(impl))});
+            return Result<std::unique_ptr<CharacterWorld>>::Success(std::unique_ptr<CharacterWorld>{
+                new CharacterWorld(std::move(impl))});  // NOSONAR: make_unique cannot access this private constructor.
         } catch (const std::bad_alloc &) {
             return Result<std::unique_ptr<CharacterWorld>>::Failure(
                 MakeError(CharacterErrors::CapacityExceeded, "Unable to allocate Character world ownership state."));
@@ -108,11 +118,12 @@ namespace Horo::Character {
                 MakeError(CharacterErrors::InvalidState, "Controller creation requires prepared owner-thread mutation."));
         if (const auto valid = ValidateCharacterControllerDescriptor(descriptor); valid.HasError())
             return Result<CharacterControllerHandle>::Failure(valid.ErrorValue());
-        const std::array ownerMatches{descriptor.sceneGeneration == impl_->descriptor.sceneGeneration,
-                                      descriptor.characterWorld == impl_->descriptor.identity,
-                                      descriptor.physicsWorld == impl_->descriptor.physicsWorld};
-        if (!std::ranges::all_of(ownerMatches, std::identity{}))
+        if (const std::array ownerMatches{descriptor.sceneGeneration == impl_->descriptor.sceneGeneration,
+                                          descriptor.characterWorld == impl_->descriptor.identity,
+                                          descriptor.physicsWorld == impl_->descriptor.physicsWorld};
+            !std::ranges::all_of(ownerMatches, std::identity{})) {
             return Result<CharacterControllerHandle>::Failure(MakeError(CharacterErrors::HandleWorldMismatch));
+        }
         if (descriptor.maximumContacts > impl_->settings.Values().work.maximumContactsPerMovement)
             return Result<CharacterControllerHandle>::Failure(
                 MakeError(CharacterErrors::CapacityExceeded, "Controller contact capacity exceeds the Character world work budget."));
