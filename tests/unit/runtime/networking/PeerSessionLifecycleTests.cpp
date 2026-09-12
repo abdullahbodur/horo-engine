@@ -7,29 +7,14 @@
 #include <cstdint>
 
 namespace Horo::Network {
+    using TestSupport::Bytes;
+    using TestSupport::Connection;
+    using TestSupport::Id;
     using TestSupport::RequireError;
+    using TestSupport::Session;
     using TestSupport::WireIdentity;
 
     namespace {
-        template <typename Identity> [[nodiscard]] Identity Id(const std::uint64_t value) {
-            return Identity::Create(value).Value();
-        }
-
-        template <std::size_t Size> [[nodiscard]] std::array<std::byte, Size> Bytes(const std::uint8_t first) {
-            std::array<std::byte, Size> bytes{};
-            for (std::size_t index = 0; index < Size; ++index)
-                bytes[index] = static_cast<std::byte>(first + static_cast<std::uint8_t>(index));
-            return bytes;
-        }
-
-        [[nodiscard]] ConnectionHandle Connection(const std::uint32_t generation = 3) {
-            return ConnectionHandle::Create(2, generation).Value();
-        }
-
-        [[nodiscard]] NetworkOperationGeneration Session(const std::uint64_t generation = 7) {
-            return NetworkOperationGeneration::Create(generation).Value();
-        }
-
         [[nodiscard]] PeerSessionDeadlines Deadlines(const std::uint64_t inactivityTicks = 10) {
             return {10, 20, 30, 100, inactivityTicks};
         }
