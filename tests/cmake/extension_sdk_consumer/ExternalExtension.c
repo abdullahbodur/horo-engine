@@ -4,18 +4,13 @@
 
 _Static_assert(HORO_EXTENSION_ABI_VERSION == 1, "Unexpected extension ABI major");
 _Static_assert(HORO_EXTENSION_ABI_MINOR_VERSION == 1, "Unexpected extension ABI minor");
-_Static_assert(HORO_EXTENSION_SDK_ABI_MAJOR == HORO_EXTENSION_ABI_VERSION,
-               "SDK metadata and ABI header major versions disagree");
-_Static_assert(HORO_EXTENSION_SDK_ABI_MIN_HOST_MINOR == 0,
-               "Unexpected oldest supported host minor");
-_Static_assert(HORO_EXTENSION_SDK_ABI_PUBLISHED_MINOR ==
-                   HORO_EXTENSION_ABI_MINOR_VERSION,
+_Static_assert(HORO_EXTENSION_SDK_ABI_MAJOR == HORO_EXTENSION_ABI_VERSION, "SDK metadata and ABI header major versions disagree");
+_Static_assert(HORO_EXTENSION_SDK_ABI_MIN_HOST_MINOR == 0, "Unexpected oldest supported host minor");
+_Static_assert(HORO_EXTENSION_SDK_ABI_PUBLISHED_MINOR == HORO_EXTENSION_ABI_MINOR_VERSION,
                "SDK metadata and ABI header minor versions disagree");
-_Static_assert(HORO_EXTENSION_SDK_ABI_MAX_HOST_MAJOR_EXCLUSIVE == 2,
-               "Unexpected next incompatible host ABI major");
+_Static_assert(HORO_EXTENSION_SDK_ABI_MAX_HOST_MAJOR_EXCLUSIVE == 2, "Unexpected next incompatible host ABI major");
 
-HORO_EXTENSION_EXPORT HoroExtensionStatus
-horo_extension_query(HoroExtensionRequirements *requirements) {
+HORO_EXTENSION_EXPORT HoroExtensionStatus horo_extension_query(HoroExtensionRequirements *requirements) {
     if (requirements == NULL || requirements->structSize < sizeof(*requirements))
         return HORO_EXTENSION_ERROR_INVALID_ARGS;
 
@@ -29,14 +24,10 @@ horo_extension_query(HoroExtensionRequirements *requirements) {
     return HORO_EXTENSION_SUCCESS;
 }
 
-HORO_EXTENSION_EXPORT HoroExtensionStatus
-horo_extension_load(const HoroExtensionHostApi *host,
-                    HoroExtensionModuleApi *module) {
+HORO_EXTENSION_EXPORT HoroExtensionStatus horo_extension_load(const HoroExtensionHostApi *host, HoroExtensionModuleApi *module) {
     static const char module_id[] = "com.horo.sdk-fixture";
     static const char module_version[] = "1.0.0";
-    if (host == NULL || module == NULL ||
-        host->structSize < sizeof(HoroExtensionHostApi) ||
-        host->abiVersion != HORO_EXTENSION_ABI_VERSION)
+    if (host == NULL || module == NULL || host->structSize < sizeof(HoroExtensionHostApi) || host->abiVersion != HORO_EXTENSION_ABI_VERSION)
         return HORO_EXTENSION_ERROR_VERSION_MISMATCH;
 
     *module = (HoroExtensionModuleApi){
@@ -47,8 +38,7 @@ horo_extension_load(const HoroExtensionHostApi *host,
     return HORO_EXTENSION_SUCCESS;
 }
 
-HORO_EXTENSION_EXPORT void
-horo_extension_unload(HoroExtensionModuleApi *module) {
+HORO_EXTENSION_EXPORT void horo_extension_unload(HoroExtensionModuleApi *module) {
     if (module != NULL)
         *module = (HoroExtensionModuleApi){0};
 }
