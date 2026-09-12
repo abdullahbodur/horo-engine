@@ -85,7 +85,7 @@ namespace Horo::Packages {
          * @return Persisted quarantine record or a typed failure; no active cache entry is created.
          */
         [[nodiscard]] Result<PackageQuarantineRecord> Quarantine(std::span<const std::byte> bytes, PackageQuarantineReason reason,
-                                                                 std::optional<Sha256Digest> expectedDigest = std::nullopt);
+                                                                 const std::optional<Sha256Digest> &expectedDigest = std::nullopt);
 
         /**
          * @brief Removes one active cache entry while holding its digest lock.
@@ -96,7 +96,7 @@ namespace Horo::Packages {
 
     private:
         /** @brief Constructs a store only after root and resource-policy validation. */
-        PackageCacheStore(DurableFileSystem &files, std::filesystem::path root, PackageValidationLimits limits) noexcept;
+        PackageCacheStore(DurableFileSystem &files, std::filesystem::path root, const PackageValidationLimits &limits) noexcept;
 
         DurableFileSystem &files_;
         std::filesystem::path root_;

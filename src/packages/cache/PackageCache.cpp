@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <array>
 #include <atomic>
+#include <format>
 #include <fstream>
 #include <limits>
 #include <nlohmann/json.hpp>
@@ -38,7 +39,11 @@ namespace Horo::Packages {
         const ErrorCodeDescriptor ResourceLimit{CacheDomain, ErrorCode{"packages.cache.resource_limit"}, ErrorSeverity::Error,
                                                 "Package cache input exceeds its configured resource limit.",
                                                 "Reject the artifact or raise the host-owned bound deliberately."};
-        std::atomic_uint64_t Sequence{0};
+
+        [[nodiscard]] std::uint64_t NextQuarantineSequence() noexcept {
+            static std::atomic_uint64_t sequence{0};
+            return ++sequence;
+        }
 
         [[nodiscard]] std::string DigestHex(const Sha256Digest &digest) {
             constexpr std::string_view Prefix{"sha256:"};
@@ -73,20 +78,25 @@ namespace Horo::Packages {
 
         [[nodiscard]] Result<std::vector<std::byte>> ReadBounded(const std::filesystem::path &path, const std::uint64_t limit) {
             std::error_code error;
-            const auto status = std::filesystem::symlink_status(path, error);
-            if (error || !std::filesystem::is_regular_file(status) || std::filesystem::is_symlink(status))
+            if (const auto status = std::filesystem::symlink_status(path, error);
+                error || !std::filesystem::is_regular_file(status) || std::filesystem::is_symlink(status)) {
                 return Result<std::vector<std::byte>>::Failure(MakeError(IoFailure, "Package cache entry is not a regular file."));
+            }
             const std::uintmax_t size = std::filesystem::file_size(path, error);
             if (error)
                 return Result<std::vector<std::byte>>::Failure(MakeError(IoFailure, "Package cache entry size could not be read."));
-            const auto readableLimit =
-                std::min<std::uintmax_t>({limit, std::numeric_limits<std::size_t>::max(), std::numeric_limits<std::streamsize>::max()});
-            if (size > readableLimit)
+            if (const auto readableLimit =
+                    std::min<std::uintmax_t>({limit, std::numeric_limits<std::size_t>::max(), std::numeric_limits<std::streamsize>::max()});
+                size > readableLimit) {
                 return Result<std::vector<std::byte>>::Failure(MakeError(ResourceLimit));
+            }
             std::vector<std::byte> bytes(static_cast<std::size_t>(size));
-            std::ifstream stream(path, std::ios::binary);
-            if (!stream || (size != 0 && !stream.read(reinterpret_cast<char *>(bytes.data()), static_cast<std::streamsize>(size))))
+            auto *const byteStorage =
+                reinterpret_cast<char *>(bytes.data());  // NOSONAR: the standard stream byte API requires char storage.
+            if (std::ifstream stream(path, std::ios::binary);
+                !stream || (size != 0 && !stream.read(byteStorage, static_cast<std::streamsize>(size)))) {
                 return Result<std::vector<std::byte>>::Failure(MakeError(IoFailure, "Package cache entry could not be read completely."));
+            }
             return Result<std::vector<std::byte>>::Success(std::move(bytes));
         }
 
@@ -136,7 +146,7 @@ namespace Horo::Packages {
             const std::string prefix = DigestHex(identity) + '-';
             constexpr std::uint32_t Attempts = 1024;
             for (std::uint32_t attempt = 0; attempt < Attempts; ++attempt) {
-                const std::string candidate = prefix + std::to_string(++Sequence);
+                const std::string candidate = std::format("{}{}", prefix, NextQuarantineSequence());
                 std::error_code error;
                 const bool exists = std::filesystem::exists(root / "quarantine" / reason / candidate, error);
                 if (error)
@@ -181,8 +191,8 @@ namespace Horo::Packages {
 
         [[nodiscard]] Result<PackageQuarantineRecord> QuarantineLocked(
             DurableFileSystem &files, const std::filesystem::path &root, std::span<const std::byte> bytes,
-            const PackageQuarantineReason reason, const std::optional<Sha256Digest> expectedDigest,
-            const std::optional<std::filesystem::path> existingPath = std::nullopt) {
+            const PackageQuarantineReason reason, const std::optional<Sha256Digest> &expectedDigest,
+            const std::optional<std::filesystem::path> &existingPath = std::nullopt) {
             const char *reasonName = ReasonName(reason);
             const Sha256Digest actualDigest = ComputeSha256(bytes);
             const Sha256Digest identity = expectedDigest.value_or(actualDigest);
@@ -224,7 +234,7 @@ namespace Horo::Packages {
 
     /** @copydoc PackageCacheStore::PackageCacheStore */
     PackageCacheStore::PackageCacheStore(DurableFileSystem &files, std::filesystem::path root,
-                                         const PackageValidationLimits limits) noexcept
+                                         const PackageValidationLimits &limits) noexcept
         : files_(files), root_(std::move(root)), limits_(limits) {}
 
     /** @copydoc PackageCacheStore::Publish */
@@ -232,17 +242,15 @@ namespace Horo::Packages {
         const Sha256Digest digest = archive.Digest();
         if (auto compatible = VerifyExpected(archive.Bytes(), digest, limits_); compatible.HasError())
             return Result<PackageCacheEntry>::Failure(compatible.ErrorValue());
-        auto lock = Acquire(files_, root_, digest);
+        auto lock = Acquire(files_, root_, digest);  // NOSONAR: the lock must span the complete publication transaction.
         if (lock.HasError())
             return Result<PackageCacheEntry>::Failure(lock.ErrorValue());
         const std::filesystem::path destination = ArchivePath(root_, digest);
-        std::error_code existsError;
-        if (std::filesystem::exists(destination, existsError)) {
+        if (std::error_code existsError; std::filesystem::exists(destination, existsError)) {
             auto bytes = ReadBounded(destination, limits_.archiveBytes);
             if (bytes.HasError())
                 return Result<PackageCacheEntry>::Failure(bytes.ErrorValue());
-            auto existing = VerifyExpected(bytes.Value(), digest, limits_);
-            if (existing.HasValue())
+            if (auto existing = VerifyExpected(bytes.Value(), digest, limits_); existing.HasValue())
                 return Result<PackageCacheEntry>::Success({digest, bytes.Value().size(), true});
             auto quarantined =
                 QuarantineLocked(files_, root_, bytes.Value(), PackageQuarantineReason::CorruptCacheEntry, digest, destination);
@@ -255,8 +263,7 @@ namespace Horo::Packages {
         const std::filesystem::path staging = root_ / "staging" / (DigestHex(digest) + ".publish.tmp");
         if (auto write = files_.WriteDurable(staging, archive.Bytes()); write.HasError())
             return Result<PackageCacheEntry>::Failure(StorageError(write.ErrorValue(), "write a staged archive"));
-        auto permissions = MakeReadOnly(staging);
-        if (permissions.HasError()) {
+        if (auto permissions = MakeReadOnly(staging); permissions.HasError()) {
             BestEffortRemove(files_, staging);
             return Result<PackageCacheEntry>::Failure(permissions.ErrorValue());
         }
@@ -267,8 +274,7 @@ namespace Horo::Packages {
         auto publishedBytes = ReadBounded(destination, limits_.archiveBytes);
         if (publishedBytes.HasError())
             return Result<PackageCacheEntry>::Failure(publishedBytes.ErrorValue());
-        auto verified = VerifyExpected(publishedBytes.Value(), digest, limits_);
-        if (verified.HasError()) {
+        if (auto verified = VerifyExpected(publishedBytes.Value(), digest, limits_); verified.HasError()) {
             auto quarantined =
                 QuarantineLocked(files_, root_, publishedBytes.Value(), PackageQuarantineReason::CorruptCacheEntry, digest, destination);
             return Result<PackageCacheEntry>::Failure(quarantined.HasError() ? WrapError(Corrupt, quarantined.ErrorValue())
@@ -279,12 +285,11 @@ namespace Horo::Packages {
 
     /** @copydoc PackageCacheStore::Load */
     Result<std::optional<ValidatedPackageArchive>> PackageCacheStore::Load(const Sha256Digest &digest) {
-        auto lock = Acquire(files_, root_, digest);
+        auto lock = Acquire(files_, root_, digest);  // NOSONAR: the lock must span the complete load and quarantine transaction.
         if (lock.HasError())
             return Result<std::optional<ValidatedPackageArchive>>::Failure(lock.ErrorValue());
         const std::filesystem::path path = ArchivePath(root_, digest);
-        std::error_code existsError;
-        if (!std::filesystem::exists(path, existsError)) {
+        if (std::error_code existsError; !std::filesystem::exists(path, existsError)) {
             if (existsError)
                 return Result<std::optional<ValidatedPackageArchive>>::Failure(MakeError(IoFailure));
             return Result<std::optional<ValidatedPackageArchive>>::Success(std::nullopt);
@@ -292,8 +297,7 @@ namespace Horo::Packages {
         auto bytes = ReadBounded(path, limits_.archiveBytes);
         if (bytes.HasError())
             return Result<std::optional<ValidatedPackageArchive>>::Failure(bytes.ErrorValue());
-        auto archive = VerifyExpected(bytes.Value(), digest, limits_);
-        if (archive.HasValue())
+        if (auto archive = VerifyExpected(bytes.Value(), digest, limits_); archive.HasValue())
             return Result<std::optional<ValidatedPackageArchive>>::Success(
                 std::optional<ValidatedPackageArchive>{std::move(archive).Value()});
         auto quarantined = QuarantineLocked(files_, root_, bytes.Value(), PackageQuarantineReason::CorruptCacheEntry, digest, path);
@@ -304,13 +308,13 @@ namespace Horo::Packages {
     /** @copydoc PackageCacheStore::Quarantine */
     Result<PackageQuarantineRecord> PackageCacheStore::Quarantine(const std::span<const std::byte> bytes,
                                                                   const PackageQuarantineReason reason,
-                                                                  const std::optional<Sha256Digest> expectedDigest) {
+                                                                  const std::optional<Sha256Digest> &expectedDigest) {
         if (bytes.size() > limits_.archiveBytes)
             return Result<PackageQuarantineRecord>::Failure(MakeError(ResourceLimit));
         if (ReasonName(reason) == nullptr)
             return Result<PackageQuarantineRecord>::Failure(MakeError(InvalidReason));
         const Sha256Digest identity = expectedDigest.value_or(ComputeSha256(bytes));
-        auto lock = Acquire(files_, root_, identity);
+        auto lock = Acquire(files_, root_, identity);  // NOSONAR: the lock must span the complete quarantine transaction.
         if (lock.HasError())
             return Result<PackageQuarantineRecord>::Failure(lock.ErrorValue());
         return QuarantineLocked(files_, root_, bytes, reason, expectedDigest);
@@ -318,7 +322,7 @@ namespace Horo::Packages {
 
     /** @copydoc PackageCacheStore::Remove */
     Result<bool> PackageCacheStore::Remove(const Sha256Digest &digest) {
-        auto lock = Acquire(files_, root_, digest);
+        auto lock = Acquire(files_, root_, digest);  // NOSONAR: the lock must span the complete removal transaction.
         if (lock.HasError())
             return Result<bool>::Failure(lock.ErrorValue());
         const std::filesystem::path path = ArchivePath(root_, digest);
