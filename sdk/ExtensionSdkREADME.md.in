@@ -12,6 +12,16 @@ find_package(HoroEngineExtensionSdk @HORO_EXTENSION_SDK_VERSION@ CONFIG REQUIRED
 target_link_libraries(my_extension PRIVATE HoroEngine::ExtensionSdk)
 ```
 
+Create a portable starter project with:
+
+```text
+python bin/horo-scaffold-extension.py --shape backend --id com.example.tools --name "Example Tools" --output example-tools
+```
+
+Supported shapes are `gui`, `backend`, `script`, and `hybrid`. Generated
+projects contain their manifest, C ABI entry modules, contract tests, and CPack
+ZIP packaging configuration.
+
 The SDK supports `horo-extension` host ABI versions from
 @HORO_EXTENSION_ABI_MAJOR_VERSION@.@HORO_EXTENSION_ABI_MIN_HOST_MINOR@
 (inclusive) to @HORO_EXTENSION_ABI_MAX_HOST_MAJOR_EXCLUSIVE@.0 (exclusive), and
