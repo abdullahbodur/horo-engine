@@ -5,6 +5,7 @@
 #include <algorithm>
 #include <array>
 #include <limits>
+#include <new>
 #include <string>
 #include <string_view>
 #include <type_traits>
@@ -112,8 +113,14 @@ namespace Horo::Runtime {
             std::ranges::transform(encoded.Value(), bytes.begin(), [](const std::byte value) {
                 return std::to_integer<std::uint8_t>(value);
             });
-            auto identity = Identity::FromBytes(bytes);
-            return identity.HasError() ? Result<Identity>::Failure(WireError(SaveErrors::ReferenceCorrupt, start)) : std::move(identity);
+            Error corrupt = WireError(SaveErrors::ReferenceCorrupt, start);
+            Error allocationFailure = WireError(SaveErrors::CanonicalCodecAllocationFailed, start);
+            try {
+                auto identity = Identity::FromBytes(bytes);
+                return identity.HasError() ? Result<Identity>::Failure(std::move(corrupt)) : std::move(identity);
+            } catch (const std::bad_alloc &) {
+                return Result<Identity>::Failure(std::move(allocationFailure));
+            }
         }
 
         [[nodiscard]] Result<SaveParticipantId> ReadParticipant(CanonicalValueReader &reader, const std::size_t maximumBytes) {
@@ -122,9 +129,14 @@ namespace Horo::Runtime {
             if (encoded.HasError())
                 return Result<SaveParticipantId>::Failure(std::move(encoded).ErrorValue());
             const std::string_view text{reinterpret_cast<const char *>(encoded.Value().data()), encoded.Value().size()};
-            auto participant = SaveParticipantId::Parse(text);
-            return participant.HasError() ? Result<SaveParticipantId>::Failure(WireError(SaveErrors::ReferenceCorrupt, start))
-                                          : std::move(participant);
+            Error corrupt = WireError(SaveErrors::ReferenceCorrupt, start);
+            Error allocationFailure = WireError(SaveErrors::CanonicalCodecAllocationFailed, start);
+            try {
+                auto participant = SaveParticipantId::Parse(text);
+                return participant.HasError() ? Result<SaveParticipantId>::Failure(std::move(corrupt)) : std::move(participant);
+            } catch (const std::bad_alloc &) {
+                return Result<SaveParticipantId>::Failure(std::move(allocationFailure));
+            }
         }
 
         template <typename Target> [[nodiscard]] Result<SaveReferenceTarget> TargetResult(Target target) {

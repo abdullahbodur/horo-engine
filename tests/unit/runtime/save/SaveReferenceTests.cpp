@@ -149,6 +149,15 @@ namespace {
         CHECK(decoded.ErrorValue().code.Value() == SaveErrors::ReferenceCorrupt.code.Value());
         REQUIRE(decoded.ErrorValue().diagnostics.size() == 1);
         CHECK(decoded.ErrorValue().diagnostics[0].location.column == 1);
+
+        std::vector<std::byte> invalidSecond{std::byte{0x02}};
+        AppendIdentity(invalidSecond, 1);
+        invalidSecond.insert(invalidSecond.end(), 16, std::byte{});
+        const auto second = DecodeSaveReference(invalidSecond);
+        REQUIRE(second.HasError());
+        CHECK(second.ErrorValue().code.Value() == SaveErrors::ReferenceCorrupt.code.Value());
+        REQUIRE(second.ErrorValue().diagnostics.size() == 1);
+        CHECK(second.ErrorValue().diagnostics[0].location.column == 17);
     }
 
     TEST_CASE("Reference encoding preserves codec bounds and invalid caller classification", "[runtime][save][reference]") {
