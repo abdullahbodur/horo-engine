@@ -8,6 +8,7 @@
 #include "Horo/Extensions/ApplicationCapabilityRegistry.h"
 #include "Horo/Foundation/CancellationToken.h"
 
+#include <chrono>
 #include <concepts>
 #include <cstddef>
 #include <cstdint>
@@ -42,6 +43,19 @@ namespace Horo::Extensions {
     enum class BackendServiceThreadRule : std::uint8_t {
         AnyThread,
         ProviderOwnerThread,
+    };
+
+    /** @brief Observable result of a bounded provider-retirement request. */
+    enum class BackendServiceRetirementDisposition : std::uint8_t {
+        ShutdownComplete,                /**< Provider shutdown completed exactly once. */
+        DeferredUntilCallExit,           /**< A re-entrant call guard owns finalization. */
+        OwnerThreadFinalizationRequired, /**< A drained provider awaits its recorded owner thread. */
+        RestartRequired,                 /**< Deadline expired; the live provider remains retained. */
+    };
+
+    /** @brief Finite lifecycle policy for one backend service registry. */
+    struct BackendServiceRegistryConfig final {
+        std::chrono::milliseconds drainDeadline{std::chrono::seconds(5)}; /**< Maximum synchronous cooperative drain wait. */
     };
 
     /** @brief Immutable service identity, capability binding, and invocation policy. */
@@ -98,7 +112,6 @@ namespace Horo::Extensions {
 
         std::shared_ptr<BackendServiceProviderState> provider_;
         BackendServiceCallContext context_;
-        BackendServiceProviderState *previousExecutingProvider_{};
         bool ownsExecutionSlot_{};
     };
 
@@ -108,6 +121,7 @@ namespace Horo::Extensions {
         [[nodiscard]] void *BackendServiceObject(const std::shared_ptr<BackendServiceProviderState> &provider) noexcept;
         [[nodiscard]] Error AttributeBackendServiceError(const BackendServiceDescriptor &provider, Error cause);
         [[nodiscard]] Error BackendServiceCancellationError(const BackendServiceDescriptor &provider);
+        [[nodiscard]] Error BackendServiceCancellationError(const ApplicationCapabilityProviderDescriptor &provider);
     }  // namespace Detail
 
     /** @brief One-shot typed invocation handle bound to an admitted application capability lease. */
@@ -184,8 +198,11 @@ namespace Horo::Extensions {
         BackendServiceRegistration(BackendServiceRegistration &&other) noexcept;
         BackendServiceRegistration &operator=(BackendServiceRegistration &&other) noexcept;
 
-        /** @brief Revokes future calls, cancels and drains active work, then shuts down the service exactly once. */
-        void Reset() noexcept;
+        /**
+         * @brief Revokes future calls, cancels and drains active work, then shuts down the service exactly once.
+         * @return Completed, deferred owner-thread/self finalization, or restart-required retained retirement.
+         */
+        [[nodiscard]] Result<BackendServiceRetirementDisposition> Reset() noexcept;
 
         /** @brief Reports whether this registration still owns a discoverable service. */
         [[nodiscard]] bool IsRegistered() const noexcept;
@@ -204,7 +221,7 @@ namespace Horo::Extensions {
     public:
         static constexpr std::size_t MaximumServices = 256; /**< Hard publication bound. */
 
-        BackendServiceRegistry();
+        explicit BackendServiceRegistry(BackendServiceRegistryConfig config = {});
         ~BackendServiceRegistry();
         BackendServiceRegistry(const BackendServiceRegistry &) = delete;
         BackendServiceRegistry &operator=(const BackendServiceRegistry &) = delete;
@@ -248,8 +265,17 @@ namespace Horo::Extensions {
                 BackendServiceCall<Service>{std::move(resolved).Value(), std::move(authority)});
         }
 
-        /** @brief Idempotently revokes, cancels, drains, and shuts down every service. */
-        void BeginShutdown() noexcept;
+        /**
+         * @brief Idempotently revokes, cancels, drains, and shuts down every service.
+         * @return Aggregate completed, deferred, or restart-required disposition.
+         */
+        [[nodiscard]] Result<BackendServiceRetirementDisposition> BeginShutdown() noexcept;
+
+        /**
+         * @brief Finalizes drained retired providers whose owner is the calling thread.
+         * @return Aggregate disposition; RestartRequired remains sticky after a deadline breach.
+         */
+        [[nodiscard]] Result<BackendServiceRetirementDisposition> FinalizeRetiredOnOwnerThread() noexcept;
 
         /** @brief Reports whether registration and resolution are terminally closed. */
         [[nodiscard]] bool IsShutdown() const noexcept;

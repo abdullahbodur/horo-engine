@@ -559,9 +559,15 @@ boundary directly.
 Provider operations do not own host lifecycle, but a defensive re-entrant shutdown
 request cannot wait on its own call. That provider is marked revoked and cancelled
 immediately; its final call guard performs the deferred `Shutdown()` after the
-operation returns. Ordinary host-driven revocation remains synchronous and requires
-providers to cooperate with cancellation, because releasing or timing out a still-
-executing in-process service would make its code and object lifetime unsafe.
+operation returns. Ordinary host-driven revocation closes admission and requests
+cancellation, then waits only for the registry's finite shared drain deadline. A
+deadline breach retains the provider and reports `RestartRequired`; it never unloads
+or destroys code that may still be executing. Owner-thread services enter an explicit
+retired state when revocation originates elsewhere, and only
+`FinalizeRetiredOnOwnerThread` may invoke their final `Shutdown()` callback. Nested
+re-entrant shutdown is detected across the complete per-thread call stack, and the
+outermost final call guard performs shutdown exactly once when its provider remains
+eligible for in-process finalization.
 
 ## Module Loading And ABI Boundary
 

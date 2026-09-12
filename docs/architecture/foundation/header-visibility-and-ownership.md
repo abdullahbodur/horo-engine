@@ -31,6 +31,11 @@ provider pointers or reusable factories with one-shot calls resolved through an
 exact `ApplicationCapabilityProviderLease`; provider-native ABI tables remain
 private to their host adapter. The generated Extensions public-header consumer
 compiles the new header through its sole owning target.
+The lifecycle API returns a typed retirement disposition: a bounded drain can
+complete, defer to the outermost re-entrant call, require owner-thread finalization,
+or retain the provider and require restart after the shared deadline. Composition
+must finalize owner-thread retirements on the recorded provider thread; no deadline
+path destroys live provider code.
 
 `Horo/Vfx/VfxQualityPolicy.h` is owned by `HoroVfxApi`. It adds backend-neutral
 immutable capability/policy evidence and pure admission decisions; consumers keep
