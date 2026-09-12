@@ -8,6 +8,16 @@
 #include <utility>
 
 namespace Horo::AI::TestSupport {
+    inline const ErrorCodeDescriptor HarnessExecutionFailure{
+        .domain = ErrorDomainId{"horo.ai.test"},
+        .code = ErrorCode{"ai.test.injected_execution_failure"},
+        .defaultSeverity = ErrorSeverity::Error,
+        .summary = "The deterministic AI harness injected an execution failure.",
+        .remediationHint = "Inspect the scripted test step; this error is deterministic test evidence.",
+        .retryable = false,
+        .userActionable = false,
+    };
+
     enum class ScriptedTaskOutcome : std::uint8_t {
         KeepRunning,
         Succeed,
@@ -66,41 +76,9 @@ namespace Horo::AI::TestSupport {
             RecordByte(static_cast<std::uint8_t>(step.resume));
             RecordByte(static_cast<std::uint8_t>(step.outcome));
             RecordByte(static_cast<std::uint8_t>(step.fault));
-
-            if (step.fault == AiTaskHarnessFault::CancelBeforeResume) {
-                const auto cancelled = lifecycle_.RequestCancellation(AiTaskCancellationReason::Requested);
-                if (cancelled.HasError())
-                    return Result<void>::Failure(cancelled.ErrorValue());
-            } else if (step.fault == AiTaskHarnessFault::RetireAgentBeforeCompletion) {
-                static_cast<void>(lifecycle_.RetireAgentGeneration());
-                const auto lateCompletion = lifecycle_.CompleteSuccess(activeAgent);
-                if (lateCompletion.HasError())
-                    return Result<void>::Failure(lateCompletion.ErrorValue());
-            } else {
-                const auto resume = lifecycle_.PrepareResume(step.resume, activeAgent);
-                if (resume.HasError())
-                    return Result<void>::Failure(resume.ErrorValue());
-                if (resume.Value() == AiTaskResumeDisposition::Ready) {
-                    if (step.outcome == ScriptedTaskOutcome::Succeed) {
-                        const auto completed = lifecycle_.CompleteSuccess(activeAgent);
-                        if (completed.HasError())
-                            return Result<void>::Failure(completed.ErrorValue());
-                    } else if (step.outcome == ScriptedTaskOutcome::Fail) {
-                        const auto completed =
-                            lifecycle_.CompleteFailure(activeAgent, {AiTaskFailureKind::Execution,
-                                                                     MakeError(AIErrors::TaskTransitionInvalid,
-                                                                               "The deterministic harness injected task failure.")});
-                        if (completed.HasError())
-                            return Result<void>::Failure(completed.ErrorValue());
-                    }
-                }
-            }
-
-            RecordByte(static_cast<std::uint8_t>(lifecycle_.State()));
-            if (const AiTaskTerminalResult *terminal = lifecycle_.TerminalResult(); terminal != nullptr) {
-                RecordByte(terminal->failure ? static_cast<std::uint8_t>(terminal->failure->kind) : NoDetail);
-                RecordByte(terminal->cancellationReason ? static_cast<std::uint8_t>(*terminal->cancellationReason) : NoDetail);
-            }
+            if (const auto executed = ExecuteStep(step, activeAgent); executed.HasError())
+                return Result<void>::Failure(executed.ErrorValue());
+            RecordLifecycleState();
             return Result<void>::Success();
         }
 
@@ -117,6 +95,42 @@ namespace Horo::AI::TestSupport {
         static constexpr std::uint8_t NoDetail = 0xff;
         static constexpr std::uint64_t FnvOffset = 14'695'981'039'346'656'037ULL;
         static constexpr std::uint64_t FnvPrime = 1'099'511'628'211ULL;
+
+        [[nodiscard]] Result<void> ExecuteStep(const ScriptedAiTaskStep step, const AgentHandle activeAgent) {
+            if (step.fault == AiTaskHarnessFault::CancelBeforeResume) {
+                const auto cancelled = lifecycle_.RequestCancellation(AiTaskCancellationReason::Requested);
+                return cancelled.HasError() ? Result<void>::Failure(cancelled.ErrorValue()) : Result<void>::Success();
+            }
+            if (step.fault == AiTaskHarnessFault::RetireAgentBeforeCompletion) {
+                static_cast<void>(lifecycle_.RetireAgentGeneration());
+                const auto completed = lifecycle_.CompleteSuccess(activeAgent);
+                return completed.HasError() ? Result<void>::Failure(completed.ErrorValue()) : Result<void>::Success();
+            }
+            return ResumeAndApplyOutcome(step, activeAgent);
+        }
+
+        [[nodiscard]] Result<void> ResumeAndApplyOutcome(const ScriptedAiTaskStep step, const AgentHandle activeAgent) {
+            const auto resume = lifecycle_.PrepareResume(step.resume, activeAgent);
+            if (resume.HasError())
+                return Result<void>::Failure(resume.ErrorValue());
+            if (resume.Value() != AiTaskResumeDisposition::Ready || step.outcome == ScriptedTaskOutcome::KeepRunning)
+                return Result<void>::Success();
+            if (step.outcome == ScriptedTaskOutcome::Succeed) {
+                const auto completed = lifecycle_.CompleteSuccess(activeAgent);
+                return completed.HasError() ? Result<void>::Failure(completed.ErrorValue()) : Result<void>::Success();
+            }
+            const auto completed =
+                lifecycle_.CompleteFailure(activeAgent, {AiTaskFailureKind::Execution, MakeError(HarnessExecutionFailure)});
+            return completed.HasError() ? Result<void>::Failure(completed.ErrorValue()) : Result<void>::Success();
+        }
+
+        void RecordLifecycleState() noexcept {
+            RecordByte(static_cast<std::uint8_t>(lifecycle_.State()));
+            if (const AiTaskTerminalResult *terminal = lifecycle_.TerminalResult(); terminal != nullptr) {
+                RecordByte(terminal->failure ? static_cast<std::uint8_t>(terminal->failure->kind) : NoDetail);
+                RecordByte(terminal->cancellationReason ? static_cast<std::uint8_t>(*terminal->cancellationReason) : NoDetail);
+            }
+        }
 
         void RecordByte(const std::uint8_t value) noexcept {
             stateHash_ ^= value;
