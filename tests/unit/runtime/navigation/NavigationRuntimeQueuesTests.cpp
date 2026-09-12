@@ -13,7 +13,12 @@ namespace Horo::Navigation {
         class QueueTestBackend final : public INavigationQueryBackend {
         public:
             [[nodiscard]] NavigationProviderCapabilities Capabilities() const noexcept override {
-                return {};
+                constexpr NavigationQueryLimits limits{
+                    .maximumNodeExpansions = 64,
+                    .maximumResultPoints = 16,
+                    .maximumSearchDistanceMeters = 100.0F,
+                };
+                return MakeAvailablePathQueryCapabilities(1, limits, 1);
             }
 
             [[nodiscard]] Result<NavigationPath> FindPath(const NavigationPathRequest &, const CancellationToken &) const override {
