@@ -381,6 +381,22 @@ def test_main_test_command_filters_and_invokes_ctest(monkeypatch: pytest.MonkeyP
     assert "gui" in ctest_call
 
 
+def test_main_test_command_forwards_compiler_launcher_to_cmake(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    calls: list[list[str]] = []
+
+    def fake_subprocess(cmd: Sequence[str], **_: object) -> int:
+        calls.append(list(cmd))
+        return 0
+
+    monkeypatch.setattr(dev, "execute_subprocess", fake_subprocess)
+
+    assert dev.main(["test", "-B", str(tmp_path), "--compiler-launcher", "sccache"]) == 0
+    assert "-DCMAKE_C_COMPILER_LAUNCHER=sccache" in calls[0]
+    assert "-DCMAKE_CXX_COMPILER_LAUNCHER=sccache" in calls[0]
+
+
 def test_main_check_command_invokes_full_ci_pass(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     calls: list[list[str]] = []
 
@@ -519,5 +535,4 @@ def test_main_help_command_and_empty_arguments(capsys: pytest.CaptureFixture[str
     assert dev.main(["help", "nonexistent"]) == 2
     err = capsys.readouterr().err
     assert "unknown command 'nonexistent'" in err
-
 

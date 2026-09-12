@@ -407,6 +407,7 @@ def configure_command(
     telemetry: bool = True,
     opentelemetry: bool | None = None,
     imgui_ui_tests: bool = False,
+    compiler_launcher: str | None = None,
     extra_cmake_args: Sequence[str] | None = None,
 ) -> list[str]:
     """Build the typed, parameterizable CMake configure command."""
@@ -432,6 +433,13 @@ def configure_command(
         f"-DHORO_ENABLE_OPENTELEMETRY={'ON' if opentelemetry else 'OFF'}",
         f"-DHORO_ENABLE_IMGUI_UI_TESTS={'ON' if imgui_ui_tests else 'OFF'}",
     ]
+    if compiler_launcher:
+        command.extend(
+            [
+                f"-DCMAKE_C_COMPILER_LAUNCHER={compiler_launcher}",
+                f"-DCMAKE_CXX_COMPILER_LAUNCHER={compiler_launcher}",
+            ]
+        )
     if extra_cmake_args:
         command.extend(extra_cmake_args)
     return command
@@ -558,6 +566,7 @@ def run_build(
     testing: bool = True,
     imgui_ui_tests: bool = False,
     clean: bool = False,
+    compiler_launcher: str | None = None,
     extra_cmake_args: Sequence[str] | None = None,
 ) -> int:
     """Configure and build the repository or a specific target."""
@@ -576,6 +585,7 @@ def run_build(
         telemetry=True,
         opentelemetry=True,
         imgui_ui_tests=imgui_ui_tests,
+        compiler_launcher=compiler_launcher,
         extra_cmake_args=extra_cmake_args,
     )
     configure_code = execute_subprocess(cfg_cmd)
@@ -593,6 +603,7 @@ def run_tests(
     build_directory: Path = DEFAULT_CI_BUILD_DIRECTORY,
     build_type: str = "Debug",
     junit: Path | None = None,
+    compiler_launcher: str | None = None,
     extra_ctest_args: Sequence[str] | None = None,
 ) -> int:
     """Build all test targets and execute ctest with optional filters."""
@@ -602,6 +613,7 @@ def run_tests(
         build_type=build_type,
         testing=True,
         imgui_ui_tests=gui,
+        compiler_launcher=compiler_launcher,
     )
     if build_code != 0:
         return build_code
@@ -1169,6 +1181,7 @@ def create_argument_parser() -> argparse.ArgumentParser:
     tst.add_argument("-B", "--dir", type=Path, default=DEFAULT_CI_BUILD_DIRECTORY, help="test build directory")
     tst.add_argument("--type", default="Debug", choices=("Debug", "Release", "RelWithDebInfo"), help="CMake build type")
     tst.add_argument("--junit", type=Path, default=None, help="write CTest results to JUnit XML file")
+    tst.add_argument("--compiler-launcher", default=None, help="CMake compiler launcher executable (for example sccache)")
 
     # check command (CI Parity)
     chk = commands.add_parser("check", help="run full CI-parity build and comprehensive test pass")
@@ -1343,6 +1356,7 @@ def _dispatch_command(parsed: argparse.Namespace, unparsed: Sequence[str], parse
             build_directory=parsed.dir,
             build_type=parsed.type,
             junit=parsed.junit,
+            compiler_launcher=parsed.compiler_launcher,
         )
 
     if parsed.command == "check":

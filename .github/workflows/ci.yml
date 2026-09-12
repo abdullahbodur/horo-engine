@@ -64,18 +64,21 @@ jobs:
             cc: gcc
             cxx: g++
             build_dir: build/ci
+            compiler_launcher: ''
           - name: macOS / Clang
             runner: macos-latest
             timeout_minutes: 25
             cc: clang
             cxx: clang++
             build_dir: build/ci
+            compiler_launcher: ''
           - name: Windows / MSVC
             runner: windows-2022
             timeout_minutes: 35
             cc: cl
             cxx: cl
             build_dir: build/ci
+            compiler_launcher: sccache
 
     steps:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
@@ -116,6 +119,12 @@ jobs:
         if: runner.os == 'Windows'
         uses: seanmiddleditch/gha-setup-ninja@3b1f8f94a2f8254bd26914c4ab9474d4f0015f67
 
+      - name: Setup sccache on Windows
+        if: runner.os == 'Windows'
+        uses: mozilla-actions/sccache-action@fc920bf0ec8de6ee65d409111f7ec508035751ba
+        with:
+          version: v0.17.0
+
       - name: Restore compiler cache
         if: runner.os != 'Windows'
         uses: hendrikmuhs/ccache-action@33522472633dbd32578e909b315f5ee43ba878ce
@@ -139,6 +148,7 @@ jobs:
         run: |
           python3 scripts/dev.py test \
             --dir "${{ matrix.build_dir }}" \
+            --compiler-launcher "${{ matrix.compiler_launcher }}" \
             --junit "${{ github.workspace }}/${{ matrix.build_dir }}/test-results/ctest.xml"
           echo "=== test-results directory ==="
           ls -la "${{ github.workspace }}/${{ matrix.build_dir }}/test-results" || true
@@ -147,6 +157,15 @@ jobs:
           CXX: ${{ matrix.cxx }}
           FETCHCONTENT_BASE_DIR: ${{ github.workspace }}/.cmake/fetchcontent
           HORO_LOG_LEVEL: debug
+          SCCACHE_GHA_ENABLED: ${{ runner.os == 'Windows' && 'true' || 'false' }}
+
+      - name: Show Windows compiler cache stats
+        if: always() && runner.os == 'Windows'
+        continue-on-error: true
+        shell: bash
+        run: '"${SCCACHE_PATH}" --show-stats'
+        env:
+          SCCACHE_GHA_ENABLED: 'true'
 
       - name: Publish test results
         if: always() && (steps.native_tests.outcome == 'success' || steps.native_tests.outcome == 'failure')
