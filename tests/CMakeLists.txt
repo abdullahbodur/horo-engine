@@ -161,6 +161,7 @@ add_executable(HoroNetworkApiTests
         unit/runtime/networking/ReplicationDescriptorTests.cpp
         unit/runtime/networking/ReplicationDescriptorRegistryTests.cpp
         unit/runtime/networking/TransportCapabilitiesTests.cpp
+        unit/runtime/networking/TransportBudgetTests.cpp
 )
 target_compile_features(HoroNetworkApiTests PRIVATE cxx_std_20)
 target_link_libraries(HoroNetworkApiTests PRIVATE HoroEngine::NetworkApi)
