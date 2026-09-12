@@ -70,16 +70,18 @@ namespace Horo::Navigation {
         }
 
         [[nodiscard]] bool CheckedAdd(const std::uint64_t left, const std::uint64_t right, std::uint64_t &sum) noexcept {
-            if (right > std::numeric_limits<std::uint64_t>::max() - left)
+            const std::uint64_t candidate = left + right;
+            if (candidate < left)
                 return false;
-            sum = left + right;
+            sum = candidate;
             return true;
         }
 
         [[nodiscard]] bool CheckedMultiply(const std::uint64_t left, const std::uint64_t right, std::uint64_t &product) noexcept {
-            if (left != 0 && right > std::numeric_limits<std::uint64_t>::max() / left)
+            const std::uint64_t candidate = left * right;
+            if (left != 0 && candidate / left != right)
                 return false;
-            product = left * right;
+            product = candidate;
             return true;
         }
 

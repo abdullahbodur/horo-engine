@@ -19,18 +19,9 @@ namespace Horo::Navigation {
     static_assert(!std::is_move_assignable_v<NavMeshData>);
 
     namespace {
+        using TestSupport::Digest;
+        using TestSupport::Id;
         using TestSupport::RequireError;
-
-        template <typename Identity> [[nodiscard]] Identity Id(const std::uint64_t value) {
-            return Identity::Create(value).Value();
-        }
-
-        [[nodiscard]] Sha256Digest Digest(const std::uint8_t seed) {
-            Sha256Digest digest{};
-            for (std::size_t index = 0; index < digest.bytes.size(); ++index)
-                digest.bytes[index] = static_cast<std::uint8_t>(seed + index);
-            return digest;
-        }
 
         [[nodiscard]] NavMeshProviderPayloadCompatibility ProviderCompatibility(const std::uint32_t formatVersion = 4,
                                                                                 const std::uint8_t fingerprintSeed = 80) {
