@@ -5,6 +5,7 @@ include_guard(GLOBAL)
 message(STATUS "Configuring target-specific public header boundaries")
 
 horo_configure_target_header_boundary(HoroFoundation PUBLIC_HEADERS
+    Horo/Foundation/AssetCookTargetId.h
     Horo/Foundation/BuildOutputStore.h
     Horo/Foundation/CancellationToken.h
     Horo/Foundation/Configuration.h
@@ -167,6 +168,8 @@ horo_configure_target_header_boundary(HoroGameplayApi PUBLIC_HEADERS
     Horo/Gameplay/BehaviorTypes.h
     Horo/Gameplay/Component.h
     Horo/Gameplay/ComponentRegistry.h
+    Horo/Gameplay/GameAsset.h
+    Horo/Gameplay/GameAssetTypeRegistry.h
     Horo/Gameplay/GameServiceRegistry.h
     Horo/Gameplay/GameModule.h
     Horo/Gameplay/GameplayErrors.h

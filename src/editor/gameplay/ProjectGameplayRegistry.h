@@ -6,6 +6,7 @@
  */
 
 #include "Horo/Gameplay/BehaviorRegistry.h"
+#include "Horo/Gameplay/GameAssetTypeRegistry.h"
 #include "Horo/Gameplay/GameModuleHost.h"
 #include "Horo/Gameplay/LuaBehavior.h"
 
@@ -31,13 +32,15 @@ namespace Horo::Editor {
         /** @brief Discovers bounded Lua behavior assets below `<project>/assets/scripts`. */
         [[nodiscard]] static std::unique_ptr<ProjectGameplayRegistry> Discover(const std::filesystem::path &projectRoot);
 
-        explicit ProjectGameplayRegistry(ConstructionToken) noexcept {}
+        explicit ProjectGameplayRegistry(ConstructionToken);
 
         ProjectGameplayRegistry(const ProjectGameplayRegistry &) = delete;
         ProjectGameplayRegistry &operator=(const ProjectGameplayRegistry &) = delete;
 
         /** @brief Returns the immutable registry used by authoring and new play sessions. */
         [[nodiscard]] const Gameplay::BehaviorRegistry &Registry() const noexcept;
+        /** @brief Returns current game-owned asset metadata or an empty frozen missing-code registry. */
+        [[nodiscard]] const Gameplay::GameAssetTypeRegistry &AssetTypes() const noexcept;
         /** @brief Returns source-addressed compile and registration failures. */
         [[nodiscard]] const std::vector<ProjectGameplayDiagnostic> &Diagnostics() const noexcept;
         /** @brief Reports whether source failures prevent a coherent registry snapshot. */
@@ -69,6 +72,7 @@ namespace Horo::Editor {
         void DiscoverLuaPrograms(const std::filesystem::path &projectRoot);
 
         std::unique_ptr<Gameplay::LoadedGameModule> nativeModule_;
+        Gameplay::GameAssetTypeRegistry missingAssetTypes_{"game.missing"};
         std::vector<std::unique_ptr<Gameplay::LuaBehaviorProgram>> luaPrograms_;
         std::vector<std::filesystem::path> luaSources_;
         std::vector<LuaSourceStat> luaSourceStats_;

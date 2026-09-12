@@ -169,6 +169,20 @@ finding through a module-owned descriptor, then return
 `Result<ValidationResult>`. Existing non-validation `Result<T>` APIs and
 `Error::diagnostics` callers do not change.
 
+## GAM-001.5 Migration Notes
+
+`HoroEngine::Foundation` owns the canonical
+`Horo/Foundation/AssetCookTargetId.h` public contract shared by Assets and
+GameplayApi. Existing asset-pipeline consumers may keep including
+`Horo/Assets/AssetCook.h` and using `Horo::Assets::AssetCookTargetId`; that name
+is an alias to the single Foundation-owned type, so persisted cook-target text
+and the existing 16-bit envelope limit remain compatible. Gameplay descriptors
+use the same type but admission retains its narrower 96-byte project-module
+boundary. New direct consumers link Foundation and include the owning header;
+they must not introduce a second parser or stringly typed target identity. The
+generated Foundation public-header consumer and Assets/Gameplay callers cover
+the ownership migration.
+
 ## CIN-001.4 Migration Notes
 
 `HoroEngine::CinematicModel` owns the new `Horo/Cinematic/CurveSampling.h`

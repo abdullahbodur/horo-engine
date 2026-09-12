@@ -44,6 +44,10 @@ namespace Horo::Gameplay::Detail {
         return value.starts_with("game.") && IsNamespacedId(value, maximumBytes);
     }
 
+    [[nodiscard]] constexpr bool BelongsToModule(const std::string_view value, const std::string_view moduleId) noexcept {
+        return value.size() > moduleId.size() + 1 && value.starts_with(moduleId) && value[moduleId.size()] == '.';
+    }
+
     template <typename Id> [[nodiscard]] bool ContainsInvalidOrDuplicateIds(const std::span<const Id> ids) {
         std::unordered_set<std::string_view> unique;
         unique.reserve(ids.size());

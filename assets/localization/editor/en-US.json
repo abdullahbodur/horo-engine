@@ -1569,6 +1569,7 @@
     "workspace.asset_drop.unsupported": {"text": "This asset type cannot be instantiated as a scene object."},
     "workspace.asset_drop.parent_missing": {"text": "The hierarchy target no longer exists."},
     "workspace.asset_drop.success": {"text": "Asset added to the scene."},
+    "workspace.game_asset.category.missing": {"text": "Missing Gameplay Asset Type"},
     "welcome.project.compatibility.current": {"text": "Current"},
     "welcome.project.compatibility.compatible": {"text": "Compatible"},
     "welcome.project.compatibility.will_upgrade": {"text": "Will upgrade"},

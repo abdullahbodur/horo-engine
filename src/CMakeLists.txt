@@ -1,4 +1,5 @@
 add_library(HoroFoundation STATIC
+        foundation/AssetCookTargetId.cpp
         foundation/FoundationErrors.cpp
         foundation/modules/ModuleActivationContext.cpp
         foundation/modules/ModuleDescriptor.cpp
@@ -258,6 +259,10 @@ target_link_libraries(HoroRuntimeUi PUBLIC HoroEngine::Foundation HoroEngine::As
 
 add_library(HoroGameplayApi STATIC
         gameplay/api/BehaviorTypes.cpp
+        gameplay/api/GameAsset.cpp
+        gameplay/api/GameAssetTypeRegistry.cpp
+        gameplay/api/GameAssetValidation.cpp
+        gameplay/api/GameAssetValidation.h
         gameplay/api/Component.cpp
         gameplay/api/ComponentRegistry.cpp
         gameplay/api/ComponentValidation.h

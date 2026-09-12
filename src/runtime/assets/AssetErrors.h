@@ -29,7 +29,6 @@ namespace Horo::Assets::AssetErrors {
 }  // namespace Horo::Assets::AssetErrors
 
 namespace Horo::Assets::CookErrors {
-    extern const ErrorCodeDescriptor InvalidTarget;
     extern const ErrorCodeDescriptor UnsupportedFormat;
     extern const ErrorCodeDescriptor MalformedArtifact;
     extern const ErrorCodeDescriptor TooLarge;

@@ -8,6 +8,14 @@
 #include "Horo/Foundation/ErrorCode.h"
 
 namespace Horo::Gameplay::GameplayErrors {
+    extern const ErrorCodeDescriptor InvalidGameAssetTypeId;
+    extern const ErrorCodeDescriptor InvalidGameAssetDescriptor;
+    extern const ErrorCodeDescriptor InvalidSerializedGameAsset;
+    extern const ErrorCodeDescriptor DuplicateGameAssetType;
+    extern const ErrorCodeDescriptor GameAssetRegistryFrozen;
+    extern const ErrorCodeDescriptor GameAssetHandlerUnavailable;
+    extern const ErrorCodeDescriptor InvalidGameAssetProcessingInput;
+    extern const ErrorCodeDescriptor GameAssetProcessingFailed;
     extern const ErrorCodeDescriptor InvalidComponentTypeId;
     extern const ErrorCodeDescriptor InvalidComponentDescriptor;
     extern const ErrorCodeDescriptor InvalidSerializedComponent;

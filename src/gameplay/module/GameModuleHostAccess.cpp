@@ -41,6 +41,11 @@ namespace Horo::Gameplay {
         return *impl_->components;
     }
 
+    /** @copydoc LoadedGameModule::AssetTypes */
+    const GameAssetTypeRegistry &LoadedGameModule::AssetTypes() const noexcept {
+        return *impl_->assetTypes;
+    }
+
     /** @copydoc LoadedGameModule::Services */
     const GameServiceRegistry &LoadedGameModule::Services() const noexcept {
         return *impl_->services;
