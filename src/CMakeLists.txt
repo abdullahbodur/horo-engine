@@ -281,6 +281,7 @@ target_compile_definitions(HoroGameplayApi PRIVATE
 )
 
 add_library(HoroRuntimeScene STATIC
+        runtime/scene/NavigationSceneComponents.cpp
         runtime/scene/RuntimeSceneDefinition.cpp
         runtime/scene/SavedSceneBootstrap.cpp
         runtime/scene/RuntimeScene.cpp
@@ -292,6 +293,7 @@ target_include_directories(HoroRuntimeScene PUBLIC ${PROJECT_SOURCE_DIR}/include
 target_link_libraries(HoroRuntimeScene PUBLIC HoroEngine::Foundation HoroEngine::Runtime HoroEngine::GameplayApi HoroEngine::RuntimeUi)
 
 add_library(HoroNetworkRuntime STATIC
+        runtime/networking/HandshakeNegotiation.cpp
         runtime/networking/NetworkObjectMapping.cpp
 )
 add_library(HoroEngine::NetworkRuntime ALIAS HoroNetworkRuntime)
@@ -602,6 +604,7 @@ add_library(HoroNavigationApi STATIC
 add_library(HoroEngine::NavigationApi ALIAS HoroNavigationApi)
 target_compile_features(HoroNavigationApi PUBLIC cxx_std_20)
 target_link_libraries(HoroNavigationApi PUBLIC HoroEngine::Foundation)
+target_link_libraries(HoroRuntimeScene PUBLIC HoroEngine::NavigationApi)
 
 add_library(HoroNavigationRuntime STATIC
         runtime/navigation/runtime/NavigationRuntimeQueues.cpp
@@ -682,6 +685,7 @@ add_library(HoroWorldStreaming STATIC
         runtime/world_streaming/StreamingSourceRange.cpp
         runtime/world_streaming/WorldCellQuantization.cpp
         runtime/world_streaming/WorldPartitionDescriptor.cpp
+        runtime/world_streaming/WorldLayerOwnershipModel.cpp
         runtime/world_streaming/WorldObjectOwnership.cpp
         runtime/world_streaming/WorldPartitionCapabilityProfile.cpp
         runtime/world_streaming/WorldPartitionRegistry.cpp
@@ -725,6 +729,10 @@ target_link_libraries(HoroInput PUBLIC HoroEngine::Foundation PRIVATE nlohmann_j
 add_library(HoroRenderApi STATIC
         runtime/renderer/api/RenderAdapter.cpp
         runtime/renderer/api/RenderAdapterErrors.cpp
+        runtime/renderer/api/RenderDisplay.cpp
+        runtime/renderer/api/RenderDisplayErrors.cpp
+        runtime/renderer/api/PresentMode.cpp
+        runtime/renderer/api/PresentModeErrors.cpp
         runtime/renderer/api/RenderGraph.cpp
         runtime/renderer/api/RenderGraphExecution.cpp
         runtime/renderer/api/RenderGraphExecutionErrors.cpp

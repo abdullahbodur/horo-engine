@@ -479,6 +479,20 @@ stable Scene object/component/contribution IDs. Moving or renaming source preser
 those identities. Render geometry is not implicit input; every geometry contribution
 names an exact validated source/collision artifact.
 
+The initial typed Scene boundary exposes `NavigationSurfaceComponent` and
+`NavigationRegionComponent`. A surface pins its definition `AssetId`, grounded
+profile set, component generation, enabled state, and object-subtree or explicit
+local-bounds bake scope. A region has a distinct stable identity, references one
+exact surface, and declares finite local bounds plus include/exclude and source
+selection policy. Scene-wide validation rejects duplicate identities and missing
+surface references before history or runtime publication. Runtime conversion uses
+only one committed Scene state and carries its identity as the definition revision;
+editor drafts, generated topology, and provider handles never cross this boundary.
+`HoroRuntimeScene` therefore has one deliberate public dependency on the
+backend-neutral `HoroNavigationApi`; the edge carries only typed identities and
+component validation. Navigation providers and `HoroNavigationRuntime` remain
+downstream and cannot enter Scene ownership or composition.
+
 `NavigationSourceGeometrySnapshot` is the owned NAV-002.6 geometry boundary inside
 that larger bake-input capture. It accepts only immutable static-collider, terrain,
 procedural-generation, and approved-custom contribution views. There is deliberately
