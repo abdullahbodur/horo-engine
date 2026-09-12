@@ -264,29 +264,30 @@ actually configured and run.
 
 ## Sonar Validation
 
-After modifying C/C++ source or header files, use the SonarQube Model Context Protocol
-(MCP) IDE bridge when available. Follow `.github/instructions/sonarqube_mcp.instructions.md`
-for tool lifecycle and project-key lookup. Setup and troubleshooting are documented
-in [Local C/C++ Analysis with SonarQube MCP and VS Code](docs/guides/sonarqube-mcp-local-analysis.md).
+After modifying C/C++ source or header files, use the SonarQube CLI as the single
+local-analysis path. Follow `.github/instructions/sonarqube_mcp.instructions.md`
+for the repository policy and use the setup/troubleshooting guidance in
+[Local analysis with the SonarQube CLI](docs/guides/sonarqube-mcp-local-analysis.md).
 
-- Identify unstaged, staged, and untracked files with `git diff --name-only`,
-  `git diff --cached --name-only`, and `git ls-files --others --exclude-standard`
-  (use zero-byte delimiters when processing paths programmatically).
-- Analyze existing changed C/C++ files with `analyze_file_list`, passing absolute
-  paths to the running SonarQube for IDE instance bound to the intended project.
-  Exclude deleted files, generated output, and `deprecated/` unless explicitly
-  in scope.
+- Run `sonar analyze --format json --depth STANDARD` from the worktree being
+  reviewed, passing the resolved project key with `--project` when discovery is
+  not configured locally.
+- The default change set includes staged, unstaged, and untracked files. Use
+  `--staged`, `--base`, or `--file` only when that narrower scope is intentional.
+- Report secrets and Agentic/Vortex results separately, including skipped files,
+  failures, and any `globalError`. An empty issue list is not clean when files
+  were skipped or analysis was forbidden.
+- Exclude deleted files, generated output, and `deprecated/` unless explicitly
+  in scope; verify that the CLI result contains the intended C/C++ files.
 - Report findings by severity with the rule, location, and reason. Fix newly
   introduced issues when safe and within scope. Request approval before a Sonar
   fix changes existing behavior unless that behavior change is already authorized.
-- Re-analyze files changed by fixes with `analyze_file_list` and report remaining
-  findings. Server issue searches do not validate unuploaded local changes.
-- Do not run SonarScanner, upload an analysis report, or substitute remote
-  analysis for this local workflow unless explicitly requested. Do not use
-  `analyze_code_snippet` for C/C++.
-- If MCP or the IDE bridge is unavailable, explicitly report that Sonar validation
-  was not run and continue applicable build/test validation. Do not claim a clean
-  Sonar result or assume all server rules are supported by the local analyzer.
+- Re-run the same CLI command after an authorized fix and report remaining
+  findings. Local results do not resolve server issues or replace the CI gate.
+- Do not use the VS Code SonarQube for IDE bridge, SonarQube MCP IDE tools, or
+  `sonar-scanner` as a substitute for this local workflow. If authentication,
+  project access, or Vortex entitlement is unavailable, report the exact failure
+  and do not claim a clean Sonar result.
 
 ## Review Mindset
 
