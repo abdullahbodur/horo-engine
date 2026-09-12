@@ -34,11 +34,6 @@ namespace Horo::Network {
             return value_ != 0;
         }
 
-        /** @brief Returns the process-local generation value. @return Zero only for invalid values. */
-        [[nodiscard]] constexpr std::uint64_t Value() const noexcept {
-            return value_;
-        }
-
         constexpr auto operator<=>(const NetworkOperationGeneration &) const noexcept = default;
 
     private:

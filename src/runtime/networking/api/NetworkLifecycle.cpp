@@ -8,7 +8,8 @@
 namespace Horo::Network {
     namespace {
         template <typename T> [[nodiscard]] Result<T> Fail(const ErrorCodeDescriptor &descriptor) {
-            return Result<T>::Failure(MakeError(descriptor));
+            const Error failure = MakeError(descriptor);
+            return Result<T>::Failure(failure);
         }
 
         [[nodiscard]] bool ValidLimits(const NetworkLifecycleLimits &limits) noexcept {
@@ -76,6 +77,83 @@ namespace Horo::Network {
             }
             return NetworkConnectionState::Failed;
         }
+
+        template <typename Slots, typename Handle, typename Factory>
+        [[nodiscard]] Result<void> AdmitPreparedSlot(Slots &slots, const Handle handle, Factory &&makeEntry) {
+            typename Slots::value_type *freeSlot = nullptr;
+            for (auto &slot : slots) {
+                if (!slot.has_value()) {
+                    if (freeSlot == nullptr)
+                        freeSlot = &slot;
+                    continue;
+                }
+                if (slot->handle.Slot() != handle.Slot())
+                    continue;
+                if (slot->handle == handle)
+                    return Fail<void>(NetworkErrors::NetworkLifecycleInvalid);
+                if (!slot->terminal.has_value())
+                    return Fail<void>(NetworkErrors::TerminalGenerationStale);
+                if (auto expected = slot->handle.NextGeneration(); expected.HasError() || expected.Value() != handle)
+                    return Fail<void>(NetworkErrors::TerminalGenerationStale);
+                slot.emplace(makeEntry());
+                return Result<void>::Success();
+            }
+            if (freeSlot == nullptr)
+                return Fail<void>(NetworkErrors::NetworkLifecycleCapacityExceeded);
+            freeSlot->emplace(makeEntry());
+            return Result<void>::Success();
+        }
+
+        template <typename Slots, typename Handle>
+        [[nodiscard]] auto *FindExact(Slots &slots, const Handle handle, const NetworkOperationGeneration operation) noexcept {
+            using Entry = typename Slots::value_type::value_type;
+            for (auto &slot : slots) {
+                if (slot.has_value() && slot->handle == handle && slot->operation == operation)
+                    return &*slot;
+            }
+            return static_cast<Entry *>(nullptr);
+        }
+
+        template <typename Entry, typename State, typename Finalize>
+        [[nodiscard]] Result<void> PublishFirstTerminal(Entry &entry, NetworkLifecycleTerminal terminal, const State closingState,
+                                                        Finalize &&finalize) {
+            if (entry.terminal.has_value())
+                return Fail<void>(NetworkErrors::TerminalAlreadyResolved);
+            if (terminal.Kind() == NetworkLifecycleTerminalKind::Closed && entry.state != closingState)
+                return Fail<void>(NetworkErrors::NetworkLifecycleTransitionInvalid);
+            finalize(entry, terminal.Kind());
+            entry.terminal.emplace(std::move(terminal));
+            return Result<void>::Success();
+        }
+
+        template <typename Complete> [[nodiscard]] Result<void> PublishCancellation(Complete &&complete) {
+            auto terminal = MakeStandardTerminal(NetworkLifecycleTerminalKind::Cancelled);
+            if (terminal.HasError())
+                return Result<void>::Failure(terminal.ErrorValue());
+            return complete(std::move(terminal).Value());
+        }
+
+        template <typename Slots, typename Finalize>
+        std::size_t TerminalizeActive(Slots &slots, const NetworkLifecycleTerminal &terminal, Finalize &&finalize) {
+            std::size_t completed{};
+            for (auto &slot : slots) {
+                if (!slot.has_value() || slot->terminal.has_value())
+                    continue;
+                finalize(*slot);
+                slot->terminal.emplace(terminal);
+                ++completed;
+            }
+            return completed;
+        }
+
+        template <typename Snapshot, typename Slots, typename Handle, typename Project>
+        [[nodiscard]] Result<Snapshot> ProjectSnapshot(const Slots &slots, const Handle handle, Project &&project) {
+            for (const auto &slot : slots) {
+                if (slot.has_value() && slot->handle == handle)
+                    return Result<Snapshot>::Success(project(*slot));
+            }
+            return Fail<Snapshot>(NetworkErrors::NetworkLifecycleOperationStale);
+        }
     }  // namespace
 
     /** @copydoc NetworkOperationGeneration::Create */
@@ -138,86 +216,49 @@ namespace Horo::Network {
         if (!handle.IsValid() || !operation.IsValid())
             return Fail<void>(NetworkErrors::NetworkLifecycleInvalid);
 
-        std::optional<ListenerEntry> *freeSlot = nullptr;
-        for (auto &slot : listeners_) {
-            if (!slot.has_value()) {
-                if (freeSlot == nullptr)
-                    freeSlot = &slot;
-                continue;
-            }
-            if (slot->handle.Slot() != handle.Slot())
-                continue;
-            if (slot->handle == handle)
-                return Fail<void>(NetworkErrors::NetworkLifecycleInvalid);
-            if (!slot->terminal.has_value())
-                return Fail<void>(NetworkErrors::TerminalGenerationStale);
-            auto expected = slot->handle.NextGeneration();
-            if (expected.HasError() || expected.Value() != handle)
-                return Fail<void>(NetworkErrors::TerminalGenerationStale);
-            slot.emplace(ListenerEntry{handle, operation, NetworkListenerState::Binding, {}});
-            return Result<void>::Success();
-        }
-        if (freeSlot == nullptr)
-            return Fail<void>(NetworkErrors::NetworkLifecycleCapacityExceeded);
-        freeSlot->emplace(ListenerEntry{handle, operation, NetworkListenerState::Binding, {}});
-        return Result<void>::Success();
+        return AdmitPreparedSlot(listeners_, handle, [=] {
+            return ListenerEntry{handle, operation, NetworkListenerState::Binding, {}};
+        });
     }
 
     /** @copydoc NetworkLifecycleRegistry::MarkListening */
     Result<void> NetworkLifecycleRegistry::MarkListening(const ListenerHandle handle, const NetworkOperationGeneration operation) {
-        for (auto &slot : listeners_) {
-            if (!slot.has_value() || slot->handle.Slot() != handle.Slot())
-                continue;
-            if (slot->handle != handle || slot->operation != operation)
-                return Fail<void>(NetworkErrors::NetworkLifecycleOperationStale);
-            if (slot->terminal.has_value() || slot->state != NetworkListenerState::Binding)
-                return Fail<void>(NetworkErrors::NetworkLifecycleTransitionInvalid);
-            slot->state = NetworkListenerState::Listening;
-            return Result<void>::Success();
-        }
-        return Fail<void>(NetworkErrors::NetworkLifecycleOperationStale);
+        ListenerEntry *entry = FindExact(listeners_, handle, operation);
+        if (entry == nullptr)
+            return Fail<void>(NetworkErrors::NetworkLifecycleOperationStale);
+        if (entry->terminal.has_value() || entry->state != NetworkListenerState::Binding)
+            return Fail<void>(NetworkErrors::NetworkLifecycleTransitionInvalid);
+        entry->state = NetworkListenerState::Listening;
+        return Result<void>::Success();
     }
 
     /** @copydoc NetworkLifecycleRegistry::RequestListenerClose */
     Result<void> NetworkLifecycleRegistry::RequestListenerClose(const ListenerHandle handle, const NetworkOperationGeneration operation) {
-        for (auto &slot : listeners_) {
-            if (!slot.has_value() || slot->handle.Slot() != handle.Slot())
-                continue;
-            if (slot->handle != handle || slot->operation != operation)
-                return Fail<void>(NetworkErrors::NetworkLifecycleOperationStale);
-            if (slot->terminal.has_value() || slot->state == NetworkListenerState::Closing)
-                return Result<void>::Success();
-            slot->state = NetworkListenerState::Closing;
-            return Result<void>::Success();
-        }
-        return Fail<void>(NetworkErrors::NetworkLifecycleOperationStale);
+        ListenerEntry *entry = FindExact(listeners_, handle, operation);
+        if (entry == nullptr)
+            return Fail<void>(NetworkErrors::NetworkLifecycleOperationStale);
+        if (!entry->terminal.has_value() && entry->state != NetworkListenerState::Closing)
+            entry->state = NetworkListenerState::Closing;
+        return Result<void>::Success();
     }
 
     /** @copydoc NetworkLifecycleRegistry::CompleteListener */
     Result<void> NetworkLifecycleRegistry::CompleteListener(const ListenerHandle handle, const NetworkOperationGeneration operation,
                                                             NetworkLifecycleTerminal terminal) {
-        for (auto &slot : listeners_) {
-            if (!slot.has_value() || slot->handle.Slot() != handle.Slot())
-                continue;
-            if (slot->handle != handle || slot->operation != operation)
-                return Fail<void>(NetworkErrors::NetworkLifecycleOperationStale);
-            if (slot->terminal.has_value())
-                return Fail<void>(NetworkErrors::TerminalAlreadyResolved);
-            if (terminal.Kind() == NetworkLifecycleTerminalKind::Closed && slot->state != NetworkListenerState::Closing)
-                return Fail<void>(NetworkErrors::NetworkLifecycleTransitionInvalid);
-            slot->state = ListenerTerminalState(terminal.Kind());
-            slot->terminal.emplace(std::move(terminal));
-            return Result<void>::Success();
-        }
-        return Fail<void>(NetworkErrors::NetworkLifecycleOperationStale);
+        ListenerEntry *entry = FindExact(listeners_, handle, operation);
+        if (entry == nullptr)
+            return Fail<void>(NetworkErrors::NetworkLifecycleOperationStale);
+        return PublishFirstTerminal(*entry, std::move(terminal), NetworkListenerState::Closing,
+                                    [](ListenerEntry &target, const NetworkLifecycleTerminalKind kind) {
+            target.state = ListenerTerminalState(kind);
+        });
     }
 
     /** @copydoc NetworkLifecycleRegistry::CancelListener */
     Result<void> NetworkLifecycleRegistry::CancelListener(const ListenerHandle handle, const NetworkOperationGeneration operation) {
-        auto terminal = MakeStandardTerminal(NetworkLifecycleTerminalKind::Cancelled);
-        if (terminal.HasError())
-            return Result<void>::Failure(terminal.ErrorValue());
-        return CompleteListener(handle, operation, std::move(terminal).Value());
+        return PublishCancellation([&](NetworkLifecycleTerminal terminal) {
+            return CompleteListener(handle, operation, std::move(terminal));
+        });
     }
 
     /** @copydoc NetworkLifecycleRegistry::AdmitConnection */
@@ -229,97 +270,61 @@ namespace Horo::Network {
             return Fail<void>(NetworkErrors::NetworkLifecycleInvalid);
         const NetworkConnectionState initial = requiresResolution ? NetworkConnectionState::Resolving : NetworkConnectionState::Created;
 
-        std::optional<ConnectionEntry> *freeSlot = nullptr;
-        for (auto &slot : connections_) {
-            if (!slot.has_value()) {
-                if (freeSlot == nullptr)
-                    freeSlot = &slot;
-                continue;
-            }
-            if (slot->handle.Slot() != handle.Slot())
-                continue;
-            if (slot->handle == handle)
-                return Fail<void>(NetworkErrors::NetworkLifecycleInvalid);
-            if (!slot->terminal.has_value())
-                return Fail<void>(NetworkErrors::TerminalGenerationStale);
-            auto expected = slot->handle.NextGeneration();
-            if (expected.HasError() || expected.Value() != handle)
-                return Fail<void>(NetworkErrors::TerminalGenerationStale);
-            slot.emplace(ConnectionEntry{handle, operation, initial, deadlineTick, {}});
-            return Result<void>::Success();
-        }
-        if (freeSlot == nullptr)
-            return Fail<void>(NetworkErrors::NetworkLifecycleCapacityExceeded);
-        freeSlot->emplace(ConnectionEntry{handle, operation, initial, deadlineTick, {}});
-        return Result<void>::Success();
+        return AdmitPreparedSlot(connections_, handle, [=] {
+            return ConnectionEntry{handle, operation, initial, deadlineTick, {}};
+        });
     }
 
     /** @copydoc NetworkLifecycleRegistry::AdvanceConnection */
     Result<void> NetworkLifecycleRegistry::AdvanceConnection(const ConnectionHandle handle, const NetworkOperationGeneration operation,
                                                              const NetworkConnectionState next) {
-        for (auto &slot : connections_) {
-            if (!slot.has_value() || slot->handle.Slot() != handle.Slot())
-                continue;
-            if (slot->handle != handle || slot->operation != operation)
-                return Fail<void>(NetworkErrors::NetworkLifecycleOperationStale);
-            if (slot->terminal.has_value())
-                return Fail<void>(NetworkErrors::NetworkLifecycleTransitionInvalid);
-            const bool legal = ((slot->state == NetworkConnectionState::Created || slot->state == NetworkConnectionState::Resolving) &&
-                                next == NetworkConnectionState::Connecting) ||
-                               (slot->state == NetworkConnectionState::Connecting && next == NetworkConnectionState::AuthenticationReady);
-            if (!legal)
-                return Fail<void>(NetworkErrors::NetworkLifecycleTransitionInvalid);
-            slot->state = next;
-            if (next == NetworkConnectionState::AuthenticationReady)
-                slot->deadlineTick = 0;
-            return Result<void>::Success();
-        }
-        return Fail<void>(NetworkErrors::NetworkLifecycleOperationStale);
+        ConnectionEntry *entry = FindExact(connections_, handle, operation);
+        if (entry == nullptr)
+            return Fail<void>(NetworkErrors::NetworkLifecycleOperationStale);
+        if (entry->terminal.has_value())
+            return Fail<void>(NetworkErrors::NetworkLifecycleTransitionInvalid);
+        const bool legal = ((entry->state == NetworkConnectionState::Created || entry->state == NetworkConnectionState::Resolving) &&
+                            next == NetworkConnectionState::Connecting) ||
+                           (entry->state == NetworkConnectionState::Connecting && next == NetworkConnectionState::AuthenticationReady);
+        if (!legal)
+            return Fail<void>(NetworkErrors::NetworkLifecycleTransitionInvalid);
+        entry->state = next;
+        if (next == NetworkConnectionState::AuthenticationReady)
+            entry->deadlineTick = 0;
+        return Result<void>::Success();
     }
 
     /** @copydoc NetworkLifecycleRegistry::RequestConnectionClose */
     Result<void> NetworkLifecycleRegistry::RequestConnectionClose(const ConnectionHandle handle,
                                                                   const NetworkOperationGeneration operation) {
-        for (auto &slot : connections_) {
-            if (!slot.has_value() || slot->handle.Slot() != handle.Slot())
-                continue;
-            if (slot->handle != handle || slot->operation != operation)
-                return Fail<void>(NetworkErrors::NetworkLifecycleOperationStale);
-            if (slot->terminal.has_value() || slot->state == NetworkConnectionState::Closing)
-                return Result<void>::Success();
-            slot->state = NetworkConnectionState::Closing;
-            slot->deadlineTick = 0;
-            return Result<void>::Success();
+        ConnectionEntry *entry = FindExact(connections_, handle, operation);
+        if (entry == nullptr)
+            return Fail<void>(NetworkErrors::NetworkLifecycleOperationStale);
+        if (!entry->terminal.has_value() && entry->state != NetworkConnectionState::Closing) {
+            entry->state = NetworkConnectionState::Closing;
+            entry->deadlineTick = 0;
         }
-        return Fail<void>(NetworkErrors::NetworkLifecycleOperationStale);
+        return Result<void>::Success();
     }
 
     /** @copydoc NetworkLifecycleRegistry::CompleteConnection */
     Result<void> NetworkLifecycleRegistry::CompleteConnection(const ConnectionHandle handle, const NetworkOperationGeneration operation,
                                                               NetworkLifecycleTerminal terminal) {
-        for (auto &slot : connections_) {
-            if (!slot.has_value() || slot->handle.Slot() != handle.Slot())
-                continue;
-            if (slot->handle != handle || slot->operation != operation)
-                return Fail<void>(NetworkErrors::NetworkLifecycleOperationStale);
-            if (slot->terminal.has_value())
-                return Fail<void>(NetworkErrors::TerminalAlreadyResolved);
-            if (terminal.Kind() == NetworkLifecycleTerminalKind::Closed && slot->state != NetworkConnectionState::Closing)
-                return Fail<void>(NetworkErrors::NetworkLifecycleTransitionInvalid);
-            slot->state = ConnectionTerminalState(terminal.Kind());
-            slot->deadlineTick = 0;
-            slot->terminal.emplace(std::move(terminal));
-            return Result<void>::Success();
-        }
-        return Fail<void>(NetworkErrors::NetworkLifecycleOperationStale);
+        ConnectionEntry *entry = FindExact(connections_, handle, operation);
+        if (entry == nullptr)
+            return Fail<void>(NetworkErrors::NetworkLifecycleOperationStale);
+        return PublishFirstTerminal(*entry, std::move(terminal), NetworkConnectionState::Closing,
+                                    [](ConnectionEntry &target, const NetworkLifecycleTerminalKind kind) {
+            target.state = ConnectionTerminalState(kind);
+            target.deadlineTick = 0;
+        });
     }
 
     /** @copydoc NetworkLifecycleRegistry::CancelConnection */
     Result<void> NetworkLifecycleRegistry::CancelConnection(const ConnectionHandle handle, const NetworkOperationGeneration operation) {
-        auto terminal = MakeStandardTerminal(NetworkLifecycleTerminalKind::Cancelled);
-        if (terminal.HasError())
-            return Result<void>::Failure(terminal.ErrorValue());
-        return CompleteConnection(handle, operation, std::move(terminal).Value());
+        return PublishCancellation([&](NetworkLifecycleTerminal terminal) {
+            return CompleteConnection(handle, operation, std::move(terminal));
+        });
     }
 
     /** @copydoc NetworkLifecycleRegistry::ExpireConnections */
@@ -353,42 +358,27 @@ namespace Horo::Network {
             return Result<std::size_t>::Failure(terminal.ErrorValue());
         shuttingDown_ = true;
 
-        std::size_t completed{};
-        for (auto &slot : listeners_) {
-            if (!slot.has_value() || slot->terminal.has_value())
-                continue;
-            slot->state = NetworkListenerState::ShuttingDown;
-            slot->terminal.emplace(terminal.Value());
-            ++completed;
-        }
-        for (auto &slot : connections_) {
-            if (!slot.has_value() || slot->terminal.has_value())
-                continue;
-            slot->state = NetworkConnectionState::ShuttingDown;
-            slot->deadlineTick = 0;
-            slot->terminal.emplace(terminal.Value());
-            ++completed;
-        }
+        std::size_t completed = TerminalizeActive(listeners_, terminal.Value(), [](ListenerEntry &entry) {
+            entry.state = NetworkListenerState::ShuttingDown;
+        });
+        completed += TerminalizeActive(connections_, terminal.Value(), [](ConnectionEntry &entry) {
+            entry.state = NetworkConnectionState::ShuttingDown;
+            entry.deadlineTick = 0;
+        });
         return Result<std::size_t>::Success(completed);
     }
 
     /** @copydoc NetworkLifecycleRegistry::Listener */
     Result<NetworkListenerSnapshot> NetworkLifecycleRegistry::Listener(const ListenerHandle handle) const {
-        for (const auto &slot : listeners_) {
-            if (slot.has_value() && slot->handle == handle)
-                return Result<NetworkListenerSnapshot>::Success(
-                    NetworkListenerSnapshot{slot->handle, slot->operation, slot->state, slot->terminal});
-        }
-        return Fail<NetworkListenerSnapshot>(NetworkErrors::NetworkLifecycleOperationStale);
+        return ProjectSnapshot<NetworkListenerSnapshot>(listeners_, handle, [](const ListenerEntry &entry) {
+            return NetworkListenerSnapshot{entry.handle, entry.operation, entry.state, entry.terminal};
+        });
     }
 
     /** @copydoc NetworkLifecycleRegistry::Connection */
     Result<NetworkConnectionSnapshot> NetworkLifecycleRegistry::Connection(const ConnectionHandle handle) const {
-        for (const auto &slot : connections_) {
-            if (slot.has_value() && slot->handle == handle)
-                return Result<NetworkConnectionSnapshot>::Success(
-                    NetworkConnectionSnapshot{slot->handle, slot->operation, slot->state, slot->deadlineTick, slot->terminal});
-        }
-        return Fail<NetworkConnectionSnapshot>(NetworkErrors::NetworkLifecycleOperationStale);
+        return ProjectSnapshot<NetworkConnectionSnapshot>(connections_, handle, [](const ConnectionEntry &entry) {
+            return NetworkConnectionSnapshot{entry.handle, entry.operation, entry.state, entry.deadlineTick, entry.terminal};
+        });
     }
 }  // namespace Horo::Network
