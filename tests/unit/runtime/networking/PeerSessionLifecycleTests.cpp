@@ -264,4 +264,20 @@ namespace Horo::Network {
         REQUIRE(closing.Terminal()->kind == PeerSessionTerminalKind::LocalClose);
         REQUIRE(closing.Terminal()->closeReason == reason);
     }
+
+    TEST_CASE("Peer session lifetime deadline completes an in-progress graceful close", "[unit][network][session]") {
+        auto closing = Lifecycle();
+        ReachActive(closing);
+        const auto reason = WireIdentity<CloseReasonId>(12);
+        REQUIRE(closing.RequestClose(Connection(), Session(), PeerSessionTerminalKind::LocalClose, reason, 22).HasValue());
+
+        REQUIRE_FALSE(closing.Expire(99));
+        REQUIRE(closing.State() == PeerSessionState::Closing);
+        REQUIRE(closing.Expire(100));
+        REQUIRE(closing.State() == PeerSessionState::Closed);
+        REQUIRE(closing.Terminal()->kind == PeerSessionTerminalKind::LocalClose);
+        REQUIRE(closing.Terminal()->closeReason == reason);
+        REQUIRE(closing.Terminal()->terminalTick == 100);
+        REQUIRE_FALSE(closing.Expire(101));
+    }
 }  // namespace Horo::Network

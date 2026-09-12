@@ -1,36 +1,14 @@
 #include "Horo/Network/PeerSessionLifecycle.h"
 
 #include "Horo/Network/NetworkErrors.h"
+#include "NetworkValidationInternal.h"
 
 #include <algorithm>
-#include <array>
-#include <cstddef>
 #include <limits>
 #include <ranges>
-#include <span>
 
 namespace Horo::Network {
     namespace {
-        template <std::size_t Size> [[nodiscard]] bool HasNonZeroByte(const std::array<std::byte, Size> &bytes) noexcept {
-            return std::ranges::any_of(bytes, [](const std::byte value) {
-                return value != std::byte{};
-            });
-        }
-
-        template <typename Identity, std::size_t Capacity>
-        [[nodiscard]] bool CanonicalIdentities(const std::array<Identity, Capacity> &values, const std::size_t count) noexcept {
-            if (count > Capacity)
-                return false;
-            const auto valid = std::span{values}.first(count);
-            if (!std::ranges::all_of(valid, [](const Identity value) {
-                return value.IsValid();
-            }))
-                return false;
-            return std::adjacent_find(valid.begin(), valid.end(), [](const Identity left, const Identity right) {
-                return left.Value() >= right.Value();
-            }) == valid.end();
-        }
-
         [[nodiscard]] bool ValidDeadlines(const PeerSessionDeadlines &deadlines) noexcept {
             return deadlines.negotiationTick != 0 && deadlines.authenticationTick > deadlines.negotiationTick &&
                    deadlines.activationTick > deadlines.authenticationTick && deadlines.lifetimeTick > deadlines.activationTick &&
@@ -68,12 +46,12 @@ namespace Horo::Network {
             return authentication.connection.IsValid() && authentication.sessionGeneration.IsValid() && authentication.policy.IsValid() &&
                    authentication.policyRevision != 0 && principal.principal.IsValid() && principal.session.IsValid() &&
                    principal.trustLevel < NetworkTrustLevel::Count && principal.provenance.IsValid() && principal.expiresAtTick > nowTick &&
-                   CanonicalIdentities(principal.roles.values, principal.roles.count) &&
-                   CanonicalIdentities(principal.capabilities.values, principal.capabilities.count) &&
+                   Detail::ValidCanonicalIdentities(principal.roles.values, principal.roles.count) &&
+                   Detail::ValidCanonicalIdentities(principal.capabilities.values, principal.capabilities.count) &&
                    channel.stamp.connection == authentication.connection &&
                    channel.stamp.sessionGeneration == authentication.sessionGeneration && channel.stamp.authorityGeneration != 0 &&
                    channel.binding.IsValid() && channel.channel.IsValid() && channel.channelGeneration != 0 &&
-                   HasNonZeroByte(channel.bindingDigest);
+                   Detail::HasNonZeroByte(channel.bindingDigest);
         }
 
         [[nodiscard]] std::uint64_t SaturatingAdd(const std::uint64_t left, const std::uint64_t right) noexcept {
@@ -206,8 +184,7 @@ namespace Horo::Network {
             return Result<void>::Failure(MakeError(NetworkErrors::NetworkLifecycleOperationStale));
         if (state_ != PeerSessionState::Active)
             return Result<void>::Failure(MakeError(NetworkErrors::GameplayDispatchRejected));
-        if (nowTick == 0 || nowTick >= activityDeadlineTick_ || nowTick >= deadlines_.lifetimeTick ||
-            (authentication_.has_value() && nowTick >= authentication_->principal.expiresAtTick))
+        if (nowTick == 0 || nowTick >= activityDeadlineTick_)
             return Result<void>::Failure(MakeError(NetworkErrors::SessionTimedOut));
         return Result<void>::Success();
     }
@@ -320,6 +297,8 @@ namespace Horo::Network {
     bool PeerSessionLifecycle::Expire(const std::uint64_t nowTick) {
         if (terminal_.has_value() || nowTick == 0)
             return false;
+        if (state_ == PeerSessionState::Closing && nowTick >= deadlines_.lifetimeTick)
+            return CompleteClose(connection_, sessionGeneration_, nowTick).HasValue();
         PeerSessionTerminalKind kind = PeerSessionTerminalKind::Count;
         if ((state_ == PeerSessionState::Created || state_ == PeerSessionState::Negotiating) && nowTick >= deadlines_.negotiationTick)
             kind = PeerSessionTerminalKind::NegotiationTimeout;
