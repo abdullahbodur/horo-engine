@@ -361,6 +361,7 @@ horo_configure_target_header_boundary(HoroWorldStreaming PUBLIC_HEADERS
     Horo/WorldStreaming/StreamingDesiredStateReduction.h
     Horo/WorldStreaming/StreamingPriorityPolicy.h
     Horo/WorldStreaming/StreamingSourceDescriptor.h
+    Horo/WorldStreaming/StreamingSourcePrefetch.h
     Horo/WorldStreaming/StreamingSourceRange.h
     Horo/WorldStreaming/WorldCellQuantization.h
     Horo/WorldStreaming/WorldPartitionDescriptor.h

@@ -573,6 +573,24 @@ sorts by descending score, canonical cell tuple and complete source/value eviden
 It performs no allocation, registration, reservation, admission or cell-state
 mutation. Cancellation and shutdown close new evaluation explicitly.
 
+`StreamingPrefetchPolicy` is the inert WST-002.8 publication for camera and
+gameplay velocity prediction. The source owner captures one exact canonical
+position, signed millimeter-per-second velocity, source owner/revision and
+unscaled service timestamp. Pure evaluation admits that exact source revision,
+rejects expired or future samples, and projects a two-point bounded
+`StreamingSourcePathVolume` over the configured lookahead. Speed threshold,
+sample age, per-axis speed, horizon and swept half-extent are finite policy
+limits; no frame-time allocation, registry lookup, backend query or ambient
+state participates. A stationary or sub-threshold sample explicitly returns an
+Inactive result rather than a fabricated path.
+
+Each evaluation is fenced by stable policy identity/revision and the mounted
+partition epoch. Policy replacement, source replacement, owner cancellation and
+shutdown reject stale work without mutating admission state. Predicted camera
+demand remains presentation-only within the ordinary source, range, priority and
+budget contracts: it cannot grant gameplay/network authority, bypass capacity,
+pin content, select a fallback shape or duplicate network-owned actors.
+
 Queue age is clamped to zero if a sampled service time precedes the enqueue sample
 and is capped by the policy. This provides bounded priority recovery for feasible
 waiting work, not a budget bypass or an unconditional admission deadline. Hosts pass

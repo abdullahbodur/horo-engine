@@ -1,6 +1,7 @@
 #include "Horo/WorldStreaming/StreamingSourceRange.h"
 
 #include "Horo/WorldStreaming/WorldStreamingErrors.h"
+#include "WorldStreamingInternal.h"
 
 #include <algorithm>
 #include <array>
@@ -22,22 +23,10 @@ namespace Horo::WorldStreaming {
             return Result<void>::Failure(MakeError(WorldStreamingErrors::SourceShapeInvalid));
         }
 
-        [[nodiscard]] std::uint64_t Magnitude(const std::int64_t value) noexcept {
-            return value >= 0 ? static_cast<std::uint64_t>(value) : static_cast<std::uint64_t>(-(value + 1)) + 1U;
-        }
-
         [[nodiscard]] std::uint64_t Distance(const std::int64_t lhs, const std::int64_t rhs) noexcept {
             if ((lhs < 0) == (rhs < 0))
-                return Magnitude(lhs - rhs);
-            return Magnitude(lhs) + Magnitude(rhs);
-        }
-
-        [[nodiscard]] bool AddChecked(const std::int64_t lhs, const std::int64_t rhs, std::int64_t &sum) noexcept {
-            if ((rhs > 0 && lhs > std::numeric_limits<std::int64_t>::max() - rhs) ||
-                (rhs < 0 && lhs < std::numeric_limits<std::int64_t>::min() - rhs))
-                return false;
-            sum = lhs + rhs;
-            return true;
+                return Internal::UnsignedMagnitude(lhs - rhs);
+            return Internal::UnsignedMagnitude(lhs) + Internal::UnsignedMagnitude(rhs);
         }
 
         [[nodiscard]] bool MultiplyChecked(const std::int64_t lhs, const std::int64_t rhs, std::int64_t &product) noexcept {
@@ -46,8 +35,8 @@ namespace Horo::WorldStreaming {
                 return true;
             }
             const bool negative = (lhs < 0) != (rhs < 0);
-            const std::uint64_t lhsMagnitude = Magnitude(lhs);
-            const std::uint64_t rhsMagnitude = Magnitude(rhs);
+            const std::uint64_t lhsMagnitude = Internal::UnsignedMagnitude(lhs);
+            const std::uint64_t rhsMagnitude = Internal::UnsignedMagnitude(rhs);
             constexpr std::uint64_t MinimumMagnitude = std::uint64_t{1} << 63U;
             if (const std::uint64_t limit =
                     negative ? MinimumMagnitude : static_cast<std::uint64_t>(std::numeric_limits<std::int64_t>::max());
@@ -61,7 +50,7 @@ namespace Horo::WorldStreaming {
         }
 
         [[nodiscard]] std::int64_t AddSaturated(const std::int64_t value, const std::int64_t delta) noexcept {
-            if (std::int64_t sum{}; AddChecked(value, delta, sum))
+            if (std::int64_t sum{}; Internal::CheckedAdd(value, delta, sum))
                 return sum;
             return delta < 0 ? std::numeric_limits<std::int64_t>::min() : std::numeric_limits<std::int64_t>::max();
         }
@@ -77,7 +66,8 @@ namespace Horo::WorldStreaming {
 
         [[nodiscard]] bool ExpandChecked(const Coordinates &center, const std::int64_t extent, ExactBounds &bounds) noexcept {
             for (std::size_t axis = 0; axis < center.size(); ++axis) {
-                if (!AddChecked(center[axis], -extent, bounds.minimum[axis]) || !AddChecked(center[axis], extent, bounds.maximum[axis]))
+                if (!Internal::CheckedAdd(center[axis], -extent, bounds.minimum[axis]) ||
+                    !Internal::CheckedAdd(center[axis], extent, bounds.maximum[axis]))
                     return false;
             }
             return true;
@@ -123,10 +113,10 @@ namespace Horo::WorldStreaming {
             if (!MultiplyChecked(cellSize, coordinate, offset))
                 return Result<std::array<std::int64_t, 2>>::Failure(MakeError(WorldStreamingErrors::CoordinateOutOfRange));
             std::int64_t minimum{};
-            if (!AddChecked(origin, offset, minimum))
+            if (!Internal::CheckedAdd(origin, offset, minimum))
                 return Result<std::array<std::int64_t, 2>>::Failure(MakeError(WorldStreamingErrors::CoordinateOutOfRange));
             std::int64_t maximum{};
-            if (!AddChecked(minimum, cellSize - 1, maximum))
+            if (!Internal::CheckedAdd(minimum, cellSize - 1, maximum))
                 return Result<std::array<std::int64_t, 2>>::Failure(MakeError(WorldStreamingErrors::CoordinateOutOfRange));
             return Result<std::array<std::int64_t, 2>>::Success({minimum, maximum});
         }

@@ -200,6 +200,14 @@ namespace Horo::WorldStreaming::WorldStreamingErrors {
     extern const ErrorCodeDescriptor SourceShapeInvalid;
     /** @brief The evaluating host does not support the requested source shape category. */
     extern const ErrorCodeDescriptor SourceShapeUnsupported;
+    /** @brief A velocity-prefetch policy, context, or kinematic sample is malformed. */
+    extern const ErrorCodeDescriptor PrefetchInvalid;
+    /** @brief A velocity-prefetch contract version or source category is unsupported. */
+    extern const ErrorCodeDescriptor PrefetchUnsupported;
+    /** @brief Velocity-prefetch evidence names a replaced policy, partition, owner, or expired sample. */
+    extern const ErrorCodeDescriptor PrefetchStale;
+    /** @brief Velocity-prefetch evaluation is closed by cancellation or shutdown. */
+    extern const ErrorCodeDescriptor PrefetchLifecycleUnavailable;
     /** @brief A source desired state combines residency and retention inconsistently. */
     extern const ErrorCodeDescriptor SourceDesiredStateInvalid;
     /** @brief A source desired-state residency or retention value is not supported by this contract version. */

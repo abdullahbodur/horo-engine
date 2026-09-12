@@ -30,6 +30,8 @@ workflows.
   rank bounded cell-work snapshots with revision fences, stable ties, and capped age.
 - [World Streaming Cell Stability Migration](./world-streaming-cell-stability-migration.md):
   replace boundary flapping and unload cooldowns with fenced hysteresis and linger decisions.
+- [World Streaming Velocity Prefetch Migration](./world-streaming-prefetch-migration.md):
+  replace ambient extrapolation with exact bounded camera/gameplay path projection.
 - [XR Coordinate and Pose Contract Migration](./xr-coordinate-pose-migration.md):
   publish generation-fenced coordinate, validity, and time evidence without native
   backend leakage or implicit clock conversion.

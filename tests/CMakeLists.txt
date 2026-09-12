@@ -415,6 +415,7 @@ add_executable(HoroWorldStreamingTests
         unit/runtime/world_streaming/StreamingDesiredStateReductionTests.cpp
         unit/runtime/world_streaming/StreamingPriorityPolicyTests.cpp
         unit/runtime/world_streaming/StreamingSourceDescriptorTests.cpp
+        unit/runtime/world_streaming/StreamingSourcePrefetchTests.cpp
         unit/runtime/world_streaming/StreamingSourceRangeTests.cpp
         unit/runtime/world_streaming/WorldCellQuantizationTests.cpp
         unit/runtime/world_streaming/WorldPartitionDescriptorTests.cpp
