@@ -120,6 +120,23 @@ def test_generated_filename_boundaries_cover_modules_contract_tests_and_archive(
     assert len(oversized_archive[0].encode("utf-8")) == 256
 
 
+def test_default_version_shape_filename_boundaries_publish_only_portable_projects(monkeypatch, tmp_path):
+    boundaries = {
+        "gui": (230, 231),
+        "backend": (229, 230),
+        "script": (230, 231),
+        "hybrid": (229, 230),
+    }
+    for shape, (accepted_bytes, rejected_bytes) in boundaries.items():
+        accepted_output = tmp_path / f"{shape}-accepted"
+        assert run_scaffolder(monkeypatch, accepted_output, shape, canonical_id(accepted_bytes)) == 0
+        assert (accepted_output / "extension.json.in").is_file()
+
+        rejected_output = tmp_path / f"{shape}-rejected"
+        assert run_scaffolder(monkeypatch, rejected_output, shape, canonical_id(rejected_bytes)) == 2
+        assert not rejected_output.exists()
+
+
 def test_derived_limits_reject_before_output_creation(monkeypatch, tmp_path):
     derived_output = tmp_path / "derived-id"
     assert run_scaffolder(monkeypatch, derived_output, "hybrid", canonical_id(242)) == 2
