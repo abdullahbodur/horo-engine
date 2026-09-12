@@ -84,6 +84,17 @@ state, query admission/cache policy, hierarchical search policy, and
 results at the owning simulation phase. It never discovers concrete providers, registers
 itself through a global singleton, performs vendor carving, or chooses cell residency.
 
+`NavigationWorldLifecycle` is the host-facing per-Scene publication authority. The host
+stages a fully initialized provider record tagged with the exact Scene incarnation, Scene
+generation, navigation world, and topology generation. `CommitAtSafePoint` performs the
+only publication swap and leaves the previous world unchanged on stale identity or bounded
+retirement-capacity failure. Pause closes admission without cancelling the unchanged world;
+replacement, unload, and shutdown atomically revoke admission and request cooperative
+cancellation. Worker-visible read leases pin immutable records after logical revocation,
+so provider storage is reclaimed only after the final lease drains. Lifecycle mutation and
+lease acquisition are owner-thread operations; acquired leases and cancellation tokens may
+cross workers. Shutdown never blocks a frame thread waiting for those workers.
+
 `DynamicObstacleOverlay` records logical Horo obstacle changes; the topology backend
 owns concrete carving and private tile-cache mutation. The crowd coordinator selects
 agents, stable ordering, budgets, and target ticks; the crowd backend owns provider-specific
