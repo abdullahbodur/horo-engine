@@ -85,6 +85,21 @@ grant the client world authority. Autonomous means permitted input submission an
 possibly a separately qualified prediction capability; it never means canonical
 server write permission.
 
+`ReplicationRoleBinding` pins one role decision to the exact session generation,
+authority-scoped object occurrence, schema identity/version and publication revision.
+An autonomous-client binding is valid only when its local peer is the granted owner;
+a simulated-client binding cannot alias that owner. `ReplicationRoleState` stages at
+most one complete role/ownership replacement and publishes it only at the matching
+owner-thread safe point. Stale, cross-session, cross-object, cross-schema, concurrent
+or post-shutdown changes fail without altering the published binding.
+
+Field routing evaluates the descriptor's closed `ReplicationCondition` against one
+validated pinned recipient value in constant work. `InitialOnly` depends on the typed
+spawn/update record kind; owner-only, skip-owner and simulated-only decisions use the
+validated role/owner relationship. This visibility policy never grants mutation:
+`AuthorizeReplicationFieldWrite` admits canonical field origination only for an
+explicit authority-server binding, even when a client owns the presentation object.
+
 `ReplicationExecutionRole` describes one world, not the process. ADR-102 resolves
 the complete host mode plan and supplies the current plan, host, scene, session and
 authority generations in a read-only gameplay role view. Every capture, apply,
@@ -136,6 +151,8 @@ Replication conditions are descriptor policy, not authority:
 - `OwnerOnly`: routed only to the granted autonomous client;
 - `SkipOwner`: omitted for that autonomous client;
 - `SimulatedOnly`: routed only to simulated-client views.
+- `Custom`: routed only from one exact registered condition identity and its
+  owner-computed bounded decision evidence; missing or mismatched evidence fails.
 
 An owner may use an explicit revision counter or
 `MarkReplicationDirty(NetworkObjectId, FieldId)` as a scheduling hint. The hint
