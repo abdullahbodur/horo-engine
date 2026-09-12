@@ -3,6 +3,7 @@
 #include "Horo/WorldStreaming/WorldStreamingErrors.h"
 #include "WorldStreamingInternal.h"
 
+#include <iterator>
 #include <limits>
 
 namespace Horo::WorldStreaming {
@@ -108,6 +109,22 @@ namespace Horo::WorldStreaming {
              WorldLayerState::Unloading, WorldLayerStateRollbackDisposition::FailurePending, true, RevisionEffect::Preserve},
         };
 
+        /** @brief Prove that state, disposition, and command select at most one transition rule. */
+        consteval bool HasUniqueTransitionKeys() {
+            for (std::size_t left = 0; left < std::size(kTransitionRules); ++left) {
+                for (std::size_t right = left + 1; right < std::size(kTransitionRules); ++right) {
+                    if (kTransitionRules[left].from == kTransitionRules[right].from &&
+                        kTransitionRules[left].disposition == kTransitionRules[right].disposition &&
+                        kTransitionRules[left].transition == kTransitionRules[right].transition) {
+                        return false;
+                    }
+                }
+            }
+            return true;
+        }
+
+        static_assert(HasUniqueTransitionKeys());
+
         /** @brief Check command-level permission while authority drains cancellation. */
         [[nodiscard]] bool AllowsDuringCancellation(const WorldLayerStateTransition transition) noexcept {
             for (const auto &rule : kTransitionRules) {
@@ -129,6 +146,8 @@ namespace Horo::WorldStreaming {
 
         [[nodiscard]] Result<void> ValidateCurrent(const WorldLayerStateRecord &current, const WorldLayerStateFence &expected,
                                                    const WorldLayerStateAuthorityState authorityState) {
+            if (!IsKnown(current.state) || !IsKnown(current.rollbackDisposition))
+                return Failure<void>(WorldStreamingErrors::LayerStateUnsupported);
             if (!current.IsValid() || !expected.IsValid() || !IsKnown(authorityState))
                 return Failure<void>(WorldStreamingErrors::LayerStateInvalid);
             if (current.Fence() != expected)
