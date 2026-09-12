@@ -1,6 +1,4 @@
-#include "GameplayModuleTestSupport.h"
 #include "Horo/Assets/MeshEditorPayload.h"
-#include "Horo/Gameplay/GameModule.h"
 #include "editor/document/SceneDocumentPersistence.h"
 #include "editor/screens/workspace/EditorWorkspaceController.h"
 #include "editor/screens/workspace/GameplayBehaviorRequestValidation.h"
@@ -156,21 +154,6 @@ namespace {
         EditorWorkspaceController controller_;
     };
 
-    struct TemporaryGameplayWorkspaceProject {
-        std::filesystem::path root =
-            std::filesystem::temp_directory_path() /
-            ("horo-workspace-native-reload-" + std::to_string(std::chrono::steady_clock::now().time_since_epoch().count()));
-
-        TemporaryGameplayWorkspaceProject() {
-            std::filesystem::create_directories(root / "assets");
-        }
-
-        ~TemporaryGameplayWorkspaceProject() {
-            std::error_code error;
-            std::filesystem::remove_all(root, error);
-        }
-    };
-
     TEST_CASE("Gameplay behavior creation requests validate Lua and native kinds", "[unit][editor][behavior]") {
         const std::string destination = std::filesystem::absolute("project/assets/scripts").string();
         for (const GameplayBehaviorKind kind : {GameplayBehaviorKind::Lua, GameplayBehaviorKind::Native}) {
@@ -250,70 +233,6 @@ namespace {
 
         std::error_code cleanupError;
         std::filesystem::remove_all(projectRoot, cleanupError);
-    }
-
-    TEST_CASE("Native gameplay reload commits compatible generations and rolls back rejected candidates", "[unit][editor][gameplay]") {
-        TemporaryGameplayWorkspaceProject project;
-        const std::filesystem::path artifact{HORO_TEST_GAME_MODULE_PATH};
-        const std::uint64_t descriptorRevision = Tests::ReadDescriptorRevision(HORO_TEST_GAME_MODULE_REVISION_PATH);
-        const auto publishManifest = [&](const std::string_view fingerprint) {
-            return Tests::WriteGameplayModuleManifest(project.root, artifact, "game.tests", fingerprint, descriptorRevision);
-        };
-        const std::filesystem::path manifestPath = publishManifest(Gameplay::CurrentGameplayBuildFingerprint());
-
-        NativeDurableFileSystem files;
-        ProjectMutationCoordinator mutations{files};
-        Runtime::RuntimeSceneService runtimeScene;
-        CancellationSource cancellation;
-        REQUIRE((runtimeScene.Startup(cancellation.Token()).HasValue()));
-        EditorWorkspaceController controller{project.root, runtimeScene, {}, {.mutations = &mutations, .durableFiles = &files}};
-
-        EditorWorkspaceViewCommandData createCamera;
-        createCamera.command = EditorWorkspaceViewCommand::CreatePrimitive;
-        createCamera.primitivePayload = Runtime::PrimitiveId{"primitive.object.camera"};
-        controller.ProcessCommand(createCamera);
-        const Runtime::FrameContext context{1, {}, 0.0, 0, {}, false, cancellation.Token()};
-        REQUIRE((runtimeScene.OnPhase(Runtime::RuntimePhase::CommitDeferredLifecycleChanges, context).HasValue()));
-        controller.SynchronizeRuntimeScenePreview();
-
-        EditorWorkspaceViewCommandData startPlay;
-        startPlay.command = EditorWorkspaceViewCommand::StartPlay;
-        controller.ProcessCommand(startPlay);
-        REQUIRE((controller.ViewModel().playState == EditorPlayState::Playing));
-
-        const std::filesystem::path rollbackDirectory = project.root / ".horo" / "local" / "gameplay_module_rollback";
-        {
-            std::ofstream blocker{rollbackDirectory, std::ios::binary};
-            blocker << "not a directory";
-        }
-        Tests::AdvanceLastWriteTime(manifestPath);
-        controller.UpdateGameplaySources(0.5F);
-        controller.UpdatePlayFixed({}, 1.0 / 60.0);
-        REQUIRE((controller.ViewModel().playState == EditorPlayState::Playing));
-
-        std::filesystem::remove(rollbackDirectory);
-        Tests::AdvanceLastWriteTime(manifestPath);
-        controller.UpdateGameplaySources(0.5F);
-        controller.UpdatePlayFixed({}, 1.0 / 60.0);
-        REQUIRE((controller.ViewModel().playState == EditorPlayState::Playing));
-
-        publishManifest("incompatible-test-fingerprint");
-        Tests::AdvanceLastWriteTime(manifestPath);
-        controller.UpdateGameplaySources(0.5F);
-        controller.UpdatePlayFixed({}, 1.0 / 60.0);
-        REQUIRE((controller.ViewModel().playState == EditorPlayState::Playing));
-        REQUIRE((controller.ViewModel().playError.empty()));
-
-        publishManifest(Gameplay::CurrentGameplayBuildFingerprint());
-        EditorWorkspaceViewCommandData stopPlay;
-        stopPlay.command = EditorWorkspaceViewCommand::StopPlay;
-        controller.ProcessCommand(stopPlay);
-        REQUIRE((controller.ViewModel().playState == EditorPlayState::Idle));
-
-        controller.ProcessCommand(startPlay);
-        REQUIRE((controller.ViewModel().playState == EditorPlayState::Playing));
-        controller.ProcessCommand(stopPlay);
-        REQUIRE((controller.ViewModel().playState == EditorPlayState::Idle));
     }
 
     TEST_CASE("Workspace Save Persists And Reopens The Default Scene", "[unit][editor][persistence]") {
