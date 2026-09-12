@@ -75,6 +75,18 @@ namespace Horo::Extensions {
             bool prerelease{};
         };
 
+        struct ResolvedImportFields {
+            std::string consumerExtensionId;
+            std::string consumerModuleId;
+            std::string importId;
+            std::string serviceId;
+            std::string contractId;
+            std::string providerModuleId;
+            std::string providerVersion;
+            ExtensionServiceImportStatus status;
+            bool required;
+        };
+
         [[nodiscard]] std::optional<SemanticVersionCore> ParseVersionCore(std::string_view version) {
             SemanticVersionCore result;
             result.prerelease = version.find('-') != std::string_view::npos;
@@ -173,6 +185,12 @@ namespace Horo::Extensions {
         using ModuleIndex = std::map<std::string, const ExtensionModuleManifest *, std::less<>>;
         using ExportIndex = std::map<std::string, ExportOwner, std::less<>>;
         using DependencyIndex = std::map<std::string, std::set<std::string, std::less<>>, std::less<>>;
+
+        struct ServiceDependencyOutputs {
+            DependencyIndex &dependencies;
+            DependencyIndex &requiredDependencies;
+            std::vector<ResolvedExtensionServiceImport> &bindings;
+        };
 
         [[nodiscard]] bool HasRole(const ExtensionModuleManifest &moduleManifest, const ExtensionModuleRole role) {
             return std::ranges::find(moduleManifest.roles, role) != moduleManifest.roles.end();
@@ -311,6 +329,50 @@ namespace Horo::Extensions {
         }
 
         template <typename MakeResolvedImport>
+        [[nodiscard]] Result<void> AddServiceDependency(const ExtensionManifest &manifest, const ExtensionModuleManifest &moduleManifest,
+                                                        const ExtensionServiceImportManifest &serviceImport, const ExportIndex &exports,
+                                                        ServiceDependencyOutputs outputs, const MakeResolvedImport &makeResolvedImport) {
+            auto makeBinding = [&](std::string providerModuleId, std::string providerVersion, const ExtensionServiceImportStatus status) {
+                return makeResolvedImport(ResolvedImportFields{manifest.id, moduleManifest.id, serviceImport.id, serviceImport.service,
+                                                               serviceImport.contract, std::move(providerModuleId),
+                                                               std::move(providerVersion), status, serviceImport.required});
+            };
+            const auto found = exports.find(serviceImport.service);
+            if (found == exports.end()) {
+                if (!serviceImport.required) {
+                    outputs.bindings.push_back(makeBinding({}, {}, ExtensionServiceImportStatus::Unavailable));
+                    return Result<void>::Success();
+                }
+                return Result<void>::Failure(
+                    MakeError(ExtensionErrors::ModuleResolutionFailed,
+                              "Missing service export '" + serviceImport.service + "'. Involved modules: " + moduleManifest.id + '.'));
+            }
+            const ExportOwner &provider = found->second;
+            if (provider.ownerModule->id == moduleManifest.id)
+                return Result<void>::Failure(
+                    MakeError(ExtensionErrors::ModuleResolutionFailed,
+                              "A module cannot import its own service. Involved modules: " + moduleManifest.id + '.'));
+            if (provider.service->contract != serviceImport.contract ||
+                !IsCompatibleVersion(provider.service->version, serviceImport.minimumVersion)) {
+                if (!serviceImport.required) {
+                    outputs.bindings.push_back(
+                        makeBinding(provider.ownerModule->id, provider.service->version, ExtensionServiceImportStatus::Incompatible));
+                    return Result<void>::Success();
+                }
+                const std::set<std::string, std::less<>> involved{moduleManifest.id, provider.ownerModule->id};
+                return Result<void>::Failure(
+                    MakeError(ExtensionErrors::ModuleResolutionFailed, "Incompatible service export '" + serviceImport.service +
+                                                                           "'. Involved modules: " + JoinModuleIds(involved) + '.'));
+            }
+            outputs.bindings.push_back(
+                makeBinding(provider.ownerModule->id, provider.service->version, ExtensionServiceImportStatus::Bound));
+            outputs.dependencies[moduleManifest.id].insert(provider.ownerModule->id);
+            if (serviceImport.required)
+                outputs.requiredDependencies[moduleManifest.id].insert(provider.ownerModule->id);
+            return Result<void>::Success();
+        }
+
+        template <typename MakeResolvedImport>
         [[nodiscard]] Result<void> AddServiceDependencies(const ExtensionManifest &manifest, const ExportIndex &exports,
                                                           DependencyIndex &dependencies, DependencyIndex &requiredDependencies,
                                                           std::vector<ResolvedExtensionServiceImport> &bindings,
@@ -322,44 +384,11 @@ namespace Horo::Extensions {
                         return Result<void>::Failure(
                             MakeError(ExtensionErrors::ModuleResolutionFailed,
                                       "Duplicate service import '" + serviceImport.id + "'. Involved modules: " + moduleManifest.id + '.'));
-                    auto makeBinding = [&](std::string providerModuleId, std::string providerVersion,
-                                           const ExtensionServiceImportStatus status) {
-                        return makeResolvedImport(manifest.id, moduleManifest.id, serviceImport.id, serviceImport.service,
-                                                  serviceImport.contract, std::move(providerModuleId), std::move(providerVersion), status,
-                                                  serviceImport.required);
-                    };
-                    const auto found = exports.find(serviceImport.service);
-                    if (found == exports.end()) {
-                        if (!serviceImport.required) {
-                            bindings.push_back(makeBinding({}, {}, ExtensionServiceImportStatus::Unavailable));
-                            continue;
-                        }
-                        return Result<void>::Failure(
-                            MakeError(ExtensionErrors::ModuleResolutionFailed, "Missing service export '" + serviceImport.service +
-                                                                                   "'. Involved modules: " + moduleManifest.id + '.'));
-                    }
-                    const ExportOwner &provider = found->second;
-                    if (provider.ownerModule->id == moduleManifest.id)
-                        return Result<void>::Failure(
-                            MakeError(ExtensionErrors::ModuleResolutionFailed,
-                                      "A module cannot import its own service. Involved modules: " + moduleManifest.id + '.'));
-                    if (provider.service->contract != serviceImport.contract ||
-                        !IsCompatibleVersion(provider.service->version, serviceImport.minimumVersion)) {
-                        if (!serviceImport.required) {
-                            bindings.push_back(makeBinding(provider.ownerModule->id, provider.service->version,
-                                                           ExtensionServiceImportStatus::Incompatible));
-                            continue;
-                        }
-                        const std::set<std::string, std::less<>> involved{moduleManifest.id, provider.ownerModule->id};
-                        return Result<void>::Failure(MakeError(ExtensionErrors::ModuleResolutionFailed,
-                                                               "Incompatible service export '" + serviceImport.service +
-                                                                   "'. Involved modules: " + JoinModuleIds(involved) + '.'));
-                    }
-                    bindings.push_back(
-                        makeBinding(provider.ownerModule->id, provider.service->version, ExtensionServiceImportStatus::Bound));
-                    dependencies[moduleManifest.id].insert(provider.ownerModule->id);
-                    if (serviceImport.required)
-                        requiredDependencies[moduleManifest.id].insert(provider.ownerModule->id);
+                    if (auto added = AddServiceDependency(manifest, moduleManifest, serviceImport, exports,
+                                                          ServiceDependencyOutputs{dependencies, requiredDependencies, bindings},
+                                                          makeResolvedImport);
+                        added.HasError())
+                        return added;
                 }
             }
             std::ranges::sort(bindings, [](const auto &left, const auto &right) {
@@ -518,9 +547,15 @@ namespace Horo::Extensions {
             });
             for (ResolvedExtensionServiceImport &binding : plan.serviceImports) {
                 if (!binding.ProviderModuleId().empty() && !selected.contains(binding.ProviderModuleId())) {
-                    binding = makeResolvedImport(binding.ConsumerExtensionId(), binding.ConsumerModuleId(), binding.ImportId(),
-                                                 binding.ServiceId(), binding.ContractId(), std::string{}, std::string{},
-                                                 ExtensionServiceImportStatus::Unavailable, binding.IsRequired());
+                    binding = makeResolvedImport(ResolvedImportFields{binding.ConsumerExtensionId(),
+                                                                      binding.ConsumerModuleId(),
+                                                                      binding.ImportId(),
+                                                                      binding.ServiceId(),
+                                                                      binding.ContractId(),
+                                                                      {},
+                                                                      {},
+                                                                      ExtensionServiceImportStatus::Unavailable,
+                                                                      binding.IsRequired()});
                 }
             }
             for (const ExtensionContributionManifest &contribution : manifest.contributions) {
@@ -547,19 +582,17 @@ namespace Horo::Extensions {
 
     /** @copydoc ResolveExtensionModules */
     Result<ExtensionModulePlan> ResolveExtensionModules(const ExtensionManifest &manifest, const ExtensionHostEnvironment &host) {
-        const auto makeResolvedImport = [](std::string consumerExtensionId, std::string consumerModuleId, std::string importId,
-                                           std::string serviceId, std::string contractId, std::string providerModuleId,
-                                           std::string providerVersion, const ExtensionServiceImportStatus status, const bool required) {
+        const auto makeResolvedImport = [](ResolvedImportFields fields) {
             return ResolvedExtensionServiceImport{ResolvedExtensionServiceImport::Fields{
-                .consumerExtensionId = std::move(consumerExtensionId),
-                .consumerModuleId = std::move(consumerModuleId),
-                .importId = std::move(importId),
-                .serviceId = std::move(serviceId),
-                .contractId = std::move(contractId),
-                .providerModuleId = std::move(providerModuleId),
-                .providerVersion = std::move(providerVersion),
-                .status = status,
-                .required = required,
+                .consumerExtensionId = std::move(fields.consumerExtensionId),
+                .consumerModuleId = std::move(fields.consumerModuleId),
+                .importId = std::move(fields.importId),
+                .serviceId = std::move(fields.serviceId),
+                .contractId = std::move(fields.contractId),
+                .providerModuleId = std::move(fields.providerModuleId),
+                .providerVersion = std::move(fields.providerVersion),
+                .status = fields.status,
+                .required = fields.required,
             }};
         };
         auto modulesResult = ValidateAndIndexModules(manifest);
