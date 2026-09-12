@@ -6,6 +6,17 @@
 #include <unordered_set>
 
 namespace Horo::Gameplay {
+    /** @copydoc BehaviorRegistry::AcquireGenerationLease */
+    Result<std::shared_ptr<void>> BehaviorRegistry::AcquireGenerationLease() const {
+        if (generationLeaseAdmission_ == nullptr)
+            return Result<std::shared_ptr<void>>::Success({});
+        std::shared_ptr<void> lease = generationLease_.lock();
+        if (lease == nullptr || !generationLeaseAdmission_->load(std::memory_order_acquire))
+            return Result<std::shared_ptr<void>>::Failure(
+                MakeError(GameplayErrors::GameplayReloadRestartRequired, "The native module generation is closed to new runtimes."));
+        return Result<std::shared_ptr<void>>::Success(std::move(lease));
+    }
+
     namespace {
         [[nodiscard]] Result<void> ValidateDescriptor(const BehaviorRegistration &registration) {
             const BehaviorDescriptor &descriptor = registration.descriptor;

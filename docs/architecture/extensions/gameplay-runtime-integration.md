@@ -144,6 +144,13 @@ module-allocated state behind that system. All module-owned system instances,
 callbacks, queued continuations, and jobs are destroyed or invalidated before
 `Stop()` returns and before the dynamic library is unloaded.
 
+Every behavior and system runtime created from a native registry acquires an
+exact-generation lease. The lease pins the module implementation, registries,
+factory functions, and dynamic library even if the public loaded-module wrapper
+is released. Native reload retirement is restart-required while any such external
+runtime remains alive; normal play-session quiescence destroys its runtime before
+asking the module to prepare for unload.
+
 System callbacks are invalid after module stop. A scene cannot keep a callable,
 vtable pointer, function pointer, or type-erased deleter that points into an
 unloaded game module.
@@ -195,6 +202,12 @@ termination, crash, or OS kill provides no gameplay callback guarantee; the OS
 reclaims process resources. Host-level emergency shutdown still invalidates
 module callbacks and releases owned host resources where the platform permits,
 but behavior authors must not rely on `OnDestroy()` for durable persistence.
+
+Behavior callback exceptions are contained at the runtime boundary. A throwing
+`OnCreate()` still schedules `OnDestroy()` before the factory instance is released;
+a throwing `OnEnable()` schedules both `OnDisable()` and `OnDestroy()`. Each cleanup
+callback is attempted independently, the factory destroy binding always runs, and
+activation returns a typed factory failure when activation or cleanup throws.
 
 The editor play-session controller uses the following explicit state machine:
 

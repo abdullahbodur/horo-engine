@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <catch2/catch_test_macros.hpp>
 #include <memory>
+#include <stdexcept>
 #include <string>
 #include <vector>
 
@@ -21,6 +22,10 @@ namespace {
         std::vector<std::string> calls;
         std::size_t destroyed{};
         std::size_t reloadStateBytes{1};
+        bool throwOnCreate{};
+        bool throwOnEnable{};
+        bool throwOnDisable{};
+        bool throwOnDestroy{};
     };
 
     class RecordingBehavior final : public IBehaviorInstance {
@@ -29,10 +34,14 @@ namespace {
 
         void OnCreate(BehaviorContext &) override {
             recorder_->calls.emplace_back("create");
+            if (recorder_->throwOnCreate)
+                throw std::runtime_error{"OnCreate failure"};
         }
 
         void OnEnable(BehaviorContext &) override {
             recorder_->calls.emplace_back("enable");
+            if (recorder_->throwOnEnable)
+                throw std::runtime_error{"OnEnable failure"};
         }
 
         void OnStart(BehaviorContext &) override {
@@ -69,10 +78,14 @@ namespace {
 
         void OnDisable(BehaviorContext &) override {
             recorder_->calls.emplace_back("disable");
+            if (recorder_->throwOnDisable)
+                throw std::runtime_error{"OnDisable failure"};
         }
 
         void OnDestroy(BehaviorContext &) override {
             recorder_->calls.emplace_back("destroy");
+            if (recorder_->throwOnDestroy)
+                throw std::runtime_error{"OnDestroy failure"};
         }
 
         Result<std::vector<std::byte>> CaptureReloadState() const override {
@@ -175,6 +188,47 @@ TEST_CASE("behavior runtime rejects duplicate attachments unless the descriptor 
     auto runtime = BehaviorRuntime::Create(*scene.Value(), registry);
     REQUIRE(runtime.HasError());
     REQUIRE(recorder.destroyed == 1);
+}
+
+TEST_CASE("behavior runtime contains activation exceptions and releases partial instances") {
+    Recorder createFailure;
+    createFailure.throwOnCreate = true;
+    BehaviorRegistry createRegistry = Registry(createFailure);
+    auto createScene = RuntimeScene::Create(Definition(), SceneRuntimeId{15});
+    REQUIRE(createScene.HasValue());
+    const auto createResult = BehaviorRuntime::Create(*createScene.Value(), createRegistry);
+    REQUIRE(createResult.HasError());
+    CHECK(createResult.ErrorValue().code.Value() == GameplayErrors::GameplayFactoryFailed.code.Value());
+    CHECK(createFailure.destroyed == 1);
+    CHECK(std::ranges::count(createFailure.calls, "destroy") == 1);
+
+    Recorder enableFailure;
+    enableFailure.throwOnEnable = true;
+    BehaviorRegistry enableRegistry = Registry(enableFailure);
+    auto enableScene = RuntimeScene::Create(Definition(), SceneRuntimeId{16});
+    REQUIRE(enableScene.HasValue());
+    const auto enableResult = BehaviorRuntime::Create(*enableScene.Value(), enableRegistry);
+    REQUIRE(enableResult.HasError());
+    CHECK(enableResult.ErrorValue().code.Value() == GameplayErrors::GameplayFactoryFailed.code.Value());
+    CHECK(enableFailure.destroyed == 1);
+    CHECK(std::ranges::count(enableFailure.calls, "disable") == 1);
+    CHECK(std::ranges::count(enableFailure.calls, "destroy") == 1);
+}
+
+TEST_CASE("behavior runtime reports rollback callback exceptions after releasing the factory instance") {
+    Recorder recorder;
+    recorder.throwOnEnable = true;
+    recorder.throwOnDisable = true;
+    recorder.throwOnDestroy = true;
+    BehaviorRegistry registry = Registry(recorder);
+    auto scene = RuntimeScene::Create(Definition(), SceneRuntimeId{17});
+    REQUIRE(scene.HasValue());
+    const auto result = BehaviorRuntime::Create(*scene.Value(), registry);
+    REQUIRE(result.HasError());
+    CHECK(result.ErrorValue().code.Value() == GameplayErrors::GameplayFactoryFailed.code.Value());
+    CHECK(recorder.destroyed == 1);
+    CHECK(std::ranges::count(recorder.calls, "disable") == 1);
+    CHECK(std::ranges::count(recorder.calls, "destroy") == 1);
 }
 
 TEST_CASE("behavior runtime restores bounded instance state without restarting an established instance") {

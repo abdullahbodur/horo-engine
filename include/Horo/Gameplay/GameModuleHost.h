@@ -34,6 +34,12 @@ namespace Horo::Gameplay {
         [[nodiscard]] const std::filesystem::path &LoadedArtifactPath() const noexcept;
         /** @brief Returns the frozen descriptor registry while the module is loaded. */
         [[nodiscard]] const BehaviorRegistry &Registry() const noexcept;
+        /**
+         * @brief Copies native behavior registrations into an unfrozen host registry and binds their module generation.
+         * @param destination Host-owned aggregate registry that will expose the copied native factories.
+         * @return Success or the first typed registration failure.
+         */
+        [[nodiscard]] Result<void> ContributeBehaviorsTo(BehaviorRegistry &destination) const;
         /** @brief Returns the frozen project component metadata while the module is loaded. */
         [[nodiscard]] const ComponentRegistry &Components() const noexcept;
         /** @brief Returns the frozen project service descriptors while the module is loaded. */
@@ -61,8 +67,8 @@ namespace Horo::Gameplay {
     private:
         friend class GameModuleHost;
         struct Impl;
-        explicit LoadedGameModule(std::unique_ptr<Impl> impl) noexcept;
-        std::unique_ptr<Impl> impl_;
+        explicit LoadedGameModule(std::shared_ptr<Impl> impl) noexcept;
+        std::shared_ptr<Impl> impl_;
     };
 
     /** @brief Loader used by editor play sessions and packaged runtime composition. */

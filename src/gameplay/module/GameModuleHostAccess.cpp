@@ -4,12 +4,9 @@
 #include <utility>
 
 namespace Horo::Gameplay {
-    LoadedGameModule::LoadedGameModule(std::unique_ptr<Impl> impl) noexcept : impl_(std::move(impl)) {}
+    LoadedGameModule::LoadedGameModule(std::shared_ptr<Impl> impl) noexcept : impl_(std::move(impl)) {}
 
-    LoadedGameModule::~LoadedGameModule() {
-        if (impl_)
-            impl_->Shutdown();
-    }
+    LoadedGameModule::~LoadedGameModule() = default;
 
     /** @copydoc LoadedGameModule::ModuleId */
     const std::string &LoadedGameModule::ModuleId() const noexcept {
@@ -34,6 +31,16 @@ namespace Horo::Gameplay {
     /** @copydoc LoadedGameModule::Registry */
     const BehaviorRegistry &LoadedGameModule::Registry() const noexcept {
         return *impl_->registry;
+    }
+
+    /** @copydoc LoadedGameModule::ContributeBehaviorsTo */
+    Result<void> LoadedGameModule::ContributeBehaviorsTo(BehaviorRegistry &destination) const {
+        for (const BehaviorRegistration &registration : impl_->registry->Registrations()) {
+            if (Result<void> contributed = destination.Register(registration); contributed.HasError())
+                return contributed;
+        }
+        Detail::GenerationLeaseBinding::Bind(destination, std::weak_ptr<void>{impl_}, impl_->runtimeLeaseAdmission);
+        return Result<void>::Success();
     }
 
     /** @copydoc LoadedGameModule::Components */
@@ -68,6 +75,10 @@ namespace Horo::Gameplay {
 
     /** @copydoc LoadedGameModule::PrepareReload */
     Result<GameModuleReloadSnapshot> LoadedGameModule::PrepareReload() {
+        impl_->runtimeLeaseAdmission.store(false, std::memory_order_release);
+        if (impl_.use_count() != 1)
+            return Result<GameModuleReloadSnapshot>::Failure(
+                MakeError(GameplayErrors::GameplayReloadRestartRequired, "A module-generation runtime is still active."));
         return impl_->PrepareReload();
     }
 

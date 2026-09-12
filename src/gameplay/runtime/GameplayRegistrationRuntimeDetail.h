@@ -3,6 +3,7 @@
 #include "Horo/Gameplay/GameplayRegistrationRuntime.h"
 
 #include <array>
+#include <utility>
 #include <vector>
 
 namespace Horo::Gameplay {
@@ -40,9 +41,10 @@ namespace Horo::Gameplay {
         };
 
         Impl(const SystemRegistry &registry, const std::span<const GameplayServiceId> availableServices,
-             const std::span<const GameplayCapabilityId> availableCapabilities, const CancellationToken parentCancellation)
+             const std::span<const GameplayCapabilityId> availableCapabilities, const CancellationToken parentCancellation,
+             std::shared_ptr<void> generationLease)
             : registry(registry), cancellation(parentCancellation), activeServices(availableServices.begin(), availableServices.end()),
-              capabilities(availableCapabilities.begin(), availableCapabilities.end()) {}
+              capabilities(availableCapabilities.begin(), availableCapabilities.end()), generationLease(std::move(generationLease)) {}
 
         [[nodiscard]] Result<void> Build();
         void Rollback() noexcept;
@@ -51,6 +53,7 @@ namespace Horo::Gameplay {
         CancellationSource cancellation;
         std::vector<GameplayServiceId> activeServices;
         std::vector<GameplayCapabilityId> capabilities;
+        std::shared_ptr<void> generationLease;
         std::vector<Instance> instances;
         std::array<std::vector<std::size_t>, PhaseCount> instancesByPhase;
         bool shutdown{};

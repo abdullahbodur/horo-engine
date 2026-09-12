@@ -91,7 +91,7 @@ Status terms mean:
 | Schema evolution and unknown payloads | Partial | Project component envelopes retain bounded opaque bytes independently from native layout and expose current, missing, newer, unsupported-old, or deterministic migration-required inspection. Behavior field migration and lossless scene parsing of unsupported encodings remain absent. |
 | Editor discovery | Implemented | Project discovery validates a bounded manifest, shadow-loads native code, discovers bounded Lua sources, freezes one combined registry, and gates Play on diagnostics. |
 | Lua source reload | Implemented | Compatible program replacement occurs in place; incompatible replacements retain the previous valid program. Existing runtime instances keep their program binding. |
-| Native code reload | Implemented | Manifest changes are deferred to the fixed-tick safe point. The editor preserves the old artifact, snapshots bounded behavior/module state, requires cancellation plus an opt-in job/callback quiescence proof, unloads old code before candidate discovery, and restores the preserved generation on failure without mutating authoring state. Unsafe modules return restart-required. |
+| Native code reload | Implemented | Manifest changes are deferred to the fixed-tick safe point. An explicit phased transaction preserves an RAII-owned old artifact plus the exact in-memory Lua generation, snapshots bounded behavior/module state, requires cancellation plus an opt-in job/callback quiescence proof and zero external runtime leases, unloads old code before candidate discovery, and restores the preserved generation on failure without mutating authoring state. Unsafe retirement returns restart-required and quarantines further reload/Play admission until workspace teardown. |
 | Packaged-player loading | Missing | No packaged-runtime composition, shipping manifest, signature policy enforcement, or packaged-player caller was found. |
 | Game components | Implemented | Project code registers stable component and property identities, schema versions, authoring metadata, payload encoding, and deterministic forward migration edges through `GameRegistrationContext`. The host copies, sorts, and freezes metadata before startup; inspection never mutates opaque persistent bytes. |
 | Game systems and services | Implemented | Typed identities, bounded descriptors, exact-generation factories, dependency and capability graphs, phase/access validation, deterministic schedules, affinity checks, cancellation, rollback, and reverse shutdown are public contracts with focused runtime evidence. |
@@ -308,6 +308,13 @@ Existing focused tests prove:
 - Native and Lua registrations merge and duplicate/invalid discovery diagnostics
   gate activation;
 - Compatible Lua source replacement retains a usable program;
+- Native rollback restores cloned last-good Lua program source, revision, and limits rather than
+  rereading files changed during the transaction, and rollback artifacts follow
+  move-only cleanup ownership;
+- Behavior activation exceptions attempt all applicable cleanup callbacks and
+  release partial factory instances;
+- External behavior and system runtimes pin the loaded module generation, while
+  the default module reload callback remains restart-required;
 - A successful project build publishes state and manifest, is recognized as
   current, and remains the last success after a later broken build;
 - Scene persistence round-trips typed behavior payloads and runtime scene

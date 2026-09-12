@@ -6,6 +6,17 @@
 #include <algorithm>
 
 namespace Horo::Gameplay {
+    /** @copydoc SystemRegistry::AcquireGenerationLease */
+    Result<std::shared_ptr<void>> SystemRegistry::AcquireGenerationLease() const {
+        if (generationLeaseAdmission_ == nullptr)
+            return Result<std::shared_ptr<void>>::Success({});
+        std::shared_ptr<void> lease = generationLease_.lock();
+        if (lease == nullptr || !generationLeaseAdmission_->load(std::memory_order_acquire))
+            return Result<std::shared_ptr<void>>::Failure(
+                MakeError(GameplayErrors::GameplayReloadRestartRequired, "The native module generation is closed to new runtimes."));
+        return Result<std::shared_ptr<void>>::Success(std::move(lease));
+    }
+
     /** @copydoc SystemRegistry::SystemRegistry */
     SystemRegistry::SystemRegistry(std::string moduleId) : moduleId_(std::move(moduleId)) {}
 

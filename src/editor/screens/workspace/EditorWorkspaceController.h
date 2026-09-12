@@ -16,6 +16,7 @@
 #include "editor/screens/workspace/EditorWorkspaceViewModel.h"
 
 #include <cstddef>
+#include <cstdint>
 #include <filesystem>
 #include <functional>
 #include <optional>
@@ -148,6 +149,7 @@ namespace Horo::Editor {
         bool m_playAfterGameplayBuild{false};
         float m_nativeBuildDebounceSeconds{-1.0F};
         bool m_nativeGameplayReloadPending{false};
+        bool m_nativeGameplayReloadQuarantined{false};
         std::optional<std::filesystem::path> m_defaultScenePath;
         std::optional<SceneFileFingerprint> m_sceneFingerprint;
         std::optional<Error> m_initializationError;
@@ -204,9 +206,20 @@ namespace Horo::Editor {
         using ContentBrowserPathMoves = std::vector<std::pair<std::filesystem::path, std::filesystem::path>>;
 
         struct NativeGameplayReloadTransaction {
+            enum class Phase : std::uint8_t {
+                Begun,
+                Retired,
+                Activated,
+                RolledBack,
+                Committed,
+                Degraded,
+            };
+
             NativeGameplayRollbackArtifact rollbackArtifact;
+            ProjectLuaGenerationSnapshot luaGeneration;
             EditorPlayReloadSnapshot playSnapshot;
             Gameplay::GameModuleReloadSnapshot moduleSnapshot;
+            Phase phase{Phase::Begun};
         };
 
         [[nodiscard]] bool ProcessDocumentCommand(const EditorWorkspaceViewCommandData &cmd);
@@ -310,13 +323,14 @@ namespace Horo::Editor {
         void RefreshAvailableBehaviorProjection();
         void ApplyPendingGameplayRegistry();
         void ApplyNativeGameplayReload();
-        [[nodiscard]] Result<NativeGameplayReloadTransaction> PrepareNativeGameplayReload(const std::filesystem::path &projectRoot);
-        [[nodiscard]] Result<std::unique_ptr<ProjectGameplayRegistry>> LoadNativeGameplayCandidate(
-            const std::filesystem::path &projectRoot) const;
-        [[nodiscard]] Result<void> ActivateNativeGameplayGeneration(ProjectGameplayRegistry &generation,
-                                                                    const NativeGameplayReloadTransaction &transaction);
+        [[nodiscard]] Result<NativeGameplayReloadTransaction> BeginNativeGameplayReload(const std::filesystem::path &projectRoot);
+        [[nodiscard]] Result<void> RetireNativeGameplayGeneration(NativeGameplayReloadTransaction &transaction);
+        [[nodiscard]] Result<std::unique_ptr<ProjectGameplayRegistry>> TryActivateNativeGameplayGeneration(
+            const std::filesystem::path &projectRoot, NativeGameplayReloadTransaction &transaction);
+        void CommitNativeGameplayReload(std::unique_ptr<ProjectGameplayRegistry> generation, NativeGameplayReloadTransaction &transaction);
         void RollbackNativeGameplayReload(const std::filesystem::path &projectRoot, NativeGameplayReloadTransaction transaction,
                                           Error candidateError);
+        void DegradeNativeGameplayReload(NativeGameplayReloadTransaction &transaction, Error error);
         void ReimportContentBrowserAsset(const std::filesystem::path &absolutePath);
         void RevealContentBrowserEntry(const std::filesystem::path &absolutePath);
         void OpenDiagnosticSource(const DiagnosticSourceRequest &source);

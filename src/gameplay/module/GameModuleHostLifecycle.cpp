@@ -79,6 +79,7 @@ namespace Horo::Gameplay {
         const std::vector<GameplayCapabilityId> capabilities = CombinedCapabilities(hostCapabilities, *services);
         if (Result<void> frozen = systems->Freeze(serviceIds, capabilities); frozen.HasError())
             return frozen;
+        Detail::GenerationLeaseBinding::Bind(*registry, *systems, weak_from_this(), runtimeLeaseAdmission);
 
         auto activated = GameplayServiceRuntime::Create(*services, GameplayServiceScope::Project, {{}, hostCapabilities});
         if (activated.HasError())
