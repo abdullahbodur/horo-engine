@@ -80,13 +80,6 @@ namespace Horo::Extensions {
             return Result<void>::Success();
         }
 
-        void RemoveProvider(const std::shared_ptr<PipelineStepRegistryState> &registry,
-                            const std::shared_ptr<PipelineStepProviderState> &provider) {
-            std::scoped_lock lock{registry->mutex};
-            provider->registered.store(false, std::memory_order_release);
-            std::erase(registry->providers, provider);
-        }
-
         [[nodiscard]] std::optional<std::vector<std::shared_ptr<PipelineStepProviderState>>> SnapshotProviders(
             const std::shared_ptr<PipelineStepRegistryState> &state) {
             std::scoped_lock lock{state->mutex};
@@ -300,10 +293,13 @@ namespace Horo::Extensions {
         if (provider_ == nullptr)
             return;
         auto registry = registry_.lock();
-        if (registry != nullptr)
-            RemoveProvider(registry, provider_);
-        else
+        if (registry != nullptr) {
+            std::scoped_lock lock{registry->mutex};
             provider_->registered.store(false, std::memory_order_release);
+            std::erase(registry->providers, provider_);
+        } else {
+            provider_->registered.store(false, std::memory_order_release);
+        }
         registry_.reset();
         provider_.reset();
     }
