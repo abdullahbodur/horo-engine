@@ -442,6 +442,7 @@ add_library(HoroPhysics STATIC
         physics/CharacterErrors.cpp
         physics/CharacterWorldSettings.cpp
         physics/PhysicsBodyDescriptor.cpp
+        physics/PhysicsBodyDynamics.cpp
         physics/PhysicsCapabilities.cpp
         physics/PhysicsCollisionSchema.cpp
         physics/PhysicsConstraintDescriptor.cpp
