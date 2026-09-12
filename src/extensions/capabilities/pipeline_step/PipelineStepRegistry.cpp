@@ -7,6 +7,7 @@
 #include <atomic>
 #include <format>
 #include <map>
+#include <memory>
 #include <mutex>
 #include <optional>
 #include <ranges>
@@ -118,7 +119,7 @@ namespace Horo::Extensions {
                         return Result<std::vector<std::size_t>>::Failure(
                             MakeError(ExtensionErrors::PipelineGraphInvalid, std::format("Pipeline step '{}' requires missing step '{}'.",
                                                                                          descriptor.stepId.value, dependency.value)));
-                    const std::size_t dependencyIndex = static_cast<std::size_t>(found - providers.begin());
+                    const auto dependencyIndex = static_cast<std::size_t>(found - providers.begin());
                     if (providers[dependencyIndex]->descriptor.phase > descriptor.phase)
                         return Result<std::vector<std::size_t>>::Failure(
                             MakeError(ExtensionErrors::PipelineGraphInvalid,
@@ -186,7 +187,7 @@ namespace Horo::Extensions {
                     return Result<std::vector<PipelineArtifactView>>::Failure(
                         MakeError(ExtensionErrors::PipelineGraphInvalid, std::format("Pipeline step '{}' requires missing artifact '{}'.",
                                                                                      descriptor.stepId.value, required.value)));
-                inputs.push_back({found->first, found->second});
+                inputs.emplace_back(found->first, found->second);
             }
             return Result<std::vector<PipelineArtifactView>>::Success(std::move(inputs));
         }
@@ -197,7 +198,7 @@ namespace Horo::Extensions {
                 remainingBytes -= artifact.bytes.size();
                 generated.push_back(std::move(artifact));
                 const PipelineArtifact &owned = generated.back();
-                available.emplace(owned.id.value, owned.bytes);
+                available.try_emplace(owned.id.value, owned.bytes);
             }
         }
 
@@ -208,7 +209,7 @@ namespace Horo::Extensions {
     /** @copydoc PipelineStepContext::Find */
     const PipelineArtifactView *PipelineStepContext::Find(const PipelineArtifactId &id) const noexcept {
         const auto found = std::ranges::lower_bound(artifacts_, id.value, {}, &PipelineArtifactView::id);
-        return found != artifacts_.end() && found->id == id.value ? &*found : nullptr;
+        return found != artifacts_.end() && found->id == id.value ? std::to_address(found) : nullptr;
     }
 
     PipelineOutputSink::PipelineOutputSink(const std::span<const PipelineArtifactId> declaredOutputs,
@@ -226,7 +227,7 @@ namespace Horo::Extensions {
         }) ||
             bytes.size() > maximumBytes_ - writtenBytes_)
             return Result<void>::Failure(MakeError(ExtensionErrors::PipelineOutputInvalid));
-        outputs_.push_back({id, std::vector<std::byte>(bytes.begin(), bytes.end())});
+        outputs_.emplace_back(id, std::vector<std::byte>(bytes.begin(), bytes.end()));
         writtenBytes_ += bytes.size();
         return Result<void>::Success();
     }
@@ -292,8 +293,7 @@ namespace Horo::Extensions {
     void PipelineStepRegistration::Reset() {
         if (provider_ == nullptr)
             return;
-        auto registry = registry_.lock();
-        if (registry != nullptr) {
+        if (auto registry = registry_.lock(); registry != nullptr) {
             std::scoped_lock lock{registry->mutex};
             provider_->registered.store(false, std::memory_order_release);
             std::erase(registry->providers, provider_);
@@ -384,7 +384,7 @@ namespace Horo::Extensions {
 
         ArtifactIndex available;
         for (const PipelineArtifactView &artifact : initialArtifacts)
-            available.emplace(artifact.id, artifact.bytes);
+            available.try_emplace(artifact.id, artifact.bytes);
         std::vector<PipelineArtifact> generated;
         std::size_t outputCount = 0U;
         for (const auto &provider : *providers)
