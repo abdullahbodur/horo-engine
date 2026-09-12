@@ -210,7 +210,9 @@ namespace {
         std::ifstream diagnostic{recordDirectory / "diagnostic.json"};
         const nlohmann::json document = nlohmann::json::parse(diagnostic);
         CHECK(document["reason"] == "corrupt-cache-entry");
+        CHECK(document["expectedDigest"].is_string());
         CHECK(document["expectedDigest"] == Horo::FormatSha256(digest));
+        CHECK(document["actualDigest"].is_string());
         CHECK(document["actualDigest"] != document["expectedDigest"]);
     }
 
@@ -228,6 +230,15 @@ namespace {
         const auto artifact = fixture.temporary.Path() / "quarantine" / "hash-mismatch" / result.Value().quarantineId / "artifact.horopkg";
         CHECK(std::filesystem::is_regular_file(artifact));
         CheckOwnerReadOnly(artifact);
+
+        const auto withoutExpected = fixture.store.Quarantine(bytes, PackageQuarantineReason::VerificationFailure);
+        REQUIRE(withoutExpected.HasValue());
+        const auto diagnosticPath =
+            fixture.temporary.Path() / "quarantine" / "verification-failure" / withoutExpected.Value().quarantineId / "diagnostic.json";
+        std::ifstream diagnostic{diagnosticPath};
+        const nlohmann::json document = nlohmann::json::parse(diagnostic);
+        CHECK(document["expectedDigest"].is_null());
+        CHECK(document["actualDigest"].is_string());
     }
 
     TEST_CASE("Package cache returns busy while publication or cleanup owns the digest lock", "[packages][cache][concurrency]") {
