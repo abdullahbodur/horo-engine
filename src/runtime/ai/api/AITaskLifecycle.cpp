@@ -7,7 +7,8 @@
 namespace Horo::AI {
     namespace {
         [[nodiscard]] bool IsTerminal(const AiTaskState state) noexcept {
-            return state == AiTaskState::Succeeded || state == AiTaskState::Failed || state == AiTaskState::Cancelled;
+            using enum AiTaskState;
+            return state == Succeeded || state == Failed || state == Cancelled;
         }
 
         [[nodiscard]] bool IsKnown(const AiTaskFailureKind kind) noexcept {
@@ -64,30 +65,32 @@ namespace Horo::AI {
 
     /** @copydoc AiTaskLifecycle::RequestCancellation */
     Result<AiTaskTransitionDisposition> AiTaskLifecycle::RequestCancellation(const AiTaskCancellationReason reason) {
+        using enum AiTaskTransitionDisposition;
         if (!IsKnown(reason))
             return Failure<AiTaskTransitionDisposition>(AIErrors::TaskContextInvalid);
         if (IsTerminal(state_))
-            return Result<AiTaskTransitionDisposition>::Success(AiTaskTransitionDisposition::AlreadyTerminal);
+            return Result<AiTaskTransitionDisposition>::Success(AlreadyTerminal);
         if (state_ == AiTaskState::Idle) {
             if (pendingCancellation_.has_value())
-                return Result<AiTaskTransitionDisposition>::Success(AiTaskTransitionDisposition::NoChange);
+                return Result<AiTaskTransitionDisposition>::Success(NoChange);
             pendingCancellation_ = reason;
-            return Result<AiTaskTransitionDisposition>::Success(AiTaskTransitionDisposition::Applied);
+            return Result<AiTaskTransitionDisposition>::Success(Applied);
         }
         PublishCancelled(reason);
-        return Result<AiTaskTransitionDisposition>::Success(AiTaskTransitionDisposition::Applied);
+        return Result<AiTaskTransitionDisposition>::Success(Applied);
     }
 
     /** @copydoc AiTaskLifecycle::RetireAgentGeneration */
     AiTaskTransitionDisposition AiTaskLifecycle::RetireAgentGeneration() noexcept {
+        using enum AiTaskTransitionDisposition;
         if (IsTerminal(state_))
-            return AiTaskTransitionDisposition::AlreadyTerminal;
+            return AlreadyTerminal;
         if (agentGenerationRetired_)
-            return AiTaskTransitionDisposition::NoChange;
+            return NoChange;
         agentGenerationRetired_ = true;
         if (state_ == AiTaskState::Running)
             PublishCancelled(AiTaskCancellationReason::AgentGenerationRetired);
-        return AiTaskTransitionDisposition::Applied;
+        return Applied;
     }
 
     /** @copydoc AiTaskLifecycle::CompleteSuccess */
@@ -103,18 +106,19 @@ namespace Horo::AI {
     /** @copydoc AiTaskLifecycle::Complete */
     Result<AiTaskTransitionDisposition> AiTaskLifecycle::Complete(const AgentHandle activeAgent,
                                                                   std::optional<AiTaskFailureDetail> failure) {
+        using enum AiTaskTransitionDisposition;
         if (IsTerminal(state_))
-            return Result<AiTaskTransitionDisposition>::Success(AiTaskTransitionDisposition::AlreadyTerminal);
+            return Result<AiTaskTransitionDisposition>::Success(AlreadyTerminal);
         if (failure.has_value() && !IsValid(*failure))
             return Failure<AiTaskTransitionDisposition>(AIErrors::TaskFailureInvalid);
         const auto boundary = CheckExecutionBoundary(activeAgent);
         if (boundary.HasError())
             return Result<AiTaskTransitionDisposition>::Failure(boundary.ErrorValue());
         if (boundary.Value() != AiTaskResumeDisposition::Ready)
-            return Result<AiTaskTransitionDisposition>::Success(AiTaskTransitionDisposition::AlreadyTerminal);
+            return Result<AiTaskTransitionDisposition>::Success(AlreadyTerminal);
         state_ = failure.has_value() ? AiTaskState::Failed : AiTaskState::Succeeded;
         terminalResult_.emplace(AiTaskTerminalResult{.state = state_, .failure = std::move(failure)});
-        return Result<AiTaskTransitionDisposition>::Success(AiTaskTransitionDisposition::Applied);
+        return Result<AiTaskTransitionDisposition>::Success(Applied);
     }
 
     /** @copydoc AiTaskLifecycle::ClaimCleanup */
@@ -158,19 +162,20 @@ namespace Horo::AI {
     }
 
     Result<AiTaskResumeDisposition> AiTaskLifecycle::CheckExecutionBoundary(const AgentHandle activeAgent) {
+        using enum AiTaskResumeDisposition;
         if (state_ == AiTaskState::Idle)
             return Failure<AiTaskResumeDisposition>(AIErrors::TaskTransitionInvalid);
         if (IsTerminal(state_))
-            return Result<AiTaskResumeDisposition>::Success(AiTaskResumeDisposition::AlreadyTerminal);
+            return Result<AiTaskResumeDisposition>::Success(AlreadyTerminal);
         if (!activeAgent.IsValid() || activeAgent != context_->agent || agentGenerationRetired_) {
             PublishCancelled(AiTaskCancellationReason::AgentGenerationRetired);
-            return Result<AiTaskResumeDisposition>::Success(AiTaskResumeDisposition::BecameTerminal);
+            return Result<AiTaskResumeDisposition>::Success(BecameTerminal);
         }
         if (context_->cancellation.IsCancellationRequested()) {
             PublishCancelled(AiTaskCancellationReason::ContextCancelled);
-            return Result<AiTaskResumeDisposition>::Success(AiTaskResumeDisposition::BecameTerminal);
+            return Result<AiTaskResumeDisposition>::Success(BecameTerminal);
         }
-        return Result<AiTaskResumeDisposition>::Success(AiTaskResumeDisposition::Ready);
+        return Result<AiTaskResumeDisposition>::Success(Ready);
     }
 
     void AiTaskLifecycle::PublishCancelled(const AiTaskCancellationReason reason) noexcept {
