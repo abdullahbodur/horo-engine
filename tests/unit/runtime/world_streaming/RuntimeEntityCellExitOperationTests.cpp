@@ -205,7 +205,7 @@ namespace Horo::WorldStreaming {
             request = RetireRequest();
             request.sourceOwnership.objectClass = WorldObjectOwnershipClass::AuthoredSpatial;
             request.sourceOwnership.authored = {
-                .page = Asset(),
+                .page = Asset(1),
                 .object = 3,
             };
             request.sourceOwnership.runtimeSpawned = {};
