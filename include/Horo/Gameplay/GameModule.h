@@ -6,6 +6,7 @@
  */
 
 #include "Horo/Gameplay/Behavior.h"
+#include "Horo/Gameplay/GameAsset.h"
 #include "Horo/Gameplay/GameplayRegistration.h"
 
 #include <cstddef>
@@ -21,10 +22,11 @@
 
 namespace Horo::Gameplay {
     class ComponentRegistry;
+    class GameAssetTypeRegistry;
     class GameServiceRegistry;
     class SystemRegistry;
 
-    inline constexpr std::uint32_t GameplaySdkBoundaryVersion = 4;
+    inline constexpr std::uint32_t GameplaySdkBoundaryVersion = 5;
     inline constexpr std::uint32_t GameplayDescriptorBundleSchemaVersion = 1;
     inline constexpr std::size_t MaximumGeneratedBehaviorDescriptors = 4096;
     inline constexpr std::size_t MaximumGeneratedDescriptorDiagnostics = 256;
@@ -59,6 +61,7 @@ namespace Horo::Gameplay {
         ComponentRegistry &components;
         SystemRegistry &systems;
         GameServiceRegistry &services;
+        GameAssetTypeRegistry &assetTypes;
     };
 
     /** @brief Project-owned module lifecycle valid only for one exact compatible SDK generation. */
@@ -66,7 +69,7 @@ namespace Horo::Gameplay {
     public:
         virtual ~IGameModule() = default;
         /**
-         * @brief Registers project-owned component, system, and service metadata without activating runtime behavior.
+         * @brief Registers project-owned component, system, service, and asset metadata without activating runtime behavior.
          * @param context Host-owned open registration transaction.
          * @return Success or a typed validation error that prevents startup.
          */

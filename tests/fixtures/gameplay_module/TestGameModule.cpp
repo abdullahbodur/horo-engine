@@ -1,4 +1,5 @@
 #include "Horo/Gameplay/ComponentRegistry.h"
+#include "Horo/Gameplay/GameAssetTypeRegistry.h"
 #include "Horo/Gameplay/GameModule.h"
 #include "Horo/Gameplay/GameServiceRegistry.h"
 #include "Horo/Gameplay/GameplayErrors.h"
@@ -75,6 +76,28 @@ namespace {
         delete system;
     }
 
+    Result<SerializedGameAsset> ImportTestAsset(void *, const GameAssetImportInput &input, const CancellationToken &) {
+        return Result<SerializedGameAsset>::Success({
+            .typeId = GameAssetTypeId::Parse("game.tests.quest_definition").Value(),
+            .schemaVersion = 1,
+            .encoding = GameAssetPayloadEncoding::CanonicalJson,
+            .payload = {input.sourceBytes.begin(), input.sourceBytes.end()},
+        });
+    }
+
+    Result<SerializedGameAsset> SerializeTestAsset(void *, const GameAssetSerializationInput &input, const CancellationToken &) {
+        return Result<SerializedGameAsset>::Success({
+            .typeId = GameAssetTypeId::Parse("game.tests.quest_definition").Value(),
+            .schemaVersion = 1,
+            .encoding = input.encoding,
+            .payload = {input.editorPayload.begin(), input.editorPayload.end()},
+        });
+    }
+
+    Result<std::vector<std::byte>> CookTestAsset(void *, const GameAssetCookInput &input, const CancellationToken &) {
+        return Result<std::vector<std::byte>>::Success(input.asset.payload);
+    }
+
     class Module final : public IGameModule {
     public:
         Result<void> Register(GameRegistrationContext &context) override {
@@ -88,6 +111,31 @@ namespace {
             };
             if (Result<void> component = context.components.Register(std::move(descriptor)); component.HasError())
                 return component;
+
+            GameAssetTypeRegistration asset{
+                .descriptor =
+                    {
+                        .typeId = GameAssetTypeId::Parse("game.tests.quest_definition").Value(),
+                        .schemaVersion = 1,
+                        .sourceExtensions = {"quest"},
+                        .cookTargets = {"headless-null"},
+                        .editor =
+                            {
+                                .displayName = "Quest Definition",
+                                .category = "Gameplay/Quests",
+                                .iconName = "asset-quest",
+                                .fields = {{GameAssetFieldId::Parse("title").Value(), "Title", GameAssetFieldKind::String, true}},
+                            },
+                    },
+                .handler =
+                    {
+                        .importAsset = &ImportTestAsset,
+                        .serializeAsset = &SerializeTestAsset,
+                        .cookAsset = &CookTestAsset,
+                    },
+            };
+            if (Result<void> registered = context.assetTypes.Register(std::move(asset)); registered.HasError())
+                return registered;
 
             GameplayServiceRegistration service{
                 .descriptor =

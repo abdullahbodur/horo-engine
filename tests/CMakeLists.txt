@@ -479,6 +479,7 @@ endif()
 add_executable(HoroGameplayRuntimeTests
         unit/gameplay/BehaviorRuntimeTests.cpp
         unit/gameplay/ComponentRegistryTests.cpp
+        unit/gameplay/GameAssetTypeRegistryTests.cpp
         unit/gameplay/GameplayRegistrationTests.cpp
 )
 target_compile_features(HoroGameplayRuntimeTests PRIVATE cxx_std_20)
