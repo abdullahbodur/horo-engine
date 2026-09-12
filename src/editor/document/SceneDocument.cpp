@@ -263,6 +263,11 @@ namespace Horo::Editor {
             return MakeDocumentError(SceneDocumentErrors::ObjectLocked, "Scene object or one of its ancestors is locked in the editor.");
         }
 
+        [[nodiscard]] Result<SceneCommandResult> ComponentNoOpResult(const SceneDocument &document, const SceneObjectId object) {
+            return Result<SceneCommandResult>::Success(
+                {object, document.Revision(), document.State(), DocumentChangeKind::ComponentChanged, {}, false});
+        }
+
         [[nodiscard]] Result<void> ValidateDescriptor(const std::optional<PrimitiveMeshDescriptor> &descriptor) {
             if (!descriptor.has_value()) {
                 return Result<void>::Success();
@@ -1281,18 +1286,9 @@ namespace Horo::Editor {
         if (const Result<void> validHistory = ValidateHistoryDelta(delta, 1); validHistory.HasError()) {
             return Result<SceneCommandResult>::Failure(validHistory.ErrorValue());
         }
-        const std::size_t memoryBytes = EstimateMemoryBytes(delta, 1);
-
-        const DocumentStateId beforeState = m_document.m_state;
-        ApplyDelta(m_document.m_objects, delta);
         ObserveNavigationComponentIds(command.components, m_document.m_nextNavigationSurfaceId, m_document.m_nextNavigationRegionId);
         ++m_document.m_nextObjectId;
-        ++m_document.m_revision.value;
-        m_document.m_state = DocumentStateId{m_document.m_nextStateId++};
-        std::vector affected{id};
-        PushHistory(*m_history.m_impl, HistoryRecord{beforeState, m_document.m_state, std::move(delta), affected, memoryBytes});
-        return Result<SceneCommandResult>::Success(
-            SceneCommandResult{id, m_document.m_revision, m_document.m_state, DocumentChangeKind::Created, std::move(affected), true});
+        return CommitObject({std::move(delta), id, DocumentChangeKind::Created});
     }
 
     /** @copydoc SceneDocumentCommandExecutor::Execute(const RenameSceneObjectCommand&) */
@@ -1569,8 +1565,7 @@ namespace Horo::Editor {
             return Result<SceneCommandResult>::Failure(LockedObjectError());
 
         if (HasComponent(object->components, command.type)) {
-            return Result<SceneCommandResult>::Success(
-                SceneCommandResult{object->id, m_document.m_revision, m_document.m_state, DocumentChangeKind::ComponentChanged, {}, false});
+            return ComponentNoOpResult(m_document, object->id);
         }
 
         return CommitObject({ComponentAddedDelta{object->id, command.type}, command.object, DocumentChangeKind::ComponentChanged});
@@ -1587,8 +1582,7 @@ namespace Horo::Editor {
             return Result<SceneCommandResult>::Failure(LockedObjectError());
 
         if (!HasComponent(object->components, command.type)) {
-            return Result<SceneCommandResult>::Success(
-                SceneCommandResult{object->id, m_document.m_revision, m_document.m_state, DocumentChangeKind::ComponentChanged, {}, false});
+            return ComponentNoOpResult(m_document, object->id);
         }
 
         return CommitObject({ComponentRemovedDelta{object->id, command.type, object->components.camera, object->components.light,
@@ -1720,16 +1714,8 @@ namespace Horo::Editor {
             .index = m_document.m_objects.size(),
             .kind = DocumentChangeKind::Duplicated,
         };
-        const std::size_t memoryBytes = EstimateMemoryBytes(delta, 1);
-        const DocumentStateId beforeState = m_document.m_state;
-        ApplyDelta(m_document.m_objects, delta);
         ++m_document.m_nextObjectId;
-        ++m_document.m_revision.value;
-        m_document.m_state = DocumentStateId{m_document.m_nextStateId++};
-        std::vector affected{id};
-        PushHistory(*m_history.m_impl, HistoryRecord{beforeState, m_document.m_state, std::move(delta), affected, memoryBytes});
-        return Result<SceneCommandResult>::Success(
-            SceneCommandResult{id, m_document.m_revision, m_document.m_state, DocumentChangeKind::Duplicated, std::move(affected), true});
+        return CommitObject({std::move(delta), id, DocumentChangeKind::Duplicated});
     }
 
     /** @copydoc SceneDocumentCommandExecutor::Execute(const DeleteSceneObjectCommand&) */
