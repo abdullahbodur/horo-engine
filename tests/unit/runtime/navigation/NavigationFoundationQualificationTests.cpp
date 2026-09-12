@@ -1,77 +1,28 @@
 #include "AllocationProbe.h"
-#include "Horo/Navigation/NavigationErrors.h"
 #include "Horo/Navigation/NavigationRuntimeQueues.h"
+#include "navigation/NavigationRuntimeTestFixtures.h"
 
 #include <atomic>
 #include <catch2/catch_test_macros.hpp>
 #include <cstdint>
-#include <limits>
 #include <memory>
-#include <utility>
 
 namespace Horo::Navigation {
     namespace {
-        class QualifiedBackend final : public INavigationQueryBackend {
-        public:
-            explicit QualifiedBackend(std::shared_ptr<std::atomic<std::uint32_t>> destructions) noexcept
-                : destructions_(std::move(destructions)) {}
-
-            ~QualifiedBackend() override {
-                destructions_->fetch_add(1, std::memory_order_relaxed);
-            }
-
-            [[nodiscard]] NavigationProviderCapabilities Capabilities() const noexcept override {
-                constexpr NavigationQueryLimits limits{
-                    .maximumNodeExpansions = 64,
-                    .maximumResultPoints = 16,
-                    .maximumSearchDistanceMeters = 100.0F,
-                };
-                return MakeAvailablePathQueryCapabilities(1, limits, 1);
-            }
-
-            [[nodiscard]] Result<NavigationPath> FindPath(const NavigationPathRequest &, const CancellationToken &) const override {
-                return Result<NavigationPath>::Failure(MakeError(NavigationErrors::NoNavigationData));
-            }
-
-        private:
-            std::shared_ptr<std::atomic<std::uint32_t>> destructions_;
-        };
-
         [[nodiscard]] NavigationWorldActivationDescriptor Activation(const std::uint64_t generation) {
-            return {
-                .scene = NavigationSceneRuntimeId::Create(1).Value(),
-                .sceneGeneration = NavigationSceneGeneration::Create(generation).Value(),
-                .world = NavigationWorldId::Create(generation).Value(),
-                .topology = NavigationGeneration::Create(generation).Value(),
-            };
+            return TestSupport::Activation(1, generation, generation, generation);
         }
 
         [[nodiscard]] NavigationPathRequest Request(const NavigationWorldActivationDescriptor &activation) {
-            return {
-                .world = activation.world,
-                .topology = activation.topology,
-                .start = {},
-                .destination = {1.0F, 0.0F, 1.0F},
-                .requirement =
-                    {
-                        .query = NavigationQueryKind::Path,
-                        .quality = NavigationQualityLevel::Balanced,
-                        .limits = {.maximumNodeExpansions = 64, .maximumResultPoints = 16, .maximumSearchDistanceMeters = 100.0F},
-                    },
-            };
+            return TestSupport::Request(activation.world, activation.topology);
         }
 
         [[nodiscard]] NavRequestHandle RequestHandle(const NavigationWorldId world, const std::uint32_t generation) {
-            return {.world = world, .slot = {.index = 1, .generation = generation}};
+            return TestSupport::RequestHandle(world, 1, generation);
         }
 
         [[nodiscard]] NavigationRuntimeQueueDescriptor QueueDescriptor() {
-            return {
-                .commandSlots = 8,
-                .querySlots = 8,
-                .completionSlots = 8,
-                .maximumOwnedBytes = std::numeric_limits<std::size_t>::max(),
-            };
+            return TestSupport::QueueDescriptor();
         }
     }  // namespace
 
@@ -83,7 +34,7 @@ namespace Horo::Navigation {
         const auto destructions = std::make_shared<std::atomic<std::uint32_t>>(0);
 
         auto active = Activation(1);
-        REQUIRE(lifecycle.Stage(active, std::make_unique<QualifiedBackend>(destructions)).HasValue());
+        REQUIRE(lifecycle.Stage(active, TestSupport::MakeObservedNavigationBackend(destructions)).HasValue());
         REQUIRE(lifecycle.CommitAtSafePoint(active.scene, active.sceneGeneration).HasValue());
 
         for (std::uint32_t generation = 2; generation <= replacementCount; ++generation) {
@@ -99,7 +50,7 @@ namespace Horo::Navigation {
             REQUIRE(workerRecord.has_value());
 
             const auto replacement = Activation(generation);
-            REQUIRE(lifecycle.Stage(replacement, std::make_unique<QualifiedBackend>(destructions)).HasValue());
+            REQUIRE(lifecycle.Stage(replacement, TestSupport::MakeObservedNavigationBackend(destructions)).HasValue());
             REQUIRE(lifecycle.CommitAtSafePoint(replacement.scene, replacement.sceneGeneration).HasValue());
             REQUIRE(workerRecord->worldLease.IsRevoked());
             REQUIRE(workerRecord->worldLease.Cancellation().IsCancellationRequested());
@@ -144,7 +95,7 @@ namespace Horo::Navigation {
         const auto activation = Activation(1);
         auto lifecycle = std::move(NavigationWorldLifecycle::Create(1)).Value();
         const auto destructions = std::make_shared<std::atomic<std::uint32_t>>(0);
-        REQUIRE(lifecycle.Stage(activation, std::make_unique<QualifiedBackend>(destructions)).HasValue());
+        REQUIRE(lifecycle.Stage(activation, TestSupport::MakeObservedNavigationBackend(destructions)).HasValue());
         REQUIRE(lifecycle.CommitAtSafePoint(activation.scene, activation.sceneGeneration).HasValue());
         const auto lease = std::move(lifecycle.Acquire(activation.world)).Value();
 

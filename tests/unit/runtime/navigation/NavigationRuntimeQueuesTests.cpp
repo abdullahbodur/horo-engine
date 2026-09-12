@@ -1,81 +1,24 @@
 #include "AllocationProbe.h"
 #include "Horo/Navigation/NavigationRuntimeQueues.h"
+#include "navigation/NavigationRuntimeTestFixtures.h"
 
 #include <atomic>
 #include <catch2/catch_test_macros.hpp>
-#include <limits>
-#include <memory>
 #include <thread>
 #include <vector>
 
 namespace Horo::Navigation {
     namespace {
-        class QueueTestBackend final : public INavigationQueryBackend {
-        public:
-            [[nodiscard]] NavigationProviderCapabilities Capabilities() const noexcept override {
-                constexpr NavigationQueryLimits limits{
-                    .maximumNodeExpansions = 64,
-                    .maximumResultPoints = 16,
-                    .maximumSearchDistanceMeters = 100.0F,
-                };
-                return MakeAvailablePathQueryCapabilities(1, limits, 1);
-            }
-
-            [[nodiscard]] Result<NavigationPath> FindPath(const NavigationPathRequest &, const CancellationToken &) const override {
-                return Result<NavigationPath>::Failure(MakeError(NavigationErrors::NoNavigationData));
-            }
-        };
-
-        [[nodiscard]] NavigationWorldId World(const std::uint64_t value = 7) {
-            return NavigationWorldId::Create(value).Value();
-        }
-
-        [[nodiscard]] NavigationGeneration Topology(const std::uint64_t value = 9) {
-            return NavigationGeneration::Create(value).Value();
-        }
-
-        [[nodiscard]] NavigationPathRequest Request(const NavigationWorldId world = World(),
-                                                    const NavigationGeneration topology = Topology()) {
-            return {
-                .world = world,
-                .topology = topology,
-                .start = {1.0F, 2.0F, 3.0F},
-                .destination = {4.0F, 5.0F, 6.0F},
-                .requirement =
-                    {
-                        .query = NavigationQueryKind::Path,
-                        .quality = NavigationQualityLevel::Balanced,
-                        .limits = {.maximumNodeExpansions = 64, .maximumResultPoints = 16, .maximumSearchDistanceMeters = 100.0F},
-                    },
-            };
-        }
-
-        [[nodiscard]] NavigationRuntimeQueueDescriptor QueueDescriptor(const std::uint32_t slots = 8) {
-            return {
-                .commandSlots = slots,
-                .querySlots = slots,
-                .completionSlots = slots,
-                .maximumOwnedBytes = std::numeric_limits<std::size_t>::max(),
-            };
-        }
-
-        [[nodiscard]] NavRequestHandle RequestHandle(const NavigationWorldId world = World(), const std::uint32_t index = 3,
-                                                     const std::uint32_t generation = 2) {
-            return {.world = world, .slot = {.index = index, .generation = generation}};
-        }
-
-        [[nodiscard]] NavigationWorldActivationDescriptor Activation() {
-            return {
-                .scene = NavigationSceneRuntimeId::Create(11).Value(),
-                .sceneGeneration = NavigationSceneGeneration::Create(12).Value(),
-                .world = World(),
-                .topology = Topology(),
-            };
-        }
+        using TestSupport::Activation;
+        using TestSupport::QueueDescriptor;
+        using TestSupport::Request;
+        using TestSupport::RequestHandle;
+        using TestSupport::Topology;
+        using TestSupport::World;
 
         [[nodiscard]] NavigationWorldReadLease ActiveLease(NavigationWorldLifecycle &lifecycle) {
             const auto activation = Activation();
-            REQUIRE(lifecycle.Stage(activation, std::make_unique<QueueTestBackend>()).HasValue());
+            REQUIRE(lifecycle.Stage(activation, TestSupport::MakeObservedNavigationBackend()).HasValue());
             REQUIRE(lifecycle.CommitAtSafePoint(activation.scene, activation.sceneGeneration).HasValue());
             return std::move(lifecycle.Acquire(activation.world)).Value();
         }
