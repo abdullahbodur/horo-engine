@@ -30,6 +30,8 @@ namespace Horo::Editor {
                 .light = ActiveComponent(object.components.light),
                 .triggerVolume = ActiveComponent(object.components.triggerVolume),
                 .audioSource = ActiveComponent(object.components.audioSource),
+                .navigationSurface = ActiveComponent(object.components.navigationSurface),
+                .navigationRegion = ActiveComponent(object.components.navigationRegion),
                 .behaviors = object.components.behaviors,
             };
             builder.Add(Runtime::RuntimeEntityDefinition{
