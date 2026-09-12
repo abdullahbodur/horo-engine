@@ -730,6 +730,8 @@ add_library(HoroRenderApi STATIC
         runtime/renderer/api/RenderAdapterErrors.cpp
         runtime/renderer/api/RenderDisplay.cpp
         runtime/renderer/api/RenderDisplayErrors.cpp
+        runtime/renderer/api/PresentMode.cpp
+        runtime/renderer/api/PresentModeErrors.cpp
         runtime/renderer/api/RenderGraph.cpp
         runtime/renderer/api/RenderGraphExecution.cpp
         runtime/renderer/api/RenderGraphExecutionErrors.cpp
