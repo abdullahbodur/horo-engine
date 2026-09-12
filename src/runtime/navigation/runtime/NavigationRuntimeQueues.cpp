@@ -216,6 +216,14 @@ namespace Horo::Navigation {
         }
     }
 
+    /** @copydoc NavigationRuntimeQueues::RequiredStorageBytes */
+    Result<std::size_t> NavigationRuntimeQueues::RequiredStorageBytes(const NavigationRuntimeQueueDescriptor &descriptor) {
+        const auto required = RequiredStorage(descriptor);
+        if (!required)
+            return Failure<std::size_t>(NavigationErrors::CapabilityDescriptorInvalid);
+        return Result<std::size_t>::Success(*required);
+    }
+
     /** @copydoc NavigationRuntimeQueues::NavigationRuntimeQueues(NavigationRuntimeQueues&&) */
     NavigationRuntimeQueues::NavigationRuntimeQueues(NavigationRuntimeQueues &&other) noexcept = default;
     /** @copydoc NavigationRuntimeQueues::~NavigationRuntimeQueues */

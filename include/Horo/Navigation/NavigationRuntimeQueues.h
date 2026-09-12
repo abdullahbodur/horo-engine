@@ -58,6 +58,13 @@ namespace Horo::Navigation {
         Telemetry::OperationContext operation;     /**< Captured operation and diagnostic context. */
     };
 
+    /** @brief Inline command bytes; indirectly owned context remains charged to its origin budget. */
+    inline constexpr std::size_t NavigationRuntimeCommandRecordBytes = sizeof(NavigationRuntimeCommand);
+    /** @brief Inline query bytes; provider scratch and leased resources remain charged to their owners. */
+    inline constexpr std::size_t NavigationRuntimeQueryRecordBytes = sizeof(NavigationQueuedQuery);
+    /** @brief Inline completion bytes; outcome allocations remain charged to the request result budget. */
+    inline constexpr std::size_t NavigationRuntimeCompletionRecordBytes = sizeof(NavigationQueuedCompletion);
+
     /** @brief Preparation-only power-of-two capacities and aggregate owned-storage ceiling. */
     struct NavigationRuntimeQueueDescriptor final {
         std::uint32_t commandSlots{};    /**< Caller-to-owner slots in [2, MaximumNavigationRuntimeQueueSlots]. */
@@ -103,6 +110,12 @@ namespace Horo::Navigation {
          * @return Prepared queues or typed invalid/capacity failure.
          */
         [[nodiscard]] static Result<NavigationRuntimeQueues> Create(const NavigationRuntimeQueueDescriptor &descriptor);
+
+        /** @brief Calculate exact platform-specific preallocated ring storage for a descriptor.
+         * @param descriptor Candidate capacities; maximumOwnedBytes is ignored.
+         * @return Required bytes, or typed failure for an invalid capacity or arithmetic overflow.
+         */
+        [[nodiscard]] static Result<std::size_t> RequiredStorageBytes(const NavigationRuntimeQueueDescriptor &descriptor);
 
         NavigationRuntimeQueues(const NavigationRuntimeQueues &) = delete;
         NavigationRuntimeQueues &operator=(const NavigationRuntimeQueues &) = delete;

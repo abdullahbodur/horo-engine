@@ -81,8 +81,15 @@ namespace Horo::Navigation {
         invalid.commandSlots = 3;
         REQUIRE(NavigationRuntimeQueues::Create(invalid).HasError());
         invalid = QueueDescriptor();
-        invalid.maximumOwnedBytes = 0;
+        const auto required = NavigationRuntimeQueues::RequiredStorageBytes(invalid);
+        REQUIRE(required.HasValue());
+        invalid.maximumOwnedBytes = required.Value() - 1;
         REQUIRE(NavigationRuntimeQueues::Create(invalid).HasError());
+        invalid.maximumOwnedBytes = required.Value();
+        REQUIRE(NavigationRuntimeQueues::Create(invalid).HasValue());
+        static_assert(NavigationRuntimeCommandRecordBytes == sizeof(NavigationRuntimeCommand));
+        static_assert(NavigationRuntimeQueryRecordBytes == sizeof(NavigationQueuedQuery));
+        static_assert(NavigationRuntimeCompletionRecordBytes == sizeof(NavigationQueuedCompletion));
 
         auto minimum = NavigationRuntimeQueues::Create(QueueDescriptor(2));
         REQUIRE(minimum.HasValue());
