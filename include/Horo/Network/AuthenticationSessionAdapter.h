@@ -5,7 +5,7 @@
  * @brief Host-owned trust and credential admission for negotiated network sessions.
  */
 
-#include "Horo/Foundation/Result.h"
+#include "Horo/Foundation/StrongId.h"
 #include "Horo/Network/NetworkErrors.h"
 #include "Horo/Network/NetworkLifecycle.h"
 
@@ -31,35 +31,8 @@ namespace Horo::Network {
     /** @brief Random session correlation identity width. */
     inline constexpr std::size_t NetworkSessionIdBytes = 16;
 
-    /** @brief Strong non-zero authentication-domain identity. */
-    template <typename Tag> class AuthenticationIdentity final {
-    public:
-        constexpr AuthenticationIdentity() = default;
-
-        /** @brief Validates a host-issued identity. @param value Non-zero identity. @return Typed identity or IdentityInvalid. */
-        [[nodiscard]] static Result<AuthenticationIdentity> Create(const std::uint64_t value) {
-            if (value == 0)
-                return Result<AuthenticationIdentity>::Failure(MakeError(NetworkErrors::IdentityInvalid));
-            return Result<AuthenticationIdentity>::Success(AuthenticationIdentity{value});
-        }
-
-        /** @brief Returns the host-issued representation. @return Zero only for an invalid identity. */
-        [[nodiscard]] constexpr std::uint64_t Value() const noexcept {
-            return value_;
-        }
-
-        /** @brief Checks representation only. @return Whether this identity is non-zero. */
-        [[nodiscard]] constexpr bool IsValid() const noexcept {
-            return value_ != 0;
-        }
-
-        constexpr auto operator<=>(const AuthenticationIdentity &) const noexcept = default;
-
-    private:
-        explicit constexpr AuthenticationIdentity(const std::uint64_t value) noexcept : value_(value) {}
-
-        std::uint64_t value_{};
-    };
+    /** @brief Strong non-zero authentication-domain identity using the shared Foundation representation. */
+    template <typename Tag> using AuthenticationIdentity = Foundation::Detail::NonZeroId64<Tag, NetworkErrors::IdentityInvalid>;
 
     struct NetworkTrustPolicyIdentityTag;
     struct CredentialBindingIdentityTag;

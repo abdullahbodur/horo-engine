@@ -365,11 +365,13 @@ namespace Horo::Network {
         fixture = Fixture{};
         auto policy = fixture.Policy();
         policy.exposure = NetworkExposure::LocalNetwork;
+        auto lanEvidence = fixture.Evidence();
+        lanEvidence.transport.authenticatedPeer = false;
         auto created = AuthenticationSessionAdapter::Create(policy, fixture.Challenge(), fixture.Authorities(), 100);
         REQUIRE(created.HasValue());
         fixture.peers.trust = NetworkTrustLevel::Paired;
         auto localNetwork = std::move(created).Value();
-        REQUIRE(localNetwork.Authenticate(Connection(), Session(), fixture.Response(), fixture.Evidence(), 20).HasValue());
+        REQUIRE(localNetwork.Authenticate(Connection(), Session(), fixture.Response(), lanEvidence, 20).HasValue());
 
         fixture = Fixture{};
         policy = fixture.Policy();

@@ -68,8 +68,9 @@ namespace Horo::Network {
             const bool protectedChannel = transport.confidentiality && transport.integrity;
             if (!protectedChannel && !(policy.allowUnprotectedInMemoryLoopback && transport.inMemoryLoopback))
                 return false;
-            if (policy.exposure != NetworkExposure::LoopbackDevelopment &&
-                (!protectedChannel || !transport.authenticatedPeer || transport.inMemoryLoopback))
+            if (policy.exposure != NetworkExposure::LoopbackDevelopment && (!protectedChannel || transport.inMemoryLoopback))
+                return false;
+            if (policy.exposure == NetworkExposure::Remote && !transport.authenticatedPeer)
                 return false;
             return evidence.certificate.binding == policy.certificate && evidence.certificate.evidenceGeneration != 0 &&
                    HasNonZeroByte(evidence.certificate.certificateDigest);
@@ -186,7 +187,7 @@ namespace Horo::Network {
             return Result<AuthenticationResult>::Failure(MakeError(NetworkErrors::SessionTimedOut));
         }
         if (response.contractVersion != AuthenticationContractVersion || response.proof.empty() ||
-            response.proof.size() > policy_.maximumProofBytes || response.proof.size() > MaximumAuthenticationProofBytes)
+            response.proof.size() > policy_.maximumProofBytes)
             return Reject(NetworkErrors::AuthenticationInvalid, AuthenticationFailureClass::Malformed);
         if (response.policy != policy_.id || response.policyRevision != policy_.revision ||
             response.transcriptDigest != challenge_.transcriptDigest)
