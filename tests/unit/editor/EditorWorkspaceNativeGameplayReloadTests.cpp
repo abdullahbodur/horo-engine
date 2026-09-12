@@ -53,13 +53,12 @@ namespace {
     public:
         NativeReloadWorkspace() {
             REQUIRE(runtimeScene_.Startup(cancellation_.Token()).HasValue());
+            CommitRuntimePreview();
             EditorWorkspaceViewCommandData createCamera;
             createCamera.command = EditorWorkspaceViewCommand::CreatePrimitive;
             createCamera.primitivePayload = Runtime::PrimitiveId{"primitive.object.camera"};
             controller_.ProcessCommand(createCamera);
-            const Runtime::FrameContext context{1, {}, 0.0, 0, {}, false, cancellation_.Token()};
-            REQUIRE(runtimeScene_.OnPhase(Runtime::RuntimePhase::CommitDeferredLifecycleChanges, context).HasValue());
-            controller_.SynchronizeRuntimeScenePreview();
+            CommitRuntimePreview();
             StartPlay();
         }
 
@@ -102,6 +101,13 @@ namespace {
         }
 
     private:
+        /** @brief Commits the queued authoring preview before play clones the active runtime scene. */
+        void CommitRuntimePreview() {
+            const Runtime::FrameContext context{1, {}, 0.0, 0, {}, false, cancellation_.Token()};
+            REQUIRE(runtimeScene_.OnPhase(Runtime::RuntimePhase::CommitDeferredLifecycleChanges, context).HasValue());
+            controller_.SynchronizeRuntimeScenePreview();
+        }
+
         [[nodiscard]] std::filesystem::path RollbackDirectory() const {
             return project_.Root() / ".horo" / "local" / "gameplay_module_rollback";
         }
