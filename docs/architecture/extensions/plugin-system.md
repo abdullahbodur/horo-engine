@@ -558,16 +558,21 @@ boundary directly.
 
 Provider operations do not own host lifecycle, but a defensive re-entrant shutdown
 request cannot wait on its own call. That provider is marked revoked and cancelled
-immediately; its final call guard performs the deferred `Shutdown()` after the
-operation returns. Ordinary host-driven revocation closes admission and requests
-cancellation, then waits only for the registry's finite shared drain deadline. A
-deadline breach retains the provider and reports `RestartRequired`; it never unloads
-or destroys code that may still be executing. Owner-thread services enter an explicit
-retired state when revocation originates elsewhere, and only
-`FinalizeRetiredOnOwnerThread` may invoke their final `Shutdown()` callback. Nested
-re-entrant shutdown is detected across the complete per-thread call stack, and the
-outermost final call guard performs shutdown exactly once when its provider remains
-eligible for in-process finalization.
+immediately; its final call guard wakes one registry-owned retirement coordinator
+after the operation returns. The coordinator processes the retired queue in reverse
+registration order and stops at the first deferred provider, so an earlier provider
+cannot overtake a later nested or active call. Ordinary host-driven revocation closes
+admission and requests cancellation for every provider before the coordinator waits
+on the registry's finite shared drain deadline.
+
+`Shutdown()` runs in an explicit `Finalizing` state. Completion is published only
+after the callback returns, and concurrent retirement observes the same deadline
+rather than treating callback entry as completion. Owner-thread services remain at
+the head of the retired queue until `FinalizeRetiredOnOwnerThread` runs on their
+recorded thread. Every registration also carries an opaque shared executable-code
+lease. A deadline breach makes `RestartRequired` sticky and retains the service,
+code lease, and registry state in a process-lifetime quarantine; teardown never
+destroys or unloads code that may still be active or awaiting safe destruction.
 
 ## Module Loading And ABI Boundary
 

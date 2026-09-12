@@ -20,6 +20,7 @@ namespace Horo::Extensions {
         Active,
         Retiring,
         AwaitingOwnerFinalization,
+        Finalizing,
         RetainedRestartRequired,
         Shutdown,
     };
@@ -27,6 +28,7 @@ namespace Horo::Extensions {
     struct BackendServiceProviderState final {
         BackendServiceDescriptor descriptor;
         std::shared_ptr<void> service;
+        BackendServiceCodeLease codeLease{BackendServiceCodeLease::Retain(std::shared_ptr<const void>{})};
         const void *typeTag{};
         void (*shutdown)(void *) noexcept {};
         std::thread::id ownerThread;
@@ -36,6 +38,9 @@ namespace Horo::Extensions {
         std::size_t activeCalls{};
         std::atomic_bool registered{true};
         BackendServiceProviderLifecycle lifecycle{BackendServiceProviderLifecycle::Active};
+        std::weak_ptr<BackendServiceRegistryState> registry;
+        std::uint64_t registrationSequence{};
+        bool retirementQueued{};
     };
 
     struct BackendServiceRegistryState final {
@@ -43,6 +48,13 @@ namespace Horo::Extensions {
         std::vector<std::shared_ptr<BackendServiceProviderState>> providers;
         std::vector<std::shared_ptr<BackendServiceProviderState>> retiredProviders;
         BackendServiceRegistryConfig config;
+        std::timed_mutex retirementMutex;
+        std::atomic_bool restartRequired{};
+        std::atomic_bool stagingShutdown{};
+        std::uint64_t nextRegistrationSequence{};
+        std::shared_ptr<BackendServiceRegistryState> restartQuarantine;
+        BackendServiceRegistryState *nextQuarantined{};
+        bool quarantined{};
         bool shutdown{};
     };
 
@@ -54,36 +66,9 @@ namespace Horo::Extensions {
 
         thread_local ExecutingProviderStack ExecutingProviders;
 
-        struct ServiceShutdown final {
-            std::shared_ptr<void> service;
-            void (*callback)(void *) noexcept {};
-
-            void Invoke() const noexcept {
-                if (callback != nullptr)
-                    callback(service.get());
-            }
-        };
-
-        struct RetirementRule final {
-            bool applies;
-            BackendServiceProviderLifecycle lifecycle;
-            BackendServiceRetirementDisposition disposition;
-            bool shutsDown;
-        };
-
         [[nodiscard]] bool IsExecuting(const BackendServiceProviderState *provider) noexcept {
             const auto end = ExecutingProviders.providers.begin() + static_cast<std::ptrdiff_t>(ExecutingProviders.size);
             return std::ranges::find(ExecutingProviders.providers.begin(), end, provider) != end;
-        }
-
-        void MergeDisposition(BackendServiceRetirementDisposition &aggregate,
-                              const BackendServiceRetirementDisposition candidate) noexcept {
-            aggregate = std::max(aggregate, candidate);
-        }
-
-        [[nodiscard]] bool ValidThreadRule(const BackendServiceThreadRule rule) noexcept {
-            constexpr std::array Rules{BackendServiceThreadRule::AnyThread, BackendServiceThreadRule::ProviderOwnerThread};
-            return std::ranges::find(Rules, rule) != Rules.end();
         }
 
         [[nodiscard]] bool ValidDescriptor(const BackendServiceDescriptor &descriptor) noexcept {
@@ -94,7 +79,8 @@ namespace Horo::Extensions {
                 Detail::IsCanonicalExtensionAuthorityId(descriptor.providerId),
                 descriptor.version != ApplicationCapabilityVersion{},
                 descriptor.providerGeneration != 0U,
-                ValidThreadRule(descriptor.threadRule),
+                descriptor.threadRule == BackendServiceThreadRule::AnyThread ||
+                    descriptor.threadRule == BackendServiceThreadRule::ProviderOwnerThread,
             };
             return std::ranges::find(valid, false) == valid.end();
         }
@@ -105,76 +91,102 @@ namespace Horo::Extensions {
             return std::ranges::find(allowed, true) != allowed.end();
         }
 
-        [[nodiscard]] ServiceShutdown PrepareShutdown(BackendServiceProviderState &provider) noexcept {
-            provider.lifecycle = BackendServiceProviderLifecycle::Shutdown;
-            return {std::move(provider.service), provider.shutdown};
-        }
-
-        [[nodiscard]] RetirementRule SelectRetirement(const BackendServiceProviderState &provider, const bool executing, const bool drained,
-                                                      const bool deadlineExpired) noexcept {
-            const std::array rules{
-                RetirementRule{provider.service == nullptr, BackendServiceProviderLifecycle::Shutdown,
-                               BackendServiceRetirementDisposition::ShutdownComplete, false},
-                RetirementRule{provider.lifecycle == BackendServiceProviderLifecycle::RetainedRestartRequired,
-                               BackendServiceProviderLifecycle::RetainedRestartRequired,
-                               BackendServiceRetirementDisposition::RestartRequired, false},
-                RetirementRule{executing, BackendServiceProviderLifecycle::Retiring,
-                               BackendServiceRetirementDisposition::DeferredUntilCallExit, false},
-                RetirementRule{deadlineExpired, BackendServiceProviderLifecycle::RetainedRestartRequired,
-                               BackendServiceRetirementDisposition::RestartRequired, false},
-                RetirementRule{!drained, BackendServiceProviderLifecycle::Retiring,
-                               BackendServiceRetirementDisposition::DeferredUntilCallExit, false},
-                RetirementRule{!CanFinalizeHere(provider), BackendServiceProviderLifecycle::AwaitingOwnerFinalization,
-                               BackendServiceRetirementDisposition::OwnerThreadFinalizationRequired, false},
-                RetirementRule{true, BackendServiceProviderLifecycle::Shutdown, BackendServiceRetirementDisposition::ShutdownComplete,
-                               true},
-            };
-            return *std::ranges::find(rules, true, &RetirementRule::applies);
-        }
-
-        [[nodiscard]] BackendServiceRetirementDisposition ApplyRetirement(BackendServiceProviderState &provider, const RetirementRule &rule,
-                                                                          std::unique_lock<std::mutex> lock) noexcept {
-            provider.lifecycle = rule.lifecycle;
-            if (!rule.shutsDown)
-                return rule.disposition;
-            ServiceShutdown shutdown = PrepareShutdown(provider);
-            lock.unlock();
-            shutdown.Invoke();
-            return rule.disposition;
-        }
-
-        [[nodiscard]] BackendServiceRetirementDisposition StopProvider(const std::shared_ptr<BackendServiceProviderState> &provider,
-                                                                       const std::chrono::steady_clock::time_point deadline) noexcept {
+        [[nodiscard]] BackendServiceRetirementDisposition StopProvider(const std::shared_ptr<BackendServiceRegistryState> &registry,
+                                                                       const std::shared_ptr<BackendServiceProviderState> &provider,
+                                                                       const std::chrono::steady_clock::time_point deadline,
+                                                                       const bool waitForDrain) noexcept {
             std::unique_lock lock{provider->mutex};
+            if (provider->lifecycle == BackendServiceProviderLifecycle::Shutdown)
+                return BackendServiceRetirementDisposition::ShutdownComplete;
+            if (provider->lifecycle == BackendServiceProviderLifecycle::RetainedRestartRequired)
+                return BackendServiceRetirementDisposition::RestartRequired;
+            if (IsExecuting(provider.get()))
+                return BackendServiceRetirementDisposition::DeferredUntilCallExit;
+            if (provider->activeCalls != 0U) {
+                if (!waitForDrain)
+                    return BackendServiceRetirementDisposition::DeferredUntilCallExit;
+                if (!provider->drained.wait_until(lock, deadline, [&provider] {
+                    return provider->activeCalls == 0U;
+                })) {
+                    registry->restartRequired.store(true, std::memory_order_release);
+                    provider->lifecycle = BackendServiceProviderLifecycle::RetainedRestartRequired;
+                    return BackendServiceRetirementDisposition::RestartRequired;
+                }
+            }
+            if (!CanFinalizeHere(*provider)) {
+                provider->lifecycle = BackendServiceProviderLifecycle::AwaitingOwnerFinalization;
+                return BackendServiceRetirementDisposition::OwnerThreadFinalizationRequired;
+            }
+
+            provider->lifecycle = BackendServiceProviderLifecycle::Finalizing;
+            std::shared_ptr<void> service = provider->service;
+            const auto shutdown = provider->shutdown;
+            lock.unlock();
+            shutdown(service.get());
+            lock.lock();
+            if (registry->restartRequired.load(std::memory_order_acquire)) {
+                provider->lifecycle = BackendServiceProviderLifecycle::RetainedRestartRequired;
+                lock.unlock();
+                provider->drained.notify_all();
+                return BackendServiceRetirementDisposition::RestartRequired;
+            }
+            service.reset();
+            BackendServiceCodeLease codeLease = std::move(provider->codeLease);
+            std::shared_ptr<void> retiredService = std::move(provider->service);
+            provider->lifecycle = BackendServiceProviderLifecycle::Shutdown;
+            lock.unlock();
+            provider->drained.notify_all();
+            return BackendServiceRetirementDisposition::ShutdownComplete;
+        }
+
+        void RequestRetirement(const std::shared_ptr<BackendServiceProviderState> &provider) noexcept {
+            std::scoped_lock lock{provider->mutex};
             provider->registered.store(false, std::memory_order_release);
             provider->cancellation.RequestCancellation();
-            const bool executing = IsExecuting(provider.get());
-            const std::array skipWaitFacts{executing, provider->lifecycle == BackendServiceProviderLifecycle::RetainedRestartRequired,
-                                           provider->service == nullptr};
-            const bool skipWait = std::ranges::find(skipWaitFacts, true) != skipWaitFacts.end();
-            const std::array deadlines{deadline, std::chrono::steady_clock::now()};
-            const bool drained = provider->drained.wait_until(lock, deadlines[static_cast<std::size_t>(skipWait)], [&provider] {
-                return provider->activeCalls == 0U;
-            });
-            constexpr std::array DeadlineExpired{true, false, false, false};
-            const std::size_t deadlineState = static_cast<std::size_t>(skipWait) * 2U + static_cast<std::size_t>(drained);
-            return ApplyRetirement(*provider, SelectRetirement(*provider, executing, drained, DeadlineExpired[deadlineState]),
-                                   std::move(lock));
+            if (provider->lifecycle == BackendServiceProviderLifecycle::Active)
+                provider->lifecycle = BackendServiceProviderLifecycle::Retiring;
         }
 
-        [[nodiscard]] BackendServiceRetirementDisposition FinalizeRetiredProvider(
-            const std::shared_ptr<BackendServiceProviderState> &provider) noexcept {
-            std::unique_lock lock{provider->mutex};
-            const bool executing = IsExecuting(provider.get());
-            const bool drained = provider->activeCalls == 0U;
-            return ApplyRetirement(*provider, SelectRetirement(*provider, executing, drained, false), std::move(lock));
+        void EnqueueRetirement(BackendServiceRegistryState &registry, const std::shared_ptr<BackendServiceProviderState> &provider) {
+            if (provider->retirementQueued)
+                return;
+            const auto position = std::ranges::lower_bound(registry.retiredProviders, provider->registrationSequence, std::greater{},
+                                                           &BackendServiceProviderState::registrationSequence);
+            registry.retiredProviders.insert(position, provider);
+            provider->retirementQueued = true;
         }
 
-        void PruneShutdownProviders(BackendServiceRegistryState &registry) {
-            std::erase_if(registry.retiredProviders, [](const auto &provider) {
-                std::scoped_lock lock{provider->mutex};
-                return provider->lifecycle == BackendServiceProviderLifecycle::Shutdown;
-            });
+        [[nodiscard]] BackendServiceRetirementDisposition ProgressRetirements(const std::shared_ptr<BackendServiceRegistryState> &registry,
+                                                                              const std::chrono::steady_clock::time_point deadline,
+                                                                              const bool waitForDrain) noexcept {
+            if (registry->stagingShutdown.load(std::memory_order_acquire))
+                return BackendServiceRetirementDisposition::DeferredUntilCallExit;
+            std::unique_lock coordinator{registry->retirementMutex, std::defer_lock};
+            if (waitForDrain ? !coordinator.try_lock_until(deadline) : !coordinator.try_lock()) {
+                if (waitForDrain)
+                    registry->restartRequired.store(true, std::memory_order_release);
+                return waitForDrain ? BackendServiceRetirementDisposition::RestartRequired
+                                    : BackendServiceRetirementDisposition::DeferredUntilCallExit;
+            }
+            auto aggregate = registry->restartRequired.load(std::memory_order_acquire)
+                                 ? BackendServiceRetirementDisposition::RestartRequired
+                                 : BackendServiceRetirementDisposition::ShutdownComplete;
+            for (;;) {
+                std::shared_ptr<BackendServiceProviderState> provider;
+                {
+                    std::scoped_lock lock{registry->mutex};
+                    if (registry->retiredProviders.empty())
+                        break;
+                    provider = registry->retiredProviders.front();
+                }
+                const auto disposition = StopProvider(registry, provider, deadline, waitForDrain);
+                aggregate = std::max(aggregate, disposition);
+                if (disposition != BackendServiceRetirementDisposition::ShutdownComplete)
+                    break;
+                std::scoped_lock lock{registry->mutex};
+                std::erase(registry->retiredProviders, provider);
+            }
+            return aggregate;
         }
 
         [[nodiscard]] BackendServiceRetirementDisposition RetireProvider(
@@ -184,20 +196,26 @@ namespace Horo::Extensions {
                 std::scoped_lock lock{registry->mutex};
                 std::erase(registry->providers, provider);
             }
-            const auto disposition = StopProvider(provider, std::chrono::steady_clock::now() + registry->config.drainDeadline);
+            RequestRetirement(provider);
             {
                 std::scoped_lock lock{registry->mutex};
-                registry->retiredProviders.push_back(provider);
-                PruneShutdownProviders(*registry);
+                EnqueueRetirement(*registry, provider);
             }
-            return disposition;
+            return ProgressRetirements(registry, std::chrono::steady_clock::now() + registry->config.drainDeadline, true);
         }
 
-        [[nodiscard]] bool MatchesAuthority(const BackendServiceDescriptor &service,
-                                            const ApplicationCapabilityProviderDescriptor &authority) noexcept {
-            return std::tie(service.capability, service.version, service.providerId, service.providerGeneration) ==
-                   std::tie(authority.capability, authority.version, authority.providerId, authority.providerGeneration);
+        void QuarantineForRestart(const std::shared_ptr<BackendServiceRegistryState> &registry) noexcept {
+            static std::mutex mutex;
+            static BackendServiceRegistryState *head{};
+            std::scoped_lock lock{mutex};
+            if (registry->quarantined)
+                return;
+            registry->restartQuarantine = registry;
+            registry->nextQuarantined = head;
+            registry->quarantined = true;
+            head = registry.get();
         }
+
     }  // namespace
 
     BackendServiceCallContext::BackendServiceCallContext(const BackendServiceDescriptor &provider, CancellationToken caller,
@@ -217,7 +235,7 @@ namespace Horo::Extensions {
 
     BackendServiceCallAdmission::BackendServiceCallAdmission(std::shared_ptr<BackendServiceProviderState> provider,
                                                              BackendServiceCallContext context) noexcept
-        : provider_(std::move(provider)), context_(std::move(context)), ownsExecutionSlot_(true) {
+        : provider_(std::move(provider)), context_(std::move(context)) {
         ExecutingProviders.providers[ExecutingProviders.size++] = provider_.get();
     }
 
@@ -225,17 +243,12 @@ namespace Horo::Extensions {
         Reset();
     }
 
-    BackendServiceCallAdmission::BackendServiceCallAdmission(BackendServiceCallAdmission &&other) noexcept
-        : provider_(std::move(other.provider_)), context_(std::move(other.context_)),
-          ownsExecutionSlot_(std::exchange(other.ownsExecutionSlot_, false)) {}
-
     BackendServiceCallAdmission &BackendServiceCallAdmission::operator=(BackendServiceCallAdmission &&other) noexcept {
         if (this == &other)
             return *this;
         Reset();
         provider_ = std::move(other.provider_);
         context_ = std::move(other.context_);
-        ownsExecutionSlot_ = std::exchange(other.ownsExecutionSlot_, false);
         return *this;
     }
 
@@ -247,24 +260,17 @@ namespace Horo::Extensions {
     void BackendServiceCallAdmission::Reset() noexcept {
         if (provider_ == nullptr)
             return;
-        ServiceShutdown shutdown;
+        const std::shared_ptr<BackendServiceRegistryState> registry = provider_->registry.lock();
         {
             std::scoped_lock lock{provider_->mutex};
             --provider_->activeCalls;
-            const std::array finalizationFacts{provider_->activeCalls == 0U,
-                                               provider_->lifecycle == BackendServiceProviderLifecycle::Retiring,
-                                               CanFinalizeHere(*provider_)};
-            if (std::ranges::find(finalizationFacts, false) == finalizationFacts.end())
-                shutdown = PrepareShutdown(*provider_);
         }
         provider_->drained.notify_all();
-        if (ownsExecutionSlot_) {
-            --ExecutingProviders.size;
-            ExecutingProviders.providers[ExecutingProviders.size] = nullptr;
-            ownsExecutionSlot_ = false;
-        }
-        shutdown.Invoke();
+        --ExecutingProviders.size;
+        ExecutingProviders.providers[ExecutingProviders.size] = nullptr;
         provider_.reset();
+        if (registry != nullptr)
+            static_cast<void>(ProgressRetirements(registry, std::chrono::steady_clock::now(), false));
     }
 
     namespace Detail {
@@ -328,9 +334,6 @@ namespace Horo::Extensions {
         static_cast<void>(Reset());
     }
 
-    BackendServiceRegistration::BackendServiceRegistration(BackendServiceRegistration &&other) noexcept
-        : registry_(std::move(other.registry_)), provider_(std::move(other.provider_)) {}
-
     BackendServiceRegistration &BackendServiceRegistration::operator=(BackendServiceRegistration &&other) noexcept {
         if (this == &other)
             return *this;
@@ -365,44 +368,59 @@ namespace Horo::Extensions {
     }
 
     BackendServiceRegistry::~BackendServiceRegistry() {
-        static_cast<void>(BeginShutdown());
+        const auto retirement = BeginShutdown();
+        if (state_ != nullptr && retirement.HasValue() && retirement.Value() != BackendServiceRetirementDisposition::ShutdownComplete)
+            QuarantineForRestart(state_);
     }
 
     BackendServiceRegistry &BackendServiceRegistry::operator=(BackendServiceRegistry &&other) noexcept {
         if (this == &other)
             return *this;
-        static_cast<void>(BeginShutdown());
+        const auto retirement = BeginShutdown();
+        if (state_ != nullptr && retirement.HasValue() && retirement.Value() != BackendServiceRetirementDisposition::ShutdownComplete)
+            QuarantineForRestart(state_);
         state_ = std::move(other.state_);
         return *this;
     }
 
     /** @copydoc BackendServiceRegistry::Register */
     Result<BackendServiceRegistration> BackendServiceRegistry::RegisterErased(BackendServiceDescriptor descriptor,
-                                                                              std::shared_ptr<void> service, const void *typeTag,
+                                                                              std::shared_ptr<void> service,
+                                                                              BackendServiceCodeLease codeLease, const void *typeTag,
                                                                               const ShutdownFunction shutdown) {
-        const std::array invalid{!ValidDescriptor(descriptor), service == nullptr, typeTag == nullptr, shutdown == nullptr};
+        const std::array invalid{!ValidDescriptor(descriptor), service == nullptr, codeLease.owner_ == nullptr, typeTag == nullptr,
+                                 shutdown == nullptr};
         if (std::ranges::find(invalid, true) != invalid.end())
             return Result<BackendServiceRegistration>::Failure(MakeError(ExtensionErrors::BackendServiceInvalid));
         if (state_ == nullptr)
             return Result<BackendServiceRegistration>::Failure(MakeError(ExtensionErrors::BackendServiceShutdown));
         std::scoped_lock lock{state_->mutex};
-        if (state_->shutdown)
-            return Result<BackendServiceRegistration>::Failure(MakeError(ExtensionErrors::BackendServiceShutdown));
         const auto duplicate = std::ranges::find_if(state_->providers, [&descriptor](const auto &provider) {
             return std::tie(provider->descriptor.serviceId, provider->descriptor.version) ==
                    std::tie(descriptor.serviceId, descriptor.version);
         });
-        if (duplicate != state_->providers.end())
-            return Result<BackendServiceRegistration>::Failure(MakeError(ExtensionErrors::BackendServiceDuplicate));
-        if (state_->providers.size() >= MaximumServices)
-            return Result<BackendServiceRegistration>::Failure(MakeError(ExtensionErrors::BackendServiceCapacityExceeded));
+        const auto retiredDuplicate = std::ranges::find_if(state_->retiredProviders, [&descriptor](const auto &provider) {
+            return std::tie(provider->descriptor.serviceId, provider->descriptor.version) ==
+                   std::tie(descriptor.serviceId, descriptor.version);
+        });
+        const std::array duplicateFacts{duplicate != state_->providers.end(), retiredDuplicate != state_->retiredProviders.end()};
+        const std::array failures{state_->shutdown, std::ranges::find(duplicateFacts, true) != duplicateFacts.end(),
+                                  state_->providers.size() + state_->retiredProviders.size() >= MaximumServices};
+        constexpr std::array errors{&ExtensionErrors::BackendServiceShutdown, &ExtensionErrors::BackendServiceDuplicate,
+                                    &ExtensionErrors::BackendServiceCapacityExceeded};
+        const auto failure = std::ranges::find(failures, true);
+        if (failure != failures.end())
+            return Result<BackendServiceRegistration>::Failure(MakeError(*errors[static_cast<std::size_t>(failure - failures.begin())]));
 
         auto provider = std::make_shared<BackendServiceProviderState>();
         provider->descriptor = std::move(descriptor);
         provider->service = std::move(service);
+        provider->codeLease = std::move(codeLease);
         provider->typeTag = typeTag;
         provider->shutdown = shutdown;
         provider->ownerThread = std::this_thread::get_id();
+        provider->registry = state_;
+        provider->registrationSequence = ++state_->nextRegistrationSequence;
         state_->providers.push_back(provider);
         return Result<BackendServiceRegistration>::Success(BackendServiceRegistration{state_, std::move(provider)});
     }
@@ -424,7 +442,11 @@ namespace Horo::Extensions {
             return provider->descriptor.serviceId;
         });
         const auto authorityMatch = std::ranges::find_if(state_->providers, [&serviceId, &authority](const auto &provider) {
-            return provider->descriptor.serviceId == serviceId ? MatchesAuthority(provider->descriptor, authority) : false;
+            return provider->descriptor.serviceId == serviceId
+                       ? std::tie(provider->descriptor.capability, provider->descriptor.version, provider->descriptor.providerId,
+                                  provider->descriptor.providerGeneration) ==
+                             std::tie(authority.capability, authority.version, authority.providerId, authority.providerGeneration)
+                       : false;
         });
         if (service == state_->providers.end())
             return Result<std::shared_ptr<BackendServiceProviderState>>::Failure(MakeError(ExtensionErrors::BackendServiceUnavailable));
@@ -441,43 +463,32 @@ namespace Horo::Extensions {
         if (state_ == nullptr)
             return Result<BackendServiceRetirementDisposition>::Success(BackendServiceRetirementDisposition::ShutdownComplete);
         std::vector<std::shared_ptr<BackendServiceProviderState>> providers;
+        bool stagesShutdown{};
         {
             std::scoped_lock lock{state_->mutex};
-            state_->shutdown = true;
-            providers = std::move(state_->providers);
+            if (!state_->shutdown) {
+                state_->stagingShutdown.store(true, std::memory_order_release);
+                state_->shutdown = true;
+                providers = std::move(state_->providers);
+                stagesShutdown = true;
+            }
         }
-        auto aggregate = BackendServiceRetirementDisposition::ShutdownComplete;
         const auto deadline = std::chrono::steady_clock::now() + state_->config.drainDeadline;
         for (auto iterator = providers.rbegin(); iterator != providers.rend(); ++iterator) {
-            const auto disposition = StopProvider(*iterator, deadline);
-            MergeDisposition(aggregate, disposition);
+            RequestRetirement(*iterator);
             std::scoped_lock lock{state_->mutex};
-            state_->retiredProviders.push_back(*iterator);
+            EnqueueRetirement(*state_, *iterator);
         }
-        const auto finalized = FinalizeRetiredOnOwnerThread();
-        MergeDisposition(aggregate, finalized.Value());
-        return Result<BackendServiceRetirementDisposition>::Success(aggregate);
+        if (stagesShutdown)
+            state_->stagingShutdown.store(false, std::memory_order_release);
+        return Result<BackendServiceRetirementDisposition>::Success(ProgressRetirements(state_, deadline, true));
     }
 
     /** @copydoc BackendServiceRegistry::FinalizeRetiredOnOwnerThread */
     Result<BackendServiceRetirementDisposition> BackendServiceRegistry::FinalizeRetiredOnOwnerThread() noexcept {
         if (state_ == nullptr)
             return Result<BackendServiceRetirementDisposition>::Success(BackendServiceRetirementDisposition::ShutdownComplete);
-        std::vector<std::shared_ptr<BackendServiceProviderState>> retired;
-        {
-            std::scoped_lock lock{state_->mutex};
-            retired = state_->retiredProviders;
-        }
-        auto aggregate = BackendServiceRetirementDisposition::ShutdownComplete;
-        for (const auto &provider : retired) {
-            const auto disposition = FinalizeRetiredProvider(provider);
-            MergeDisposition(aggregate, disposition);
-        }
-        {
-            std::scoped_lock lock{state_->mutex};
-            PruneShutdownProviders(*state_);
-        }
-        return Result<BackendServiceRetirementDisposition>::Success(aggregate);
+        return Result<BackendServiceRetirementDisposition>::Success(ProgressRetirements(state_, std::chrono::steady_clock::now(), false));
     }
 
     /** @copydoc BackendServiceRegistry::IsShutdown */

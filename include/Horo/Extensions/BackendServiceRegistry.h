@@ -58,6 +58,27 @@ namespace Horo::Extensions {
         std::chrono::milliseconds drainDeadline{std::chrono::seconds(5)}; /**< Maximum synchronous cooperative drain wait. */
     };
 
+    /** @brief Opaque shared ownership that keeps provider executable code mapped through service destruction. */
+    class BackendServiceCodeLease final {
+    public:
+        /**
+         * @brief Retains one host-owned executable/module lifetime object.
+         * @tparam Owner Concrete lifetime owner, such as a loaded module lease.
+         * @param owner Non-null shared lifetime owner.
+         * @return Opaque lease validated during service registration.
+         */
+        template <typename Owner> [[nodiscard]] static BackendServiceCodeLease Retain(std::shared_ptr<Owner> owner) noexcept {
+            return BackendServiceCodeLease{std::move(owner)};
+        }
+
+    private:
+        friend class BackendServiceRegistry;
+
+        explicit BackendServiceCodeLease(std::shared_ptr<const void> owner) noexcept : owner_(std::move(owner)) {}
+
+        std::shared_ptr<const void> owner_;
+    };
+
     /** @brief Immutable service identity, capability binding, and invocation policy. */
     struct BackendServiceDescriptor final {
         BackendServiceId serviceId;                                               /**< Stable exported service identity. */
@@ -96,7 +117,7 @@ namespace Horo::Extensions {
         ~BackendServiceCallAdmission();
         BackendServiceCallAdmission(const BackendServiceCallAdmission &) = delete;
         BackendServiceCallAdmission &operator=(const BackendServiceCallAdmission &) = delete;
-        BackendServiceCallAdmission(BackendServiceCallAdmission &&other) noexcept;
+        BackendServiceCallAdmission(BackendServiceCallAdmission &&other) noexcept = default;
         BackendServiceCallAdmission &operator=(BackendServiceCallAdmission &&other) noexcept;
 
         /** @brief Returns the operation context valid for this admitted call. */
@@ -112,7 +133,6 @@ namespace Horo::Extensions {
 
         std::shared_ptr<BackendServiceProviderState> provider_;
         BackendServiceCallContext context_;
-        bool ownsExecutionSlot_{};
     };
 
     namespace Detail {
@@ -195,7 +215,7 @@ namespace Horo::Extensions {
         ~BackendServiceRegistration();
         BackendServiceRegistration(const BackendServiceRegistration &) = delete;
         BackendServiceRegistration &operator=(const BackendServiceRegistration &) = delete;
-        BackendServiceRegistration(BackendServiceRegistration &&other) noexcept;
+        BackendServiceRegistration(BackendServiceRegistration &&other) noexcept = default;
         BackendServiceRegistration &operator=(BackendServiceRegistration &&other) noexcept;
 
         /**
@@ -233,15 +253,17 @@ namespace Horo::Extensions {
          * @tparam Service Contract type with a noexcept `Shutdown()` lifecycle method.
          * @param descriptor Exact service, capability, provider, version, generation, and thread policy.
          * @param service Provider implementation whose sole ownership transfers to the registry.
+         * @param codeLease Shared host-owned lease keeping the implementation's executable code mapped.
          * @return Lifetime registration or a typed invalid, duplicate, capacity, or shutdown failure.
          */
         template <typename Service>
             requires requires(Service &service) {
                 { service.Shutdown() } noexcept -> std::same_as<void>;
             }
-        [[nodiscard]] Result<BackendServiceRegistration> Register(BackendServiceDescriptor descriptor, std::unique_ptr<Service> service) {
+        [[nodiscard]] Result<BackendServiceRegistration> Register(BackendServiceDescriptor descriptor, std::unique_ptr<Service> service,
+                                                                  BackendServiceCodeLease codeLease) {
             std::shared_ptr<void> erased{std::move(service)};
-            return RegisterErased(std::move(descriptor), std::move(erased), &Detail::BackendServiceTypeTag<Service>,
+            return RegisterErased(std::move(descriptor), std::move(erased), std::move(codeLease), &Detail::BackendServiceTypeTag<Service>,
                                   [](void *object) noexcept {
                 static_cast<Service *>(object)->Shutdown();
             });
@@ -283,7 +305,8 @@ namespace Horo::Extensions {
     private:
         using ShutdownFunction = void (*)(void *) noexcept;
         [[nodiscard]] Result<BackendServiceRegistration> RegisterErased(BackendServiceDescriptor descriptor, std::shared_ptr<void> service,
-                                                                        const void *typeTag, ShutdownFunction shutdown);
+                                                                        BackendServiceCodeLease codeLease, const void *typeTag,
+                                                                        ShutdownFunction shutdown);
         [[nodiscard]] Result<std::shared_ptr<BackendServiceProviderState>> ResolveErased(
             const ApplicationCapabilityProviderDescriptor &authority, const BackendServiceId &serviceId,
             const BackendServiceContractId &contractId, const void *typeTag) const;
