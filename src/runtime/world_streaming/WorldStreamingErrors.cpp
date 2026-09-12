@@ -618,6 +618,36 @@ namespace Horo::WorldStreaming::WorldStreamingErrors {
         Describe("world_streaming.object_ownership.lifecycle_unavailable", ErrorSeverity::Warning,
                  "The ownership authority is cancelling or closed to publication.",
                  "Finish retirement or publish to a new active mounted-world authority.", false);
+    const ErrorCodeDescriptor LayerOwnershipInvalid =
+        Describe("world_streaming.layer_ownership.invalid", ErrorSeverity::Error,
+                 "A layer-ownership descriptor, request, or owner snapshot is malformed.",
+                 "Provide a stable layer identity, revision, coherent classification, exact owner, and positive bounded capacity.", true);
+    const ErrorCodeDescriptor LayerOwnershipUnsupported =
+        Describe("world_streaming.layer_ownership.unsupported", ErrorSeverity::Error,
+                 "A layer classification and control-owner combination is unsupported or contradictory.",
+                 "Use World Streaming for runtime persistent/streamed layers, Editor for editor-only layers, and an explicit gameplay "
+                 "or replication authority for runtime-controlled layers.",
+                 true);
+    const ErrorCodeDescriptor LayerOwnershipIdentityConflict =
+        Describe("world_streaming.layer_ownership.identity_conflict", ErrorSeverity::Error,
+                 "A layer replacement names a different stable layer identity.",
+                 "Resolve the exact current layer identity before publishing its successor.", false);
+    const ErrorCodeDescriptor LayerOwnershipRevisionStale =
+        Describe("world_streaming.layer_ownership.revision_stale", ErrorSeverity::Warning,
+                 "A layer publication is missing the current revision or is not its exact successor.",
+                 "Reload the current layer fact and submit its next non-wrapping revision.", false);
+    const ErrorCodeDescriptor LayerOwnershipOwnerStale =
+        Describe("world_streaming.layer_ownership.owner_stale", ErrorSeverity::Warning,
+                 "A layer fact does not belong to the active mounted-world owner lifetime.",
+                 "Discard the stale fact and rebuild it for the current partition, epoch, and runtime owner.", false);
+    const ErrorCodeDescriptor LayerOwnershipCapacityExceeded =
+        Describe("world_streaming.layer_ownership.capacity_exceeded", ErrorSeverity::Error,
+                 "The bounded layer-ownership authority cannot admit another stable layer.",
+                 "Retire an existing layer fact or increase the host-configured capacity.", false);
+    const ErrorCodeDescriptor LayerOwnershipLifecycleUnavailable =
+        Describe("world_streaming.layer_ownership.lifecycle_unavailable", ErrorSeverity::Warning,
+                 "The layer-ownership authority is cancelling or closed to publication.",
+                 "Finish retirement or publish to a new active mounted-world authority.", false);
     const ErrorCodeDescriptor RuntimeEntityCellExitInvalid =
         Describe("world_streaming.runtime_entity_cell_exit.invalid", ErrorSeverity::Error,
                  "A runtime-entity cell-exit request, context, handle, or capacity is malformed.",
