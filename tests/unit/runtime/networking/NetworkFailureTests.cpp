@@ -57,6 +57,8 @@ namespace Horo::Network {
                  &NetworkErrors::SessionPolicyRejected},
             Case{NetworkFailureLayer::Session, NetworkFailureKind::SessionRemoteRejected, NetworkFailureDisposition::RemoteRejection,
                  &NetworkErrors::SessionRemoteRejected},
+            Case{NetworkFailureLayer::Session, NetworkFailureKind::SessionAuthenticationRejected,
+                 NetworkFailureDisposition::RemoteRejection, &NetworkErrors::AuthenticationRejected},
             Case{NetworkFailureLayer::Session, NetworkFailureKind::SessionCancelled, NetworkFailureDisposition::LocalPolicy,
                  &NetworkErrors::SessionCancelled},
             Case{NetworkFailureLayer::Session, NetworkFailureKind::SessionTimedOut, NetworkFailureDisposition::Retryable,

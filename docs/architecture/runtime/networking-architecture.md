@@ -449,6 +449,22 @@ product-anchor trust. Only an explicitly configured, proven in-memory loopback m
 omit transport protection. Unavailable authorities, weaker trust, malformed evidence,
 timeout, cancellation and shutdown all fail closed and cannot publish late results.
 
+`PeerSessionLifecycle` owns the next created-through-closed gameplay-session boundary.
+It pins the exact `HandshakeSelection` and `AuthenticationResult`, admits activation
+only for the authenticated secure-channel generation/binding digest, and admits
+gameplay only while that same connection/session generation is `Active` and within
+credential expiry, inactivity and absolute-lifetime deadlines. Activity extends only
+the inactivity deadline and never credential authority or the immutable lifetime
+ceiling.
+
+Protocol rejection, authentication rejection, transport failure, local cancellation,
+each stage/activity timeout, graceful local/remote close and shutdown remain distinct
+typed terminal reasons. Graceful close pins its reason before transport drain; a later
+transport failure or shutdown completes that close without replacing the first reason.
+Every other terminal path publishes once, clears gameplay admission and rejects late
+messages/callbacks or replacement generations. Transport close remains externally
+owned and cannot rewrite the session snapshot.
+
 The canonical hello exchange includes:
 
 - Product/protocol family identity and minimum/maximum wire versions.
