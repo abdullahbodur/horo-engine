@@ -74,7 +74,7 @@ namespace Horo::Extensions::Tests {
               "[unit][extensions][pipeline-step][headless]") {
         PipelineStepRegistry registry;
         const auto source = Bytes({1U, 2U});
-        const std::array initial{PipelineArtifactView{{"artifact.source"}, source}};
+        const std::array initial{PipelineArtifactView{"artifact.source", source}};
 
         auto package =
             std::make_shared<TestStep>([](const PipelineStepContext &context, PipelineOutputSink &outputs, const CancellationToken &) {
@@ -259,12 +259,12 @@ namespace Horo::Extensions::Tests {
         RequireError(registry.Register(Descriptor("step.second", {}, {{"artifact.output"}}), noOp), "pipeline_step_registry_duplicate");
 
         const auto initialBytes = Bytes({1U});
-        const std::array duplicateInitial{PipelineArtifactView{{"artifact.same"}, initialBytes},
-                                          PipelineArtifactView{{"artifact.same"}, initialBytes}};
+        const std::array duplicateInitial{PipelineArtifactView{"artifact.same", initialBytes},
+                                          PipelineArtifactView{"artifact.same", initialBytes}};
         RequireError(registry.Execute(duplicateInitial, {}), "pipeline_step_registry_invalid");
-        const std::array conflictingInitial{PipelineArtifactView{{"artifact.output"}, initialBytes}};
+        const std::array conflictingInitial{PipelineArtifactView{"artifact.output", initialBytes}};
         RequireError(registry.Execute(conflictingInitial, {}), "pipeline_graph_invalid");
-        const std::array missingInput{PipelineArtifactView{{"artifact.input"}, initialBytes}};
+        const std::array missingInput{PipelineArtifactView{"artifact.input", initialBytes}};
         auto requiring = registry.Register(Descriptor("step.requires", {{"artifact.missing"}}, {}), noOp);
         REQUIRE(requiring.HasValue());
         RequireError(registry.Execute(missingInput, {}), "pipeline_graph_invalid");

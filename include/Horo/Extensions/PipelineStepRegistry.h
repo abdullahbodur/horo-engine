@@ -13,6 +13,7 @@
 #include <memory>
 #include <span>
 #include <string>
+#include <string_view>
 #include <vector>
 
 namespace Horo::Extensions {
@@ -49,8 +50,8 @@ namespace Horo::Extensions {
 
     /** @brief Immutable borrowed artifact available for one synchronous pipeline run. */
     struct PipelineArtifactView final {
-        PipelineArtifactId id;
-        std::span<const std::byte> bytes;
+        std::string_view id;              /**< Canonical identity borrowed for this synchronous call. */
+        std::span<const std::byte> bytes; /**< Immutable bytes borrowed for this synchronous call. */
     };
 
     /** @brief Host-owned artifact value published only after the complete graph succeeds. */
@@ -185,6 +186,11 @@ namespace Horo::Extensions {
         [[nodiscard]] bool IsShutdown() const;
 
     private:
+        /** @brief Invokes one admitted provider against pre-resolved declared inputs. */
+        [[nodiscard]] static Result<std::vector<PipelineArtifact>> InvokeStep(const std::shared_ptr<PipelineStepProviderState> &provider,
+                                                                              std::span<const PipelineArtifactView> inputs,
+                                                                              std::uint64_t remainingBytes,
+                                                                              const CancellationToken &cancellation);
         std::shared_ptr<PipelineStepRegistryState> state_;
     };
 }  // namespace Horo::Extensions

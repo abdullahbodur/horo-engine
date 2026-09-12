@@ -6,6 +6,7 @@
 #include <algorithm>
 #include <atomic>
 #include <format>
+#include <map>
 #include <mutex>
 #include <optional>
 #include <ranges>
@@ -29,6 +30,8 @@ namespace Horo::Extensions {
     };
 
     namespace {
+        using ArtifactIndex = std::map<std::string_view, std::span<const std::byte>, std::less<>>;
+
         template <typename Id> [[nodiscard]] bool SortedUniqueCanonical(const std::vector<Id> &ids) noexcept {
             std::string_view previous;
             for (const Id &id : ids) {
@@ -67,10 +70,10 @@ namespace Horo::Extensions {
             std::string_view previous;
             std::uint64_t totalBytes = 0U;
             for (const PipelineArtifactView &artifact : artifacts) {
-                if (!Detail::IsCanonicalExtensionAuthorityId(artifact.id.value) || (!previous.empty() && artifact.id.value <= previous) ||
+                if (!Detail::IsCanonicalExtensionAuthorityId(artifact.id) || (!previous.empty() && artifact.id <= previous) ||
                     artifact.bytes.size() > PipelineStepRegistry::MaximumArtifactBytes - totalBytes)
                     return Result<void>::Failure(MakeError(ExtensionErrors::PipelineStepRegistryInvalid));
-                previous = artifact.id.value;
+                previous = artifact.id;
                 totalBytes += artifact.bytes.size();
             }
             return Result<void>::Success();
@@ -153,17 +156,53 @@ namespace Horo::Extensions {
             }
             return Result<std::vector<std::size_t>>::Success(std::move(order));
         }
+
+        [[nodiscard]] Result<void> ValidateOutputConflicts(const std::span<const PipelineArtifactView> initialArtifacts,
+                                                           const std::vector<std::shared_ptr<PipelineStepProviderState>> &providers) {
+            for (const auto &provider : providers) {
+                for (const PipelineArtifactId &output : provider->descriptor.outputs) {
+                    if (std::ranges::binary_search(initialArtifacts, output.value, {}, &PipelineArtifactView::id))
+                        return Result<void>::Failure(
+                            MakeError(ExtensionErrors::PipelineGraphInvalid,
+                                      std::format("Pipeline output '{}' conflicts with an initial artifact.", output.value)));
+                }
+            }
+            return Result<void>::Success();
+        }
+
+        [[nodiscard]] Result<std::vector<PipelineArtifactView>> ResolveInputs(const PipelineStepDescriptor &descriptor,
+                                                                              const ArtifactIndex &available) {
+            std::vector<PipelineArtifactView> inputs;
+            inputs.reserve(descriptor.inputs.size());
+            for (const PipelineArtifactId &required : descriptor.inputs) {
+                const auto found = available.find(required.value);
+                if (found == available.end())
+                    return Result<std::vector<PipelineArtifactView>>::Failure(
+                        MakeError(ExtensionErrors::PipelineGraphInvalid, std::format("Pipeline step '{}' requires missing artifact '{}'.",
+                                                                                     descriptor.stepId.value, required.value)));
+                inputs.push_back({found->first, found->second});
+            }
+            return Result<std::vector<PipelineArtifactView>>::Success(std::move(inputs));
+        }
+
+        void AcceptOutputs(std::vector<PipelineArtifact> outputs, ArtifactIndex &available, std::vector<PipelineArtifact> &generated,
+                           std::uint64_t &remainingBytes) {
+            for (PipelineArtifact &artifact : outputs) {
+                remainingBytes -= artifact.bytes.size();
+                generated.push_back(std::move(artifact));
+                const PipelineArtifact &owned = generated.back();
+                available.emplace(owned.id.value, owned.bytes);
+            }
+        }
+
     }  // namespace
 
     PipelineStepContext::PipelineStepContext(const std::span<const PipelineArtifactView> artifacts) noexcept : artifacts_(artifacts) {}
 
     /** @copydoc PipelineStepContext::Find */
     const PipelineArtifactView *PipelineStepContext::Find(const PipelineArtifactId &id) const noexcept {
-        const auto found =
-            std::ranges::lower_bound(artifacts_, id.value, {}, [](const PipelineArtifactView &artifact) -> const std::string & {
-            return artifact.id.value;
-        });
-        return found != artifacts_.end() && found->id == id ? &*found : nullptr;
+        const auto found = std::ranges::lower_bound(artifacts_, id.value, {}, &PipelineArtifactView::id);
+        return found != artifacts_.end() && found->id == id.value ? &*found : nullptr;
     }
 
     PipelineOutputSink::PipelineOutputSink(const std::span<const PipelineArtifactId> declaredOutputs,
@@ -193,6 +232,29 @@ namespace Horo::Extensions {
             return artifact.id.value;
         });
         return Result<std::vector<PipelineArtifact>>::Success(std::move(outputs_));
+    }
+
+    Result<std::vector<PipelineArtifact>> PipelineStepRegistry::InvokeStep(const std::shared_ptr<PipelineStepProviderState> &provider,
+                                                                           const std::span<const PipelineArtifactView> inputs,
+                                                                           const std::uint64_t remainingBytes,
+                                                                           const CancellationToken &cancellation) {
+        if (cancellation.IsCancellationRequested())
+            return Result<std::vector<PipelineArtifact>>::Failure(CancellationFailure(&provider->descriptor));
+        PipelineStepContext context{inputs};
+        PipelineOutputSink outputs{provider->descriptor.outputs, remainingBytes};
+        try {
+            auto executed = provider->provider->Execute(context, outputs, cancellation);
+            if (executed.HasError())
+                return Result<std::vector<PipelineArtifact>>::Failure(InvocationFailure(provider->descriptor, executed.ErrorValue()));
+        } catch (...) {  // NOSONAR(cpp:S1181) Trusted extension callback exception boundary.
+            return Result<std::vector<PipelineArtifact>>::Failure(InvocationFailure(provider->descriptor));
+        }
+        if (cancellation.IsCancellationRequested())
+            return Result<std::vector<PipelineArtifact>>::Failure(CancellationFailure(&provider->descriptor));
+        auto completed = outputs.Complete();
+        if (completed.HasError())
+            return Result<std::vector<PipelineArtifact>>::Failure(InvocationFailure(provider->descriptor, completed.ErrorValue()));
+        return completed;
     }
 
     PipelineStepRegistration::PipelineStepRegistration(std::weak_ptr<PipelineStepRegistryState> registry,
@@ -307,18 +369,12 @@ namespace Horo::Extensions {
             return Result<PipelineRunResult>::Failure(order.ErrorValue());
         if (cancellation.IsCancellationRequested())
             return Result<PipelineRunResult>::Failure(CancellationFailure(nullptr));
-        for (const auto &provider : *providers) {
-            for (const PipelineArtifactId &output : provider->descriptor.outputs) {
-                if (std::ranges::binary_search(initialArtifacts, output.value, {}, [](const PipelineArtifactView &artifact) {
-                    return artifact.id.value;
-                }))
-                    return Result<PipelineRunResult>::Failure(
-                        MakeError(ExtensionErrors::PipelineGraphInvalid,
-                                  std::format("Pipeline output '{}' conflicts with an initial artifact.", output.value)));
-            }
-        }
+        if (const auto valid = ValidateOutputConflicts(initialArtifacts, *providers); valid.HasError())
+            return Result<PipelineRunResult>::Failure(valid.ErrorValue());
 
-        std::vector<PipelineArtifactView> available(initialArtifacts.begin(), initialArtifacts.end());
+        ArtifactIndex available;
+        for (const PipelineArtifactView &artifact : initialArtifacts)
+            available.emplace(artifact.id, artifact.bytes);
         std::vector<PipelineArtifact> generated;
         std::size_t outputCount = 0U;
         for (const auto &provider : *providers)
@@ -332,46 +388,14 @@ namespace Horo::Extensions {
 
         for (const std::size_t index : order.Value()) {
             const auto &provider = (*providers)[index];
-            if (cancellation.IsCancellationRequested())
-                return Result<PipelineRunResult>::Failure(CancellationFailure(&provider->descriptor));
-
-            std::vector<PipelineArtifactView> inputs;
-            inputs.reserve(provider->descriptor.inputs.size());
-            for (const PipelineArtifactId &required : provider->descriptor.inputs) {
-                const auto found = std::ranges::lower_bound(available, required.value, {}, [](const PipelineArtifactView &artifact) {
-                    return artifact.id.value;
-                });
-                if (found == available.end() || found->id != required)
-                    return Result<PipelineRunResult>::Failure(
-                        MakeError(ExtensionErrors::PipelineGraphInvalid, std::format("Pipeline step '{}' requires missing artifact '{}'.",
-                                                                                     provider->descriptor.stepId.value, required.value)));
-                inputs.push_back(*found);
-            }
-
-            PipelineStepContext context{inputs};
-            PipelineOutputSink outputs{provider->descriptor.outputs, remainingBytes};
-            try {
-                auto executed = provider->provider->Execute(context, outputs, cancellation);
-                if (executed.HasError())
-                    return Result<PipelineRunResult>::Failure(InvocationFailure(provider->descriptor, executed.ErrorValue()));
-            } catch (...) {  // NOSONAR(cpp:S1181) Trusted extension callback exception boundary.
-                return Result<PipelineRunResult>::Failure(InvocationFailure(provider->descriptor));
-            }
-            if (cancellation.IsCancellationRequested())
-                return Result<PipelineRunResult>::Failure(CancellationFailure(&provider->descriptor));
-            auto completed = outputs.Complete();
+            auto inputs = ResolveInputs(provider->descriptor, available);
+            if (inputs.HasError())
+                return Result<PipelineRunResult>::Failure(inputs.ErrorValue());
+            auto completed = InvokeStep(provider, inputs.Value(), remainingBytes, cancellation);
             if (completed.HasError())
-                return Result<PipelineRunResult>::Failure(InvocationFailure(provider->descriptor, completed.ErrorValue()));
+                return Result<PipelineRunResult>::Failure(completed.ErrorValue());
             result.executionOrder.push_back(provider->descriptor.stepId);
-            for (PipelineArtifact &artifact : completed.Value()) {
-                remainingBytes -= artifact.bytes.size();
-                generated.push_back(std::move(artifact));
-                const PipelineArtifact &owned = generated.back();
-                const auto insertion = std::ranges::lower_bound(available, owned.id.value, {}, [](const PipelineArtifactView &candidate) {
-                    return candidate.id.value;
-                });
-                available.insert(insertion, PipelineArtifactView{owned.id, owned.bytes});
-            }
+            AcceptOutputs(std::move(completed).Value(), available, generated, remainingBytes);
         }
         if (cancellation.IsCancellationRequested())
             return Result<PipelineRunResult>::Failure(CancellationFailure(nullptr));
