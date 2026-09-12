@@ -191,13 +191,6 @@ namespace Horo::Runtime::Ui {
         }
     }  // namespace
 
-    /** @copydoc UiLogicalTransform::IsValid */
-    bool UiLogicalTransform::IsValid() const noexcept {
-        return std::ranges::all_of(values, [](const float value) {
-            return std::isfinite(value);
-        });
-    }
-
     /** @copydoc UiLinearColor::IsValid */
     bool UiLinearColor::IsValid() const noexcept {
         return UnitInterval(red) && UnitInterval(green) && UnitInterval(blue) && UnitInterval(alpha);

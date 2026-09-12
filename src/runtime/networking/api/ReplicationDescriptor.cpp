@@ -59,6 +59,9 @@ namespace Horo::Network {
             if (field.condition >= ReplicationCondition::Count || field.requirement >= ReplicationFieldRequirement::Count ||
                 field.writePolicy >= ReplicationWritePolicy::Count)
                 return Result<void>::Failure(MakeError(NetworkErrors::ReplicationDescriptorInvalid));
+            if (field.customCondition.has_value() != (field.condition == ReplicationCondition::Custom) ||
+                (field.customCondition && !field.customCondition->IsValid()))
+                return Result<void>::Failure(MakeError(NetworkErrors::ReplicationDescriptorInvalid));
             if (field.limits.maximumEncodedBytes == 0 || field.limits.maximumElementCount == 0)
                 return Result<void>::Failure(MakeError(NetworkErrors::ReplicationDescriptorInvalid));
             return Result<void>::Success();
