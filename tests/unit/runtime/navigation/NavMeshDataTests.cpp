@@ -32,6 +32,16 @@ namespace Horo::Navigation {
             return digest;
         }
 
+        [[nodiscard]] NavMeshProviderPayloadCompatibility ProviderCompatibility(const std::uint32_t formatVersion = 4,
+                                                                                const std::uint8_t fingerprintSeed = 80) {
+            return {
+                .providerFingerprint = Digest(fingerprintSeed),
+                .formatVersion = formatVersion,
+                .byteOrder = NavMeshByteOrder::LittleEndian,
+                .compression = NavMeshCompression::None,
+            };
+        }
+
         struct ArtifactFixture final {
             NavMeshArtifactHeader header{
                 .coordinateFrame = {.origin = Math::WorldCoordinate64::FromMillimeters(12'000, 0, -8'000), .tileSizeMeters = 32.0F},
@@ -103,22 +113,28 @@ namespace Horo::Navigation {
                 };
             }
 
-            void AddProviderPayload() {
-                providerPayloadBytes = {std::byte{0x10}, std::byte{0x20}, std::byte{0x30}};
-                providerPayloads = {{
+            void AppendProviderPayload(const std::uint32_t formatVersion, const std::span<const std::byte> bytes) {
+                const auto byteOffset = providerPayloadBytes.size();
+                providerPayloadBytes.insert(providerPayloadBytes.end(), bytes.begin(), bytes.end());
+                providerPayloads.push_back({
                     .providerFingerprint = Digest(80),
-                    .formatVersion = 4,
+                    .formatVersion = formatVersion,
                     .byteOrder = NavMeshByteOrder::LittleEndian,
                     .compression = NavMeshCompression::None,
-                    .byteOffset = 0,
-                    .encodedBytes = providerPayloadBytes.size(),
-                    .decodedBytes = providerPayloadBytes.size(),
-                    .payloadDigest = ComputeSha256(providerPayloadBytes),
-                }};
-                tiles.front().providerPayloads = {0, 1};
-                header.providerPayloadCount = 1;
+                    .byteOffset = byteOffset,
+                    .encodedBytes = bytes.size(),
+                    .decodedBytes = bytes.size(),
+                    .payloadDigest = ComputeSha256(bytes),
+                });
+                tiles.front().providerPayloads.count = static_cast<std::uint32_t>(providerPayloads.size());
+                header.providerPayloadCount = static_cast<std::uint32_t>(providerPayloads.size());
                 header.providerEncodedBytes = providerPayloadBytes.size();
                 header.providerDecodedBytes = providerPayloadBytes.size();
+            }
+
+            void AddProviderPayload() {
+                constexpr std::array Bytes{std::byte{0x10}, std::byte{0x20}, std::byte{0x30}};
+                AppendProviderPayload(4, Bytes);
             }
         };
     }  // namespace
@@ -225,12 +241,7 @@ namespace Horo::Navigation {
         fixture.AddProviderPayload();
         auto artifact = std::move(NavMeshData::Create(fixture.View())).Value();
         const NavMeshTileKey tile{.x = -2, .z = 4, .layer = 1};
-        NavMeshProviderPayloadCompatibility compatibility{
-            .providerFingerprint = Digest(80),
-            .formatVersion = 4,
-            .byteOrder = NavMeshByteOrder::LittleEndian,
-            .compression = NavMeshCompression::None,
-        };
+        auto compatibility = ProviderCompatibility();
 
         const auto payload = artifact.ResolveProviderPayload(tile, compatibility);
         REQUIRE(payload.HasValue());
@@ -246,27 +257,11 @@ namespace Horo::Navigation {
         ArtifactFixture fixture;
         fixture.AddProviderPayload();
         fixture.providerPayloads.front().formatVersion = 3;
-        fixture.providerPayloadBytes.push_back(std::byte{0x40});
-        fixture.providerPayloads.push_back({
-            .providerFingerprint = Digest(80),
-            .formatVersion = 4,
-            .byteOrder = NavMeshByteOrder::LittleEndian,
-            .compression = NavMeshCompression::None,
-            .byteOffset = 3,
-            .encodedBytes = 1,
-            .decodedBytes = 1,
-            .payloadDigest = ComputeSha256(std::span<const std::byte>{fixture.providerPayloadBytes}.subspan(3)),
-        });
-        fixture.tiles.front().providerPayloads = {0, 2};
-        fixture.header.providerPayloadCount = 2;
-        fixture.header.providerEncodedBytes = 4;
-        fixture.header.providerDecodedBytes = 4;
+        constexpr std::array AdditionalBytes{std::byte{0x40}};
+        fixture.AppendProviderPayload(4, AdditionalBytes);
 
         auto artifact = std::move(NavMeshData::Create(fixture.View())).Value();
-        const auto payload = artifact.ResolveProviderPayload({.x = -2, .z = 4, .layer = 1}, {.providerFingerprint = Digest(80),
-                                                                                             .formatVersion = 4,
-                                                                                             .byteOrder = NavMeshByteOrder::LittleEndian,
-                                                                                             .compression = NavMeshCompression::None});
+        const auto payload = artifact.ResolveProviderPayload({.x = -2, .z = 4, .layer = 1}, ProviderCompatibility());
         REQUIRE(payload.HasValue());
         REQUIRE(payload.Value().bytes.size() == 1);
         REQUIRE(payload.Value().bytes.front() == std::byte{0x40});
