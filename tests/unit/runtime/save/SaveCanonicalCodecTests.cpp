@@ -2,6 +2,7 @@
 #include "Horo/Runtime/Save/SaveDiagnostics.h"
 #include "Horo/Runtime/Save/SaveErrors.h"
 
+#include <algorithm>
 #include <array>
 #include <bit>
 #include <catch2/catch_test_macros.hpp>
