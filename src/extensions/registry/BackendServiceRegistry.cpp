@@ -10,7 +10,6 @@
 #include <mutex>
 #include <ranges>
 #include <thread>
-#include <tuple>
 #include <utility>
 #include <vector>
 
@@ -26,6 +25,7 @@ namespace Horo::Extensions {
         std::condition_variable drained;
         std::size_t activeCalls{};
         std::atomic_bool registered{true};
+        bool deferredSelfShutdown{};
         bool shutdownCalled{};
     };
 
@@ -36,6 +36,18 @@ namespace Horo::Extensions {
     };
 
     namespace {
+        thread_local BackendServiceProviderState *ExecutingProvider;
+
+        struct ServiceShutdown final {
+            std::shared_ptr<void> service;
+            void (*callback)(void *) noexcept {};
+
+            void Invoke() const noexcept {
+                if (service != nullptr && callback != nullptr)
+                    callback(service.get());
+            }
+        };
+
         [[nodiscard]] bool ValidThreadRule(const BackendServiceThreadRule rule) noexcept {
             return rule == BackendServiceThreadRule::AnyThread || rule == BackendServiceThreadRule::ProviderOwnerThread;
         }
@@ -52,17 +64,19 @@ namespace Horo::Extensions {
             std::unique_lock lock{provider->mutex};
             provider->registered.store(false, std::memory_order_release);
             provider->cancellation.RequestCancellation();
+            if (ExecutingProvider == provider.get()) {
+                provider->deferredSelfShutdown = true;
+                return;
+            }
             provider->drained.wait(lock, [&provider] {
                 return provider->activeCalls == 0U;
             });
             if (provider->shutdownCalled)
                 return;
             provider->shutdownCalled = true;
-            auto service = std::move(provider->service);
-            const auto shutdown = provider->shutdown;
+            ServiceShutdown shutdown{std::move(provider->service), provider->shutdown};
             lock.unlock();
-            if (service != nullptr && shutdown != nullptr)
-                shutdown(service.get());
+            shutdown.Invoke();
         }
 
         void RemoveProvider(const std::shared_ptr<BackendServiceRegistryState> &registry,
@@ -97,14 +111,19 @@ namespace Horo::Extensions {
 
     BackendServiceCallAdmission::BackendServiceCallAdmission(std::shared_ptr<BackendServiceProviderState> provider,
                                                              BackendServiceCallContext context) noexcept
-        : provider_(std::move(provider)), context_(std::move(context)) {}
+        : provider_(std::move(provider)), context_(std::move(context)), previousExecutingProvider_(ExecutingProvider),
+          ownsExecutionSlot_(true) {
+        ExecutingProvider = provider_.get();
+    }
 
     BackendServiceCallAdmission::~BackendServiceCallAdmission() {
         Reset();
     }
 
     BackendServiceCallAdmission::BackendServiceCallAdmission(BackendServiceCallAdmission &&other) noexcept
-        : provider_(std::move(other.provider_)), context_(std::move(other.context_)) {}
+        : provider_(std::move(other.provider_)), context_(std::move(other.context_)),
+          previousExecutingProvider_(other.previousExecutingProvider_), ownsExecutionSlot_(std::exchange(other.ownsExecutionSlot_, false)) {
+    }
 
     BackendServiceCallAdmission &BackendServiceCallAdmission::operator=(BackendServiceCallAdmission &&other) noexcept {
         if (this == &other)
@@ -112,6 +131,8 @@ namespace Horo::Extensions {
         Reset();
         provider_ = std::move(other.provider_);
         context_ = std::move(other.context_);
+        previousExecutingProvider_ = other.previousExecutingProvider_;
+        ownsExecutionSlot_ = std::exchange(other.ownsExecutionSlot_, false);
         return *this;
     }
 
@@ -123,11 +144,21 @@ namespace Horo::Extensions {
     void BackendServiceCallAdmission::Reset() noexcept {
         if (provider_ == nullptr)
             return;
+        ServiceShutdown shutdown;
         {
             std::scoped_lock lock{provider_->mutex};
             --provider_->activeCalls;
+            if (provider_->activeCalls == 0U && provider_->deferredSelfShutdown && !provider_->shutdownCalled) {
+                provider_->shutdownCalled = true;
+                shutdown = {std::move(provider_->service), provider_->shutdown};
+            }
         }
         provider_->drained.notify_all();
+        if (ownsExecutionSlot_) {
+            ExecutingProvider = previousExecutingProvider_;
+            ownsExecutionSlot_ = false;
+        }
+        shutdown.Invoke();
         provider_.reset();
     }
 
@@ -245,10 +276,6 @@ namespace Horo::Extensions {
         provider->shutdown = shutdown;
         provider->ownerThread = std::this_thread::get_id();
         state_->providers.push_back(provider);
-        std::ranges::sort(state_->providers, [](const auto &left, const auto &right) {
-            return std::tie(left->descriptor.serviceId.value, left->descriptor.version) <
-                   std::tie(right->descriptor.serviceId.value, right->descriptor.version);
-        });
         return Result<BackendServiceRegistration>::Success(BackendServiceRegistration{state_, std::move(provider)});
     }
 
@@ -264,20 +291,25 @@ namespace Horo::Extensions {
         std::scoped_lock lock{state_->mutex};
         if (state_->shutdown)
             return Result<std::shared_ptr<BackendServiceProviderState>>::Failure(MakeError(ExtensionErrors::BackendServiceShutdown));
-        const bool serviceExists = std::ranges::any_of(state_->providers, [&serviceId](const auto &provider) {
-            return provider->descriptor.serviceId == serviceId;
-        });
-        const auto found = std::ranges::find_if(state_->providers, [&](const auto &provider) {
-            return provider->descriptor.serviceId == serviceId && MatchesAuthority(provider->descriptor, authority);
-        });
-        if (found == state_->providers.end() && !serviceExists)
+        std::shared_ptr<BackendServiceProviderState> found;
+        bool serviceExists = false;
+        for (const auto &provider : state_->providers) {
+            if (provider->descriptor.serviceId != serviceId)
+                continue;
+            serviceExists = true;
+            if (MatchesAuthority(provider->descriptor, authority)) {
+                found = provider;
+                break;
+            }
+        }
+        if (found == nullptr && !serviceExists)
             return Result<std::shared_ptr<BackendServiceProviderState>>::Failure(MakeError(ExtensionErrors::BackendServiceUnavailable));
-        if (found == state_->providers.end() || (*found)->descriptor.contractId != contractId)
+        if (found == nullptr || found->descriptor.contractId != contractId)
             return Result<std::shared_ptr<BackendServiceProviderState>>::Failure(
                 MakeError(ExtensionErrors::BackendServiceContractMismatch));
-        if ((*found)->typeTag != typeTag)
+        if (found->typeTag != typeTag)
             return Result<std::shared_ptr<BackendServiceProviderState>>::Failure(MakeError(ExtensionErrors::BackendServiceTypeMismatch));
-        return Result<std::shared_ptr<BackendServiceProviderState>>::Success(*found);
+        return Result<std::shared_ptr<BackendServiceProviderState>>::Success(std::move(found));
     }
 
     /** @copydoc BackendServiceRegistry::BeginShutdown */
