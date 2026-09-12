@@ -72,15 +72,12 @@ namespace Horo::Character {
             return Result<std::unique_ptr<CharacterWorld>>::Failure(completed.ErrorValue());
         const CharacterWorldDescriptor owner = completed.Value();
 
-        auto registry =
-            Detail::CharacterControllerRegistry<CharacterControllerRecord>::Create(owner.sceneGeneration, owner.identity,
-                                                                                   {.maximumSlots =
-                                                                                        settings.Values().capacities.maximumControllers});
-        if (registry.HasError())
-            return Result<std::unique_ptr<CharacterWorld>>::Failure(registry.ErrorValue());
-
         try {
-            auto impl = std::make_unique<Impl>(owner, settings, std::move(registry).Value());
+            Detail::CharacterControllerRegistry<CharacterControllerRecord> registry{owner.sceneGeneration,
+                                                                                    owner.identity,
+                                                                                    {.maximumSlots =
+                                                                                         settings.Values().capacities.maximumControllers}};
+            auto impl = std::make_unique<Impl>(owner, settings, std::move(registry));
             return Result<std::unique_ptr<CharacterWorld>>::Success(std::unique_ptr<CharacterWorld>{new CharacterWorld(std::move(impl))});
         } catch (const std::bad_alloc &) {
             return Result<std::unique_ptr<CharacterWorld>>::Failure(

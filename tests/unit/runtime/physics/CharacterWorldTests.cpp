@@ -213,13 +213,7 @@ namespace Horo::Character {
 
             TrackedRecord(TrackedRecord &&other) noexcept : live_(std::exchange(other.live_, nullptr)) {}
 
-            TrackedRecord &operator=(TrackedRecord &&other) noexcept {
-                if (this != &other) {
-                    Release();
-                    live_ = std::exchange(other.live_, nullptr);
-                }
-                return *this;
-            }
+            TrackedRecord &operator=(TrackedRecord &&) noexcept = delete;
 
             ~TrackedRecord() noexcept {
                 Release();
@@ -238,11 +232,10 @@ namespace Horo::Character {
         TEST_CASE("Character registry drains owned records and retires non-wrapping generations",
                   "[physics][character][world][lifecycle]") {
             using Registry = Detail::CharacterControllerRegistry<TrackedRecord>;
-            auto created = Registry::Create(61, WorldId(), {.maximumSlots = 1, .maximumGeneration = 2});
-            REQUIRE(created.HasValue());
             std::uint32_t live{};
-            auto registry = std::move(created).Value();
-            RequireError(created.Value().Acquire(TrackedRecord{live}), CharacterErrors::CapacityExceeded);
+            Registry source{61, WorldId(), {.maximumSlots = 1, .maximumGeneration = 2}};
+            auto registry = std::move(source);
+            RequireError(source.Acquire(TrackedRecord{live}), CharacterErrors::CapacityExceeded);
             const auto first = registry.Acquire(TrackedRecord{live});
             REQUIRE(first.HasValue());
             REQUIRE(live == 1);
@@ -256,9 +249,7 @@ namespace Horo::Character {
             RequireError(registry.Acquire(TrackedRecord{live}), CharacterErrors::GenerationExhausted);
             REQUIRE(live == 0);
 
-            auto drainableResult = Registry::Create(61, WorldId(), {.maximumSlots = 1});
-            REQUIRE(drainableResult.HasValue());
-            auto drainable = std::move(drainableResult).Value();
+            Registry drainable{61, WorldId(), {.maximumSlots = 1}};
             REQUIRE(drainable.Acquire(TrackedRecord{live}).HasValue());
             REQUIRE(live == 1);
             drainable.Drain();
@@ -266,14 +257,5 @@ namespace Horo::Character {
             REQUIRE(drainable.ActiveCount() == 0);
         }
 
-        TEST_CASE("Character registry validates malformed preparation bounds", "[physics][character][world][capacity]") {
-            using Registry = Detail::CharacterControllerRegistry<std::uint32_t>;
-            RequireError(Registry::Create(0, WorldId(), {.maximumSlots = 1}), CharacterErrors::WorldInvalid);
-            RequireError(Registry::Create(61, {}, {.maximumSlots = 1}), CharacterErrors::WorldInvalid);
-            RequireError(Registry::Create(61, WorldId(), {.maximumSlots = 0}), CharacterErrors::DescriptorInvalid);
-            RequireError(Registry::Create(61, WorldId(), {.maximumSlots = CharacterWorldSettingLimits::MaximumControllers + 1}),
-                         CharacterErrors::CapacityExceeded);
-            RequireError(Registry::Create(61, WorldId(), {.maximumSlots = 1, .maximumGeneration = 0}), CharacterErrors::DescriptorInvalid);
-        }
     }  // namespace
 }  // namespace Horo::Character

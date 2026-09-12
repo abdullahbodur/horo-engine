@@ -4,6 +4,8 @@
  * @brief Target-private bounded value storage with non-wrapping slot generations.
  */
 
+#include "Horo/Foundation/Result.h"
+
 #include <cstddef>
 #include <cstdint>
 #include <limits>
@@ -82,14 +84,6 @@ namespace Horo::Physics::Detail {
         }
 
         /** @brief Resolves an exact occupied generation. @return Borrow or null for absent, out-of-range, or stale identity. */
-        [[nodiscard]] Value *Resolve(const std::uint32_t index, const std::uint32_t generation) noexcept {
-            if (index >= entries_.size())
-                return nullptr;
-            Entry &entry = entries_[index];
-            return entry.value.has_value() && entry.generation == generation ? &*entry.value : nullptr;
-        }
-
-        /** @copydoc Resolve */
         [[nodiscard]] const Value *Resolve(const std::uint32_t index, const std::uint32_t generation) const noexcept {
             if (index >= entries_.size())
                 return nullptr;
@@ -132,10 +126,6 @@ namespace Horo::Physics::Detail {
             return activeCount_;
         }
 
-        [[nodiscard]] std::size_t ExhaustedCount() const noexcept {
-            return exhaustedCount_;
-        }
-
         [[nodiscard]] bool AllSlotsExhausted() const noexcept {
             return !entries_.empty() && exhaustedCount_ == entries_.size();
         }
@@ -148,16 +138,6 @@ namespace Horo::Physics::Detail {
                 return Result<const Value *>::Failure(owner.ErrorValue());
             const Value *value = Resolve(handle.slot.index, handle.slot.generation);
             return value ? Result<const Value *>::Success(value) : Result<const Value *>::Failure(staleError(handle));
-        }
-
-        /** @copydoc ResolveOwned */
-        template <typename Handle, typename OwnerValidator, typename StaleError>
-        [[nodiscard]] Result<Value *> ResolveOwned(const Handle &handle, OwnerValidator validateOwner, StaleError staleError) {
-            const Result<void> owner = validateOwner(handle);
-            if (owner.HasError())
-                return Result<Value *>::Failure(owner.ErrorValue());
-            Value *value = Resolve(handle.slot.index, handle.slot.generation);
-            return value ? Result<Value *>::Success(value) : Result<Value *>::Failure(staleError(handle));
         }
 
         /** @brief Removes one domain handle after caller-provided owner validation and error translation. */
@@ -185,5 +165,3 @@ namespace Horo::Physics::Detail {
         std::size_t exhaustedCount_{};
     };
 }  // namespace Horo::Physics::Detail
-
-#include "Horo/Foundation/Result.h"

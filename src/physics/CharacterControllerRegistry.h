@@ -6,11 +6,9 @@
 
 #include "GenerationalSlotStorage.h"
 #include "Horo/Physics/CharacterControllerContracts.h"
-#include "Horo/Physics/CharacterWorldSettings.h"
 
 #include <cstddef>
 #include <format>
-#include <new>
 #include <type_traits>
 #include <utility>
 
@@ -24,25 +22,9 @@ namespace Horo::Character::Detail {
         static_assert(std::is_nothrow_destructible_v<Value>, "Character registry values must destruct without throwing.");
 
     public:
-        /** @brief Allocates the complete slot table for one unpublished world candidate. */
-        [[nodiscard]] static Result<CharacterControllerRegistry> Create(const std::uint64_t sceneGeneration, const CharacterWorldId world,
-                                                                        const CharacterControllerRegistryLimits limits) {
-            if (sceneGeneration == 0 || !world.IsValid())
-                return Result<CharacterControllerRegistry>::Failure(MakeError(CharacterErrors::WorldInvalid));
-            if (limits.maximumSlots == 0)
-                return Result<CharacterControllerRegistry>::Failure(MakeError(CharacterErrors::DescriptorInvalid));
-            if (limits.maximumSlots > CharacterWorldSettingLimits::MaximumControllers)
-                return Result<CharacterControllerRegistry>::Failure(MakeError(CharacterErrors::CapacityExceeded));
-            if (limits.maximumGeneration == 0)
-                return Result<CharacterControllerRegistry>::Failure(
-                    MakeError(CharacterErrors::DescriptorInvalid, "Character slot generation ceiling must be non-zero."));
-            try {
-                return Result<CharacterControllerRegistry>::Success(CharacterControllerRegistry{sceneGeneration, world, limits});
-            } catch (const std::bad_alloc &) {
-                return Result<CharacterControllerRegistry>::Failure(
-                    MakeError(CharacterErrors::CapacityExceeded, "Unable to allocate the bounded Character controller registry."));
-            }
-        }
+        /** @brief Allocates storage for owner generations and limits already validated by CharacterWorld preparation. */
+        CharacterControllerRegistry(std::uint64_t sceneGeneration, CharacterWorldId world, CharacterControllerRegistryLimits limits)
+            : sceneGeneration_(sceneGeneration), world_(world), storage_(limits) {}
 
         CharacterControllerRegistry(const CharacterControllerRegistry &) = delete;
         CharacterControllerRegistry &operator=(const CharacterControllerRegistry &) = delete;
@@ -51,14 +33,7 @@ namespace Horo::Character::Detail {
             : sceneGeneration_(std::exchange(other.sceneGeneration_, 0)), world_(std::exchange(other.world_, {})),
               storage_(std::move(other.storage_)) {}
 
-        CharacterControllerRegistry &operator=(CharacterControllerRegistry &&other) noexcept {
-            if (this == &other)
-                return *this;
-            sceneGeneration_ = std::exchange(other.sceneGeneration_, 0);
-            world_ = std::exchange(other.world_, {});
-            storage_ = std::move(other.storage_);
-            return *this;
-        }
+        CharacterControllerRegistry &operator=(CharacterControllerRegistry &&) noexcept = delete;
 
         /** @brief Installs one record and returns its exact scene/world/slot generation. */
         [[nodiscard]] Result<CharacterControllerHandle> Acquire(Value value) {
@@ -96,10 +71,6 @@ namespace Horo::Character::Detail {
         }
 
     private:
-        CharacterControllerRegistry(const std::uint64_t sceneGeneration, const CharacterWorldId world,
-                                    const CharacterControllerRegistryLimits limits)
-            : sceneGeneration_(sceneGeneration), world_(world), storage_(limits) {}
-
         [[nodiscard]] const ErrorCodeDescriptor &FullError() const noexcept {
             return storage_.AllSlotsExhausted() ? CharacterErrors::GenerationExhausted : CharacterErrors::CapacityExceeded;
         }

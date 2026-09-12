@@ -127,7 +127,6 @@ namespace Horo::Physics {
             REQUIRE(last.slot.generation == 2);
             REQUIRE(registry.Remove(last).HasValue());
             REQUIRE(registry.ActiveCount() == 0);
-            REQUIRE(registry.ExhaustedCount() == 1);
             RequireError(registry.Resolve(last), PhysicsErrors::HandleStale);
             RequireError(registry.Acquire({4}), PhysicsErrors::GenerationExhausted);
         }

@@ -102,13 +102,6 @@ namespace Horo::Physics::Detail {
          * @param handle Borrowed Horo identity.
          * @return Borrowed mapping, or a stable malformed/foreign/stale/state error before native access.
          */
-        [[nodiscard]] Result<Value *> Resolve(const Handle &handle) {
-            return storage_.ResolveOwned(handle, [this](const auto &candidate) {
-                return ValidateOwner(candidate);
-            }, HandleError);
-        }
-
-        /** @copydoc Resolve */
         [[nodiscard]] Result<const Value *> Resolve(const Handle &handle) const {
             return storage_.ResolveOwned(handle, [this](const auto &candidate) {
                 return ValidateOwner(candidate);
@@ -139,11 +132,6 @@ namespace Horo::Physics::Detail {
         /** @brief Returns the number of currently resolvable values. */
         [[nodiscard]] std::size_t ActiveCount() const noexcept {
             return storage_.ActiveCount();
-        }
-
-        /** @brief Returns the number of slots permanently retired at the generation ceiling. */
-        [[nodiscard]] std::size_t ExhaustedCount() const noexcept {
-            return storage_.ExhaustedCount();
         }
 
     private:
