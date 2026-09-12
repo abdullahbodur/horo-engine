@@ -606,7 +606,10 @@ projects use only `HoroEngine::ExtensionSdk`, relative project paths, and CPack
 ZIP configuration. The generated manifest template resolves the native module
 suffix during CMake configuration and records the installed `bin/` path; hosted
 regression coverage extracts the ZIP and activates every scaffold shape through
-the real extension host. Manifest schemas, validation, and distribution commands
+the real extension host. Scaffolding rejects a base identity when any shape-derived
+module/service/import identity would exceed the manifest limit or any generated
+module, contract-test, or archive filename would exceed the portable 255-byte
+component limit. Manifest schemas, validation, and distribution commands
 remain separately versioned SDK deliverables.
 
 Project gameplay modules may use the SDK-generation C++ boundary documented in

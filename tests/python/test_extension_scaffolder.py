@@ -25,6 +25,11 @@ def run_scaffolder(monkeypatch, output: Path, shape: str, package_id: str = "com
     return SCAFFOLDER.main()
 
 
+def canonical_id(length: int) -> str:
+    assert length >= 3
+    return "a." + "b" * (length - 2)
+
+
 def test_each_shape_is_portable_and_complete(monkeypatch, tmp_path):
     expected_modules = {"gui": 1, "backend": 1, "script": 1, "hybrid": 3}
     for shape, module_count in expected_modules.items():
@@ -83,6 +88,57 @@ def test_manifest_validation_rules_match_host_contract(monkeypatch, tmp_path):
          "--output", str(tmp_path / "valid")],
     )
     assert SCAFFOLDER.main() == 0
+
+
+def test_derived_identifier_boundaries_cover_every_shape():
+    for modules in SCAFFOLDER.SHAPES.values():
+        suffix_bytes = max(len(identifier) - len("a.b")
+                           for identifier in SCAFFOLDER.derived_identifiers("a.b", modules))
+        boundary_id = canonical_id(SCAFFOLDER.MAXIMUM_IDENTIFIER_BYTES - suffix_bytes)
+        assert all(SCAFFOLDER.is_canonical_identifier(identifier)
+                   for identifier in SCAFFOLDER.derived_identifiers(boundary_id, modules))
+        oversized_id = canonical_id(len(boundary_id) + 1)
+        assert not all(SCAFFOLDER.is_canonical_identifier(identifier)
+                       for identifier in SCAFFOLDER.derived_identifiers(oversized_id, modules))
+
+
+def test_generated_filename_boundaries_cover_modules_contract_tests_and_archive():
+    backend = SCAFFOLDER.SHAPES["backend"]
+    boundary_target_id = canonical_id(229)
+    target_filenames = SCAFFOLDER.generated_filenames(boundary_target_id, "1.0.0", backend)
+    assert max(len(filename.encode("utf-8")) for filename in target_filenames) == 255
+    oversized_target_id = canonical_id(230)
+    assert max(len(filename.encode("utf-8"))
+               for filename in SCAFFOLDER.generated_filenames(oversized_target_id, "1.0.0", backend)) == 256
+
+    maximum_version = "1.2.3-" + "r" * 58
+    boundary_archive_id = canonical_id(186)
+    archive_filenames = SCAFFOLDER.generated_filenames(boundary_archive_id, maximum_version, SCAFFOLDER.SHAPES["gui"])
+    assert len(archive_filenames[0].encode("utf-8")) == 255
+    oversized_archive_id = canonical_id(187)
+    oversized_archive = SCAFFOLDER.generated_filenames(oversized_archive_id, maximum_version, SCAFFOLDER.SHAPES["gui"])
+    assert len(oversized_archive[0].encode("utf-8")) == 256
+
+
+def test_derived_limits_reject_before_output_creation(monkeypatch, tmp_path):
+    derived_output = tmp_path / "derived-id"
+    assert run_scaffolder(monkeypatch, derived_output, "hybrid", canonical_id(242)) == 2
+    assert not derived_output.exists()
+
+    target_output = tmp_path / "target-name"
+    assert run_scaffolder(monkeypatch, target_output, "backend", canonical_id(230)) == 2
+    assert not target_output.exists()
+
+    archive_output = tmp_path / "archive-name"
+    maximum_version = "1.2.3-" + "r" * 58
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [str(SCRIPT), "--shape", "gui", "--id", canonical_id(187), "--name", "Boundary",
+         "--version", maximum_version, "--output", str(archive_output)],
+    )
+    assert SCAFFOLDER.main() == 2
+    assert not archive_output.exists()
 
 
 def test_dangling_destination_symlink_is_rejected(monkeypatch, tmp_path):

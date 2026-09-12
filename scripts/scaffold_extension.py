@@ -16,6 +16,9 @@ from pathlib import Path
 MAXIMUM_IDENTIFIER_BYTES = 256
 MAXIMUM_SEMANTIC_VERSION_BYTES = 64
 MAXIMUM_DISPLAY_NAME_BYTES = 4 * 1024
+MAXIMUM_PORTABLE_FILENAME_BYTES = 255
+LONGEST_SHARED_MODULE_SUFFIX = ".dylib"
+LONGEST_EXECUTABLE_SUFFIX = ".exe"
 
 
 @dataclass(frozen=True)
@@ -114,6 +117,28 @@ def module_id(package_id: str, module: Module) -> str:
 
 def target_name(package_id: str, module: Module) -> str:
     return f"{re.sub(r'[^A-Za-z0-9]', '_', package_id)}_{module.suffix}"
+
+
+def derived_identifiers(package_id: str, modules: tuple[Module, ...]) -> tuple[str, ...]:
+    service_id = f"{package_id}.service"
+    backend_id = f"{package_id}.backend"
+    identifiers = {package_id}
+    for module in modules:
+        current_module_id = module_id(package_id, module)
+        identifiers.add(current_module_id)
+        if module.exports_service:
+            identifiers.update((service_id,))
+        if module.imports_backend:
+            identifiers.update((backend_id, f"{current_module_id}.backend", service_id))
+    return tuple(sorted(identifiers))
+
+
+def generated_filenames(package_id: str, version: str, modules: tuple[Module, ...]) -> tuple[str, ...]:
+    filenames = [f"{package_id}-{version}.zip"]
+    for module in modules:
+        target = target_name(package_id, module)
+        filenames.extend((target + LONGEST_SHARED_MODULE_SUFFIX, target + "_contract_test" + LONGEST_EXECUTABLE_SUFFIX))
+    return tuple(filenames)
 
 
 def is_ascii_lower(character: str) -> bool:
@@ -268,6 +293,12 @@ def validate(args: argparse.Namespace) -> None:
         raise ValueError("--version must be a canonical semantic version")
     if len(args.name.strip().encode("utf-8")) > MAXIMUM_DISPLAY_NAME_BYTES:
         raise ValueError("--name exceeds the manifest display-name limit")
+    modules = SHAPES[args.shape]
+    if not all(is_canonical_identifier(identifier) for identifier in derived_identifiers(args.id, modules)):
+        raise ValueError("--id is too long for identifiers derived by this scaffold shape")
+    if not all(len(filename.encode("utf-8")) <= MAXIMUM_PORTABLE_FILENAME_BYTES
+               for filename in generated_filenames(args.id, args.version, modules)):
+        raise ValueError("--id and --version produce a filename longer than the portable component limit")
     if os.path.lexists(args.output):
         if args.output.is_symlink() or not args.output.is_dir() or any(args.output.iterdir()):
             raise ValueError("--output must be an absent path or empty directory")
