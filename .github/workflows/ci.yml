@@ -116,6 +116,12 @@ jobs:
         if: runner.os == 'Windows'
         uses: seanmiddleditch/gha-setup-ninja@3b1f8f94a2f8254bd26914c4ab9474d4f0015f67
 
+      - name: Setup sccache on Windows
+        if: runner.os == 'Windows'
+        uses: mozilla-actions/sccache-action@fc920bf0ec8de6ee65d409111f7ec508035751ba
+        with:
+          version: v0.17.0
+
       - name: Restore compiler cache
         if: runner.os != 'Windows'
         uses: hendrikmuhs/ccache-action@33522472633dbd32578e909b315f5ee43ba878ce
@@ -137,8 +143,13 @@ jobs:
         id: native_tests
         shell: bash
         run: |
+          compiler_cache_args=()
+          if [[ "${{ runner.os }}" == "Windows" ]]; then
+            compiler_cache_args=(--compiler-launcher sccache --msvc-debug-information-format Embedded)
+          fi
           python3 scripts/dev.py test \
             --dir "${{ matrix.build_dir }}" \
+            "${compiler_cache_args[@]}" \
             --junit "${{ github.workspace }}/${{ matrix.build_dir }}/test-results/ctest.xml"
           echo "=== test-results directory ==="
           ls -la "${{ github.workspace }}/${{ matrix.build_dir }}/test-results" || true
@@ -147,6 +158,16 @@ jobs:
           CXX: ${{ matrix.cxx }}
           FETCHCONTENT_BASE_DIR: ${{ github.workspace }}/.cmake/fetchcontent
           HORO_LOG_LEVEL: debug
+          SCCACHE_GHA_ENABLED: ${{ runner.os == 'Windows' && 'true' || 'false' }}
+          SCCACHE_IGNORE_SERVER_IO_ERROR: ${{ runner.os == 'Windows' && '1' || '0' }}
+
+      - name: Show Windows compiler cache stats
+        if: always() && runner.os == 'Windows'
+        continue-on-error: true
+        shell: bash
+        run: '"${SCCACHE_PATH}" --show-stats'
+        env:
+          SCCACHE_GHA_ENABLED: 'true'
 
       - name: Publish test results
         if: always() && (steps.native_tests.outcome == 'success' || steps.native_tests.outcome == 'failure')

@@ -407,6 +407,8 @@ def configure_command(
     telemetry: bool = True,
     opentelemetry: bool | None = None,
     imgui_ui_tests: bool = False,
+    compiler_launcher: str | None = None,
+    msvc_debug_information_format: str | None = None,
     extra_cmake_args: Sequence[str] | None = None,
 ) -> list[str]:
     """Build the typed, parameterizable CMake configure command."""
@@ -432,6 +434,15 @@ def configure_command(
         f"-DHORO_ENABLE_OPENTELEMETRY={'ON' if opentelemetry else 'OFF'}",
         f"-DHORO_ENABLE_IMGUI_UI_TESTS={'ON' if imgui_ui_tests else 'OFF'}",
     ]
+    if compiler_launcher:
+        command.extend(
+            [
+                f"-DCMAKE_C_COMPILER_LAUNCHER={compiler_launcher}",
+                f"-DCMAKE_CXX_COMPILER_LAUNCHER={compiler_launcher}",
+            ]
+        )
+    if msvc_debug_information_format:
+        command.append(f"-DCMAKE_MSVC_DEBUG_INFORMATION_FORMAT={msvc_debug_information_format}")
     if extra_cmake_args:
         command.extend(extra_cmake_args)
     return command
@@ -558,6 +569,8 @@ def run_build(
     testing: bool = True,
     imgui_ui_tests: bool = False,
     clean: bool = False,
+    compiler_launcher: str | None = None,
+    msvc_debug_information_format: str | None = None,
     extra_cmake_args: Sequence[str] | None = None,
 ) -> int:
     """Configure and build the repository or a specific target."""
@@ -576,6 +589,8 @@ def run_build(
         telemetry=True,
         opentelemetry=True,
         imgui_ui_tests=imgui_ui_tests,
+        compiler_launcher=compiler_launcher,
+        msvc_debug_information_format=msvc_debug_information_format,
         extra_cmake_args=extra_cmake_args,
     )
     configure_code = execute_subprocess(cfg_cmd)
@@ -593,6 +608,8 @@ def run_tests(
     build_directory: Path = DEFAULT_CI_BUILD_DIRECTORY,
     build_type: str = "Debug",
     junit: Path | None = None,
+    compiler_launcher: str | None = None,
+    msvc_debug_information_format: str | None = None,
     extra_ctest_args: Sequence[str] | None = None,
 ) -> int:
     """Build all test targets and execute ctest with optional filters."""
@@ -602,6 +619,8 @@ def run_tests(
         build_type=build_type,
         testing=True,
         imgui_ui_tests=gui,
+        compiler_launcher=compiler_launcher,
+        msvc_debug_information_format=msvc_debug_information_format,
     )
     if build_code != 0:
         return build_code
@@ -628,6 +647,8 @@ def run_check(
     gui: bool = False,
     build_directory: Path = DEFAULT_CI_BUILD_DIRECTORY,
     junit: Path | None = None,
+    compiler_launcher: str | None = None,
+    msvc_debug_information_format: str | None = None,
 ) -> int:
     """Run full CI-parity check: configure all components, compile all targets, run test suite."""
     print("==================================================", flush=True)
@@ -638,6 +659,8 @@ def run_check(
         gui=gui,
         build_directory=build_directory,
         junit=junit,
+        compiler_launcher=compiler_launcher,
+        msvc_debug_information_format=msvc_debug_information_format,
     )
 
 
@@ -1134,6 +1157,21 @@ _EPILOG_EXAMPLES = """examples:
 """
 
 
+def _add_compiler_cache_arguments(parser: argparse.ArgumentParser) -> None:
+    """Add compiler-cache CMake options shared by build-oriented commands."""
+    parser.add_argument(
+        "--compiler-launcher",
+        default=None,
+        help="CMake compiler launcher executable (for example sccache)",
+    )
+    parser.add_argument(
+        "--msvc-debug-information-format",
+        choices=("Embedded", "ProgramDatabase", "EditAndContinue"),
+        default=None,
+        help="select the MSVC debug information representation",
+    )
+
+
 def create_argument_parser() -> argparse.ArgumentParser:
     """Create the developer command-line interface argument parser."""
     parser = argparse.ArgumentParser(
@@ -1159,6 +1197,7 @@ def create_argument_parser() -> argparse.ArgumentParser:
     bld.add_argument("--type", default="Debug", choices=("Debug", "Release", "RelWithDebInfo"), help="CMake build type")
     bld.add_argument("--clean", action="store_true", help="clean build directory before configuring")
     bld.add_argument("--no-testing", action="store_true", help="disable building tests")
+    _add_compiler_cache_arguments(bld)
 
     # test command
     tst = commands.add_parser("test", help="configure with tests, compile, and run CTest suite")
@@ -1169,6 +1208,7 @@ def create_argument_parser() -> argparse.ArgumentParser:
     tst.add_argument("-B", "--dir", type=Path, default=DEFAULT_CI_BUILD_DIRECTORY, help="test build directory")
     tst.add_argument("--type", default="Debug", choices=("Debug", "Release", "RelWithDebInfo"), help="CMake build type")
     tst.add_argument("--junit", type=Path, default=None, help="write CTest results to JUnit XML file")
+    _add_compiler_cache_arguments(tst)
 
     # check command (CI Parity)
     chk = commands.add_parser("check", help="run full CI-parity build and comprehensive test pass")
@@ -1176,6 +1216,7 @@ def create_argument_parser() -> argparse.ArgumentParser:
     chk.add_argument("--gui", action="store_true", help="include interactive GUI scenarios")
     chk.add_argument("-B", "--dir", type=Path, default=DEFAULT_CI_BUILD_DIRECTORY, help="check build directory")
     chk.add_argument("--junit", type=Path, default=None, help="write CTest results to JUnit XML file")
+    _add_compiler_cache_arguments(chk)
 
     # format command
     fmt = commands.add_parser("format", help="format C++ source files using clang-format")
@@ -1331,6 +1372,8 @@ def _dispatch_command(parsed: argparse.Namespace, unparsed: Sequence[str], parse
             build_type=parsed.type,
             testing=not parsed.no_testing,
             clean=parsed.clean,
+            compiler_launcher=parsed.compiler_launcher,
+            msvc_debug_information_format=parsed.msvc_debug_information_format,
         )
 
     if parsed.command == "test":
@@ -1343,6 +1386,8 @@ def _dispatch_command(parsed: argparse.Namespace, unparsed: Sequence[str], parse
             build_directory=parsed.dir,
             build_type=parsed.type,
             junit=parsed.junit,
+            compiler_launcher=parsed.compiler_launcher,
+            msvc_debug_information_format=parsed.msvc_debug_information_format,
         )
 
     if parsed.command == "check":
@@ -1352,6 +1397,8 @@ def _dispatch_command(parsed: argparse.Namespace, unparsed: Sequence[str], parse
             gui=parsed.gui,
             build_directory=parsed.dir,
             junit=parsed.junit,
+            compiler_launcher=parsed.compiler_launcher,
+            msvc_debug_information_format=parsed.msvc_debug_information_format,
         )
 
     # run command

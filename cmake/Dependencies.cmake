@@ -98,6 +98,12 @@ FetchContent_Declare(
 )
 FetchContent_MakeAvailable(miniz)
 
+# miniz hard-codes /Zi in its MSVC flags. With /Z7 selected for cached builds,
+# sccache otherwise expects a PDB that the compiler intentionally does not emit.
+if(MSVC AND CMAKE_C_COMPILER_LAUNCHER MATCHES "sccache")
+    set_property(TARGET miniz PROPERTY C_COMPILER_LAUNCHER "")
+endif()
+
 # Portable package paths need Unicode normalization and full case folding.
 set(HORO_UTF8PROC_REVISION "d7bf128df773c2a1a7242eb80e51e91a769fc985")
 set(UTF8PROC_ENABLE_TESTING OFF CACHE BOOL "" FORCE)

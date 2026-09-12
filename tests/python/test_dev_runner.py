@@ -4,6 +4,7 @@ import importlib.util
 import json
 import subprocess
 import sys
+from collections.abc import Sequence
 from pathlib import Path
 from urllib.error import URLError
 
@@ -24,6 +25,19 @@ LOCAL_ENV_FILENAME = ".env.local"
 def write_env(path: Path, text: str) -> Path:
     path.write_text(text, encoding="utf-8")
     return path
+
+
+@pytest.fixture
+def subprocess_calls(monkeypatch: pytest.MonkeyPatch) -> list[list[str]]:
+    """Capture commands passed through the developer runner subprocess boundary."""
+    calls: list[list[str]] = []
+
+    def capture(cmd: Sequence[str], **_: object) -> int:
+        calls.append(list(cmd))
+        return 0
+
+    monkeypatch.setattr(dev, "execute_subprocess", capture)
+    return calls
 
 
 def test_dotenv_parser_supports_the_declared_non_executable_grammar(tmp_path: Path) -> None:
@@ -343,35 +357,34 @@ def test_main_doctor_command_json_and_exit_code(capsys: pytest.CaptureFixture[st
     assert isinstance(parsed["checks"], list)
 
 
-def test_main_build_command_invokes_cmake_build(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
-    calls: list[list[str]] = []
-
-    def fake_subprocess(cmd: Sequence[str], **_: object) -> int:
-        calls.append(list(cmd))
-        return 0
-
-    monkeypatch.setattr(dev, "execute_subprocess", fake_subprocess)
-    exit_code = dev.main(["build", "HoroEditorUiComponentsRenderTests", "-B", str(tmp_path)])
+def test_main_build_command_invokes_cmake_build(subprocess_calls: list[list[str]], tmp_path: Path) -> None:
+    exit_code = dev.main(
+        [
+            "build",
+            "HoroEditorUiComponentsRenderTests",
+            "-B",
+            str(tmp_path),
+            "--compiler-launcher",
+            "sccache",
+            "--msvc-debug-information-format",
+            "Embedded",
+        ]
+    )
     assert exit_code == 0
-    assert len(calls) == 2
-    assert calls[0][0] == "cmake"
-    assert calls[1][:4] == ["cmake", "--build", str(tmp_path), "--target"]
-    assert calls[1][4] == "HoroEditorUiComponentsRenderTests"
+    assert len(subprocess_calls) == 2
+    assert subprocess_calls[0][0] == "cmake"
+    assert "-DCMAKE_CXX_COMPILER_LAUNCHER=sccache" in subprocess_calls[0]
+    assert "-DCMAKE_MSVC_DEBUG_INFORMATION_FORMAT=Embedded" in subprocess_calls[0]
+    assert subprocess_calls[1][:4] == ["cmake", "--build", str(tmp_path), "--target"]
+    assert subprocess_calls[1][4] == "HoroEditorUiComponentsRenderTests"
 
 
-def test_main_test_command_filters_and_invokes_ctest(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
-    calls: list[list[str]] = []
-
-    def fake_subprocess(cmd: Sequence[str], **_: object) -> int:
-        calls.append(list(cmd))
-        return 0
-
-    monkeypatch.setattr(dev, "execute_subprocess", fake_subprocess)
+def test_main_test_command_filters_and_invokes_ctest(subprocess_calls: list[list[str]], tmp_path: Path) -> None:
     exit_code = dev.main(["test", "SceneDocument", "-E", "Slow", "-B", str(tmp_path)])
     assert exit_code == 0
     # configure + build + ctest
-    assert len(calls) == 3
-    ctest_call = calls[2]
+    assert len(subprocess_calls) == 3
+    ctest_call = subprocess_calls[2]
     assert ctest_call[0] == "ctest"
     assert "-R" in ctest_call
     assert "SceneDocument" in ctest_call
@@ -381,20 +394,47 @@ def test_main_test_command_filters_and_invokes_ctest(monkeypatch: pytest.MonkeyP
     assert "gui" in ctest_call
 
 
-def test_main_check_command_invokes_full_ci_pass(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
-    calls: list[list[str]] = []
+def test_main_test_command_forwards_windows_cache_configuration_to_cmake(
+    subprocess_calls: list[list[str]], tmp_path: Path
+) -> None:
+    assert (
+        dev.main(
+            [
+                "test",
+                "-B",
+                str(tmp_path),
+                "--compiler-launcher",
+                "sccache",
+                "--msvc-debug-information-format",
+                "Embedded",
+            ]
+        )
+        == 0
+    )
+    assert "-DCMAKE_C_COMPILER_LAUNCHER=sccache" in subprocess_calls[0]
+    assert "-DCMAKE_CXX_COMPILER_LAUNCHER=sccache" in subprocess_calls[0]
+    assert "-DCMAKE_MSVC_DEBUG_INFORMATION_FORMAT=Embedded" in subprocess_calls[0]
 
-    def fake_subprocess(cmd: Sequence[str], **_: object) -> int:
-        calls.append(list(cmd))
-        return 0
 
-    monkeypatch.setattr(dev, "execute_subprocess", fake_subprocess)
-    exit_code = dev.main(["check", "-B", str(tmp_path)])
+def test_main_check_command_invokes_full_ci_pass(subprocess_calls: list[list[str]], tmp_path: Path) -> None:
+    exit_code = dev.main(
+        [
+            "check",
+            "-B",
+            str(tmp_path),
+            "--compiler-launcher",
+            "sccache",
+            "--msvc-debug-information-format",
+            "Embedded",
+        ]
+    )
     assert exit_code == 0
-    assert len(calls) == 3
-    assert calls[0][0] == "cmake"
-    assert calls[1][:3] == ["cmake", "--build", str(tmp_path)]
-    assert calls[2][0] == "ctest"
+    assert len(subprocess_calls) == 3
+    assert subprocess_calls[0][0] == "cmake"
+    assert "-DCMAKE_CXX_COMPILER_LAUNCHER=sccache" in subprocess_calls[0]
+    assert "-DCMAKE_MSVC_DEBUG_INFORMATION_FORMAT=Embedded" in subprocess_calls[0]
+    assert subprocess_calls[1][:3] == ["cmake", "--build", str(tmp_path)]
+    assert subprocess_calls[2][0] == "ctest"
 
 
 def test_is_formattable_filters_cpp_extensions_and_ignores_vendor() -> None:
@@ -405,24 +445,19 @@ def test_is_formattable_filters_cpp_extensions_and_ignores_vendor() -> None:
     assert dev._is_formattable(Path("scripts/dev.py")) is False
 
 
-def test_main_format_command_invokes_clang_format(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+def test_main_format_command_invokes_clang_format(
+    monkeypatch: pytest.MonkeyPatch, subprocess_calls: list[list[str]], tmp_path: Path
+) -> None:
     test_cpp = tmp_path / "Test.cpp"
     test_cpp.write_text("int main() { return 0; }\n", encoding="utf-8")
 
-    calls: list[list[str]] = []
-
-    def fake_subprocess(cmd: Sequence[str], **_: object) -> int:
-        calls.append(list(cmd))
-        return 0
-
-    monkeypatch.setattr(dev, "execute_subprocess", fake_subprocess)
     monkeypatch.setattr(dev.shutil, "which", lambda cmd: "/usr/bin/clang-format" if cmd == "clang-format" else None)
 
     exit_code = dev.main(["format", str(test_cpp)])
     assert exit_code == 0
-    assert len(calls) == 1
-    assert calls[0][:2] == ["/usr/bin/clang-format", "-i"]
-    assert str(test_cpp) in calls[0]
+    assert len(subprocess_calls) == 1
+    assert subprocess_calls[0][:2] == ["/usr/bin/clang-format", "-i"]
+    assert str(test_cpp) in subprocess_calls[0]
 
 
 def test_staged_format_refuses_to_stage_unstaged_worktree_changes(
@@ -470,19 +505,12 @@ def test_doctor_runs_gracefully_with_broken_env_file(monkeypatch: pytest.MonkeyP
     assert "Syntax/validation error" in config_check["message"]
 
 
-def test_gui_flag_propagates_to_cmake_configure(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
-    calls: list[list[str]] = []
-
-    def fake_subprocess(cmd: Sequence[str], **_: object) -> int:
-        calls.append(list(cmd))
-        return 0
-
-    monkeypatch.setattr(dev, "execute_subprocess", fake_subprocess)
+def test_gui_flag_propagates_to_cmake_configure(subprocess_calls: list[list[str]], tmp_path: Path) -> None:
     exit_code = dev.main(["test", "--gui", "-B", str(tmp_path)])
     assert exit_code == 0
-    assert len(calls) == 3
+    assert len(subprocess_calls) == 3
     # Configure command must have HORO_ENABLE_IMGUI_UI_TESTS=ON
-    cmake_cfg = calls[0]
+    cmake_cfg = subprocess_calls[0]
     assert "-DHORO_ENABLE_IMGUI_UI_TESTS=ON" in cmake_cfg
 
 
@@ -519,5 +547,3 @@ def test_main_help_command_and_empty_arguments(capsys: pytest.CaptureFixture[str
     assert dev.main(["help", "nonexistent"]) == 2
     err = capsys.readouterr().err
     assert "unknown command 'nonexistent'" in err
-
-
