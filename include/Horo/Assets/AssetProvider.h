@@ -123,6 +123,11 @@ namespace Horo::Assets {
          * @param id Registered identity to load. @return Move-only request handle or a typed missing/queue/shutdown error.
          */
         [[nodiscard]] Result<AssetLoadHandle> LoadAsync(const AssetRegistrySnapshot &snapshot, AssetId id);
+        /** @brief Submits a load beneath an explicit cooperative cancellation parent. @param snapshot Registry state to
+         * capture. @param id Registered identity to load. @param parentCancellation Parent operation cancellation ancestry.
+         * @return Move-only request handle or a typed missing, queue, cancellation, or shutdown error. */
+        [[nodiscard]] Result<AssetLoadHandle> LoadAsync(const AssetRegistrySnapshot &snapshot, AssetId id,
+                                                        const CancellationToken &parentCancellation);
         /** @brief Stops admission, cancels and joins service-owned requests, and is safe to call repeatedly. */
         void Shutdown() noexcept;
 
