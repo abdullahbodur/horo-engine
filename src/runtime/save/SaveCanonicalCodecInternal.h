@@ -9,6 +9,7 @@
 #include <ranges>
 #include <span>
 #include <type_traits>
+#include <utility>
 #include <vector>
 
 namespace Horo::Runtime::CanonicalCodecDetail {
@@ -22,16 +23,22 @@ namespace Horo::Runtime::CanonicalCodecDetail {
     template <typename Unsigned> [[nodiscard]] std::array<std::byte, sizeof(Unsigned)> ToLittleEndian(const Unsigned value) noexcept {
         static_assert(std::is_unsigned_v<Unsigned>);
         std::array<std::byte, sizeof(Unsigned)> output{};
-        for (std::size_t index = 0; index < output.size(); ++index)
-            output[index] = static_cast<std::byte>(value >> (index * 8U));
+        std::size_t shift{};
+        for (std::byte &byte : output) {
+            byte = static_cast<std::byte>(value >> shift);
+            shift += 8U;
+        }
         return output;
     }
 
     template <typename Unsigned> [[nodiscard]] Unsigned FromLittleEndian(const std::array<std::byte, sizeof(Unsigned)> &bytes) noexcept {
         static_assert(std::is_unsigned_v<Unsigned>);
         Unsigned output{};
-        for (std::size_t index = 0; index < bytes.size(); ++index)
-            output |= static_cast<Unsigned>(std::to_integer<std::uint8_t>(bytes[index])) << (index * 8U);
+        std::size_t shift{};
+        for (const std::byte byte : bytes) {
+            output |= static_cast<Unsigned>(std::to_integer<std::uint8_t>(byte)) << shift;
+            shift += 8U;
+        }
         return output;
     }
 
@@ -70,6 +77,9 @@ namespace Horo::Runtime::CanonicalCodecDetail {
 
 namespace Horo::Runtime {
     struct CanonicalPathNode final {
+        CanonicalPathNode(CanonicalFieldId fieldValue, std::shared_ptr<const CanonicalPathNode> parentValue, const std::size_t depthValue)
+            : field(fieldValue), parent(std::move(parentValue)), depth(depthValue) {}
+
         CanonicalFieldId field;
         std::shared_ptr<const CanonicalPathNode> parent;
         std::size_t depth{};

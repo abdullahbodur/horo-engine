@@ -84,8 +84,8 @@ namespace Horo::Runtime {
     private:
         friend class CanonicalValueReader;
 
-        CanonicalDecodedValue(std::span<const std::byte> bytes, CanonicalCodecLimits limits, std::shared_ptr<CanonicalReadState> state,
-                              std::size_t depth, std::shared_ptr<const CanonicalPathNode> path)
+        CanonicalDecodedValue(std::span<const std::byte> bytes, const CanonicalCodecLimits &limits,
+                              std::shared_ptr<CanonicalReadState> state, std::size_t depth, std::shared_ptr<const CanonicalPathNode> path)
             : bytes_(bytes), limits_(limits), state_(std::move(state)), depth_(depth), path_(std::move(path)) {}
 
         std::span<const std::byte> bytes_;
@@ -123,7 +123,7 @@ namespace Horo::Runtime {
     class CanonicalValueWriter final {
     public:
         /** @brief Creates an empty sticky-failure writer. @param limits Trusted nonzero codec bounds. */
-        explicit CanonicalValueWriter(CanonicalCodecLimits limits = {});
+        explicit CanonicalValueWriter(const CanonicalCodecLimits &limits = {});
         /** @brief Creates a writer whose diagnostics append one field identity. @param field Stable field identity. @return Child writer
          * or typed configuration/allocation failure. */
         [[nodiscard]] Result<CanonicalValueWriter> ForField(CanonicalFieldId field) const;
@@ -180,7 +180,7 @@ namespace Horo::Runtime {
         [[nodiscard]] Result<CanonicalEncodedValue> Finalize() &&;
 
     private:
-        CanonicalValueWriter(CanonicalCodecLimits limits, std::shared_ptr<const CanonicalPathNode> path);
+        CanonicalValueWriter(const CanonicalCodecLimits &limits, std::shared_ptr<const CanonicalPathNode> path);
         [[nodiscard]] Result<void> Append(std::span<const std::byte> value);
         [[nodiscard]] Result<void> AppendLengthDelimited(std::span<const std::byte> value);
         [[nodiscard]] Result<void> CommitStaged(CanonicalValueWriter &&staging);
@@ -207,7 +207,7 @@ namespace Horo::Runtime {
     public:
         /** @brief Creates a bounded root reader. @param bytes Complete borrowed value bytes. @param limits Trusted codec bounds.
          * @return Reader or configuration, wire-size, or allocation failure. */
-        [[nodiscard]] static Result<CanonicalValueReader> Create(std::span<const std::byte> bytes, CanonicalCodecLimits limits = {});
+        [[nodiscard]] static Result<CanonicalValueReader> Create(std::span<const std::byte> bytes, const CanonicalCodecLimits &limits = {});
 
         /** @brief Returns the next unread byte position. @return Offset relative to this value. */
         [[nodiscard]] std::size_t ByteOffset() const noexcept {
@@ -272,16 +272,16 @@ namespace Horo::Runtime {
             Preserve,
             RequireCanonical,
         };
-        CanonicalValueReader(std::span<const std::byte> bytes, CanonicalCodecLimits limits, std::shared_ptr<CanonicalReadState> state,
-                             std::size_t depth, std::shared_ptr<const CanonicalPathNode> path);
+        CanonicalValueReader(std::span<const std::byte> bytes, const CanonicalCodecLimits &limits,
+                             std::shared_ptr<CanonicalReadState> state, std::size_t depth, std::shared_ptr<const CanonicalPathNode> path);
         [[nodiscard]] Result<std::size_t> ReadLength(std::size_t maximum);
         [[nodiscard]] Result<CanonicalDecodedValue> ReadChild(std::shared_ptr<const CanonicalPathNode> path);
         /** @brief Reads a bounded value collection with optional strict canonical ordering. */
         [[nodiscard]] Result<std::vector<CanonicalDecodedValue>> ReadValueCollection(ValueCollectionOrder order);
         [[nodiscard]] Result<void> AdmitComposite() const;
-        [[nodiscard]] Result<void> Charge(std::size_t bytes);
-        [[nodiscard]] Result<void> ChargeElements(std::size_t count, std::size_t elementSize);
-        [[nodiscard]] Result<void> AdmitElements(std::size_t count, std::size_t elementSize, std::size_t minimumWireBytesPerElement);
+        [[nodiscard]] Result<void> Charge(std::size_t bytes) const;
+        [[nodiscard]] Result<void> ChargeElements(std::size_t count, std::size_t elementSize) const;
+        [[nodiscard]] Result<void> AdmitElements(std::size_t count, std::size_t elementSize, std::size_t minimumWireBytesPerElement) const;
         [[nodiscard]] Error ErrorAt(const ErrorCodeDescriptor &descriptor) const;
         [[nodiscard]] Result<void> ReadFloatComponents(std::span<float> components);
         template <typename Unsigned> [[nodiscard]] Result<Unsigned> ReadUnsigned();
