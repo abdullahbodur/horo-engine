@@ -73,49 +73,28 @@ namespace Horo::Navigation {
                     return NavigationQueueEnqueueResult::Closed;
                 }
 
-                auto position = enqueuePosition_.load();
-                for (std::size_t attempt = 0; attempt < MaximumContentionAttempts; ++attempt) {
-                    Slot &slot = slots_[position & mask_];
-                    const std::size_t sequence = slot.sequence.load();
-                    const auto difference = static_cast<std::intptr_t>(sequence) - static_cast<std::intptr_t>(position);
-                    if (difference == 0) {
-                        if (!enqueuePosition_.compare_exchange_weak(position, position + 1U))
-                            continue;
-                        slot.record.emplace(std::move(record));
-                        count_.fetch_add(1U);
-                        slot.sequence.store(position + 1U);
-                        SaturatingIncrement(stats_.enqueued);
-                        return NavigationQueueEnqueueResult::Enqueued;
-                    }
-                    if (difference < 0)
-                        break;
-                    position = enqueuePosition_.load();
+                const auto claim = TryClaim(enqueuePosition_, 0);
+                if (claim) {
+                    claim->slot->record.emplace(std::move(record));
+                    count_.fetch_add(1U);
+                    claim->slot->sequence.store(claim->position + 1U);
+                    SaturatingIncrement(stats_.enqueued);
+                    return NavigationQueueEnqueueResult::Enqueued;
                 }
                 SaturatingIncrement(stats_.rejectedFull);
                 return NavigationQueueEnqueueResult::Full;
             }
 
             [[nodiscard]] std::optional<T> TryPop() noexcept {
-                auto position = dequeuePosition_.load();
-                for (std::size_t attempt = 0; attempt < MaximumContentionAttempts; ++attempt) {
-                    Slot &slot = slots_[position & mask_];
-                    const std::size_t sequence = slot.sequence.load();
-                    const auto difference = static_cast<std::intptr_t>(sequence) - static_cast<std::intptr_t>(position + 1U);
-                    if (difference == 0) {
-                        if (!dequeuePosition_.compare_exchange_weak(position, position + 1U))
-                            continue;
-                        std::optional<T> record{std::move(slot.record)};
-                        slot.record.reset();
-                        count_.fetch_sub(1U);
-                        slot.sequence.store(position + capacity_);
-                        SaturatingIncrement(stats_.dequeued);
-                        return record;
-                    }
-                    if (difference < 0)
-                        return std::nullopt;
-                    position = dequeuePosition_.load();
-                }
-                return std::nullopt;
+                const auto claim = TryClaim(dequeuePosition_, 1U);
+                if (!claim)
+                    return std::nullopt;
+                std::optional<T> record{std::move(claim->slot->record)};
+                claim->slot->record.reset();
+                count_.fetch_sub(1U);
+                claim->slot->sequence.store(claim->position + capacity_);
+                SaturatingIncrement(stats_.dequeued);
+                return record;
             }
 
             void Close() noexcept {
@@ -131,6 +110,29 @@ namespace Horo::Navigation {
             }
 
         private:
+            struct Claim final {
+                Slot *slot{};
+                std::size_t position{};
+            };
+
+            [[nodiscard]] std::optional<Claim> TryClaim(std::atomic<std::size_t> &cursor, const std::size_t sequenceOffset) noexcept {
+                auto position = cursor.load();
+                for (std::size_t attempt = 0; attempt < MaximumContentionAttempts; ++attempt) {
+                    Slot &slot = slots_[position & mask_];
+                    const auto difference =
+                        static_cast<std::intptr_t>(slot.sequence.load()) - static_cast<std::intptr_t>(position + sequenceOffset);
+                    if (difference == 0) {
+                        if (cursor.compare_exchange_weak(position, position + 1U))
+                            return Claim{.slot = &slot, .position = position};
+                        continue;
+                    }
+                    if (difference < 0)
+                        return std::nullopt;
+                    position = cursor.load();
+                }
+                return std::nullopt;
+            }
+
             std::unique_ptr<Slot[]> slots_;
             std::size_t capacity_{};
             std::size_t mask_{};
