@@ -233,6 +233,7 @@ horo_configure_target_header_boundary(HoroInput PUBLIC_HEADERS
 horo_configure_target_header_boundary(HoroPhysics PUBLIC_HEADERS
     Horo/Physics/CharacterControllerContracts.h
     Horo/Physics/CharacterErrors.h
+    Horo/Physics/CharacterWorld.h
     Horo/Physics/CharacterWorldSettings.h
     Horo/Physics/PhysicsBodyDescriptor.h
     Horo/Physics/PhysicsCapabilities.h

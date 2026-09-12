@@ -440,6 +440,8 @@ target_link_libraries(HoroAudioCommands PUBLIC HoroEngine::AudioMemory)
 add_library(HoroPhysics STATIC
         physics/CharacterControllerContracts.cpp
         physics/CharacterErrors.cpp
+        physics/CharacterControllerRegistry.h
+        physics/CharacterWorld.cpp
         physics/CharacterWorldSettings.cpp
         physics/PhysicsBodyDescriptor.cpp
         physics/PhysicsCapabilities.cpp
