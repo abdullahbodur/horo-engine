@@ -326,8 +326,7 @@ namespace Horo::Runtime::Ui {
             std::size_t offset = 0;
             while (offset < slots.size()) {
                 const auto index = (nextSlot + offset) % slots.size();
-                std::uint64_t expected{};
-                if (!slots[index]->leases.compare_exchange_strong(expected, 1)) {
+                if (std::uint64_t expected{}; !slots[index]->leases.compare_exchange_strong(expected, 1)) {
                     ++offset;
                     continue;
                 }
