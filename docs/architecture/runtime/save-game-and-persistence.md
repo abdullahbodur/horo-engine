@@ -155,6 +155,16 @@ pins that revision and module leases. Registry changes require an explicit host
 quiescent rebind; they cannot unload codecs under a worker or register through ambient
 service discovery.
 
+Each dependency edge declares required or optional absence policy and the exact
+capture, restore or combined phase it orders. Snapshot publication builds separate
+stable topological capture and restore plans, selecting the lowest stable participant
+ID whenever multiple nodes are ready. Registration order, addresses and unordered
+container iteration never break ties. Missing required dependencies, present
+dependencies without the declared phase capability and cycles fail snapshot
+publication with diagnostics naming the involved stable IDs; optional absence alone
+does not fail. The identity-sorted binding view remains the canonical manifest/query
+projection and is not used as an execution plan.
+
 Schematic interface shapes (not new installed headers):
 
 ```cpp

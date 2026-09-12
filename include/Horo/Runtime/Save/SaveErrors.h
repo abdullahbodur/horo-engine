@@ -36,6 +36,8 @@ namespace Horo::Runtime::SaveErrors {
     extern const ErrorCodeDescriptor ParticipantDependencyMissing;
     /** @brief Participant dependencies contain a cycle. */
     extern const ErrorCodeDescriptor ParticipantDependencyCycle;
+    /** @brief A dependency names a capture/restore phase unsupported by either participant. */
+    extern const ErrorCodeDescriptor ParticipantDependencyPhaseIncompatible;
     /** @brief The registry generation cannot advance without reusing a value. */
     extern const ErrorCodeDescriptor ParticipantRegistryGenerationExhausted;
     /** @brief Capture evidence or operation bounds are missing, zero, or outside qualified maxima. */

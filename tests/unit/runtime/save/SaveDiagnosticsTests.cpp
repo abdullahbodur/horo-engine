@@ -70,6 +70,7 @@ namespace Horo::Runtime {
                 std::pair{&SaveErrors::CaptureBudgetExceeded, SaveFailureCategory::Quota},
                 std::pair{&SaveErrors::ArchiveChunkHashMismatch, SaveFailureCategory::Corruption},
                 std::pair{&SaveErrors::ParticipantDependencyMissing, SaveFailureCategory::Participant},
+                std::pair{&SaveErrors::ParticipantDependencyPhaseIncompatible, SaveFailureCategory::Participant},
                 std::pair{&SaveErrors::ParticipantRegistryClosed, SaveFailureCategory::Lifecycle},
             };
             for (const auto &[descriptor, expected] : cases) {

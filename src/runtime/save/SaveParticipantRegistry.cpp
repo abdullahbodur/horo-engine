@@ -5,18 +5,20 @@
 #include <algorithm>
 #include <cstddef>
 #include <limits>
+#include <string>
+#include <string_view>
 #include <unordered_map>
 #include <unordered_set>
 
 namespace Horo::Runtime {
+    struct SaveParticipantRegistryDetail::SnapshotStorage final {
+        std::vector<SaveParticipantBinding> bindings;
+        std::vector<SaveParticipantBinding> captureBindings;
+        std::vector<SaveParticipantBinding> restoreBindings;
+    };
+
     namespace {
         using ParticipantIndices = std::unordered_map<SaveParticipantId, std::size_t, SaveParticipantIdHash>;
-
-        enum class VisitState : std::uint8_t {
-            Unvisited,
-            Visiting,
-            Visited
-        };
 
         /** @brief Reports whether the descriptor declares one supported semantic scope. */
         [[nodiscard]] bool IsValidScope(const SaveParticipantScope scope) noexcept {
@@ -50,21 +52,71 @@ namespace Horo::Runtime {
                    HasValidRoles(descriptor.roles) && HasValidLimits(descriptor) && !descriptor.ownedRecords.empty();
         }
 
+        /** @brief Reports whether a dependency requirement is a supported closed value. */
+        [[nodiscard]] bool IsKnown(const SaveParticipantDependencyRequirement requirement) noexcept {
+            switch (requirement) {
+                case SaveParticipantDependencyRequirement::Required:
+                case SaveParticipantDependencyRequirement::Optional:
+                    return true;
+            }
+            return false;
+        }
+
+        /** @brief Reports whether a dependency phase is a supported closed value. */
+        [[nodiscard]] bool IsKnown(const SaveParticipantDependencyPhase phase) noexcept {
+            switch (phase) {
+                case SaveParticipantDependencyPhase::Capture:
+                case SaveParticipantDependencyPhase::Restore:
+                case SaveParticipantDependencyPhase::CaptureAndRestore:
+                    return true;
+            }
+            return false;
+        }
+
+        /** @brief Reports whether an edge applies to one operation role. */
+        [[nodiscard]] bool AppliesTo(const SaveParticipantDependencyPhase phase, const SaveParticipantRole role) noexcept {
+            if (phase == SaveParticipantDependencyPhase::CaptureAndRestore)
+                return true;
+            if (role == SaveParticipantRole::Capture)
+                return phase == SaveParticipantDependencyPhase::Capture;
+            return phase == SaveParticipantDependencyPhase::Restore;
+        }
+
+        /** @brief Formats one dependency phase for actionable diagnostics. */
+        [[nodiscard]] std::string_view PhaseName(const SaveParticipantRole role) noexcept {
+            return role == SaveParticipantRole::Capture ? "capture" : "restore";
+        }
+
         /** @brief Validates dependency identity, self-reference, and uniqueness rules. */
-        [[nodiscard]] bool HasValidDependencies(const CanonicalStateParticipantDescriptor &descriptor) {
+        [[nodiscard]] Result<void> ValidateDependencyMetadata(const CanonicalStateParticipantDescriptor &descriptor) {
+            if (descriptor.dependencies.size() > MaximumSaveParticipantCount)
+                return Result<void>::Failure(MakeError(SaveErrors::ParticipantDescriptorInvalid));
             std::unordered_set<SaveParticipantId, SaveParticipantIdHash> uniqueDependencies;
             uniqueDependencies.reserve(descriptor.dependencies.size());
-            for (const SaveParticipantId &dependency : descriptor.dependencies) {
-                if (!dependency.IsValid() || dependency == descriptor.participant || !uniqueDependencies.insert(dependency).second)
-                    return false;
+            for (const SaveParticipantDependency &dependency : descriptor.dependencies) {
+                if (!dependency.participant.IsValid() || dependency.participant == descriptor.participant ||
+                    !IsKnown(dependency.requirement) || !IsKnown(dependency.phase) ||
+                    !uniqueDependencies.insert(dependency.participant).second)
+                    return Result<void>::Failure(MakeError(SaveErrors::ParticipantDescriptorInvalid));
+                const bool captureCompatible = !AppliesTo(dependency.phase, SaveParticipantRole::Capture) ||
+                                               HasSaveParticipantRole(descriptor.roles, SaveParticipantRole::Capture);
+                const bool restoreCompatible = !AppliesTo(dependency.phase, SaveParticipantRole::Restore) ||
+                                               HasSaveParticipantRole(descriptor.roles, SaveParticipantRole::Restore);
+                if (!captureCompatible || !restoreCompatible) {
+                    return Result<void>::Failure(MakeError(SaveErrors::ParticipantDependencyPhaseIncompatible,
+                                                           "Participant '" + descriptor.participant.Value() + "' declares dependency '" +
+                                                               dependency.participant.Value() + "' for a phase it does not support."));
+                }
             }
-            return true;
+            return Result<void>::Success();
         }
 
         /** @brief Validates one inert descriptor before registry mutation. */
         [[nodiscard]] Result<void> ValidateDescriptor(const CanonicalStateParticipantDescriptor &descriptor) {
-            if (!HasValidRequiredFields(descriptor) || !HasValidDependencies(descriptor))
+            if (!HasValidRequiredFields(descriptor))
                 return Result<void>::Failure(MakeError(SaveErrors::ParticipantDescriptorInvalid));
+            if (const Result<void> dependencies = ValidateDependencyMetadata(descriptor); dependencies.HasError())
+                return dependencies;
             if (const Result<void> records = ValidateUniqueSaveIdentities<SaveRecordIdentityTag>(descriptor.ownedRecords);
                 records.HasError())
                 return Result<void>::Failure(MakeError(SaveErrors::ParticipantDescriptorInvalid));
@@ -80,53 +132,72 @@ namespace Horo::Runtime {
             return indices;
         }
 
-        /** @brief Reports whether every declared dependency exists in the candidate snapshot. */
-        [[nodiscard]] bool ContainsAllDependencies(const std::vector<SaveParticipantBinding> &bindings, const ParticipantIndices &indices) {
-            for (const SaveParticipantBinding &binding : bindings) {
-                for (const SaveParticipantId &dependency : binding.Descriptor().dependencies) {
-                    if (!indices.contains(dependency))
-                        return false;
+        /** @brief Builds one stable topological phase plan with actionable dependency diagnostics. */
+        [[nodiscard]] Result<std::vector<SaveParticipantBinding>> BuildPhasePlan(const std::vector<SaveParticipantBinding> &bindings,
+                                                                                 const SaveParticipantRole role) {
+            const ParticipantIndices indices = BuildParticipantIndices(bindings);
+            std::vector<std::vector<std::size_t>> dependents(bindings.size());
+            std::vector<std::size_t> dependencyCounts(bindings.size());
+            std::size_t phaseParticipantCount = 0;
+
+            for (std::size_t index = 0; index < bindings.size(); ++index) {
+                const CanonicalStateParticipantDescriptor &descriptor = bindings[index].Descriptor();
+                if (!HasSaveParticipantRole(descriptor.roles, role))
+                    continue;
+                ++phaseParticipantCount;
+                for (const SaveParticipantDependency &dependency : descriptor.dependencies) {
+                    if (!AppliesTo(dependency.phase, role))
+                        continue;
+                    const auto found = indices.find(dependency.participant);
+                    if (found == indices.end()) {
+                        if (dependency.requirement == SaveParticipantDependencyRequirement::Optional)
+                            continue;
+                        return Result<std::vector<SaveParticipantBinding>>::Failure(
+                            MakeError(SaveErrors::ParticipantDependencyMissing,
+                                      "Participant '" + descriptor.participant.Value() + "' requires missing " +
+                                          std::string{PhaseName(role)} + " dependency '" + dependency.participant.Value() + "'."));
+                    }
+                    const CanonicalStateParticipantDescriptor &provider = bindings[found->second].Descriptor();
+                    if (!HasSaveParticipantRole(provider.roles, role)) {
+                        return Result<std::vector<SaveParticipantBinding>>::Failure(
+                            MakeError(SaveErrors::ParticipantDependencyPhaseIncompatible,
+                                      "Participant '" + descriptor.participant.Value() + "' depends on '" + provider.participant.Value() +
+                                          "' during " + std::string{PhaseName(role)} +
+                                          ", but the dependency does not support that phase."));
+                    }
+                    dependents[found->second].push_back(index);
+                    ++dependencyCounts[index];
                 }
             }
-            return true;
-        }
 
-        /** @brief Visits one participant and returns false when its dependency path cycles. */
-        [[nodiscard]] bool VisitParticipant(const std::size_t index, const std::vector<SaveParticipantBinding> &bindings,
-                                            const ParticipantIndices &indices, std::vector<VisitState> &states) {
-            using enum VisitState;
-            if (states[index] == Visiting)
-                return false;
-            if (states[index] == Visited)
-                return true;
-            states[index] = Visiting;
-            for (const SaveParticipantId &dependency : bindings[index].Descriptor().dependencies) {
-                if (!VisitParticipant(indices.at(dependency), bindings, indices, states))
-                    return false;
+            std::vector<bool> emitted(bindings.size());
+            std::vector<SaveParticipantBinding> plan;
+            plan.reserve(phaseParticipantCount);
+            while (plan.size() < phaseParticipantCount) {
+                std::size_t selected = bindings.size();
+                for (std::size_t index = 0; index < bindings.size(); ++index) {
+                    if (!emitted[index] && dependencyCounts[index] == 0 &&
+                        HasSaveParticipantRole(bindings[index].Descriptor().roles, role)) {
+                        selected = index;
+                        break;
+                    }
+                }
+                if (selected == bindings.size()) {
+                    std::string message = std::string{PhaseName(role)} + " participant dependency cycle involves";
+                    for (std::size_t index = 0; index < bindings.size(); ++index) {
+                        if (!emitted[index] && HasSaveParticipantRole(bindings[index].Descriptor().roles, role))
+                            message += " '" + bindings[index].Descriptor().participant.Value() + "'";
+                    }
+                    message += ".";
+                    return Result<std::vector<SaveParticipantBinding>>::Failure(
+                        MakeError(SaveErrors::ParticipantDependencyCycle, std::move(message)));
+                }
+                emitted[selected] = true;
+                plan.push_back(bindings[selected]);
+                for (const std::size_t dependent : dependents[selected])
+                    --dependencyCounts[dependent];
             }
-            states[index] = Visited;
-            return true;
-        }
-
-        /** @brief Reports whether the complete participant graph contains a dependency cycle. */
-        [[nodiscard]] bool HasDependencyCycle(const std::vector<SaveParticipantBinding> &bindings, const ParticipantIndices &indices) {
-            using enum VisitState;
-            std::vector states(bindings.size(), Unvisited);
-            for (std::size_t index = 0; index < bindings.size(); ++index) {
-                if (!VisitParticipant(index, bindings, indices, states))
-                    return true;
-            }
-            return false;
-        }
-
-        /** @brief Validates dependency presence and acyclicity for a candidate snapshot. */
-        [[nodiscard]] Result<void> ValidateDependencies(const std::vector<SaveParticipantBinding> &bindings) {
-            const ParticipantIndices indices = BuildParticipantIndices(bindings);
-            if (!ContainsAllDependencies(bindings, indices))
-                return Result<void>::Failure(MakeError(SaveErrors::ParticipantDependencyMissing));
-            if (HasDependencyCycle(bindings, indices))
-                return Result<void>::Failure(MakeError(SaveErrors::ParticipantDependencyCycle));
-            return Result<void>::Success();
+            return Result<std::vector<SaveParticipantBinding>>::Success(std::move(plan));
         }
     }  // namespace
 
@@ -144,13 +215,13 @@ namespace Horo::Runtime {
         return adapter_;
     }
 
-    SaveParticipantRegistrySnapshot::SaveParticipantRegistrySnapshot(const std::uint64_t generation,
-                                                                     std::shared_ptr<const std::vector<SaveParticipantBinding>> bindings)
-        : generation_(generation), bindings_(std::move(bindings)) {}
+    SaveParticipantRegistrySnapshot::SaveParticipantRegistrySnapshot(
+        const std::uint64_t generation, std::shared_ptr<const SaveParticipantRegistryDetail::SnapshotStorage> storage)
+        : generation_(generation), storage_(std::move(storage)) {}
 
     /** @copydoc SaveParticipantRegistrySnapshot::IsValid */
     bool SaveParticipantRegistrySnapshot::IsValid() const noexcept {
-        return generation_ != 0 && bindings_ != nullptr;
+        return generation_ != 0 && storage_ != nullptr;
     }
 
     /** @copydoc SaveParticipantRegistrySnapshot::Generation */
@@ -160,7 +231,20 @@ namespace Horo::Runtime {
 
     /** @copydoc SaveParticipantRegistrySnapshot::Bindings */
     std::span<const SaveParticipantBinding> SaveParticipantRegistrySnapshot::Bindings() const noexcept {
-        return bindings_ == nullptr ? std::span<const SaveParticipantBinding>{} : std::span<const SaveParticipantBinding>{*bindings_};
+        return storage_ == nullptr ? std::span<const SaveParticipantBinding>{}
+                                   : std::span<const SaveParticipantBinding>{storage_->bindings};
+    }
+
+    /** @copydoc SaveParticipantRegistrySnapshot::CaptureBindings */
+    std::span<const SaveParticipantBinding> SaveParticipantRegistrySnapshot::CaptureBindings() const noexcept {
+        return storage_ == nullptr ? std::span<const SaveParticipantBinding>{}
+                                   : std::span<const SaveParticipantBinding>{storage_->captureBindings};
+    }
+
+    /** @copydoc SaveParticipantRegistrySnapshot::RestoreBindings */
+    std::span<const SaveParticipantBinding> SaveParticipantRegistrySnapshot::RestoreBindings() const noexcept {
+        return storage_ == nullptr ? std::span<const SaveParticipantBinding>{}
+                                   : std::span<const SaveParticipantBinding>{storage_->restoreBindings};
     }
 
     /** @copydoc SaveParticipantRegistrySnapshot::Find */
@@ -200,6 +284,7 @@ namespace Horo::Runtime {
             }
         }
         const SaveParticipantId participant = descriptor.participant;
+        std::ranges::sort(descriptor.dependencies);
         if (const Result<void> advanced = AdvanceGeneration(); advanced.HasError())
             return Result<SaveParticipantRegistration>::Failure(advanced.ErrorValue());
         bindings_.push_back(SaveParticipantBinding{std::move(descriptor), std::move(adapter)});
@@ -225,13 +310,20 @@ namespace Horo::Runtime {
     Result<SaveParticipantRegistrySnapshot> CanonicalStateParticipantRegistry::Snapshot() const {
         if (closed_)
             return Result<SaveParticipantRegistrySnapshot>::Failure(MakeError(SaveErrors::ParticipantRegistryClosed));
-        if (const Result<void> dependencies = ValidateDependencies(bindings_); dependencies.HasError())
-            return Result<SaveParticipantRegistrySnapshot>::Failure(dependencies.ErrorValue());
-        auto snapshotBindings = std::make_shared<std::vector<SaveParticipantBinding>>(bindings_);
-        std::ranges::sort(*snapshotBindings, {}, [](const SaveParticipantBinding &binding) {
+        auto storage = std::make_shared<SaveParticipantRegistryDetail::SnapshotStorage>();
+        storage->bindings = bindings_;
+        std::ranges::sort(storage->bindings, {}, [](const SaveParticipantBinding &binding) {
             return binding.Descriptor().participant.Value();
         });
-        return Result<SaveParticipantRegistrySnapshot>::Success({generation_, std::move(snapshotBindings)});
+        auto capturePlan = BuildPhasePlan(storage->bindings, SaveParticipantRole::Capture);
+        if (capturePlan.HasError())
+            return Result<SaveParticipantRegistrySnapshot>::Failure(capturePlan.ErrorValue());
+        auto restorePlan = BuildPhasePlan(storage->bindings, SaveParticipantRole::Restore);
+        if (restorePlan.HasError())
+            return Result<SaveParticipantRegistrySnapshot>::Failure(restorePlan.ErrorValue());
+        storage->captureBindings = std::move(capturePlan).Value();
+        storage->restoreBindings = std::move(restorePlan).Value();
+        return Result<SaveParticipantRegistrySnapshot>::Success({generation_, std::move(storage)});
     }
 
     /** @copydoc CanonicalStateParticipantRegistry::Close */

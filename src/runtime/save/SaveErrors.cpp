@@ -47,6 +47,11 @@ namespace Horo::Runtime::SaveErrors {
     const ErrorCodeDescriptor ParticipantDependencyCycle{kDomain, ErrorCode{"save.participant.dependency_cycle"}, kError,
                                                          "Save participant dependencies contain a cycle.",
                                                          "Remove the cycle so semantic ownership has an acyclic dependency graph."};
+    const ErrorCodeDescriptor ParticipantDependencyPhaseIncompatible{kDomain, ErrorCode{"save.participant.dependency_phase_incompatible"},
+                                                                     kError,
+                                                                     "A save participant dependency names an unsupported operation phase.",
+                                                                     "Give both participants the required phase capability or correct the "
+                                                                     "typed dependency phase."};
     const ErrorCodeDescriptor ParticipantRegistryGenerationExhausted{kDomain, ErrorCode{"save.participant.registry_generation_exhausted"},
                                                                      ErrorSeverity::Critical,
                                                                      "The save participant registry generation is exhausted.",

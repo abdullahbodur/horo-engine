@@ -604,3 +604,17 @@ backend type crosses the boundary. Callers that previously inferred readiness fr
 source validity must now retain an exact registry snapshot, call `ValidatePCGGraph`,
 and hand the returned generation-fenced dependency order to the later compiler. There
 is no compatibility path for ambient runtime discovery or best-effort fallback.
+
+## Runtime Save Participant Ordering Boundary
+
+`[SAV-001.8]` extends the existing `SaveParticipantRegistry.h` contract without
+changing target ownership. Dependency edges now carry required/optional policy and
+an exact capture, restore or combined phase. Registry snapshots retain their
+identity-sorted canonical binding view and additionally publish stable topological
+capture and restore plans. Equivalent participant sets therefore produce the same
+orders regardless of registration timing, addresses or unordered-container order.
+
+Existing `SaveParticipantId` dependency initializers retain their required-both
+meaning; callers that intended optional or phase-specific behavior must migrate to
+an explicit `SaveParticipantDependency` value. The generated Runtime public-header
+consumer continues to cover the extended Foundation-only surface.

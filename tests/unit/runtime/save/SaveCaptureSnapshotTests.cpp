@@ -95,6 +95,30 @@ namespace Horo::Runtime {
             REQUIRE(snapshot.Participants().front().records == std::vector{record});
         }
 
+        TEST_CASE("Capture adapters run in the registry dependency plan", "[unit][save][capture]") {
+            auto destructionCount = std::make_shared<int>();
+            auto order = std::make_shared<std::vector<std::string>>();
+            CanonicalStateParticipantRegistry registry;
+            auto consumer = Descriptor("project.capture.a_consumer", {Test::Id<SaveRecordId>(26)}, false);
+            consumer.dependencies = {{Participant("project.capture.z_provider"), SaveParticipantDependencyRequirement::Required,
+                                      SaveParticipantDependencyPhase::Capture}};
+            Register(registry, std::move(consumer),
+                     std::make_shared<CallbackCaptureAdapter>([order](const CanonicalCaptureContext &context, ICanonicalCaptureSink &) {
+                order->push_back(context.participant.Value());
+                return Result<CanonicalCaptureDisposition>::Success(CanonicalCaptureDisposition::Omitted);
+            }, destructionCount));
+            Register(registry, Descriptor("project.capture.z_provider", {Test::Id<SaveRecordId>(27)}, false),
+                     std::make_shared<CallbackCaptureAdapter>([order](const CanonicalCaptureContext &context, ICanonicalCaptureSink &) {
+                order->push_back(context.participant.Value());
+                return Result<CanonicalCaptureDisposition>::Success(CanonicalCaptureDisposition::Omitted);
+            }, destructionCount));
+            const SaveParticipantRegistrySnapshot participants = registry.Snapshot().Value();
+            auto builder = RuntimeSaveCaptureBuilder::Create(Provenance(participants), participants).Value();
+
+            REQUIRE(builder.CaptureParticipants().HasValue());
+            CHECK(*order == std::vector<std::string>{"project.capture.z_provider", "project.capture.a_consumer"});
+        }
+
         TEST_CASE("Large captures retain segmented immutable leases and destroy payload before module adapter", "[unit][save][capture]") {
             auto events = std::make_shared<std::vector<std::string>>();
             CanonicalStateParticipantRegistry registry;

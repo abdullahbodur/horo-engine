@@ -35,6 +35,7 @@ namespace Horo::Runtime {
             DiagnosticPolicy{&SaveErrors::ParticipantRegistryCapacityExceeded, Quota},
             DiagnosticPolicy{&SaveErrors::ParticipantDependencyMissing, Participant},
             DiagnosticPolicy{&SaveErrors::ParticipantDependencyCycle, Participant},
+            DiagnosticPolicy{&SaveErrors::ParticipantDependencyPhaseIncompatible, Participant},
             DiagnosticPolicy{&SaveErrors::ParticipantRegistryGenerationExhausted, Lifecycle},
             DiagnosticPolicy{&SaveErrors::CaptureContextInvalid, Validation},
             DiagnosticPolicy{&SaveErrors::CaptureRegistryStale, Lifecycle},
