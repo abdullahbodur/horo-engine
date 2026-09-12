@@ -45,6 +45,24 @@ namespace Horo::WorldStreaming {
             return result.Value();
         }
 
+        WorldLayerStateOwnershipReplacementContext ReplacementContext() {
+            return {.authorityState = WorldLayerStateAuthorityState::Active};
+        }
+
+        WorldLayerStateOwnershipReplacementContext AuthorizedReplacementContext(const WorldLayerStateRecord &current,
+                                                                                const WorldLayerControlOwner &target) {
+            const WorldLayerControlHandoffReceipt receipt{
+                .id = IdentityFrom<WorldLayerControlHandoffId>(21),
+                .generation = IdentityFrom<WorldLayerControlHandoffGeneration>(1),
+                .currentOwner = current.ownership.owner,
+                .targetOwner = target,
+                .expectedRevision = current.ownership.revision,
+            };
+            return {.authorityState = WorldLayerStateAuthorityState::Active,
+                    .authorizedHandoff = receipt,
+                    .validatedHandoffTarget = target};
+        }
+
         void Advance(WorldLayerStateRecord &record, const WorldLayerStateTransition transition,
                      const WorldLayerStateAuthorityState authorityState = WorldLayerStateAuthorityState::Active) {
             const WorldLayerStateTransitionRequest request{.expected = record.Fence(), .transition = transition};
@@ -122,82 +140,71 @@ namespace Horo::WorldStreaming {
                    transition == WorldLayerStateTransition::Fail;
         }
 
-        [[nodiscard]] constexpr ExpectedTransition Success(const WorldLayerState state,
-                                                           const WorldLayerStateRollbackDisposition disposition,
-                                                           const bool advancesRevision = true) {
-            return {ExpectedResult::Success, state, disposition, advancesRevision};
+        struct ExpectedRule final {
+            StateCase from{};
+            WorldLayerStateTransition transition{};
+            ExpectedTransition outcome{};
+        };
+
+        [[nodiscard]] constexpr ExpectedRule AdvanceCase(
+            const WorldLayerState from, const WorldLayerStateTransition transition, const WorldLayerState to,
+            const WorldLayerStateRollbackDisposition fromDisposition = WorldLayerStateRollbackDisposition::None,
+            const WorldLayerStateRollbackDisposition toDisposition = WorldLayerStateRollbackDisposition::None) {
+            return {{from, fromDisposition}, transition, {ExpectedResult::Success, to, toDisposition, true}};
         }
 
-        [[nodiscard]] ExpectedTransition ExpectedOrderedTransition(const WorldLayerStateRecord &current,
-                                                                   const WorldLayerStateTransition transition) {
-            using enum WorldLayerState;
-            using enum WorldLayerStateRollbackDisposition;
-            using enum WorldLayerStateTransition;
-            switch (transition) {
-                case BeginLoad:
-                    if (current.state == Unloaded || current.state == Failed)
-                        return Success(Loading, None);
-                    break;
-                case CompleteLoad:
-                    if (current.state == Loading)
-                        return Success(Loaded, None);
-                    break;
-                case BeginActivation:
-                    if (current.state == Loaded)
-                        return Success(Activating, None);
-                    break;
-                case CompleteActivation:
-                    if (current.state == Activating)
-                        return Success(Activated, None);
-                    break;
-                case BeginDeactivation:
-                    if (current.state == Activated)
-                        return Success(Deactivating, None);
-                    break;
-                case CompleteDeactivation:
-                    if (current.state == Deactivating && current.rollbackDisposition == FailurePending)
-                        return Success(Unloading, FailurePending);
-                    if (current.state == Deactivating)
-                        return Success(Loaded, None);
-                    break;
-                case BeginUnload:
-                    if (current.state == Loaded)
-                        return Success(Unloading, None);
-                    break;
-                case CompleteUnload:
-                    if (current.state == Unloading && current.rollbackDisposition == FailurePending)
-                        return Success(Failed, None);
-                    if (current.state == Unloading)
-                        return Success(Unloaded, None);
-                    break;
-                case Cancel:
-                case Fail:
-                    break;
-            }
-            return {};
+        [[nodiscard]] constexpr ExpectedRule PreserveCase(const WorldLayerState state, const WorldLayerStateTransition transition,
+                                                          const WorldLayerStateRollbackDisposition disposition) {
+            return {{state, disposition}, transition, {ExpectedResult::Success, state, disposition, false}};
         }
 
-        [[nodiscard]] ExpectedTransition ExpectedSignalTransition(const WorldLayerStateRecord &current,
-                                                                  const WorldLayerStateTransition transition) {
-            using enum WorldLayerState;
-            using enum WorldLayerStateRollbackDisposition;
-            if (transition == WorldLayerStateTransition::Cancel) {
-                if (current.state == Loading)
-                    return Success(Unloading, CancellationPending);
-                if (current.state == Activating)
-                    return Success(Deactivating, CancellationPending);
-                if (current.state == Deactivating || current.state == Unloading)
-                    return Success(current.state, current.rollbackDisposition, false);
-                return {};
-            }
-            if (current.state == Loading)
-                return Success(Unloading, FailurePending);
-            if (current.state == Activating)
-                return Success(Deactivating, FailurePending);
-            if (current.state == Deactivating || current.state == Unloading)
-                return Success(current.state, FailurePending, current.rollbackDisposition != FailurePending);
-            return {};
-        }
+        constexpr std::array kExpectedRules{
+            AdvanceCase(WorldLayerState::Unloaded, WorldLayerStateTransition::BeginLoad, WorldLayerState::Loading),
+            AdvanceCase(WorldLayerState::Failed, WorldLayerStateTransition::BeginLoad, WorldLayerState::Loading),
+            AdvanceCase(WorldLayerState::Loading, WorldLayerStateTransition::CompleteLoad, WorldLayerState::Loaded),
+            AdvanceCase(WorldLayerState::Loaded, WorldLayerStateTransition::BeginActivation, WorldLayerState::Activating),
+            AdvanceCase(WorldLayerState::Activating, WorldLayerStateTransition::CompleteActivation, WorldLayerState::Activated),
+            AdvanceCase(WorldLayerState::Activated, WorldLayerStateTransition::BeginDeactivation, WorldLayerState::Deactivating),
+            AdvanceCase(WorldLayerState::Deactivating, WorldLayerStateTransition::CompleteDeactivation, WorldLayerState::Loaded),
+            AdvanceCase(WorldLayerState::Loaded, WorldLayerStateTransition::BeginUnload, WorldLayerState::Unloading),
+            AdvanceCase(WorldLayerState::Unloading, WorldLayerStateTransition::CompleteUnload, WorldLayerState::Unloaded),
+            AdvanceCase(WorldLayerState::Loading, WorldLayerStateTransition::Cancel, WorldLayerState::Unloading,
+                        WorldLayerStateRollbackDisposition::None, WorldLayerStateRollbackDisposition::CancellationPending),
+            AdvanceCase(WorldLayerState::Activating, WorldLayerStateTransition::Cancel, WorldLayerState::Deactivating,
+                        WorldLayerStateRollbackDisposition::None, WorldLayerStateRollbackDisposition::CancellationPending),
+            AdvanceCase(WorldLayerState::Deactivating, WorldLayerStateTransition::CompleteDeactivation, WorldLayerState::Loaded,
+                        WorldLayerStateRollbackDisposition::CancellationPending),
+            AdvanceCase(WorldLayerState::Unloading, WorldLayerStateTransition::CompleteUnload, WorldLayerState::Unloaded,
+                        WorldLayerStateRollbackDisposition::CancellationPending),
+            AdvanceCase(WorldLayerState::Deactivating, WorldLayerStateTransition::CompleteDeactivation, WorldLayerState::Unloading,
+                        WorldLayerStateRollbackDisposition::FailurePending, WorldLayerStateRollbackDisposition::FailurePending),
+            AdvanceCase(WorldLayerState::Unloading, WorldLayerStateTransition::CompleteUnload, WorldLayerState::Failed,
+                        WorldLayerStateRollbackDisposition::FailurePending),
+            AdvanceCase(WorldLayerState::Loading, WorldLayerStateTransition::Fail, WorldLayerState::Unloading,
+                        WorldLayerStateRollbackDisposition::None, WorldLayerStateRollbackDisposition::FailurePending),
+            AdvanceCase(WorldLayerState::Activating, WorldLayerStateTransition::Fail, WorldLayerState::Deactivating,
+                        WorldLayerStateRollbackDisposition::None, WorldLayerStateRollbackDisposition::FailurePending),
+            AdvanceCase(WorldLayerState::Deactivating, WorldLayerStateTransition::Fail, WorldLayerState::Deactivating,
+                        WorldLayerStateRollbackDisposition::None, WorldLayerStateRollbackDisposition::FailurePending),
+            AdvanceCase(WorldLayerState::Deactivating, WorldLayerStateTransition::Fail, WorldLayerState::Deactivating,
+                        WorldLayerStateRollbackDisposition::CancellationPending, WorldLayerStateRollbackDisposition::FailurePending),
+            AdvanceCase(WorldLayerState::Unloading, WorldLayerStateTransition::Fail, WorldLayerState::Unloading,
+                        WorldLayerStateRollbackDisposition::None, WorldLayerStateRollbackDisposition::FailurePending),
+            AdvanceCase(WorldLayerState::Unloading, WorldLayerStateTransition::Fail, WorldLayerState::Unloading,
+                        WorldLayerStateRollbackDisposition::CancellationPending, WorldLayerStateRollbackDisposition::FailurePending),
+            PreserveCase(WorldLayerState::Deactivating, WorldLayerStateTransition::Fail,
+                         WorldLayerStateRollbackDisposition::FailurePending),
+            PreserveCase(WorldLayerState::Unloading, WorldLayerStateTransition::Fail, WorldLayerStateRollbackDisposition::FailurePending),
+            PreserveCase(WorldLayerState::Deactivating, WorldLayerStateTransition::Cancel, WorldLayerStateRollbackDisposition::None),
+            PreserveCase(WorldLayerState::Deactivating, WorldLayerStateTransition::Cancel,
+                         WorldLayerStateRollbackDisposition::CancellationPending),
+            PreserveCase(WorldLayerState::Deactivating, WorldLayerStateTransition::Cancel,
+                         WorldLayerStateRollbackDisposition::FailurePending),
+            PreserveCase(WorldLayerState::Unloading, WorldLayerStateTransition::Cancel, WorldLayerStateRollbackDisposition::None),
+            PreserveCase(WorldLayerState::Unloading, WorldLayerStateTransition::Cancel,
+                         WorldLayerStateRollbackDisposition::CancellationPending),
+            PreserveCase(WorldLayerState::Unloading, WorldLayerStateTransition::Cancel, WorldLayerStateRollbackDisposition::FailurePending),
+        };
 
         [[nodiscard]] ExpectedTransition ExpectedFor(const WorldLayerStateRecord &current, const WorldLayerStateTransition transition,
                                                      const WorldLayerStateAuthorityState authorityState) {
@@ -205,9 +212,13 @@ namespace Horo::WorldStreaming {
                 (authorityState == WorldLayerStateAuthorityState::Cancelling && !IsDrainCommand(transition))) {
                 return {.result = ExpectedResult::LifecycleUnavailable};
             }
-            if (transition == WorldLayerStateTransition::Cancel || transition == WorldLayerStateTransition::Fail)
-                return ExpectedSignalTransition(current, transition);
-            return ExpectedOrderedTransition(current, transition);
+            for (const auto &rule : kExpectedRules) {
+                if (rule.from.state == current.state && rule.from.disposition == current.rollbackDisposition &&
+                    rule.transition == transition) {
+                    return rule.outcome;
+                }
+            }
+            return {};
         }
 
         TEST_CASE("Layer state follows load activation deactivation and unload independently from cells",
@@ -356,20 +367,22 @@ namespace Horo::WorldStreaming {
             auto current = Record(3, true);
             auto replacement = Ownership(4, true);
             replacement.owner = GameplayOwner(10, 2);
-            const auto replaced =
-                ReplaceWorldLayerStateOwnership(current, replacement, current.Fence(), WorldLayerStateAuthorityState::Active);
+            RequireError(ReplaceWorldLayerStateOwnership(current, replacement, current.Fence(), ReplacementContext()),
+                         WorldStreamingErrors::LayerOwnershipOwnerStale);
+            const auto replaced = ReplaceWorldLayerStateOwnership(current, replacement, current.Fence(),
+                                                                  AuthorizedReplacementContext(current, replacement.owner));
             REQUIRE(replaced.HasValue());
             REQUIRE(replaced.Value().ownership.owner == replacement.owner);
             REQUIRE(replaced.Value().state == WorldLayerState::Unloaded);
             REQUIRE(replaced.Value().revision.Value() == 2);
 
             Advance(current, WorldLayerStateTransition::BeginLoad);
-            RequireError(ReplaceWorldLayerStateOwnership(current, replacement, current.Fence(), WorldLayerStateAuthorityState::Active),
+            RequireError(ReplaceWorldLayerStateOwnership(current, replacement, current.Fence(), ReplacementContext()),
                          WorldStreamingErrors::LayerStateTransitionInvalid);
 
             current = Record(3, true);
             replacement.revision = IdentityFrom<WorldLayerRevision>(5);
-            RequireError(ReplaceWorldLayerStateOwnership(current, replacement, current.Fence(), WorldLayerStateAuthorityState::Active),
+            RequireError(ReplaceWorldLayerStateOwnership(current, replacement, current.Fence(), ReplacementContext()),
                          WorldStreamingErrors::LayerOwnershipRevisionStale);
         }
 
@@ -411,19 +424,17 @@ namespace Horo::WorldStreaming {
             REQUIRE(activationFailure.state == WorldLayerState::Deactivating);
             REQUIRE(activationFailure.rollbackDisposition == WorldLayerStateRollbackDisposition::FailurePending);
             const auto replacement = Ownership(2);
-            RequireError(ReplaceWorldLayerStateOwnership(activationFailure, replacement, activationFailure.Fence(),
-                                                         WorldLayerStateAuthorityState::Active),
+            RequireError(ReplaceWorldLayerStateOwnership(activationFailure, replacement, activationFailure.Fence(), ReplacementContext()),
                          WorldStreamingErrors::LayerStateTransitionInvalid);
             Advance(activationFailure, WorldLayerStateTransition::CompleteDeactivation);
             REQUIRE(activationFailure.state == WorldLayerState::Unloading);
             REQUIRE(activationFailure.rollbackDisposition == WorldLayerStateRollbackDisposition::FailurePending);
-            RequireError(ReplaceWorldLayerStateOwnership(activationFailure, replacement, activationFailure.Fence(),
-                                                         WorldLayerStateAuthorityState::Active),
+            RequireError(ReplaceWorldLayerStateOwnership(activationFailure, replacement, activationFailure.Fence(), ReplacementContext()),
                          WorldStreamingErrors::LayerStateTransitionInvalid);
             Advance(activationFailure, WorldLayerStateTransition::CompleteUnload);
             REQUIRE(activationFailure.state == WorldLayerState::Failed);
-            const auto recovered = ReplaceWorldLayerStateOwnership(activationFailure, replacement, activationFailure.Fence(),
-                                                                   WorldLayerStateAuthorityState::Active);
+            const auto recovered =
+                ReplaceWorldLayerStateOwnership(activationFailure, replacement, activationFailure.Fence(), ReplacementContext());
             REQUIRE(recovered.HasValue());
             REQUIRE(recovered.Value().state == WorldLayerState::Unloaded);
 

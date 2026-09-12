@@ -10,6 +10,7 @@
 #include <compare>
 #include <cstddef>
 #include <cstdint>
+#include <optional>
 
 namespace Horo::WorldStreaming {
     namespace Detail {
@@ -94,6 +95,13 @@ namespace Horo::WorldStreaming {
         WorldLayerStateAuthorityState authorityState{WorldLayerStateAuthorityState::Closed}; /**< Current lifecycle gate. */
     };
 
+    /** @brief Lifecycle and optional exact handoff evidence for ownership replacement. */
+    struct WorldLayerStateOwnershipReplacementContext final {
+        WorldLayerStateAuthorityState authorityState{WorldLayerStateAuthorityState::Closed}; /**< Current lifecycle gate. */
+        std::optional<WorldLayerControlHandoffReceipt> authorizedHandoff{}; /**< Current-owner authorization for a handoff. */
+        std::optional<WorldLayerControlOwner> validatedHandoffTarget{};     /**< Independently fresh target owner lifetime. */
+    };
+
     /** @brief Exact state-machine command and compare-and-swap fence. */
     struct WorldLayerStateTransitionRequest final {
         WorldLayerStateFence expected{};        /**< Exact current record fence. */
@@ -128,14 +136,14 @@ namespace Horo::WorldStreaming {
      * @param current Current immutable layer-state fact.
      * @param replacement Exact successor classification/owner publication for the same stable layer.
      * @param expected Exact current state fence.
-     * @param authorityState Current owner lifecycle gate.
+     * @param context Current lifecycle gate and exact handoff evidence when control ownership changes.
      * @return Unloaded successor record or a typed primary-ownership, state, lifecycle, stale, or exhaustion error.
      * @post Active or in-flight content is never replaced and failure leaves @p current unchanged.
      */
     [[nodiscard]] Result<WorldLayerStateRecord> ReplaceWorldLayerStateOwnership(const WorldLayerStateRecord &current,
                                                                                 const WorldLayerOwnershipDescriptor &replacement,
                                                                                 const WorldLayerStateFence &expected,
-                                                                                WorldLayerStateAuthorityState authorityState);
+                                                                                const WorldLayerStateOwnershipReplacementContext &context);
 
     /** @brief Advances a layer-state revision without wrapping. @param current Current valid revision. @return Successor or
      * GenerationExhausted. */

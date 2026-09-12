@@ -217,20 +217,24 @@ namespace Horo::WorldStreaming {
     Result<WorldLayerStateRecord> ReplaceWorldLayerStateOwnership(const WorldLayerStateRecord &current,
                                                                   const WorldLayerOwnershipDescriptor &replacement,
                                                                   const WorldLayerStateFence &expected,
-                                                                  const WorldLayerStateAuthorityState authorityState) {
-        if (const auto valid = ValidateCurrent(current, expected, authorityState); valid.HasError())
+                                                                  const WorldLayerStateOwnershipReplacementContext &context) {
+        if (const auto valid = ValidateCurrent(current, expected, context.authorityState); valid.HasError())
             return Result<WorldLayerStateRecord>::Failure(valid.ErrorValue());
-        if (authorityState != WorldLayerStateAuthorityState::Active)
+        if (context.authorityState != WorldLayerStateAuthorityState::Active)
             return Failure<WorldLayerStateRecord>(WorldStreamingErrors::LayerStateLifecycleUnavailable);
         if (current.state != WorldLayerState::Unloaded && current.state != WorldLayerState::Failed)
             return Failure<WorldLayerStateRecord>(WorldStreamingErrors::LayerStateTransitionInvalid);
 
         const WorldLayerOwnershipAdmissionContext ownershipContext{.expectedWorld = expected.world,
                                                                    .current = current.ownership,
+                                                                   .authorizedHandoff = context.authorizedHandoff,
+                                                                   .validatedHandoffTarget = context.validatedHandoffTarget,
                                                                    .layerCount = 1,
                                                                    .layerCapacity = 1,
                                                                    .state = WorldLayerOwnershipAuthorityState::Active};
-        const WorldLayerOwnershipRequest ownershipRequest{.candidate = replacement, .expectedRevision = current.ownership.revision};
+        const WorldLayerOwnershipRequest ownershipRequest{.candidate = replacement,
+                                                          .expectedRevision = current.ownership.revision,
+                                                          .handoff = context.authorizedHandoff};
         if (const auto admitted = ValidateWorldLayerOwnershipAdmission(ownershipRequest, ownershipContext); admitted.HasError())
             return Result<WorldLayerStateRecord>::Failure(admitted.ErrorValue());
 

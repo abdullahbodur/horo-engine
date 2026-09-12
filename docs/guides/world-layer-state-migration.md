@@ -26,7 +26,9 @@ physical cell residency or publishing unacknowledged cleanup.
 5. Retain `FailurePending` when in-flight work fails. Finish deactivation and unload
    before publishing `Failed`; the failure signal alone is not cleanup acknowledgement.
 6. Replace layer ownership only from `Unloaded` or cleanup-complete `Failed`, using
-   the exact WST-006.1 ownership successor and current state fence.
+   the exact WST-006.1 ownership successor and current state fence. When the control
+   owner changes, also provide the current handoff authorization and independently
+   validated target lifetime required by WST-006.1.
 
 ## Troubleshooting
 

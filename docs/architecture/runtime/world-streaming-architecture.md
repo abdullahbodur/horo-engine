@@ -922,9 +922,11 @@ never fabricates cleanup acknowledgement.
 Initial state admission is bounded and starts at Unloaded even for a Persistent
 layer; the owner must still publish real load completion. Ownership replacement is
 allowed only while the state is Unloaded or cleanup-complete Failed and must pass the
-WST-006.1 exact successor validation. Invalid, unsupported, stale, over-capacity,
-illegal-transition, cancelling and closed inputs return typed results without
-modifying the current record.
+WST-006.1 exact successor validation. A control-owner change additionally forwards
+the exact current handoff authorization and independently validated target lifetime;
+state quiescence never substitutes for ownership authority. Invalid, unsupported,
+stale, over-capacity, illegal-transition, cancelling and closed inputs return typed
+results without modifying the current record.
 
 ### Persistent, non-spatial and dynamic ownership policy
 
