@@ -76,6 +76,14 @@ namespace {
         REQUIRE(Runtime::ValidateNavigationModifierComponent(modifier).HasError());
         modifier.operation = Runtime::NavigationModifierOperation::Exclude;
         REQUIRE(Runtime::ValidateNavigationModifierComponent(modifier).HasError());
+        modifier = Modifier();
+        modifier.volume = Runtime::NavigationCylinderVolume{.radius = 0.0F, .halfHeight = 1.0F};
+        REQUIRE(Runtime::ValidateNavigationModifierComponent(modifier).HasError());
+        modifier = Modifier();
+        modifier.operation = Runtime::NavigationModifierOperation::OverrideAreaAndCost;
+        modifier.area = Navigation::NavigationAreaId::Create(9).Value();
+        modifier.traversalCost = -1.0F;
+        REQUIRE(Runtime::ValidateNavigationModifierComponent(modifier).HasError());
 
         auto link = Link();
         REQUIRE(Runtime::ValidateNavigationLinkComponent(link).HasValue());
@@ -88,6 +96,12 @@ namespace {
         REQUIRE(Runtime::ValidateNavigationLinkComponent(link).HasError());
         link = Link();
         link.start.connectionRadiusMeters = 0.0F;
+        REQUIRE(Runtime::ValidateNavigationLinkComponent(link).HasError());
+        link = Link();
+        link.profiles.clear();
+        REQUIRE(Runtime::ValidateNavigationLinkComponent(link).HasError());
+        link = Link();
+        link.traversalCost = -1.0F;
         REQUIRE(Runtime::ValidateNavigationLinkComponent(link).HasError());
     }
 
