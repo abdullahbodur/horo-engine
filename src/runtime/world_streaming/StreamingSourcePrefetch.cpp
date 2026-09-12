@@ -15,18 +15,6 @@ namespace Horo::WorldStreaming {
             return intent == StreamingSourceIntent::Camera || intent == StreamingSourceIntent::Gameplay;
         }
 
-        [[nodiscard]] std::uint64_t Magnitude(const std::int64_t value) noexcept {
-            return value >= 0 ? static_cast<std::uint64_t>(value) : static_cast<std::uint64_t>(-(value + 1)) + 1U;
-        }
-
-        [[nodiscard]] bool AddChecked(const std::int64_t lhs, const std::int64_t rhs, std::int64_t &sum) noexcept {
-            if ((rhs > 0 && lhs > std::numeric_limits<std::int64_t>::max() - rhs) ||
-                (rhs < 0 && lhs < std::numeric_limits<std::int64_t>::min() - rhs))
-                return false;
-            sum = lhs + rhs;
-            return true;
-        }
-
         [[nodiscard]] bool PredictAxis(const std::int64_t position, const std::int64_t velocity, const std::uint64_t horizonMilliseconds,
                                        std::int64_t &predicted) noexcept {
             constexpr std::int64_t MillisecondsPerSecond = 1'000;
@@ -34,16 +22,30 @@ namespace Horo::WorldStreaming {
             const std::int64_t wholeSeconds = velocity / MillisecondsPerSecond;
             const std::int64_t remainder = velocity % MillisecondsPerSecond;
             const std::int64_t delta = wholeSeconds * horizon + (remainder * horizon) / MillisecondsPerSecond;
-            return AddChecked(position, delta, predicted);
+            return Internal::CheckedAdd(position, delta, predicted);
         }
 
         [[nodiscard]] std::uint64_t SpeedSquared(const StreamingVelocity64 &velocity) noexcept {
             std::uint64_t squared{};
             for (const std::int64_t component : velocity.millimetersPerSecond) {
-                const std::uint64_t magnitude = Magnitude(component);
+                const std::uint64_t magnitude = Internal::UnsignedMagnitude(component);
                 squared += magnitude * magnitude;
             }
             return squared;
+        }
+
+        [[nodiscard]] Result<void> ValidateObservation(const StreamingPrefetchPolicyRequest &request,
+                                                       const StreamingPrefetchEvaluationContext &context,
+                                                       const StreamingVelocityPrefetchObservation &observation) {
+            if (observation.sampledAtServiceMilliseconds > context.serviceTimeMilliseconds)
+                return Internal::Failure<void>(WorldStreamingErrors::PrefetchInvalid);
+            if (context.serviceTimeMilliseconds - observation.sampledAtServiceMilliseconds > request.maximumSampleAgeMilliseconds)
+                return Internal::Failure<void>(WorldStreamingErrors::PrefetchStale);
+            for (const std::int64_t component : observation.velocity.millimetersPerSecond) {
+                if (Internal::UnsignedMagnitude(component) > request.maximumSpeedMillimetersPerSecond)
+                    return Internal::Failure<void>(WorldStreamingErrors::PrefetchInvalid);
+            }
+            return Result<void>::Success();
         }
     }  // namespace
 
@@ -95,14 +97,9 @@ namespace Horo::WorldStreaming {
             return Internal::Failure<StreamingPrefetchResult>(WorldStreamingErrors::PrefetchLifecycleUnavailable);
         if (!IsSupportedSource(observation.source.intent))
             return Internal::Failure<StreamingPrefetchResult>(WorldStreamingErrors::PrefetchUnsupported);
-        if (observation.sampledAtServiceMilliseconds > context.serviceTimeMilliseconds)
-            return Internal::Failure<StreamingPrefetchResult>(WorldStreamingErrors::PrefetchInvalid);
-        if (context.serviceTimeMilliseconds - observation.sampledAtServiceMilliseconds > policy.request_.maximumSampleAgeMilliseconds)
-            return Internal::Failure<StreamingPrefetchResult>(WorldStreamingErrors::PrefetchStale);
-        for (const std::int64_t component : observation.velocity.millimetersPerSecond) {
-            if (Magnitude(component) > policy.request_.maximumSpeedMillimetersPerSecond)
-                return Internal::Failure<StreamingPrefetchResult>(WorldStreamingErrors::PrefetchInvalid);
-        }
+        const auto validObservation = ValidateObservation(policy.request_, context, observation);
+        if (validObservation.HasError())
+            return Result<StreamingPrefetchResult>::Failure(validObservation.ErrorValue());
 
         const auto admission = ValidateStreamingSourceAdmission(observation.source, context.sourceAdmission);
         if (admission.HasError())
