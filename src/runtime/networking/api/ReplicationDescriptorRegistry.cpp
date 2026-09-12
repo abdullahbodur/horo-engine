@@ -86,6 +86,9 @@ namespace Horo::Network {
                     bytes.U8(field.canonicalDefault.has_value() ? 1U : 0U);
                     if (field.canonicalDefault.has_value())
                         bytes.Bytes(field.canonicalDefault->canonicalBytes);
+                    bytes.U8(field.customCondition.has_value() ? 1U : 0U);
+                    if (field.customCondition.has_value())
+                        bytes.U32(field.customCondition->Value());
                 }
                 bytes.Size(schema.tombstonedFields.size());
                 for (const FieldId tombstone : schema.tombstonedFields)
