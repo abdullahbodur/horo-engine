@@ -528,6 +528,51 @@ namespace Horo::Network::NetworkErrors {
         .retryable = false,
         .userActionable = false,
     };
+    const ErrorCodeDescriptor AuthenticationInvalid{
+        .domain = NetworkDomain,
+        .code = ErrorCode{"network.authentication.invalid"},
+        .defaultSeverity = ErrorSeverity::Error,
+        .summary = "Network authentication input is malformed.",
+        .remediationHint = "Use the exact bounded challenge contract and generation-bound host authority outputs.",
+        .retryable = false,
+        .userActionable = false,
+    };
+    const ErrorCodeDescriptor AuthenticationIncompatible{
+        .domain = NetworkDomain,
+        .code = ErrorCode{"network.authentication.incompatible"},
+        .defaultSeverity = ErrorSeverity::Error,
+        .summary = "Network authentication conflicts with immutable trust policy.",
+        .remediationHint = "Use the exact policy revision, transcript, and exposure-specific protection requirements.",
+        .retryable = false,
+        .userActionable = true,
+    };
+    const ErrorCodeDescriptor AuthenticationTrustUnavailable{
+        .domain = NetworkDomain,
+        .code = ErrorCode{"network.authentication.trust_unavailable"},
+        .defaultSeverity = ErrorSeverity::Error,
+        .summary = "A required host trust authority is unavailable.",
+        .remediationHint = "Restore the configured credential, certificate, peer-verification, and private-key providers.",
+        .retryable = true,
+        .userActionable = true,
+    };
+    const ErrorCodeDescriptor AuthenticationRejected{
+        .domain = NetworkDomain,
+        .code = ErrorCode{"network.authentication.rejected"},
+        .defaultSeverity = ErrorSeverity::Error,
+        .summary = "Host trust policy rejected network authentication.",
+        .remediationHint = "Present only this safe failure class; keep provider, account, proof, certificate, and key detail private.",
+        .retryable = false,
+        .userActionable = true,
+    };
+    const ErrorCodeDescriptor AuthenticationStateInvalid{
+        .domain = NetworkDomain,
+        .code = ErrorCode{"network.authentication.state_invalid"},
+        .defaultSeverity = ErrorSeverity::Warning,
+        .summary = "Network authentication is not legal from its current state.",
+        .remediationHint = "Retain the first terminal result and begin a new authentication generation when required.",
+        .retryable = false,
+        .userActionable = false,
+    };
     const ErrorCodeDescriptor MessageEnvelopeInvalid{
         .domain = NetworkDomain,
         .code = ErrorCode{"network.message.envelope_invalid"},
