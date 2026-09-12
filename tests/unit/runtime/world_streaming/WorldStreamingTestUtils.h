@@ -2,6 +2,7 @@
 
 #include "Horo/Assets/AssetId.h"
 #include "Horo/WorldStreaming/StreamingSourceDescriptor.h"
+#include "Horo/WorldStreaming/WorldLayerOwnershipModel.h"
 #include "Horo/WorldStreaming/WorldStreamingIdentity.h"
 #include "Horo/WorldStreaming/WorldStreamingRuntimeComposition.h"
 
@@ -34,6 +35,10 @@ namespace Horo::WorldStreaming::TestSupport {
 
     inline StreamingRuntimeOwnerToken WorldOwner(const std::uint64_t owner = 5, const std::uint64_t epoch = 1) {
         return {.partition = World(), .epoch = IdentityFrom<PartitionEpoch>(epoch), .owner = IdentityFrom<StreamingRuntimeOwnerId>(owner)};
+    }
+
+    inline WorldLayerControlOwner StreamingLayerOwner() {
+        return {.world = WorldOwner(), .kind = WorldLayerControlOwnerKind::WorldStreaming};
     }
 
     inline StreamingSourceOwnerToken Owner(const std::uint32_t generation = 1,

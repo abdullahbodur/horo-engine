@@ -11,12 +11,9 @@ namespace Horo::WorldStreaming {
         using TestSupport::IdentityFrom;
         using TestSupport::Layer;
         using TestSupport::RequireError;
+        using TestSupport::StreamingLayerOwner;
         using TestSupport::World;
         using TestSupport::WorldOwner;
-
-        WorldLayerControlOwner StreamingOwner() {
-            return {.world = WorldOwner(), .kind = WorldLayerControlOwnerKind::WorldStreaming};
-        }
 
         WorldLayerControlOwner ExplicitOwner(const WorldLayerControlOwnerKind kind, const std::uint64_t identity = 9,
                                              const std::uint64_t generation = 1) {
@@ -48,11 +45,11 @@ namespace Horo::WorldStreaming {
         TEST_CASE("Layer classification keeps placement residency audience and owner orthogonal",
                   "[unit][world_streaming][layer_ownership]") {
             const auto persistent = Descriptor(WorldLayerPlacement::Spatial, WorldLayerResidencyPolicy::Persistent,
-                                               WorldLayerAudience::Runtime, StreamingOwner());
+                                               WorldLayerAudience::Runtime, StreamingLayerOwner());
             const auto spatial = Descriptor(WorldLayerPlacement::Spatial, WorldLayerResidencyPolicy::Streamed, WorldLayerAudience::Runtime,
-                                            StreamingOwner());
+                                            StreamingLayerOwner());
             const auto nonSpatial = Descriptor(WorldLayerPlacement::NonSpatial, WorldLayerResidencyPolicy::Streamed,
-                                               WorldLayerAudience::Runtime, StreamingOwner());
+                                               WorldLayerAudience::Runtime, StreamingLayerOwner());
             const auto editorOnly = Descriptor(WorldLayerPlacement::Spatial, WorldLayerResidencyPolicy::Streamed,
                                                WorldLayerAudience::EditorOnly, ExplicitOwner(WorldLayerControlOwnerKind::EditorDocument));
             const auto runtimeControlled =
@@ -73,7 +70,7 @@ namespace Horo::WorldStreaming {
                          WorldStreamingErrors::LayerOwnershipUnsupported);
             RequireError(ValidateWorldLayerOwnershipDescriptor(Descriptor(WorldLayerPlacement::Spatial,
                                                                           WorldLayerResidencyPolicy::RuntimeControlled,
-                                                                          WorldLayerAudience::Runtime, StreamingOwner())),
+                                                                          WorldLayerAudience::Runtime, StreamingLayerOwner())),
                          WorldStreamingErrors::LayerOwnershipUnsupported);
             RequireError(ValidateWorldLayerOwnershipDescriptor(
                              Descriptor(WorldLayerPlacement::NonSpatial, WorldLayerResidencyPolicy::Streamed,
@@ -87,7 +84,7 @@ namespace Horo::WorldStreaming {
 
         TEST_CASE("Layer owner bindings carry exactly one applicable authority representation",
                   "[unit][world_streaming][layer_ownership][owner]") {
-            auto streaming = StreamingOwner();
+            auto streaming = StreamingLayerOwner();
             streaming.authority = IdentityFrom<WorldLayerControlOwnerId>(9);
             CHECK_FALSE(streaming.IsValid());
 
@@ -128,7 +125,7 @@ namespace Horo::WorldStreaming {
                   "[unit][world_streaming][layer_ownership][identity]") {
             auto context = Context();
             context.current = Descriptor(WorldLayerPlacement::Spatial, WorldLayerResidencyPolicy::Streamed, WorldLayerAudience::Runtime,
-                                         StreamingOwner(), 7);
+                                         StreamingLayerOwner(), 7);
             auto candidate = *context.current;
             candidate.revision = IdentityFrom<WorldLayerRevision>(8);
 
@@ -144,7 +141,7 @@ namespace Horo::WorldStreaming {
 
             candidate = *context.current;
             candidate.revision = IdentityFrom<WorldLayerRevision>(8);
-            candidate.owner = StreamingOwner();
+            candidate.owner = StreamingLayerOwner();
             candidate.owner.world = WorldOwner(6);
             RequireError(ValidateWorldLayerOwnershipAdmission({candidate, IdentityFrom<WorldLayerRevision>(7)}, context),
                          WorldStreamingErrors::LayerOwnershipOwnerStale);
@@ -153,7 +150,7 @@ namespace Horo::WorldStreaming {
         TEST_CASE("Layer admission enforces capacity cancellation and shutdown transactionally",
                   "[unit][world_streaming][layer_ownership][lifecycle]") {
             const auto candidate = Descriptor(WorldLayerPlacement::Spatial, WorldLayerResidencyPolicy::Persistent,
-                                              WorldLayerAudience::Runtime, StreamingOwner());
+                                              WorldLayerAudience::Runtime, StreamingLayerOwner());
             auto context = Context();
             context.layerCount = context.layerCapacity;
             RequireError(ValidateWorldLayerOwnershipAdmission({candidate, std::nullopt}, context),
@@ -180,19 +177,19 @@ namespace Horo::WorldStreaming {
         TEST_CASE("Layer descriptors reject malformed enums owners and revision exhaustion",
                   "[unit][world_streaming][layer_ownership][failure]") {
             auto descriptor = Descriptor(WorldLayerPlacement::Spatial, WorldLayerResidencyPolicy::Persistent, WorldLayerAudience::Runtime,
-                                         StreamingOwner());
+                                         StreamingLayerOwner());
             descriptor.placement = static_cast<WorldLayerPlacement>(255);
             RequireError(ValidateWorldLayerOwnershipDescriptor(descriptor), WorldStreamingErrors::LayerOwnershipUnsupported);
 
             descriptor = Descriptor(WorldLayerPlacement::Spatial, WorldLayerResidencyPolicy::Persistent, WorldLayerAudience::Runtime,
-                                    StreamingOwner());
+                                    StreamingLayerOwner());
             descriptor.revision = {};
             RequireError(ValidateWorldLayerOwnershipDescriptor(descriptor), WorldStreamingErrors::LayerOwnershipInvalid);
 
             constexpr auto maximum = std::numeric_limits<std::uint64_t>::max();
             auto context = Context();
             context.current = Descriptor(WorldLayerPlacement::Spatial, WorldLayerResidencyPolicy::Persistent, WorldLayerAudience::Runtime,
-                                         StreamingOwner(), maximum);
+                                         StreamingLayerOwner(), maximum);
             auto successor = *context.current;
             successor.revision = IdentityFrom<WorldLayerRevision>(1);
             RequireError(ValidateWorldLayerOwnershipAdmission({successor, IdentityFrom<WorldLayerRevision>(maximum)}, context),
