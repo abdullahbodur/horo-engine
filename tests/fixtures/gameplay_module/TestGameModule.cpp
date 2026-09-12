@@ -5,6 +5,7 @@
 #include "Horo/Gameplay/GameplayErrors.h"
 #include "Horo/Gameplay/NativeBehavior.h"
 #include "Horo/Gameplay/SystemRegistry.h"
+#include "gameplay/GameAssetTestSupport.h"
 
 #include <algorithm>
 
@@ -113,20 +114,7 @@ namespace {
                 return component;
 
             GameAssetTypeRegistration asset{
-                .descriptor =
-                    {
-                        .typeId = GameAssetTypeId::Parse("game.tests.quest_definition").Value(),
-                        .schemaVersion = 1,
-                        .sourceExtensions = {"quest"},
-                        .cookTargets = {AssetCookTargetId::Parse("headless-null").Value()},
-                        .editor =
-                            {
-                                .displayName = "Quest Definition",
-                                .category = "Gameplay/Quests",
-                                .iconName = "asset-quest",
-                                .fields = {{GameAssetFieldId::Parse("title").Value(), "Title", GameAssetFieldKind::String, true}},
-                            },
-                    },
+                .descriptor = Tests::QuestGameAssetDescriptor(),
                 .handler =
                     {
                         .importAsset = &ImportTestAsset,

@@ -1,5 +1,6 @@
 #include "Horo/Gameplay/GameAssetTypeRegistry.h"
 #include "Horo/Gameplay/GameplayErrors.h"
+#include "gameplay/GameAssetTestSupport.h"
 
 #include <catch2/catch_test_macros.hpp>
 #include <stdexcept>
@@ -46,6 +47,11 @@ namespace {
         return Result<std::vector<std::byte>>::Success(input.asset.payload);
     }
 
+    Result<std::vector<std::byte>> CookEmpty(void *userData, const GameAssetCookInput &, const CancellationToken &) {
+        ++*static_cast<int *>(userData);
+        return Result<std::vector<std::byte>>::Success({});
+    }
+
     Result<SerializedGameAsset> ImportWrongSchema(void *, const GameAssetImportInput &, const CancellationToken &) {
         return Result<SerializedGameAsset>::Success(Payload(QuestType(), 1));
     }
@@ -72,20 +78,7 @@ namespace {
 
     GameAssetTypeRegistration Registration(int &invocations) {
         return {
-            .descriptor =
-                {
-                    .typeId = QuestType(),
-                    .schemaVersion = 2,
-                    .sourceExtensions = {"quest", "json"},
-                    .cookTargets = {Target("headless-null"), Target("desktop-vulkan")},
-                    .editor =
-                        {
-                            .displayName = "Quest Definition",
-                            .category = "Gameplay/Quests",
-                            .iconName = "asset-quest",
-                            .fields = {{GameAssetFieldId::Parse("title").Value(), "Title", GameAssetFieldKind::String, true}},
-                        },
-                },
+            .descriptor = Tests::QuestGameAssetDescriptor(2, {"quest", "json"}, {Target("headless-null"), Target("desktop-vulkan")}),
             .handler = {.userData = &invocations, .importAsset = &Import, .serializeAsset = &Serialize, .cookAsset = &Cook},
         };
     }
@@ -122,6 +115,16 @@ TEST_CASE("game asset registration validates stable identities metadata and call
     duplicateTarget.descriptor.cookTargets.push_back(Target("headless-null"));
     CHECK(registry.Register(std::move(duplicateTarget)).HasError());
 
+    GameAssetTypeRegistration maximumTarget = Registration(invocations);
+    maximumTarget.descriptor.cookTargets = {Target("a-" + std::string(MaximumGameAssetCookTargetBytes - 2, 'a'))};
+    GameAssetTypeRegistry maximumTargetRegistry{"game.tests"};
+    CHECK(maximumTargetRegistry.Register(std::move(maximumTarget)).HasValue());
+
+    GameAssetTypeRegistration oversizedTarget = Registration(invocations);
+    oversizedTarget.descriptor.cookTargets = {Target("a-" + std::string(MaximumGameAssetCookTargetBytes - 1, 'a'))};
+    GameAssetTypeRegistry oversizedTargetRegistry{"game.tests"};
+    CHECK(oversizedTargetRegistry.Register(std::move(oversizedTarget)).HasError());
+
     REQUIRE(registry.Freeze().HasValue());
     CHECK(registry.IsFrozen());
     CHECK(registry.Registrations().size() == 1);
@@ -145,9 +148,12 @@ TEST_CASE("game asset processing invokes exact type callbacks and validates thei
     REQUIRE(serialized.HasValue());
     CHECK(serialized.Value().schemaVersion == 2);
 
-    const auto cooked = registry.Cook({serialized.Value(), Target("headless-null")}, cancellation);
+    auto cooked = registry.Cook({serialized.Value(), Target("headless-null")}, cancellation);
     REQUIRE(cooked.HasValue());
-    CHECK(cooked.Value() == bytes);
+    std::vector<std::byte> cookedBytes = std::move(cooked).Value();
+    CHECK(cookedBytes == bytes);
+    cookedBytes.front() = std::byte{0x7f};
+    CHECK(serialized.Value().payload == bytes);
     CHECK(invocations == 3);
 
     CHECK(registry.Import(typeId, {{bytes}, "png"}, cancellation).HasError());
@@ -190,11 +196,9 @@ TEST_CASE("game asset processing contains callback exceptions and enforces host 
           GameplayErrors::GameAssetProcessingFailed.code.Value());
     CHECK(registry.Serialize(QuestType(), {{small}, GameAssetPayloadEncoding::Binary}, {}).ErrorValue().code.Value() ==
           GameplayErrors::GameAssetProcessingFailed.code.Value());
-    const SerializedGameAsset asset = Payload(QuestType());
-    const SerializedGameAsset original = asset;
+    SerializedGameAsset asset = Payload(QuestType());
     CHECK(registry.Cook({asset, Target("headless-null")}, {}).ErrorValue().code.Value() ==
           GameplayErrors::GameAssetProcessingFailed.code.Value());
-    CHECK(asset == original);
     CHECK(registry.Import(QuestType(), {{oversized}, "quest"}, {}).ErrorValue().code.Value() ==
           GameplayErrors::InvalidGameAssetProcessingInput.code.Value());
     CHECK(registry.Serialize(QuestType(), {{oversized}, GameAssetPayloadEncoding::Binary}, {}).ErrorValue().code.Value() ==
@@ -208,7 +212,6 @@ TEST_CASE("game asset processing contains callback exceptions and enforces host 
     REQUIRE(bounded.Freeze().HasValue());
     CHECK(bounded.Cook({asset, Target("headless-null")}, {}).ErrorValue().code.Value() ==
           GameplayErrors::GameAssetProcessingFailed.code.Value());
-    CHECK(asset == original);
 }
 
 TEST_CASE("missing and replaced game asset code preserves payload and exposes an editor fallback") {
@@ -279,6 +282,28 @@ TEST_CASE("game asset validation rejects malformed envelopes without changing au
     CHECK(registry.Cook({malformed, Target("headless-null")}, {}).HasError());
     CHECK(malformed == original);
     CHECK(invocations == 0);
+}
+
+TEST_CASE("game asset envelope payload bound is enforced before cook callbacks") {
+    int invocations = 0;
+    GameAssetTypeRegistration registration = Registration(invocations);
+    registration.handler.cookAsset = &CookEmpty;
+    GameAssetTypeRegistry registry{"game.tests"};
+    REQUIRE(registry.Register(std::move(registration)).HasValue());
+    REQUIRE(registry.Freeze().HasValue());
+
+    SerializedGameAsset asset = Payload(QuestType());
+    asset.payload.resize(MaximumGameAssetPayloadBytes);
+    CHECK(ValidateSerializedGameAsset(asset).HasValue());
+    CHECK(registry.Inspect(asset).HasValue());
+    CHECK(registry.Cook({asset, Target("headless-null")}, {}).HasValue());
+    CHECK(invocations == 1);
+
+    asset.payload.push_back(std::byte{0x00});
+    CHECK(ValidateSerializedGameAsset(asset).HasError());
+    CHECK(registry.Inspect(asset).HasError());
+    CHECK(registry.Cook({asset, Target("headless-null")}, {}).HasError());
+    CHECK(invocations == 1);
 }
 
 TEST_CASE("game asset inspection reports schema skew without invoking project code") {

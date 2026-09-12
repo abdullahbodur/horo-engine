@@ -22,6 +22,7 @@ namespace Horo::Gameplay {
     inline constexpr std::size_t MaximumGameAssetTypeIdBytes = 96;
     inline constexpr std::size_t MaximumGameAssetFieldIdBytes = 96;
     inline constexpr std::size_t MaximumGameAssetExtensionBytes = 32;
+    inline constexpr std::size_t MaximumGameAssetCookTargetBytes = 96;
     inline constexpr std::size_t MaximumGameAssetEditorTextBytes = 256;
     inline constexpr std::size_t MaximumGameAssetTypes = 256;
     inline constexpr std::size_t MaximumGameAssetFields = 256;

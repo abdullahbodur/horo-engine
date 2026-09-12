@@ -14,7 +14,7 @@
 #include <utility>
 
 namespace Horo {
-    inline constexpr std::size_t MaximumAssetCookTargetIdBytes = 96;
+    inline constexpr std::size_t MaximumAssetCookTargetIdBytes = 65'535;
 
     namespace AssetCookTargetErrors {
         /** @brief Canonical asset cook-target parsing failed. */

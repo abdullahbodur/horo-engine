@@ -4,6 +4,7 @@
 #include "Horo/Gameplay/GameplayErrors.h"
 
 #include <algorithm>
+#include <utility>
 
 namespace Horo::Gameplay {
     namespace {
@@ -15,6 +16,13 @@ namespace Horo::Gameplay {
             } catch (...) {
                 return Result<Output>::Failure(MakeError(GameplayErrors::GameAssetProcessingFailed, failureMessage));
             }
+        }
+
+        template <typename Output, typename Action>
+        [[nodiscard]] Result<Output> UseRegistration(Result<const GameAssetTypeRegistration *> resolved, Action &&action) {
+            if (resolved.HasError())
+                return Result<Output>::Failure(resolved.ErrorValue());
+            return std::forward<Action>(action)(*resolved.Value());
         }
 
         [[nodiscard]] bool HandlesExtension(const GameAssetTypeDescriptor &descriptor, const std::string_view extension) noexcept {
@@ -81,18 +89,10 @@ namespace Horo::Gameplay {
 
     /** @copydoc GameAssetTypeRegistry::Find */
     const GameAssetTypeRegistration *GameAssetTypeRegistry::Find(const GameAssetTypeId &typeId) const noexcept {
-        if (!frozen_) {
-            const auto found = std::ranges::find(registrations_, typeId, [](const GameAssetTypeRegistration &registration) {
-                return registration.descriptor.typeId;
-            });
-            return found == registrations_.end() ? nullptr : std::to_address(found);
-        }
-        const auto found = std::ranges::lower_bound(registrations_, typeId, {}, [](const GameAssetTypeRegistration &registration) {
+        const auto found = std::ranges::find(registrations_, typeId, [](const GameAssetTypeRegistration &registration) {
             return registration.descriptor.typeId;
         });
-        if (found == registrations_.end() || found->descriptor.typeId != typeId)
-            return nullptr;
-        return std::to_address(found);
+        return found == registrations_.end() ? nullptr : std::to_address(found);
     }
 
     /** @copydoc GameAssetTypeRegistry::Inspect */
@@ -151,33 +151,30 @@ namespace Horo::Gameplay {
     /** @copydoc GameAssetTypeRegistry::Import */
     Result<SerializedGameAsset> GameAssetTypeRegistry::Import(const GameAssetTypeId &typeId, const GameAssetImportInput &input,
                                                               const CancellationToken &cancellation) const {
-        const auto resolved = GetRegistrationForProcessing(typeId);
-        if (resolved.HasError())
-            return Result<SerializedGameAsset>::Failure(resolved.ErrorValue());
-        const GameAssetTypeRegistration *registration = resolved.Value();
-        if (!HandlesExtension(registration->descriptor, input.sourceExtension) || input.sourceBytes.size() > limits_.maximumInputBytes)
-            return Result<SerializedGameAsset>::Failure(MakeError(GameplayErrors::InvalidGameAssetProcessingInput));
-        return ValidateProcessedAsset(Invoke<decltype(registration->handler.importAsset), GameAssetImportInput,
-                                             SerializedGameAsset>(registration->handler.importAsset, registration->handler.userData, input,
-                                                                  cancellation, "Gameplay asset import callback threw an exception."),
-                                      registration->descriptor);
+        return UseRegistration<SerializedGameAsset>(GetRegistrationForProcessing(typeId), [&](const auto &registration) {
+            if (!HandlesExtension(registration.descriptor, input.sourceExtension) || input.sourceBytes.size() > limits_.maximumInputBytes)
+                return Result<SerializedGameAsset>::Failure(MakeError(GameplayErrors::InvalidGameAssetProcessingInput));
+            return ValidateProcessedAsset(Invoke<decltype(registration.handler.importAsset), GameAssetImportInput,
+                                                 SerializedGameAsset>(registration.handler.importAsset, registration.handler.userData,
+                                                                      input, cancellation,
+                                                                      "Gameplay asset import callback threw an exception."),
+                                          registration.descriptor);
+        });
     }
 
     /** @copydoc GameAssetTypeRegistry::Serialize */
     Result<SerializedGameAsset> GameAssetTypeRegistry::Serialize(const GameAssetTypeId &typeId, const GameAssetSerializationInput &input,
                                                                  const CancellationToken &cancellation) const {
-        const auto resolved = GetRegistrationForProcessing(typeId);
-        if (resolved.HasError())
-            return Result<SerializedGameAsset>::Failure(resolved.ErrorValue());
-        const GameAssetTypeRegistration *registration = resolved.Value();
-        if (input.editorPayload.size() > limits_.maximumInputBytes ||
-            (input.encoding != GameAssetPayloadEncoding::CanonicalJson && input.encoding != GameAssetPayloadEncoding::Binary))
-            return Result<SerializedGameAsset>::Failure(MakeError(GameplayErrors::InvalidGameAssetProcessingInput));
-        return ValidateProcessedAsset(Invoke<decltype(registration->handler.serializeAsset), GameAssetSerializationInput,
-                                             SerializedGameAsset>(registration->handler.serializeAsset, registration->handler.userData,
-                                                                  input, cancellation,
-                                                                  "Gameplay asset serialization callback threw an exception."),
-                                      registration->descriptor);
+        return UseRegistration<SerializedGameAsset>(GetRegistrationForProcessing(typeId), [&](const auto &registration) {
+            if (input.editorPayload.size() > limits_.maximumInputBytes ||
+                (input.encoding != GameAssetPayloadEncoding::CanonicalJson && input.encoding != GameAssetPayloadEncoding::Binary))
+                return Result<SerializedGameAsset>::Failure(MakeError(GameplayErrors::InvalidGameAssetProcessingInput));
+            return ValidateProcessedAsset(Invoke<decltype(registration.handler.serializeAsset), GameAssetSerializationInput,
+                                                 SerializedGameAsset>(registration.handler.serializeAsset, registration.handler.userData,
+                                                                      input, cancellation,
+                                                                      "Gameplay asset serialization callback threw an exception."),
+                                          registration.descriptor);
+        });
     }
 
     /** @copydoc GameAssetTypeRegistry::Cook */

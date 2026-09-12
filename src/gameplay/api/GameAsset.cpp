@@ -3,6 +3,10 @@
 #include "GameplayIdentityValidation.h"
 #include "Horo/Gameplay/GameplayErrors.h"
 
+#include <algorithm>
+#include <array>
+#include <functional>
+
 namespace Horo::Gameplay {
     /** @copydoc GameAssetTypeId::Parse */
     Result<GameAssetTypeId> GameAssetTypeId::Parse(const std::string_view value) {
@@ -40,9 +44,10 @@ namespace Horo::Gameplay {
 
     /** @copydoc ValidateSerializedGameAsset */
     Result<void> ValidateSerializedGameAsset(const SerializedGameAsset &asset) {
-        if (!asset.typeId.IsValid() || asset.schemaVersion == 0 || asset.payload.size() > MaximumGameAssetPayloadBytes)
-            return Result<void>::Failure(MakeError(GameplayErrors::InvalidSerializedGameAsset));
-        if (asset.encoding != GameAssetPayloadEncoding::CanonicalJson && asset.encoding != GameAssetPayloadEncoding::Binary)
+        const std::array valid{asset.typeId.IsValid(), asset.schemaVersion != 0, asset.payload.size() <= MaximumGameAssetPayloadBytes,
+                               asset.encoding == GameAssetPayloadEncoding::CanonicalJson ||
+                                   asset.encoding == GameAssetPayloadEncoding::Binary};
+        if (!std::ranges::all_of(valid, std::identity{}))
             return Result<void>::Failure(MakeError(GameplayErrors::InvalidSerializedGameAsset));
         return Result<void>::Success();
     }

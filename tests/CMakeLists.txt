@@ -483,12 +483,14 @@ add_executable(HoroGameplayRuntimeTests
         unit/gameplay/GameplayRegistrationTests.cpp
 )
 target_compile_features(HoroGameplayRuntimeTests PRIVATE cxx_std_20)
+target_include_directories(HoroGameplayRuntimeTests PRIVATE "${PROJECT_SOURCE_DIR}/tests/helpers")
 target_link_libraries(HoroGameplayRuntimeTests PRIVATE HoroEngine::GameplayRuntime)
 horo_add_gameplay_module(HoroTestGameModule
         MODULE_ID game.tests
         NO_MANIFEST
         SOURCES ${CMAKE_CURRENT_SOURCE_DIR}/fixtures/gameplay_module/TestGameModule.cpp
 )
+target_include_directories(HoroTestGameModule PRIVATE "${PROJECT_SOURCE_DIR}/tests/helpers")
 get_property(HORO_TEST_GAME_MODULE_REVISION_FILE TARGET HoroTestGameModule PROPERTY HORO_GAMEPLAY_DESCRIPTOR_REVISION_FILE)
 add_executable(HoroGameModuleHostTests
         unit/gameplay/GameModuleHostTests.cpp
