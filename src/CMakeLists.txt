@@ -201,6 +201,7 @@ add_library(HoroRuntime STATIC
         runtime/save/SaveCanonicalScalarCodec.cpp
         runtime/save/SaveCanonicalCompositeWriter.cpp
         runtime/save/SaveCanonicalCompositeReader.cpp
+        runtime/save/SaveReference.cpp
         runtime/save/SaveSlotMetadata.cpp
         runtime/save/SaveTestCompositions.cpp
 )

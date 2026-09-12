@@ -86,6 +86,10 @@ namespace Horo::Runtime::SaveErrors {
     extern const ErrorCodeDescriptor CanonicalCodecConfigurationInvalid;
     /** @brief Canonical codec owned storage could not be allocated within admitted bounds. */
     extern const ErrorCodeDescriptor CanonicalCodecAllocationFailed;
+    /** @brief A durable reference contains an invalid stable identity or unknown form. */
+    extern const ErrorCodeDescriptor ReferenceInvalid;
+    /** @brief A resolved, missing, remapped, or deferred reference result is contradictory. */
+    extern const ErrorCodeDescriptor ReferenceResolutionInvalid;
     /** @brief Product save-root inputs are missing, relative, or structurally invalid. */
     extern const ErrorCodeDescriptor SaveRootConfigurationInvalid;
     /** @brief The selected save-root platform convention is not supported. */
