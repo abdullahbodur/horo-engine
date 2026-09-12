@@ -289,14 +289,14 @@ namespace Horo::Navigation {
         REQUIRE(leftHandedSnapshot.Triangles().front().vertexIndices == std::array<std::uint32_t, 3>{0, 2, 1});
 
         input.coordinates.metersPerUnit = std::numeric_limits<float>::infinity();
-        auto invalid = NavigationSourceGeometrySnapshot::Create(Id<NavigationSourceSnapshotRevision>(1), std::span{&input, 1});
-        RequireError(invalid, NavigationErrors::SourceGeometryInvalid);
-        REQUIRE(invalid.ErrorValue().message.find("producer 1") != std::string::npos);
+        const auto invalidUnits = NavigationSourceGeometrySnapshot::Create(Id<NavigationSourceSnapshotRevision>(1), std::span{&input, 1});
+        RequireError(invalidUnits, NavigationErrors::SourceGeometryInvalid);
+        REQUIRE(invalidUnits.ErrorValue().message.find("producer 1") != std::string::npos);
 
         input.coordinates.metersPerUnit = 1.0F;
         source.vertices.front().x = std::numeric_limits<float>::quiet_NaN();
-        invalid = NavigationSourceGeometrySnapshot::Create(Id<NavigationSourceSnapshotRevision>(1), std::span{&input, 1});
-        RequireError(invalid, NavigationErrors::SourceGeometryInvalid);
-        REQUIRE(invalid.ErrorValue().message.find("contribution 1") != std::string::npos);
+        const auto invalidVertex = NavigationSourceGeometrySnapshot::Create(Id<NavigationSourceSnapshotRevision>(1), std::span{&input, 1});
+        RequireError(invalidVertex, NavigationErrors::SourceGeometryInvalid);
+        REQUIRE(invalidVertex.ErrorValue().message.find("contribution 1") != std::string::npos);
     }
 }  // namespace Horo::Navigation
