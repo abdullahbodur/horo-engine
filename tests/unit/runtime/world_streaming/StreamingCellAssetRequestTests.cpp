@@ -58,6 +58,11 @@ namespace Horo::WorldStreaming {
             Assets::AssetLoadService service_;
         };
 
+        Result<StreamingCellAssetRequest> Submit(LoadHarness &loads, const RequestFixture &fixture) {
+            return RequestStreamingCellAssets(loads.Service(), fixture.registry, fixture.manifest, fixture.candidate,
+                                              AssetRequestContext());
+        }
+
         void WaitTerminal(StreamingCellAssetRequest &request) {
             while (request.State() == StreamingCellAssetRequestState::Loading ||
                    request.State() == StreamingCellAssetRequestState::Cancelling)
@@ -89,8 +94,7 @@ namespace Horo::WorldStreaming {
         provider.Insert(Asset(5), {5});
         provider.Insert(Asset(6), {6});
         LoadHarness loads{provider, 2};
-        auto result =
-            RequestStreamingCellAssets(loads.Service(), fixture.registry, fixture.manifest, fixture.candidate, AssetRequestContext());
+        auto result = Submit(loads, fixture);
         REQUIRE(result.HasValue());
         auto request = std::move(result).Value();
         WaitTerminal(request);
@@ -137,8 +141,7 @@ namespace Horo::WorldStreaming {
         RequestFixture fixture;
         BlockingProvider provider;
         LoadHarness loads{provider, 1, 2};
-        auto result =
-            RequestStreamingCellAssets(loads.Service(), fixture.registry, fixture.manifest, fixture.candidate, AssetRequestContext());
+        auto result = Submit(loads, fixture);
         REQUIRE(result.HasError());
         REQUIRE(result.ErrorValue().code.Value() == "asset.load.queue_full");
     }
@@ -147,8 +150,7 @@ namespace Horo::WorldStreaming {
         RequestFixture fixture;
         BlockingProvider provider;
         LoadHarness loads{provider, 1};
-        auto result =
-            RequestStreamingCellAssets(loads.Service(), fixture.registry, fixture.manifest, fixture.candidate, AssetRequestContext());
+        auto result = Submit(loads, fixture);
         REQUIRE(result.HasValue());
         auto request = std::move(result).Value();
         while (!provider.entered.load())
