@@ -29,8 +29,9 @@ namespace Horo::Extensions::Tests {
                                                                        const std::uint64_t generation = 1) {
             return {.capability = {"horo.project.validate"},
                     .version = version,
-                    .providerId = "horo.project-validator",
-                    .providerGeneration = generation};
+                    .provider = {.moduleId = "com.example.project-validator.backend",
+                                 .providerId = "horo.project-validator",
+                                 .generation = generation}};
         }
 
         void RequireErrorCode(const auto &result, const std::string &code) {
@@ -54,10 +55,11 @@ namespace Horo::Extensions::Tests {
             registry.Resolve(authority.Value(), {{1, 0, 0}, {1, 9, 9}}, "com.example.validator", "com.example.validator.backend", 9);
         REQUIRE(resolved.HasValue());
         CHECK(resolved.Value().Descriptor().version == ApplicationCapabilityVersion{1, 2, 0});
-        CHECK(resolved.Value().Descriptor().providerGeneration == 2);
-        CHECK(resolved.Value().ConsumerExtensionId() == "com.example.validator");
-        CHECK(resolved.Value().ConsumerModuleId() == "com.example.validator.backend");
-        CHECK(resolved.Value().ConsumerActivationGeneration() == 9);
+        CHECK(resolved.Value().Descriptor().provider.generation == 2);
+        CHECK(resolved.Value().Consumer().ExtensionId() == "com.example.validator");
+        CHECK(resolved.Value().Consumer().ModuleId() == "com.example.validator.backend");
+        CHECK(resolved.Value().Consumer().Generation() == 9);
+        CHECK(resolved.Value().IsUsable());
     }
 
     TEST_CASE("Application capability registry reports unavailable and incompatible contracts explicitly",
@@ -129,9 +131,13 @@ namespace Horo::Extensions::Tests {
              std::vector<std::string>{"invalid.", "invalid.2segment", "invalid_under", std::string(257, 'a')}) {
             ApplicationCapabilityRegistry registry;
             auto provider = Provider();
-            provider.providerId = invalid;
+            provider.provider.providerId = invalid;
             RequireErrorCode(registry.Register(std::move(provider)), "capability_registry_invalid");
         }
+        ApplicationCapabilityRegistry registry;
+        auto malformedMapping = Provider();
+        malformedMapping.provider.moduleId = "Invalid Module";
+        RequireErrorCode(registry.Register(std::move(malformedMapping)), "capability_registry_invalid");
     }
 
     TEST_CASE("Application capability registry enforces its provider bound", "[Extensions][ApplicationCapabilities]") {

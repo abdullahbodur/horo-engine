@@ -4,19 +4,34 @@
 #include "Horo/Extensions/ExtensionErrors.h"
 
 #include <algorithm>
+#include <array>
 #include <atomic>
+#include <charconv>
 #include <condition_variable>
+#include <exception>
 #include <format>
+#include <limits>
 #include <mutex>
+#include <optional>
 #include <ranges>
 #include <thread>
+#include <tuple>
 #include <utility>
 #include <vector>
 
 namespace Horo::Extensions {
+    enum class BackendServiceProviderLifecycle : std::uint8_t {
+        Active,
+        Retiring,
+        AwaitingOwnerFinalization,
+        Finalizing,
+        RetainedRestartRequired,
+        Shutdown,
+    };
+
     struct BackendServiceProviderState final {
         BackendServiceDescriptor descriptor;
-        std::shared_ptr<void> service;
+        Detail::BackendServiceOwnedImplementation implementation{BackendServiceCodeLease::Retain(std::shared_ptr<const void>{}), {}};
         const void *typeTag{};
         void (*shutdown)(void *) noexcept {};
         std::thread::id ownerThread;
@@ -25,74 +40,221 @@ namespace Horo::Extensions {
         std::condition_variable drained;
         std::size_t activeCalls{};
         std::atomic_bool registered{true};
-        bool deferredSelfShutdown{};
-        bool shutdownCalled{};
+        BackendServiceProviderLifecycle lifecycle{BackendServiceProviderLifecycle::Active};
+        std::weak_ptr<BackendServiceRegistryState> registry;
+        std::uint64_t registrationSequence{};
+        bool retirementQueued{};
     };
 
     struct BackendServiceRegistryState final {
         std::mutex mutex;
         std::vector<std::shared_ptr<BackendServiceProviderState>> providers;
+        std::vector<std::shared_ptr<BackendServiceProviderState>> retiredProviders;
+        BackendServiceRegistryConfig config;
+        std::timed_mutex retirementMutex;
+        std::atomic_bool restartRequired{};
+        std::atomic_bool stagingShutdown{};
+        std::uint64_t nextRegistrationSequence{};
+        std::shared_ptr<BackendServiceRegistryState> restartQuarantine;
+        bool quarantined{};
         bool shutdown{};
     };
 
     namespace {
-        thread_local BackendServiceProviderState *ExecutingProvider;
-
-        struct ServiceShutdown final {
-            std::shared_ptr<void> service;
-            void (*callback)(void *) noexcept {};
-
-            void Invoke() const noexcept {
-                if (service != nullptr && callback != nullptr)
-                    callback(service.get());
-            }
+        struct ExecutingProviderStack final {
+            std::array<BackendServiceProviderState *, BackendServiceRegistry::MaximumServices> providers{};
+            std::size_t size{};
         };
 
-        [[nodiscard]] bool ValidThreadRule(const BackendServiceThreadRule rule) noexcept {
-            return rule == BackendServiceThreadRule::AnyThread || rule == BackendServiceThreadRule::ProviderOwnerThread;
+        thread_local ExecutingProviderStack ExecutingProviders;
+
+        [[nodiscard]] bool IsExecuting(const BackendServiceProviderState *provider) noexcept {
+            const auto end = ExecutingProviders.providers.begin() + static_cast<std::ptrdiff_t>(ExecutingProviders.size);
+            return std::ranges::find(ExecutingProviders.providers.begin(), end, provider) != end;
         }
 
         [[nodiscard]] bool ValidDescriptor(const BackendServiceDescriptor &descriptor) noexcept {
-            return Detail::IsCanonicalExtensionAuthorityId(descriptor.serviceId.value) &&
-                   Detail::IsCanonicalExtensionAuthorityId(descriptor.contractId.value) &&
-                   Detail::IsCanonicalExtensionAuthorityId(descriptor.capability.value) &&
-                   Detail::IsCanonicalExtensionAuthorityId(descriptor.providerId) && descriptor.version != ApplicationCapabilityVersion{} &&
-                   descriptor.providerGeneration != 0U && ValidThreadRule(descriptor.threadRule);
+            const std::array valid{
+                Detail::IsCanonicalExtensionAuthorityId(descriptor.serviceId.value),
+                Detail::IsCanonicalExtensionAuthorityId(descriptor.contractId.value),
+                Detail::IsCanonicalExtensionAuthorityId(descriptor.capability.value),
+                Detail::IsCanonicalExtensionAuthorityId(descriptor.provider.moduleId),
+                Detail::IsCanonicalExtensionAuthorityId(descriptor.provider.providerId),
+                descriptor.version != ApplicationCapabilityVersion{},
+                descriptor.provider.generation != 0U,
+                static_cast<std::uint8_t>(descriptor.threadRule) <=
+                    static_cast<std::uint8_t>(BackendServiceThreadRule::ProviderOwnerThread),
+            };
+            return std::ranges::find(valid, false) == valid.end();
         }
 
-        void StopProvider(const std::shared_ptr<BackendServiceProviderState> &provider) noexcept {
+        [[nodiscard]] std::optional<ApplicationCapabilityVersion> ParseProviderVersion(const std::string_view encoded) noexcept {
+            std::array<std::uint32_t, 3> components{};
+            std::string_view remaining = encoded;
+            for (std::size_t index = 0; index < components.size(); ++index) {
+                const std::size_t separator = remaining.find('.');
+                if ((index + 1U < components.size()) != (separator != std::string_view::npos))
+                    return std::nullopt;
+                const std::string_view digits = remaining.substr(0, separator);
+                const auto [end, error] = std::from_chars(digits.data(), digits.data() + digits.size(), components[index]);
+                if (digits.empty() || (digits.size() > 1U && digits.front() == '0') || error != std::errc{} ||
+                    end != digits.data() + digits.size() || components[index] > std::numeric_limits<std::uint16_t>::max())
+                    return std::nullopt;
+                if (separator != std::string_view::npos)
+                    remaining.remove_prefix(separator + 1U);
+            }
+            return ApplicationCapabilityVersion{static_cast<std::uint16_t>(components[0]), static_cast<std::uint16_t>(components[1]),
+                                                static_cast<std::uint16_t>(components[2])};
+        }
+
+        [[nodiscard]] bool CanFinalizeHere(const BackendServiceProviderState &provider) noexcept {
+            const std::array allowed{provider.descriptor.threadRule == BackendServiceThreadRule::AnyThread,
+                                     provider.ownerThread == std::this_thread::get_id()};
+            return std::ranges::find(allowed, true) != allowed.end();
+        }
+
+        [[nodiscard]] BackendServiceRetirementDisposition StopProvider(const std::shared_ptr<BackendServiceRegistryState> &registry,
+                                                                       const std::shared_ptr<BackendServiceProviderState> &provider,
+                                                                       const std::chrono::steady_clock::time_point deadline,
+                                                                       const bool waitForDrain) noexcept {
             std::unique_lock lock{provider->mutex};
+
+            struct EarlyDisposition final {
+                bool applies;
+                BackendServiceRetirementDisposition disposition;
+            };
+
+            const std::array earlyDispositions{
+                EarlyDisposition{provider->lifecycle == BackendServiceProviderLifecycle::Shutdown,
+                                 BackendServiceRetirementDisposition::ShutdownComplete},
+                EarlyDisposition{provider->lifecycle == BackendServiceProviderLifecycle::RetainedRestartRequired,
+                                 BackendServiceRetirementDisposition::RestartRequired},
+                EarlyDisposition{IsExecuting(provider.get()), BackendServiceRetirementDisposition::DeferredUntilCallExit},
+            };
+            const auto early = std::ranges::find(earlyDispositions, true, &EarlyDisposition::applies);
+            if (early != earlyDispositions.end())
+                return early->disposition;
+            if (provider->activeCalls != 0U) {
+                const std::array deadlines{std::chrono::steady_clock::now(), deadline};
+                if (!provider->drained.wait_until(lock, deadlines[static_cast<std::size_t>(waitForDrain)], [&provider] {
+                    return provider->activeCalls == 0U;
+                })) {
+                    constexpr std::array lifecycles{BackendServiceProviderLifecycle::Retiring,
+                                                    BackendServiceProviderLifecycle::RetainedRestartRequired};
+                    constexpr std::array dispositions{BackendServiceRetirementDisposition::DeferredUntilCallExit,
+                                                      BackendServiceRetirementDisposition::RestartRequired};
+                    if (waitForDrain)
+                        registry->restartRequired.store(true, std::memory_order_release);
+                    provider->lifecycle = lifecycles[static_cast<std::size_t>(waitForDrain)];
+                    return dispositions[static_cast<std::size_t>(waitForDrain)];
+                }
+            }
+            if (!CanFinalizeHere(*provider)) {
+                provider->lifecycle = BackendServiceProviderLifecycle::AwaitingOwnerFinalization;
+                return BackendServiceRetirementDisposition::OwnerThreadFinalizationRequired;
+            }
+
+            provider->lifecycle = BackendServiceProviderLifecycle::Finalizing;
+            std::shared_ptr<void> service = provider->implementation.service;
+            const auto shutdown = provider->shutdown;
+            lock.unlock();
+            shutdown(service.get());
+            lock.lock();
+            if (registry->restartRequired.load(std::memory_order_acquire)) {
+                provider->lifecycle = BackendServiceProviderLifecycle::RetainedRestartRequired;
+                lock.unlock();
+                provider->drained.notify_all();
+                return BackendServiceRetirementDisposition::RestartRequired;
+            }
+            service.reset();
+            Detail::BackendServiceOwnedImplementation retired = std::move(provider->implementation);
+            provider->lifecycle = BackendServiceProviderLifecycle::Shutdown;
+            lock.unlock();
+            provider->drained.notify_all();
+            retired.service.reset();
+            return BackendServiceRetirementDisposition::ShutdownComplete;
+        }
+
+        void RequestRetirement(const std::shared_ptr<BackendServiceProviderState> &provider) noexcept {
+            std::scoped_lock lock{provider->mutex};
             provider->registered.store(false, std::memory_order_release);
             provider->cancellation.RequestCancellation();
-            if (ExecutingProvider == provider.get()) {
-                provider->deferredSelfShutdown = true;
-                return;
-            }
-            provider->drained.wait(lock, [&provider] {
-                return provider->activeCalls == 0U;
-            });
-            if (provider->shutdownCalled)
-                return;
-            provider->shutdownCalled = true;
-            ServiceShutdown shutdown{std::move(provider->service), provider->shutdown};
-            lock.unlock();
-            shutdown.Invoke();
+            if (provider->lifecycle == BackendServiceProviderLifecycle::Active)
+                provider->lifecycle = BackendServiceProviderLifecycle::Retiring;
         }
 
-        void RemoveProvider(const std::shared_ptr<BackendServiceRegistryState> &registry,
-                            const std::shared_ptr<BackendServiceProviderState> &provider) noexcept {
+        void EnqueueRetirement(BackendServiceRegistryState &registry, const std::shared_ptr<BackendServiceProviderState> &provider) {
+            if (provider->retirementQueued)
+                return;
+            const auto position = std::ranges::lower_bound(registry.retiredProviders, provider->registrationSequence, std::greater{},
+                                                           &BackendServiceProviderState::registrationSequence);
+            registry.retiredProviders.insert(position, provider);
+            provider->retirementQueued = true;
+        }
+
+        [[nodiscard]] BackendServiceRetirementDisposition ProgressRetirements(const std::shared_ptr<BackendServiceRegistryState> &registry,
+                                                                              const std::chrono::steady_clock::time_point deadline,
+                                                                              const bool waitForDrain) noexcept {
+            if (registry->stagingShutdown.load(std::memory_order_acquire))
+                return BackendServiceRetirementDisposition::DeferredUntilCallExit;
+            std::unique_lock coordinator{registry->retirementMutex, std::defer_lock};
+            const std::array coordinatorDeadlines{std::chrono::steady_clock::now(), deadline};
+            if (!coordinator.try_lock_until(coordinatorDeadlines[static_cast<std::size_t>(waitForDrain)])) {
+                if (waitForDrain)
+                    registry->restartRequired.store(true, std::memory_order_release);
+                constexpr std::array dispositions{BackendServiceRetirementDisposition::DeferredUntilCallExit,
+                                                  BackendServiceRetirementDisposition::RestartRequired};
+                return dispositions[static_cast<std::size_t>(waitForDrain)];
+            }
+            constexpr std::array initialDispositions{BackendServiceRetirementDisposition::ShutdownComplete,
+                                                     BackendServiceRetirementDisposition::RestartRequired};
+            auto aggregate = initialDispositions[static_cast<std::size_t>(registry->restartRequired.load(std::memory_order_acquire))];
+            for (;;) {
+                std::shared_ptr<BackendServiceProviderState> provider;
+                {
+                    std::scoped_lock lock{registry->mutex};
+                    if (registry->retiredProviders.empty())
+                        break;
+                    provider = registry->retiredProviders.front();
+                }
+                const auto disposition = StopProvider(registry, provider, deadline, waitForDrain);
+                aggregate = std::max(aggregate, disposition);
+                if (disposition != BackendServiceRetirementDisposition::ShutdownComplete)
+                    break;
+                std::scoped_lock lock{registry->mutex};
+                std::erase(registry->retiredProviders, provider);
+            }
+            return aggregate;
+        }
+
+        [[nodiscard]] BackendServiceRetirementDisposition RetireProvider(
+            const std::shared_ptr<BackendServiceRegistryState> &registry,
+            const std::shared_ptr<BackendServiceProviderState> &provider) noexcept {
             {
                 std::scoped_lock lock{registry->mutex};
                 std::erase(registry->providers, provider);
             }
-            StopProvider(provider);
+            RequestRetirement(provider);
+            {
+                std::scoped_lock lock{registry->mutex};
+                EnqueueRetirement(*registry, provider);
+            }
+            return ProgressRetirements(registry, std::chrono::steady_clock::now() + registry->config.drainDeadline, true);
         }
 
-        [[nodiscard]] bool MatchesAuthority(const BackendServiceDescriptor &service,
-                                            const ApplicationCapabilityProviderDescriptor &authority) noexcept {
-            return service.capability == authority.capability && service.version == authority.version &&
-                   service.providerId == authority.providerId && service.providerGeneration == authority.providerGeneration;
+        void QuarantineForRestart(const std::shared_ptr<BackendServiceRegistryState> &registry) noexcept {
+            static std::mutex mutex;
+            static BackendServiceRegistryState *quarantinedRegistry{};
+            std::scoped_lock lock{mutex};
+            if (registry->quarantined)
+                return;
+            if (quarantinedRegistry != nullptr)
+                std::terminate();
+            registry->restartQuarantine = registry;
+            registry->quarantined = true;
+            quarantinedRegistry = registry.get();
         }
+
     }  // namespace
 
     BackendServiceCallContext::BackendServiceCallContext(const BackendServiceDescriptor &provider, CancellationToken caller,
@@ -106,34 +268,18 @@ namespace Horo::Extensions {
 
     /** @copydoc BackendServiceCallContext::IsCancellationRequested */
     bool BackendServiceCallContext::IsCancellationRequested() const noexcept {
-        return caller_.IsCancellationRequested() || providerCancellation_.IsCancellationRequested();
+        const std::array cancelled{caller_.IsCancellationRequested(), providerCancellation_.IsCancellationRequested()};
+        return std::ranges::find(cancelled, true) != cancelled.end();
     }
 
     BackendServiceCallAdmission::BackendServiceCallAdmission(std::shared_ptr<BackendServiceProviderState> provider,
                                                              BackendServiceCallContext context) noexcept
-        : provider_(std::move(provider)), context_(std::move(context)), previousExecutingProvider_(ExecutingProvider),
-          ownsExecutionSlot_(true) {
-        ExecutingProvider = provider_.get();
+        : provider_(std::move(provider)), context_(std::move(context)) {
+        ExecutingProviders.providers[ExecutingProviders.size++] = provider_.get();
     }
 
     BackendServiceCallAdmission::~BackendServiceCallAdmission() {
         Reset();
-    }
-
-    BackendServiceCallAdmission::BackendServiceCallAdmission(BackendServiceCallAdmission &&other) noexcept
-        : provider_(std::move(other.provider_)), context_(std::move(other.context_)),
-          previousExecutingProvider_(other.previousExecutingProvider_), ownsExecutionSlot_(std::exchange(other.ownsExecutionSlot_, false)) {
-    }
-
-    BackendServiceCallAdmission &BackendServiceCallAdmission::operator=(BackendServiceCallAdmission &&other) noexcept {
-        if (this == &other)
-            return *this;
-        Reset();
-        provider_ = std::move(other.provider_);
-        context_ = std::move(other.context_);
-        previousExecutingProvider_ = other.previousExecutingProvider_;
-        ownsExecutionSlot_ = std::exchange(other.ownsExecutionSlot_, false);
-        return *this;
     }
 
     /** @copydoc BackendServiceCallAdmission::Context */
@@ -144,35 +290,43 @@ namespace Horo::Extensions {
     void BackendServiceCallAdmission::Reset() noexcept {
         if (provider_ == nullptr)
             return;
-        ServiceShutdown shutdown;
+        const std::shared_ptr<BackendServiceRegistryState> registry = provider_->registry.lock();
         {
             std::scoped_lock lock{provider_->mutex};
             --provider_->activeCalls;
-            if (provider_->activeCalls == 0U && provider_->deferredSelfShutdown && !provider_->shutdownCalled) {
-                provider_->shutdownCalled = true;
-                shutdown = {std::move(provider_->service), provider_->shutdown};
-            }
         }
         provider_->drained.notify_all();
-        if (ownsExecutionSlot_) {
-            ExecutingProvider = previousExecutingProvider_;
-            ownsExecutionSlot_ = false;
-        }
-        shutdown.Invoke();
+        --ExecutingProviders.size;
+        ExecutingProviders.providers[ExecutingProviders.size] = nullptr;
         provider_.reset();
+        if (registry != nullptr)
+            static_cast<void>(ProgressRetirements(registry, std::chrono::steady_clock::now(), false));
     }
 
     namespace Detail {
         Result<BackendServiceCallAdmission> BeginBackendServiceCall(const std::shared_ptr<BackendServiceProviderState> &provider,
                                                                     const CancellationToken &caller) {
             std::scoped_lock lock{provider->mutex};
-            if (!provider->registered.load(std::memory_order_acquire))
-                return Result<BackendServiceCallAdmission>::Failure(MakeError(ExtensionErrors::BackendServiceUnavailable));
-            if (provider->descriptor.threadRule == BackendServiceThreadRule::ProviderOwnerThread &&
-                provider->ownerThread != std::this_thread::get_id())
-                return Result<BackendServiceCallAdmission>::Failure(MakeError(ExtensionErrors::BackendServiceThreadViolation));
-            if (caller.IsCancellationRequested() || provider->cancellation.Token().IsCancellationRequested())
-                return Result<BackendServiceCallAdmission>::Failure(BackendServiceCancellationError(provider->descriptor));
+            const std::array cancellationFacts{caller.IsCancellationRequested(), provider->cancellation.Token().IsCancellationRequested()};
+            const std::array failures{
+                !provider->registered.load(std::memory_order_acquire),
+                !CanFinalizeHere(*provider),
+                std::ranges::find(cancellationFacts, true) != cancellationFacts.end(),
+                ExecutingProviders.size >= ExecutingProviders.providers.size(),
+            };
+            const std::array errors{
+                &ExtensionErrors::BackendServiceUnavailable,
+                &ExtensionErrors::BackendServiceThreadViolation,
+                &ExtensionErrors::BackendServiceCancelled,
+                &ExtensionErrors::BackendServiceCapacityExceeded,
+            };
+            const auto failure = std::ranges::find(failures, true);
+            if (failure != failures.end()) {
+                const std::size_t index = static_cast<std::size_t>(failure - failures.begin());
+                if (errors[index] == &ExtensionErrors::BackendServiceCancelled)
+                    return Result<BackendServiceCallAdmission>::Failure(BackendServiceCancellationError(provider->descriptor));
+                return Result<BackendServiceCallAdmission>::Failure(MakeError(*errors[index]));
+            }
             ++provider->activeCalls;
             return Result<BackendServiceCallAdmission>::Success(
                 BackendServiceCallAdmission{provider,
@@ -180,60 +334,79 @@ namespace Horo::Extensions {
         }
 
         void *BackendServiceObject(const std::shared_ptr<BackendServiceProviderState> &provider) noexcept {
-            return provider->service.get();
+            return provider->implementation.service.get();
         }
 
         Error AttributeBackendServiceError(const BackendServiceDescriptor &provider, Error cause) {
-            const std::string detail = std::format("Backend service failed: {}@{} ({}).", provider.providerId, provider.providerGeneration,
-                                                   provider.serviceId.value);
+            const std::string detail = std::format("Backend service failed: {}@{} ({}).", provider.provider.providerId,
+                                                   provider.provider.generation, provider.serviceId.value);
             return cause.code.Value().empty() ? MakeError(ExtensionErrors::BackendServiceInvocationFailed, detail)
                                               : WrapError(ExtensionErrors::BackendServiceInvocationFailed, std::move(cause), detail);
         }
 
         Error BackendServiceCancellationError(const BackendServiceDescriptor &provider) {
             return MakeError(ExtensionErrors::BackendServiceCancelled,
-                             std::format("Backend service call cancelled: {}@{} ({}).", provider.providerId, provider.providerGeneration,
-                                         provider.serviceId.value));
+                             std::format("Backend service call cancelled: {}@{} ({}).", provider.provider.providerId,
+                                         provider.provider.generation, provider.serviceId.value));
         }
 
-        Error BackendServiceImportError(const ExtensionServiceImportStatus status) {
-            if (status == ExtensionServiceImportStatus::Unavailable)
-                return MakeError(ExtensionErrors::BackendServiceUnavailable, "The declared optional service import is unavailable.");
-            return MakeError(ExtensionErrors::BackendServiceContractMismatch,
-                             "The declared service import is incompatible with the admitted provider.");
+        Error BackendServiceCancellationError(const ApplicationCapabilityProviderDescriptor &provider) {
+            return MakeError(ExtensionErrors::BackendServiceCancelled,
+                             std::format("Backend service call cancelled: {}@{}.", provider.provider.providerId,
+                                         provider.provider.generation));
+        }
+
+        Error BackendServiceAuthorityUnavailableError() {
+            return MakeError(ExtensionErrors::BackendServiceUnavailable,
+                             "The application capability/provider authority is unavailable or already consumed.");
+        }
+
+        Error BackendServiceConsumedCallError() {
+            return MakeError(ExtensionErrors::BackendServiceUnavailable, "The one-shot backend service call was already consumed.");
+        }
+
+        Error AttributeBackendServiceImportError(const ResolvedExtensionServiceImport &binding, Error error, const std::string_view reason,
+                                                 const ApplicationCapabilityProviderDescriptor *provider) {
+            const std::string providerModule = binding.ProviderModuleId().empty() ? "<unavailable>" : binding.ProviderModuleId();
+            std::string detail =
+                std::format("Extension import '{}': consumer='{}/{}', service='{}', declared-provider-module='{}', declared-version='{}'.",
+                            binding.ImportId(), binding.ConsumerExtensionId(), binding.ConsumerModuleId(), binding.ServiceId(),
+                            providerModule, binding.ProviderVersion());
+            if (provider != nullptr) {
+                detail += std::format(" Admitted provider='{} -> {}@{}', version={}.{}.{}.", provider->provider.moduleId,
+                                      provider->provider.providerId, provider->provider.generation, provider->version.major,
+                                      provider->version.minor, provider->version.patch);
+            }
+            if (!reason.empty())
+                detail += " " + std::string{reason};
+            if (!error.message.empty())
+                detail += " " + error.message;
+            error.message = std::move(detail);
+            return error;
+        }
+
+        Error BackendServiceImportError(const ResolvedExtensionServiceImport &binding, const ErrorCodeDescriptor &descriptor,
+                                        const std::string_view reason, const ApplicationCapabilityProviderDescriptor *provider) {
+            return AttributeBackendServiceImportError(binding, MakeError(descriptor), reason, provider);
         }
     }  // namespace Detail
 
-    BackendServiceRegistration::BackendServiceRegistration(std::weak_ptr<BackendServiceRegistryState> registry,
+    BackendServiceRegistration::BackendServiceRegistration(std::shared_ptr<BackendServiceRegistryState> registry,
                                                            std::shared_ptr<BackendServiceProviderState> provider) noexcept
         : registry_(std::move(registry)), provider_(std::move(provider)) {}
 
     BackendServiceRegistration::~BackendServiceRegistration() {
-        Reset();
-    }
-
-    BackendServiceRegistration::BackendServiceRegistration(BackendServiceRegistration &&other) noexcept
-        : registry_(std::move(other.registry_)), provider_(std::move(other.provider_)) {}
-
-    BackendServiceRegistration &BackendServiceRegistration::operator=(BackendServiceRegistration &&other) noexcept {
-        if (this == &other)
-            return *this;
-        Reset();
-        registry_ = std::move(other.registry_);
-        provider_ = std::move(other.provider_);
-        return *this;
+        static_cast<void>(Reset());
     }
 
     /** @copydoc BackendServiceRegistration::Reset */
-    void BackendServiceRegistration::Reset() noexcept {
+    BackendServiceRetirementDisposition BackendServiceRegistration::Reset() noexcept {
         if (provider_ == nullptr)
-            return;
-        if (auto registry = registry_.lock())
-            RemoveProvider(registry, provider_);
-        else
-            StopProvider(provider_);
+            return BackendServiceRetirementDisposition::ShutdownComplete;
+        const BackendServiceRetirementDisposition disposition = RetireProvider(registry_, provider_);
         provider_.reset();
         registry_.reset();
+        return disposition;
     }
 
     /** @copydoc BackendServiceRegistration::IsRegistered */
@@ -241,104 +414,210 @@ namespace Horo::Extensions {
         return provider_ != nullptr && provider_->registered.load(std::memory_order_acquire);
     }
 
-    BackendServiceRegistry::BackendServiceRegistry() : state_(std::make_shared<BackendServiceRegistryState>()) {
+    BackendServiceImportBinding::BackendServiceImportBinding(std::shared_ptr<BackendServiceProviderState> provider,
+                                                             ApplicationCapabilityProviderLease authority,
+                                                             ResolvedExtensionServiceImport import) noexcept
+        : provider_(std::move(provider)), authority_(std::move(authority)), import_(std::move(import)) {}
+
+    BackendServiceRegistry::BackendServiceRegistry(BackendServiceRegistryConfig config)
+        : state_(std::make_shared<BackendServiceRegistryState>()) {
+        if (config.drainDeadline <= std::chrono::milliseconds::zero())
+            config.drainDeadline = std::chrono::milliseconds{1};
+        state_->config = config;
         state_->providers.reserve(MaximumServices);
+        state_->retiredProviders.reserve(MaximumServices);
     }
 
     BackendServiceRegistry::~BackendServiceRegistry() {
-        BeginShutdown();
-    }
-
-    BackendServiceRegistry &BackendServiceRegistry::operator=(BackendServiceRegistry &&other) noexcept {
-        if (this == &other)
-            return *this;
-        BeginShutdown();
-        state_ = std::move(other.state_);
-        return *this;
+        if (BeginShutdown() != BackendServiceRetirementDisposition::ShutdownComplete)
+            QuarantineForRestart(state_);
     }
 
     /** @copydoc BackendServiceRegistry::Register */
     Result<BackendServiceRegistration> BackendServiceRegistry::RegisterErased(BackendServiceDescriptor descriptor,
-                                                                              std::shared_ptr<void> service, const void *typeTag,
-                                                                              const ShutdownFunction shutdown) {
-        if (!ValidDescriptor(descriptor) || service == nullptr || typeTag == nullptr || shutdown == nullptr)
+                                                                              Detail::BackendServiceOwnedImplementation implementation,
+                                                                              const void *typeTag, const ShutdownFunction shutdown) {
+        const std::array invalid{!ValidDescriptor(descriptor), implementation.service == nullptr,
+                                 implementation.codeLease.owner_ == nullptr, typeTag == nullptr, shutdown == nullptr};
+        if (std::ranges::find(invalid, true) != invalid.end())
             return Result<BackendServiceRegistration>::Failure(MakeError(ExtensionErrors::BackendServiceInvalid));
-        if (state_ == nullptr)
-            return Result<BackendServiceRegistration>::Failure(MakeError(ExtensionErrors::BackendServiceShutdown));
         std::scoped_lock lock{state_->mutex};
-        if (state_->shutdown)
-            return Result<BackendServiceRegistration>::Failure(MakeError(ExtensionErrors::BackendServiceShutdown));
         const auto duplicate = std::ranges::find_if(state_->providers, [&descriptor](const auto &provider) {
-            return provider->descriptor.serviceId == descriptor.serviceId && provider->descriptor.version == descriptor.version;
+            return std::tie(provider->descriptor.serviceId, provider->descriptor.version) ==
+                   std::tie(descriptor.serviceId, descriptor.version);
         });
-        if (duplicate != state_->providers.end())
-            return Result<BackendServiceRegistration>::Failure(MakeError(ExtensionErrors::BackendServiceDuplicate));
-        if (state_->providers.size() >= MaximumServices)
-            return Result<BackendServiceRegistration>::Failure(MakeError(ExtensionErrors::BackendServiceCapacityExceeded));
+        const auto retiredDuplicate = std::ranges::find_if(state_->retiredProviders, [&descriptor](const auto &provider) {
+            return std::tie(provider->descriptor.serviceId, provider->descriptor.version) ==
+                   std::tie(descriptor.serviceId, descriptor.version);
+        });
+        const std::array duplicateFacts{duplicate != state_->providers.end(), retiredDuplicate != state_->retiredProviders.end()};
+        const std::array failures{state_->shutdown, std::ranges::find(duplicateFacts, true) != duplicateFacts.end(),
+                                  state_->providers.size() + state_->retiredProviders.size() >= MaximumServices};
+        constexpr std::array errors{&ExtensionErrors::BackendServiceShutdown, &ExtensionErrors::BackendServiceDuplicate,
+                                    &ExtensionErrors::BackendServiceCapacityExceeded};
+        const auto failure = std::ranges::find(failures, true);
+        if (failure != failures.end())
+            return Result<BackendServiceRegistration>::Failure(MakeError(*errors[static_cast<std::size_t>(failure - failures.begin())]));
 
         auto provider = std::make_shared<BackendServiceProviderState>();
         provider->descriptor = std::move(descriptor);
-        provider->service = std::move(service);
+        provider->implementation = std::move(implementation);
         provider->typeTag = typeTag;
         provider->shutdown = shutdown;
         provider->ownerThread = std::this_thread::get_id();
+        provider->registry = state_;
+        provider->registrationSequence = ++state_->nextRegistrationSequence;
         state_->providers.push_back(provider);
         return Result<BackendServiceRegistration>::Success(BackendServiceRegistration{state_, std::move(provider)});
+    }
+
+    /** @copydoc BackendServiceRegistry::BindImport */
+    Result<BackendServiceImportBinding> BackendServiceRegistry::BindImport(ApplicationCapabilityProviderLease authority,
+                                                                           const ResolvedExtensionServiceImport &import) const {
+        if (import.Status() != ExtensionServiceImportStatus::Bound) {
+            const ErrorCodeDescriptor &error = import.Status() == ExtensionServiceImportStatus::Unavailable
+                                                   ? ExtensionErrors::BackendServiceUnavailable
+                                                   : ExtensionErrors::BackendServiceContractMismatch;
+            return Result<BackendServiceImportBinding>::Failure(
+                Detail::BackendServiceImportError(import, error, "The declared import did not resolve to a provider."));
+        }
+        if (!authority.IsUsable()) {
+            return Result<BackendServiceImportBinding>::Failure(
+                Detail::BackendServiceImportError(import, ExtensionErrors::BackendServiceUnavailable,
+                                                  "The consumer admission or capability publication is no longer active."));
+        }
+
+        const ApplicationCapabilityProviderDescriptor &provider = authority.Descriptor();
+        const ExtensionActivationIdentity &consumer = authority.Consumer();
+        if (consumer.ExtensionId() != import.ConsumerExtensionId() || consumer.ModuleId() != import.ConsumerModuleId()) {
+            return Result<BackendServiceImportBinding>::Failure(
+                Detail::BackendServiceImportError(import, ExtensionErrors::BackendServiceContractMismatch,
+                                                  std::format("Admitted consumer is '{}/{}' at generation {}.", consumer.ExtensionId(),
+                                                              consumer.ModuleId(), consumer.Generation()),
+                                                  &provider));
+        }
+
+        if (provider.provider.moduleId != import.ProviderModuleId()) {
+            return Result<BackendServiceImportBinding>::Failure(
+                Detail::BackendServiceImportError(import, ExtensionErrors::BackendServiceContractMismatch,
+                                                  std::format("Admitted provider mapping is '{} -> {}' at generation {}.",
+                                                              provider.provider.moduleId, provider.provider.providerId,
+                                                              provider.provider.generation),
+                                                  &provider));
+        }
+        const std::optional<ApplicationCapabilityVersion> declaredVersion = ParseProviderVersion(import.ProviderVersion());
+        if (!declaredVersion.has_value() || *declaredVersion != provider.version) {
+            return Result<BackendServiceImportBinding>::Failure(
+                Detail::BackendServiceImportError(import, ExtensionErrors::BackendServiceContractMismatch,
+                                                  std::format("Admitted provider version is {}.{}.{} at generation {}.",
+                                                              provider.version.major, provider.version.minor, provider.version.patch,
+                                                              provider.provider.generation),
+                                                  &provider));
+        }
+
+        auto resolved =
+            ResolveErased(provider, BackendServiceId{import.ServiceId()}, BackendServiceContractId{import.ContractId()}, nullptr);
+        if (resolved.HasError()) {
+            return Result<BackendServiceImportBinding>::Failure(
+                Detail::AttributeBackendServiceImportError(import, resolved.ErrorValue(), "Live provider binding failed.", &provider));
+        }
+        return Result<BackendServiceImportBinding>::Success(
+            BackendServiceImportBinding{std::move(resolved).Value(), std::move(authority), import});
     }
 
     /** @copydoc BackendServiceRegistry::Resolve */
     Result<std::shared_ptr<BackendServiceProviderState>> BackendServiceRegistry::ResolveErased(
         const ApplicationCapabilityProviderDescriptor &authority, const BackendServiceId &serviceId,
         const BackendServiceContractId &contractId, const void *typeTag) const {
-        if (!Detail::IsCanonicalExtensionAuthorityId(serviceId.value) || !Detail::IsCanonicalExtensionAuthorityId(contractId.value) ||
-            typeTag == nullptr)
+        if (!Detail::IsCanonicalExtensionAuthorityId(serviceId.value) || !Detail::IsCanonicalExtensionAuthorityId(contractId.value))
             return Result<std::shared_ptr<BackendServiceProviderState>>::Failure(MakeError(ExtensionErrors::BackendServiceInvalid));
-        if (state_ == nullptr)
-            return Result<std::shared_ptr<BackendServiceProviderState>>::Failure(MakeError(ExtensionErrors::BackendServiceShutdown));
         std::scoped_lock lock{state_->mutex};
         if (state_->shutdown)
             return Result<std::shared_ptr<BackendServiceProviderState>>::Failure(MakeError(ExtensionErrors::BackendServiceShutdown));
-        std::shared_ptr<BackendServiceProviderState> found;
-        bool serviceExists = false;
-        for (const auto &provider : state_->providers) {
-            if (provider->descriptor.serviceId != serviceId)
-                continue;
-            serviceExists = true;
-            if (MatchesAuthority(provider->descriptor, authority)) {
-                found = provider;
-                break;
-            }
-        }
-        if (found == nullptr && !serviceExists)
+        const auto service = std::ranges::find(state_->providers, serviceId, [](const auto &provider) {
+            return provider->descriptor.serviceId;
+        });
+        const auto authorityMatch = std::ranges::find_if(state_->providers, [&serviceId, &authority](const auto &provider) {
+            return std::tie(provider->descriptor.serviceId, provider->descriptor.capability, provider->descriptor.version,
+                            provider->descriptor.provider) ==
+                   std::tie(serviceId, authority.capability, authority.version, authority.provider);
+        });
+        if (service == state_->providers.end())
             return Result<std::shared_ptr<BackendServiceProviderState>>::Failure(MakeError(ExtensionErrors::BackendServiceUnavailable));
-        if (found == nullptr || found->descriptor.contractId != contractId)
+        if (authorityMatch == state_->providers.end() || (*authorityMatch)->descriptor.contractId != contractId)
             return Result<std::shared_ptr<BackendServiceProviderState>>::Failure(
                 MakeError(ExtensionErrors::BackendServiceContractMismatch));
-        if (found->typeTag != typeTag)
+        if (typeTag != nullptr && (*authorityMatch)->typeTag != typeTag)
             return Result<std::shared_ptr<BackendServiceProviderState>>::Failure(MakeError(ExtensionErrors::BackendServiceTypeMismatch));
-        return Result<std::shared_ptr<BackendServiceProviderState>>::Success(std::move(found));
+        return Result<std::shared_ptr<BackendServiceProviderState>>::Success(*authorityMatch);
+    }
+
+    Result<void> BackendServiceRegistry::ValidateImportedBinding(const BackendServiceImportBinding &binding, const void *typeTag) const {
+        if (binding.provider_ == nullptr || typeTag == nullptr) {
+            return Result<void>::Failure(Detail::BackendServiceImportError(binding.import_, ExtensionErrors::BackendServiceInvalid,
+                                                                           "The host-created import binding is malformed or consumed."));
+        }
+        if (!binding.authority_.IsUsable()) {
+            return Result<void>::Failure(
+                Detail::BackendServiceImportError(binding.import_, ExtensionErrors::BackendServiceUnavailable,
+                                                  "The bound consumer admission or capability publication was revoked.",
+                                                  &binding.authority_.Descriptor()));
+        }
+
+        std::scoped_lock lock{state_->mutex};
+        if (state_->shutdown) {
+            return Result<void>::Failure(Detail::BackendServiceImportError(binding.import_, ExtensionErrors::BackendServiceShutdown,
+                                                                           "The backend service registry is shutting down.",
+                                                                           &binding.authority_.Descriptor()));
+        }
+        const bool live = binding.provider_->registered.load(std::memory_order_acquire) &&
+                          std::ranges::find(state_->providers, binding.provider_) != state_->providers.end();
+        if (!live) {
+            return Result<void>::Failure(
+                Detail::BackendServiceImportError(binding.import_, ExtensionErrors::BackendServiceUnavailable,
+                                                  "The exact provider generation selected by the binding is no longer published.",
+                                                  &binding.authority_.Descriptor()));
+        }
+        if (binding.provider_->typeTag != typeTag) {
+            return Result<void>::Failure(
+                Detail::BackendServiceImportError(binding.import_, ExtensionErrors::BackendServiceTypeMismatch,
+                                                  "The bound provider does not implement the requested C++ adapter type.",
+                                                  &binding.authority_.Descriptor()));
+        }
+        return Result<void>::Success();
     }
 
     /** @copydoc BackendServiceRegistry::BeginShutdown */
-    void BackendServiceRegistry::BeginShutdown() noexcept {
-        if (state_ == nullptr)
-            return;
+    BackendServiceRetirementDisposition BackendServiceRegistry::BeginShutdown() noexcept {
         std::vector<std::shared_ptr<BackendServiceProviderState>> providers;
+        bool stagesShutdown{};
         {
             std::scoped_lock lock{state_->mutex};
-            if (state_->shutdown)
-                return;
-            state_->shutdown = true;
-            providers = std::move(state_->providers);
+            if (!state_->shutdown) {
+                state_->stagingShutdown.store(true, std::memory_order_release);
+                state_->shutdown = true;
+                providers = std::move(state_->providers);
+                stagesShutdown = true;
+            }
         }
-        for (auto iterator = providers.rbegin(); iterator != providers.rend(); ++iterator)
-            StopProvider(*iterator);
+        const auto deadline = std::chrono::steady_clock::now() + state_->config.drainDeadline;
+        for (auto iterator = providers.rbegin(); iterator != providers.rend(); ++iterator) {
+            RequestRetirement(*iterator);
+            std::scoped_lock lock{state_->mutex};
+            EnqueueRetirement(*state_, *iterator);
+        }
+        if (stagesShutdown)
+            state_->stagingShutdown.store(false, std::memory_order_release);
+        return ProgressRetirements(state_, deadline, true);
+    }
+
+    /** @copydoc BackendServiceRegistry::FinalizeRetiredOnOwnerThread */
+    BackendServiceRetirementDisposition BackendServiceRegistry::FinalizeRetiredOnOwnerThread() noexcept {
+        return ProgressRetirements(state_, std::chrono::steady_clock::now(), false);
     }
 
     /** @copydoc BackendServiceRegistry::IsShutdown */
     bool BackendServiceRegistry::IsShutdown() const noexcept {
-        if (state_ == nullptr)
-            return true;
         std::scoped_lock lock{state_->mutex};
         return state_->shutdown;
     }

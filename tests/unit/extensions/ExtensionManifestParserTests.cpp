@@ -160,6 +160,25 @@ namespace Horo::Extensions::Tests {
         CHECK(result.Value().modules.back().imports.front().minimumVersion == "2.0.0");
         CHECK_FALSE(result.Value().modules.back().imports.front().required);
 
+        auto defaultRequired = ParseExtensionManifest(R"json({
+            "id":"com.example.default-required","version":"1.0.0","modules":[{
+                "id":"com.example.default-required.backend","version":"1.0.0","kind":"native",
+                "imports":[{"id":"com.example.default-required.import","service":"com.example.service",
+                            "contract":"com.example.contract","minimumVersion":"1.0.0"}]
+            }]
+        })json");
+        REQUIRE(defaultRequired.HasValue());
+        CHECK(defaultRequired.Value().modules.front().imports.front().required);
+
+        auto nonBooleanRequired = ParseExtensionManifest(R"json({
+            "id":"com.example.invalid-required","version":"1.0.0","modules":[{
+                "id":"com.example.invalid-required.backend","version":"1.0.0","kind":"native",
+                "imports":[{"id":"com.example.invalid-required.import","service":"com.example.service",
+                            "contract":"com.example.contract","minimumVersion":"1.0.0","required":"no"}]
+            }]
+        })json");
+        RequireError(nonBooleanRequired, "$.modules[0].imports[0].required", "extension.manifest.invalid_type");
+
         auto unknownRole = ParseExtensionManifest(R"json({
             "id":"com.example.test","version":"1.0.0",
             "modules":[{"id":"com.example.test.native","version":"1.0.0","kind":"native","roles":["gui-ish"]}]

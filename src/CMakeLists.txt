@@ -225,6 +225,13 @@ add_library(HoroEngine::NetworkApi ALIAS HoroNetworkApi)
 target_compile_features(HoroNetworkApi PUBLIC cxx_std_20)
 target_link_libraries(HoroNetworkApi PUBLIC HoroEngine::Foundation)
 
+add_library(HoroNetworkTransportNull STATIC
+        runtime/networking/null/DeterministicTransport.cpp
+)
+add_library(HoroEngine::NetworkTransportNull ALIAS HoroNetworkTransportNull)
+target_compile_features(HoroNetworkTransportNull PUBLIC cxx_std_20)
+target_link_libraries(HoroNetworkTransportNull PUBLIC HoroEngine::NetworkApi)
+
 add_library(HoroRuntimeUi STATIC
         runtime/ui/UiErrors.cpp
         runtime/ui/UiIdentity.cpp
@@ -232,6 +239,8 @@ add_library(HoroRuntimeUi STATIC
         runtime/ui/UiDocument.cpp
         runtime/ui/UiDiagnostics.cpp
         runtime/ui/UiElementTree.cpp
+        runtime/ui/UiLayout.cpp
+        runtime/ui/UiLayoutTypes.cpp
         runtime/ui/UiRenderSnapshot.cpp
         runtime/ui/UiPresentationReceipt.cpp
 )
@@ -442,6 +451,7 @@ add_library(HoroPhysics STATIC
         physics/CharacterErrors.cpp
         physics/CharacterWorldSettings.cpp
         physics/PhysicsBodyDescriptor.cpp
+        physics/PhysicsBodyDynamics.cpp
         physics/PhysicsCapabilities.cpp
         physics/PhysicsCollisionSchema.cpp
         physics/PhysicsConstraintDescriptor.cpp
@@ -652,6 +662,8 @@ add_library(HoroWorldStreaming STATIC
         runtime/world_streaming/StreamingBudgetModel.cpp
         runtime/world_streaming/StreamingCellOperation.cpp
         runtime/world_streaming/StreamingCellCandidate.cpp
+        runtime/world_streaming/StreamingCellAssetRequest.cpp
+        runtime/world_streaming/StreamingCellActivation.cpp
         runtime/world_streaming/StreamingCellStability.cpp
         runtime/world_streaming/StreamingCellState.cpp
         runtime/world_streaming/StreamingSchedulerAdmission.cpp
@@ -1190,6 +1202,7 @@ add_library(HoroExtensions STATIC
         extensions/marketplace/ExtensionMarketplace.cpp
         extensions/capabilities/asset_pipeline_points/ExternalAssetImporter.cpp
         extensions/capabilities/project_validator/ProjectValidatorRegistry.cpp
+        extensions/capabilities/pipeline_step/PipelineStepRegistry.cpp
 )
 
 add_library(HoroEngine::Extensions ALIAS HoroExtensions)

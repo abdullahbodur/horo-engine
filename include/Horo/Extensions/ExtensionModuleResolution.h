@@ -64,16 +64,59 @@ namespace Horo::Extensions {
         Incompatible,
     };
 
-    /** @brief Immutable service binding selected from the validated package module graph. */
-    struct ResolvedExtensionServiceImport final {
-        std::string consumerModuleId; /**< Module that declared and exclusively owns this import. */
-        std::string importId;         /**< Stable import identity local to the consumer module. */
-        std::string serviceId;        /**< Exact exported service identity. */
-        std::string contractId;       /**< Exact typed callable contract identity. */
-        std::string providerModuleId; /**< Selected provider module, empty only when unavailable. */
-        std::string providerVersion;  /**< Selected service API version, empty only when unavailable. */
-        ExtensionServiceImportStatus status{ExtensionServiceImportStatus::Unavailable}; /**< Explicit binding outcome. */
-        bool required{true}; /**< Whether a non-bound outcome rejects composition. */
+    struct ExtensionModulePlan;
+
+    /** @brief Unforgeable immutable service resolution selected from one validated package module graph. */
+    class ResolvedExtensionServiceImport final {
+    public:
+        ResolvedExtensionServiceImport(const ResolvedExtensionServiceImport &) = default;
+        ResolvedExtensionServiceImport &operator=(const ResolvedExtensionServiceImport &) = default;
+        ResolvedExtensionServiceImport(ResolvedExtensionServiceImport &&) noexcept = default;
+        ResolvedExtensionServiceImport &operator=(ResolvedExtensionServiceImport &&) noexcept = default;
+
+        /** @brief Returns the package/extension that owns the consumer module. */
+        [[nodiscard]] const std::string &ConsumerExtensionId() const noexcept;
+
+        /** @brief Returns the module that declared and exclusively owns this import. */
+        [[nodiscard]] const std::string &ConsumerModuleId() const noexcept;
+
+        /** @brief Returns the stable import identity local to the consumer module. */
+        [[nodiscard]] const std::string &ImportId() const noexcept;
+
+        /** @brief Returns the exact exported service identity. */
+        [[nodiscard]] const std::string &ServiceId() const noexcept;
+
+        /** @brief Returns the exact typed callable contract identity. */
+        [[nodiscard]] const std::string &ContractId() const noexcept;
+
+        /** @brief Returns the selected provider module, or an empty string when unavailable. */
+        [[nodiscard]] const std::string &ProviderModuleId() const noexcept;
+
+        /** @brief Returns the selected canonical service API version, or an empty string when unavailable. */
+        [[nodiscard]] const std::string &ProviderVersion() const noexcept;
+
+        /** @brief Returns the explicit deterministic resolution outcome. */
+        [[nodiscard]] ExtensionServiceImportStatus Status() const noexcept;
+
+        /** @brief Returns whether a non-bound outcome rejects package composition. */
+        [[nodiscard]] bool IsRequired() const noexcept;
+
+    private:
+        friend Result<ExtensionModulePlan> ResolveExtensionModules(const ExtensionManifest &manifest, const ExtensionHostEnvironment &host);
+
+        ResolvedExtensionServiceImport(std::string consumerExtensionId, std::string consumerModuleId, std::string importId,
+                                       std::string serviceId, std::string contractId, std::string providerModuleId,
+                                       std::string providerVersion, ExtensionServiceImportStatus status, bool required);
+
+        std::string consumerExtensionId_;
+        std::string consumerModuleId_;
+        std::string importId_;
+        std::string serviceId_;
+        std::string contractId_;
+        std::string providerModuleId_;
+        std::string providerVersion_;
+        ExtensionServiceImportStatus status_{ExtensionServiceImportStatus::Unavailable};
+        bool required_{true};
     };
 
     /** @brief Immutable deterministic module order and contribution ownership for one activation attempt. */

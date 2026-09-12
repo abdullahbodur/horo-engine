@@ -65,4 +65,22 @@ namespace Horo::Extensions::ExtensionErrors {
     extern const ErrorCodeDescriptor ProjectValidatorInvocationFailed;
     /** @brief Project validation was cooperatively cancelled without publishing partial results. */
     extern const ErrorCodeDescriptor ProjectValidationCancelled;
+    /** @brief A pipeline-step descriptor, artifact declaration, or input is malformed. */
+    extern const ErrorCodeDescriptor PipelineStepRegistryInvalid;
+    /** @brief A step identity or generated artifact producer is already published. */
+    extern const ErrorCodeDescriptor PipelineStepRegistryDuplicate;
+    /** @brief The bounded pipeline-step registry is full. */
+    extern const ErrorCodeDescriptor PipelineStepRegistryCapacityExceeded;
+    /** @brief Pipeline-step registration and new run admission are closed. */
+    extern const ErrorCodeDescriptor PipelineStepRegistryShutdown;
+    /** @brief The registered dependency graph is incomplete or violates phase ordering. */
+    extern const ErrorCodeDescriptor PipelineGraphInvalid;
+    /** @brief The registered pipeline-step dependency graph contains a cycle. */
+    extern const ErrorCodeDescriptor PipelineGraphCycle;
+    /** @brief A step tried to publish malformed, undeclared, duplicate, or oversized output. */
+    extern const ErrorCodeDescriptor PipelineOutputInvalid;
+    /** @brief One attributed pipeline-step callback failed. */
+    extern const ErrorCodeDescriptor PipelineStepInvocationFailed;
+    /** @brief A pipeline run was cancelled and discarded all staged outputs. */
+    extern const ErrorCodeDescriptor PipelineRunCancelled;
 }  // namespace Horo::Extensions::ExtensionErrors

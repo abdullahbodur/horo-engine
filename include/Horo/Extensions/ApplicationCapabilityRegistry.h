@@ -30,12 +30,20 @@ namespace Horo::Extensions {
         ApplicationCapabilityVersion maximum{}; /**< Newest accepted provider contract. */
     };
 
+    /** @brief Exact module-to-provider ownership and generation selected by composition. */
+    struct ApplicationCapabilityProviderIdentity final {
+        std::string moduleId;       /**< Module that owns the provider publication. */
+        std::string providerId;     /**< Stable provider identity within the host composition. */
+        std::uint64_t generation{}; /**< Non-zero provider activation generation. */
+
+        bool operator==(const ApplicationCapabilityProviderIdentity &) const noexcept = default;
+    };
+
     /** @brief Immutable identity and ownership metadata for one provider publication. */
     struct ApplicationCapabilityProviderDescriptor final {
-        ExtensionCapabilityId capability;       /**< Stable application capability identity. */
-        ApplicationCapabilityVersion version{}; /**< Exact provider contract version. */
-        std::string providerId;                 /**< Canonical stable provider identity. */
-        std::uint64_t providerGeneration{};     /**< Non-zero publication generation. */
+        ExtensionCapabilityId capability;               /**< Stable application capability identity. */
+        ApplicationCapabilityVersion version{};         /**< Exact provider contract version. */
+        ApplicationCapabilityProviderIdentity provider; /**< Explicit module/provider ownership and generation. */
     };
 
     struct ApplicationCapabilityRegistryState;
@@ -81,14 +89,11 @@ namespace Horo::Extensions {
         /** @brief Returns the exact provider publication selected for this call. */
         [[nodiscard]] const ApplicationCapabilityProviderDescriptor &Descriptor() const noexcept;
 
-        /** @brief Returns the consumer extension that owns this admitted call. */
-        [[nodiscard]] const std::string &ConsumerExtensionId() const noexcept;
+        /** @brief Returns the exact consumer activation that owns this admitted call. */
+        [[nodiscard]] const ExtensionActivationIdentity &Consumer() const noexcept;
 
-        /** @brief Returns the consumer module that owns this admitted call. */
-        [[nodiscard]] const std::string &ConsumerModuleId() const noexcept;
-
-        /** @brief Returns the consumer activation generation that owns this admitted call. */
-        [[nodiscard]] std::uint64_t ConsumerActivationGeneration() const noexcept;
+        /** @brief Returns whether both provider publication and consumer admission remain active. */
+        [[nodiscard]] bool IsUsable() const noexcept;
 
     private:
         friend class ApplicationCapabilityRegistry;

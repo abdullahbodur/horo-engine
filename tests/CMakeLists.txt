@@ -24,6 +24,33 @@ add_test(NAME HoroGameplayManifestRevisionValidationTest
 set_tests_properties(HoroGameplayManifestRevisionValidationTest PROPERTIES
     LABELS "gameplay;cmake")
 
+add_test(NAME HoroExtensionSdkExternalConsumerTest
+    COMMAND "${CMAKE_COMMAND}"
+        "-DHORO_EXTENSION_SDK_PACKAGE_DIR=${HORO_EXTENSION_SDK_PACKAGE_DIR}"
+        "-DHORO_EXTENSION_SDK_VERSION=${HORO_EXTENSION_SDK_VERSION}"
+        "-DHORO_ENGINE_SOURCE_DIR=${PROJECT_SOURCE_DIR}"
+        "-DHORO_TEST_BINARY_DIR=${CMAKE_CURRENT_BINARY_DIR}/extension-sdk-consumer"
+        "-DCMAKE_GENERATOR=${CMAKE_GENERATOR}"
+        "-DCMAKE_GENERATOR_PLATFORM=${CMAKE_GENERATOR_PLATFORM}"
+        "-DCMAKE_GENERATOR_TOOLSET=${CMAKE_GENERATOR_TOOLSET}"
+        -P "${PROJECT_SOURCE_DIR}/tests/cmake/RunExtensionSdkConsumerTest.cmake")
+set_tests_properties(HoroExtensionSdkExternalConsumerTest PROPERTIES
+    LABELS "extensions;sdk;cmake")
+
+add_test(NAME HoroExtensionScaffoldsTest
+    COMMAND "${CMAKE_COMMAND}"
+        "-DHORO_EXTENSION_SDK_PACKAGE_DIR=${HORO_EXTENSION_SDK_PACKAGE_DIR}"
+        "-DHORO_EXTENSION_SCAFFOLDER=${HORO_EXTENSION_SDK_PACKAGE_DIR}/bin/horo-scaffold-extension.py"
+        "-DHORO_EXTENSION_ACTIVATION_TEST=$<TARGET_FILE:HoroPackagedExtensionActivation>"
+        "-DHORO_TEST_BINARY_DIR=${CMAKE_CURRENT_BINARY_DIR}/extension-scaffolds"
+        "-DPYTHON_EXECUTABLE=${Python3_EXECUTABLE}"
+        "-DCMAKE_GENERATOR=${CMAKE_GENERATOR}"
+        "-DCMAKE_GENERATOR_PLATFORM=${CMAKE_GENERATOR_PLATFORM}"
+        "-DCMAKE_GENERATOR_TOOLSET=${CMAKE_GENERATOR_TOOLSET}"
+        -P "${PROJECT_SOURCE_DIR}/tests/cmake/RunExtensionScaffoldsTest.cmake")
+set_tests_properties(HoroExtensionScaffoldsTest PROPERTIES
+    LABELS "extensions;sdk;cmake")
+
 # One translation unit per registered public header verifies that consumers can
 # compile the contract using only its owning target's usage requirements.
 horo_add_public_header_consumer_targets()
@@ -166,6 +193,12 @@ add_executable(HoroNetworkApiTests
 target_compile_features(HoroNetworkApiTests PRIVATE cxx_std_20)
 target_link_libraries(HoroNetworkApiTests PRIVATE HoroEngine::NetworkApi)
 horo_register_catch_test(HoroNetworkApiTests LABELS "unit;network;headless")
+add_executable(HoroNetworkTransportNullTests
+        unit/runtime/networking/DeterministicTransportTests.cpp
+)
+target_compile_features(HoroNetworkTransportNullTests PRIVATE cxx_std_20)
+target_link_libraries(HoroNetworkTransportNullTests PRIVATE HoroEngine::NetworkTransportNull)
+horo_register_catch_test(HoroNetworkTransportNullTests LABELS "unit;network;headless")
 add_executable(HoroNetworkRuntimeTests
         unit/runtime/networking/NetworkObjectMappingTests.cpp
 )
@@ -234,6 +267,7 @@ add_executable(HoroPhysicsTests
         unit/runtime/physics/CharacterWorldSettingsTests.cpp
         unit/runtime/physics/CanonicalSolverTests.cpp
         unit/runtime/physics/PhysicsBodyDescriptorTests.cpp
+        unit/runtime/physics/PhysicsBodyDynamicsTests.cpp
         unit/runtime/physics/PhysicsCollisionSchemaTests.cpp
         unit/runtime/physics/PhysicsConstraintDescriptorTests.cpp
         unit/runtime/physics/PhysicsCookedShapeDescriptorTests.cpp
@@ -364,6 +398,7 @@ horo_register_catch_test(HoroNavigationApiTests LABELS "unit;navigation;headless
 
 add_executable(HoroNavigationRuntimeTests
         support/AllocationProbe.cpp
+        unit/runtime/navigation/NavigationFoundationQualificationTests.cpp
         unit/runtime/navigation/NavigationRuntimeQueuesTests.cpp
         unit/runtime/navigation/NavigationWorldLifecycleTests.cpp
 )
@@ -412,6 +447,8 @@ add_executable(HoroWorldStreamingTests
         unit/runtime/world_streaming/StreamingBudgetModelTests.cpp
         unit/runtime/world_streaming/StreamingCellOperationTests.cpp
         unit/runtime/world_streaming/StreamingCellCandidateTests.cpp
+        unit/runtime/world_streaming/StreamingCellAssetRequestTests.cpp
+        unit/runtime/world_streaming/StreamingCellActivationTests.cpp
         unit/runtime/world_streaming/StreamingCellStateTests.cpp
         unit/runtime/world_streaming/StreamingCellStabilityTests.cpp
         unit/runtime/world_streaming/StreamingSchedulerAdmissionTests.cpp
@@ -1276,6 +1313,11 @@ add_executable(HoroRuntimeUiRenderSnapshotTests
 )
 target_compile_features(HoroRuntimeUiRenderSnapshotTests PRIVATE cxx_std_20)
 target_link_libraries(HoroRuntimeUiRenderSnapshotTests PRIVATE HoroEngine::RuntimeUi)
+add_executable(HoroRuntimeUiLayoutTests
+        unit/runtime/ui/UiLayoutTests.cpp
+)
+target_compile_features(HoroRuntimeUiLayoutTests PRIVATE cxx_std_20)
+target_link_libraries(HoroRuntimeUiLayoutTests PRIVATE HoroEngine::RuntimeUi)
 add_executable(HoroRuntimeSaveArchiveMetadataTests
         unit/runtime/save/SaveArchiveMetadataTests.cpp
 )
@@ -1421,6 +1463,11 @@ set_target_properties(HoroExtensionAbiCConsumer PROPERTIES C_EXTENSIONS OFF)
 target_link_libraries(HoroExtensionAbiCConsumer PRIVATE HoroEngine::Extensions)
 add_test(NAME HoroExtensionAbiCConsumer COMMAND HoroExtensionAbiCConsumer)
 
+add_executable(HoroPackagedExtensionActivation helpers/extensions/PackagedExtensionActivation.cpp)
+target_compile_features(HoroPackagedExtensionActivation PRIVATE cxx_std_20)
+target_include_directories(HoroPackagedExtensionActivation PRIVATE ${PROJECT_SOURCE_DIR}/tests/support)
+target_link_libraries(HoroPackagedExtensionActivation PRIVATE HoroEngine::Extensions)
+
 add_executable(HoroExtensionManagerTests
         unit/extensions/ApplicationCapabilityRegistryTests.cpp
         unit/extensions/ExtensionActivationTransactionTests.cpp
@@ -1463,6 +1510,13 @@ add_executable(HoroProjectValidatorRegistryTests
 target_compile_features(HoroProjectValidatorRegistryTests PRIVATE cxx_std_20)
 target_link_libraries(HoroProjectValidatorRegistryTests PRIVATE HoroEngine::Extensions Catch2::Catch2WithMain)
 add_test(NAME HoroProjectValidatorRegistryTests COMMAND HoroProjectValidatorRegistryTests)
+
+add_executable(HoroPipelineStepRegistryTests
+        unit/extensions/PipelineStepRegistryTests.cpp
+)
+target_compile_features(HoroPipelineStepRegistryTests PRIVATE cxx_std_20)
+target_link_libraries(HoroPipelineStepRegistryTests PRIVATE HoroEngine::Extensions Catch2::Catch2WithMain)
+add_test(NAME HoroPipelineStepRegistryTests COMMAND HoroPipelineStepRegistryTests)
 
 add_library(HoroBackendServiceReference STATIC
         fixtures/extensions/BackendServiceReference.cpp
@@ -1682,6 +1736,7 @@ set(HORO_CATCH_TEST_TARGETS
         HoroRuntimeUiDiagnosticsTests
         HoroRuntimeUiElementTreeTests
         HoroRuntimeUiRenderSnapshotTests
+        HoroRuntimeUiLayoutTests
         HoroRuntimeSaveArchiveMetadataTests
         HoroRuntimeSaveArchiveFramingTests
         HoroRuntimeSaveSlotMetadataTests

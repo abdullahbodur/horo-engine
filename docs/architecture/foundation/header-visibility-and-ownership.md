@@ -31,6 +31,21 @@ provider pointers or reusable factories with one-shot calls resolved through an
 exact `ApplicationCapabilityProviderLease`; provider-native ABI tables remain
 private to their host adapter. The generated Extensions public-header consumer
 compiles the new header through its sole owning target.
+The lifecycle API returns a typed retirement disposition: a bounded drain can
+complete, defer to the outermost re-entrant call, require owner-thread finalization,
+or retain the provider and require restart after the shared deadline. Composition
+must finalize owner-thread retirements on the recorded provider thread; no deadline
+path destroys live provider code. Each registration supplies an opaque shared code
+lease, and the reverse-ordered retirement coordinator retains that lease through
+`Shutdown()`, service destruction, and any process-lifetime restart quarantine.
+Registry and registration owners are non-assignable lifetime boundaries; retirement
+operations return their infallible typed disposition directly rather than wrapping
+it in an error result with no failure state.
+The service object and code lease transfer as one ordering-safe storage value from
+the public registration boundary onward. Every rejection, allocation unwind,
+successful shutdown, and quarantine path destroys the service before releasing the
+code that contains its deleter. Composition permits only one quarantined registry
+per process and treats any attempted replacement as a fail-fast restart violation.
 
 `Horo/Vfx/VfxQualityPolicy.h` is owned by `HoroVfxApi`. It adds backend-neutral
 immutable capability/policy evidence and pure admission decisions; consumers keep

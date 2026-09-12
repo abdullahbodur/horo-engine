@@ -59,6 +59,28 @@ namespace Horo::Extensions {
     class ExtensionCapabilityAdmission;
     struct ExtensionCapabilityAdmissionState;
 
+    /** @brief Immutable identity of one admitted extension-module activation. */
+    class ExtensionActivationIdentity final {
+    public:
+        /** @brief Returns the owning extension identity. */
+        [[nodiscard]] const std::string &ExtensionId() const noexcept;
+
+        /** @brief Returns the owning module identity. */
+        [[nodiscard]] const std::string &ModuleId() const noexcept;
+
+        /** @brief Returns the exact non-zero activation generation. */
+        [[nodiscard]] std::uint64_t Generation() const noexcept;
+
+    private:
+        friend struct ExtensionCapabilityAdmissionState;
+
+        ExtensionActivationIdentity(std::string extensionId, std::string moduleId, std::uint64_t generation) noexcept;
+
+        std::string extensionId_;
+        std::string moduleId_;
+        std::uint64_t generation_{};
+    };
+
     /**
      * @brief Move-only guard proving a capability callback entered before revocation.
      *
@@ -75,14 +97,11 @@ namespace Horo::Extensions {
         /** @brief Returns the exact capability admitted for this callback. */
         [[nodiscard]] const ExtensionCapabilityId &Capability() const noexcept;
 
-        /** @brief Returns the extension activation that owns this use lease. */
-        [[nodiscard]] const std::string &ExtensionId() const noexcept;
+        /** @brief Returns the exact extension-module activation that owns this use lease. */
+        [[nodiscard]] const ExtensionActivationIdentity &Activation() const noexcept;
 
-        /** @brief Returns the module activation that owns this use lease. */
-        [[nodiscard]] const std::string &ModuleId() const noexcept;
-
-        /** @brief Returns the exact activation generation that owns this use lease. */
-        [[nodiscard]] std::uint64_t ActivationGeneration() const noexcept;
+        /** @brief Returns whether the owning admission still accepts callback dispatch. */
+        [[nodiscard]] bool IsUsable() const noexcept;
 
     private:
         friend class ExtensionCapabilityHandle;
@@ -105,14 +124,8 @@ namespace Horo::Extensions {
         /** @brief Returns the exact admitted capability identity. */
         [[nodiscard]] const ExtensionCapabilityId &Capability() const noexcept;
 
-        /** @brief Returns the extension identity that owns this handle. */
-        [[nodiscard]] const std::string &ExtensionId() const noexcept;
-
-        /** @brief Returns the module identity that owns this handle. */
-        [[nodiscard]] const std::string &ModuleId() const noexcept;
-
-        /** @brief Returns the activation generation that owns this handle. */
-        [[nodiscard]] std::uint64_t ActivationGeneration() const noexcept;
+        /** @brief Returns the exact extension-module activation that owns this handle. */
+        [[nodiscard]] const ExtensionActivationIdentity &Activation() const noexcept;
 
         /**
          * @brief Atomically admits one capability callback for the exact owner generation.

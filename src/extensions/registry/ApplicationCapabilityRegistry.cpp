@@ -28,8 +28,9 @@ namespace Horo::Extensions {
     namespace {
         [[nodiscard]] bool IsValid(const ApplicationCapabilityProviderDescriptor &descriptor) noexcept {
             return Detail::IsCanonicalExtensionAuthorityId(descriptor.capability.value) &&
-                   Detail::IsCanonicalExtensionAuthorityId(descriptor.providerId) && descriptor.version != ApplicationCapabilityVersion{} &&
-                   descriptor.providerGeneration != 0;
+                   Detail::IsCanonicalExtensionAuthorityId(descriptor.provider.moduleId) &&
+                   Detail::IsCanonicalExtensionAuthorityId(descriptor.provider.providerId) &&
+                   descriptor.version != ApplicationCapabilityVersion{} && descriptor.provider.generation != 0;
         }
 
         [[nodiscard]] bool IsValid(const ApplicationCapabilityVersionRange &versions) noexcept {
@@ -93,19 +94,14 @@ namespace Horo::Extensions {
         return provider_->descriptor;
     }
 
-    /** @copydoc ApplicationCapabilityProviderLease::ConsumerExtensionId */
-    const std::string &ApplicationCapabilityProviderLease::ConsumerExtensionId() const noexcept {
-        return admission_.ExtensionId();
+    /** @copydoc ApplicationCapabilityProviderLease::Consumer */
+    const ExtensionActivationIdentity &ApplicationCapabilityProviderLease::Consumer() const noexcept {
+        return admission_.Activation();
     }
 
-    /** @copydoc ApplicationCapabilityProviderLease::ConsumerModuleId */
-    const std::string &ApplicationCapabilityProviderLease::ConsumerModuleId() const noexcept {
-        return admission_.ModuleId();
-    }
-
-    /** @copydoc ApplicationCapabilityProviderLease::ConsumerActivationGeneration */
-    std::uint64_t ApplicationCapabilityProviderLease::ConsumerActivationGeneration() const noexcept {
-        return admission_.ActivationGeneration();
+    /** @copydoc ApplicationCapabilityProviderLease::IsUsable */
+    bool ApplicationCapabilityProviderLease::IsUsable() const noexcept {
+        return provider_ != nullptr && provider_->active.load(std::memory_order_acquire) && admission_.IsUsable();
     }
 
     ApplicationCapabilityRegistry::ApplicationCapabilityRegistry() : state_(std::make_shared<ApplicationCapabilityRegistryState>()) {
