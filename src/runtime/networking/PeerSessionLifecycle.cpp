@@ -33,8 +33,8 @@ namespace Horo::Network {
                                        [](const ProtocolFeatureId feature) {
                 return feature.IsValid();
             }) &&
-                   std::adjacent_find(features.begin(), features.end(),
-                                      [](const ProtocolFeatureId left, const ProtocolFeatureId right) {
+                   std::ranges::adjacent_find(features,
+                                              [](const ProtocolFeatureId left, const ProtocolFeatureId right) {
                 return left.Value() >= right.Value();
             }) == features.end() &&
                    selection.compression < HandshakeCompression::Count && ValidTransportSelection(selection.transport);
@@ -64,7 +64,7 @@ namespace Horo::Network {
     }  // namespace
 
     PeerSessionLifecycle::PeerSessionLifecycle(const ConnectionHandle connection, const NetworkOperationGeneration sessionGeneration,
-                                               const PeerSessionDeadlines deadlines) noexcept
+                                               const PeerSessionDeadlines &deadlines) noexcept
         : connection_(connection), sessionGeneration_(sessionGeneration), deadlines_(deadlines) {}
 
     /** @copydoc PeerSessionLifecycle::Create */
@@ -90,12 +90,13 @@ namespace Horo::Network {
     }
 
     Result<NetworkTerminalRecord> PeerSessionLifecycle::SessionFailure(const NetworkFailureKind kind) const {
-        NetworkFailureLayer layer = NetworkFailureLayer::Session;
-        if (kind == NetworkFailureKind::ProtocolMalformed || kind == NetworkFailureKind::ProtocolIncompatible)
-            layer = NetworkFailureLayer::Protocol;
-        else if (kind == NetworkFailureKind::NameResolutionFailed || kind == NetworkFailureKind::TransportUnavailable ||
-                 kind == NetworkFailureKind::TransportSaturated)
-            layer = NetworkFailureLayer::Transport;
+        using enum NetworkFailureKind;
+        using enum NetworkFailureLayer;
+        NetworkFailureLayer layer = Session;
+        if (kind == ProtocolMalformed || kind == ProtocolIncompatible)
+            layer = Protocol;
+        else if (kind == NameResolutionFailed || kind == TransportUnavailable || kind == TransportSaturated)
+            layer = Transport;
         return MakeNetworkTerminalRecord(layer, kind);
     }
 
@@ -107,7 +108,7 @@ namespace Horo::Network {
             (IsGracefulClose(kind) == failure.has_value()))
             return Result<void>::Failure(MakeError(NetworkErrors::NetworkLifecycleInvalid));
 
-        terminal_.emplace(PeerSessionTerminalSnapshot{connection_, sessionGeneration_, kind, closeReason, nowTick, std::move(failure)});
+        terminal_.emplace(connection_, sessionGeneration_, kind, closeReason, nowTick, std::move(failure));
         activityDeadlineTick_ = 0;
         state_ = IsGracefulClose(kind) || kind == PeerSessionTerminalKind::LocalCancellation || kind == PeerSessionTerminalKind::Shutdown
                      ? PeerSessionState::Closed
@@ -178,9 +179,9 @@ namespace Horo::Network {
         if (nowTick == 0 || nowTick >= deadlines_.activationTick || nowTick >= deadlines_.lifetimeTick ||
             nowTick >= authentication_->principal.expiresAtTick)
             return Result<void>::Failure(MakeError(NetworkErrors::SessionTimedOut));
-        const auto &channel = authentication_->secureChannel;
-        if (activation.channel != channel.channel || activation.channelGeneration != channel.channelGeneration ||
-            activation.bindingDigest != channel.bindingDigest)
+        if (const auto &channel = authentication_->secureChannel; activation.channel != channel.channel ||
+                                                                  activation.channelGeneration != channel.channelGeneration ||
+                                                                  activation.bindingDigest != channel.bindingDigest)
             return Result<void>::Failure(MakeError(NetworkErrors::AuthenticationIncompatible));
         activityDeadlineTick_ = std::min(
             {deadlines_.lifetimeTick, authentication_->principal.expiresAtTick, SaturatingAdd(nowTick, deadlines_.inactivityTicks)});
@@ -203,8 +204,7 @@ namespace Horo::Network {
     /** @copydoc PeerSessionLifecycle::RecordActivity */
     Result<void> PeerSessionLifecycle::RecordActivity(const ConnectionHandle connection, const NetworkOperationGeneration sessionGeneration,
                                                       const std::uint64_t nowTick) {
-        auto admitted = AdmitGameplay(connection, sessionGeneration, nowTick);
-        if (admitted.HasError())
+        if (auto admitted = AdmitGameplay(connection, sessionGeneration, nowTick); admitted.HasError())
             return admitted;
         activityDeadlineTick_ = std::min(
             {deadlines_.lifetimeTick, authentication_->principal.expiresAtTick, SaturatingAdd(nowTick, deadlines_.inactivityTicks)});
@@ -215,19 +215,20 @@ namespace Horo::Network {
     Result<void> PeerSessionLifecycle::RequestClose(const ConnectionHandle connection, const NetworkOperationGeneration sessionGeneration,
                                                     const PeerSessionTerminalKind kind, const CloseReasonId reason,
                                                     const std::uint64_t nowTick) {
+        using enum PeerSessionState;
         if (auto valid = MutableOperation(connection, sessionGeneration); valid.HasError())
             return valid;
         if (!IsGracefulClose(kind) || !reason.IsValid() || nowTick == 0)
             return Result<void>::Failure(MakeError(NetworkErrors::NetworkLifecycleInvalid));
-        if (state_ == PeerSessionState::Closing)
+        if (state_ == Closing)
             return pendingCloseKind_ == kind && pendingCloseReason_ == reason
                        ? Result<void>::Success()
                        : Result<void>::Failure(MakeError(NetworkErrors::TerminalAlreadyResolved));
-        if (state_ != PeerSessionState::Active)
+        if (state_ != Active)
             return Result<void>::Failure(MakeError(NetworkErrors::NetworkLifecycleTransitionInvalid));
         pendingCloseKind_ = kind;
         pendingCloseReason_ = reason;
-        state_ = PeerSessionState::Closing;
+        state_ = Closing;
         activityDeadlineTick_ = 0;
         return Result<void>::Success();
     }
@@ -260,9 +261,10 @@ namespace Horo::Network {
     Result<void> PeerSessionLifecycle::RejectAuthentication(const ConnectionHandle connection,
                                                             const NetworkOperationGeneration sessionGeneration,
                                                             const std::uint64_t nowTick) {
+        using enum PeerSessionState;
         if (auto valid = MutableOperation(connection, sessionGeneration); valid.HasError())
             return valid;
-        if (state_ != PeerSessionState::Closing && state_ != PeerSessionState::Authenticating && state_ != PeerSessionState::Activating)
+        if (state_ != Closing && state_ != Authenticating && state_ != Activating)
             return Result<void>::Failure(MakeError(NetworkErrors::NetworkLifecycleTransitionInvalid));
         return PublishFailureOrClose(NetworkFailureKind::SessionAuthenticationRejected, PeerSessionTerminalKind::AuthenticationRejected,
                                      nowTick);
@@ -271,10 +273,11 @@ namespace Horo::Network {
     /** @copydoc PeerSessionLifecycle::FailTransport */
     Result<void> PeerSessionLifecycle::FailTransport(const ConnectionHandle connection, const NetworkOperationGeneration sessionGeneration,
                                                      const NetworkFailureKind failure, const std::uint64_t nowTick) {
+        using enum NetworkFailureKind;
         if (auto valid = MutableOperation(connection, sessionGeneration); valid.HasError())
             return valid;
-        if (state_ != PeerSessionState::Closing && failure != NetworkFailureKind::NameResolutionFailed &&
-            failure != NetworkFailureKind::TransportUnavailable && failure != NetworkFailureKind::TransportSaturated)
+        if (state_ != PeerSessionState::Closing && failure != NameResolutionFailed && failure != TransportUnavailable &&
+            failure != TransportSaturated)
             return Result<void>::Failure(MakeError(NetworkErrors::NetworkLifecycleInvalid));
         return PublishFailureOrClose(failure, PeerSessionTerminalKind::TransportFailed, nowTick);
     }

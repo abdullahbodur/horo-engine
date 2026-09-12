@@ -22,7 +22,7 @@ namespace Horo::Network::Detail {
             return value.IsValid();
         }))
             return false;
-        return std::adjacent_find(valid.begin(), valid.end(), [](const Identity left, const Identity right) {
+        return std::ranges::adjacent_find(valid, [](const Identity left, const Identity right) {
             return left.Value() >= right.Value();
         }) == valid.end();
     }

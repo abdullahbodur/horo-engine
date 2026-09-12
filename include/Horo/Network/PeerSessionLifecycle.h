@@ -164,7 +164,7 @@ namespace Horo::Network {
 
     private:
         PeerSessionLifecycle(ConnectionHandle connection, NetworkOperationGeneration sessionGeneration,
-                             PeerSessionDeadlines deadlines) noexcept;
+                             const PeerSessionDeadlines &deadlines) noexcept;
         [[nodiscard]] bool Owns(ConnectionHandle connection, NetworkOperationGeneration sessionGeneration) const noexcept;
         [[nodiscard]] Result<void> MutableOperation(ConnectionHandle connection, NetworkOperationGeneration sessionGeneration) const;
         [[nodiscard]] Result<void> PublishTerminal(PeerSessionTerminalKind kind, std::uint64_t nowTick,
