@@ -242,4 +242,94 @@ namespace Horo::Extensions::ExtensionErrors {
         .retryable = true,
         .userActionable = false,
     };
+
+    const ErrorCodeDescriptor PipelineStepRegistryInvalid{
+        .domain = Domain,
+        .code = ErrorCode{"pipeline_step_registry_invalid"},
+        .defaultSeverity = ErrorSeverity::Error,
+        .summary = "The pipeline-step registry input is invalid.",
+        .remediationHint = "Provide canonical bounded step, provider, dependency, and artifact declarations.",
+        .retryable = false,
+        .userActionable = false,
+    };
+
+    const ErrorCodeDescriptor PipelineStepRegistryDuplicate{
+        .domain = Domain,
+        .code = ErrorCode{"pipeline_step_registry_duplicate"},
+        .defaultSeverity = ErrorSeverity::Error,
+        .summary = "The pipeline step or output producer is already registered.",
+        .remediationHint = "Publish one provider per step identity and one producer per generated artifact.",
+        .retryable = false,
+        .userActionable = false,
+    };
+
+    const ErrorCodeDescriptor PipelineStepRegistryCapacityExceeded{
+        .domain = Domain,
+        .code = ErrorCode{"pipeline_step_registry_capacity_exceeded"},
+        .defaultSeverity = ErrorSeverity::Error,
+        .summary = "The pipeline-step registry capacity was exceeded.",
+        .remediationHint = "Reduce the explicitly composed pipeline-step provider set.",
+        .retryable = false,
+        .userActionable = false,
+    };
+
+    const ErrorCodeDescriptor PipelineStepRegistryShutdown{
+        .domain = Domain,
+        .code = ErrorCode{"pipeline_step_registry_shutdown"},
+        .defaultSeverity = ErrorSeverity::Error,
+        .summary = "The pipeline-step registry is shutting down.",
+        .remediationHint = "Do not register or begin pipeline runs after host shutdown starts.",
+        .retryable = false,
+        .userActionable = false,
+    };
+
+    const ErrorCodeDescriptor PipelineGraphInvalid{
+        .domain = Domain,
+        .code = ErrorCode{"pipeline_graph_invalid"},
+        .defaultSeverity = ErrorSeverity::Error,
+        .summary = "The pipeline-step dependency or artifact graph is invalid.",
+        .remediationHint = "Provide existing phase-compatible dependencies and available declared inputs.",
+        .retryable = false,
+        .userActionable = true,
+    };
+
+    const ErrorCodeDescriptor PipelineGraphCycle{
+        .domain = Domain,
+        .code = ErrorCode{"pipeline_graph_cycle"},
+        .defaultSeverity = ErrorSeverity::Error,
+        .summary = "The pipeline-step dependency graph contains a cycle.",
+        .remediationHint = "Remove at least one cyclic dependency before running the pipeline.",
+        .retryable = false,
+        .userActionable = true,
+    };
+
+    const ErrorCodeDescriptor PipelineOutputInvalid{
+        .domain = Domain,
+        .code = ErrorCode{"pipeline_output_invalid"},
+        .defaultSeverity = ErrorSeverity::Error,
+        .summary = "A pipeline step produced invalid output.",
+        .remediationHint = "Produce each declared output exactly once through the bounded host sink.",
+        .retryable = false,
+        .userActionable = false,
+    };
+
+    const ErrorCodeDescriptor PipelineStepInvocationFailed{
+        .domain = Domain,
+        .code = ErrorCode{"pipeline_step_invocation_failed"},
+        .defaultSeverity = ErrorSeverity::Error,
+        .summary = "An attributed pipeline-step callback failed.",
+        .remediationHint = "Inspect the provider identity and its preserved typed cause.",
+        .retryable = false,
+        .userActionable = false,
+    };
+
+    const ErrorCodeDescriptor PipelineRunCancelled{
+        .domain = Domain,
+        .code = ErrorCode{"pipeline_run_cancelled"},
+        .defaultSeverity = ErrorSeverity::Warning,
+        .summary = "The pipeline run was cancelled.",
+        .remediationHint = "Retry the pipeline when its owning operation remains active.",
+        .retryable = true,
+        .userActionable = false,
+    };
 }  // namespace Horo::Extensions::ExtensionErrors
