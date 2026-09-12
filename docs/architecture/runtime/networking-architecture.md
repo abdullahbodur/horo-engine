@@ -305,6 +305,22 @@ to wake, serializes against the final poll, discards unobserved records and then
 releases the backend. This contract does not create a process-global I/O loop or
 move connection lifecycle authority out of the concrete transport.
 
+`NetworkLifecycleRegistry` is the owner-thread boundary immediately after that
+normalized drain. It prepares finite listener and connection slots at setup and
+accepts only Horo `ListenerHandle` / `ConnectionHandle` values paired with a
+non-zero asynchronous operation generation. Connections advance explicitly
+through created or resolving, connecting, and authentication-ready states; the
+last state is a handoff boundary, not an authenticated gameplay session.
+
+Close requests are idempotent, while terminal publication is exactly once. The
+first graceful, failed, cancelled, timed-out, or shutdown result is retained as
+immutable typed evidence. A reused slot must carry the exact next non-wrapping
+handle generation, and every completion must also match the current operation
+generation. Bounded deadline scans, cancellation and shutdown therefore cannot
+let a late DNS, connect, close, or native callback revive a replacement. The
+registry is owner-thread-only; private transport threads publish through
+`NetworkIoService` and never mutate lifecycle state directly.
+
 `PollEvents()` may be called only on the simulation/main thread during `NetworkPoll`. It drains the transport-owned inbound queue into `ITransportEventConsumer` callbacks. Those callbacks must not block, allocate unboundedly, or re-enter the transport.
 
 ## Threading Model and Frame Schedule Phases

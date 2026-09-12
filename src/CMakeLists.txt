@@ -211,6 +211,7 @@ add_library(HoroNetworkApi STATIC
         runtime/networking/api/NetworkErrors.cpp
         runtime/networking/api/NetworkFailure.cpp
         runtime/networking/api/NetworkIoService.cpp
+        runtime/networking/api/NetworkLifecycle.cpp
         runtime/networking/api/NetworkObjectIdentity.cpp
         runtime/networking/api/PacketBuffer.cpp
         runtime/networking/api/PacketQueue.cpp

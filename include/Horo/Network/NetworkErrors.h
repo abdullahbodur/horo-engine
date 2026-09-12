@@ -86,6 +86,14 @@ namespace Horo::Network::NetworkErrors {
     extern const ErrorCodeDescriptor NetworkIoWrongThread;
     /** @brief The service cannot advance a poll or completion sequence without wrapping. */
     extern const ErrorCodeDescriptor NetworkIoSequenceExhausted;
+    /** @brief Listener or connection lifecycle input, bounds, or terminal evidence is malformed. */
+    extern const ErrorCodeDescriptor NetworkLifecycleInvalid;
+    /** @brief Prepared listener or connection lifecycle capacity is exhausted. */
+    extern const ErrorCodeDescriptor NetworkLifecycleCapacityExceeded;
+    /** @brief A listener or connection phase change is not legal from its current state. */
+    extern const ErrorCodeDescriptor NetworkLifecycleTransitionInvalid;
+    /** @brief A completion names a retired handle or asynchronous operation generation. */
+    extern const ErrorCodeDescriptor NetworkLifecycleOperationStale;
     /** @brief Protocol identity contributions or version ranges are malformed. */
     extern const ErrorCodeDescriptor ProtocolIdentityDescriptorInvalid;
     /** @brief A protocol-scoped stable identity is registered more than once. */
