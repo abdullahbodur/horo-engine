@@ -23,6 +23,7 @@ namespace Horo::Network {
         OwnerOnly,     /**< Route only to the granted autonomous client. */
         SkipOwner,     /**< Route to replicas other than the autonomous owner. */
         SimulatedOnly, /**< Route only to simulated-client views. */
+        Custom,        /**< Route from exact registered typed condition evidence. */
         Count          /**< Closed-set sentinel; never a valid policy. */
     };
 
@@ -71,6 +72,7 @@ namespace Horo::Network {
         ReplicationWritePolicy writePolicy{ReplicationWritePolicy::AuthorityServerOnly}; /**< State-origin authority. */
         ReplicationFieldLimits limits;                                                   /**< Finite decode and allocation envelope. */
         std::optional<ReplicationFieldDefault> canonicalDefault;                         /**< Required for every optional field. */
+        std::optional<ReplicationConditionId> customCondition; /**< Exact registered policy identity iff condition is Custom. */
 
         bool operator==(const ReplicationFieldDescriptor &) const = default;
     };
