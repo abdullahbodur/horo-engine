@@ -6,6 +6,7 @@
 #include <exception>
 #include <mutex>
 #include <new>
+#include <system_error>
 #include <tuple>
 #include <type_traits>
 #include <utility>
@@ -137,13 +138,14 @@ namespace Horo::Runtime {
 
         [[nodiscard]] SaveCancellationReason PendingCancellation(SharedState &state,
                                                                  const std::chrono::steady_clock::time_point now) noexcept {
+            using enum SaveCancellationReason;
             if (state.snapshot.cancellationRequested)
                 return state.snapshot.cancellationReason;
             if (state.parentCancellation.IsCancellationRequested())
-                return SaveCancellationReason::Parent;
+                return Parent;
             if (state.snapshot.deadline.has_value() && now >= *state.snapshot.deadline)
-                return SaveCancellationReason::Deadline;
-            return SaveCancellationReason::None;
+                return Deadline;
+            return None;
         }
 
         void MarkCancellationRequested(SharedState &state, const SaveCancellationReason reason) noexcept {
@@ -175,14 +177,15 @@ namespace Horo::Runtime {
 
         [[nodiscard]] PreflightResult PreflightLocked(const std::shared_ptr<SharedState> &state,
                                                       const std::chrono::steady_clock::time_point now) noexcept {
+            using enum PreflightDisposition;
             if (IsTerminal(*state))
-                return {.disposition = PreflightDisposition::AlreadyTerminal};
+                return {.disposition = AlreadyTerminal};
             if (state->commitStarted)
-                return {.disposition = PreflightDisposition::CommitStarted};
+                return {.disposition = CommitStarted};
             const SaveCancellationReason cancellation = PendingCancellation(*state, now);
             if (cancellation == SaveCancellationReason::None)
                 return {};
-            return {.disposition = PreflightDisposition::CancellationWon, .dispatch = CancelLocked(state, cancellation)};
+            return {.disposition = CancellationWon, .dispatch = CancelLocked(state, cancellation)};
         }
 
         void Dispatch(const CompletionDispatch &dispatch) noexcept {
@@ -200,17 +203,18 @@ namespace Horo::Runtime {
 
         [[nodiscard]] SaveCancellationRequestResult RequestCancellation(const std::shared_ptr<SharedState> &state,
                                                                         const SaveCancellationReason reason) noexcept {
+            using enum SaveCancellationRequestResult;
             if (!state)
-                return SaveCancellationRequestResult::InvalidHandle;
+                return InvalidHandle;
             std::lock_guard lock(state->mutex);
             if (IsTerminal(*state))
-                return SaveCancellationRequestResult::AlreadyTerminal;
+                return AlreadyTerminal;
             if (state->commitStarted)
-                return SaveCancellationRequestResult::TooLate;
+                return TooLate;
             if (state->snapshot.cancellationRequested)
-                return SaveCancellationRequestResult::AlreadyRequested;
+                return AlreadyRequested;
             MarkCancellationRequested(*state, reason);
-            return SaveCancellationRequestResult::Requested;
+            return Requested;
         }
 
         [[nodiscard]] bool IsValidProgress(const SaveOperationProgress progress) noexcept {
@@ -264,9 +268,9 @@ namespace Horo::Runtime {
                                                                    CompletionDispatch &dispatch) noexcept {
             const bool validMutation =
                 RequiresCommit(state->snapshot.kind) && state->commitStarted && request.outcome == SaveOperationCommitOutcome::Committed;
-            const bool validQuery = !RequiresCommit(state->snapshot.kind) && !state->commitStarted &&
-                                    request.outcome == SaveOperationCommitOutcome::NotCommitted;
-            if (!validMutation && !validQuery)
+            if (const bool validQuery = !RequiresCommit(state->snapshot.kind) && !state->commitStarted &&
+                                        request.outcome == SaveOperationCommitOutcome::NotCommitted;
+                !validMutation && !validQuery)
                 return SaveOperationTransitionResult::InvalidTransition;
             state->snapshot.progress = {.completedUnits = 1, .totalUnits = 1};
             dispatch = TerminalizeLocked(state, SaveOperationState::Completed, request.outcome);
@@ -275,9 +279,9 @@ namespace Horo::Runtime {
 
         [[nodiscard]] SaveOperationTransitionResult FailLocked(const std::shared_ptr<SharedState> &state, TransitionRequest &request,
                                                                CompletionDispatch &dispatch) noexcept {
-            const bool validOutcome = request.outcome == SaveOperationCommitOutcome::NotCommitted ||
-                                      (state->commitStarted && request.outcome == SaveOperationCommitOutcome::Unknown);
-            if (!validOutcome)
+            if (const bool validOutcome = request.outcome == SaveOperationCommitOutcome::NotCommitted ||
+                                          (state->commitStarted && request.outcome == SaveOperationCommitOutcome::Unknown);
+                !validOutcome)
                 return SaveOperationTransitionResult::InvalidTransition;
             dispatch = TerminalizeLocked(state, SaveOperationState::Failed, request.outcome, std::move(request.error));
             return SaveOperationTransitionResult::Applied;
@@ -307,6 +311,7 @@ namespace Horo::Runtime {
         }
 
         void AbandonState(const std::shared_ptr<SharedState> &state) noexcept {
+            using enum PreflightDisposition;
             if (!state)
                 return;
             CompletionDispatch dispatch;
@@ -314,14 +319,13 @@ namespace Horo::Runtime {
                 std::lock_guard lock(state->mutex);
                 PreflightResult preflight = PreflightLocked(state, std::chrono::steady_clock::now());
                 dispatch = std::move(preflight.dispatch);
-                if (preflight.disposition == PreflightDisposition::Proceed ||
-                    preflight.disposition == PreflightDisposition::CommitStarted) {
-                    const SaveOperationCommitOutcome outcome = preflight.disposition == PreflightDisposition::CommitStarted
+                if (preflight.disposition == Proceed || preflight.disposition == CommitStarted) {
+                    const SaveOperationCommitOutcome outcome = preflight.disposition == CommitStarted
                                                                    ? SaveOperationCommitOutcome::Unknown
                                                                    : SaveOperationCommitOutcome::NotCommitted;
                     dispatch = TerminalizeLocked(state, SaveOperationState::Failed, outcome, std::move(state->abandonmentError));
                 }
-            } catch (...) {
+            } catch (const std::system_error &) {
                 // Destructors never propagate platform mutex failures.
             }
             Dispatch(dispatch);
@@ -337,7 +341,8 @@ namespace Horo::Runtime {
 
     /** @copydoc SaveOperationSnapshot::IsTerminal */
     bool SaveOperationSnapshot::IsTerminal() const noexcept {
-        return state == SaveOperationState::Completed || state == SaveOperationState::Failed || state == SaveOperationState::Cancelled;
+        using enum SaveOperationState;
+        return state == Completed || state == Failed || state == Cancelled;
     }
 
     SaveOperationHandle::SaveOperationHandle(std::shared_ptr<SaveOperationDetail::SharedState> state) noexcept : state_(std::move(state)) {}
