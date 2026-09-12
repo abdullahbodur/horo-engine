@@ -220,6 +220,16 @@ namespace Horo::WorldStreaming::WorldStreamingErrors {
     extern const ErrorCodeDescriptor PriorityPolicyStale;
     /** @brief Priority ranking is closed by cancellation or shutdown. */
     extern const ErrorCodeDescriptor PriorityPolicyLifecycleUnavailable;
+    /** @brief A cell-stability policy, context, observation, or retained state is malformed. */
+    extern const ErrorCodeDescriptor CellStabilityInvalid;
+    /** @brief A cell-stability contract version or closed enum value is unsupported. */
+    extern const ErrorCodeDescriptor CellStabilityUnsupported;
+    /** @brief A new anti-thrash record exceeds the authority's immutable cell ceiling. */
+    extern const ErrorCodeDescriptor CellStabilityCapacityExceeded;
+    /** @brief Cell-stability evidence names a replaced policy or partition publication. */
+    extern const ErrorCodeDescriptor CellStabilityStale;
+    /** @brief Cell-stability evaluation is closed by cancellation or shutdown. */
+    extern const ErrorCodeDescriptor CellStabilityLifecycleUnavailable;
     /** @brief A world-authoring contract, page descriptor, request, or authority snapshot is malformed. */
     extern const ErrorCodeDescriptor AuthoringContractInvalid;
     /** @brief The requested world-authoring contract schema version is unsupported. */

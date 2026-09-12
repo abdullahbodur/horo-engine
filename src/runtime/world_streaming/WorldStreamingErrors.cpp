@@ -447,6 +447,27 @@ namespace Horo::WorldStreaming::WorldStreamingErrors {
         Describe("world_streaming.priority_policy.lifecycle_unavailable", ErrorSeverity::Warning,
                  "Streaming priority ranking is unavailable during cancellation or after shutdown.",
                  "Stop producing ranking snapshots and retain already admitted work until canonical retirement completes.", true);
+    const ErrorCodeDescriptor CellStabilityInvalid =
+        Describe("world_streaming.cell_stability.invalid", ErrorSeverity::Error,
+                 "A cell-stability policy, context, observation, or retained state is malformed.",
+                 "Provide valid policy and partition fences, monotonic service time, bounded margins, and coherent desired residency.",
+                 true);
+    const ErrorCodeDescriptor CellStabilityUnsupported =
+        Describe("world_streaming.cell_stability.unsupported", ErrorSeverity::Error,
+                 "A cell-stability contract version or closed enum value is unsupported.",
+                 "Migrate the policy or producer to the current typed cell-stability contract.", true);
+    const ErrorCodeDescriptor CellStabilityCapacityExceeded =
+        Describe("world_streaming.cell_stability.capacity_exceeded", ErrorSeverity::Error,
+                 "A new anti-thrash record exceeds the authority's immutable tracked-cell ceiling.",
+                 "Retire an expired record or configure a supported larger ceiling before admitting new demand.", false);
+    const ErrorCodeDescriptor CellStabilityStale =
+        Describe("world_streaming.cell_stability.stale", ErrorSeverity::Warning,
+                 "Cell-stability evidence names a replaced policy or partition publication, or moves service time backward.",
+                 "Evaluate against the current policy and partition generation using monotonic service time.", true);
+    const ErrorCodeDescriptor CellStabilityLifecycleUnavailable =
+        Describe("world_streaming.cell_stability.lifecycle_unavailable", ErrorSeverity::Warning,
+                 "Cell-stability evaluation is unavailable during cancellation or after shutdown.",
+                 "Stop admitting stability transitions and let the streaming authority retire its retained records.", true);
     const ErrorCodeDescriptor AuthoringContractInvalid =
         Describe("world_streaming.authoring.contract_invalid", ErrorSeverity::Error,
                  "A world-authoring contract, page request, or authority snapshot is malformed.",

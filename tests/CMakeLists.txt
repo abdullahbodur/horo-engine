@@ -406,6 +406,7 @@ add_executable(HoroWorldStreamingTests
         unit/runtime/world_streaming/StreamingBudgetModelTests.cpp
         unit/runtime/world_streaming/StreamingCellOperationTests.cpp
         unit/runtime/world_streaming/StreamingCellStateTests.cpp
+        unit/runtime/world_streaming/StreamingCellStabilityTests.cpp
         unit/runtime/world_streaming/StreamingSchedulerAdmissionTests.cpp
         unit/runtime/world_streaming/WorldDependencyPlanTests.cpp
         unit/runtime/world_streaming/WorldAuthoringContractTests.cpp
