@@ -1,5 +1,6 @@
 #include "Horo/Navigation/NavigationErrors.h"
 
+#include <string>
 #include <string_view>
 
 namespace Horo::Navigation::NavigationErrors {
@@ -11,7 +12,7 @@ namespace Horo::Navigation::NavigationErrors {
                                                                    const bool userActionable) {
             return {
                 .domain = NavigationDomain,
-                .code = ErrorCode{code},
+                .code = ErrorCode{std::string{code}},
                 .defaultSeverity = severity,
                 .summary = summary,
                 .remediationHint = remediationHint,
