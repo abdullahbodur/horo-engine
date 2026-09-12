@@ -120,7 +120,7 @@ namespace {
         const std::array incompatibleLinks{incompatible};
         const auto mismatch = Runtime::ValidateNavigationSceneComponents(surfaces, regions, modifiers, incompatibleLinks);
         REQUIRE(mismatch.HasError());
-        REQUIRE(mismatch.ErrorValue().code == Navigation::NavigationErrors::SceneProfileMismatch.code);
+        REQUIRE(mismatch.ErrorValue().code.Value() == Navigation::NavigationErrors::SceneProfileMismatch.code.Value());
     }
 
     TEST_CASE("Runtime definition pins committed navigation generations and rejects missing references", "[unit][navigation][scene]") {
