@@ -293,6 +293,7 @@ target_include_directories(HoroRuntimeScene PUBLIC ${PROJECT_SOURCE_DIR}/include
 target_link_libraries(HoroRuntimeScene PUBLIC HoroEngine::Foundation HoroEngine::Runtime HoroEngine::GameplayApi HoroEngine::RuntimeUi)
 
 add_library(HoroNetworkRuntime STATIC
+        runtime/networking/HandshakeNegotiation.cpp
         runtime/networking/NetworkObjectMapping.cpp
 )
 add_library(HoroEngine::NetworkRuntime ALIAS HoroNetworkRuntime)
@@ -683,6 +684,7 @@ add_library(HoroWorldStreaming STATIC
         runtime/world_streaming/StreamingSourceRange.cpp
         runtime/world_streaming/WorldCellQuantization.cpp
         runtime/world_streaming/WorldPartitionDescriptor.cpp
+        runtime/world_streaming/WorldLayerOwnershipModel.cpp
         runtime/world_streaming/WorldObjectOwnership.cpp
         runtime/world_streaming/WorldPartitionCapabilityProfile.cpp
         runtime/world_streaming/WorldPartitionRegistry.cpp
