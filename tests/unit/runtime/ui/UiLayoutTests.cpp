@@ -11,21 +11,24 @@
 
 namespace {
     std::atomic<std::size_t> layoutAllocations{};
-}
+
+    void FreeLayoutAllocation(void *memory) noexcept {
+        std::free(memory);
+    }
+}  // namespace
 
 void *operator new(const std::size_t size) {
     layoutAllocations.fetch_add(1, std::memory_order_relaxed);
-    if (void *memory = std::malloc(size); memory != nullptr)
-        return memory;
-    throw std::bad_alloc{};
+    void *memory = std::malloc(size);
+    return memory != nullptr ? memory : throw std::bad_alloc{};
 }
 
 void operator delete(void *memory) noexcept {
-    std::free(memory);
+    FreeLayoutAllocation(memory);
 }
 
 void operator delete(void *memory, std::size_t) noexcept {
-    std::free(memory);
+    FreeLayoutAllocation(memory);
 }
 
 namespace Horo::Runtime::Ui {
