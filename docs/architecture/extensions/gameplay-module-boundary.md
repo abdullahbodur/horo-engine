@@ -467,12 +467,22 @@ contracts.
 
 Native gameplay code reload, when enabled in development:
 
-- occurs only at a runtime safe point
-- stops affected systems and joins module-owned jobs
-- transfers only explicitly preservable state through a hot-reload adapter
-- invalidates all module-owned callbacks and function pointers
-- reloads through a versioned module boundary
-- recreates systems and restores compatible state
+- occurs only at the owner-thread fixed-tick safe point
+- captures bounded behavior-instance state by stable instance and type ID
+- revokes the old generation's cancellation token before calling
+  `IGameModule::PrepareReload`
+- requires that callback to close callback/job admission, join owned work, and
+  return a bounded module snapshot; the default is restart-required
+- stops behaviors, services, and the module before destroying its registries and
+  unloading its shadow library
+- closes exact-generation runtime admission before checking retirement, then
+  refuses retirement while any external behavior or system runtime still holds
+  a lease; destroying the public module wrapper alone cannot unload code
+  referenced by one of those runtimes, and no new runtime can join a closing
+  generation
+- loads and validates the replacement only after the old generation is gone
+- calls `IGameModule::RestoreReload`, recreates behavior instances against the
+  unchanged runtime scene, and restores compatible state
 
 The project module build publishes `.horo/local/gameplay_module.json` only after
 the complete dynamic library and generated descriptor bundle succeed. The
@@ -486,15 +496,24 @@ revision before changing the active registry. Native and script descriptors are
 then committed into one frozen registry transaction. A duplicate ID across the
 two sources rejects the candidate rather than selecting by load order.
 
-During Play, an accepted candidate waits for the next fixed-tick boundary. The
-old behavior runtime is shut down while its module remains loaded, replacement
-instances are created against the unchanged runtime scene, and only then is the
-old module released. Candidate activation failure reconstructs the previous
-runtime against the same scene; if rollback also fails, the play session enters
-the explicit failed state.
+During Play, an artifact-manifest transition is recorded without loading a
+candidate. At the next fixed-tick boundary, the editor executes one explicit
+`Begin -> Retire -> TryActivate -> Commit` transaction. `Begin` takes cleanup
+ownership of a preserved native artifact and clones the exact in-memory last-good
+Lua program generation, including its watcher baseline. `Retire` captures behavior
+and module state and proves old-generation quiescence before any code is unloaded.
+Candidate activation never rereads mutable Lua source from disk. Candidate failure
+uses `Rollback` to shadow-load the preserved native artifact and reinstall cloned
+Lua programs, restoring module and behavior state against the unchanged runtime
+scene. The rollback artifact is removed by transaction ownership after commit,
+successful rollback, or any early exit. The authoring document is never part of
+this transaction.
 
-If any unload precondition cannot be proven, the editor requests a play-session
-or process restart instead of unloading unsafe C++ code.
+If any unload precondition cannot be proven, the cancellation token remains
+revoked and the transaction enters `Degraded`. The generation is quarantined for
+the remainder of the workspace session: source watching, registry refresh, further
+reload attempts, and new Play admission are blocked with an explicit process-restart
+diagnostic. This prevents overlap with an incompletely retired native generation.
 
 Shipping builds do not load unsigned replacement gameplay code.
 

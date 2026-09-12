@@ -4,10 +4,12 @@
 
 #include <algorithm>
 #include <array>
+#include <format>
 #include <fstream>
 #include <nlohmann/json.hpp>
 #include <ranges>
 #include <system_error>
+#include <utility>
 
 namespace Horo::Editor {
     namespace {
@@ -71,6 +73,39 @@ namespace Horo::Editor {
 
     }  // namespace
 
+    /** @copydoc NativeGameplayRollbackArtifact::NativeGameplayRollbackArtifact(std::filesystem::path, std::string, std::uint64_t) */
+    NativeGameplayRollbackArtifact::NativeGameplayRollbackArtifact(std::filesystem::path artifactPath, std::string owningModuleId,
+                                                                   const std::uint64_t revision)
+        : path(std::move(artifactPath)), moduleId(std::move(owningModuleId)), descriptorRevision(revision) {}
+
+    /** @copydoc NativeGameplayRollbackArtifact::~NativeGameplayRollbackArtifact */
+    NativeGameplayRollbackArtifact::~NativeGameplayRollbackArtifact() {
+        if (path.empty())
+            return;
+        std::error_code ignored;
+        std::filesystem::remove(path, ignored);
+    }
+
+    /** @copydoc NativeGameplayRollbackArtifact::NativeGameplayRollbackArtifact(NativeGameplayRollbackArtifact&&) */
+    NativeGameplayRollbackArtifact::NativeGameplayRollbackArtifact(NativeGameplayRollbackArtifact &&other) noexcept
+        : path(std::exchange(other.path, {})), moduleId(std::move(other.moduleId)), descriptorRevision(other.descriptorRevision) {
+        other.descriptorRevision = 0;
+    }
+
+    /** @copydoc NativeGameplayRollbackArtifact::operator= */
+    NativeGameplayRollbackArtifact &NativeGameplayRollbackArtifact::operator=(NativeGameplayRollbackArtifact &&other) noexcept {
+        if (this == &other)
+            return *this;
+        if (!path.empty()) {
+            std::error_code ignored;
+            std::filesystem::remove(path, ignored);
+        }
+        path = std::exchange(other.path, {});
+        moduleId = std::move(other.moduleId);
+        descriptorRevision = std::exchange(other.descriptorRevision, 0);
+        return *this;
+    }
+
     ProjectGameplayRegistry::ProjectGameplayRegistry(ConstructionToken) {
         static_cast<void>(missingAssetTypes_.Freeze());
     }
@@ -97,6 +132,31 @@ namespace Horo::Editor {
         auto result = std::make_unique<ProjectGameplayRegistry>(ConstructionToken{});
         result->DiscoverNativeModule(projectRoot);
         result->DiscoverLuaPrograms(projectRoot);
+        return result;
+    }
+
+    /** @copydoc ProjectGameplayRegistry::DiscoverRollback */
+    std::unique_ptr<ProjectGameplayRegistry> ProjectGameplayRegistry::DiscoverRollback(const std::filesystem::path &projectRoot,
+                                                                                       const NativeGameplayRollbackArtifact &artifact,
+                                                                                       const ProjectLuaGenerationSnapshot &luaGeneration) {
+        auto result = std::make_unique<ProjectGameplayRegistry>(ConstructionToken{});
+        result->nativeManifestPath_ = projectRoot / ".horo" / "local" / "gameplay_module.json";
+        if (std::error_code manifestError; std::filesystem::is_regular_file(result->nativeManifestPath_, manifestError)) {
+            const auto writeTime = std::filesystem::last_write_time(result->nativeManifestPath_, manifestError);
+            if (!manifestError)
+                result->nativeManifestWriteTime_ = writeTime;
+        }
+        result->LoadNativeModule(projectRoot, artifact.path, artifact.moduleId, artifact.descriptorRevision);
+        result->InstallLuaGeneration(luaGeneration);
+        return result;
+    }
+
+    /** @copydoc ProjectGameplayRegistry::DiscoverNativeGeneration */
+    std::unique_ptr<ProjectGameplayRegistry> ProjectGameplayRegistry::DiscoverNativeGeneration(
+        const std::filesystem::path &projectRoot, const ProjectLuaGenerationSnapshot &luaGeneration) {
+        auto result = std::make_unique<ProjectGameplayRegistry>(ConstructionToken{});
+        result->DiscoverNativeModule(projectRoot);
+        result->InstallLuaGeneration(luaGeneration);
         return result;
     }
 
@@ -164,11 +224,11 @@ namespace Horo::Editor {
             return;
         }
         nativeModule_ = std::move(loaded).Value();
-        for (const Gameplay::BehaviorRegistration &registration : nativeModule_->Registry().Registrations()) {
-            if (Result<void> registered = registry_.Register(registration); registered.HasError()) {
-                diagnostics_.emplace_back(artifactPath, registered.ErrorValue());
-                return;
-            }
+        nativeModuleId_ = std::string{moduleId};
+        nativeDescriptorRevision_ = descriptorRevision;
+        if (Result<void> contributed = nativeModule_->ContributeBehaviorsTo(registry_); contributed.HasError()) {
+            diagnostics_.emplace_back(artifactPath, contributed.ErrorValue());
+            return;
         }
     }
 
@@ -218,6 +278,26 @@ namespace Horo::Editor {
 
         if (Result<void> frozen = registry_.Freeze(); frozen.HasError())
             diagnostics_.emplace_back(scriptsRoot, frozen.ErrorValue());
+    }
+
+    void ProjectGameplayRegistry::InstallLuaGeneration(const ProjectLuaGenerationSnapshot &snapshot) {
+        for (const ProjectLuaProgramSnapshot &entry : snapshot.programs) {
+            auto cloned = entry.program->Clone();
+            if (cloned.HasError()) {
+                diagnostics_.emplace_back(entry.source, cloned.ErrorValue());
+                continue;
+            }
+            std::unique_ptr<Gameplay::LuaBehaviorProgram> program = std::move(cloned).Value();
+            if (Result<void> registered = registry_.Register(program->Registration()); registered.HasError()) {
+                diagnostics_.emplace_back(entry.source, registered.ErrorValue());
+                continue;
+            }
+            luaPrograms_.emplace_back(std::move(program));
+            luaSources_.emplace_back(entry.source);
+            luaSourceStats_.emplace_back(entry.sourceWriteTime, entry.metadataWriteTime, entry.sourceSize, entry.metadataSize);
+        }
+        if (Result<void> frozen = registry_.Freeze(); frozen.HasError())
+            diagnostics_.emplace_back(std::filesystem::path{}, frozen.ErrorValue());
     }
 
     /** @copydoc ProjectGameplayRegistry::Registry */
@@ -282,5 +362,58 @@ namespace Horo::Editor {
             return false;
         nativeManifestWriteTime_ = writeTime;
         return true;
+    }
+
+    /** @copydoc ProjectGameplayRegistry::PreserveNativeArtifactForRollback */
+    Result<NativeGameplayRollbackArtifact> ProjectGameplayRegistry::PreserveNativeArtifactForRollback(
+        const std::filesystem::path &destination) const {
+        if (!nativeModule_ || nativeModuleId_.empty() || nativeDescriptorRevision_ == 0 || !destination.is_absolute())
+            return Result<NativeGameplayRollbackArtifact>::Failure(ManifestError("no active native generation can be preserved."));
+        std::error_code error;
+        std::filesystem::create_directories(destination, error);
+        if (error)
+            return Result<NativeGameplayRollbackArtifact>::Failure(ManifestError(error.message()));
+        const std::filesystem::path preserved =
+            destination / std::format("rollback-{}-{}", nativeDescriptorRevision_, nativeModule_->LoadedArtifactPath().filename().string());
+        std::filesystem::copy_file(nativeModule_->LoadedArtifactPath(), preserved, std::filesystem::copy_options::overwrite_existing,
+                                   error);
+        if (error)
+            return Result<NativeGameplayRollbackArtifact>::Failure(ManifestError(error.message()));
+        return Result<NativeGameplayRollbackArtifact>::Success(
+            NativeGameplayRollbackArtifact{preserved, nativeModuleId_, nativeDescriptorRevision_});
+    }
+
+    /** @copydoc ProjectGameplayRegistry::CaptureLuaGeneration */
+    Result<ProjectLuaGenerationSnapshot> ProjectGameplayRegistry::CaptureLuaGeneration() const {
+        ProjectLuaGenerationSnapshot snapshot;
+        snapshot.programs.reserve(luaPrograms_.size());
+        for (std::size_t index = 0; index < luaPrograms_.size(); ++index) {
+            auto cloned = luaPrograms_[index]->Clone();
+            if (cloned.HasError())
+                return Result<ProjectLuaGenerationSnapshot>::Failure(cloned.ErrorValue());
+            const LuaSourceStat &stat = luaSourceStats_[index];
+            snapshot.programs.emplace_back(std::move(cloned).Value(), luaSources_[index], stat.sourceWriteTime, stat.metadataWriteTime,
+                                           stat.sourceSize, stat.metadataSize);
+        }
+        return Result<ProjectLuaGenerationSnapshot>::Success(std::move(snapshot));
+    }
+
+    /** @copydoc ProjectGameplayRegistry::PrepareNativeReload */
+    Result<Gameplay::GameModuleReloadSnapshot> ProjectGameplayRegistry::PrepareNativeReload() {
+        if (!nativeModule_)
+            return Result<Gameplay::GameModuleReloadSnapshot>::Failure(ManifestError("no active native generation is loaded."));
+        return nativeModule_->PrepareReload();
+    }
+
+    /** @copydoc ProjectGameplayRegistry::RestoreNativeReload */
+    Result<void> ProjectGameplayRegistry::RestoreNativeReload(const Gameplay::GameModuleReloadSnapshot &snapshot) {
+        if (!nativeModule_)
+            return Result<void>::Failure(ManifestError("no replacement native generation is loaded."));
+        return nativeModule_->RestoreReload(snapshot);
+    }
+
+    /** @copydoc ProjectGameplayRegistry::HasNativeModule */
+    bool ProjectGameplayRegistry::HasNativeModule() const noexcept {
+        return nativeModule_ != nullptr;
     }
 }  // namespace Horo::Editor

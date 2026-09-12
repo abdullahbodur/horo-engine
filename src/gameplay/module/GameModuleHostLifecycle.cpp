@@ -39,6 +39,25 @@ namespace Horo::Gameplay {
                     MakeError(GameplayErrors::GameplayFactoryFailed, "Gameplay module startup threw an exception."));
             }
         }
+
+        [[nodiscard]] Result<GameModuleReloadSnapshot> InvokePrepareReload(IGameModule &gameModule, GameRuntimeContext &context) noexcept {
+            try {
+                return gameModule.PrepareReload(context);
+            } catch (...) {
+                return Result<GameModuleReloadSnapshot>::Failure(
+                    MakeError(GameplayErrors::GameplayReloadRestartRequired, "Gameplay reload quiescence callback threw an exception."));
+            }
+        }
+
+        [[nodiscard]] Result<void> InvokeRestoreReload(IGameModule &gameModule, const GameModuleReloadSnapshot &snapshot,
+                                                       GameRuntimeContext &context) noexcept {
+            try {
+                return gameModule.RestoreReload(snapshot, context);
+            } catch (...) {
+                return Result<void>::Failure(
+                    MakeError(GameplayErrors::GameplayReloadRestoreFailed, "Gameplay reload restore callback threw an exception."));
+            }
+        }
     }  // namespace
 
     LoadedGameModule::Impl::~Impl() {
@@ -63,6 +82,7 @@ namespace Horo::Gameplay {
         const std::vector<GameplayCapabilityId> capabilities = CombinedCapabilities(hostCapabilities, *services);
         if (Result<void> frozen = systems->Freeze(serviceIds, capabilities); frozen.HasError())
             return frozen;
+        Detail::GenerationLeaseBinding::Bind(*registry, *systems, weak_from_this(), runtimeLeaseAdmission);
 
         auto activated = GameplayServiceRuntime::Create(*services, GameplayServiceScope::Project, {{}, hostCapabilities});
         if (activated.HasError())
@@ -71,6 +91,32 @@ namespace Horo::Gameplay {
         runtimeContext = {projectServices->Cancellation(), projectServices->ActiveServices(), projectServices->Capabilities()};
         startAttempted = true;
         return InvokeStart(*gameplayModule, runtimeContext);
+    }
+
+    Result<GameModuleReloadSnapshot> LoadedGameModule::Impl::PrepareReload() {
+        if (reloadPrepared || gameplayModule == nullptr || projectServices == nullptr)
+            return Result<GameModuleReloadSnapshot>::Failure(MakeError(GameplayErrors::GameplayReloadRestartRequired));
+        projectServices->RequestCancellation();
+        auto snapshot = InvokePrepareReload(*gameplayModule, runtimeContext);
+        if (snapshot.HasError())
+            return Result<GameModuleReloadSnapshot>::Failure(snapshot.ErrorValue());
+        if (snapshot.Value().schemaVersion == 0 || snapshot.Value().payload.size() > MaximumGameModuleReloadStateBytes)
+            return Result<GameModuleReloadSnapshot>::Failure(MakeError(GameplayErrors::GameplayReloadSnapshotInvalid));
+        if (startAttempted)
+            gameplayModule->Stop(runtimeContext);
+        projectServices.reset();
+        runtimeContext.activeServices = {};
+        runtimeContext.capabilities = {};
+        startAttempted = false;
+        reloadPrepared = true;
+        return snapshot;
+    }
+
+    Result<void> LoadedGameModule::Impl::RestoreReload(const GameModuleReloadSnapshot &snapshot) {
+        if (reloadPrepared || gameplayModule == nullptr || projectServices == nullptr || snapshot.schemaVersion == 0 ||
+            snapshot.payload.size() > MaximumGameModuleReloadStateBytes)
+            return Result<void>::Failure(MakeError(GameplayErrors::GameplayReloadSnapshotInvalid));
+        return InvokeRestoreReload(*gameplayModule, snapshot, runtimeContext);
     }
 
     void LoadedGameModule::Impl::Shutdown() noexcept {

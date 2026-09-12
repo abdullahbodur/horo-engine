@@ -35,6 +35,19 @@ namespace {
 
     void DestroyTestBehavior(void *, IBehaviorInstance *) noexcept {}
 
+    class RestartRequiredModule final : public IGameModule {
+    public:
+        Result<void> Register(GameRegistrationContext &) override {
+            return Result<void>::Success();
+        }
+
+        Result<void> Start(GameRuntimeContext &) override {
+            return Result<void>::Success();
+        }
+
+        void Stop(GameRuntimeContext &) noexcept override {}
+    };
+
     struct ValidBundleStorage {
         BehaviorDescriptor behavior;
         GeneratedBehaviorFactoryBinding binding;
@@ -68,6 +81,30 @@ namespace {
         return Tests::SingleBehaviorSceneDefinition(SceneDefinitionId{3}, SceneDefinitionRevision{1}, SceneObjectId{1},
                                                     BehaviorInstanceId{1}, BehaviorTypeId::Parse("game.tests.dynamic_mover").Value());
     }
+
+    template <typename Value> void RequireRestartRequired(const Result<Value> &result) {
+        REQUIRE(result.HasError());
+        CHECK(result.ErrorValue().code.Value() == GameplayErrors::GameplayReloadRestartRequired.code.Value());
+    }
+
+    template <typename CreateRuntime, typename ExerciseRuntime>
+    void CheckGenerationLease(CreateRuntime createRuntime, ExerciseRuntime exerciseRuntime) {
+        GameModuleHost host;
+        auto loadedResult = host.Load(HORO_TEST_GAME_MODULE_PATH, Expectation());
+        REQUIRE(loadedResult.HasValue());
+        std::unique_ptr<LoadedGameModule> loaded = std::move(loadedResult).Value();
+        auto created = createRuntime(*loaded);
+        REQUIRE(created.HasValue());
+        auto runtime = std::move(created).Value();
+
+        RequireRestartRequired(loaded->PrepareReload());
+        const auto rejected = createRuntime(*loaded);
+        RequireRestartRequired(rejected);
+
+        loaded.reset();
+        CHECK(exerciseRuntime(*runtime).HasValue());
+        runtime->Shutdown();
+    }
 }  // namespace
 
 TEST_CASE("game module host validates fingerprint and keeps factories alive through behavior shutdown") {
@@ -98,17 +135,63 @@ TEST_CASE("game module host validates fingerprint and keeps factories alive thro
     REQUIRE(loaded.Value()->Capabilities().size() == 1);
     REQUIRE_FALSE(loaded.Value()->Cancellation().IsCancellationRequested());
 
-    auto systems = GameplaySystemRuntime::Create(loaded.Value()->Systems(), loaded.Value()->ActiveServices(),
-                                                 loaded.Value()->Capabilities(), loaded.Value()->Cancellation());
-    REQUIRE(systems.HasValue());
-    REQUIRE(systems.Value()->Execute(GameplaySystemPhase::Gameplay, GameplayThreadAffinity::RuntimeOwner, 1.0 / 60.0).HasValue());
-    systems.Value()->Shutdown();
+    {
+        auto systems = GameplaySystemRuntime::Create(loaded.Value()->Systems(), loaded.Value()->ActiveServices(),
+                                                     loaded.Value()->Capabilities(), loaded.Value()->Cancellation());
+        REQUIRE(systems.HasValue());
+        REQUIRE(systems.Value()->Execute(GameplaySystemPhase::Gameplay, GameplayThreadAffinity::RuntimeOwner, 1.0 / 60.0).HasValue());
+        systems.Value()->Shutdown();
+    }
 
-    Tests::ActiveBehaviorRuntime active = Tests::ActivateBehaviorRuntime(Definition(), SceneRuntimeId{7}, loaded.Value()->Registry());
-    const GameplayInputAction move{GameplayActionId{"game.tests.move"}, 3.0F, 0.0F, true, true, false};
-    REQUIRE(Tests::FixedUpdateAndReadPosition(*active.scene, *active.runtime, SceneObjectId{1}, {&move, 1}).x == 3.0F);
+    {
+        Tests::ActiveBehaviorRuntime active = Tests::ActivateBehaviorRuntime(Definition(), SceneRuntimeId{7}, loaded.Value()->Registry());
+        const GameplayInputAction move{GameplayActionId{"game.tests.move"}, 3.0F, 0.0F, true, true, false};
+        REQUIRE(Tests::FixedUpdateAndReadPosition(*active.scene, *active.runtime, SceneObjectId{1}, {&move, 1}).x == 3.0F);
+        active.runtime->Shutdown();
+    }
 
-    active.runtime->Shutdown();
+    std::unique_ptr<LoadedGameModule> active = std::move(loaded).Value();
+    auto reloadSnapshot = active->PrepareReload();
+    REQUIRE(reloadSnapshot.HasValue());
+    REQUIRE(active->Cancellation().IsCancellationRequested());
+    REQUIRE(active->ActiveServices().empty());
+    REQUIRE(active->Capabilities().empty());
+    REQUIRE(reloadSnapshot.Value().schemaVersion == 1);
+    REQUIRE(reloadSnapshot.Value().payload.empty());
+    active.reset();
+
+    auto replacement = host.Load(HORO_TEST_GAME_MODULE_PATH, Expectation());
+    REQUIRE(replacement.HasValue());
+    REQUIRE(replacement.Value()->RestoreReload(reloadSnapshot.Value()).HasValue());
+}
+
+TEST_CASE("default game module reload contract requires a restart") {
+    RestartRequiredModule module;
+    GameRuntimeContext context;
+    const auto prepared = module.PrepareReload(context);
+    REQUIRE(prepared.HasError());
+    CHECK(prepared.ErrorValue().code.Value() == GameplayErrors::GameplayReloadRestartRequired.code.Value());
+}
+
+TEST_CASE("game module generation remains pinned by external behavior and system runtimes") {
+    SECTION("behavior runtime") {
+        auto createdScene = RuntimeScene::Create(Definition(), SceneRuntimeId{18});
+        REQUIRE(createdScene.HasValue());
+        std::unique_ptr<RuntimeScene> scene = std::move(createdScene).Value();
+        CheckGenerationLease([&scene](LoadedGameModule &loaded) {
+            return BehaviorRuntime::Create(*scene, loaded.Registry());
+        }, [](BehaviorRuntime &runtime) {
+            return runtime.FixedUpdate({}, FixedDeltaTime{1.0 / 60.0});
+        });
+    }
+
+    SECTION("system runtime") {
+        CheckGenerationLease([](LoadedGameModule &loaded) {
+            return GameplaySystemRuntime::Create(loaded.Systems(), loaded.ActiveServices(), loaded.Capabilities(), loaded.Cancellation());
+        }, [](GameplaySystemRuntime &runtime) {
+            return runtime.Execute(GameplaySystemPhase::Gameplay, GameplayThreadAffinity::RuntimeOwner, 1.0 / 60.0);
+        });
+    }
 }
 
 TEST_CASE("game module host validates an independent shadow artifact and removes it after unload") {

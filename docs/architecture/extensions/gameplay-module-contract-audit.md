@@ -91,7 +91,7 @@ Status terms mean:
 | Schema evolution and unknown payloads | Partial | Project component envelopes retain bounded opaque bytes independently from native layout and expose current, missing, newer, unsupported-old, or deterministic migration-required inspection. Behavior field migration and lossless scene parsing of unsupported encodings remain absent. |
 | Editor discovery | Implemented | Project discovery validates a bounded manifest, shadow-loads native code, discovers bounded Lua sources, freezes one combined registry, and gates Play on diagnostics. |
 | Lua source reload | Implemented | Compatible program replacement occurs in place; incompatible replacements retain the previous valid program. Existing runtime instances keep their program binding. |
-| Native code reload | Partial | Candidate activation occurs at a fixed-tick boundary and runtime reconstruction can roll back. Candidate module `Start` occurs during discovery, old and new modules overlap, runtime-only behavior state is not snapshotted, and there is no job/callback quiesce proof. |
+| Native code reload | Implemented | Manifest changes are deferred to the fixed-tick safe point. An explicit phased transaction preserves an RAII-owned old artifact plus the exact in-memory Lua generation, snapshots bounded behavior/module state, requires cancellation plus an opt-in job/callback quiescence proof and zero external runtime leases, unloads old code before candidate discovery, and restores the preserved generation on failure without mutating authoring state. Unsafe retirement returns restart-required and quarantines further reload/Play admission until workspace teardown. |
 | Packaged-player loading | Missing | No packaged-runtime composition, shipping manifest, signature policy enforcement, or packaged-player caller was found. |
 | Game components | Implemented | Project code registers stable component and property identities, schema versions, authoring metadata, payload encoding, and deterministic forward migration edges through `GameRegistrationContext`. The host copies, sorts, and freezes metadata before startup; inspection never mutates opaque persistent bytes. |
 | Game systems and services | Implemented | Typed identities, bounded descriptors, exact-generation factories, dependency and capability graphs, phase/access validation, deterministic schedules, affinity checks, cancellation, rollback, and reverse shutdown are public contracts with focused runtime evidence. |
@@ -146,9 +146,12 @@ The boundary relies on all of the following assumptions:
 9. The generated bundle revision is a deterministic, non-zero SHA-256-derived
    identity over the module ID, sorted annotations, and declared source content.
    No revision migration or compatibility range exists.
-10. `GameRuntimeContext` is currently empty. Module `Start` therefore receives no
-    scene, assets, jobs, diagnostics, configuration, or mediated platform
-    capabilities.
+10. `GameRuntimeContext` carries a generation-scoped cancellation token plus
+    active service and capability views. It does not expose scenes, assets, raw
+    job ownership, diagnostics, configuration, or direct platform capabilities.
+11. `PrepareReload` and `RestoreReload` are virtual C++ ABI surface. A module must
+    be rebuilt for boundary version `5`; snapshots are bounded opaque bytes with
+    a module-owned schema version and no cross-module compatibility promise.
 
 ## Generated Descriptor And Build Contract
 
@@ -306,6 +309,13 @@ Existing focused tests prove:
 - Native and Lua registrations merge and duplicate/invalid discovery diagnostics
   gate activation;
 - Compatible Lua source replacement retains a usable program;
+- Native rollback restores cloned last-good Lua program source, revision, and limits rather than
+  rereading files changed during the transaction, and rollback artifacts follow
+  move-only cleanup ownership;
+- Behavior activation exceptions attempt all applicable cleanup callbacks and
+  release partial factory instances;
+- External behavior and system runtimes pin the loaded module generation, while
+  the default module reload callback remains restart-required;
 - A successful project build publishes state and manifest, is recognized as
   current, and remains the last success after a later broken build;
 - Scene persistence round-trips typed behavior payloads and runtime scene

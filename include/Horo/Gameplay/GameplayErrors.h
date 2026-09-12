@@ -41,6 +41,9 @@ namespace Horo::Gameplay::GameplayErrors {
     extern const ErrorCodeDescriptor GameplayRuntimeInactive;
     extern const ErrorCodeDescriptor GameplayCancelled;
     extern const ErrorCodeDescriptor GameplayThreadAccessViolation;
+    extern const ErrorCodeDescriptor GameplayReloadRestartRequired;
+    extern const ErrorCodeDescriptor GameplayReloadSnapshotInvalid;
+    extern const ErrorCodeDescriptor GameplayReloadRestoreFailed;
     extern const ErrorCodeDescriptor InvalidBehaviorTypeId;
     extern const ErrorCodeDescriptor InvalidBehaviorInstanceId;
     extern const ErrorCodeDescriptor InvalidBehaviorComponent;

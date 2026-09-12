@@ -6,12 +6,18 @@
  */
 
 #include "Horo/Gameplay/BehaviorTypes.h"
+#include "Horo/Gameplay/GameplayErrors.h"
 
+#include <cstddef>
 #include <memory>
 #include <optional>
 #include <span>
+#include <vector>
 
 namespace Horo::Gameplay {
+    inline constexpr std::size_t MaximumBehaviorReloadStateBytes = 1024U * 1024U;
+    inline constexpr std::size_t MaximumBehaviorReloadSnapshotBytes = 16U * 1024U * 1024U;
+
     /** @brief Generation-checked entity identity exposed without leaking runtime storage. */
     struct GameplayEntityRef {
         std::uint64_t scene{};
@@ -184,6 +190,23 @@ namespace Horo::Gameplay {
 
         virtual void OnDestroy(BehaviorContext &) {
             // Optional hook: instances implement only the lifecycle phases they use.
+        }
+
+        /**
+         * @brief Captures bounded runtime-only state before a native module reload.
+         * @return Opaque state owned by this behavior type, or a typed failure that aborts reload.
+         */
+        [[nodiscard]] virtual Result<std::vector<std::byte>> CaptureReloadState() const {
+            return Result<std::vector<std::byte>>::Success({});
+        }
+
+        /**
+         * @brief Restores state captured from the previous compatible module generation.
+         * @param state Opaque bytes returned by the old generation of this stable behavior type.
+         * @return Success or a typed failure that triggers generation rollback.
+         */
+        [[nodiscard]] virtual Result<void> RestoreReloadState(std::span<const std::byte> state) {
+            return state.empty() ? Result<void>::Success() : Result<void>::Failure(MakeError(GameplayErrors::GameplayReloadRestoreFailed));
         }
     };
 
