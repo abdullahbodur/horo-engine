@@ -217,6 +217,9 @@ namespace Horo::Network {
 
         TransportBudgetController(TransportBudgetCapacity capacity, TransportLimitPolicyV1 policy, std::vector<ConnectionEntry> connections,
                                   std::vector<QueueEntry> queue, std::vector<std::uint32_t> freeSlots) noexcept;
+        /** @brief Validates caller admission state and controller lifetime. @param state Caller-owned operation state.
+         * @return Success or the exact typed cancellation, shutdown, or malformed-state failure. */
+        [[nodiscard]] Result<void> ValidateOperationalState(TransportAdmissionState state) const;
         [[nodiscard]] bool PolicyFitsUsage(const TransportLimitPolicyV1 &candidate) const noexcept;
         [[nodiscard]] ConnectionEntry *FindConnection(ConnectionHandle connection) noexcept;
         [[nodiscard]] QueueEntry *FindReplaceable(ConnectionEntry &connection, const TransportBudgetSubmission &submission) noexcept;

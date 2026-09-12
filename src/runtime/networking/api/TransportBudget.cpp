@@ -54,6 +54,15 @@ namespace Horo::Network {
         : capacity_(capacity), policy_(policy), connections_(std::move(connections)), queue_(std::move(queue)),
           freeSlots_(std::move(freeSlots)), freeCount_(freeSlots_.size()) {}
 
+    /** @copydoc TransportBudgetController::ValidateOperationalState */
+    Result<void> TransportBudgetController::ValidateOperationalState(const TransportAdmissionState state) const {
+        if (const auto admission = ValidateAdmissionState(state); admission.HasError())
+            return admission;
+        if (shuttingDown_)
+            return Fail<void>(NetworkErrors::TransportShuttingDown);
+        return Result<void>::Success();
+    }
+
     /** @copydoc TransportBudgetController::Create */
     Result<TransportBudgetController> TransportBudgetController::Create(const TransportBudgetCapacity &capacity,
                                                                         const TransportLimitPolicyV1 &policy) {
@@ -92,10 +101,8 @@ namespace Horo::Network {
     /** @copydoc TransportBudgetController::ReplacePolicy */
     Result<void> TransportBudgetController::ReplacePolicy(const std::uint64_t expectedRevision, const TransportLimitPolicyV1 &candidate,
                                                           const TransportAdmissionState state) {
-        if (const auto admission = ValidateAdmissionState(state); admission.HasError())
-            return admission;
-        if (shuttingDown_)
-            return Fail<void>(NetworkErrors::TransportShuttingDown);
+        if (const auto operational = ValidateOperationalState(state); operational.HasError())
+            return operational;
         if (expectedRevision != policy_.revision)
             return Fail<void>(NetworkErrors::TransportBudgetPolicyStale);
         if (!ValidatePolicy(capacity_, candidate) || candidate.revision <= policy_.revision)
@@ -108,10 +115,8 @@ namespace Horo::Network {
 
     /** @copydoc TransportBudgetController::BeginTick */
     Result<void> TransportBudgetController::BeginTick(const std::uint64_t tick, const TransportAdmissionState state) {
-        if (const auto admission = ValidateAdmissionState(state); admission.HasError())
-            return admission;
-        if (shuttingDown_)
-            return Fail<void>(NetworkErrors::TransportShuttingDown);
+        if (const auto operational = ValidateOperationalState(state); operational.HasError())
+            return operational;
         if (tick == 0 || tick <= tick_)
             return Fail<void>(NetworkErrors::TransportBudgetInvalid);
         tick_ = tick;
@@ -134,10 +139,8 @@ namespace Horo::Network {
 
     /** @copydoc TransportBudgetController::OpenConnection */
     Result<void> TransportBudgetController::OpenConnection(const ConnectionHandle connection, const TransportAdmissionState state) {
-        if (const auto admission = ValidateAdmissionState(state); admission.HasError())
-            return admission;
-        if (shuttingDown_)
-            return Fail<void>(NetworkErrors::TransportShuttingDown);
+        if (const auto operational = ValidateOperationalState(state); operational.HasError())
+            return operational;
         if (!connection.IsValid() || connection.Slot() >= connections_.size())
             return Fail<void>(NetworkErrors::TransportHandleInvalid);
         auto &entry = connections_[connection.Slot()];
@@ -311,10 +314,8 @@ namespace Horo::Network {
     /** @copydoc TransportBudgetController::Admit */
     Result<TransportBudgetDecision> TransportBudgetController::Admit(const TransportBudgetSubmission &submission,
                                                                      const TransportAdmissionState state) {
-        if (const auto admission = ValidateAdmissionState(state); admission.HasError())
-            return Result<TransportBudgetDecision>::Failure(admission.ErrorValue());
-        if (shuttingDown_)
-            return Fail<TransportBudgetDecision>(NetworkErrors::TransportShuttingDown);
+        if (const auto operational = ValidateOperationalState(state); operational.HasError())
+            return Result<TransportBudgetDecision>::Failure(operational.ErrorValue());
         if (tick_ == 0 || !submission.connection.IsValid() || submission.traffic >= TransportTrafficClass::Count || submission.bytes == 0 ||
             (submission.traffic == TransportTrafficClass::ReplaceableState) != (submission.replaceableKey != 0))
             return Fail<TransportBudgetDecision>(NetworkErrors::TransportBudgetInvalid);
