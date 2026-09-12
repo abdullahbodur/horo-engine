@@ -1,11 +1,10 @@
 #include "Horo/Packages/PackageCache.h"
+#include "PackageArchiveTestSupport.h"
 
 #include <atomic>
 #include <catch2/catch_test_macros.hpp>
 #include <chrono>
-#include <cstdlib>
 #include <fstream>
-#include <memory>
 #include <miniz.h>
 #include <nlohmann/json.hpp>
 
@@ -55,11 +54,7 @@ namespace {
         const std::vector<File> files{{"horo-package.toml", "schemaVersion = 1\n"}, {"assets/data.bin", "verified bytes"}};
         nlohmann::json entries = nlohmann::json::array();
         for (const auto &file : files) {
-            entries.push_back({{"path", file.name},
-                               {"size", file.content.size()},
-                               {"sha256", Horo::FormatSha256(Horo::ComputeSha256(std::as_bytes(std::span{file.content})))},
-                               {"executable", false},
-                               {"contributionRoot", nullptr}});
+            entries.push_back(Horo::Tests::Packages::FileInventoryEntry(file.name, file.content));
         }
         const std::string inventory = nlohmann::json{{"schemaVersion", 1}, {"files", entries}}.dump();
 
@@ -68,14 +63,7 @@ namespace {
         for (const auto &file : files)
             REQUIRE(mz_zip_writer_add_mem(&zip, file.name.c_str(), file.content.data(), file.content.size(), MZ_BEST_COMPRESSION));
         REQUIRE(mz_zip_writer_add_mem(&zip, "files.manifest.json", inventory.data(), inventory.size(), MZ_BEST_COMPRESSION));
-        void *buffer = nullptr;
-        std::size_t size = 0;
-        REQUIRE(mz_zip_writer_finalize_heap_archive(&zip, &buffer, &size));
-        const std::unique_ptr<void, decltype(&std::free)> owner{buffer, &std::free};
-        const auto *bytes = static_cast<const std::byte *>(buffer);
-        std::vector<std::byte> result(bytes, bytes + size);
-        REQUIRE(mz_zip_writer_end(&zip));
-        return result;
+        return Horo::Tests::Packages::FinalizeArchive(zip);
     }
 
     [[nodiscard]] ValidatedPackageArchive VerifiedArchive() {
@@ -146,49 +134,57 @@ namespace {
         Failure failure_;
     };
 
-    TEST_CASE("Package cache atomically publishes, reverifies, snapshots and cleans entries", "[packages][cache]") {
+    [[nodiscard]] PackageCacheStore CreateStore(Horo::DurableFileSystem &files, const std::filesystem::path &root,
+                                                const Horo::Packages::PackageValidationLimits &limits = {}) {
+        auto result = PackageCacheStore::Create(files, root, limits);
+        REQUIRE(result.HasValue());
+        return std::move(result).Value();
+    }
+
+    class CacheFixture final {
+    public:
+        CacheFixture() : store(CreateStore(files, temporary.Path())) {}
+
         TemporaryDirectory temporary;
         Horo::NativeDurableFileSystem files;
-        auto storeResult = PackageCacheStore::Create(files, temporary.Path());
-        REQUIRE(storeResult.HasValue());
-        auto store = std::move(storeResult).Value();
+        PackageCacheStore store;
+    };
+
+    TEST_CASE("Package cache atomically publishes, reverifies, snapshots and cleans entries", "[packages][cache]") {
+        CacheFixture fixture;
         auto archive = VerifiedArchive();
         const auto digest = archive.Digest();
 
-        const auto first = store.Publish(archive);
+        const auto first = fixture.store.Publish(archive);
         REQUIRE(first.HasValue());
         CHECK_FALSE(first.Value().alreadyPresent);
         CHECK(first.Value().digest == digest);
-        const auto permissions = std::filesystem::status(ActivePath(temporary.Path(), digest)).permissions();
+        const auto permissions = std::filesystem::status(ActivePath(fixture.temporary.Path(), digest)).permissions();
         CHECK((permissions & std::filesystem::perms::owner_write) == std::filesystem::perms::none);
 
-        const auto second = store.Publish(archive);
+        const auto second = fixture.store.Publish(archive);
         REQUIRE(second.HasValue());
         CHECK(second.Value().alreadyPresent);
-        auto loaded = store.Load(digest);
+        auto loaded = fixture.store.Load(digest);
         REQUIRE(loaded.HasValue());
         REQUIRE(loaded.Value().has_value());
         CHECK(loaded.Value()->Digest() == digest);
 
-        REQUIRE(store.Remove(digest).Value());
-        CHECK_FALSE(std::filesystem::exists(ActivePath(temporary.Path(), digest)));
-        auto missing = store.Load(digest);
+        REQUIRE(fixture.store.Remove(digest).Value());
+        CHECK_FALSE(std::filesystem::exists(ActivePath(fixture.temporary.Path(), digest)));
+        auto missing = fixture.store.Load(digest);
         REQUIRE(missing.HasValue());
         CHECK_FALSE(missing.Value().has_value());
-        CHECK_FALSE(store.Remove(digest).Value());
+        CHECK_FALSE(fixture.store.Remove(digest).Value());
     }
 
     TEST_CASE("Package cache quarantines a poisoned hit with safe persisted diagnostics", "[packages][cache][quarantine]") {
-        TemporaryDirectory temporary;
-        Horo::NativeDurableFileSystem files;
-        auto storeResult = PackageCacheStore::Create(files, temporary.Path());
-        REQUIRE(storeResult.HasValue());
-        auto store = std::move(storeResult).Value();
+        CacheFixture fixture;
         auto archive = VerifiedArchive();
         const auto digest = archive.Digest();
-        REQUIRE(store.Publish(archive).HasValue());
+        REQUIRE(fixture.store.Publish(archive).HasValue());
 
-        const auto path = ActivePath(temporary.Path(), digest);
+        const auto path = ActivePath(fixture.temporary.Path(), digest);
         std::filesystem::permissions(path, std::filesystem::perms::owner_write, std::filesystem::perm_options::add);
         std::fstream stream(path, std::ios::in | std::ios::out | std::ios::binary);
         REQUIRE(stream);
@@ -196,11 +192,11 @@ namespace {
         stream.put('x');
         stream.close();
 
-        const auto loaded = store.Load(digest);
+        const auto loaded = fixture.store.Load(digest);
         REQUIRE(loaded.HasError());
         CHECK(loaded.ErrorValue().code.Value() == "packages.cache.corrupt");
         CHECK_FALSE(std::filesystem::exists(path));
-        const auto quarantineRoot = temporary.Path() / "quarantine" / "corrupt-cache-entry";
+        const auto quarantineRoot = fixture.temporary.Path() / "quarantine" / "corrupt-cache-entry";
         REQUIRE(std::filesystem::is_directory(quarantineRoot));
         const auto recordDirectory = std::filesystem::directory_iterator{quarantineRoot}->path();
         CHECK(std::filesystem::is_regular_file(recordDirectory / "artifact.horopkg"));
@@ -212,39 +208,31 @@ namespace {
     }
 
     TEST_CASE("Package cache isolates failed downloads without publishing them", "[packages][cache][quarantine]") {
-        TemporaryDirectory temporary;
-        Horo::NativeDurableFileSystem files;
-        auto storeResult = PackageCacheStore::Create(files, temporary.Path());
-        REQUIRE(storeResult.HasValue());
-        auto store = std::move(storeResult).Value();
+        CacheFixture fixture;
         const auto bytes = ArchiveBytes();
         const auto expected = Horo::ComputeSha256({});
 
-        const auto result = store.Quarantine(bytes, PackageQuarantineReason::HashMismatch, expected);
+        const auto result = fixture.store.Quarantine(bytes, PackageQuarantineReason::HashMismatch, expected);
         REQUIRE(result.HasValue());
         CHECK(result.Value().reason == PackageQuarantineReason::HashMismatch);
         CHECK(result.Value().expectedDigest == expected);
         CHECK(result.Value().actualDigest == Horo::ComputeSha256(bytes));
-        CHECK_FALSE(std::filesystem::exists(ActivePath(temporary.Path(), expected)));
-        CHECK(std::filesystem::is_regular_file(temporary.Path() / "quarantine" / "hash-mismatch" / result.Value().quarantineId /
+        CHECK_FALSE(std::filesystem::exists(ActivePath(fixture.temporary.Path(), expected)));
+        CHECK(std::filesystem::is_regular_file(fixture.temporary.Path() / "quarantine" / "hash-mismatch" / result.Value().quarantineId /
                                                "artifact.horopkg"));
     }
 
     TEST_CASE("Package cache returns busy while publication or cleanup owns the digest lock", "[packages][cache][concurrency]") {
-        TemporaryDirectory temporary;
-        Horo::NativeDurableFileSystem files;
-        auto storeResult = PackageCacheStore::Create(files, temporary.Path());
-        REQUIRE(storeResult.HasValue());
-        auto store = std::move(storeResult).Value();
+        CacheFixture fixture;
         auto archive = VerifiedArchive();
-        const auto lockPath = temporary.Path() / "locks" / (DigestHex(archive.Digest()) + ".lock");
-        auto held = files.TryAcquireExclusive(lockPath, "test-owner");
+        const auto lockPath = fixture.temporary.Path() / "locks" / (DigestHex(archive.Digest()) + ".lock");
+        auto held = fixture.files.TryAcquireExclusive(lockPath, "test-owner");
         REQUIRE(held.HasValue());
 
-        const auto publish = store.Publish(archive);
+        const auto publish = fixture.store.Publish(archive);
         REQUIRE(publish.HasError());
         CHECK(publish.ErrorValue().code.Value() == "packages.cache.busy");
-        const auto remove = store.Remove(archive.Digest());
+        const auto remove = fixture.store.Remove(archive.Digest());
         REQUIRE(remove.HasError());
         CHECK(remove.ErrorValue().code.Value() == "packages.cache.busy");
     }
@@ -255,9 +243,7 @@ namespace {
             TemporaryDirectory temporary;
             Horo::NativeDurableFileSystem native;
             DenyingFileSystem files{native, failure};
-            auto storeResult = PackageCacheStore::Create(files, temporary.Path());
-            REQUIRE(storeResult.HasValue());
-            auto store = std::move(storeResult).Value();
+            auto store = CreateStore(files, temporary.Path());
             const auto result = store.Publish(archive);
             REQUIRE(result.HasError());
             CHECK(result.ErrorValue().code.Value() == "packages.cache.io_failed");
@@ -271,9 +257,7 @@ namespace {
         TemporaryDirectory temporary;
         Horo::NativeDurableFileSystem files;
         CHECK(PackageCacheStore::Create(files, std::filesystem::path{"relative/cache"}).HasError());
-        auto storeResult = PackageCacheStore::Create(files, temporary.Path(), {.archiveBytes = 1});
-        REQUIRE(storeResult.HasValue());
-        auto store = std::move(storeResult).Value();
+        auto store = CreateStore(files, temporary.Path(), {.archiveBytes = 1});
         const std::array bytes{std::byte{1}, std::byte{2}};
         const auto result = store.Quarantine(bytes, PackageQuarantineReason::InvalidArchive);
         REQUIRE(result.HasError());
