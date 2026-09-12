@@ -1,5 +1,6 @@
 #include "Horo/Navigation/Backends/RecastDetourProvider.h"
 #include "Horo/Navigation/NavigationErrors.h"
+#include "navigation/NavigationProviderContract.h"
 #include "navigation/NavigationTestAssertions.h"
 
 #include <array>
@@ -75,6 +76,7 @@ namespace Horo::Navigation {
         REQUIRE(path.Value().points.front() == Request(info).start);
         REQUIRE(path.Value().points.back() == Request(info).destination);
         REQUIRE(path.Value().lengthMeters > 0.0F);
+        TestSupport::RequireNavigationProviderContract(*provider, Request(info), TestSupport::NavigationProviderFixtureOutcome::Path);
     }
 
     TEST_CASE("Recast Detour provider rejects malformed topology without publishing partial state", "[unit][navigation][provider]") {

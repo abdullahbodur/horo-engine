@@ -16,6 +16,7 @@ horo_allow_target_dependencies(TARGET HoroRuntimeUi DEPENDENCIES HoroFoundation 
 horo_allow_target_dependencies(TARGET HoroAssets DEPENDENCIES HoroFoundation)
 horo_allow_target_dependencies(TARGET HoroNetworkApi DEPENDENCIES HoroFoundation)
 horo_allow_target_dependencies(TARGET HoroNetworkRuntime DEPENDENCIES HoroNetworkApi HoroRuntimeScene)
+horo_allow_target_dependencies(TARGET HoroNetworkTransportNull DEPENDENCIES HoroNetworkApi)
 horo_allow_target_dependencies(TARGET HoroAudioApi DEPENDENCIES HoroFoundation HoroAssets)
 horo_allow_target_dependencies(TARGET HoroAudioDsp DEPENDENCIES HoroAudioApi)
 horo_allow_target_dependencies(TARGET HoroAudioMemory DEPENDENCIES HoroAudioApi)
@@ -44,7 +45,7 @@ horo_allow_target_dependencies(TARGET HoroInputSdl DEPENDENCIES HoroInput)
 
 horo_allow_target_dependencies(TARGET HoroGameplayApi DEPENDENCIES HoroFoundation)
 horo_allow_target_dependencies(TARGET HoroRuntimeScene
-    DEPENDENCIES HoroFoundation HoroRuntime HoroAssets HoroGameplayApi HoroSceneModel HoroRuntimeUi)
+    DEPENDENCIES HoroFoundation HoroRuntime HoroAssets HoroGameplayApi HoroNavigationApi HoroSceneModel HoroRuntimeUi)
 horo_allow_target_dependencies(TARGET HoroGameplayRuntime
     DEPENDENCIES HoroGameplayApi HoroRuntimeScene)
 horo_allow_target_dependencies(TARGET HoroGameplayModuleHost
