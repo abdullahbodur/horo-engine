@@ -229,6 +229,7 @@ horo_configure_target_header_boundary(HoroAudioCommands PUBLIC_HEADERS
     Horo/Audio/AudioCommandBuffer.h
     Horo/Audio/AudioCommandStaging.h
     Horo/Audio/AudioEventQueue.h
+    Horo/Audio/AudioLifecycleReconciler.h
     Horo/Audio/ScheduledAudioCommandBatch.h
 )
 horo_configure_target_header_boundary(HoroInput PUBLIC_HEADERS
