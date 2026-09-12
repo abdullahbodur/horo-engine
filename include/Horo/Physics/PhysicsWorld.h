@@ -12,6 +12,7 @@
 
 #include <cstdint>
 #include <memory>
+#include <optional>
 #include <utility>
 
 namespace Horo {
@@ -43,6 +44,15 @@ namespace Horo::Physics {
         ActiveNull,
         Failed,
         Destroyed
+    };
+
+    /** @brief Last owner-driven or fatal lifecycle boundary applied to a world. */
+    enum class PhysicsWorldLifecycleCause : std::uint8_t {
+        None,
+        Reset,
+        SceneUnload,
+        FatalSolverError,
+        ProcessShutdown
     };
 
     class PhysicsWorld;
@@ -123,7 +133,17 @@ namespace Horo::Physics {
          * The host remains responsible for never reusing a historical process-local generation.
          */
         [[nodiscard]] Result<void> Activate(PhysicsWorldId identity);
-        /** @brief Closes admission and releases all per-world resources; safe repeatedly. */
+        /** @brief Retires active state and rebuilds the unpublished candidate from its immutable settings.
+         * @return Success in PreparedSolver/PreparedNull, or a typed affinity/state/reinitialization error.
+         * @post A successful reset clears identity, commands, publication and statistics and requires a new Activate call.
+         * Calling Reset again while already prepared is a no-op.
+         */
+        [[nodiscard]] Result<void> Reset();
+        /** @brief Closes scene admission and releases all per-world resources on the owner thread.
+         * @return Success after complete retirement, including repeated scene-unload calls, or a typed affinity error.
+         */
+        [[nodiscard]] Result<void> UnloadScene();
+        /** @brief Closes admission for process teardown and releases all per-world resources; safe repeatedly. */
         void Shutdown() noexcept;
         /** @brief Reads lifecycle state. @return Current prepared, active or destroyed state. */
         [[nodiscard]] PhysicsWorldState State() const noexcept;
@@ -131,6 +151,10 @@ namespace Horo::Physics {
         [[nodiscard]] PhysicsWorldId Identity() const noexcept;
         /** @brief Reads immutable world policy. @return Borrowed snapshot valid for this object's lifetime, including after shutdown. */
         [[nodiscard]] const PhysicsWorldSettings &Settings() const noexcept;
+        /** @brief Reads the most recent explicit lifecycle cause. @return None before the first reset, failure or retirement. */
+        [[nodiscard]] PhysicsWorldLifecycleCause LifecycleCause() const noexcept;
+        /** @brief Reads the retained fatal/reset failure. @return Typed terminal error, or empty outside Failed. */
+        [[nodiscard]] const std::optional<Error> &LastFailure() const noexcept;
         /** @brief Defers one structural intent to its semantic fixed-tick safe point.
          * @param command Owned command envelope copied into bounded world storage.
          * @return Admission status, or a typed malformed/state/affinity error. Rejected work remains caller-owned.
