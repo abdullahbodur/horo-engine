@@ -179,6 +179,8 @@ namespace Horo::AI {
 
         /** @brief Applies generation and cancellation precedence at one serialized owner boundary. */
         [[nodiscard]] Result<AiTaskResumeDisposition> CheckExecutionBoundary(AgentHandle activeAgent);
+        /** @brief Resolves whether the active execution boundary still permits terminal completion. */
+        [[nodiscard]] Result<bool> CanPublishCompletion(AgentHandle activeAgent);
         /** @brief Publishes the first cancelled terminal result after the caller proves the task is nonterminal. */
         void PublishCancelled(AiTaskCancellationReason reason) noexcept;
 

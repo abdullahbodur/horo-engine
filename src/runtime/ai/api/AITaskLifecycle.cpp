@@ -94,10 +94,10 @@ namespace Horo::AI {
     Result<AiTaskTransitionDisposition> AiTaskLifecycle::CompleteSuccess(const AgentHandle activeAgent) {
         if (IsTerminal(state_))
             return Result<AiTaskTransitionDisposition>::Success(AiTaskTransitionDisposition::AlreadyTerminal);
-        const auto boundary = CheckExecutionBoundary(activeAgent);
-        if (boundary.HasError())
-            return Result<AiTaskTransitionDisposition>::Failure(boundary.ErrorValue());
-        if (boundary.Value() != AiTaskResumeDisposition::Ready)
+        const auto canPublish = CanPublishCompletion(activeAgent);
+        if (canPublish.HasError())
+            return Result<AiTaskTransitionDisposition>::Failure(canPublish.ErrorValue());
+        if (!canPublish.Value())
             return Result<AiTaskTransitionDisposition>::Success(AiTaskTransitionDisposition::AlreadyTerminal);
         state_ = AiTaskState::Succeeded;
         terminalResult_.emplace(AiTaskTerminalResult{.state = AiTaskState::Succeeded});
@@ -110,10 +110,10 @@ namespace Horo::AI {
             return Result<AiTaskTransitionDisposition>::Success(AiTaskTransitionDisposition::AlreadyTerminal);
         if (!IsValid(failure))
             return Failure<AiTaskTransitionDisposition>(AIErrors::TaskFailureInvalid);
-        const auto boundary = CheckExecutionBoundary(activeAgent);
-        if (boundary.HasError())
-            return Result<AiTaskTransitionDisposition>::Failure(boundary.ErrorValue());
-        if (boundary.Value() != AiTaskResumeDisposition::Ready)
+        const auto canPublish = CanPublishCompletion(activeAgent);
+        if (canPublish.HasError())
+            return Result<AiTaskTransitionDisposition>::Failure(canPublish.ErrorValue());
+        if (!canPublish.Value())
             return Result<AiTaskTransitionDisposition>::Success(AiTaskTransitionDisposition::AlreadyTerminal);
         state_ = AiTaskState::Failed;
         terminalResult_.emplace(AiTaskTerminalResult{.state = AiTaskState::Failed, .failure = std::move(failure)});
@@ -174,6 +174,14 @@ namespace Horo::AI {
             return Result<AiTaskResumeDisposition>::Success(AiTaskResumeDisposition::BecameTerminal);
         }
         return Result<AiTaskResumeDisposition>::Success(AiTaskResumeDisposition::Ready);
+    }
+
+    /** @copydoc AiTaskLifecycle::CanPublishCompletion */
+    Result<bool> AiTaskLifecycle::CanPublishCompletion(const AgentHandle activeAgent) {
+        const auto boundary = CheckExecutionBoundary(activeAgent);
+        if (boundary.HasError())
+            return Result<bool>::Failure(boundary.ErrorValue());
+        return Result<bool>::Success(boundary.Value() == AiTaskResumeDisposition::Ready);
     }
 
     void AiTaskLifecycle::PublishCancelled(const AiTaskCancellationReason reason) noexcept {
