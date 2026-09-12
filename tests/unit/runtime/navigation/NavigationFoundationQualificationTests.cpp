@@ -24,20 +24,11 @@ namespace Horo::Navigation {
         [[nodiscard]] NavigationRuntimeQueueDescriptor QueueDescriptor() {
             return TestSupport::QueueDescriptor();
         }
-    }  // namespace
 
-    TEST_CASE("Navigation replacement drains stale completions before provider reclamation",
-              "[unit][navigation][qualification][lifecycle]") {
-        constexpr std::uint32_t replacementCount = 64;
-        auto lifecycle = std::move(NavigationWorldLifecycle::Create(2)).Value();
-        auto queues = std::move(NavigationRuntimeQueues::Create(QueueDescriptor())).Value();
-        const auto destructions = std::make_shared<std::atomic<std::uint32_t>>(0);
-
-        auto active = Activation(1);
-        REQUIRE(lifecycle.Stage(active, TestSupport::MakeObservedNavigationBackend(destructions)).HasValue());
-        REQUIRE(lifecycle.CommitAtSafePoint(active.scene, active.sceneGeneration).HasValue());
-
-        for (std::uint32_t generation = 2; generation <= replacementCount; ++generation) {
+        [[nodiscard]] NavigationWorldActivationDescriptor ExecuteReplacementIteration(
+            NavigationWorldLifecycle &lifecycle, NavigationRuntimeQueues &queues,
+            const std::shared_ptr<std::atomic<std::uint32_t>> &destructions, const NavigationWorldActivationDescriptor &active,
+            const std::uint32_t generation) {
             auto lease = std::move(lifecycle.Acquire(active.world)).Value();
             NavigationQueuedQuery query{
                 .acceptedSequence = generation - 1U,
@@ -72,8 +63,24 @@ namespace Horo::Navigation {
             workerRecord.reset();
             lease = {};
             REQUIRE(lifecycle.CollectRetired() == NavigationWorldLifecycleState::Active);
+            return replacement;
+        }
+    }  // namespace
+
+    TEST_CASE("Navigation replacement drains stale completions before provider reclamation",
+              "[unit][navigation][qualification][lifecycle]") {
+        constexpr std::uint32_t replacementCount = 64;
+        auto lifecycle = std::move(NavigationWorldLifecycle::Create(2)).Value();
+        auto queues = std::move(NavigationRuntimeQueues::Create(QueueDescriptor())).Value();
+        const auto destructions = std::make_shared<std::atomic<std::uint32_t>>(0);
+
+        auto active = Activation(1);
+        REQUIRE(lifecycle.Stage(active, TestSupport::MakeObservedNavigationBackend(destructions)).HasValue());
+        REQUIRE(lifecycle.CommitAtSafePoint(active.scene, active.sceneGeneration).HasValue());
+
+        for (std::uint32_t generation = 2; generation <= replacementCount; ++generation) {
+            active = ExecuteReplacementIteration(lifecycle, queues, destructions, active, generation);
             REQUIRE(destructions->load(std::memory_order_relaxed) == generation - 1U);
-            active = replacement;
         }
 
         lifecycle.BeginShutdown();
