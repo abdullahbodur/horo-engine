@@ -260,8 +260,7 @@ namespace Horo::Runtime {
             return SaveOperationTransitionResult::Applied;
         }
 
-        [[nodiscard]] SaveOperationTransitionResult CompleteLocked(const std::shared_ptr<SharedState> &state,
-                                                                   const TransitionRequest &request,
+        [[nodiscard]] SaveOperationTransitionResult CompleteLocked(const std::shared_ptr<SharedState> &state, TransitionRequest &request,
                                                                    CompletionDispatch &dispatch) noexcept {
             const bool validMutation =
                 RequiresCommit(state->snapshot.kind) && state->commitStarted && request.outcome == SaveOperationCommitOutcome::Committed;
