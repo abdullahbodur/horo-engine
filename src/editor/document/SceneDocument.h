@@ -109,6 +109,8 @@ namespace Horo::Editor {
         std::optional<Runtime::AudioSourceComponent> audioSource;
         std::optional<Runtime::NavigationSurfaceComponent> navigationSurface;
         std::optional<Runtime::NavigationRegionComponent> navigationRegion;
+        std::optional<Runtime::NavigationModifierComponent> navigationModifier;
+        std::optional<Runtime::NavigationLinkComponent> navigationLink;
         std::vector<Gameplay::BehaviorComponent> behaviors;
 
         [[nodiscard]] bool operator==(const SceneObjectComponentSet &) const noexcept = default;
@@ -276,6 +278,18 @@ namespace Horo::Editor {
     struct SetSceneNavigationRegionCommand {
         SceneObjectId object;
         std::optional<Runtime::NavigationRegionComponent> region;
+    };
+
+    /** @brief Undoable replacement, attachment, or removal of one authored navigation modifier. */
+    struct SetSceneNavigationModifierCommand {
+        SceneObjectId object;
+        std::optional<Runtime::NavigationModifierComponent> modifier;
+    };
+
+    /** @brief Undoable replacement, attachment, or removal of one authored grounded navigation link. */
+    struct SetSceneNavigationLinkCommand {
+        SceneObjectId object;
+        std::optional<Runtime::NavigationLinkComponent> link;
     };
 
     /** @brief Undoable replacement of one object's local editor-only visibility and lock state. */
@@ -496,6 +510,8 @@ namespace Horo::Editor {
         std::uint64_t m_nextPrefabInstanceId{1};
         std::uint64_t m_nextNavigationSurfaceId{1};
         std::uint64_t m_nextNavigationRegionId{1};
+        std::uint64_t m_nextNavigationModifierId{1};
+        std::uint64_t m_nextNavigationLinkId{1};
     };
 
     /** @brief Sole mutation boundary for the minimum typed scene command set. */
@@ -533,6 +549,12 @@ namespace Horo::Editor {
 
         /** @brief Validates Scene-wide identities/references and atomically commits a navigation region value. */
         [[nodiscard]] Result<SceneCommandResult> Execute(const SetSceneNavigationRegionCommand &command);
+
+        /** @brief Validates Scene-wide identities/references and atomically commits a navigation modifier value. */
+        [[nodiscard]] Result<SceneCommandResult> Execute(const SetSceneNavigationModifierCommand &command);
+
+        /** @brief Validates endpoint/profile compatibility and atomically commits a grounded navigation link value. */
+        [[nodiscard]] Result<SceneCommandResult> Execute(const SetSceneNavigationLinkCommand &command);
 
         /** @brief Atomically commits local editor visibility/lock state without changing runtime activation. */
         [[nodiscard]] Result<SceneCommandResult> Execute(const SetSceneObjectEditorStateCommand &command);
@@ -581,7 +603,9 @@ namespace Horo::Editor {
         [[nodiscard]] Result<SceneCommandResult> CommitObject(ObjectCommitContext context);
         [[nodiscard]] Result<SceneCommandResult> CommitNavigationComponents(
             SceneObjectId object, const std::optional<Runtime::NavigationSurfaceComponent> *surface,
-            const std::optional<Runtime::NavigationRegionComponent> *region);
+            const std::optional<Runtime::NavigationRegionComponent> *region,
+            const std::optional<Runtime::NavigationModifierComponent> *modifier,
+            const std::optional<Runtime::NavigationLinkComponent> *link);
 
         /** @brief Commits one validated prefab delta through the shared document/history transition. */
         [[nodiscard]] Result<SceneCommandResult> CommitPrefab(PrefabCommitContext context);

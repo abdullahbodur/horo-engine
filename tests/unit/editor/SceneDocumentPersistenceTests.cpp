@@ -9,6 +9,7 @@
 #include <span>
 #include <string>
 #include <thread>
+#include <variant>
 
 namespace {
     using namespace Horo;
@@ -180,6 +181,33 @@ namespace {
                                     .sourceSelection = Runtime::NavigationRegionSourceSelection::StaticCollisionInBounds,
                                     .mode = Runtime::NavigationRegionMode::Exclude,
                                 },
+                            .navigationModifier =
+                                Runtime::NavigationModifierComponent{
+                                    .id = Navigation::NavigationModifierId::Create(31).Value(),
+                                    .surface = Navigation::SurfaceId::Create(19).Value(),
+                                    .generation = 2,
+                                    .volume = Runtime::NavigationCylinderVolume{.center = {0.5F, 1.0F, -0.5F},
+                                                                                .radius = 2.5F,
+                                                                                .halfHeight = 1.25F},
+                                    .operation = Runtime::NavigationModifierOperation::OverrideAreaAndCost,
+                                    .area = Navigation::NavigationAreaId::Create(12).Value(),
+                                    .traversalCost = 1.75F,
+                                },
+                            .navigationLink =
+                                Runtime::NavigationLinkComponent{
+                                    .id = Navigation::NavigationLinkId::Create(37).Value(),
+                                    .generation = 5,
+                                    .start = {.surface = Navigation::SurfaceId::Create(19).Value(),
+                                              .localPosition = {-2.0F, 0.0F, 0.0F},
+                                              .connectionRadiusMeters = 0.75F},
+                                    .end = {.surface = Navigation::SurfaceId::Create(19).Value(),
+                                            .localPosition = {2.0F, 0.0F, 0.0F},
+                                            .connectionRadiusMeters = 1.0F},
+                                    .kind = Runtime::NavigationLinkKind::Door,
+                                    .direction = Runtime::NavigationLinkDirection::Bidirectional,
+                                    .profiles = {Navigation::NavigationAgentProfileId::Create(6).Value()},
+                                    .traversalCost = 2.0F,
+                                },
                             .behaviors =
                                 {
                                     Gameplay::BehaviorComponent{
@@ -256,6 +284,37 @@ TEST_CASE("Project Scene Save Reopens The Same Authored State", "[unit][editor][
     REQUIRE((reopened.Objects().front().components == authored.objects.front().components));
     REQUIRE((reopened.PrefabInstances().size() == 1));
     REQUIRE((reopened.PrefabInstances().front() == authored.prefabInstances.front()));
+}
+
+TEST_CASE("Navigation link direction and modifier shape round trip explicitly", "[unit][editor][persistence][navigation]") {
+    TemporaryProject project;
+    project.WriteMetadata();
+    project.WriteScene("{\"schemaVersion\":1,\"objects\":[]}\n");
+    SceneDocumentSnapshot authored = AuthoredScene();
+    authored.prefabInstances.clear();
+    auto &components = authored.objects.front().components;
+    components.navigationModifier->volume =
+        Runtime::NavigationLocalBounds{.center = {-1.0F, 2.0F, 3.0F}, .halfExtents = {4.0F, 5.0F, 6.0F}};
+    components.navigationModifier->operation = Runtime::NavigationModifierOperation::Exclude;
+    components.navigationModifier->area.reset();
+    components.navigationModifier->traversalCost.reset();
+    components.navigationLink->kind = Runtime::NavigationLinkKind::Jump;
+    components.navigationLink->direction = Runtime::NavigationLinkDirection::StartToEnd;
+
+    NativeDurableFileSystem files;
+    ProjectMutationCoordinator mutations(files);
+    auto expected = InspectProjectSceneFingerprint(project.Root(), project.ScenePath());
+    REQUIRE(expected.HasValue());
+    REQUIRE(SaveProjectScene(project.Root(), project.ScenePath(), authored, expected.Value(), false, mutations, files).HasValue());
+
+    auto loaded = LoadProjectDefaultScene(project.Root());
+    REQUIRE(loaded.HasValue());
+    REQUIRE(loaded.Value().has_value());
+    const auto &loadedComponents = loaded.Value()->objects.front().components;
+    REQUIRE(loadedComponents.navigationModifier == components.navigationModifier);
+    REQUIRE(loadedComponents.navigationLink == components.navigationLink);
+    REQUIRE(std::holds_alternative<Runtime::NavigationLocalBounds>(loadedComponents.navigationModifier->volume));
+    REQUIRE(loadedComponents.navigationLink->direction == Runtime::NavigationLinkDirection::StartToEnd);
 }
 
 TEST_CASE("Every authored light kind survives project scene save and reload", "[unit][editor][persistence]") {

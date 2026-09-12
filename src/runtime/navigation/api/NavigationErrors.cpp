@@ -283,7 +283,7 @@ namespace Horo::Navigation::NavigationErrors {
         .code = ErrorCode{"navigation.scene_component_invalid"},
         .defaultSeverity = ErrorSeverity::Error,
         .summary = "A Scene navigation component is invalid.",
-        .remediationHint = "Repair the component identity, version, bounds, definition, profiles, or source policy.",
+        .remediationHint = "Repair the component identity, version, bounds, definition, surface, profiles, area, direction, or cost.",
         .retryable = false,
         .userActionable = true,
     };
@@ -292,7 +292,7 @@ namespace Horo::Navigation::NavigationErrors {
         .code = ErrorCode{"navigation.scene_component_conflict"},
         .defaultSeverity = ErrorSeverity::Error,
         .summary = "Scene navigation component identities conflict.",
-        .remediationHint = "Assign distinct stable surface and region identities before committing the Scene.",
+        .remediationHint = "Assign distinct stable identities within each navigation component domain before committing the Scene.",
         .retryable = false,
         .userActionable = true,
     };
@@ -300,8 +300,17 @@ namespace Horo::Navigation::NavigationErrors {
         .domain = NavigationDomain,
         .code = ErrorCode{"navigation.scene_surface_missing"},
         .defaultSeverity = ErrorSeverity::Error,
-        .summary = "A Scene navigation region references a missing surface.",
-        .remediationHint = "Restore the exact surface or explicitly retarget the region.",
+        .summary = "A Scene navigation component references a missing surface.",
+        .remediationHint = "Restore the exact surface or explicitly retarget the region, modifier, or link endpoint.",
+        .retryable = false,
+        .userActionable = true,
+    };
+    const ErrorCodeDescriptor SceneProfileMismatch{
+        .domain = NavigationDomain,
+        .code = ErrorCode{"navigation.scene_profile_mismatch"},
+        .defaultSeverity = ErrorSeverity::Error,
+        .summary = "A grounded navigation link has incompatible endpoint profiles.",
+        .remediationHint = "Select only grounded profiles present on both exact endpoint surfaces.",
         .retryable = false,
         .userActionable = true,
     };

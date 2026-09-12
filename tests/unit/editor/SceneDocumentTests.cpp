@@ -33,6 +33,23 @@ namespace {
         };
     }
 
+    [[nodiscard]] Horo::Runtime::NavigationModifierComponent NavigationModifier(const std::uint64_t id = 1,
+                                                                                const std::uint64_t surface = 1) {
+        return {
+            .id = Horo::Navigation::NavigationModifierId::Create(id).Value(),
+            .surface = Horo::Navigation::SurfaceId::Create(surface).Value(),
+        };
+    }
+
+    [[nodiscard]] Horo::Runtime::NavigationLinkComponent NavigationLink(const std::uint64_t id = 1, const std::uint64_t surface = 1) {
+        return {
+            .id = Horo::Navigation::NavigationLinkId::Create(id).Value(),
+            .start = {.surface = Horo::Navigation::SurfaceId::Create(surface).Value()},
+            .end = {.surface = Horo::Navigation::SurfaceId::Create(surface).Value(), .localPosition = {3.0F, 0.0F, 0.0F}},
+            .profiles = {Horo::Navigation::NavigationAgentProfileId::Create(3).Value()},
+        };
+    }
+
     [[nodiscard]] std::unique_ptr<Horo::Runtime::RuntimeScene> MakeRuntimeScene(const Horo::Editor::SceneDocument &document) {
         auto definition = Horo::Editor::ConvertSceneDocumentToRuntime(document.Snapshot(), Horo::Runtime::SceneDefinitionId{1});
         REQUIRE((definition.HasValue()));
@@ -96,13 +113,27 @@ namespace {
                         .name = "Disabled Camera",
                         .components = {.camera = Runtime::CameraComponent{.enabled = false}},
                     },
+                    SceneObjectSnapshot{
+                        .id = SceneObjectId{2},
+                        .name = "Disabled Navigation",
+                        .components = {.navigationSurface = NavigationSurface(),
+                                       .navigationModifier = NavigationModifier(),
+                                       .navigationLink = NavigationLink()},
+                    },
                 },
         };
+        document.objects[1].components.navigationSurface->enabled = false;
+        document.objects[1].components.navigationModifier->enabled = false;
+        document.objects[1].components.navigationLink->enabled = false;
         const auto converted = ConvertSceneDocumentToRuntime(document, Runtime::SceneDefinitionId{1});
         REQUIRE(converted.HasValue());
-        REQUIRE(converted.Value().Entities().size() == 1);
+        REQUIRE(converted.Value().Entities().size() == 2);
         REQUIRE_FALSE(converted.Value().Entities().front().components.camera.has_value());
         REQUIRE(document.objects.front().components.camera.has_value());
+        REQUIRE_FALSE(converted.Value().Entities()[1].components.navigationSurface.has_value());
+        REQUIRE_FALSE(converted.Value().Entities()[1].components.navigationModifier.has_value());
+        REQUIRE_FALSE(converted.Value().Entities()[1].components.navigationLink.has_value());
+        REQUIRE(document.objects[1].components.navigationLink.has_value());
     }
 
     TEST_CASE("Scene navigation commands preserve committed generations through undo redo and runtime conversion",
@@ -119,6 +150,8 @@ namespace {
         REQUIRE(regionObject.HasValue());
         REQUIRE(commands.Execute(SetSceneNavigationSurfaceCommand{surfaceObject.Value().object, NavigationSurface()}).HasValue());
         REQUIRE(commands.Execute(SetSceneNavigationRegionCommand{regionObject.Value().object, NavigationRegion()}).HasValue());
+        REQUIRE(commands.Execute(SetSceneNavigationModifierCommand{regionObject.Value().object, NavigationModifier()}).HasValue());
+        REQUIRE(commands.Execute(SetSceneNavigationLinkCommand{regionObject.Value().object, NavigationLink()}).HasValue());
 
         auto changedSurface = NavigationSurface();
         changedSurface.generation = 2;
@@ -134,7 +167,20 @@ namespace {
         REQUIRE(runtime.Value().Revision().value == document.State().value);
         REQUIRE(runtime.Value().Entities()[0].components.navigationSurface->generation == 2);
         REQUIRE(runtime.Value().Entities()[1].components.navigationRegion->surface == Navigation::SurfaceId::Create(1).Value());
+        REQUIRE(runtime.Value().Entities()[1].components.navigationModifier->surface == Navigation::SurfaceId::Create(1).Value());
+        REQUIRE(runtime.Value().Entities()[1].components.navigationLink->direction == Runtime::NavigationLinkDirection::StartToEnd);
 
+        const DocumentRevision revision = document.Revision();
+        auto malformedModifier = NavigationModifier();
+        malformedModifier.operation = Runtime::NavigationModifierOperation::OverrideArea;
+        REQUIRE(commands.Execute(SetSceneNavigationModifierCommand{regionObject.Value().object, malformedModifier}).HasError());
+        auto incompatibleLink = NavigationLink();
+        incompatibleLink.profiles = {Navigation::NavigationAgentProfileId::Create(99).Value()};
+        REQUIRE(commands.Execute(SetSceneNavigationLinkCommand{regionObject.Value().object, incompatibleLink}).HasError());
+        REQUIRE(document.Revision() == revision);
+        REQUIRE(document.Objects()[0].components.navigationSurface->generation == 2);
+        REQUIRE(document.Objects()[1].components.navigationModifier == NavigationModifier());
+        REQUIRE(document.Objects()[1].components.navigationLink == NavigationLink());
         REQUIRE(commands.Execute(SetSceneNavigationSurfaceCommand{surfaceObject.Value().object, std::nullopt}).HasError());
         REQUIRE(commands.Execute(SetSceneNavigationRegionCommand{regionObject.Value().object, NavigationRegion(1, 99)}).HasError());
     }
@@ -148,6 +194,8 @@ namespace {
         SceneObjectComponentSet components;
         components.navigationSurface = NavigationSurface(8);
         components.navigationRegion = NavigationRegion(11, 8);
+        components.navigationModifier = NavigationModifier(17, 8);
+        components.navigationLink = NavigationLink(23, 8);
         const auto source = commands.Execute(CreateSceneObjectCommand{.name = "Source", .components = components});
         REQUIRE(source.HasValue());
         const auto duplicate = commands.Execute(DuplicateSceneObjectCommand{source.Value().object, "Duplicate"});
@@ -155,9 +203,14 @@ namespace {
         const auto &duplicated = document.Objects().back().components;
         REQUIRE(duplicated.navigationSurface->id != components.navigationSurface->id);
         REQUIRE(duplicated.navigationRegion->id != components.navigationRegion->id);
+        REQUIRE(duplicated.navigationModifier->id != components.navigationModifier->id);
+        REQUIRE(duplicated.navigationLink->id != components.navigationLink->id);
         REQUIRE(duplicated.navigationSurface->id.Value() == 9);
         REQUIRE(duplicated.navigationRegion->id.Value() == 12);
         REQUIRE(duplicated.navigationRegion->surface == duplicated.navigationSurface->id);
+        REQUIRE(duplicated.navigationModifier->surface == duplicated.navigationSurface->id);
+        REQUIRE(duplicated.navigationLink->start.surface == duplicated.navigationSurface->id);
+        REQUIRE(duplicated.navigationLink->end.surface == duplicated.navigationSurface->id);
     }
 
     TEST_CASE("Catalog Owns Stable Core Primitive Ids", "[unit][editor]") {

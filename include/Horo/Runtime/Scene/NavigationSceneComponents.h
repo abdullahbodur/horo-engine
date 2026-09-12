@@ -2,19 +2,21 @@
 
 /**
  * @file NavigationSceneComponents.h
- * @brief Typed authored navigation surface and bounded region Scene components.
+ * @brief Typed authored navigation surface, region, modifier-volume, and grounded-link Scene components.
  */
 
 #include "Horo/Assets/AssetId.h"
 #include "Horo/Foundation/Result.h"
 #include "Horo/Math/SceneMath.h"
 #include "Horo/Navigation/NavigationAgentProfiles.h"
+#include "Horo/Navigation/NavigationAreas.h"
 #include "Horo/Navigation/NavigationIdentity.h"
 
 #include <cstddef>
 #include <cstdint>
 #include <optional>
 #include <span>
+#include <variant>
 #include <vector>
 
 namespace Horo::Runtime {
@@ -81,10 +83,94 @@ namespace Horo::Runtime {
         [[nodiscard]] constexpr bool operator==(const NavigationRegionComponent &) const noexcept = default;
     };
 
+    /** @brief Closed semantic operations contributed by one authored modifier volume. */
+    enum class NavigationModifierOperation : std::uint8_t {
+        Exclude,
+        OverrideArea,
+        OverrideAreaAndCost,
+        Count,
+    };
+
+    /** @brief Finite positive object-local Y-axis cylinder used by a navigation modifier. */
+    struct NavigationCylinderVolume final {
+        Math::Vec3 center{};
+        float radius{1.0F};
+        float halfHeight{1.0F};
+
+        [[nodiscard]] constexpr bool operator==(const NavigationCylinderVolume &) const noexcept = default;
+    };
+
+    /** @brief Closed object-local shape payload for an authored navigation modifier. */
+    using NavigationModifierVolume = std::variant<NavigationLocalBounds, NavigationCylinderVolume>;
+
+    /**
+     * @brief Stable authored area, exclusion, or cost-volume intent for one exact surface.
+     * @details Exclusion carries no area or cost. Area override carries an area only. Area-and-cost override carries both.
+     */
+    struct NavigationModifierComponent final {
+        Navigation::NavigationModifierId id;
+        Navigation::SurfaceId surface;
+        std::uint32_t schemaVersion{1};
+        std::uint64_t generation{1};
+        NavigationModifierVolume volume{NavigationLocalBounds{}};
+        NavigationModifierOperation operation{NavigationModifierOperation::Exclude};
+        std::optional<Navigation::NavigationAreaId> area;
+        std::optional<float> traversalCost;
+        bool enabled{true};
+
+        [[nodiscard]] constexpr bool operator==(const NavigationModifierComponent &) const noexcept = default;
+    };
+
+    /** @brief Closed traversal semantics for one explicit grounded transition. */
+    enum class NavigationLinkKind : std::uint8_t {
+        Jump,
+        Ladder,
+        Door,
+        Teleport,
+        Count,
+    };
+
+    /** @brief Direction of a link relative to its explicitly named start and end endpoints. */
+    enum class NavigationLinkDirection : std::uint8_t {
+        StartToEnd,
+        Bidirectional,
+        Count,
+    };
+
+    /** @brief One finite object-local endpoint attached to an exact authored navigation surface. */
+    struct NavigationLinkEndpoint final {
+        Navigation::SurfaceId surface;
+        Math::Vec3 localPosition{};
+        float connectionRadiusMeters{0.5F};
+
+        [[nodiscard]] constexpr bool operator==(const NavigationLinkEndpoint &) const noexcept = default;
+    };
+
+    /**
+     * @brief Stable authored grounded transition owned by the containing committed Scene object.
+     * @details Endpoint order is semantic: StartToEnd permits traversal only from start to end; Bidirectional permits both ways.
+     */
+    struct NavigationLinkComponent final {
+        Navigation::NavigationLinkId id;
+        std::uint32_t schemaVersion{1};
+        std::uint64_t generation{1};
+        NavigationLinkEndpoint start;
+        NavigationLinkEndpoint end;
+        NavigationLinkKind kind{NavigationLinkKind::Jump};
+        NavigationLinkDirection direction{NavigationLinkDirection::StartToEnd};
+        std::vector<Navigation::NavigationAgentProfileId> profiles;
+        float traversalCost{1.0F};
+        bool enabled{true};
+
+        [[nodiscard]] bool operator==(const NavigationLinkComponent &) const noexcept = default;
+    };
+
     /** @brief Borrowed Scene-object projection used to validate navigation components without copying payload storage. */
     struct NavigationSceneComponentView final {
-        const NavigationSurfaceComponent *surface{}; /**< Optional surface owned by the immutable source snapshot. */
-        const NavigationRegionComponent *region{};   /**< Optional region owned by the immutable source snapshot. */
+        const NavigationSurfaceComponent *surface{};   /**< Optional surface owned by the immutable source snapshot. */
+        const NavigationRegionComponent *region{};     /**< Optional region owned by the immutable source snapshot. */
+        const NavigationModifierComponent *modifier{}; /**< Optional modifier owned by the immutable source snapshot. */
+        const NavigationLinkComponent *link{};         /**< Optional grounded link owned by the immutable source snapshot. */
     };
 
     /** @brief Validates one surface payload independently of Scene-wide identity references.
@@ -99,14 +185,30 @@ namespace Horo::Runtime {
      */
     [[nodiscard]] Result<void> ValidateNavigationRegionComponent(const NavigationRegionComponent &component);
 
+    /** @brief Validates one modifier payload independently of its referenced surface's presence.
+     * @param component Authored component value.
+     * @return Success or NavigationErrors::SceneComponentInvalid.
+     */
+    [[nodiscard]] Result<void> ValidateNavigationModifierComponent(const NavigationModifierComponent &component);
+
+    /** @brief Validates one grounded-link payload independently of endpoint surface/profile presence.
+     * @param component Authored component value.
+     * @return Success or NavigationErrors::SceneComponentInvalid.
+     */
+    [[nodiscard]] Result<void> ValidateNavigationLinkComponent(const NavigationLinkComponent &component);
+
     /**
      * @brief Validates unique identities and exact region-to-surface references in one committed Scene snapshot.
      * @param surfaces Surface components in arbitrary Scene-object order.
      * @param regions Region components in arbitrary Scene-object order.
-     * @return Success, or a typed invalid, conflict, or missing-surface diagnostic.
+     * @param modifiers Modifier components in arbitrary Scene-object order.
+     * @param links Grounded-link components in arbitrary Scene-object order.
+     * @return Success, or a typed invalid, conflict, missing-surface, or profile-mismatch diagnostic.
      */
     [[nodiscard]] Result<void> ValidateNavigationSceneComponents(std::span<const NavigationSurfaceComponent> surfaces,
-                                                                 std::span<const NavigationRegionComponent> regions);
+                                                                 std::span<const NavigationRegionComponent> regions,
+                                                                 std::span<const NavigationModifierComponent> modifiers = {},
+                                                                 std::span<const NavigationLinkComponent> links = {});
 
     /**
      * @brief Validates unique identities and references through borrowed component projections without payload copies.

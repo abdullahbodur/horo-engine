@@ -56,6 +56,8 @@ namespace Horo::Runtime {
         std::optional<UiCanvasComponent> uiCanvas; /**< Optional canvas asset instantiated by the Runtime UI owner. */
         std::optional<NavigationSurfaceComponent> navigationSurface;
         std::optional<NavigationRegionComponent> navigationRegion;
+        std::optional<NavigationModifierComponent> navigationModifier;
+        std::optional<NavigationLinkComponent> navigationLink;
         std::vector<Gameplay::BehaviorComponent> behaviors;
         [[nodiscard]] bool operator==(const RuntimeComponentSet &) const noexcept = default;
     };

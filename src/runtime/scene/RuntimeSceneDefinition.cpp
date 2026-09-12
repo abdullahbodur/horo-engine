@@ -62,6 +62,10 @@ namespace Horo::Runtime {
                 return false;
             if (components.navigationRegion && ValidateNavigationRegionComponent(*components.navigationRegion).HasError())
                 return false;
+            if (components.navigationModifier && ValidateNavigationModifierComponent(*components.navigationModifier).HasError())
+                return false;
+            if (components.navigationLink && ValidateNavigationLinkComponent(*components.navigationLink).HasError())
+                return false;
             std::vector<Gameplay::BehaviorInstanceId> behaviorIds;
             behaviorIds.reserve(components.behaviors.size());
             for (const Gameplay::BehaviorComponent &behavior : components.behaviors) {
@@ -80,7 +84,9 @@ namespace Horo::Runtime {
             for (const RuntimeEntityDefinition &entity : entities) {
                 navigationComponents.push_back(
                     {.surface = entity.components.navigationSurface ? &*entity.components.navigationSurface : nullptr,
-                     .region = entity.components.navigationRegion ? &*entity.components.navigationRegion : nullptr});
+                     .region = entity.components.navigationRegion ? &*entity.components.navigationRegion : nullptr,
+                     .modifier = entity.components.navigationModifier ? &*entity.components.navigationModifier : nullptr,
+                     .link = entity.components.navigationLink ? &*entity.components.navigationLink : nullptr});
             }
             return ValidateNavigationSceneComponentViews(navigationComponents);
         }
