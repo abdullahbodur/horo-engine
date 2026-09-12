@@ -184,8 +184,6 @@ namespace Horo::Packages {
             const PackageQuarantineReason reason, const std::optional<Sha256Digest> expectedDigest,
             const std::optional<std::filesystem::path> existingPath = std::nullopt) {
             const char *reasonName = ReasonName(reason);
-            if (reasonName == nullptr)
-                return Result<PackageQuarantineRecord>::Failure(MakeError(InvalidReason));
             const Sha256Digest actualDigest = ComputeSha256(bytes);
             const Sha256Digest identity = expectedDigest.value_or(actualDigest);
             auto quarantineId = AvailableQuarantineId(root, reasonName, identity);
