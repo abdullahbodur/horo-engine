@@ -69,6 +69,8 @@ workflows.
   enforce versioned connection, queue, byte, rate, and sustained-overload limits before backend mutation.
 - [Deterministic Network Transport Migration](./deterministic-network-transport-migration.md):
   compose explicit network-disabled, loopback, and seeded impairment modes with bounded caller-thread delivery.
+- [Handshake Negotiation Migration](./handshake-negotiation-migration.md):
+  replace transport-owned compatibility flags with one bounded generation-fenced session selection.
 
 ## Writing a Guide
 
