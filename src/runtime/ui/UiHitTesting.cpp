@@ -75,6 +75,11 @@ namespace Horo::Runtime::Ui {
                 slots.push_back(std::make_shared<UiHitTestSnapshot::Storage>(source.elementCapacity));
         }
 
+        Storage(const Storage &) = delete;
+        Storage &operator=(const Storage &) = delete;
+        Storage(Storage &&) = delete;
+        Storage &operator=(Storage &&) = delete;
+
         ~Storage() {
             ReleaseCurrent();
         }
@@ -258,12 +263,12 @@ namespace Horo::Runtime::Ui {
         const double unitsPerPixel =
             static_cast<double>(query.canvasSpace.pixelsPerDip.logicalDips) * 64.0 / query.canvasSpace.pixelsPerDip.pixelUnits;
         const double resolvedWidth = query.canvasSpace.pixelExtent.width * unitsPerPixel;
-        const double resolvedHeight = query.canvasSpace.pixelExtent.height * unitsPerPixel;
-        if (!std::isfinite(unitsPerPixel) || std::abs(resolvedWidth - query.canvasSpace.logicalExtent.width) > 0.5 ||
+        if (const double resolvedHeight = query.canvasSpace.pixelExtent.height * unitsPerPixel;
+            !std::isfinite(unitsPerPixel) || std::abs(resolvedWidth - query.canvasSpace.logicalExtent.width) > 0.5 ||
             std::abs(resolvedHeight - query.canvasSpace.logicalExtent.height) > 0.5)
             return Failure<std::optional<UiHitTestResult>>(UiErrors::HitTestInvalid);
-        if (query.pixelX < 0.0F || query.pixelY < 0.0F || query.pixelX >= query.canvasSpace.pixelExtent.width ||
-            query.pixelY >= query.canvasSpace.pixelExtent.height)
+        if (query.pixelX < 0.0F || query.pixelY < 0.0F || query.pixelX >= static_cast<float>(query.canvasSpace.pixelExtent.width) ||
+            query.pixelY >= static_cast<float>(query.canvasSpace.pixelExtent.height))
             return Result<std::optional<UiHitTestResult>>::Success(std::nullopt);
         const double logicalX = static_cast<double>(query.pixelX) * unitsPerPixel;
         const double logicalY = static_cast<double>(query.pixelY) * unitsPerPixel;
@@ -400,12 +405,10 @@ namespace Horo::Runtime::Ui {
     bool UiHitTestStore::IsDrained() const noexcept {
         if (!storage_)
             return true;
-        for (const auto &slot : storage_->slots) {
+        return std::ranges::all_of(storage_->slots, [this](const auto &slot) {
             const auto leases = slot->leases.load();
             const auto retainedByStore = slot == storage_->current ? 1U : 0U;
-            if (leases > retainedByStore)
-                return false;
-        }
-        return true;
+            return leases <= retainedByStore;
+        });
     }
 }  // namespace Horo::Runtime::Ui
