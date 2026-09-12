@@ -122,11 +122,14 @@ shutdown. Lookups return dense handles fenced by registry identity, revision,
 partition identity, and partition epoch; a handle issued by one publication cannot
 resolve against another even if the same cell tuple remains present.
 
-Snapshot lookup is logarithmic in canonical manifest order. Spatial intersection
-queries scan at most the registry's admitted cell ceiling, perform no allocation,
+Snapshot lookup is logarithmic in canonical manifest order. Publication builds one
+deterministic immutable bounding-volume hierarchy owned by the snapshot. Spatial
+intersection queries prune non-overlapping hierarchy branches, perform no allocation,
 emit canonical handles into caller-owned bounded storage, and publish no partial
-output when capacity is insufficient. Query bounds use exact inclusive canonical
-millimeters with optional declared layer and LOD filters. The registry is an index,
+output when capacity is insufficient. Their typed result exposes match, leaf-candidate,
+and visited-node counts so the bounded index work remains testable without timers.
+Query bounds use exact inclusive canonical millimeters with optional declared layer
+and LOD filters. The registry is an index,
 not a second topology or residency authority: it does not mount worlds, perform I/O,
 select providers, mutate cell state, or silently fall back to another layer, LOD,
 partition epoch, or snapshot revision.

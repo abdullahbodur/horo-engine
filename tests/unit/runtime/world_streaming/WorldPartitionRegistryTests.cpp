@@ -53,6 +53,13 @@ namespace Horo::WorldStreaming {
             return std::move(result).Value();
         }
 
+        void RequireQueryBinding(const WorldPartitionRegistrySnapshot &snapshot) {
+            std::array<WorldPartitionCellHandle, 4> output{};
+            const WorldPartitionBounds bounds{Math::WorldCoordinate64::FromMillimeters(0, 0, 0),
+                                              Math::WorldCoordinate64::FromMillimeters(99, 99, 99)};
+            REQUIRE(snapshot.Query({bounds, Layer(2), 0}, output).Value().binding == snapshot.Binding());
+        }
+
         TEST_CASE("Partition registry publishes a canonical generation-pinned immutable snapshot",
                   "[unit][world_streaming][partition_registry]") {
             auto registry = Registry();
@@ -84,6 +91,8 @@ namespace Horo::WorldStreaming {
             REQUIRE(first.Resolve(handle).Value()->package.chunkAsset == Asset(2));
             RequireError(second.Resolve(handle), WorldStreamingErrors::PartitionRegistryStale);
             REQUIRE(second.Resolve(second.Find(cell).Value()).Value()->package.chunkAsset == Asset(12));
+
+            RequireQueryBinding(first);
         }
 
         TEST_CASE("Spatial query is inclusive bounded allocation-free and canonically ordered",
@@ -98,10 +107,84 @@ namespace Horo::WorldStreaming {
                                                    Layer(2),
                                                    0};
             const auto count = snapshot.Query(query, output);
-            REQUIRE(count.Value() == 2);
+            REQUIRE(count.Value().binding == snapshot.Binding());
+            REQUIRE(count.Value().matches == 2);
             REQUIRE(output[0].cell.x == 0);
             REQUIRE(output[1].cell.x == 1);
             REQUIRE(snapshot.Resolve(output[1]).HasValue());
+        }
+
+        TEST_CASE("Spatial query prunes non-overlapping cells through its immutable publication index",
+                  "[unit][world_streaming][partition_registry][query][spatial_index]") {
+            const auto layer = Layer(2);
+            const std::array layers{WorldLayerDescriptor{layer, "base", WorldLayerOwnership::WorldStreaming, WorldLayerFlags::None, 1.0F}};
+            std::array<WorldPartitionCellDescriptor, 64> cells{};
+            for (std::size_t index = 0; index < cells.size(); ++index) {
+                cells[index] = {{static_cast<std::int32_t>(index), 0, 0, 0, layer}, {Asset(static_cast<std::uint8_t>(index + 1))}};
+            }
+            const auto grid =
+                WorldCellQuantizationPolicy::Create(Math::WorldCoordinate64::FromMillimeters(0, 0, 0), 100, {0, 63, 0, 0, 0, 0}, 1).Value();
+            auto descriptor = WorldPartitionDescriptor::Create({}, World(),
+                                                               {Math::WorldCoordinate64::FromMillimeters(0, 0, 0),
+                                                                Math::WorldCoordinate64::FromMillimeters(6'399, 99, 99)},
+                                                               grid, layers, cells, {1, 64, 64})
+                                  .Value();
+            auto registry = Registry({64, 8});
+            REQUIRE(registry->Publish(std::move(descriptor), IdentityFrom<WorldPartitionRegistryRevision>(1)).HasValue());
+            const auto snapshot = registry->Snapshot().Value();
+            std::array<WorldPartitionCellHandle, 8> output{};
+
+            const auto result = snapshot
+                                    .Query({{Math::WorldCoordinate64::FromMillimeters(3'200, 0, 0),
+                                             Math::WorldCoordinate64::FromMillimeters(3'299, 99, 99)},
+                                            layer,
+                                            0},
+                                           output)
+                                    .Value();
+            REQUIRE(result.matches == 1);
+            REQUIRE(result.candidatesExamined < snapshot.Cells().size());
+            REQUIRE(output[0].cell.x == 32);
+        }
+
+        TEST_CASE("Spatial index handles single-cell and perfectly overlapping leaf bounds",
+                  "[unit][world_streaming][partition_registry][query][spatial_index][boundary]") {
+            const auto base = Layer(2);
+            const auto overlay = Layer(7);
+            const WorldPartitionBounds bounds{Math::WorldCoordinate64::FromMillimeters(0, 0, 0),
+                                              Math::WorldCoordinate64::FromMillimeters(99, 99, 99)};
+            const auto grid = WorldCellQuantizationPolicy::Create(bounds.minimum, 100, {0, 0, 0, 0, 0, 0}, 1).Value();
+            const std::array singleLayer{
+                WorldLayerDescriptor{base, "base", WorldLayerOwnership::WorldStreaming, WorldLayerFlags::None, 1.0F}};
+            const std::array singleCell{WorldPartitionCellDescriptor{{0, 0, 0, 0, base}, {Asset(1)}}};
+            auto registry = Registry({2, 2});
+            REQUIRE(registry
+                        ->Publish(WorldPartitionDescriptor::Create({}, World(), bounds, grid, singleLayer, singleCell, {2, 2, 64}).Value(),
+                                  IdentityFrom<WorldPartitionRegistryRevision>(1))
+                        .HasValue());
+            std::array<WorldPartitionCellHandle, 2> output{};
+            const auto single = registry->Snapshot().Value().Query({bounds, base, 0}, output).Value();
+            REQUIRE(single.matches == 1);
+            REQUIRE(single.candidatesExamined == 1);
+            REQUIRE(single.nodesVisited == 1);
+
+            const std::array layers{
+                WorldLayerDescriptor{base, "base", WorldLayerOwnership::WorldStreaming, WorldLayerFlags::None, 1.0F},
+                WorldLayerDescriptor{overlay, "overlay", WorldLayerOwnership::WorldStreaming, WorldLayerFlags::Optional, 1.0F},
+            };
+            const std::array cells{
+                WorldPartitionCellDescriptor{{0, 0, 0, 0, base}, {Asset(1)}},
+                WorldPartitionCellDescriptor{{0, 0, 0, 0, overlay}, {Asset(2)}},
+            };
+            auto descriptor = WorldPartitionDescriptor::Create({}, World(), bounds, grid, layers, cells, {2, 2, 64}).Value();
+            REQUIRE(registry->Publish(std::move(descriptor), IdentityFrom<WorldPartitionRegistryRevision>(2)).HasValue());
+            const auto snapshot = registry->Snapshot().Value();
+            const auto result = snapshot.Query({bounds, std::nullopt, 0}, output).Value();
+
+            REQUIRE(result.matches == 2);
+            REQUIRE(result.candidatesExamined == 2);
+            REQUIRE(result.nodesVisited == 1);
+            REQUIRE(output[0].cell.layer == base);
+            REQUIRE(output[1].cell.layer == overlay);
         }
 
         TEST_CASE("Spatial query validates filters and preserves caller output on capacity failure",
@@ -170,6 +253,7 @@ namespace Horo::WorldStreaming {
             registry->Shutdown();
             REQUIRE(registry->Lifecycle() == WorldPartitionRegistryState::Closed);
             REQUIRE(retained.Find({0, 0, 0, 0, Layer(2)}).HasValue());
+            RequireQueryBinding(retained);
         }
 
         TEST_CASE("Concurrent readers pin whole old or new registry publications",

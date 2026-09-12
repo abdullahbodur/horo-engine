@@ -60,16 +60,19 @@ with their existing authorities.
 ## Limitations
 
 The registry is an in-memory index, not the persistent `world.index` format, a
-residency authority, or a provider selector. Queries are bounded linear scans over
-the immutable cell array; later acceleration structures may replace the internal
-layout without changing the generation-fenced public contract.
+residency authority, or a provider selector. Queries traverse the immutable spatial
+index built during publication and expose bounded work evidence in
+`WorldPartitionSpatialQueryResult`; use `result.matches` instead of treating the
+return value as a bare count. Queries operate over
+the immutable cell array; later internal layouts may evolve without changing the
+generation-fenced query semantics or typed work evidence.
 
 ## Validation Record
 
 Validated on 2026-09-12 with the world-streaming unit and public-header consumer
-targets on macOS. Coverage includes lookup, bounded spatial query, replacement,
-cancellation, shutdown, stale handles, invalid filters, capacity failure, and
-concurrent snapshot capture.
+targets on macOS. Coverage includes lookup, bounded spatial query and branch pruning,
+replacement, cancellation, shutdown, stale handles, invalid filters, capacity
+failure, and concurrent snapshot capture.
 
 ## References
 
