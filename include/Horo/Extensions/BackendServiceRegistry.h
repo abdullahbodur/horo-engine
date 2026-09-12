@@ -184,7 +184,7 @@ namespace Horo::Extensions {
             requires std::invocable<Operation, Service &, const Request &, const BackendServiceCallContext &>
         [[nodiscard]] auto Invoke(Operation operation, const Request &request, CancellationToken cancellation = {})
             && -> std::invoke_result_t<Operation, Service &, const Request &, const BackendServiceCallContext &> {
-            return InvokeImpl(operation, request, std::move(cancellation));
+            return std::move(*this).InvokeImpl(operation, request, std::move(cancellation));
         }
 
     private:
