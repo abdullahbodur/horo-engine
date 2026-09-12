@@ -7,7 +7,7 @@ namespace Horo::Extensions::Fixtures {
 
     /** @copydoc ArithmeticService::Add */
     Result<SumResponse> ArithmeticService::Add(const SumRequest &request, const BackendServiceCallContext &context) {
-        audit_->observedProvider = context.Provider().providerId;
+        audit_->observedProvider = context.Provider().provider.providerId;
         return Result<SumResponse>::Success({request.left + request.right});
     }
 

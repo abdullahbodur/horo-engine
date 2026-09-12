@@ -591,6 +591,29 @@ that registry enters process-lifetime quarantine, replacement is a process resta
 attempting to quarantine a second registry fails fast instead of creating an
 unbounded collection of executable-code leases.
 
+Module resolution emits an opaque immutable `ResolvedExtensionServiceImport` for
+every declared service import. Required missing or incompatible imports reject the
+whole plan; optional imports remain explicit `Unavailable` or `Incompatible`
+records rather than falling through by load order. Headless filtering considers
+only required edges when deciding whether an excluded presentation module blocks a
+surviving module; an optional binding to an excluded provider becomes
+`Unavailable`. Bound records name the consumer package/module and local import,
+exact service/contract, provider module and selected version, sorted by consumer
+and import identity. Callers can inspect but cannot construct or mutate these
+records.
+
+The host combines that static record with an admitted application-capability lease
+through `BindImport`. Binding compares the exact consumer activation, canonical
+service version, and the provider's explicit module-to-provider identity and
+generation before returning a move-only `BackendServiceImportBinding`.
+`ResolveImported` consumes that token exactly once. Consumer revocation, capability
+unpublication, backend-provider replacement, or registry shutdown invalidates the
+token before provider entry and never falls through to another provider. Provider
+descriptors therefore use the typed `provider = {moduleId, providerId, generation}`
+record; callers migrating from the earlier flat fields must supply the owning
+module explicitly. Module code receives only the resulting call adapter, never a
+registry or a token constructor.
+
 ## Module Loading And ABI Boundary
 
 The generic module C ABI is a bootstrap/control boundary, not sufficient for every

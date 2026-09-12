@@ -6,6 +6,7 @@
  */
 
 #include "Horo/Extensions/ApplicationCapabilityRegistry.h"
+#include "Horo/Extensions/ExtensionModuleResolution.h"
 #include "Horo/Foundation/CancellationToken.h"
 
 #include <chrono>
@@ -15,12 +16,14 @@
 #include <functional>
 #include <memory>
 #include <string>
+#include <string_view>
 #include <utility>
 
 namespace Horo::Extensions {
     struct BackendServiceProviderState;
     struct BackendServiceRegistryState;
     class BackendServiceCallAdmission;
+    class BackendServiceImportBinding;
     class BackendServiceRegistry;
 
     namespace Detail {
@@ -94,8 +97,7 @@ namespace Horo::Extensions {
         BackendServiceContractId contractId;                                      /**< Stable typed callable contract identity. */
         ExtensionCapabilityId capability;                                         /**< Application capability authorizing calls. */
         ApplicationCapabilityVersion version{};                                   /**< Exact service contract version. */
-        std::string providerId;                                                   /**< Canonical stable provider identity. */
-        std::uint64_t providerGeneration{};                                       /**< Non-zero activation generation. */
+        ApplicationCapabilityProviderIdentity provider;                           /**< Exact module/provider owner and generation. */
         BackendServiceThreadRule threadRule{BackendServiceThreadRule::AnyThread}; /**< Enforced call-thread policy. */
     };
 
@@ -151,6 +153,14 @@ namespace Horo::Extensions {
         [[nodiscard]] Error AttributeBackendServiceError(const BackendServiceDescriptor &provider, Error cause);
         [[nodiscard]] Error BackendServiceCancellationError(const BackendServiceDescriptor &provider);
         [[nodiscard]] Error BackendServiceCancellationError(const ApplicationCapabilityProviderDescriptor &provider);
+        [[nodiscard]] Error BackendServiceAuthorityUnavailableError();
+        [[nodiscard]] Error BackendServiceConsumedCallError();
+        [[nodiscard]] Error BackendServiceImportError(const ResolvedExtensionServiceImport &binding, const ErrorCodeDescriptor &descriptor,
+                                                      std::string_view reason,
+                                                      const ApplicationCapabilityProviderDescriptor *provider = nullptr);
+        [[nodiscard]] Error AttributeBackendServiceImportError(const ResolvedExtensionServiceImport &binding, Error error,
+                                                               std::string_view reason = {},
+                                                               const ApplicationCapabilityProviderDescriptor *provider = nullptr);
     }  // namespace Detail
 
     /** @brief One-shot typed invocation handle bound to an admitted application capability lease. */
@@ -189,6 +199,8 @@ namespace Horo::Extensions {
             using OperationResult = std::invoke_result_t<Operation, Service &, const Request &, const BackendServiceCallContext &>;
             const auto provider = std::exchange(provider_, {});
             if (provider == nullptr)
+                return OperationResult::Failure(Detail::BackendServiceConsumedCallError());
+            if (!authority_.IsUsable())
                 return OperationResult::Failure(Detail::BackendServiceCancellationError(authority_.Descriptor()));
             auto admitted = Detail::BeginBackendServiceCall(provider, cancellation);
             if (admitted.HasError())
@@ -238,6 +250,25 @@ namespace Horo::Extensions {
         std::shared_ptr<BackendServiceProviderState> provider_;
     };
 
+    /** @brief Move-only host-created proof of one admitted static import bound to an exact live provider generation. */
+    class BackendServiceImportBinding final {
+    public:
+        BackendServiceImportBinding(const BackendServiceImportBinding &) = delete;
+        BackendServiceImportBinding &operator=(const BackendServiceImportBinding &) = delete;
+        BackendServiceImportBinding(BackendServiceImportBinding &&) noexcept = default;
+        BackendServiceImportBinding &operator=(BackendServiceImportBinding &&) noexcept = default;
+
+    private:
+        friend class BackendServiceRegistry;
+
+        BackendServiceImportBinding(std::shared_ptr<BackendServiceProviderState> provider, ApplicationCapabilityProviderLease authority,
+                                    ResolvedExtensionServiceImport import) noexcept;
+
+        std::shared_ptr<BackendServiceProviderState> provider_;
+        ApplicationCapabilityProviderLease authority_;
+        ResolvedExtensionServiceImport import_;
+    };
+
     /** @brief Explicit host-owned registry for typed backend-only service contributions. */
     class BackendServiceRegistry final {
     public:
@@ -282,11 +313,37 @@ namespace Horo::Extensions {
         [[nodiscard]] Result<BackendServiceCall<Service>> Resolve(ApplicationCapabilityProviderLease authority,
                                                                   const BackendServiceId &serviceId,
                                                                   const BackendServiceContractId &contractId) const {
+            if (!authority.IsUsable())
+                return Result<BackendServiceCall<Service>>::Failure(Detail::BackendServiceAuthorityUnavailableError());
             auto resolved = ResolveErased(authority.Descriptor(), serviceId, contractId, &Detail::BackendServiceTypeTag<Service>);
             if (resolved.HasError())
                 return Result<BackendServiceCall<Service>>::Failure(resolved.ErrorValue());
             return Result<BackendServiceCall<Service>>::Success(
                 BackendServiceCall<Service>{std::move(resolved).Value(), std::move(authority)});
+        }
+
+        /**
+         * @brief Binds one immutable declared import to an exact admitted consumer and live provider generation.
+         * @param authority Provider lease acquired through the consumer activation's admitted capability.
+         * @param import Unforgeable static import resolution emitted by `ResolveExtensionModules`.
+         * @return Move-only host binding, or an attributed unavailable, ownership, version, or generation failure.
+         */
+        [[nodiscard]] Result<BackendServiceImportBinding> BindImport(ApplicationCapabilityProviderLease authority,
+                                                                     const ResolvedExtensionServiceImport &import) const;
+
+        /**
+         * @brief Converts one exact host-created import binding into a one-shot typed call.
+         * @tparam Service Concrete host adapter contract expected by the consumer.
+         * @param binding Move-only binding returned by `BindImport`; consumed exactly once.
+         * @return One-shot typed call, or an attributed revocation, replacement, type, or shutdown failure.
+         */
+        template <typename Service>
+        [[nodiscard]] Result<BackendServiceCall<Service>> ResolveImported(BackendServiceImportBinding binding) const {
+            auto validated = ValidateImportedBinding(binding, &Detail::BackendServiceTypeTag<Service>);
+            if (validated.HasError())
+                return Result<BackendServiceCall<Service>>::Failure(validated.ErrorValue());
+            return Result<BackendServiceCall<Service>>::Success(
+                BackendServiceCall<Service>{std::move(binding.provider_), std::move(binding.authority_)});
         }
 
         /**
@@ -312,6 +369,7 @@ namespace Horo::Extensions {
         [[nodiscard]] Result<std::shared_ptr<BackendServiceProviderState>> ResolveErased(
             const ApplicationCapabilityProviderDescriptor &authority, const BackendServiceId &serviceId,
             const BackendServiceContractId &contractId, const void *typeTag) const;
+        [[nodiscard]] Result<void> ValidateImportedBinding(const BackendServiceImportBinding &binding, const void *typeTag) const;
 
         std::shared_ptr<BackendServiceRegistryState> state_;
     };

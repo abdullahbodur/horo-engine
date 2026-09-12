@@ -57,11 +57,85 @@ namespace Horo::Extensions {
         }
     };
 
+    /** @brief Explicit resolution state for one declared cross-module service import. */
+    enum class ExtensionServiceImportStatus : std::uint8_t {
+        Bound,
+        Unavailable,
+        Incompatible,
+    };
+
+    struct ExtensionModulePlan;
+
+    /** @brief Unforgeable immutable service resolution selected from one validated package module graph. */
+    class ResolvedExtensionServiceImport final {
+    public:
+        ResolvedExtensionServiceImport(const ResolvedExtensionServiceImport &) = default;
+        ResolvedExtensionServiceImport &operator=(const ResolvedExtensionServiceImport &) = default;
+        ResolvedExtensionServiceImport(ResolvedExtensionServiceImport &&) noexcept = default;
+        ResolvedExtensionServiceImport &operator=(ResolvedExtensionServiceImport &&) noexcept = default;
+
+        /** @brief Returns the package/extension that owns the consumer module. */
+        [[nodiscard]] const std::string &ConsumerExtensionId() const noexcept;
+
+        /** @brief Returns the module that declared and exclusively owns this import. */
+        [[nodiscard]] const std::string &ConsumerModuleId() const noexcept;
+
+        /** @brief Returns the stable import identity local to the consumer module. */
+        [[nodiscard]] const std::string &ImportId() const noexcept;
+
+        /** @brief Returns the exact exported service identity. */
+        [[nodiscard]] const std::string &ServiceId() const noexcept;
+
+        /** @brief Returns the exact typed callable contract identity. */
+        [[nodiscard]] const std::string &ContractId() const noexcept;
+
+        /** @brief Returns the selected provider module, or an empty string when unavailable. */
+        [[nodiscard]] const std::string &ProviderModuleId() const noexcept;
+
+        /** @brief Returns the selected canonical service API version, or an empty string when unavailable. */
+        [[nodiscard]] const std::string &ProviderVersion() const noexcept;
+
+        /** @brief Returns the explicit deterministic resolution outcome. */
+        [[nodiscard]] ExtensionServiceImportStatus Status() const noexcept;
+
+        /** @brief Returns whether a non-bound outcome rejects package composition. */
+        [[nodiscard]] bool IsRequired() const noexcept;
+
+    private:
+        friend Result<ExtensionModulePlan> ResolveExtensionModules(const ExtensionManifest &manifest, const ExtensionHostEnvironment &host);
+
+        /** @brief Complete construction payload produced only by the validated module resolver. */
+        struct Fields {
+            std::string consumerExtensionId;
+            std::string consumerModuleId;
+            std::string importId;
+            std::string serviceId;
+            std::string contractId;
+            std::string providerModuleId;
+            std::string providerVersion;
+            ExtensionServiceImportStatus status;
+            bool required;
+        };
+
+        explicit ResolvedExtensionServiceImport(Fields fields);
+
+        std::string consumerExtensionId_;
+        std::string consumerModuleId_;
+        std::string importId_;
+        std::string serviceId_;
+        std::string contractId_;
+        std::string providerModuleId_;
+        std::string providerVersion_;
+        ExtensionServiceImportStatus status_{ExtensionServiceImportStatus::Unavailable};
+        bool required_{true};
+    };
+
     /** @brief Immutable deterministic module order and contribution ownership for one activation attempt. */
     struct ExtensionModulePlan {
-        std::vector<std::string> moduleIds;                       /**< Dependency-first module identities. */
-        std::vector<ExtensionContributionManifest> contributions; /**< Contributions owned by selected modules. */
-        std::vector<std::string> selectedEntries;                 /**< Entry selected for each module ID at the same index. */
+        std::vector<std::string> moduleIds;                         /**< Dependency-first module identities. */
+        std::vector<ExtensionContributionManifest> contributions;   /**< Contributions owned by selected modules. */
+        std::vector<std::string> selectedEntries;                   /**< Entry selected for each module ID at the same index. */
+        std::vector<ResolvedExtensionServiceImport> serviceImports; /**< Stable consumer/import ordered binding snapshot. */
     };
 
     /**
