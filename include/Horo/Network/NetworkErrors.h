@@ -120,6 +120,16 @@ namespace Horo::Network::NetworkErrors {
     extern const ErrorCodeDescriptor HandshakeIncompatible;
     /** @brief A handshake operation is not legal from the current terminal or negotiating state. */
     extern const ErrorCodeDescriptor HandshakeStateInvalid;
+    /** @brief Authentication policy, challenge, evidence, proof framing, or authority output is malformed. */
+    extern const ErrorCodeDescriptor AuthenticationInvalid;
+    /** @brief Authentication input conflicts with the immutable challenge or exposure security floor. */
+    extern const ErrorCodeDescriptor AuthenticationIncompatible;
+    /** @brief A required host-owned credential, certificate, key, or peer-trust authority is unavailable. */
+    extern const ErrorCodeDescriptor AuthenticationTrustUnavailable;
+    /** @brief A host-owned authority rejected authentication without disclosing private provider detail. */
+    extern const ErrorCodeDescriptor AuthenticationRejected;
+    /** @brief Authentication is not legal from the current terminal or authenticating state. */
+    extern const ErrorCodeDescriptor AuthenticationStateInvalid;
     /** @brief Message framing or codec metadata is malformed or non-canonical. */
     extern const ErrorCodeDescriptor MessageEnvelopeInvalid;
     /** @brief Declared message framing exceeds an explicit finite bound. */
