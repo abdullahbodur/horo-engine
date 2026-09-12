@@ -223,6 +223,7 @@ add_executable(HoroAudioCommandTests
     unit/runtime/audio/AudioCommandBufferTests.cpp
     unit/runtime/audio/AudioCommandStagingTests.cpp
     unit/runtime/audio/AudioEventQueueTests.cpp
+    unit/runtime/audio/AudioLifecycleReconcilerTests.cpp
     unit/runtime/audio/ScheduledAudioCommandBatchTests.cpp
 )
 target_compile_features(HoroAudioCommandTests PRIVATE cxx_std_20)
