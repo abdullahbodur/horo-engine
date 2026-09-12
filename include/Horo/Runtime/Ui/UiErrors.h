@@ -64,6 +64,16 @@ namespace Horo::Runtime::Ui::UiErrors {
     extern const ErrorCodeDescriptor LayoutSnapshotStorageExhausted;
     /** @brief The layout engine is retiring or stopped and rejects new work. */
     extern const ErrorCodeDescriptor LayoutLifecycleUnavailable;
+    /** @brief Hit-test projection, geometry, pointer, ray, or canvas evidence is malformed. */
+    extern const ErrorCodeDescriptor HitTestInvalid;
+    /** @brief Hit-test ownership, tree, canvas, or interaction evidence is stale or mismatched. */
+    extern const ErrorCodeDescriptor HitTestSourceStale;
+    /** @brief The queried interaction generation is not the last successfully presented generation. */
+    extern const ErrorCodeDescriptor HitTestNotPresented;
+    /** @brief Every preallocated immutable hit-test snapshot slot remains leased. */
+    extern const ErrorCodeDescriptor HitTestSnapshotStorageExhausted;
+    /** @brief The hit-test store is retiring or stopped and rejects publication. */
+    extern const ErrorCodeDescriptor HitTestLifecycleUnavailable;
     /** @brief Immutable Runtime UI render snapshot evidence or table topology is malformed. */
     extern const ErrorCodeDescriptor RenderSnapshotInvalid;
     /** @brief A Runtime UI draw command contains invalid geometry, paint, or table references. */
