@@ -61,8 +61,7 @@ namespace Horo::WorldStreaming {
                 .targetOwner = target,
                 .expectedRevision = context.current->revision,
             };
-            context.authorizedHandoff = receipt;
-            context.validatedHandoffTarget = target;
+            context.handoff = WorldLayerValidatedHandoffContext{.authorization = receipt, .validatedTarget = target};
             return receipt;
         }
 
@@ -196,7 +195,7 @@ namespace Horo::WorldStreaming {
             RequireError(ValidateWorldLayerOwnershipAdmission({candidate, context.current->revision, staleAuthorization}, context),
                          WorldStreamingErrors::LayerOwnershipOwnerStale);
 
-            context.validatedHandoffTarget = ExplicitOwner(WorldLayerControlOwnerKind::NetworkReplication, 12, 2);
+            context.handoff->validatedTarget = ExplicitOwner(WorldLayerControlOwnerKind::NetworkReplication, 12, 2);
             RequireError(ValidateWorldLayerOwnershipAdmission({candidate, context.current->revision, authorization}, context),
                          WorldStreamingErrors::LayerOwnershipOwnerStale);
         }

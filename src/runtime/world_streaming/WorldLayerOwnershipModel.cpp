@@ -3,62 +3,48 @@
 #include "Horo/WorldStreaming/WorldStreamingErrors.h"
 #include "WorldStreamingInternal.h"
 
+#include <algorithm>
+#include <array>
 #include <limits>
 
 namespace Horo::WorldStreaming {
     namespace {
+        template <typename T, std::size_t Size> [[nodiscard]] bool IsOneOf(const T value, const std::array<T, Size> &values) noexcept {
+            return std::find(values.begin(), values.end(), value) != values.end();
+        }
+
+        template <std::size_t Size> [[nodiscard]] bool All(const std::array<bool, Size> &conditions) noexcept {
+            return std::all_of(conditions.begin(), conditions.end(), [](const bool condition) {
+                return condition;
+            });
+        }
+
         [[nodiscard]] bool IsKnown(const WorldLayerPlacement value) noexcept {
-            using enum WorldLayerPlacement;
-            switch (value) {
-                case Spatial:
-                case NonSpatial:
-                    return true;
-            }
-            return false;
+            constexpr std::array values{WorldLayerPlacement::Spatial, WorldLayerPlacement::NonSpatial};
+            return IsOneOf(value, values);
         }
 
         [[nodiscard]] bool IsKnown(const WorldLayerResidencyPolicy value) noexcept {
-            using enum WorldLayerResidencyPolicy;
-            switch (value) {
-                case Persistent:
-                case Streamed:
-                case RuntimeControlled:
-                    return true;
-            }
-            return false;
+            constexpr std::array values{WorldLayerResidencyPolicy::Persistent, WorldLayerResidencyPolicy::Streamed,
+                                        WorldLayerResidencyPolicy::RuntimeControlled};
+            return IsOneOf(value, values);
         }
 
         [[nodiscard]] bool IsKnown(const WorldLayerAudience value) noexcept {
-            using enum WorldLayerAudience;
-            switch (value) {
-                case Runtime:
-                case EditorOnly:
-                    return true;
-            }
-            return false;
+            constexpr std::array values{WorldLayerAudience::Runtime, WorldLayerAudience::EditorOnly};
+            return IsOneOf(value, values);
         }
 
         [[nodiscard]] bool IsKnown(const WorldLayerControlOwnerKind value) noexcept {
-            using enum WorldLayerControlOwnerKind;
-            switch (value) {
-                case WorldStreaming:
-                case EditorDocument:
-                case GameplayScript:
-                case NetworkReplication:
-                    return true;
-            }
-            return false;
+            constexpr std::array values{WorldLayerControlOwnerKind::WorldStreaming, WorldLayerControlOwnerKind::EditorDocument,
+                                        WorldLayerControlOwnerKind::GameplayScript, WorldLayerControlOwnerKind::NetworkReplication};
+            return IsOneOf(value, values);
         }
 
         [[nodiscard]] bool IsKnown(const WorldLayerOwnershipAuthorityState value) noexcept {
-            using enum WorldLayerOwnershipAuthorityState;
-            switch (value) {
-                case Active:
-                case Cancelling:
-                case Closed:
-                    return true;
-            }
-            return false;
+            constexpr std::array values{WorldLayerOwnershipAuthorityState::Active, WorldLayerOwnershipAuthorityState::Cancelling,
+                                        WorldLayerOwnershipAuthorityState::Closed};
+            return IsOneOf(value, values);
         }
 
         [[nodiscard]] bool HasCoherentPolicy(const WorldLayerOwnershipDescriptor &descriptor) noexcept {
@@ -77,12 +63,12 @@ namespace Horo::WorldStreaming {
         }
 
         [[nodiscard]] Result<void> ValidateContext(const WorldLayerOwnershipAdmissionContext &context) {
-            if (!context.expectedWorld.IsValid() || !IsKnown(context.state) || context.layerCapacity == 0 ||
-                context.layerCount > context.layerCapacity) {
+            if (!All(std::array{context.expectedWorld.IsValid(), IsKnown(context.state), context.layerCapacity > 0,
+                                context.layerCount <= context.layerCapacity})) {
                 return Failure<void>(WorldStreamingErrors::LayerOwnershipInvalid);
             }
             if (!context.current.has_value()) {
-                if (context.authorizedHandoff.has_value() || context.validatedHandoffTarget.has_value())
+                if (context.handoff.has_value())
                     return Failure<void>(WorldStreamingErrors::LayerOwnershipInvalid);
                 return Result<void>::Success();
             }
@@ -92,16 +78,13 @@ namespace Horo::WorldStreaming {
                 return valid;
             if (context.current->owner.world != context.expectedWorld)
                 return Failure<void>(WorldStreamingErrors::LayerOwnershipOwnerStale);
-            if (context.authorizedHandoff.has_value() != context.validatedHandoffTarget.has_value())
-                return Failure<void>(WorldStreamingErrors::LayerOwnershipInvalid);
-            if (!context.authorizedHandoff.has_value())
+            if (!context.handoff.has_value())
                 return Result<void>::Success();
-            if (!context.authorizedHandoff->IsValid() || !context.validatedHandoffTarget->IsValid())
+            if (!context.handoff->IsValid())
                 return Failure<void>(WorldStreamingErrors::LayerOwnershipInvalid);
-            if (context.authorizedHandoff->currentOwner != context.current->owner ||
-                context.authorizedHandoff->expectedRevision != context.current->revision ||
-                context.authorizedHandoff->targetOwner != *context.validatedHandoffTarget ||
-                context.validatedHandoffTarget->world != context.expectedWorld) {
+            if (!All(std::array{context.handoff->authorization.currentOwner == context.current->owner,
+                                context.handoff->authorization.expectedRevision == context.current->revision,
+                                context.handoff->validatedTarget.world == context.expectedWorld})) {
                 return Failure<void>(WorldStreamingErrors::LayerOwnershipOwnerStale);
             }
             return Result<void>::Success();
@@ -130,15 +113,15 @@ namespace Horo::WorldStreaming {
         [[nodiscard]] Result<void> ValidateHandoff(const WorldLayerOwnershipRequest &request,
                                                    const WorldLayerOwnershipAdmissionContext &context,
                                                    const WorldLayerOwnershipDescriptor &current) {
-            if (!request.handoff.has_value() || !context.authorizedHandoff.has_value() || !context.validatedHandoffTarget.has_value()) {
+            if (!request.handoff.has_value() || !context.handoff.has_value()) {
                 return Failure<void>(WorldStreamingErrors::LayerOwnershipOwnerStale);
             }
             const auto &receipt = *request.handoff;
             if (!receipt.IsValid())
                 return Failure<void>(WorldStreamingErrors::LayerOwnershipInvalid);
-            if (receipt != *context.authorizedHandoff || receipt.currentOwner != current.owner ||
-                receipt.targetOwner != request.candidate.owner || receipt.expectedRevision != current.revision ||
-                receipt.targetOwner != *context.validatedHandoffTarget) {
+            if (!All(std::array{receipt == context.handoff->authorization, receipt.currentOwner == current.owner,
+                                receipt.targetOwner == request.candidate.owner, receipt.expectedRevision == current.revision,
+                                receipt.targetOwner == context.handoff->validatedTarget})) {
                 return Failure<void>(WorldStreamingErrors::LayerOwnershipOwnerStale);
             }
             if (SameOwnerLineage(current.owner, request.candidate.owner) &&
@@ -188,20 +171,25 @@ namespace Horo::WorldStreaming {
 
     /** @copydoc WorldLayerControlHandoffReceipt::IsValid */
     bool WorldLayerControlHandoffReceipt::IsValid() const noexcept {
-        return id.IsValid() && generation.IsValid() && currentOwner.IsValid() && targetOwner.IsValid() && expectedRevision.IsValid() &&
-               currentOwner.world == targetOwner.world && currentOwner != targetOwner;
+        return All(std::array{id.IsValid(), generation.IsValid(), currentOwner.IsValid(), targetOwner.IsValid(), expectedRevision.IsValid(),
+                              currentOwner.world == targetOwner.world, currentOwner != targetOwner});
+    }
+
+    /** @copydoc WorldLayerValidatedHandoffContext::IsValid */
+    bool WorldLayerValidatedHandoffContext::IsValid() const noexcept {
+        return All(std::array{authorization.IsValid(), validatedTarget.IsValid(), authorization.targetOwner == validatedTarget});
     }
 
     /** @copydoc WorldLayerOwnershipDescriptor::IsValid */
     bool WorldLayerOwnershipDescriptor::IsValid() const noexcept {
-        return layer.IsValid() && revision.IsValid() && IsKnown(placement) && IsKnown(residency) && IsKnown(audience) && owner.IsValid() &&
-               HasCoherentPolicy(*this);
+        return All(std::array{layer.IsValid(), revision.IsValid(), IsKnown(placement), IsKnown(residency), IsKnown(audience),
+                              owner.IsValid(), HasCoherentPolicy(*this)});
     }
 
     /** @copydoc ValidateWorldLayerOwnershipDescriptor */
     Result<void> ValidateWorldLayerOwnershipDescriptor(const WorldLayerOwnershipDescriptor &descriptor) {
-        if (!IsKnown(descriptor.placement) || !IsKnown(descriptor.residency) || !IsKnown(descriptor.audience) ||
-            !IsKnown(descriptor.owner.kind)) {
+        if (!All(std::array{IsKnown(descriptor.placement), IsKnown(descriptor.residency), IsKnown(descriptor.audience),
+                            IsKnown(descriptor.owner.kind)})) {
             return Failure<void>(WorldStreamingErrors::LayerOwnershipUnsupported);
         }
         if (!descriptor.layer.IsValid() || !descriptor.revision.IsValid() || !descriptor.owner.IsValid())

@@ -90,6 +90,16 @@ namespace Horo::WorldStreaming {
         [[nodiscard]] constexpr auto operator<=>(const WorldLayerControlHandoffReceipt &) const noexcept = default;
     };
 
+    /** @brief Current handoff authorization paired with independently validated target-lifetime evidence. */
+    struct WorldLayerValidatedHandoffContext final {
+        WorldLayerControlHandoffReceipt authorization{}; /**< Exact current-owner authorization. */
+        WorldLayerControlOwner validatedTarget{};        /**< Independently confirmed current target lifetime. */
+
+        /** @brief Checks authorization structure and exact target-lifetime agreement. @return True when usable. */
+        [[nodiscard]] bool IsValid() const noexcept;
+        [[nodiscard]] constexpr auto operator<=>(const WorldLayerValidatedHandoffContext &) const noexcept = default;
+    };
+
     /** @brief Immutable classification and control-ownership fact for one stable layer identity. */
     struct WorldLayerOwnershipDescriptor final {
         StreamingLayerId layer{};              /**< Stable world.index layer identity. */
@@ -120,12 +130,11 @@ namespace Horo::WorldStreaming {
 
     /** @brief Immutable bounded owner snapshot consumed by pure admission validation. */
     struct WorldLayerOwnershipAdmissionContext final {
-        StreamingRuntimeOwnerToken expectedWorld{};                         /**< Exact active mounted-world authority. */
-        std::optional<WorldLayerOwnershipDescriptor> current{};             /**< Current fact for the candidate identity, if any. */
-        std::optional<WorldLayerControlHandoffReceipt> authorizedHandoff{}; /**< Current authorization, if handoff is allowed. */
-        std::optional<WorldLayerControlOwner> validatedHandoffTarget{};     /**< Fresh target lifetime proven by the composition owner. */
-        std::size_t layerCount{};                                           /**< Distinct layer facts currently charged. */
-        std::size_t layerCapacity{};                                        /**< Maximum admitted layer facts. */
+        StreamingRuntimeOwnerToken expectedWorld{};                 /**< Exact active mounted-world authority. */
+        std::optional<WorldLayerOwnershipDescriptor> current{};     /**< Current fact for the candidate identity, if any. */
+        std::optional<WorldLayerValidatedHandoffContext> handoff{}; /**< Current authorization and fresh target evidence. */
+        std::size_t layerCount{};                                   /**< Distinct layer facts currently charged. */
+        std::size_t layerCapacity{};                                /**< Maximum admitted layer facts. */
         WorldLayerOwnershipAuthorityState state{WorldLayerOwnershipAuthorityState::Closed}; /**< Current lifecycle gate. */
     };
 
