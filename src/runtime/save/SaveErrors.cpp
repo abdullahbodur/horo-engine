@@ -129,6 +129,9 @@ namespace Horo::Runtime::SaveErrors {
                                                              "Reduce admitted data or memory pressure before retrying."};
     const ErrorCodeDescriptor ReferenceInvalid{kDomain, ErrorCode{"save.reference.invalid"}, kError, "A durable save reference is invalid.",
                                                "Use a declared stable identity form without paths or runtime handles."};
+    const ErrorCodeDescriptor ReferenceCorrupt{kDomain, ErrorCode{"save.reference.corrupt"}, kError,
+                                               "Durable save reference wire bytes are corrupt.",
+                                               "Reject the unknown tag or invalid stable reference payload."};
     const ErrorCodeDescriptor ReferenceResolutionInvalid{kDomain, ErrorCode{"save.reference.resolution_invalid"}, kError,
                                                          "A durable save reference resolution is contradictory.",
                                                          "Retain the original target and provide a replacement only for remapping."};

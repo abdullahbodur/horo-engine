@@ -88,6 +88,8 @@ namespace Horo::Runtime::SaveErrors {
     extern const ErrorCodeDescriptor CanonicalCodecAllocationFailed;
     /** @brief A durable reference contains an invalid stable identity or unknown form. */
     extern const ErrorCodeDescriptor ReferenceInvalid;
+    /** @brief Durable reference wire bytes contain an unknown tag or invalid stable payload. */
+    extern const ErrorCodeDescriptor ReferenceCorrupt;
     /** @brief A resolved, missing, remapped, or deferred reference result is contradictory. */
     extern const ErrorCodeDescriptor ReferenceResolutionInvalid;
     /** @brief Product save-root inputs are missing, relative, or structurally invalid. */

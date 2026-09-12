@@ -61,6 +61,7 @@ namespace Horo::Runtime {
             DiagnosticPolicy{&SaveErrors::CanonicalCodecConfigurationInvalid, Validation},
             DiagnosticPolicy{&SaveErrors::CanonicalCodecAllocationFailed, Quota},
             DiagnosticPolicy{&SaveErrors::ReferenceInvalid, Validation},
+            DiagnosticPolicy{&SaveErrors::ReferenceCorrupt, Corruption},
             DiagnosticPolicy{&SaveErrors::ReferenceResolutionInvalid, Validation},
             DiagnosticPolicy{&SaveErrors::SaveRootConfigurationInvalid, Storage},
             DiagnosticPolicy{&SaveErrors::SaveRootPlatformUnsupported, Storage},
