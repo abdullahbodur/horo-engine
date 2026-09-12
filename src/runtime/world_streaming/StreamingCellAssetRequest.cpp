@@ -5,6 +5,7 @@
 #include "WorldStreamingInternal.h"
 
 #include <algorithm>
+#include <memory>
 #include <mutex>
 #include <optional>
 #include <utility>
@@ -18,7 +19,7 @@ namespace Horo::WorldStreaming {
         [[nodiscard]] const WorldPartitionCellDescriptor *FindCell(const CookedWorldIndexManifest &manifest, const StreamingCellId &cell) {
             const auto cells = manifest.Descriptor().Cells();
             const auto found = std::ranges::lower_bound(cells, cell, StreamingCellCanonicalLess{}, &WorldPartitionCellDescriptor::id);
-            return found != cells.end() && found->id == cell ? &*found : nullptr;
+            return found != cells.end() && found->id == cell ? std::to_address(found) : nullptr;
         }
 
         [[nodiscard]] std::optional<std::size_t> FindManifestCellIndex(const CookedWorldIndexManifest &manifest,
@@ -52,8 +53,8 @@ namespace Horo::WorldStreaming {
             if (context.operation != candidate.Operation() || context.operation.fence.partition != manifest.Descriptor().Partition())
                 return Internal::Failure<void>(WorldStreamingErrors::CellAssetRequestStale);
             const auto manifestCell = FindManifestCellIndex(manifest, context.operation.fence.cell);
-            const auto *descriptorCell = FindCell(manifest, context.operation.fence.cell);
-            if (!manifestCell || !descriptorCell || !Matches(manifest.Cells()[*manifestCell], candidate.ManifestEntry()) ||
+            if (const auto *descriptorCell = FindCell(manifest, context.operation.fence.cell);
+                !manifestCell || !descriptorCell || !Matches(manifest.Cells()[*manifestCell], candidate.ManifestEntry()) ||
                 descriptorCell->package.chunkAsset != candidate.ChunkAsset() ||
                 !std::ranges::equal(manifest.HardDependencies(*manifestCell), candidate.HardDependencies()))
                 return Internal::Failure<void>(WorldStreamingErrors::CellAssetRequestStale);
@@ -168,8 +169,8 @@ namespace Horo::WorldStreaming {
         if (!state_)
             return Internal::Failure<StreamingCellAssetBatch>(WorldStreamingErrors::CellAssetRequestLifecycleUnavailable);
         std::scoped_lock lock{state_->mutex};
-        const auto state = state_->RefreshState();
-        if (state == StreamingCellAssetRequestState::Loading || state == StreamingCellAssetRequestState::Cancelling)
+        if (const auto state = state_->RefreshState();
+            state == StreamingCellAssetRequestState::Loading || state == StreamingCellAssetRequestState::Cancelling)
             return Internal::Failure<StreamingCellAssetBatch>(WorldStreamingErrors::CellAssetRequestNotReady);
         if (state_->consumed)
             return Internal::Failure<StreamingCellAssetBatch>(WorldStreamingErrors::CellAssetRequestConsumed);
@@ -182,7 +183,7 @@ namespace Horo::WorldStreaming {
             if (loaded.HasError())
                 return Result<StreamingCellAssetBatch>::Failure(loaded.ErrorValue());
             auto value = std::move(loaded).Value();
-            batch.assets.push_back({state_->assets[index], std::move(value.bytes)});
+            batch.assets.emplace_back(state_->assets[index], std::move(value.bytes));
         }
         return Result<StreamingCellAssetBatch>::Success(std::move(batch));
     }
