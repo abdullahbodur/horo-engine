@@ -47,7 +47,7 @@ project CMake + source inputs
   -> GameplayBuildService validates a shadow-loaded candidate
   -> gameplay_module.json + gameplay_build_state.json
   -> ProjectGameplayRegistry shadow-loads the published artifact
-  -> register and freeze component, service, and system transactions
+  -> register and freeze component, asset, service, and system transactions
   -> activate project services in provider-first order
   -> native registrations + discovered Lua registrations
   -> frozen BehaviorRegistry
@@ -84,8 +84,8 @@ Status terms mean:
 | Platform dynamic loading | Partial | POSIX uses canonical paths with immediate, local `dlopen` resolution. Windows canonicalizes but uses `LoadLibraryA`; Unicode paths and dependency-search isolation are not covered. macOS uses the generic POSIX path without signing-specific policy. |
 | Module descriptor validation | Implemented | Host checks exact struct size, boundary version, bounded text fields, exact fingerprint, module identity, bundle revision, and descriptor/bundle agreement before factory creation. |
 | Behavior registration | Implemented | Native bundle records and Lua descriptors are validated into one registry; duplicates reject the candidate and the registry is sorted and frozen. |
-| Registration transaction | Partial | Native and Lua behavior contributions plus project component, system, and service descriptors are accumulated before activation. `GameRegistrationContext` exposes host-owned transactions that are validated, deterministically ordered, and frozen before `Start`; asset and remaining registry families are absent. |
-| Module lifecycle | Implemented | Load calls `Create`, `Register`, freezes component/service/system metadata, activates project services provider-first, then calls `Start` with cancellation, active-service, and capability views. Unload requests cancellation before module `Stop`, reverses service shutdown, destroys every module-owned callable, unloads the library, and deletes the shadow artifact. |
+| Registration transaction | Partial | Native and Lua behavior contributions plus project component, system, service, and asset-type descriptors are accumulated before activation. `GameRegistrationContext` exposes host-owned transactions that are validated, deterministically ordered, and frozen before `Start`; input, settings, command, and remaining registry families are absent. |
+| Module lifecycle | Implemented | Load calls `Create`, `Register`, freezes component/asset/service/system metadata, activates project services provider-first, then calls `Start` with cancellation, active-service, and capability views. Unload requests cancellation before module `Stop`, reverses service shutdown, destroys every module-owned callable, unloads the library, and deletes the shadow artifact. |
 | Behavior runtime lifecycle | Implemented | Runtime creates instances through module-owned factories and calls defined behavior lifecycle phases; instances are destroyed before their registry/module owner is released. |
 | Scene behavior persistence | Implemented | Scenes preserve instance ID, stable behavior type ID, schema version, enabled state, and tagged field values without requiring the module to be loaded. |
 | Schema evolution and unknown payloads | Partial | Project component envelopes retain bounded opaque bytes independently from native layout and expose current, missing, newer, unsupported-old, or deterministic migration-required inspection. Behavior field migration and lossless scene parsing of unsupported encodings remain absent. |
@@ -95,14 +95,14 @@ Status terms mean:
 | Packaged-player loading | Missing | No packaged-runtime composition, shipping manifest, signature policy enforcement, or packaged-player caller was found. |
 | Game components | Implemented | Project code registers stable component and property identities, schema versions, authoring metadata, payload encoding, and deterministic forward migration edges through `GameRegistrationContext`. The host copies, sorts, and freezes metadata before startup; inspection never mutates opaque persistent bytes. |
 | Game systems and services | Implemented | Typed identities, bounded descriptors, exact-generation factories, dependency and capability graphs, phase/access validation, deterministic schedules, affinity checks, cancellation, rollback, and reverse shutdown are public contracts with focused runtime evidence. |
-| Game-owned assets | Missing | Game-owned asset type registration, import, cook, editor representation, and missing-code fallback remain absent. |
+| Game-owned assets | Implemented | Project code registers stable type/schema identity, bounded import/serialize/cook bindings, declarative editor metadata, and supported source/target claims. Host-owned opaque envelopes survive missing or replaced code; inspection exposes a read-only fallback without invoking project callbacks. |
 | Imported gameplay libraries | Missing | Project gameplay build does not consume reusable game libraries through the package graph. |
 | Multi-module or mod composition | Missing | One project-global primary-module path is assumed; load ordering, trust, isolation, and dependency policy do not exist. |
 | Dead production paths | None proven | `NO_MANIFEST` is test-only but actively used by the module-host fixture. Public host APIs have editor and test callers. The packaged-player promise is missing composition, not dead code. |
 
 ## Exact ABI Assumptions
 
-`GameModule.h` defines boundary version `4` and requires these symbols:
+`GameModule.h` defines boundary version `5` and requires these symbols:
 
 ```text
 GetGameModuleDescriptor
@@ -125,14 +125,14 @@ The boundary relies on all of the following assumptions:
 2. C linkage stabilizes only the four exported names. Struct layout, virtual
    dispatch, `Result<void>`, and factory signatures remain C++ ABI.
 3. Exact `sizeof` equality is required for descriptor and bundle structures.
-   Structure growth is not append-compatible within boundary version `4`.
+   Structure growth is not append-compatible within boundary version `5`.
 4. Descriptor strings, registration arrays, descriptors, and factory function
    pointers are borrowed from the loaded library. They are valid only while the
    library remains loaded.
-5. The host copies module ID, fingerprint text, and component descriptor metadata.
-   The frozen behavior registry retains descriptors and factory bindings whose
-   executable code is module-owned. Registry and every behavior instance must die
-   before unload.
+5. The host copies module ID, fingerprint text, component metadata, and asset-type
+   metadata. Frozen behavior and asset registries retain factory or processing
+   bindings whose executable code is module-owned. Registries and every behavior
+   instance must die before unload.
 6. Objects created by module factories are destroyed only by their paired
    module-owned destroy functions. The host never applies `delete` across the
    boundary.
@@ -208,7 +208,7 @@ canonical source artifact
   -> validated descriptor and bundle
   -> host-owned BehaviorRegistry containing module factory bindings
   -> module-owned IGameModule
-  -> Register(host-owned component, service, and system transactions)
+  -> Register(host-owned component, asset, service, and system transactions)
   -> freeze copied metadata and deterministic dependency schedules
   -> create/start project services provider-first
   -> Start(GameRuntimeContext with cancellation, services, and capabilities)
@@ -219,15 +219,16 @@ unload:
   -> request module/service cancellation
   -> module Stop
   -> stop/destroy project services in reverse dependency order
+  -> release game-owned asset processing bindings
   -> module DestroyGameModule
-  -> registry releases
+  -> remaining registry releases
   -> DynamicLibrary unload
   -> shadow artifact deletion
 ```
 
 On `Start` failure the host calls `Stop`, then module destroy, then unload. A
-`Register` or component-freeze failure destroys the module without calling `Start`
-or `Stop`. On any earlier validation failure no project factory executes. Shadow artifacts are
+`Register` or registration-freeze failure destroys the module without calling
+`Start` or `Stop`. On any earlier validation failure no project factory executes. Shadow artifacts are
 removed on both failed load and normal destruction where filesystem removal
 succeeds.
 
@@ -319,6 +320,11 @@ Existing focused tests prove:
   edges, cycles, ambiguous component access, and presentation writes; execution
   proves deterministic phase order, affinity enforcement, cancellation, callback
   exception containment, and reverse shutdown.
+- Project asset registration rejects foreign or duplicate IDs, incomplete
+  bindings, invalid extensions/targets, and ambiguous editor fields. Focused
+  processing tests prove import/serialization/cook dispatch and output validation;
+  missing-code inspection proves byte-preserving read-only editor fallback and
+  compatible descriptor restoration.
 
 The current focused suite does not directly prove:
 

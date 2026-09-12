@@ -15,6 +15,7 @@
 namespace Horo::Gameplay {
     class BehaviorRegistry;
     class ComponentRegistry;
+    class GameAssetTypeRegistry;
     class GameServiceRegistry;
     class SystemRegistry;
 
@@ -36,6 +37,8 @@ namespace Horo::Gameplay {
         [[nodiscard]] const BehaviorRegistry &Registry() const noexcept;
         /** @brief Returns the frozen project component metadata while the module is loaded. */
         [[nodiscard]] const ComponentRegistry &Components() const noexcept;
+        /** @brief Returns frozen project asset metadata and exact-generation processing bindings. */
+        [[nodiscard]] const GameAssetTypeRegistry &AssetTypes() const noexcept;
         /** @brief Returns the frozen project service descriptors while the module is loaded. */
         [[nodiscard]] const GameServiceRegistry &Services() const noexcept;
         /** @brief Returns the frozen project system schedule while the module is loaded. */

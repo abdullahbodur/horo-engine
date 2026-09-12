@@ -11,8 +11,11 @@
 #include <limits>
 #include <memory>
 #include <new>
+#include <string>
 #include <thread>
 #include <type_traits>
+#include <utility>
+#include <vector>
 
 namespace {
     std::atomic<std::size_t> gAllocations{};
@@ -79,6 +82,52 @@ namespace {
         Check(built.HasValue());
         return std::move(built).Value();
     }
+
+    const ErrorCodeDescriptor ParticipantFailure{ErrorDomainId{"test.scene"}, ErrorCode{"test.scene.participant"}, ErrorSeverity::Error,
+                                                 "Injected participant failure.", "Disable the injected failure."};
+
+    class TrackingSceneCandidate final : public SceneActivationCandidate {
+    public:
+        TrackingSceneCandidate(std::vector<std::string> &events, std::string name, const bool failValidation)
+            : events_(&events), name_(std::move(name)), failValidation_(failValidation) {}
+
+        Result<void> ValidatePublication() const override {
+            events_->push_back("validate:" + name_);
+            if (failValidation_)
+                return Result<void>::Failure(MakeError(ParticipantFailure));
+            return Result<void>::Success();
+        }
+
+        void Shutdown() noexcept override {
+            events_->push_back("shutdown:" + name_);
+        }
+
+    private:
+        std::vector<std::string> *events_{};
+        std::string name_;
+        bool failValidation_{};
+    };
+
+    class TrackingSceneParticipant final : public SceneActivationParticipant {
+    public:
+        TrackingSceneParticipant(std::vector<std::string> &events, std::string name) : events_(&events), name_(std::move(name)) {}
+
+        Result<std::unique_ptr<SceneActivationCandidate>> Prepare(const RuntimeSceneDefinition &, RuntimeSceneView) override {
+            events_->push_back("prepare:" + name_);
+            if (std::exchange(failPreparation, false))
+                return Result<std::unique_ptr<SceneActivationCandidate>>::Failure(MakeError(ParticipantFailure));
+            const bool fail = std::exchange(failValidation, false);
+            return Result<std::unique_ptr<SceneActivationCandidate>>::Success(
+                std::make_unique<TrackingSceneCandidate>(*events_, name_, fail));
+        }
+
+        bool failPreparation{};
+        bool failValidation{};
+
+    private:
+        std::vector<std::string> *events_{};
+        std::string name_;
+    };
 
     AssetId Asset(const std::string_view value) {
         auto parsed = AssetId::Parse(value);
@@ -663,5 +712,49 @@ namespace {
         Check(!service.ActiveScene());
         Check(service.QueueUnload().HasValue());
         service.Shutdown();
+    }
+
+    TEST_CASE("Aggregate scene participants prepare fully, publish once, and retire in reverse dependency order",
+              "[unit][runtime][scene][activation]") {
+        std::vector<std::string> events;
+        RuntimeSceneService service;
+        auto first = std::make_unique<TrackingSceneParticipant>(events, "first");
+        auto second = std::make_unique<TrackingSceneParticipant>(events, "second");
+        TrackingSceneParticipant *secondState = second.get();
+        Check(service.AddActivationParticipant(std::move(first)).HasValue());
+        Check(service.AddActivationParticipant(std::move(second)).HasValue());
+        CancellationSource cancellation;
+        Check(service.Startup(cancellation.Token()).HasValue());
+        Check(service.QueuePreparation(Definition()).HasValue());
+        Check(service.OnPhase(RuntimePhase::CommitDeferredLifecycleChanges, Context(cancellation.Token())).HasValue());
+        const SceneRuntimeId active = service.ActiveScene()->RuntimeId();
+
+        events.clear();
+        secondState->failPreparation = true;
+        Check(service.QueuePreparation(Definition(2)).HasError());
+        Check(service.ActiveScene()->RuntimeId() == active);
+        Check(events == std::vector<std::string>{"prepare:first", "prepare:second", "shutdown:first"});
+
+        events.clear();
+        secondState->failValidation = true;
+        Check(service.QueuePreparation(Definition(2)).HasValue());
+        Check(service.OnPhase(RuntimePhase::CommitDeferredLifecycleChanges, Context(cancellation.Token())).HasValue());
+        Check(service.TakeOperationError().has_value());
+        Check(service.ActiveScene()->RuntimeId() == active);
+        Check(events == std::vector<std::string>{"prepare:first", "prepare:second", "validate:first", "validate:second", "shutdown:second",
+                                                 "shutdown:first"});
+
+        events.clear();
+        Check(service.QueuePreparation(Definition(3)).HasValue());
+        Check(service.OnPhase(RuntimePhase::CommitDeferredLifecycleChanges, Context(cancellation.Token())).HasValue());
+        Check(service.ActiveScene()->RuntimeId() != active);
+        Check(events == std::vector<std::string>{"prepare:first", "prepare:second", "validate:first", "validate:second", "shutdown:second",
+                                                 "shutdown:first"});
+
+        events.clear();
+        Check(service.QueueUnload().HasValue());
+        Check(service.OnPhase(RuntimePhase::CommitDeferredLifecycleChanges, Context(cancellation.Token())).HasValue());
+        Check(events == std::vector<std::string>{"shutdown:second", "shutdown:first"});
+        Check(!service.ActiveScene());
     }
 }  // namespace

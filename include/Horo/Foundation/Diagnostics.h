@@ -41,6 +41,7 @@ namespace Horo {
         DiagnosticSeverity severity = DiagnosticSeverity::Error;
         std::string message;
         SourceLocation location;
+        std::string path; /**< Optional machine-readable path within the diagnostic source. */
     };
 
     /** @brief Event published over DataBus whenever a new diagnostic finding is reported. */

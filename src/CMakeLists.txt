@@ -1,4 +1,5 @@
 add_library(HoroFoundation STATIC
+        foundation/AssetCookTargetId.cpp
         foundation/FoundationErrors.cpp
         foundation/modules/ModuleActivationContext.cpp
         foundation/modules/ModuleDescriptor.cpp
@@ -13,6 +14,7 @@ add_library(HoroFoundation STATIC
         foundation/math/SceneMath.cpp
         foundation/math/WorldCoordinate64.cpp
         foundation/text/String.cpp
+        foundation/text/Utf8.cpp
         foundation/logging/Logger.cpp
         foundation/logging/LogContext.cpp
         foundation/logging/StructuredLogStore.cpp
@@ -38,7 +40,6 @@ target_include_directories(HoroFoundation
         PRIVATE
         $<TARGET_PROPERTY:nlohmann_json::nlohmann_json,INTERFACE_INCLUDE_DIRECTORIES>
 )
-
 add_library(HoroSecurity STATIC
         security/SecurityErrors.cpp
         security/SecureMemory.cpp
@@ -134,6 +135,7 @@ target_compile_features(HoroPlatformServices PUBLIC cxx_std_20)
 target_link_libraries(HoroPlatformServices PUBLIC HoroEngine::Foundation)
 
 add_library(HoroPackages STATIC
+        packages/cache/PackageCache.cpp
         packages/resolver/PackageDependencyResolver.cpp
         packages/resolver/PackageLockfile.cpp
         packages/validation/PackagePath.cpp
@@ -197,7 +199,12 @@ add_library(HoroRuntime STATIC
         runtime/save/SaveArchiveMetadata.cpp
         runtime/save/SaveCompatibility.cpp
         runtime/save/SaveArchiveFraming.cpp
+        runtime/save/SaveCanonicalCodec.cpp
+        runtime/save/SaveCanonicalScalarCodec.cpp
+        runtime/save/SaveCanonicalCompositeWriter.cpp
+        runtime/save/SaveCanonicalCompositeReader.cpp
         runtime/save/SaveSlotMetadata.cpp
+        runtime/save/SaveOperation.cpp
         runtime/save/SaveTestCompositions.cpp
 )
 add_library(HoroEngine::Runtime ALIAS HoroRuntime)
@@ -252,6 +259,10 @@ target_link_libraries(HoroRuntimeUi PUBLIC HoroEngine::Foundation HoroEngine::As
 
 add_library(HoroGameplayApi STATIC
         gameplay/api/BehaviorTypes.cpp
+        gameplay/api/GameAsset.cpp
+        gameplay/api/GameAssetTypeRegistry.cpp
+        gameplay/api/GameAssetValidation.cpp
+        gameplay/api/GameAssetValidation.h
         gameplay/api/Component.cpp
         gameplay/api/ComponentRegistry.cpp
         gameplay/api/ComponentValidation.h
@@ -455,7 +466,10 @@ target_link_libraries(HoroAudioCommands PUBLIC HoroEngine::AudioMemory)
 add_library(HoroPhysics STATIC
         physics/CharacterControllerContracts.cpp
         physics/CharacterErrors.cpp
+        physics/CharacterControllerRegistry.h
+        physics/CharacterWorld.cpp
         physics/CharacterWorldSettings.cpp
+        physics/GenerationalSlotStorage.h
         physics/PhysicsBodyDescriptor.cpp
         physics/PhysicsBodyDynamics.cpp
         physics/PhysicsCapabilities.cpp
@@ -496,6 +510,11 @@ if(HORO_BUILD_PHYSICS_NATIVE)
 else()
     target_sources(HoroPhysics PRIVATE physics/CanonicalPhysicsRuntimeOmitted.cpp physics/CanonicalSolverOmitted.cpp)
 endif()
+
+add_library(HoroPhysicsSceneIntegration STATIC physics/PhysicsSceneActivation.cpp)
+add_library(HoroEngine::PhysicsSceneIntegration ALIAS HoroPhysicsSceneIntegration)
+target_compile_features(HoroPhysicsSceneIntegration PUBLIC cxx_std_20)
+target_link_libraries(HoroPhysicsSceneIntegration PUBLIC HoroEngine::Physics HoroEngine::RuntimeScene)
 
 add_library(HoroAI STATIC
         runtime/ai/api/AIErrors.cpp
@@ -689,6 +708,7 @@ add_library(HoroWorldStreaming STATIC
         runtime/world_streaming/WorldPartitionDescriptor.cpp
         runtime/world_streaming/WorldLayerFiltering.cpp
         runtime/world_streaming/WorldLayerOwnershipModel.cpp
+        runtime/world_streaming/WorldLayerState.cpp
         runtime/world_streaming/WorldObjectOwnership.cpp
         runtime/world_streaming/WorldPartitionCapabilityProfile.cpp
         runtime/world_streaming/WorldPartitionRegistry.cpp
@@ -718,7 +738,7 @@ add_library(HoroPrefabAuthoring STATIC
 )
 add_library(HoroEngine::PrefabAuthoring ALIAS HoroPrefabAuthoring)
 target_compile_features(HoroPrefabAuthoring PUBLIC cxx_std_20)
-target_link_libraries(HoroPrefabAuthoring PUBLIC HoroEngine::Prefab HoroEngine::Application PRIVATE utf8proc)
+target_link_libraries(HoroPrefabAuthoring PUBLIC HoroEngine::Prefab HoroEngine::Application)
 
 add_library(HoroInput STATIC
         runtime/input/Input.cpp
@@ -1209,6 +1229,7 @@ add_library(HoroExtensions STATIC
         extensions/host/ExtensionModuleResolution.cpp
         extensions/host/ExtensionAbiValidation.cpp
         extensions/registry/ApplicationCapabilityRegistry.cpp
+        extensions/registry/BackendServiceRegistry.cpp
         extensions/manifest/ExtensionManifestParser.cpp
         extensions/manifest/ExtensionManifestJson.cpp
         extensions/registry/ExtensionActivationState.cpp

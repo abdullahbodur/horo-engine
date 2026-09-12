@@ -330,6 +330,18 @@ namespace Horo::WorldStreaming::WorldStreamingErrors {
     extern const ErrorCodeDescriptor LayerFilterCapacityExceeded;
     /** @brief Layer filtering is unavailable because its authority is cancelling or closed. */
     extern const ErrorCodeDescriptor LayerFilterLifecycleUnavailable;
+    /** @brief A layer-state record, fence, or authority snapshot is structurally invalid. */
+    extern const ErrorCodeDescriptor LayerStateInvalid;
+    /** @brief A layer-state enum or transition command is unsupported. */
+    extern const ErrorCodeDescriptor LayerStateUnsupported;
+    /** @brief A layer-state command no longer names the current owner or revisions. */
+    extern const ErrorCodeDescriptor LayerStateStale;
+    /** @brief The bounded layer-state authority cannot admit another layer. */
+    extern const ErrorCodeDescriptor LayerStateCapacityExceeded;
+    /** @brief A requested layer-state edge is illegal from the current state. */
+    extern const ErrorCodeDescriptor LayerStateTransitionInvalid;
+    /** @brief Layer-state admission or forward progress is closed by cancellation or shutdown. */
+    extern const ErrorCodeDescriptor LayerStateLifecycleUnavailable;
     /** @brief A runtime-entity cell-exit request, context, handle, or capacity is malformed. */
     extern const ErrorCodeDescriptor RuntimeEntityCellExitInvalid;
     /** @brief A runtime-entity cell-exit policy, successor, or transition value is unsupported. */
