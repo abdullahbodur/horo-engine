@@ -33,6 +33,18 @@ namespace Horo::Runtime {
             std::vector<SaveOperationCompletionCallback> callbacks;
         };
 
+        enum class PreflightDisposition : std::uint8_t {
+            Proceed,
+            AlreadyTerminal,
+            CommitStarted,
+            CancellationWon,
+        };
+
+        struct PreflightResult final {
+            PreflightDisposition disposition{PreflightDisposition::Proceed};
+            CompletionDispatch dispatch;
+        };
+
         struct TransitionRequest;
         using TransitionHandler = SaveOperationTransitionResult (*)(const std::shared_ptr<SharedState> &, TransitionRequest &,
                                                                     CompletionDispatch &) noexcept;
@@ -161,6 +173,18 @@ namespace Horo::Runtime {
             return TerminalizeLocked(state, SaveOperationState::Cancelled, SaveOperationCommitOutcome::NotCommitted, std::move(error));
         }
 
+        [[nodiscard]] PreflightResult PreflightLocked(const std::shared_ptr<SharedState> &state,
+                                                      const std::chrono::steady_clock::time_point now) noexcept {
+            if (IsTerminal(*state))
+                return {.disposition = PreflightDisposition::AlreadyTerminal};
+            if (state->commitStarted)
+                return {.disposition = PreflightDisposition::CommitStarted};
+            const SaveCancellationReason cancellation = PendingCancellation(*state, now);
+            if (cancellation == SaveCancellationReason::None)
+                return {};
+            return {.disposition = PreflightDisposition::CancellationWon, .dispatch = CancelLocked(state, cancellation)};
+        }
+
         void Dispatch(const CompletionDispatch &dispatch) noexcept {
             if (!dispatch.state)
                 return;
@@ -269,11 +293,11 @@ namespace Horo::Runtime {
             SaveOperationTransitionResult result = SaveOperationTransitionResult::Applied;
             {
                 std::lock_guard lock(state->mutex);
-                if (IsTerminal(*state))
+                PreflightResult preflight = PreflightLocked(state, now);
+                if (preflight.disposition == PreflightDisposition::AlreadyTerminal)
                     return SaveOperationTransitionResult::AlreadyTerminal;
-                const SaveCancellationReason cancellation = PendingCancellation(*state, now);
-                if (!state->commitStarted && cancellation != SaveCancellationReason::None) {
-                    dispatch = CancelLocked(state, cancellation);
+                if (preflight.disposition == PreflightDisposition::CancellationWon) {
+                    dispatch = std::move(preflight.dispatch);
                     result = SaveOperationTransitionResult::CancellationWon;
                 } else {
                     result = request.handler(state, request, dispatch);
@@ -289,15 +313,14 @@ namespace Horo::Runtime {
             CompletionDispatch dispatch;
             try {
                 std::lock_guard lock(state->mutex);
-                if (!IsTerminal(*state)) {
-                    const SaveCancellationReason cancellation = PendingCancellation(*state, std::chrono::steady_clock::now());
-                    if (!state->commitStarted && cancellation != SaveCancellationReason::None) {
-                        dispatch = CancelLocked(state, cancellation);
-                    } else {
-                        const SaveOperationCommitOutcome outcome =
-                            state->commitStarted ? SaveOperationCommitOutcome::Unknown : SaveOperationCommitOutcome::NotCommitted;
-                        dispatch = TerminalizeLocked(state, SaveOperationState::Failed, outcome, std::move(state->abandonmentError));
-                    }
+                PreflightResult preflight = PreflightLocked(state, std::chrono::steady_clock::now());
+                dispatch = std::move(preflight.dispatch);
+                if (preflight.disposition == PreflightDisposition::Proceed ||
+                    preflight.disposition == PreflightDisposition::CommitStarted) {
+                    const SaveOperationCommitOutcome outcome = preflight.disposition == PreflightDisposition::CommitStarted
+                                                                   ? SaveOperationCommitOutcome::Unknown
+                                                                   : SaveOperationCommitOutcome::NotCommitted;
+                    dispatch = TerminalizeLocked(state, SaveOperationState::Failed, outcome, std::move(state->abandonmentError));
                 }
             } catch (...) {
                 // Destructors never propagate platform mutex failures.
@@ -419,13 +442,13 @@ namespace Horo::Runtime {
         SaveCancellationObservation result = SaveCancellationObservation::NotRequested;
         {
             std::lock_guard lock(state_->mutex);
-            if (IsTerminal(*state_))
+            PreflightResult preflight = PreflightLocked(state_, now);
+            if (preflight.disposition == PreflightDisposition::AlreadyTerminal)
                 return SaveCancellationObservation::AlreadyTerminal;
-            if (state_->commitStarted)
+            if (preflight.disposition == PreflightDisposition::CommitStarted)
                 return SaveCancellationObservation::TooLate;
-            const SaveCancellationReason cancellation = PendingCancellation(*state_, now);
-            if (cancellation != SaveCancellationReason::None) {
-                dispatch = CancelLocked(state_, cancellation);
+            if (preflight.disposition == PreflightDisposition::CancellationWon) {
+                dispatch = std::move(preflight.dispatch);
                 result = SaveCancellationObservation::Cancelled;
             }
         }
@@ -441,13 +464,13 @@ namespace Horo::Runtime {
         SaveCommitGateResult result = SaveCommitGateResult::Entered;
         {
             std::lock_guard lock(state_->mutex);
-            if (IsTerminal(*state_))
+            PreflightResult preflight = PreflightLocked(state_, now);
+            if (preflight.disposition == PreflightDisposition::AlreadyTerminal)
                 return SaveCommitGateResult::AlreadyTerminal;
-            if (state_->commitStarted)
+            if (preflight.disposition == PreflightDisposition::CommitStarted)
                 return SaveCommitGateResult::AlreadyEntered;
-            const SaveCancellationReason cancellation = PendingCancellation(*state_, now);
-            if (cancellation != SaveCancellationReason::None) {
-                dispatch = CancelLocked(state_, cancellation);
+            if (preflight.disposition == PreflightDisposition::CancellationWon) {
+                dispatch = std::move(preflight.dispatch);
                 result = SaveCommitGateResult::CancellationWon;
             } else if (!RequiresCommit(state_->snapshot.kind)) {
                 return SaveCommitGateResult::NotRequired;
