@@ -218,6 +218,9 @@ namespace Horo::Network {
         [[nodiscard]] bool FitsNew(const ConnectionEntry &connection, std::size_t bytes) const noexcept;
         [[nodiscard]] bool FitsReplacement(const ConnectionEntry &connection, const QueueEntry &record, std::size_t bytes) const noexcept;
         [[nodiscard]] TransportBudgetDecision Overload(ConnectionEntry &connection, TransportTrafficClass traffic) noexcept;
+        [[nodiscard]] Result<TransportBudgetDecision> AdmitReplacement(ConnectionEntry &connection, QueueEntry &record,
+                                                                       const TransportBudgetSubmission &submission);
+        [[nodiscard]] Result<TransportBudgetDecision> AdmitNew(ConnectionEntry &connection, const TransportBudgetSubmission &submission);
         [[nodiscard]] TransportQueueTicket AllocateTicket();
         void Release(QueueEntry &entry) noexcept;
 

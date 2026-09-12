@@ -246,6 +246,55 @@ namespace Horo::Network {
         return TransportQueueTicket{slot, queue_[slot].generation};
     }
 
+    Result<TransportBudgetDecision> TransportBudgetController::AdmitReplacement(ConnectionEntry &connection, QueueEntry &record,
+                                                                                const TransportBudgetSubmission &submission) {
+        if (!FitsReplacement(connection, record, submission.bytes))
+            return Result<TransportBudgetDecision>::Success(Overload(connection, submission.traffic));
+        const auto previousBytes = record.bytes;
+        queuedBytes_ = queuedBytes_ - previousBytes + submission.bytes;
+        connection.queuedBytes = connection.queuedBytes - previousBytes + submission.bytes;
+        record.bytes = submission.bytes;
+        ++tickMessages_;
+        tickBytes_ += submission.bytes;
+        ++connection.tickMessages;
+        connection.tickBytes += submission.bytes;
+        connection.saturationTicks = 0;
+        return Result<TransportBudgetDecision>::Success(
+            {TransportBudgetAdmission::Replaced,
+             TransportQueueTicket{static_cast<std::uint32_t>(&record - queue_.data()), record.generation}, previousBytes});
+    }
+
+    Result<TransportBudgetDecision> TransportBudgetController::AdmitNew(ConnectionEntry &connection,
+                                                                        const TransportBudgetSubmission &submission) {
+        if (!FitsNew(connection, submission.bytes)) {
+            const auto overload = Overload(connection, submission.traffic);
+            if (submission.traffic == TransportTrafficClass::Reliable &&
+                overload.admission != TransportBudgetAdmission::ConnectionMustClose)
+                return Fail<TransportBudgetDecision>(NetworkErrors::TransportReliableBackpressure);
+            return Result<TransportBudgetDecision>::Success(overload);
+        }
+
+        const auto ticket = AllocateTicket();
+        if (!ticket.IsValid())
+            return Fail<TransportBudgetDecision>(NetworkErrors::TransportBudgetCapacityExceeded);
+        auto &record = queue_[ticket.Slot()];
+        record.connection = submission.connection;
+        record.traffic = submission.traffic;
+        record.replaceableKey = submission.replaceableKey;
+        record.bytes = submission.bytes;
+        record.occupied = true;
+        ++queuedMessages_;
+        queuedBytes_ += submission.bytes;
+        ++connection.queuedMessages;
+        connection.queuedBytes += submission.bytes;
+        ++tickMessages_;
+        tickBytes_ += submission.bytes;
+        ++connection.tickMessages;
+        connection.tickBytes += submission.bytes;
+        connection.saturationTicks = 0;
+        return Result<TransportBudgetDecision>::Success({TransportBudgetAdmission::Enqueued, ticket, 0});
+    }
+
     /** @copydoc TransportBudgetController::Admit */
     Result<TransportBudgetDecision> TransportBudgetController::Admit(const TransportBudgetSubmission &submission,
                                                                      const TransportAdmissionState state) {
@@ -264,51 +313,10 @@ namespace Horo::Network {
             return Fail<TransportBudgetDecision>(NetworkErrors::TransportBudgetCapacityExceeded);
 
         if (submission.traffic == TransportTrafficClass::ReplaceableState) {
-            if (auto *record = FindReplaceable(submission); record != nullptr) {
-                if (!FitsReplacement(*connection, *record, submission.bytes))
-                    return Result<TransportBudgetDecision>::Success(Overload(*connection, submission.traffic));
-                const std::size_t previousBytes = record->bytes;
-                queuedBytes_ = queuedBytes_ - previousBytes + submission.bytes;
-                connection->queuedBytes = connection->queuedBytes - previousBytes + submission.bytes;
-                record->bytes = submission.bytes;
-                ++tickMessages_;
-                tickBytes_ += submission.bytes;
-                ++connection->tickMessages;
-                connection->tickBytes += submission.bytes;
-                connection->saturationTicks = 0;
-                return Result<TransportBudgetDecision>::Success(
-                    {TransportBudgetAdmission::Replaced,
-                     TransportQueueTicket{static_cast<std::uint32_t>(record - queue_.data()), record->generation}, previousBytes});
-            }
+            if (auto *record = FindReplaceable(submission); record != nullptr)
+                return AdmitReplacement(*connection, *record, submission);
         }
-
-        if (!FitsNew(*connection, submission.bytes)) {
-            const auto overload = Overload(*connection, submission.traffic);
-            if (submission.traffic == TransportTrafficClass::Reliable &&
-                overload.admission != TransportBudgetAdmission::ConnectionMustClose)
-                return Fail<TransportBudgetDecision>(NetworkErrors::TransportReliableBackpressure);
-            return Result<TransportBudgetDecision>::Success(overload);
-        }
-
-        const TransportQueueTicket ticket = AllocateTicket();
-        if (!ticket.IsValid())
-            return Fail<TransportBudgetDecision>(NetworkErrors::TransportBudgetCapacityExceeded);
-        auto &record = queue_[ticket.Slot()];
-        record.connection = submission.connection;
-        record.traffic = submission.traffic;
-        record.replaceableKey = submission.replaceableKey;
-        record.bytes = submission.bytes;
-        record.occupied = true;
-        ++queuedMessages_;
-        queuedBytes_ += submission.bytes;
-        ++connection->queuedMessages;
-        connection->queuedBytes += submission.bytes;
-        ++tickMessages_;
-        tickBytes_ += submission.bytes;
-        ++connection->tickMessages;
-        connection->tickBytes += submission.bytes;
-        connection->saturationTicks = 0;
-        return Result<TransportBudgetDecision>::Success({TransportBudgetAdmission::Enqueued, ticket, 0});
+        return AdmitNew(*connection, submission);
     }
 
     /** @copydoc TransportBudgetController::Complete */

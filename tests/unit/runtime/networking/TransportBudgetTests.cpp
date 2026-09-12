@@ -50,6 +50,16 @@ namespace Horo::Network {
             REQUIRE(created.HasValue());
             return std::move(created).Value();
         }
+
+        struct BudgetFixture final {
+            BudgetFixture() {
+                REQUIRE(controller.OpenConnection(connection).HasValue());
+                REQUIRE(controller.BeginTick(1).HasValue());
+            }
+
+            TransportBudgetController controller{Controller()};
+            ConnectionHandle connection{Connection()};
+        };
     }  // namespace
 
     TEST_CASE("Transport budget validates complete finite hard and active bounds", "[unit][network][budget]") {
@@ -86,12 +96,8 @@ namespace Horo::Network {
         REQUIRE(controller.OpenConnection(Connection(0, 2)).HasValue());
     }
 
-    TEST_CASE("Reliable traffic is never silently discarded and tickets release exact queued generations", "[unit][network][budget]") {
-        auto controller = Controller();
-        const auto connection = Connection();
-        REQUIRE(controller.OpenConnection(connection).HasValue());
-        REQUIRE(controller.BeginTick(1).HasValue());
-
+    TEST_CASE_METHOD(BudgetFixture, "Reliable traffic is never silently discarded and tickets release exact queued generations",
+                     "[unit][network][budget]") {
         const auto first = controller.Admit(Reliable(connection, 4));
         const auto second = controller.Admit(Reliable(connection, 4));
         REQUIRE(first.Value().admission == TransportBudgetAdmission::Enqueued);
@@ -111,12 +117,7 @@ namespace Horo::Network {
         REQUIRE(reused.Value().ticket.Generation() == first.Value().ticket.Generation() + 1);
     }
 
-    TEST_CASE("Replaceable state coalesces in place and overload remains bounded", "[unit][network][budget]") {
-        auto controller = Controller();
-        const auto connection = Connection();
-        REQUIRE(controller.OpenConnection(connection).HasValue());
-        REQUIRE(controller.BeginTick(1).HasValue());
-
+    TEST_CASE_METHOD(BudgetFixture, "Replaceable state coalesces in place and overload remains bounded", "[unit][network][budget]") {
         const auto first = controller.Admit(Replaceable(connection, 91, 3));
         const auto replacement = controller.Admit(Replaceable(connection, 91, 5));
         REQUIRE(first.Value().admission == TransportBudgetAdmission::Enqueued);
@@ -132,11 +133,8 @@ namespace Horo::Network {
         REQUIRE(controller.Snapshot().queuedMessages == 1);
     }
 
-    TEST_CASE("Distinct saturated ticks escalate one abusive connection without log-shaped work", "[unit][network][budget]") {
-        auto controller = Controller();
-        const auto connection = Connection();
-        REQUIRE(controller.OpenConnection(connection).HasValue());
-        REQUIRE(controller.BeginTick(1).HasValue());
+    TEST_CASE_METHOD(BudgetFixture, "Distinct saturated ticks escalate one abusive connection without log-shaped work",
+                     "[unit][network][budget]") {
         REQUIRE(controller.Admit(Reliable(connection, 4)).HasValue());
         REQUIRE(controller.Admit(Reliable(connection, 4)).HasValue());
         REQUIRE(controller.Admit(Replaceable(connection, 1, 1)).Value().admission == TransportBudgetAdmission::DroppedReplaceable);
@@ -147,11 +145,8 @@ namespace Horo::Network {
         REQUIRE(controller.Snapshot().queuedMessages == 2);
     }
 
-    TEST_CASE("Policy replacement is atomic and preserves last good policy on every failure", "[unit][network][budget]") {
-        auto controller = Controller();
-        const auto connection = Connection();
-        REQUIRE(controller.OpenConnection(connection).HasValue());
-        REQUIRE(controller.BeginTick(1).HasValue());
+    TEST_CASE_METHOD(BudgetFixture, "Policy replacement is atomic and preserves last good policy on every failure",
+                     "[unit][network][budget]") {
         REQUIRE(controller.Admit(Reliable(connection, 4)).HasValue());
 
         auto candidate = Policy(2);
