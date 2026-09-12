@@ -263,18 +263,19 @@ def write_project(root: Path, package_id: str, name: str, version: str, shape: s
     modules = SHAPES[shape]
     (root / "src").mkdir(parents=True)
     (root / "tests").mkdir()
-    (root / "CMakeLists.txt").write_text(  # Fixed child in owned staging root; NOSONAR
+    # Every destination below is a fixed or closed-table child of the private staging root.
+    (root / "CMakeLists.txt").write_text(  # NOSONAR
         cmake_project(package_id, version, modules), encoding="utf-8"
     )
-    (root / "extension.json.in").write_text(  # Fixed child in owned staging root; NOSONAR
+    (root / "extension.json.in").write_text(  # NOSONAR
         json.dumps(manifest(package_id, name, version, modules), indent=2) + "\n", encoding="utf-8"
     )
     for module in modules:
         replacements = {"MODULE_ID": module_id(package_id, module), "VERSION": version}
-        (root / "src" / f"{module.suffix}.c").write_text(  # Closed-table child in owned staging root; NOSONAR
+        (root / "src" / f"{module.suffix}.c").write_text(  # NOSONAR
             render(MODULE_SOURCE, replacements), encoding="utf-8"
         )
-        (root / "tests" / f"{module.suffix}_contract.c").write_text(  # Closed-table child in owned staging root; NOSONAR
+        (root / "tests" / f"{module.suffix}_contract.c").write_text(  # NOSONAR
             render(CONTRACT_TEST, replacements), encoding="utf-8"
         )
     (root / "README.md").write_text(  # Fixed child in owned staging root; NOSONAR
