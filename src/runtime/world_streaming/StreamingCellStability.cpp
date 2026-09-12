@@ -4,8 +4,14 @@
 
 namespace Horo::WorldStreaming {
     namespace {
-        template <typename T> [[nodiscard]] Result<T> Failure(const ErrorCodeDescriptor &descriptor) {
-            return Result<T>::Failure(MakeError(descriptor));
+        /** @brief Creates a typed policy-construction failure. */
+        [[nodiscard]] Result<StreamingCellStabilityPolicy> PolicyFailure(const ErrorCodeDescriptor &descriptor) {
+            return Result<StreamingCellStabilityPolicy>::Failure(MakeError(descriptor));
+        }
+
+        /** @brief Creates a typed evaluation failure. */
+        [[nodiscard]] Result<StreamingCellStabilityDecision> DecisionFailure(const ErrorCodeDescriptor &descriptor) {
+            return Result<StreamingCellStabilityDecision>::Failure(MakeError(descriptor));
         }
 
         [[nodiscard]] bool IsKnown(const StreamingCellStabilityLifecycle lifecycle) noexcept {
@@ -60,14 +66,14 @@ namespace Horo::WorldStreaming {
     /** @copydoc StreamingCellStabilityPolicy::Create */
     Result<StreamingCellStabilityPolicy> StreamingCellStabilityPolicy::Create(const StreamingCellStabilityPolicyRequest &request) {
         if (request.contractVersion != StreamingCellStabilityPolicyRequest::CurrentContractVersion)
-            return Failure<StreamingCellStabilityPolicy>(WorldStreamingErrors::CellStabilityUnsupported);
+            return PolicyFailure(WorldStreamingErrors::CellStabilityUnsupported);
         if (!request.id.IsValid() || !request.revision.IsValid() || request.enterMarginMillimeters < 0 ||
             request.enterMarginMillimeters > StreamingCellStabilityPolicyRequest::MaximumMarginMillimeters ||
             request.exitMarginMillimeters < 0 ||
             request.exitMarginMillimeters > StreamingCellStabilityPolicyRequest::MaximumMarginMillimeters ||
             request.lingerMilliseconds > StreamingCellStabilityPolicyRequest::MaximumLingerMilliseconds ||
             request.maximumTrackedCells == 0 || request.maximumTrackedCells > StreamingCellStabilityPolicyRequest::MaximumTrackedCellCount)
-            return Failure<StreamingCellStabilityPolicy>(WorldStreamingErrors::CellStabilityInvalid);
+            return PolicyFailure(WorldStreamingErrors::CellStabilityInvalid);
         return Result<StreamingCellStabilityPolicy>::Success(StreamingCellStabilityPolicy{request});
     }
 
@@ -110,19 +116,19 @@ namespace Horo::WorldStreaming {
                                                                           const StreamingCellStabilityObservation &observation,
                                                                           const std::optional<StreamingCellStabilitySnapshot> &previous) {
         if (!IsKnown(context.lifecycle))
-            return Failure<StreamingCellStabilityDecision>(WorldStreamingErrors::CellStabilityUnsupported);
+            return DecisionFailure(WorldStreamingErrors::CellStabilityUnsupported);
         if (!IsKnown(observation.effectiveResidency) ||
             (observation.pinnedResidencyFloor.has_value() && !IsKnown(*observation.pinnedResidencyFloor)))
-            return Failure<StreamingCellStabilityDecision>(WorldStreamingErrors::CellStabilityUnsupported);
+            return DecisionFailure(WorldStreamingErrors::CellStabilityUnsupported);
         if (!context.policy.IsValid() || !context.policyRevision.IsValid() || !context.partition.IsValid() || !context.epoch.IsValid() ||
             !IsValidObservation(observation))
-            return Failure<StreamingCellStabilityDecision>(WorldStreamingErrors::CellStabilityInvalid);
+            return DecisionFailure(WorldStreamingErrors::CellStabilityInvalid);
         if (context.policy != policy.Id() || context.policyRevision != policy.Revision())
-            return Failure<StreamingCellStabilityDecision>(WorldStreamingErrors::CellStabilityStale);
+            return DecisionFailure(WorldStreamingErrors::CellStabilityStale);
         if (context.lifecycle != StreamingCellStabilityLifecycle::Active)
-            return Failure<StreamingCellStabilityDecision>(WorldStreamingErrors::CellStabilityLifecycleUnavailable);
+            return DecisionFailure(WorldStreamingErrors::CellStabilityLifecycleUnavailable);
         if (previous.has_value() && !IsValidPrevious(*previous, context, observation))
-            return Failure<StreamingCellStabilityDecision>(WorldStreamingErrors::CellStabilityStale);
+            return DecisionFailure(WorldStreamingErrors::CellStabilityStale);
 
         const bool hasDemand = observation.effectiveResidency != StreamingDesiredResidency::Unloaded;
         const bool pinned = observation.pinnedResidencyFloor.has_value();
@@ -132,7 +138,7 @@ namespace Horo::WorldStreaming {
                     {Snapshot(context, observation, StreamingCellStabilityPhase::Unloaded, StreamingDesiredResidency::Unloaded, 0), false,
                      false});
             if (context.trackedCells >= policy.MaximumTrackedCells())
-                return Failure<StreamingCellStabilityDecision>(WorldStreamingErrors::CellStabilityCapacityExceeded);
+                return DecisionFailure(WorldStreamingErrors::CellStabilityCapacityExceeded);
             return Result<StreamingCellStabilityDecision>::Success(
                 {Snapshot(context, observation, StreamingCellStabilityPhase::Resident, observation.effectiveResidency, 0), false, false});
         }
