@@ -59,6 +59,7 @@ namespace Horo::WorldStreaming {
 
     /** @brief Observable reason a stable source layer is included or excluded. */
     enum class WorldLayerFilterDisposition : std::uint8_t {
+        Unresolved,
         Included,
         ExcludedEditorOnly,
         ExcludedServerOnly,
@@ -66,8 +67,9 @@ namespace Horo::WorldStreaming {
         ExcludedOptional,
     };
 
-    /** @brief One deterministic target decision that preserves exact source identity and revision. */
+    /** @brief One deterministic target decision bound to an exact mounted world, source identity, and revision. */
     struct WorldLayerFilterDecision final {
+        StreamingRuntimeOwnerToken world{};        /**< Exact mounted-world lifetime containing the source layer. */
         StreamingLayerId layer{};                  /**< Unchanged stable source identity. */
         WorldLayerRevision ownershipRevision{};    /**< Exact source classification revision. */
         WorldLayerFilterDisposition disposition{}; /**< Inclusion result and typed reason. */
@@ -96,8 +98,9 @@ namespace Horo::WorldStreaming {
         WorldLayerFilterAuthorityState authorityState{WorldLayerFilterAuthorityState::Closed}; /**< Current lifecycle gate. */
     };
 
-    /** @brief Summary of one complete filtering pass. */
+    /** @brief Summary of one complete filtering pass bound to its exact mounted-world lifetime. */
     struct WorldLayerFilterResult final {
+        StreamingRuntimeOwnerToken world{};        /**< Exact mounted-world lifetime used by every decision. */
         WorldLayerFilterPolicyId policy{};         /**< Exact policy used. */
         WorldLayerFilterPolicyRevision revision{}; /**< Exact policy revision used. */
         std::size_t decisionCount{};               /**< Number of decisions written. */

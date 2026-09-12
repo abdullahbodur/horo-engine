@@ -13,15 +13,9 @@ namespace Horo::WorldStreaming {
         using TestSupport::IdentityFrom;
         using TestSupport::Layer;
         using TestSupport::RequireError;
+        using TestSupport::StreamingLayerOwner;
         using TestSupport::World;
-
-        StreamingRuntimeOwnerToken WorldOwner(const std::uint64_t owner = 5) {
-            return {.partition = World(), .epoch = IdentityFrom<PartitionEpoch>(1), .owner = IdentityFrom<StreamingRuntimeOwnerId>(owner)};
-        }
-
-        WorldLayerControlOwner StreamingOwner() {
-            return {.world = WorldOwner(), .kind = WorldLayerControlOwnerKind::WorldStreaming};
-        }
+        using TestSupport::WorldOwner;
 
         WorldLayerControlOwner EditorOwner() {
             return {.world = WorldOwner(),
@@ -37,7 +31,7 @@ namespace Horo::WorldStreaming {
                                   .placement = WorldLayerPlacement::Spatial,
                                   .residency = residency,
                                   .audience = audience,
-                                  .owner = audience == WorldLayerAudience::EditorOnly ? EditorOwner() : StreamingOwner()},
+                                  .owner = audience == WorldLayerAudience::EditorOnly ? EditorOwner() : StreamingLayerOwner()},
                     .flags = flags};
         }
 
@@ -50,8 +44,8 @@ namespace Horo::WorldStreaming {
                     .optional = optional};
         }
 
-        WorldLayerFilterContext Context() {
-            return {.expectedWorld = WorldOwner(),
+        WorldLayerFilterContext Context(const StreamingRuntimeOwnerToken world = WorldOwner()) {
+            return {.expectedWorld = world,
                     .expectedPolicy = IdentityFrom<WorldLayerFilterPolicyId>(7),
                     .expectedPolicyRevision = IdentityFrom<WorldLayerFilterPolicyRevision>(3),
                     .maximumCandidates = 8,
@@ -67,20 +61,77 @@ namespace Horo::WorldStreaming {
                     Candidate(5, WorldLayerResidencyPolicy::Streamed, WorldLayerAudience::Runtime, WorldLayerFlags::Optional)};
         }
 
+        WorldLayerFilterDecision SentinelDecision() {
+            return {.world = WorldOwner(),
+                    .layer = Layer(99),
+                    .ownershipRevision = IdentityFrom<WorldLayerRevision>(99),
+                    .disposition = WorldLayerFilterDisposition::Included};
+        }
+
+        std::array<WorldLayerFilterDecision, 5> SentinelDecisions() {
+            std::array<WorldLayerFilterDecision, 5> decisions{};
+            decisions.fill(SentinelDecision());
+            return decisions;
+        }
+
+        void BindWorld(std::array<WorldLayerFilterCandidate, 5> &candidates, const StreamingRuntimeOwnerToken world) {
+            for (auto &candidate : candidates)
+                candidate.ownership.owner.world = world;
+        }
+
+        void RequireWorldScopedResult(const StreamingRuntimeOwnerToken world) {
+            const auto baselineCandidates = Candidates();
+            auto candidates = baselineCandidates;
+            BindWorld(candidates, world);
+            std::array<WorldLayerFilterDecision, 5> decisions{};
+            const auto result = FilterWorldLayers(Policy(WorldLayerExecutionTarget::Editor), candidates, Context(world), decisions);
+
+            REQUIRE(result.HasValue());
+            REQUIRE(result.Value().world == world);
+            REQUIRE(decisions[0].world == world);
+            REQUIRE(decisions[0].world != baselineCandidates[0].ownership.owner.world);
+            REQUIRE(decisions[0].layer == baselineCandidates[0].ownership.layer);
+            REQUIRE(decisions[0].ownershipRevision == baselineCandidates[0].ownership.revision);
+        }
+
         TEST_CASE("Editor filtering preserves every authored stable layer identity", "[unit][world_streaming][layer_filter][editor]") {
             const auto candidates = Candidates();
             std::array<WorldLayerFilterDecision, 5> decisions{};
             const auto result = FilterWorldLayers(Policy(WorldLayerExecutionTarget::Editor), candidates, Context(), decisions);
 
             REQUIRE(result.HasValue());
+            REQUIRE(result.Value().world == Context().expectedWorld);
             REQUIRE(result.Value().decisionCount == candidates.size());
             REQUIRE(result.Value().includedCount == candidates.size());
             for (std::size_t index = 0; index < candidates.size(); ++index) {
                 REQUIRE(decisions[index].IsIncluded());
+                REQUIRE(decisions[index].world == candidates[index].ownership.owner.world);
                 REQUIRE(decisions[index].layer == candidates[index].ownership.layer);
                 REQUIRE(decisions[index].ownershipRevision == candidates[index].ownership.revision);
             }
             static_assert(std::is_trivially_copyable_v<WorldLayerFilterDecision>);
+        }
+
+        TEST_CASE("Default layer-filter decisions are unresolved", "[unit][world_streaming][layer_filter][default]") {
+            const WorldLayerFilterDecision decision{};
+            REQUIRE_FALSE(decision.IsIncluded());
+            REQUIRE(decision.disposition == WorldLayerFilterDisposition::Unresolved);
+        }
+
+        TEST_CASE("Filter results distinguish reused layers across runtime owners", "[unit][world_streaming][layer_filter][world_fence]") {
+            RequireWorldScopedResult(WorldOwner(6));
+        }
+
+        TEST_CASE("Filter results distinguish reused layers across partition epochs",
+                  "[unit][world_streaming][layer_filter][world_fence]") {
+            RequireWorldScopedResult(WorldOwner(5, 2));
+        }
+
+        TEST_CASE("Filter results distinguish reused layers across world partitions",
+                  "[unit][world_streaming][layer_filter][world_fence]") {
+            auto world = WorldOwner();
+            world.partition = World(2);
+            RequireWorldScopedResult(world);
         }
 
         TEST_CASE("Client filtering excludes editor server and unsupported optional layers with typed reasons",
@@ -119,50 +170,44 @@ namespace Horo::WorldStreaming {
         TEST_CASE("Filtering rejects stale world and policy evidence before touching output",
                   "[unit][world_streaming][layer_filter][stale]") {
             const auto candidates = Candidates();
-            std::array<WorldLayerFilterDecision, 5> decisions{};
-            decisions[0] = {.layer = Layer(99),
-                            .ownershipRevision = IdentityFrom<WorldLayerRevision>(99),
-                            .disposition = WorldLayerFilterDisposition::Included};
-            const auto sentinel = decisions[0];
+            auto decisions = SentinelDecisions();
+            const auto sentinel = decisions;
 
             auto context = Context();
             context.expectedPolicyRevision = IdentityFrom<WorldLayerFilterPolicyRevision>(4);
             RequireError(FilterWorldLayers(Policy(WorldLayerExecutionTarget::Editor), candidates, context, decisions),
                          WorldStreamingErrors::LayerFilterStale);
-            REQUIRE(decisions[0] == sentinel);
+            REQUIRE(decisions == sentinel);
 
             auto staleCandidates = candidates;
             staleCandidates[0].ownership.owner.world = WorldOwner(6);
             RequireError(FilterWorldLayers(Policy(WorldLayerExecutionTarget::Editor), staleCandidates, Context(), decisions),
                          WorldStreamingErrors::LayerFilterStale);
-            REQUIRE(decisions[0] == sentinel);
+            REQUIRE(decisions == sentinel);
         }
 
         TEST_CASE("Filtering validates the complete canonical snapshot before publication",
                   "[unit][world_streaming][layer_filter][transaction]") {
             auto candidates = Candidates();
-            std::array<WorldLayerFilterDecision, 5> decisions{};
-            decisions[0] = {.layer = Layer(99),
-                            .ownershipRevision = IdentityFrom<WorldLayerRevision>(99),
-                            .disposition = WorldLayerFilterDisposition::Included};
-            const auto sentinel = decisions[0];
+            auto decisions = SentinelDecisions();
+            const auto sentinel = decisions;
 
             candidates[2].ownership.layer = candidates[1].ownership.layer;
             RequireError(FilterWorldLayers(Policy(WorldLayerExecutionTarget::Editor), candidates, Context(), decisions),
                          WorldStreamingErrors::LayerFilterIdentityConflict);
-            REQUIRE(decisions[0] == sentinel);
+            REQUIRE(decisions == sentinel);
 
             candidates = Candidates();
             std::swap(candidates[1], candidates[2]);
             RequireError(FilterWorldLayers(Policy(WorldLayerExecutionTarget::Editor), candidates, Context(), decisions),
                          WorldStreamingErrors::LayerFilterInvalid);
-            REQUIRE(decisions[0] == sentinel);
+            REQUIRE(decisions == sentinel);
 
             const std::span<WorldLayerFilterDecision> shortOutput{decisions.data(), decisions.size() - 1};
             candidates = Candidates();
             RequireError(FilterWorldLayers(Policy(WorldLayerExecutionTarget::Editor), candidates, Context(), shortOutput),
                          WorldStreamingErrors::LayerFilterCapacityExceeded);
-            REQUIRE(decisions[0] == sentinel);
+            REQUIRE(decisions == sentinel);
         }
 
         TEST_CASE("Filtering rejects contradictory flags and classification", "[unit][world_streaming][layer_filter][policy]") {

@@ -19,9 +19,12 @@ exclusion reasons or mixing filtering with cell scheduling.
 2. Pair each stable ownership fact with its manifest flags without changing the
    source identity or ownership revision.
 3. Validate the complete canonical candidate snapshot and write one decision per
-   source layer.
+   source layer. Cache the exact mounted-world token with the result and each decision;
+   layer identity and revision alone are not unique across owner, partition or epoch
+   replacement.
 4. Keep excluded decisions with their typed reason. Do not collapse missing,
-   editor-only, role-filtered and unsupported-optional content into one empty result.
+   editor-only, role-filtered and unsupported-optional content into one empty result,
+   and do not treat a default Unresolved decision as included.
 5. Replace filtering policy with the same stable identity and exact non-wrapping
    revision successor when platform support changes; treat old evidence as stale.
 
@@ -45,9 +48,9 @@ own physical cell residency.
 ## Validation Record
 
 Focused coverage exercises editor, client and dedicated-server projections, optional
-policy, exact source identity preservation, typed exclusion reasons, stale evidence,
-canonical ordering, duplicates, unsupported flags, capacity, cancellation and
-shutdown.
+policy, exact owner/partition/epoch binding, source identity preservation, unresolved
+defaults, typed exclusion reasons, transactional output, stale evidence, canonical
+ordering, duplicates, unsupported flags, capacity, cancellation and shutdown.
 
 ## References
 

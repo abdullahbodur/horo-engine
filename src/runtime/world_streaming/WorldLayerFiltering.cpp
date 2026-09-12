@@ -103,13 +103,17 @@ namespace Horo::WorldStreaming {
         std::size_t includedCount{};
         for (std::size_t index = 0; index < candidates.size(); ++index) {
             const auto disposition = Decide(policy, candidates[index]);
-            decisions[index] = {.layer = candidates[index].ownership.layer,
+            decisions[index] = {.world = candidates[index].ownership.owner.world,
+                                .layer = candidates[index].ownership.layer,
                                 .ownershipRevision = candidates[index].ownership.revision,
                                 .disposition = disposition};
             includedCount += disposition == WorldLayerFilterDisposition::Included ? 1U : 0U;
         }
-        return Result<WorldLayerFilterResult>::Success(
-            {.policy = policy.id, .revision = policy.revision, .decisionCount = candidates.size(), .includedCount = includedCount});
+        return Result<WorldLayerFilterResult>::Success({.world = context.expectedWorld,
+                                                        .policy = policy.id,
+                                                        .revision = policy.revision,
+                                                        .decisionCount = candidates.size(),
+                                                        .includedCount = includedCount});
     }
 
     /** @copydoc ValidateWorldLayerFilterPolicyReplacement */

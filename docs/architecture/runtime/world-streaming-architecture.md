@@ -895,9 +895,10 @@ or lifecycle callback.
 projection boundary. One policy selects Editor, client runtime or dedicated-server
 runtime and explicitly includes or excludes layers marked Optional. The input is a
 canonical immutable sequence of WST-006.1 ownership facts plus the corresponding
-version-one manifest flags. The output has one typed inclusion/exclusion decision per
-input and always repeats the exact source `StreamingLayerId` and ownership revision;
-filtering never renumbers, hashes, aliases or otherwise replaces a source identity.
+version-one manifest flags. The result and every decision repeat the exact mounted
+`StreamingRuntimeOwnerToken`, source `StreamingLayerId` and ownership revision;
+filtering never renumbers, hashes, aliases or otherwise replaces a source identity,
+and a cached decision cannot be reused across owner, partition or epoch replacement.
 
 Editor includes editor-only, server-only and client-only authored layers so those
 sources remain inspectable. Runtime targets exclude editor-only content. Client
@@ -905,7 +906,8 @@ runtime additionally excludes ServerOnly layers, while dedicated-server runtime
 excludes ClientOnly layers. Optional exclusion applies after audience and target-role
 filtering so each omitted layer has one stable observable reason. Persistent manifest
 flags must agree with the WST-006.1 residency policy, and ServerOnly plus ClientOnly
-is contradictory.
+is contradictory. A default-constructed decision is explicitly Unresolved and is
+never interpreted as included content.
 
 The caller supplies storage for every decision and a mandatory candidate ceiling.
 The function validates the complete strictly identity-ordered input, exact mounted
