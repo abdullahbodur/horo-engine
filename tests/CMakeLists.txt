@@ -41,6 +41,7 @@ add_test(NAME HoroExtensionScaffoldsTest
     COMMAND "${CMAKE_COMMAND}"
         "-DHORO_EXTENSION_SDK_PACKAGE_DIR=${HORO_EXTENSION_SDK_PACKAGE_DIR}"
         "-DHORO_EXTENSION_SCAFFOLDER=${HORO_EXTENSION_SDK_PACKAGE_DIR}/bin/horo-scaffold-extension.py"
+        "-DHORO_EXTENSION_ACTIVATION_TEST=$<TARGET_FILE:HoroPackagedExtensionActivation>"
         "-DHORO_TEST_BINARY_DIR=${CMAKE_CURRENT_BINARY_DIR}/extension-scaffolds"
         "-DPYTHON_EXECUTABLE=${Python3_EXECUTABLE}"
         "-DCMAKE_GENERATOR=${CMAKE_GENERATOR}"
@@ -1461,6 +1462,11 @@ target_compile_features(HoroExtensionAbiCConsumer PRIVATE c_std_11)
 set_target_properties(HoroExtensionAbiCConsumer PROPERTIES C_EXTENSIONS OFF)
 target_link_libraries(HoroExtensionAbiCConsumer PRIVATE HoroEngine::Extensions)
 add_test(NAME HoroExtensionAbiCConsumer COMMAND HoroExtensionAbiCConsumer)
+
+add_executable(HoroPackagedExtensionActivation helpers/extensions/PackagedExtensionActivation.cpp)
+target_compile_features(HoroPackagedExtensionActivation PRIVATE cxx_std_20)
+target_include_directories(HoroPackagedExtensionActivation PRIVATE ${PROJECT_SOURCE_DIR}/tests/support)
+target_link_libraries(HoroPackagedExtensionActivation PRIVATE HoroEngine::Extensions)
 
 add_executable(HoroExtensionManagerTests
         unit/extensions/ApplicationCapabilityRegistryTests.cpp

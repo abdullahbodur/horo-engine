@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import re
 import shutil
 import tempfile
@@ -12,8 +13,9 @@ from dataclasses import dataclass
 from pathlib import Path
 
 
-IDENTIFIER_PATTERN = re.compile(r"^[a-z][a-z0-9]*(?:\.[a-z][a-z0-9-]*)+$")
-VERSION_PATTERN = re.compile(r"^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$")
+MAXIMUM_IDENTIFIER_BYTES = 256
+MAXIMUM_SEMANTIC_VERSION_BYTES = 64
+MAXIMUM_DISPLAY_NAME_BYTES = 4 * 1024
 
 
 @dataclass(frozen=True)
@@ -114,6 +116,45 @@ def target_name(package_id: str, module: Module) -> str:
     return f"{re.sub(r'[^A-Za-z0-9]', '_', package_id)}_{module.suffix}"
 
 
+def is_ascii_lower(character: str) -> bool:
+    return "a" <= character <= "z"
+
+
+def is_ascii_digit(character: str) -> bool:
+    return "0" <= character <= "9"
+
+
+def is_canonical_identifier(value: str) -> bool:
+    if not value or len(value.encode("utf-8")) > MAXIMUM_IDENTIFIER_BYTES:
+        return False
+    for segment in value.split("."):
+        if not segment or not is_ascii_lower(segment[0]) or segment[-1] == "-":
+            return False
+        if not all(is_ascii_lower(character) or is_ascii_digit(character) or character == "-" for character in segment):
+            return False
+    return True
+
+
+def is_canonical_numeric_component(value: str) -> bool:
+    return bool(value) and not (len(value) > 1 and value[0] == "0") and all(is_ascii_digit(character) for character in value)
+
+
+def is_canonical_semantic_version(value: str) -> bool:
+    if not value or len(value.encode("utf-8")) > MAXIMUM_SEMANTIC_VERSION_BYTES or "+" in value:
+        return False
+    core, separator, prerelease = value.partition("-")
+    if len(core.split(".")) != 3 or not all(is_canonical_numeric_component(part) for part in core.split(".")):
+        return False
+    if not separator:
+        return True
+    for identifier in prerelease.split("."):
+        if not identifier or not all(character.isascii() and (character.isalnum() or character == "-") for character in identifier):
+            return False
+        if all(is_ascii_digit(character) for character in identifier) and len(identifier) > 1 and identifier[0] == "0":
+            return False
+    return True
+
+
 def render(text: str, replacements: dict[str, str]) -> str:
     for key, value in replacements.items():
         text = text.replace(f"@{key}@", value)
@@ -129,7 +170,7 @@ def manifest(package_id: str, name: str, version: str, modules: tuple[Module, ..
             "id": module_id(package_id, module),
             "version": version,
             "kind": "native",
-            "entry": target_name(package_id, module),
+            "entry": f"bin/{target_name(package_id, module)}@CMAKE_SHARED_MODULE_SUFFIX@",
             "roles": list(module.roles),
             "abi": {"major": 1, "minimumMinor": 1},
         }
@@ -157,9 +198,10 @@ def manifest(package_id: str, name: str, version: str, modules: tuple[Module, ..
 def cmake_project(package_id: str, version: str, modules: tuple[Module, ...]) -> str:
     lines = [
         "cmake_minimum_required(VERSION 3.25)",
-        f"project(HoroExtension VERSION {version} LANGUAGES C)",
+        "project(HoroExtension LANGUAGES C)",
         "find_package(HoroEngineExtensionSdk CONFIG REQUIRED)",
         "include(CTest)",
+        'configure_file(extension.json.in "${CMAKE_CURRENT_BINARY_DIR}/extension.json" @ONLY)',
         "",
     ]
     for module in modules:
@@ -180,7 +222,7 @@ def cmake_project(package_id: str, version: str, modules: tuple[Module, ...]) ->
             "",
         ])
     lines.extend([
-        "install(FILES extension.json DESTINATION .)",
+        'install(FILES "${CMAKE_CURRENT_BINARY_DIR}/extension.json" DESTINATION .)',
         f'set(CPACK_PACKAGE_NAME "{package_id}")',
         f'set(CPACK_PACKAGE_VERSION "{version}")',
         f'set(CPACK_PACKAGE_FILE_NAME "{package_id}-{version}")',
@@ -196,14 +238,20 @@ def write_project(root: Path, package_id: str, name: str, version: str, shape: s
     modules = SHAPES[shape]
     (root / "src").mkdir(parents=True)
     (root / "tests").mkdir()
-    (root / "CMakeLists.txt").write_text(cmake_project(package_id, version, modules), encoding="utf-8")
-    (root / "extension.json").write_text(
+    (root / "CMakeLists.txt").write_text(  # Fixed child in owned staging root; NOSONAR
+        cmake_project(package_id, version, modules), encoding="utf-8"
+    )
+    (root / "extension.json.in").write_text(  # Fixed child in owned staging root; NOSONAR
         json.dumps(manifest(package_id, name, version, modules), indent=2) + "\n", encoding="utf-8"
     )
     for module in modules:
         replacements = {"MODULE_ID": module_id(package_id, module), "VERSION": version}
-        (root / "src" / f"{module.suffix}.c").write_text(render(MODULE_SOURCE, replacements), encoding="utf-8")
-        (root / "tests" / f"{module.suffix}_contract.c").write_text(render(CONTRACT_TEST, replacements), encoding="utf-8")
+        (root / "src" / f"{module.suffix}.c").write_text(  # Closed-table child in owned staging root; NOSONAR
+            render(MODULE_SOURCE, replacements), encoding="utf-8"
+        )
+        (root / "tests" / f"{module.suffix}_contract.c").write_text(  # Closed-table child in owned staging root; NOSONAR
+            render(CONTRACT_TEST, replacements), encoding="utf-8"
+        )
     (root / "README.md").write_text(
         f"# {name}\n\nGenerated `{shape}` Horo extension scaffold.\n\n"
         "Configure with `HoroEngineExtensionSdk_DIR` pointing to the SDK's "
@@ -214,14 +262,15 @@ def write_project(root: Path, package_id: str, name: str, version: str, shape: s
 
 
 def validate(args: argparse.Namespace) -> None:
-    if not IDENTIFIER_PATTERN.fullmatch(args.id):
+    if not is_canonical_identifier(args.id):
         raise ValueError("--id must be a lowercase reverse-domain identifier")
-    if not VERSION_PATTERN.fullmatch(args.version):
-        raise ValueError("--version must be a canonical major.minor.patch version")
-    if not args.name.strip():
-        raise ValueError("--name must not be empty")
-    if args.output.exists() and any(args.output.iterdir()):
-        raise ValueError("--output must not already contain files")
+    if not is_canonical_semantic_version(args.version):
+        raise ValueError("--version must be a canonical semantic version")
+    if len(args.name.strip().encode("utf-8")) > MAXIMUM_DISPLAY_NAME_BYTES:
+        raise ValueError("--name exceeds the manifest display-name limit")
+    if os.path.lexists(args.output):
+        if args.output.is_symlink() or not args.output.is_dir() or any(args.output.iterdir()):
+            raise ValueError("--output must be an absent path or empty directory")
 
 
 def parse_args() -> argparse.Namespace:
@@ -240,15 +289,20 @@ def main() -> int:
         validate(args)
         output = args.output.absolute()
         output.parent.mkdir(parents=True, exist_ok=True)
-        staging = Path(tempfile.mkdtemp(prefix=f".{output.name}.", dir=output.parent))
+        output_parent = output.parent.resolve(strict=True)
+        if output.name in {"", ".", ".."}:
+            raise ValueError("--output must name a project directory")
+        output = output_parent / output.name
+        staging: Path | None = Path(tempfile.mkdtemp(prefix=".horo-extension.", dir=output_parent))
         try:
             write_project(staging, args.id, args.name.strip(), args.version, args.shape)
             if output.exists():
                 output.rmdir()
             staging.replace(output)
-        except Exception:
-            shutil.rmtree(staging, ignore_errors=True)
-            raise
+            staging = None
+        finally:
+            if staging is not None:
+                shutil.rmtree(staging, ignore_errors=True)
     except (OSError, ValueError) as error:
         print(f"error: {error}")
         return 2

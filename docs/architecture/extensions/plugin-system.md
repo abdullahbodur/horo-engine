@@ -603,7 +603,10 @@ script-provider, and hybrid C projects. Every generated module owns a separate
 ABI entry unit and contract test. Hybrid presentation and script adapters import
 the backend's typed service instead of duplicating backend authority. Generated
 projects use only `HoroEngine::ExtensionSdk`, relative project paths, and CPack
-ZIP configuration. Manifest schemas, validation, and distribution commands
+ZIP configuration. The generated manifest template resolves the native module
+suffix during CMake configuration and records the installed `bin/` path; hosted
+regression coverage extracts the ZIP and activates every scaffold shape through
+the real extension host. Manifest schemas, validation, and distribution commands
 remain separately versioned SDK deliverables.
 
 Project gameplay modules may use the SDK-generation C++ boundary documented in

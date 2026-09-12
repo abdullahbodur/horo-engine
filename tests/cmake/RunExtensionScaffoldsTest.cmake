@@ -1,5 +1,5 @@
 foreach(required IN ITEMS HORO_EXTENSION_SDK_PACKAGE_DIR HORO_EXTENSION_SCAFFOLDER
-        HORO_TEST_BINARY_DIR PYTHON_EXECUTABLE)
+        HORO_EXTENSION_ACTIVATION_TEST HORO_TEST_BINARY_DIR PYTHON_EXECUTABLE)
     if(NOT DEFINED ${required})
         message(FATAL_ERROR "Missing extension scaffold test input: ${required}")
     endif()
@@ -58,5 +58,15 @@ foreach(shape IN ITEMS gui backend script hybrid)
     file(GLOB package_artifacts "${build_dir}/com.horo.fixture.${shape}-1.0.0*.zip")
     if(NOT package_artifacts)
         message(FATAL_ERROR "The ${shape} scaffold produced no package artifact")
+    endif()
+    list(GET package_artifacts 0 package_artifact)
+    set(package_dir "${HORO_TEST_BINARY_DIR}/${shape}-package")
+    file(MAKE_DIRECTORY "${package_dir}")
+    file(ARCHIVE_EXTRACT INPUT "${package_artifact}" DESTINATION "${package_dir}")
+    execute_process(
+        COMMAND "${HORO_EXTENSION_ACTIVATION_TEST}" "${package_dir}" "com.horo.fixture.${shape}"
+        RESULT_VARIABLE activation_result)
+    if(NOT activation_result EQUAL 0)
+        message(FATAL_ERROR "Packaged ${shape} extension failed host activation")
     endif()
 endforeach()
