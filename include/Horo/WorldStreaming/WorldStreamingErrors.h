@@ -304,6 +304,32 @@ namespace Horo::WorldStreaming::WorldStreamingErrors {
     extern const ErrorCodeDescriptor ObjectOwnershipCapacityExceeded;
     /** @brief Ownership admission is closed because its authority is cancelling or shut down. */
     extern const ErrorCodeDescriptor ObjectOwnershipLifecycleUnavailable;
+    /** @brief A layer-ownership descriptor, request, or owner snapshot is structurally invalid. */
+    extern const ErrorCodeDescriptor LayerOwnershipInvalid;
+    /** @brief A layer classification and control-owner combination is unsupported or incoherent. */
+    extern const ErrorCodeDescriptor LayerOwnershipUnsupported;
+    /** @brief A layer replacement does not name the currently admitted stable layer identity. */
+    extern const ErrorCodeDescriptor LayerOwnershipIdentityConflict;
+    /** @brief A layer publication is missing the current revision or is not its exact successor. */
+    extern const ErrorCodeDescriptor LayerOwnershipRevisionStale;
+    /** @brief A layer fact does not belong to the active mounted-world owner lifetime. */
+    extern const ErrorCodeDescriptor LayerOwnershipOwnerStale;
+    /** @brief A new layer fact exceeds the bounded owner capacity. */
+    extern const ErrorCodeDescriptor LayerOwnershipCapacityExceeded;
+    /** @brief Layer admission is closed because its authority is cancelling or shut down. */
+    extern const ErrorCodeDescriptor LayerOwnershipLifecycleUnavailable;
+    /** @brief A runtime-entity cell-exit request, context, handle, or capacity is malformed. */
+    extern const ErrorCodeDescriptor RuntimeEntityCellExitInvalid;
+    /** @brief A runtime-entity cell-exit policy, successor, or transition value is unsupported. */
+    extern const ErrorCodeDescriptor RuntimeEntityCellExitUnsupported;
+    /** @brief A cell-exit command or source observation does not name the current entity and cell generation. */
+    extern const ErrorCodeDescriptor RuntimeEntityCellExitStale;
+    /** @brief The bounded cell-exit owner cannot admit another in-flight transaction. */
+    extern const ErrorCodeDescriptor RuntimeEntityCellExitCapacityExceeded;
+    /** @brief Runtime-entity cell-exit admission is cancelling or closed. */
+    extern const ErrorCodeDescriptor RuntimeEntityCellExitLifecycleUnavailable;
+    /** @brief A known runtime-entity cell-exit transition is illegal from the current phase. */
+    extern const ErrorCodeDescriptor RuntimeEntityCellExitTransitionInvalid;
     /** @brief A partition capability snapshot or project-settings request is structurally invalid. */
     extern const ErrorCodeDescriptor PartitionSettingsInvalid;
     /** @brief A precision or package mode is unsupported by the selected project profile or host. */

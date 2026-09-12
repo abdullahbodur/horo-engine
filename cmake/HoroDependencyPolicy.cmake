@@ -45,7 +45,7 @@ horo_allow_target_dependencies(TARGET HoroInputSdl DEPENDENCIES HoroInput)
 
 horo_allow_target_dependencies(TARGET HoroGameplayApi DEPENDENCIES HoroFoundation)
 horo_allow_target_dependencies(TARGET HoroRuntimeScene
-    DEPENDENCIES HoroFoundation HoroRuntime HoroAssets HoroGameplayApi HoroSceneModel HoroRuntimeUi)
+    DEPENDENCIES HoroFoundation HoroRuntime HoroAssets HoroGameplayApi HoroNavigationApi HoroSceneModel HoroRuntimeUi)
 horo_allow_target_dependencies(TARGET HoroGameplayRuntime
     DEPENDENCIES HoroGameplayApi HoroRuntimeScene)
 horo_allow_target_dependencies(TARGET HoroGameplayModuleHost
