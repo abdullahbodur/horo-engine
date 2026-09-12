@@ -6,7 +6,7 @@
  */
 
 #include "Horo/Assets/AssetId.h"
-#include "Horo/Runtime/Ui/UiElementTree.h"
+#include "Horo/Runtime/Ui/UiLayout.h"
 
 #include <array>
 #include <compare>
@@ -38,28 +38,6 @@ namespace Horo::Runtime::Ui {
     using UiRenderSnapshotRevision = UiRevision<UiRenderSnapshotRevisionTag>;
     /** @brief Exact Horo resource-source generation expected by extraction. */
     using UiRenderResourceRevision = UiRevision<UiRenderResourceRevisionTag>;
-
-    /** @brief Signed logical point in deterministic 1/64-DIP units. */
-    struct UiLogicalPoint final {
-        std::int32_t x{}; /**< Horizontal 1/64-DIP coordinate. */
-        std::int32_t y{}; /**< Vertical 1/64-DIP coordinate. */
-        [[nodiscard]] auto operator<=>(const UiLogicalPoint &) const noexcept = default;
-    };
-
-    /** @brief Non-negative logical extent in deterministic 1/64-DIP units. */
-    struct UiLogicalExtent final {
-        std::int32_t width{};  /**< Non-negative 1/64-DIP width. */
-        std::int32_t height{}; /**< Non-negative 1/64-DIP height. */
-        [[nodiscard]] bool IsValid() const noexcept;
-        [[nodiscard]] auto operator<=>(const UiLogicalExtent &) const noexcept = default;
-    };
-
-    /** @brief Logical rectangle produced upstream by layout. */
-    struct UiLogicalRect final {
-        UiLogicalPoint origin;  /**< Signed logical origin. */
-        UiLogicalExtent extent; /**< Non-negative logical extent. */
-        [[nodiscard]] auto operator<=>(const UiLogicalRect &) const noexcept = default;
-    };
 
     /** @brief Finite affine logical transform; translation uses logical DIP units. */
     struct UiLogicalTransform final {

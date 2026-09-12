@@ -16,6 +16,23 @@ namespace {
         return Horo::Prefab::PrefabAssetReference::Create(Horo::Assets::AssetId::FromBytes(bytes)).Value();
     }
 
+    [[nodiscard]] Horo::Runtime::NavigationSurfaceComponent NavigationSurface(const std::uint64_t id = 1) {
+        std::array<std::uint8_t, 16> bytes{};
+        bytes.back() = 7;
+        return {
+            .id = Horo::Navigation::SurfaceId::Create(id).Value(),
+            .definition = Horo::Assets::AssetId::FromBytes(bytes),
+            .profiles = {Horo::Navigation::NavigationAgentProfileId::Create(3).Value()},
+        };
+    }
+
+    [[nodiscard]] Horo::Runtime::NavigationRegionComponent NavigationRegion(const std::uint64_t id = 1, const std::uint64_t surface = 1) {
+        return {
+            .id = Horo::Navigation::NavigationRegionId::Create(id).Value(),
+            .surface = Horo::Navigation::SurfaceId::Create(surface).Value(),
+        };
+    }
+
     [[nodiscard]] std::unique_ptr<Horo::Runtime::RuntimeScene> MakeRuntimeScene(const Horo::Editor::SceneDocument &document) {
         auto definition = Horo::Editor::ConvertSceneDocumentToRuntime(document.Snapshot(), Horo::Runtime::SceneDefinitionId{1});
         REQUIRE((definition.HasValue()));
@@ -86,6 +103,61 @@ namespace {
         REQUIRE(converted.Value().Entities().size() == 1);
         REQUIRE_FALSE(converted.Value().Entities().front().components.camera.has_value());
         REQUIRE(document.objects.front().components.camera.has_value());
+    }
+
+    TEST_CASE("Scene navigation commands preserve committed generations through undo redo and runtime conversion",
+              "[unit][editor][navigation]") {
+        using namespace Horo;
+        using namespace Horo::Editor;
+
+        SceneDocument document;
+        EditorHistory history;
+        SceneDocumentCommandExecutor commands{document, history};
+        const auto surfaceObject = commands.Execute(CreateSceneObjectCommand{.name = "Surface"});
+        const auto regionObject = commands.Execute(CreateSceneObjectCommand{.name = "Region"});
+        REQUIRE(surfaceObject.HasValue());
+        REQUIRE(regionObject.HasValue());
+        REQUIRE(commands.Execute(SetSceneNavigationSurfaceCommand{surfaceObject.Value().object, NavigationSurface()}).HasValue());
+        REQUIRE(commands.Execute(SetSceneNavigationRegionCommand{regionObject.Value().object, NavigationRegion()}).HasValue());
+
+        auto changedSurface = NavigationSurface();
+        changedSurface.generation = 2;
+        REQUIRE(commands.Execute(SetSceneNavigationSurfaceCommand{surfaceObject.Value().object, changedSurface}).HasValue());
+        REQUIRE(document.Objects()[0].components.navigationSurface->generation == 2);
+        REQUIRE(commands.Undo().HasValue());
+        REQUIRE(document.Objects()[0].components.navigationSurface->generation == 1);
+        REQUIRE(commands.Redo().HasValue());
+        REQUIRE(document.Objects()[0].components.navigationSurface->generation == 2);
+
+        const auto runtime = ConvertSceneDocumentToRuntime(document.Snapshot(), Runtime::SceneDefinitionId{9});
+        REQUIRE(runtime.HasValue());
+        REQUIRE(runtime.Value().Revision().value == document.State().value);
+        REQUIRE(runtime.Value().Entities()[0].components.navigationSurface->generation == 2);
+        REQUIRE(runtime.Value().Entities()[1].components.navigationRegion->surface == Navigation::SurfaceId::Create(1).Value());
+
+        REQUIRE(commands.Execute(SetSceneNavigationSurfaceCommand{surfaceObject.Value().object, std::nullopt}).HasError());
+        REQUIRE(commands.Execute(SetSceneNavigationRegionCommand{regionObject.Value().object, NavigationRegion(1, 99)}).HasError());
+    }
+
+    TEST_CASE("Scene object duplication regenerates navigation component identities and retargets local regions",
+              "[unit][editor][navigation]") {
+        using namespace Horo::Editor;
+        SceneDocument document;
+        EditorHistory history;
+        SceneDocumentCommandExecutor commands{document, history};
+        SceneObjectComponentSet components;
+        components.navigationSurface = NavigationSurface(8);
+        components.navigationRegion = NavigationRegion(11, 8);
+        const auto source = commands.Execute(CreateSceneObjectCommand{.name = "Source", .components = components});
+        REQUIRE(source.HasValue());
+        const auto duplicate = commands.Execute(DuplicateSceneObjectCommand{source.Value().object, "Duplicate"});
+        REQUIRE(duplicate.HasValue());
+        const auto &duplicated = document.Objects().back().components;
+        REQUIRE(duplicated.navigationSurface->id != components.navigationSurface->id);
+        REQUIRE(duplicated.navigationRegion->id != components.navigationRegion->id);
+        REQUIRE(duplicated.navigationSurface->id.Value() == 9);
+        REQUIRE(duplicated.navigationRegion->id.Value() == 12);
+        REQUIRE(duplicated.navigationRegion->surface == duplicated.navigationSurface->id);
     }
 
     TEST_CASE("Catalog Owns Stable Core Primitive Ids", "[unit][editor]") {
