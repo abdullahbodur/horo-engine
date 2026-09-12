@@ -1388,6 +1388,11 @@ add_executable(HoroRuntimeSaveCanonicalCodecTests
 )
 target_compile_features(HoroRuntimeSaveCanonicalCodecTests PRIVATE cxx_std_20)
 target_link_libraries(HoroRuntimeSaveCanonicalCodecTests PRIVATE HoroEngine::Runtime)
+add_executable(HoroRuntimeSaveReferenceTests
+        unit/runtime/save/SaveReferenceTests.cpp
+)
+target_compile_features(HoroRuntimeSaveReferenceTests PRIVATE cxx_std_20)
+target_link_libraries(HoroRuntimeSaveReferenceTests PRIVATE HoroEngine::Runtime)
 add_executable(HoroRuntimeSaveSlotMetadataTests
         unit/runtime/save/SaveSlotMetadataTests.cpp
 )
@@ -1859,6 +1864,7 @@ set(HORO_CATCH_TEST_TARGETS
         HoroRuntimeSaveArchiveMetadataTests
         HoroRuntimeSaveArchiveFramingTests
         HoroRuntimeSaveCanonicalCodecTests
+        HoroRuntimeSaveReferenceTests
         HoroRuntimeSaveSlotMetadataTests
         HoroRuntimeSaveOperationTests
         HoroRuntimeSaveTestCompositionsTests
