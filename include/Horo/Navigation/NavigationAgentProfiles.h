@@ -45,6 +45,13 @@ namespace Horo::Navigation {
     };
 
     /**
+     * @brief Validates grounded-agent dimensions and bake resolution independently of profile identity.
+     * @param geometry Candidate finite geometry values.
+     * @return Success or NavigationErrors::AgentProfileInvalid.
+     */
+    [[nodiscard]] Result<void> ValidateNavigationAgentBuildGeometry(const NavigationAgentBuildGeometry &geometry);
+
+    /**
      * @brief Validates one grounded-agent profile before bake admission.
      * @param profile Authored profile to validate.
      * @return Success only for a non-zero identity, non-empty display name, and valid finite geometry values.

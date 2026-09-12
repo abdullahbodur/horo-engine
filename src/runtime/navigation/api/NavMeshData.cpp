@@ -3,7 +3,6 @@
 #include "Horo/Navigation/NavigationErrors.h"
 
 #include <algorithm>
-#include <array>
 #include <cmath>
 #include <limits>
 #include <utility>
@@ -30,19 +29,6 @@ namespace Horo::Navigation {
             return std::ranges::any_of(digest.bytes, [](const std::uint8_t value) {
                 return value != 0;
             });
-        }
-
-        [[nodiscard]] bool IsValid(const NavigationAgentBuildGeometry &geometry) noexcept {
-            const std::array positive{geometry.radiusMeters, geometry.heightMeters, geometry.cellSizeMeters, geometry.cellHeightMeters};
-            const std::array nonNegative{geometry.maxSlopeDegrees, geometry.stepHeightMeters, geometry.minimumRegionSizeMeters};
-            const auto positiveFinite = [](const float value) {
-                return std::isfinite(value) && value > 0.0F;
-            };
-            const auto nonNegativeFinite = [](const float value) {
-                return std::isfinite(value) && value >= 0.0F;
-            };
-            return std::ranges::all_of(positive, positiveFinite) && std::ranges::all_of(nonNegative, nonNegativeFinite) &&
-                   geometry.maxSlopeDegrees < 90.0F && geometry.stepHeightMeters < geometry.heightMeters;
         }
 
         [[nodiscard]] constexpr bool IsValidCountLimits(const NavMeshArtifactLimits &limits) noexcept {
@@ -344,9 +330,10 @@ namespace Horo::Navigation {
 
     /** @copydoc ValidateNavMeshArtifactHeader */
     Result<void> ValidateNavMeshArtifactHeader(const NavMeshArtifactHeader &header, const NavMeshArtifactLimits &limits) {
-        if (!IsValidLimits(limits) || !header.profile.id.IsValid() || !IsValid(header.profile.buildGeometry) ||
-            !IsPresent(header.profile.contentDigest) || !IsPresent(header.payloadDigest) ||
-            !std::isfinite(header.coordinateFrame.tileSizeMeters) || header.coordinateFrame.tileSizeMeters <= 0.0F)
+        if (!IsValidLimits(limits) || !header.profile.id.IsValid() ||
+            ValidateNavigationAgentBuildGeometry(header.profile.buildGeometry).HasError() || !IsPresent(header.profile.contentDigest) ||
+            !IsPresent(header.payloadDigest) || !std::isfinite(header.coordinateFrame.tileSizeMeters) ||
+            header.coordinateFrame.tileSizeMeters <= 0.0F)
             return Failure<void>(NavigationErrors::NavMeshArtifactInvalid);
         if (header.formatVersion.major != CurrentNavMeshFormatVersion.major ||
             header.formatVersion.minor > CurrentNavMeshFormatVersion.minor || !IsKnown(header.byteOrder) ||
