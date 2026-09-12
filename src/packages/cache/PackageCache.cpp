@@ -1,5 +1,6 @@
 #include "Horo/Packages/PackageCache.h"
 
+#include <algorithm>
 #include <array>
 #include <atomic>
 #include <fstream>
@@ -78,8 +79,9 @@ namespace Horo::Packages {
             const std::uintmax_t size = std::filesystem::file_size(path, error);
             if (error)
                 return Result<std::vector<std::byte>>::Failure(MakeError(IoFailure, "Package cache entry size could not be read."));
-            if (size > limit || size > std::numeric_limits<std::size_t>::max() ||
-                size > static_cast<std::uintmax_t>(std::numeric_limits<std::streamsize>::max()))
+            const auto readableLimit =
+                std::min<std::uintmax_t>({limit, std::numeric_limits<std::size_t>::max(), std::numeric_limits<std::streamsize>::max()});
+            if (size > readableLimit)
                 return Result<std::vector<std::byte>>::Failure(MakeError(ResourceLimit));
             std::vector<std::byte> bytes(static_cast<std::size_t>(size));
             std::ifstream stream(path, std::ios::binary);

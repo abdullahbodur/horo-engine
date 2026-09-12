@@ -161,9 +161,8 @@ namespace {
         CHECK(first.Value().digest == digest);
         const auto permissions = std::filesystem::status(ActivePath(fixture.temporary.Path(), digest)).permissions();
         CHECK((permissions & std::filesystem::perms::owner_read) != std::filesystem::perms::none);
-        CHECK((permissions & std::filesystem::perms::owner_write) == std::filesystem::perms::none);
-        CHECK((permissions & std::filesystem::perms::group_all) == std::filesystem::perms::none);
-        CHECK((permissions & std::filesystem::perms::others_all) == std::filesystem::perms::none);
+        CHECK((permissions & (std::filesystem::perms::owner_write | std::filesystem::perms::group_all |
+                              std::filesystem::perms::others_all)) == std::filesystem::perms::none);
 
         const auto second = fixture.store.Publish(archive);
         REQUIRE(second.HasValue());
@@ -226,9 +225,8 @@ namespace {
         CHECK(std::filesystem::is_regular_file(artifact));
         const auto permissions = std::filesystem::status(artifact).permissions();
         CHECK((permissions & std::filesystem::perms::owner_read) != std::filesystem::perms::none);
-        CHECK((permissions & std::filesystem::perms::owner_write) == std::filesystem::perms::none);
-        CHECK((permissions & std::filesystem::perms::group_all) == std::filesystem::perms::none);
-        CHECK((permissions & std::filesystem::perms::others_all) == std::filesystem::perms::none);
+        CHECK((permissions & (std::filesystem::perms::owner_write | std::filesystem::perms::group_all |
+                              std::filesystem::perms::others_all)) == std::filesystem::perms::none);
     }
 
     TEST_CASE("Package cache returns busy while publication or cleanup owns the digest lock", "[packages][cache][concurrency]") {
