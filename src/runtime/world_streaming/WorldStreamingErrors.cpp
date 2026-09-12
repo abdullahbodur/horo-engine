@@ -407,6 +407,22 @@ namespace Horo::WorldStreaming::WorldStreamingErrors {
         Describe("world_streaming.source.shape_unsupported", ErrorSeverity::Error,
                  "The evaluating host does not support the requested streaming source shape.",
                  "Enable the shape capability or submit a supported bounded source shape.", true);
+    const ErrorCodeDescriptor PrefetchInvalid =
+        Describe("world_streaming.prefetch.invalid", ErrorSeverity::Error,
+                 "A velocity-prefetch policy, context, or canonical kinematic sample is malformed.",
+                 "Provide valid policy and partition fences, bounded exact velocity, and coherent source admission evidence.", true);
+    const ErrorCodeDescriptor PrefetchUnsupported =
+        Describe("world_streaming.prefetch.unsupported", ErrorSeverity::Error,
+                 "A velocity-prefetch contract version or source category is unsupported.",
+                 "Use the current contract with a camera or gameplay source and an explicitly supported bounded path.", true);
+    const ErrorCodeDescriptor PrefetchStale =
+        Describe("world_streaming.prefetch.stale", ErrorSeverity::Warning,
+                 "Velocity-prefetch evidence names a replaced policy, partition, owner, or expired kinematic sample.",
+                 "Capture the current policy, mounted partition and source owner before evaluating a recent sample.", true);
+    const ErrorCodeDescriptor PrefetchLifecycleUnavailable =
+        Describe("world_streaming.prefetch.lifecycle_unavailable", ErrorSeverity::Warning,
+                 "Velocity-prefetch evaluation is unavailable during cancellation or after shutdown.",
+                 "Stop emitting predicted demand and let the source owner retire its admitted revision.", false);
     const ErrorCodeDescriptor SourceDesiredStateInvalid =
         Describe("world_streaming.source.desired_state_invalid", ErrorSeverity::Error,
                  "A streaming source desired state combines residency and retention inconsistently.",

@@ -511,6 +511,14 @@ frame lease semantics; it has no Scene Runtime, renderer, physics, native,
 editor, or GUI dependency. Trigger policy, participant coordination, and backend
 adapters remain outside this public identity boundary.
 
+`[WST-002.8]` adds `Horo/WorldStreaming/StreamingSourcePrefetch.h` to the same
+`HoroWorldStreaming` owner. It reuses the existing source descriptor, exact
+canonical coordinate and bounded path-volume contracts without exposing a camera,
+character controller, Scene Runtime, network, renderer, platform clock or native
+backend type. Hosts retain source registration and clock ownership; the public
+function only projects immutable caller-supplied evidence. The generated public
+header consumer continues to verify the Foundation/Assets-only staged boundary.
+
 ANI-001.6 adds `Horo/Animation/AnimationClip.h` to the same owner. Asset and runtime
 composition replace ad hoc floating-point cursors and untyped wrap flags with exact
 nanosecond-tick time, reduced sample-rate metadata, stable generation-fenced clip and
