@@ -10,11 +10,11 @@
 namespace Horo::WorldStreaming {
     namespace {
         template <typename T, std::size_t Size> [[nodiscard]] bool IsOneOf(const T value, const std::array<T, Size> &values) noexcept {
-            return std::find(values.begin(), values.end(), value) != values.end();
+            return std::ranges::find(values, value) != values.end();
         }
 
         template <std::size_t Size> [[nodiscard]] bool All(const std::array<bool, Size> &conditions) noexcept {
-            return std::all_of(conditions.begin(), conditions.end(), [](const bool condition) {
+            return std::ranges::all_of(conditions, [](const bool condition) {
                 return condition;
             });
         }
@@ -25,8 +25,8 @@ namespace Horo::WorldStreaming {
         }
 
         [[nodiscard]] bool IsKnown(const WorldLayerResidencyPolicy value) noexcept {
-            constexpr std::array values{WorldLayerResidencyPolicy::Persistent, WorldLayerResidencyPolicy::Streamed,
-                                        WorldLayerResidencyPolicy::RuntimeControlled};
+            using enum WorldLayerResidencyPolicy;
+            constexpr std::array values{Persistent, Streamed, RuntimeControlled};
             return IsOneOf(value, values);
         }
 
@@ -36,14 +36,14 @@ namespace Horo::WorldStreaming {
         }
 
         [[nodiscard]] bool IsKnown(const WorldLayerControlOwnerKind value) noexcept {
-            constexpr std::array values{WorldLayerControlOwnerKind::WorldStreaming, WorldLayerControlOwnerKind::EditorDocument,
-                                        WorldLayerControlOwnerKind::GameplayScript, WorldLayerControlOwnerKind::NetworkReplication};
+            using enum WorldLayerControlOwnerKind;
+            constexpr std::array values{WorldStreaming, EditorDocument, GameplayScript, NetworkReplication};
             return IsOneOf(value, values);
         }
 
         [[nodiscard]] bool IsKnown(const WorldLayerOwnershipAuthorityState value) noexcept {
-            constexpr std::array values{WorldLayerOwnershipAuthorityState::Active, WorldLayerOwnershipAuthorityState::Cancelling,
-                                        WorldLayerOwnershipAuthorityState::Closed};
+            using enum WorldLayerOwnershipAuthorityState;
+            constexpr std::array values{Active, Cancelling, Closed};
             return IsOneOf(value, values);
         }
 
