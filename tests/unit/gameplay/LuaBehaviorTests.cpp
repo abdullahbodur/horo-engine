@@ -1,3 +1,4 @@
+#include "GameplayRuntimeTestSupport.h"
 #include "Horo/Gameplay/BehaviorRuntime.h"
 #include "Horo/Gameplay/LuaBehavior.h"
 
@@ -39,19 +40,8 @@ return horo.behavior {
     }
 
     RuntimeSceneDefinition Definition() {
-        RuntimeComponentSet components;
-        components.behaviors.push_back({
-            BehaviorInstanceId{8},
-            Type(),
-            1,
-            true,
-            {BehaviorField{"speed", 2.0}},
-        });
-        SceneDefinitionBuilder builder{SceneDefinitionId{5}, SceneDefinitionRevision{1}};
-        builder.Add({SceneObjectId{2}, std::nullopt, {}, std::nullopt, std::move(components)});
-        auto built = std::move(builder).Build();
-        REQUIRE(built.HasValue());
-        return std::move(built).Value();
+        return Tests::SingleBehaviorSceneDefinition(SceneDefinitionId{5}, SceneDefinitionRevision{1}, SceneObjectId{2},
+                                                    BehaviorInstanceId{8}, Type(), {BehaviorField{"speed", 2.0}});
     }
 }  // namespace
 
@@ -63,29 +53,18 @@ TEST_CASE("Lua behavior uses the shared lifecycle input fields and deferred tran
     BehaviorRegistry registry;
     REQUIRE(registry.Register(program.Value()->Registration()).HasValue());
     REQUIRE(registry.Freeze().HasValue());
-    auto scene = RuntimeScene::Create(Definition(), SceneRuntimeId{15});
-    REQUIRE(scene.HasValue());
-    auto runtime = BehaviorRuntime::Create(*scene.Value(), registry);
-    REQUIRE(runtime.HasValue());
+    Tests::ActiveBehaviorRuntime active = Tests::ActivateBehaviorRuntime(Definition(), SceneRuntimeId{15}, registry);
 
     const GameplayInputAction move{GameplayActionId{"game.tests.move"}, 3.0F, 0.0F, true, true, false};
-    REQUIRE(runtime.Value()->FixedUpdate({&move, 1}, FixedDeltaTime{1.0 / 60.0}).HasValue());
-    const auto entity = scene.Value()->View().Find(SceneObjectId{2});
-    REQUIRE(entity.has_value());
-    auto view = scene.Value()->View().Get(*entity);
-    REQUIRE(view.HasValue());
-    REQUIRE(view.Value().localTransform->translation.x == 6.0F);
+    REQUIRE(Tests::FixedUpdateAndReadPosition(*active.scene, *active.runtime, SceneObjectId{2}, {&move, 1}).x == 6.0F);
 
     auto candidate = LuaBehaviorProgram::Compile(Source(2.0F), Type(), "lua_mover.horo_script");
     REQUIRE(candidate.HasValue());
     REQUIRE(program.Value()->ReplaceCompatible(std::move(candidate).Value()).HasValue());
     REQUIRE(program.Value()->Revision() == 2);
-    REQUIRE(runtime.Value()->FixedUpdate({&move, 1}, FixedDeltaTime{1.0 / 60.0}).HasValue());
-    view = scene.Value()->View().Get(*entity);
-    REQUIRE(view.HasValue());
-    REQUIRE(view.Value().localTransform->translation.x == 18.0F);
+    REQUIRE(Tests::FixedUpdateAndReadPosition(*active.scene, *active.runtime, SceneObjectId{2}, {&move, 1}).x == 18.0F);
 
-    runtime.Value()->Shutdown();
+    active.runtime->Shutdown();
 }
 
 TEST_CASE("Lua behavior rejects sidecar identity mismatch and unavailable OS libraries") {
@@ -125,13 +104,7 @@ return horo.behavior {
     BehaviorRegistry registry;
     REQUIRE(registry.Register(program.Value()->Registration()).HasValue());
     REQUIRE(registry.Freeze().HasValue());
-    auto scene = RuntimeScene::Create(Definition(), SceneRuntimeId{16});
-    REQUIRE(scene.HasValue());
-    auto runtime = BehaviorRuntime::Create(*scene.Value(), registry);
-    REQUIRE(runtime.HasValue());
+    Tests::ActiveBehaviorRuntime active = Tests::ActivateBehaviorRuntime(Definition(), SceneRuntimeId{16}, registry);
     const GameplayInputAction move{GameplayActionId{"game.tests.move"}, 4.0F, 2.0F, true, true, false};
-    REQUIRE(runtime.Value()->FixedUpdate({&move, 1}, FixedDeltaTime{1.0 / 60.0}).HasValue());
-    const auto entity = scene.Value()->View().Find(SceneObjectId{2});
-    REQUIRE(entity.has_value());
-    REQUIRE(scene.Value()->View().Get(*entity).Value().localTransform->translation.x == 4.0F);
+    REQUIRE(Tests::FixedUpdateAndReadPosition(*active.scene, *active.runtime, SceneObjectId{2}, {&move, 1}).x == 4.0F);
 }

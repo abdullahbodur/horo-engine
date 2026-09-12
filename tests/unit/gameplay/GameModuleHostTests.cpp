@@ -1,4 +1,5 @@
 #include "GameplayModuleTestSupport.h"
+#include "GameplayRuntimeTestSupport.h"
 #include "Horo/Gameplay/BehaviorRuntime.h"
 #include "Horo/Gameplay/ComponentRegistry.h"
 #include "Horo/Gameplay/GameAssetTypeRegistry.h"
@@ -64,13 +65,8 @@ namespace {
     };
 
     RuntimeSceneDefinition Definition() {
-        RuntimeComponentSet components;
-        components.behaviors.push_back({BehaviorInstanceId{1}, BehaviorTypeId::Parse("game.tests.dynamic_mover").Value(), 1, true, {}});
-        SceneDefinitionBuilder builder{SceneDefinitionId{3}, SceneDefinitionRevision{1}};
-        builder.Add({SceneObjectId{1}, std::nullopt, {}, std::nullopt, std::move(components)});
-        auto built = std::move(builder).Build();
-        REQUIRE(built.HasValue());
-        return std::move(built).Value();
+        return Tests::SingleBehaviorSceneDefinition(SceneDefinitionId{3}, SceneDefinitionRevision{1}, SceneObjectId{1},
+                                                    BehaviorInstanceId{1}, BehaviorTypeId::Parse("game.tests.dynamic_mover").Value());
     }
 }  // namespace
 
@@ -108,19 +104,11 @@ TEST_CASE("game module host validates fingerprint and keeps factories alive thro
     REQUIRE(systems.Value()->Execute(GameplaySystemPhase::Gameplay, GameplayThreadAffinity::RuntimeOwner, 1.0 / 60.0).HasValue());
     systems.Value()->Shutdown();
 
-    auto scene = RuntimeScene::Create(Definition(), SceneRuntimeId{7});
-    REQUIRE(scene.HasValue());
-    auto runtime = BehaviorRuntime::Create(*scene.Value(), loaded.Value()->Registry());
-    REQUIRE(runtime.HasValue());
+    Tests::ActiveBehaviorRuntime active = Tests::ActivateBehaviorRuntime(Definition(), SceneRuntimeId{7}, loaded.Value()->Registry());
     const GameplayInputAction move{GameplayActionId{"game.tests.move"}, 3.0F, 0.0F, true, true, false};
-    REQUIRE(runtime.Value()->FixedUpdate({&move, 1}, FixedDeltaTime{1.0 / 60.0}).HasValue());
-    const auto entity = scene.Value()->View().Find(SceneObjectId{1});
-    REQUIRE(entity.has_value());
-    const auto view = scene.Value()->View().Get(*entity);
-    REQUIRE(view.HasValue());
-    REQUIRE(view.Value().localTransform->translation.x == 3.0F);
+    REQUIRE(Tests::FixedUpdateAndReadPosition(*active.scene, *active.runtime, SceneObjectId{1}, {&move, 1}).x == 3.0F);
 
-    runtime.Value()->Shutdown();
+    active.runtime->Shutdown();
 }
 
 TEST_CASE("game module host validates an independent shadow artifact and removes it after unload") {
