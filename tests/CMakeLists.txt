@@ -37,6 +37,17 @@ add_test(NAME HoroExtensionSdkExternalConsumerTest
 set_tests_properties(HoroExtensionSdkExternalConsumerTest PROPERTIES
     LABELS "extensions;sdk;cmake")
 
+add_test(NAME HoroExtensionSdkReconfigureTest
+    COMMAND "${CMAKE_COMMAND}"
+        "-DHORO_ENGINE_SOURCE_DIR=${PROJECT_SOURCE_DIR}"
+        "-DHORO_TEST_BINARY_DIR=${CMAKE_CURRENT_BINARY_DIR}/extension-sdk-reconfigure"
+        "-DCMAKE_GENERATOR=${CMAKE_GENERATOR}"
+        "-DCMAKE_GENERATOR_PLATFORM=${CMAKE_GENERATOR_PLATFORM}"
+        "-DCMAKE_GENERATOR_TOOLSET=${CMAKE_GENERATOR_TOOLSET}"
+        -P "${PROJECT_SOURCE_DIR}/tests/cmake/RunExtensionSdkReconfigureTest.cmake")
+set_tests_properties(HoroExtensionSdkReconfigureTest PROPERTIES
+    LABELS "extensions;sdk;cmake")
+
 add_test(NAME HoroExtensionScaffoldsTest
     COMMAND "${CMAKE_COMMAND}"
         "-DHORO_EXTENSION_SDK_PACKAGE_DIR=${HORO_EXTENSION_SDK_PACKAGE_DIR}"
@@ -1497,6 +1508,47 @@ add_executable(HoroPackagedExtensionActivation helpers/extensions/PackagedExtens
 target_compile_features(HoroPackagedExtensionActivation PRIVATE cxx_std_20)
 target_include_directories(HoroPackagedExtensionActivation PRIVATE ${PROJECT_SOURCE_DIR}/tests/support)
 target_link_libraries(HoroPackagedExtensionActivation PRIVATE HoroEngine::Extensions)
+
+add_test(NAME HoroExtensionManifestValidatorValid
+    COMMAND "$<TARGET_FILE:horo-extension-validate>" --json --schema-version 1
+        "${PROJECT_SOURCE_DIR}/tests/fixtures/extensions/manifest-validator-valid.json")
+set_tests_properties(HoroExtensionManifestValidatorValid PROPERTIES
+    LABELS "extensions;sdk;cli"
+    PASS_REGULAR_EXPRESSION
+        "\\\"valid\\\":true,\\\"schemaVersion\\\":1,\\\"id\\\":\\\"com.horo.fixture.validator\\\"")
+
+add_test(NAME HoroExtensionManifestValidatorInvalid
+    COMMAND "${CMAKE_COMMAND}"
+        "-DVALIDATOR=$<TARGET_FILE:horo-extension-validate>"
+        "-DMANIFEST=${PROJECT_SOURCE_DIR}/tests/fixtures/extensions/manifest-validator-invalid.json"
+        -P "${PROJECT_SOURCE_DIR}/tests/cmake/VerifyExtensionValidatorFailure.cmake")
+set_tests_properties(HoroExtensionManifestValidatorInvalid PROPERTIES
+    LABELS "extensions;sdk;cli")
+
+add_test(NAME HoroExtensionManifestValidatorContracts
+    COMMAND "${CMAKE_COMMAND}"
+        "-DVALIDATOR=$<TARGET_FILE:horo-extension-validate>"
+        "-DTEST_DIRECTORY=${CMAKE_CURRENT_BINARY_DIR}/extension-validator-contracts"
+        "-DESCAPED_MANIFEST=${PROJECT_SOURCE_DIR}/tests/fixtures/extensions/manifest-validator-escaped-path.json"
+        -P "${PROJECT_SOURCE_DIR}/tests/cmake/VerifyExtensionValidatorContracts.cmake")
+set_tests_properties(HoroExtensionManifestValidatorContracts PROPERTIES
+    LABELS "extensions;sdk;cli")
+
+add_test(NAME HoroExtensionManifestValidatorRejectsUnknownSchema
+    COMMAND "${CMAKE_COMMAND}"
+        "-DVALIDATOR=$<TARGET_FILE:horo-extension-validate>"
+        "-DMANIFEST=${PROJECT_SOURCE_DIR}/tests/fixtures/extensions/manifest-validator-valid.json"
+        -P "${PROJECT_SOURCE_DIR}/tests/cmake/VerifyExtensionValidatorUsageFailure.cmake")
+set_tests_properties(HoroExtensionManifestValidatorRejectsUnknownSchema PROPERTIES
+    LABELS "extensions;sdk;cli")
+
+add_test(NAME HoroExtensionManifestValidatorIsPackaged
+    COMMAND "${CMAKE_COMMAND}"
+        "-DVALIDATOR=${HORO_EXTENSION_SDK_PACKAGE_DIR}/bin/horo-extension-validate${CMAKE_EXECUTABLE_SUFFIX}"
+        "-DSCHEMA=${HORO_EXTENSION_SDK_PACKAGE_DIR}/share/horo/extension-sdk/extension-manifest-v1.schema.json"
+        -P "${PROJECT_SOURCE_DIR}/tests/cmake/VerifyExtensionValidatorPackage.cmake")
+set_tests_properties(HoroExtensionManifestValidatorIsPackaged PROPERTIES
+    LABELS "extensions;sdk;cli")
 
 add_executable(HoroExtensionManagerTests
         unit/extensions/ApplicationCapabilityRegistryTests.cpp
