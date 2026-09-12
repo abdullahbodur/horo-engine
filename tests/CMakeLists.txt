@@ -258,6 +258,7 @@ add_executable(HoroAITests
         unit/runtime/ai/AIIdentityTests.cpp
         unit/runtime/ai/BlackboardInstanceTests.cpp
         unit/runtime/ai/BlackboardSchemaTests.cpp
+        unit/runtime/ai/PerceptionDescriptorRegistryTests.cpp
 )
 target_compile_features(HoroAITests PRIVATE cxx_std_20)
 target_link_libraries(HoroAITests PRIVATE HoroEngine::AI)

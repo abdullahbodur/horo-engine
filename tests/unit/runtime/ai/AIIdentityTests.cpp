@@ -31,12 +31,18 @@ namespace Horo::AI {
             CHECK(TaskId::Create(0).HasError());
             CHECK(BlackboardSchemaId::Create(0).HasError());
             CHECK(BlackboardKeyId::Create(0).HasError());
+            CHECK(SenseTypeId::Create(0).HasError());
+            CHECK(StimulusTypeId::Create(0).HasError());
+            CHECK(PerceptionListenerTypeId::Create(0).HasError());
+            CHECK(PerceptionProviderId::Create(0).HasError());
 
             CHECK(MakeIdentity<AgentId>(std::numeric_limits<std::uint64_t>::max()).Value() == std::numeric_limits<std::uint64_t>::max());
             static_assert(!std::is_convertible_v<std::uint64_t, AgentId>);
             static_assert(!std::is_same_v<AgentId, ControllerTypeId>);
             static_assert(!std::is_same_v<ControllerTypeId, TaskId>);
             static_assert(!std::is_same_v<BlackboardSchemaId, BlackboardKeyId>);
+            static_assert(!std::is_same_v<SenseTypeId, StimulusTypeId>);
+            static_assert(!std::is_same_v<PerceptionListenerTypeId, PerceptionProviderId>);
         }
 
         TEST_CASE("Every persistent AI identity uses canonical fixed-width network byte order", "[unit][ai][identity]") {
@@ -54,6 +60,10 @@ namespace Horo::AI {
             check.template operator()<TaskId>();
             check.template operator()<BlackboardSchemaId>();
             check.template operator()<BlackboardKeyId>();
+            check.template operator()<SenseTypeId>();
+            check.template operator()<StimulusTypeId>();
+            check.template operator()<PerceptionListenerTypeId>();
+            check.template operator()<PerceptionProviderId>();
 
             static_assert(PersistentlySerializableAiIdentity<AgentId>);
             static_assert(!PersistentlySerializableAiIdentity<AiRuntimeIncarnation>);
@@ -143,6 +153,13 @@ namespace Horo::AI {
                 &AIErrors::BlackboardObserverInvalid,
                 &AIErrors::BlackboardObserverLimitExceeded,
                 &AIErrors::BlackboardReentrantMutation,
+                &AIErrors::PerceptionDescriptorInvalid,
+                &AIErrors::PerceptionDescriptorLimitExceeded,
+                &AIErrors::PerceptionDescriptorConflict,
+                &AIErrors::PerceptionDependencyMissing,
+                &AIErrors::PerceptionDescriptorIncompatible,
+                &AIErrors::PerceptionCapabilityUnavailable,
+                &AIErrors::PerceptionRegistryStorageUnavailable,
             };
             std::set<std::string_view> uniqueCodes;
             for (const ErrorCodeDescriptor *descriptor : descriptors) {

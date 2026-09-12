@@ -22,8 +22,15 @@ namespace Horo::AI {
 
         [[nodiscard]] bool ExceedsDescriptorLimit(const AiIdentityDescriptorSet &descriptors) noexcept {
             std::size_t remaining = MaximumAiIdentityDescriptors;
-            const std::array sizes{descriptors.agents.size(), descriptors.controllerTypes.size(), descriptors.tasks.size(),
-                                   descriptors.blackboardSchemas.size(), descriptors.blackboardKeys.size()};
+            const std::array sizes{descriptors.agents.size(),
+                                   descriptors.controllerTypes.size(),
+                                   descriptors.tasks.size(),
+                                   descriptors.blackboardSchemas.size(),
+                                   descriptors.blackboardKeys.size(),
+                                   descriptors.senseTypes.size(),
+                                   descriptors.stimulusTypes.size(),
+                                   descriptors.listenerTypes.size(),
+                                   descriptors.perceptionProviders.size()};
             for (const std::size_t size : sizes) {
                 if (size > remaining)
                     return true;
@@ -37,8 +44,15 @@ namespace Horo::AI {
     Result<void> ValidateAiIdentityDescriptorSet(const AiIdentityDescriptorSet &descriptors) {
         if (ExceedsDescriptorLimit(descriptors))
             return Result<void>::Failure(MakeError(AIErrors::DescriptorLimitExceeded));
-        const std::array domainSizes{descriptors.agents.size(), descriptors.controllerTypes.size(), descriptors.tasks.size(),
-                                     descriptors.blackboardSchemas.size(), descriptors.blackboardKeys.size()};
+        const std::array domainSizes{descriptors.agents.size(),
+                                     descriptors.controllerTypes.size(),
+                                     descriptors.tasks.size(),
+                                     descriptors.blackboardSchemas.size(),
+                                     descriptors.blackboardKeys.size(),
+                                     descriptors.senseTypes.size(),
+                                     descriptors.stimulusTypes.size(),
+                                     descriptors.listenerTypes.size(),
+                                     descriptors.perceptionProviders.size()};
         std::vector<std::uint64_t> orderedValues;
         orderedValues.reserve(std::ranges::max(domainSizes));
         if (const Result<void> agents = ValidateDomain(descriptors.agents, orderedValues); agents.HasError())
@@ -49,7 +63,15 @@ namespace Horo::AI {
             return tasks;
         if (const Result<void> schemas = ValidateDomain(descriptors.blackboardSchemas, orderedValues); schemas.HasError())
             return schemas;
-        return ValidateDomain(descriptors.blackboardKeys, orderedValues);
+        if (const Result<void> keys = ValidateDomain(descriptors.blackboardKeys, orderedValues); keys.HasError())
+            return keys;
+        if (const Result<void> senses = ValidateDomain(descriptors.senseTypes, orderedValues); senses.HasError())
+            return senses;
+        if (const Result<void> stimuli = ValidateDomain(descriptors.stimulusTypes, orderedValues); stimuli.HasError())
+            return stimuli;
+        if (const Result<void> listeners = ValidateDomain(descriptors.listenerTypes, orderedValues); listeners.HasError())
+            return listeners;
+        return ValidateDomain(descriptors.perceptionProviders, orderedValues);
     }
 
     /** @copydoc AiRuntimeIncarnation::Create */
