@@ -81,9 +81,9 @@ namespace Horo::WorldStreaming {
         StreamingCellAssetRequest &operator=(StreamingCellAssetRequest &&other) noexcept;
 
         /** @brief Returns the latest aggregate state without blocking. @return Loading, cancelling, or terminal state. */
-        [[nodiscard]] StreamingCellAssetRequestState State() const noexcept;
+        [[nodiscard]] StreamingCellAssetRequestState State() const;
         /** @brief Requests cancellation for the root and every admitted child; idempotent. @return Success or shutdown error. */
-        [[nodiscard]] Result<void> RequestCancel() noexcept;
+        [[nodiscard]] Result<void> RequestCancel();
         /** @brief Consumes the complete terminal success exactly once without blocking. @return Owned canonical bytes or typed error. */
         [[nodiscard]] Result<StreamingCellAssetBatch> TakeResult();
 

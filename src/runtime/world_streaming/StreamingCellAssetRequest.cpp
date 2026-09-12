@@ -55,7 +55,7 @@ namespace Horo::WorldStreaming {
         bool cancellationRequested{};
         bool consumed{};
 
-        [[nodiscard]] StreamingCellAssetRequestState RefreshState() noexcept {
+        [[nodiscard]] StreamingCellAssetRequestState RefreshState() {
             using enum Assets::AssetLoadState;
             bool anyLoading{};
             bool anyFailed{};
@@ -78,11 +78,16 @@ namespace Horo::WorldStreaming {
             return StreamingCellAssetRequestState::Ready;
         }
 
-        void CancelChildren() noexcept {
+        void CancelChildren() {
             cancellationRequested = true;
             cancellation.RequestCancellation();
             for (auto &handle : handles)
                 static_cast<void>(handle.RequestCancel());
+        }
+
+        void CancelRoot() noexcept {
+            cancellationRequested = true;
+            cancellation.RequestCancellation();
         }
     };
 
@@ -91,7 +96,7 @@ namespace Horo::WorldStreaming {
     /** @copydoc StreamingCellAssetRequest::~StreamingCellAssetRequest */
     StreamingCellAssetRequest::~StreamingCellAssetRequest() {
         if (state_)
-            static_cast<void>(RequestCancel());
+            state_->CancelRoot();
     }
 
     /** @copydoc StreamingCellAssetRequest::operator= */
@@ -99,13 +104,13 @@ namespace Horo::WorldStreaming {
         if (this == &other)
             return *this;
         if (state_)
-            static_cast<void>(RequestCancel());
+            state_->CancelRoot();
         state_ = std::move(other.state_);
         return *this;
     }
 
     /** @copydoc StreamingCellAssetRequest::State */
-    StreamingCellAssetRequestState StreamingCellAssetRequest::State() const noexcept {
+    StreamingCellAssetRequestState StreamingCellAssetRequest::State() const {
         if (!state_)
             return StreamingCellAssetRequestState::Failed;
         std::scoped_lock lock{state_->mutex};
@@ -113,7 +118,7 @@ namespace Horo::WorldStreaming {
     }
 
     /** @copydoc StreamingCellAssetRequest::RequestCancel */
-    Result<void> StreamingCellAssetRequest::RequestCancel() noexcept {
+    Result<void> StreamingCellAssetRequest::RequestCancel() {
         if (!state_)
             return Failure<void>(WorldStreamingErrors::CellAssetRequestLifecycleUnavailable);
         std::scoped_lock lock{state_->mutex};
