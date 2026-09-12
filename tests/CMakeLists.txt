@@ -37,6 +37,17 @@ add_test(NAME HoroExtensionSdkExternalConsumerTest
 set_tests_properties(HoroExtensionSdkExternalConsumerTest PROPERTIES
     LABELS "extensions;sdk;cmake")
 
+add_test(NAME HoroExtensionSdkReconfigureTest
+    COMMAND "${CMAKE_COMMAND}"
+        "-DHORO_ENGINE_SOURCE_DIR=${PROJECT_SOURCE_DIR}"
+        "-DHORO_TEST_BINARY_DIR=${CMAKE_CURRENT_BINARY_DIR}/extension-sdk-reconfigure"
+        "-DCMAKE_GENERATOR=${CMAKE_GENERATOR}"
+        "-DCMAKE_GENERATOR_PLATFORM=${CMAKE_GENERATOR_PLATFORM}"
+        "-DCMAKE_GENERATOR_TOOLSET=${CMAKE_GENERATOR_TOOLSET}"
+        -P "${PROJECT_SOURCE_DIR}/tests/cmake/RunExtensionSdkReconfigureTest.cmake")
+set_tests_properties(HoroExtensionSdkReconfigureTest PROPERTIES
+    LABELS "extensions;sdk;cmake")
+
 add_test(NAME HoroExtensionScaffoldsTest
     COMMAND "${CMAKE_COMMAND}"
         "-DHORO_EXTENSION_SDK_PACKAGE_DIR=${HORO_EXTENSION_SDK_PACKAGE_DIR}"
