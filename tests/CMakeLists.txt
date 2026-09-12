@@ -37,6 +37,19 @@ add_test(NAME HoroExtensionSdkExternalConsumerTest
 set_tests_properties(HoroExtensionSdkExternalConsumerTest PROPERTIES
     LABELS "extensions;sdk;cmake")
 
+add_test(NAME HoroExtensionScaffoldsTest
+    COMMAND "${CMAKE_COMMAND}"
+        "-DHORO_EXTENSION_SDK_PACKAGE_DIR=${HORO_EXTENSION_SDK_PACKAGE_DIR}"
+        "-DHORO_EXTENSION_SCAFFOLDER=${HORO_EXTENSION_SDK_PACKAGE_DIR}/bin/horo-scaffold-extension.py"
+        "-DHORO_TEST_BINARY_DIR=${CMAKE_CURRENT_BINARY_DIR}/extension-scaffolds"
+        "-DPYTHON_EXECUTABLE=${Python3_EXECUTABLE}"
+        "-DCMAKE_GENERATOR=${CMAKE_GENERATOR}"
+        "-DCMAKE_GENERATOR_PLATFORM=${CMAKE_GENERATOR_PLATFORM}"
+        "-DCMAKE_GENERATOR_TOOLSET=${CMAKE_GENERATOR_TOOLSET}"
+        -P "${PROJECT_SOURCE_DIR}/tests/cmake/RunExtensionScaffoldsTest.cmake")
+set_tests_properties(HoroExtensionScaffoldsTest PROPERTIES
+    LABELS "extensions;sdk;cmake")
+
 # One translation unit per registered public header verifies that consumers can
 # compile the contract using only its owning target's usage requirements.
 horo_add_public_header_consumer_targets()

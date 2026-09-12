@@ -598,8 +598,13 @@ The build publishes that header as a self-contained, versioned
 `HoroEngine::ExtensionSdk` header target, machine-readable SDK-to-host ABI range
 metadata, and the project license. It has no engine-library or third-party link
 dependencies and is verified by an external C consumer copied away from the
-engine build tree. Manifest schemas, scaffolding, validation, and distribution
-commands remain separately versioned SDK deliverables.
+engine build tree. Its scaffolder generates portable GUI-only, backend/library,
+script-provider, and hybrid C projects. Every generated module owns a separate
+ABI entry unit and contract test. Hybrid presentation and script adapters import
+the backend's typed service instead of duplicating backend authority. Generated
+projects use only `HoroEngine::ExtensionSdk`, relative project paths, and CPack
+ZIP configuration. Manifest schemas, validation, and distribution commands
+remain separately versioned SDK deliverables.
 
 Project gameplay modules may use the SDK-generation C++ boundary documented in
 [Gameplay Module Boundary](./gameplay-module-boundary.md). That boundary is
