@@ -56,6 +56,7 @@ namespace Horo::Navigation {
     struct NavigationGenerationIdentityTag;
     struct NavigationSnapshotIdentityTag;
     struct NavigationSurfaceIdentityTag;
+    struct NavigationRegionIdentityTag;
 
     /** @brief Process-local world incarnation assigned once by the host and never serialized. */
     using NavigationWorldId = NavigationIdentity<NavigationWorldIdentityTag>;
@@ -69,6 +70,8 @@ namespace Horo::Navigation {
     using NavigationSnapshotToken = NavigationIdentity<NavigationSnapshotIdentityTag>;
     /** @brief Stable authored surface identity, distinct from runtime handles and native references. */
     using SurfaceId = NavigationIdentity<NavigationSurfaceIdentityTag>;
+    /** @brief Stable authored region identity, independent from Scene object slots and runtime topology. */
+    using NavigationRegionId = NavigationIdentity<NavigationRegionIdentityTag>;
 
     /** @brief Decodes a canonical network-byte-order surface identity. @param bytes Persistent bytes.
      * @return Typed identity or NavigationErrors::IdentityInvalid when the decoded value is reserved.

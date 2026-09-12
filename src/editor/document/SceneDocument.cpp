@@ -1,5 +1,6 @@
 #include "editor/document/SceneDocument.h"
 
+#include "Horo/Navigation/NavigationErrors.h"
 #include "Horo/Runtime/Scene/PrimitiveMesh.h"
 #include "editor/project_model/EditorModelErrors.h"
 
@@ -132,6 +133,14 @@ namespace Horo::Editor {
             Runtime::AudioSourceComponent after;
         };
 
+        struct NavigationComponentsChangedDelta {
+            SceneObjectId object;
+            std::optional<Runtime::NavigationSurfaceComponent> surfaceBefore;
+            std::optional<Runtime::NavigationSurfaceComponent> surfaceAfter;
+            std::optional<Runtime::NavigationRegionComponent> regionBefore;
+            std::optional<Runtime::NavigationRegionComponent> regionAfter;
+        };
+
         struct EditorStateChangedDelta {
             SceneObjectId object;
             SceneObjectEditorState before;
@@ -198,9 +207,10 @@ namespace Horo::Editor {
 
         using SceneCommandDelta =
             std::variant<CreatedObjectDelta, RenamedObjectDelta, TransformedObjectDelta, TransformedObjectsDelta, CameraChangedDelta,
-                         LightChangedDelta, TriggerVolumeChangedDelta, AudioSourceChangedDelta, EditorStateChangedDelta,
-                         ComponentAddedDelta, ComponentRemovedDelta, BehaviorsChangedDelta, DeletedObjectsDelta, CreatedPrefabInstanceDelta,
-                         PrefabInstanceTransformDelta, PrefabInstanceReparentDelta, DeletedPrefabInstancesDelta>;
+                         LightChangedDelta, TriggerVolumeChangedDelta, AudioSourceChangedDelta, NavigationComponentsChangedDelta,
+                         EditorStateChangedDelta, ComponentAddedDelta, ComponentRemovedDelta, BehaviorsChangedDelta, DeletedObjectsDelta,
+                         CreatedPrefabInstanceDelta, PrefabInstanceTransformDelta, PrefabInstanceReparentDelta,
+                         DeletedPrefabInstancesDelta>;
 
         struct HistoryRecord {
             DocumentStateId beforeState;
@@ -253,6 +263,11 @@ namespace Horo::Editor {
             return MakeDocumentError(SceneDocumentErrors::ObjectLocked, "Scene object or one of its ancestors is locked in the editor.");
         }
 
+        [[nodiscard]] Result<SceneCommandResult> ComponentNoOpResult(const SceneDocument &document, const SceneObjectId object) {
+            return Result<SceneCommandResult>::Success(
+                {object, document.Revision(), document.State(), DocumentChangeKind::ComponentChanged, {}, false});
+        }
+
         [[nodiscard]] Result<void> ValidateDescriptor(const std::optional<PrimitiveMeshDescriptor> &descriptor) {
             if (!descriptor.has_value()) {
                 return Result<void>::Success();
@@ -266,6 +281,10 @@ namespace Horo::Editor {
         }
 
         [[nodiscard]] Result<void> ValidateComponents(const SceneObjectComponentSet &components) {
+            if (components.navigationSurface && Runtime::ValidateNavigationSurfaceComponent(*components.navigationSurface).HasError())
+                return Result<void>::Failure(MakeError(Navigation::NavigationErrors::SceneComponentInvalid));
+            if (components.navigationRegion && Runtime::ValidateNavigationRegionComponent(*components.navigationRegion).HasError())
+                return Result<void>::Failure(MakeError(Navigation::NavigationErrors::SceneComponentInvalid));
             if (components.camera.has_value()) {
                 const Runtime::CameraComponent &camera = *components.camera;
                 if (!IsValidCameraComponent(camera)) {
@@ -295,6 +314,36 @@ namespace Horo::Editor {
                 behaviorIds.push_back(behavior.instanceId);
             }
             return Result<void>::Success();
+        }
+
+        [[nodiscard]] Result<void> ValidateSceneNavigationComponents(
+            const std::span<const SceneObjectSnapshot> objects,
+            const std::optional<std::pair<SceneObjectId, const SceneObjectComponentSet *>> replacement = std::nullopt,
+            const SceneObjectComponentSet *appended = nullptr) {
+            std::vector<Runtime::NavigationSceneComponentView> views;
+            views.reserve(objects.size() + (appended != nullptr ? 1U : 0U));
+            const auto collect = [&](const SceneObjectComponentSet &components) {
+                views.push_back({.surface = components.navigationSurface ? &*components.navigationSurface : nullptr,
+                                 .region = components.navigationRegion ? &*components.navigationRegion : nullptr});
+            };
+            for (const SceneObjectSnapshot &object : objects) {
+                collect(replacement && replacement->first == object.id ? *replacement->second : object.components);
+            }
+            if (appended != nullptr)
+                collect(*appended);
+            return Runtime::ValidateNavigationSceneComponentViews(views);
+        }
+
+        void ObserveNavigationComponentIds(const SceneObjectComponentSet &components, std::uint64_t &nextSurfaceId,
+                                           std::uint64_t &nextRegionId) noexcept {
+            const auto advance = [](const std::uint64_t observed, std::uint64_t &next) {
+                if (next != 0 && observed >= next)
+                    next = observed == std::numeric_limits<std::uint64_t>::max() ? 0 : observed + 1;
+            };
+            if (components.navigationSurface)
+                advance(components.navigationSurface->id.Value(), nextSurfaceId);
+            if (components.navigationRegion)
+                advance(components.navigationRegion->id.Value(), nextRegionId);
         }
 
         [[nodiscard]] std::size_t EstimateBehaviorMemoryBytes(const std::vector<Gameplay::BehaviorComponent> &behaviors) noexcept {
@@ -339,6 +388,13 @@ namespace Horo::Editor {
 
         [[nodiscard]] std::size_t EstimateTypedDeltaMemoryBytes(const BehaviorsChangedDelta &delta) noexcept {
             return sizeof(delta) + EstimateBehaviorMemoryBytes(delta.before) + EstimateBehaviorMemoryBytes(delta.after);
+        }
+
+        [[nodiscard]] std::size_t EstimateTypedDeltaMemoryBytes(const NavigationComponentsChangedDelta &delta) noexcept {
+            const auto profileBytes = [](const std::optional<Runtime::NavigationSurfaceComponent> &surface) {
+                return surface ? surface->profiles.size() * sizeof(Navigation::NavigationAgentProfileId) : 0U;
+            };
+            return sizeof(delta) + profileBytes(delta.surfaceBefore) + profileBytes(delta.surfaceAfter);
         }
 
         [[nodiscard]] std::size_t EstimateMemoryBytes(const SceneCommandDelta &delta, const std::size_t affectedObjectCount) noexcept {
@@ -492,6 +548,13 @@ namespace Horo::Editor {
                 object->components.audioSource = delta.after;
         }
 
+        void ApplyTypedDelta(std::vector<SceneObjectSnapshot> &objects, const NavigationComponentsChangedDelta &delta) {
+            if (const auto object = FindObject(objects, delta.object); object != objects.end()) {
+                object->components.navigationSurface = delta.surfaceAfter;
+                object->components.navigationRegion = delta.regionAfter;
+            }
+        }
+
         void ApplyTypedDelta(std::vector<SceneObjectSnapshot> &objects, const EditorStateChangedDelta &delta) {
             FindObject(objects, delta.object)->editorState = delta.after;
         }
@@ -591,6 +654,13 @@ namespace Horo::Editor {
         void RevertTypedDelta(std::vector<SceneObjectSnapshot> &objects, const AudioSourceChangedDelta &delta) {
             if (const auto object = FindObject(objects, delta.object); object != objects.end())
                 object->components.audioSource = delta.before;
+        }
+
+        void RevertTypedDelta(std::vector<SceneObjectSnapshot> &objects, const NavigationComponentsChangedDelta &delta) {
+            if (const auto object = FindObject(objects, delta.object); object != objects.end()) {
+                object->components.navigationSurface = delta.surfaceBefore;
+                object->components.navigationRegion = delta.regionBefore;
+            }
         }
 
         void RevertTypedDelta(std::vector<SceneObjectSnapshot> &objects, const EditorStateChangedDelta &delta) {
@@ -901,6 +971,12 @@ namespace Horo::Editor {
         bool advanceInstanceId{};
     };
 
+    struct SceneDocumentCommandExecutor::ObjectCommitContext final {
+        SceneCommandDelta delta;
+        SceneObjectId object;
+        DocumentChangeKind kind;
+    };
+
     struct EditorHistory::Impl {
         Impl() {
             undo.reserve(kMaximumHistoryEntries);
@@ -1077,10 +1153,13 @@ namespace Horo::Editor {
         objectIds.reserve(objects.size());
         std::uint64_t maximumObjectId = 0;
         std::uint64_t maximumBehaviorId = 0;
+        std::uint64_t nextNavigationSurfaceId = 1;
+        std::uint64_t nextNavigationRegionId = 1;
         for (const SceneObjectSnapshot &object : objects) {
             if (Result<void> valid = ValidateLoadedObject(object, objectIds, behaviorIds, maximumObjectId, maximumBehaviorId);
                 valid.HasError())
                 return valid;
+            ObserveNavigationComponentIds(object.components, nextNavigationSurfaceId, nextNavigationRegionId);
         }
         if (maximumObjectId == std::numeric_limits<std::uint64_t>::max() ||
             maximumBehaviorId == std::numeric_limits<std::uint64_t>::max()) {
@@ -1090,6 +1169,8 @@ namespace Horo::Editor {
 
         if (Result<void> validHierarchy = ValidateLoadedHierarchy(objects, objectIds); validHierarchy.HasError())
             return validHierarchy;
+        if (Result<void> navigation = ValidateSceneNavigationComponents(objects); navigation.HasError())
+            return navigation;
         auto maximumPrefabInstanceId = ValidateLoadedPrefabInstances(prefabInstances, objectIds);
         if (maximumPrefabInstanceId.HasError())
             return Result<void>::Failure(maximumPrefabInstanceId.ErrorValue());
@@ -1101,6 +1182,8 @@ namespace Horo::Editor {
         m_state = DocumentStateId{1};
         m_savedState = m_state;
         m_nextStateId = 2;
+        m_nextNavigationSurfaceId = nextNavigationSurfaceId;
+        m_nextNavigationRegionId = nextNavigationRegionId;
         m_nextObjectId = maximumObjectId + 1;
         m_nextBehaviorInstanceId = maximumBehaviorId + 1;
         m_nextPrefabInstanceId = maximumPrefabInstanceId.Value() + 1;
@@ -1120,6 +1203,19 @@ namespace Horo::Editor {
     /** @copydoc SceneDocumentCommandExecutor::SceneDocumentCommandExecutor */
     SceneDocumentCommandExecutor::SceneDocumentCommandExecutor(SceneDocument &document, EditorHistory &history) noexcept
         : m_document(document), m_history(history) {}
+
+    /** @copydoc SceneDocumentCommandExecutor::CommitObject */
+    Result<SceneCommandResult> SceneDocumentCommandExecutor::CommitObject(ObjectCommitContext context) {
+        const std::size_t memoryBytes = EstimateMemoryBytes(context.delta, 1);
+        const DocumentStateId beforeState = m_document.m_state;
+        ApplyDelta(m_document.m_objects, context.delta);
+        ++m_document.m_revision.value;
+        m_document.m_state = DocumentStateId{m_document.m_nextStateId++};
+        std::vector affected{context.object};
+        PushHistory(*m_history.m_impl, HistoryRecord{beforeState, m_document.m_state, std::move(context.delta), affected, memoryBytes});
+        return Result<SceneCommandResult>::Success(
+            {context.object, m_document.m_revision, m_document.m_state, context.kind, std::move(affected), true});
+    }
 
     /** @copydoc SceneDocumentCommandExecutor::CommitPrefab */
     Result<SceneCommandResult> SceneDocumentCommandExecutor::CommitPrefab(PrefabCommitContext context) {
@@ -1164,6 +1260,10 @@ namespace Horo::Editor {
         if (const Result<void> componentResult = ValidateComponents(command.components); componentResult.HasError()) {
             return Result<SceneCommandResult>::Failure(componentResult.ErrorValue());
         }
+        if (const Result<void> navigation = ValidateSceneNavigationComponents(m_document.m_objects, std::nullopt, &command.components);
+            navigation.HasError()) {
+            return Result<SceneCommandResult>::Failure(navigation.ErrorValue());
+        }
         if (command.parent.has_value() && FindObject(m_document.m_objects, *command.parent) == m_document.m_objects.end()) {
             return Result<SceneCommandResult>::Failure(
                 MakeDocumentError(SceneDocumentErrors::ParentNotFound, "Scene object parent does not exist."));
@@ -1186,17 +1286,9 @@ namespace Horo::Editor {
         if (const Result<void> validHistory = ValidateHistoryDelta(delta, 1); validHistory.HasError()) {
             return Result<SceneCommandResult>::Failure(validHistory.ErrorValue());
         }
-        const std::size_t memoryBytes = EstimateMemoryBytes(delta, 1);
-
-        const DocumentStateId beforeState = m_document.m_state;
-        ApplyDelta(m_document.m_objects, delta);
+        ObserveNavigationComponentIds(command.components, m_document.m_nextNavigationSurfaceId, m_document.m_nextNavigationRegionId);
         ++m_document.m_nextObjectId;
-        ++m_document.m_revision.value;
-        m_document.m_state = DocumentStateId{m_document.m_nextStateId++};
-        std::vector affected{id};
-        PushHistory(*m_history.m_impl, HistoryRecord{beforeState, m_document.m_state, std::move(delta), affected, memoryBytes});
-        return Result<SceneCommandResult>::Success(
-            SceneCommandResult{id, m_document.m_revision, m_document.m_state, DocumentChangeKind::Created, std::move(affected), true});
+        return CommitObject({std::move(delta), id, DocumentChangeKind::Created});
     }
 
     /** @copydoc SceneDocumentCommandExecutor::Execute(const RenameSceneObjectCommand&) */
@@ -1323,16 +1415,8 @@ namespace Horo::Editor {
                 SceneCommandResult{object->id, m_document.m_revision, m_document.m_state, DocumentChangeKind::ComponentChanged, {}, false});
         }
 
-        SceneCommandDelta delta = CameraChangedDelta{object->id, *object->components.camera, command.camera};
-        const std::size_t memoryBytes = EstimateMemoryBytes(delta, 1);
-        const DocumentStateId beforeState = m_document.m_state;
-        ApplyDelta(m_document.m_objects, delta);
-        ++m_document.m_revision.value;
-        m_document.m_state = DocumentStateId{m_document.m_nextStateId++};
-        std::vector affected{object->id};
-        PushHistory(*m_history.m_impl, HistoryRecord{beforeState, m_document.m_state, std::move(delta), affected, memoryBytes});
-        return Result<SceneCommandResult>::Success(SceneCommandResult{command.object, m_document.m_revision, m_document.m_state,
-                                                                      DocumentChangeKind::ComponentChanged, std::move(affected), true});
+        return CommitObject({CameraChangedDelta{object->id, *object->components.camera, command.camera}, command.object,
+                             DocumentChangeKind::ComponentChanged});
     }
 
     /** @copydoc SceneDocumentCommandExecutor::Execute(const SetSceneObjectLightCommand&) */
@@ -1357,16 +1441,8 @@ namespace Horo::Editor {
                 SceneCommandResult{object->id, m_document.m_revision, m_document.m_state, DocumentChangeKind::ComponentChanged, {}, false});
         }
 
-        SceneCommandDelta delta = LightChangedDelta{object->id, *object->components.light, command.light};
-        const std::size_t memoryBytes = EstimateMemoryBytes(delta, 1);
-        const DocumentStateId beforeState = m_document.m_state;
-        ApplyDelta(m_document.m_objects, delta);
-        ++m_document.m_revision.value;
-        m_document.m_state = DocumentStateId{m_document.m_nextStateId++};
-        std::vector affected{object->id};
-        PushHistory(*m_history.m_impl, HistoryRecord{beforeState, m_document.m_state, std::move(delta), affected, memoryBytes});
-        return Result<SceneCommandResult>::Success(SceneCommandResult{command.object, m_document.m_revision, m_document.m_state,
-                                                                      DocumentChangeKind::ComponentChanged, std::move(affected), true});
+        return CommitObject({LightChangedDelta{object->id, *object->components.light, command.light}, command.object,
+                             DocumentChangeKind::ComponentChanged});
     }
 
     /** @copydoc SceneDocumentCommandExecutor::Execute(const SetSceneObjectTriggerVolumeCommand&) */
@@ -1387,16 +1463,8 @@ namespace Horo::Editor {
                 SceneCommandResult{object->id, m_document.m_revision, m_document.m_state, DocumentChangeKind::ComponentChanged, {}, false});
         }
 
-        SceneCommandDelta delta = TriggerVolumeChangedDelta{object->id, *object->components.triggerVolume, command.triggerVolume};
-        const std::size_t memoryBytes = EstimateMemoryBytes(delta, 1);
-        const DocumentStateId beforeState = m_document.m_state;
-        ApplyDelta(m_document.m_objects, delta);
-        ++m_document.m_revision.value;
-        m_document.m_state = DocumentStateId{m_document.m_nextStateId++};
-        std::vector affected{object->id};
-        PushHistory(*m_history.m_impl, HistoryRecord{beforeState, m_document.m_state, std::move(delta), affected, memoryBytes});
-        return Result<SceneCommandResult>::Success(SceneCommandResult{command.object, m_document.m_revision, m_document.m_state,
-                                                                      DocumentChangeKind::ComponentChanged, std::move(affected), true});
+        return CommitObject({TriggerVolumeChangedDelta{object->id, *object->components.triggerVolume, command.triggerVolume},
+                             command.object, DocumentChangeKind::ComponentChanged});
     }
 
     /** @copydoc SceneDocumentCommandExecutor::Execute(const SetSceneObjectAudioSourceCommand&) */
@@ -1421,16 +1489,55 @@ namespace Horo::Editor {
                 SceneCommandResult{object->id, m_document.m_revision, m_document.m_state, DocumentChangeKind::ComponentChanged, {}, false});
         }
 
-        SceneCommandDelta delta = AudioSourceChangedDelta{object->id, *object->components.audioSource, command.audioSource};
-        const std::size_t memoryBytes = EstimateMemoryBytes(delta, 1);
-        const DocumentStateId beforeState = m_document.m_state;
-        ApplyDelta(m_document.m_objects, delta);
-        ++m_document.m_revision.value;
-        m_document.m_state = DocumentStateId{m_document.m_nextStateId++};
-        std::vector affected{object->id};
-        PushHistory(*m_history.m_impl, HistoryRecord{beforeState, m_document.m_state, std::move(delta), affected, memoryBytes});
-        return Result<SceneCommandResult>::Success(SceneCommandResult{command.object, m_document.m_revision, m_document.m_state,
-                                                                      DocumentChangeKind::ComponentChanged, std::move(affected), true});
+        return CommitObject({AudioSourceChangedDelta{object->id, *object->components.audioSource, command.audioSource}, command.object,
+                             DocumentChangeKind::ComponentChanged});
+    }
+
+    /** @copydoc SceneDocumentCommandExecutor::CommitNavigationComponents */
+    Result<SceneCommandResult> SceneDocumentCommandExecutor::CommitNavigationComponents(
+        const SceneObjectId objectId, const std::optional<Runtime::NavigationSurfaceComponent> *surface,
+        const std::optional<Runtime::NavigationRegionComponent> *region) {
+        const auto object = FindObject(m_document.m_objects, objectId);
+        if (object == m_document.m_objects.end())
+            return Result<SceneCommandResult>::Failure(
+                MakeDocumentError(SceneDocumentErrors::ObjectNotFound, "Scene object does not exist."));
+        if (IsEffectivelyLocked(m_document.m_objects, objectId))
+            return Result<SceneCommandResult>::Failure(LockedObjectError());
+
+        SceneObjectComponentSet candidate = object->components;
+        if (surface != nullptr)
+            candidate.navigationSurface = *surface;
+        if (region != nullptr)
+            candidate.navigationRegion = *region;
+        if (Result<void> valid = ValidateComponents(candidate); valid.HasError())
+            return Result<SceneCommandResult>::Failure(valid.ErrorValue());
+        if (Result<void> valid =
+                ValidateSceneNavigationComponents(m_document.m_objects,
+                                                  std::pair{objectId, static_cast<const SceneObjectComponentSet *>(&candidate)});
+            valid.HasError()) {
+            return Result<SceneCommandResult>::Failure(valid.ErrorValue());
+        }
+        if (candidate.navigationSurface == object->components.navigationSurface &&
+            candidate.navigationRegion == object->components.navigationRegion) {
+            return Result<SceneCommandResult>::Success(
+                {objectId, m_document.m_revision, m_document.m_state, DocumentChangeKind::ComponentChanged, {}, false});
+        }
+
+        SceneCommandDelta delta =
+            NavigationComponentsChangedDelta{objectId, object->components.navigationSurface, candidate.navigationSurface,
+                                             object->components.navigationRegion, candidate.navigationRegion};
+        ObserveNavigationComponentIds(candidate, m_document.m_nextNavigationSurfaceId, m_document.m_nextNavigationRegionId);
+        return CommitObject({std::move(delta), objectId, DocumentChangeKind::ComponentChanged});
+    }
+
+    /** @copydoc SceneDocumentCommandExecutor::Execute(const SetSceneNavigationSurfaceCommand&) */
+    Result<SceneCommandResult> SceneDocumentCommandExecutor::Execute(const SetSceneNavigationSurfaceCommand &command) {
+        return CommitNavigationComponents(command.object, &command.surface, nullptr);
+    }
+
+    /** @copydoc SceneDocumentCommandExecutor::Execute(const SetSceneNavigationRegionCommand&) */
+    Result<SceneCommandResult> SceneDocumentCommandExecutor::Execute(const SetSceneNavigationRegionCommand &command) {
+        return CommitNavigationComponents(command.object, nullptr, &command.region);
     }
 
     /** @copydoc SceneDocumentCommandExecutor::Execute(const SetSceneObjectEditorStateCommand&) */
@@ -1443,16 +1550,8 @@ namespace Horo::Editor {
             return Result<SceneCommandResult>::Success(
                 {command.object, m_document.m_revision, m_document.m_state, DocumentChangeKind::EditorStateChanged, {}, false});
 
-        SceneCommandDelta delta = EditorStateChangedDelta{object->id, object->editorState, command.editorState};
-        const std::size_t memoryBytes = EstimateMemoryBytes(delta, 1);
-        const DocumentStateId beforeState = m_document.m_state;
-        ApplyDelta(m_document.m_objects, delta);
-        ++m_document.m_revision.value;
-        m_document.m_state = DocumentStateId{m_document.m_nextStateId++};
-        std::vector affected{object->id};
-        PushHistory(*m_history.m_impl, HistoryRecord{beforeState, m_document.m_state, std::move(delta), affected, memoryBytes});
-        return Result<SceneCommandResult>::Success(
-            {command.object, m_document.m_revision, m_document.m_state, DocumentChangeKind::EditorStateChanged, std::move(affected), true});
+        return CommitObject({EditorStateChangedDelta{object->id, object->editorState, command.editorState}, command.object,
+                             DocumentChangeKind::EditorStateChanged});
     }
 
     /** @copydoc SceneDocumentCommandExecutor::Execute(const AddSceneObjectComponentCommand&) */
@@ -1466,21 +1565,10 @@ namespace Horo::Editor {
             return Result<SceneCommandResult>::Failure(LockedObjectError());
 
         if (HasComponent(object->components, command.type)) {
-            return Result<SceneCommandResult>::Success(
-                SceneCommandResult{object->id, m_document.m_revision, m_document.m_state, DocumentChangeKind::ComponentChanged, {}, false});
+            return ComponentNoOpResult(m_document, object->id);
         }
 
-        SceneCommandDelta delta = ComponentAddedDelta{object->id, command.type};
-        const std::size_t memoryBytes = EstimateMemoryBytes(delta, 1);
-        const DocumentStateId beforeState = m_document.m_state;
-        ApplyDelta(m_document.m_objects, delta);
-        ++m_document.m_revision.value;
-        m_document.m_state = DocumentStateId{m_document.m_nextStateId++};
-        std::vector affected{object->id};
-        PushHistory(*m_history.m_impl, HistoryRecord{beforeState, m_document.m_state, std::move(delta), affected, memoryBytes});
-
-        return Result<SceneCommandResult>::Success(SceneCommandResult{command.object, m_document.m_revision, m_document.m_state,
-                                                                      DocumentChangeKind::ComponentChanged, std::move(affected), true});
+        return CommitObject({ComponentAddedDelta{object->id, command.type}, command.object, DocumentChangeKind::ComponentChanged});
     }
 
     /** @copydoc SceneDocumentCommandExecutor::Execute(const RemoveSceneObjectComponentCommand&) */
@@ -1494,26 +1582,12 @@ namespace Horo::Editor {
             return Result<SceneCommandResult>::Failure(LockedObjectError());
 
         if (!HasComponent(object->components, command.type)) {
-            return Result<SceneCommandResult>::Success(
-                SceneCommandResult{object->id, m_document.m_revision, m_document.m_state, DocumentChangeKind::ComponentChanged, {}, false});
+            return ComponentNoOpResult(m_document, object->id);
         }
 
-        SceneCommandDelta delta = ComponentRemovedDelta{object->id,
-                                                        command.type,
-                                                        object->components.camera,
-                                                        object->components.light,
-                                                        object->components.triggerVolume,
-                                                        object->components.audioSource};
-        const std::size_t memoryBytes = EstimateMemoryBytes(delta, 1);
-        const DocumentStateId beforeState = m_document.m_state;
-        ApplyDelta(m_document.m_objects, delta);
-        ++m_document.m_revision.value;
-        m_document.m_state = DocumentStateId{m_document.m_nextStateId++};
-        std::vector affected{object->id};
-        PushHistory(*m_history.m_impl, HistoryRecord{beforeState, m_document.m_state, std::move(delta), affected, memoryBytes});
-
-        return Result<SceneCommandResult>::Success(SceneCommandResult{command.object, m_document.m_revision, m_document.m_state,
-                                                                      DocumentChangeKind::ComponentChanged, std::move(affected), true});
+        return CommitObject({ComponentRemovedDelta{object->id, command.type, object->components.camera, object->components.light,
+                                                   object->components.triggerVolume, object->components.audioSource},
+                             command.object, DocumentChangeKind::ComponentChanged});
     }
 
     /** @copydoc SceneDocumentCommandExecutor::Execute(const AttachSceneObjectBehaviorCommand&) */
@@ -1541,16 +1615,8 @@ namespace Horo::Editor {
         SceneCommandDelta delta = BehaviorsChangedDelta{object->id, object->components.behaviors, std::move(after)};
         if (const Result<void> valid = ValidateHistoryDelta(delta, 1); valid.HasError())
             return Result<SceneCommandResult>::Failure(valid.ErrorValue());
-        const std::size_t memoryBytes = EstimateMemoryBytes(delta, 1);
-        const DocumentStateId beforeState = m_document.m_state;
-        ApplyDelta(m_document.m_objects, delta);
         ++m_document.m_nextBehaviorInstanceId;
-        ++m_document.m_revision.value;
-        m_document.m_state = DocumentStateId{m_document.m_nextStateId++};
-        std::vector affected{object->id};
-        PushHistory(*m_history.m_impl, HistoryRecord{beforeState, m_document.m_state, std::move(delta), affected, memoryBytes});
-        return Result<SceneCommandResult>::Success(
-            {command.object, m_document.m_revision, m_document.m_state, DocumentChangeKind::ComponentChanged, std::move(affected), true});
+        return CommitObject({std::move(delta), command.object, DocumentChangeKind::ComponentChanged});
     }
 
     /** @copydoc SceneDocumentCommandExecutor::Execute(const SetSceneObjectBehaviorCommand&) */
@@ -1577,15 +1643,7 @@ namespace Horo::Editor {
         SceneCommandDelta delta = BehaviorsChangedDelta{object->id, object->components.behaviors, std::move(after)};
         if (const Result<void> valid = ValidateHistoryDelta(delta, 1); valid.HasError())
             return Result<SceneCommandResult>::Failure(valid.ErrorValue());
-        const std::size_t memoryBytes = EstimateMemoryBytes(delta, 1);
-        const DocumentStateId beforeState = m_document.m_state;
-        ApplyDelta(m_document.m_objects, delta);
-        ++m_document.m_revision.value;
-        m_document.m_state = DocumentStateId{m_document.m_nextStateId++};
-        std::vector affected{object->id};
-        PushHistory(*m_history.m_impl, HistoryRecord{beforeState, m_document.m_state, std::move(delta), affected, memoryBytes});
-        return Result<SceneCommandResult>::Success(
-            {command.object, m_document.m_revision, m_document.m_state, DocumentChangeKind::ComponentChanged, std::move(affected), true});
+        return CommitObject({std::move(delta), command.object, DocumentChangeKind::ComponentChanged});
     }
 
     /** @copydoc SceneDocumentCommandExecutor::Execute(const RemoveSceneObjectBehaviorCommand&) */
@@ -1604,16 +1662,8 @@ namespace Horo::Editor {
             removed == 0)
             return Result<SceneCommandResult>::Failure(
                 MakeDocumentError(SceneDocumentErrors::InvalidBehavior, "Behavior attachment does not exist."));
-        SceneCommandDelta delta = BehaviorsChangedDelta{object->id, object->components.behaviors, std::move(after)};
-        const std::size_t memoryBytes = EstimateMemoryBytes(delta, 1);
-        const DocumentStateId beforeState = m_document.m_state;
-        ApplyDelta(m_document.m_objects, delta);
-        ++m_document.m_revision.value;
-        m_document.m_state = DocumentStateId{m_document.m_nextStateId++};
-        std::vector affected{object->id};
-        PushHistory(*m_history.m_impl, HistoryRecord{beforeState, m_document.m_state, std::move(delta), affected, memoryBytes});
-        return Result<SceneCommandResult>::Success(
-            {command.object, m_document.m_revision, m_document.m_state, DocumentChangeKind::ComponentChanged, std::move(affected), true});
+        return CommitObject({BehaviorsChangedDelta{object->id, object->components.behaviors, std::move(after)}, command.object,
+                             DocumentChangeKind::ComponentChanged});
     }
 
     /** @copydoc SceneDocumentCommandExecutor::Execute(const DuplicateSceneObjectCommand&) */
@@ -1632,8 +1682,26 @@ namespace Horo::Editor {
 
         const SceneObjectId id{m_document.m_nextObjectId};
         SceneObjectComponentSet duplicatedComponents = source->components;
+        if (duplicatedComponents.navigationSurface) {
+            if (m_document.m_nextNavigationSurfaceId == 0)
+                return Result<SceneCommandResult>::Failure(MakeError(Navigation::NavigationErrors::SceneComponentInvalid));
+            const Navigation::SurfaceId sourceSurface = duplicatedComponents.navigationSurface->id;
+            duplicatedComponents.navigationSurface->id = Navigation::SurfaceId::Create(m_document.m_nextNavigationSurfaceId).Value();
+            if (duplicatedComponents.navigationRegion && duplicatedComponents.navigationRegion->surface == sourceSurface)
+                duplicatedComponents.navigationRegion->surface = duplicatedComponents.navigationSurface->id;
+        }
+        if (duplicatedComponents.navigationRegion) {
+            if (m_document.m_nextNavigationRegionId == 0)
+                return Result<SceneCommandResult>::Failure(MakeError(Navigation::NavigationErrors::SceneComponentInvalid));
+            duplicatedComponents.navigationRegion->id = Navigation::NavigationRegionId::Create(m_document.m_nextNavigationRegionId).Value();
+        }
+        if (Result<void> navigation = ValidateSceneNavigationComponents(m_document.m_objects, std::nullopt, &duplicatedComponents);
+            navigation.HasError()) {
+            return Result<SceneCommandResult>::Failure(navigation.ErrorValue());
+        }
         for (Gameplay::BehaviorComponent &behavior : duplicatedComponents.behaviors)
             behavior.instanceId = Gameplay::BehaviorInstanceId{m_document.m_nextBehaviorInstanceId++};
+        ObserveNavigationComponentIds(duplicatedComponents, m_document.m_nextNavigationSurfaceId, m_document.m_nextNavigationRegionId);
         SceneCommandDelta delta = CreatedObjectDelta{
             .object = SceneObjectSnapshot{.id = id,
                                           .parent = source->parent,
@@ -1646,16 +1714,8 @@ namespace Horo::Editor {
             .index = m_document.m_objects.size(),
             .kind = DocumentChangeKind::Duplicated,
         };
-        const std::size_t memoryBytes = EstimateMemoryBytes(delta, 1);
-        const DocumentStateId beforeState = m_document.m_state;
-        ApplyDelta(m_document.m_objects, delta);
         ++m_document.m_nextObjectId;
-        ++m_document.m_revision.value;
-        m_document.m_state = DocumentStateId{m_document.m_nextStateId++};
-        std::vector affected{id};
-        PushHistory(*m_history.m_impl, HistoryRecord{beforeState, m_document.m_state, std::move(delta), affected, memoryBytes});
-        return Result<SceneCommandResult>::Success(
-            SceneCommandResult{id, m_document.m_revision, m_document.m_state, DocumentChangeKind::Duplicated, std::move(affected), true});
+        return CommitObject({std::move(delta), id, DocumentChangeKind::Duplicated});
     }
 
     /** @copydoc SceneDocumentCommandExecutor::Execute(const DeleteSceneObjectCommand&) */
@@ -1678,6 +1738,17 @@ namespace Horo::Editor {
             return IsEffectivelyLocked(m_document.m_objects, object);
         }))
             return Result<SceneCommandResult>::Failure(LockedObjectError());
+        std::vector<Runtime::NavigationSceneComponentView> remainingNavigation;
+        remainingNavigation.reserve(m_document.m_objects.size() - removedIds.size());
+        for (const SceneObjectSnapshot &object : m_document.m_objects) {
+            if (removedIds.contains(object.id.value))
+                continue;
+            remainingNavigation.push_back({.surface = object.components.navigationSurface ? &*object.components.navigationSurface : nullptr,
+                                           .region = object.components.navigationRegion ? &*object.components.navigationRegion : nullptr});
+        }
+        if (Result<void> navigation = Runtime::ValidateNavigationSceneComponentViews(remainingNavigation); navigation.HasError()) {
+            return Result<SceneCommandResult>::Failure(navigation.ErrorValue());
+        }
         const SceneObjectId primary = roots.front();
         SceneCommandDelta delta = CaptureDeletedObjects(m_document.m_objects, m_document.m_prefabInstances, std::move(roots), removedIds);
         const auto &deleted = std::get<DeletedObjectsDelta>(delta);

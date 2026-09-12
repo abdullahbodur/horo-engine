@@ -148,6 +148,7 @@ horo_configure_target_header_boundary(HoroNetworkApi PUBLIC_HEADERS
     Horo/Network/TransportBudget.h
 )
 horo_configure_target_header_boundary(HoroNetworkRuntime PUBLIC_HEADERS
+    Horo/Network/HandshakeNegotiation.h
     Horo/Network/NetworkObjectMapping.h
 )
 horo_configure_target_header_boundary(HoroNetworkTransportNull PUBLIC_HEADERS
@@ -167,6 +168,7 @@ horo_configure_target_header_boundary(HoroGameplayApi PUBLIC_HEADERS
     Horo/Gameplay/SystemRegistry.h
 )
 horo_configure_target_header_boundary(HoroRuntimeScene PUBLIC_HEADERS
+    Horo/Runtime/Scene/NavigationSceneComponents.h
     Horo/Runtime/Scene/RuntimeScene.h
     Horo/Runtime/Scene/RuntimeSceneDefinition.h
     Horo/Runtime/Scene/SavedSceneBootstrap.h
@@ -229,6 +231,7 @@ horo_configure_target_header_boundary(HoroAudioCommands PUBLIC_HEADERS
     Horo/Audio/AudioCommandBuffer.h
     Horo/Audio/AudioCommandStaging.h
     Horo/Audio/AudioEventQueue.h
+    Horo/Audio/AudioLifecycleReconciler.h
     Horo/Audio/ScheduledAudioCommandBatch.h
 )
 horo_configure_target_header_boundary(HoroInput PUBLIC_HEADERS
@@ -263,8 +266,10 @@ horo_configure_target_header_boundary(HoroPhysics PUBLIC_HEADERS
 horo_configure_target_header_boundary(HoroAI PUBLIC_HEADERS
     Horo/AI/AIErrors.h
     Horo/AI/AIIdentity.h
+    Horo/AI/AITaskLifecycle.h
     Horo/AI/BlackboardInstance.h
     Horo/AI/BlackboardSchema.h
+    Horo/AI/NullAIRuntime.h
     Horo/AI/PerceptionDescriptorRegistry.h
 )
 horo_configure_target_header_boundary(HoroAnimationApi PUBLIC_HEADERS
@@ -357,6 +362,7 @@ horo_configure_target_header_boundary(HoroNavigationRecastDetour PUBLIC_HEADERS
 horo_configure_target_header_boundary(HoroWorldStreaming PUBLIC_HEADERS
     Horo/WorldStreaming/NetworkStreamingAuthority.h
     Horo/WorldStreaming/OriginFrame.h
+    Horo/WorldStreaming/RuntimeEntityCellExitOperation.h
     Horo/WorldStreaming/CookedWorldIndexManifest.h
     Horo/WorldStreaming/FallbackStreamingProvider.h
     Horo/WorldStreaming/StreamingBudgetModel.h
@@ -377,6 +383,7 @@ horo_configure_target_header_boundary(HoroWorldStreaming PUBLIC_HEADERS
     Horo/WorldStreaming/StreamingSourceRange.h
     Horo/WorldStreaming/WorldCellQuantization.h
     Horo/WorldStreaming/WorldPartitionDescriptor.h
+    Horo/WorldStreaming/WorldLayerOwnershipModel.h
     Horo/WorldStreaming/WorldObjectOwnership.h
     Horo/WorldStreaming/WorldPartitionCapabilityProfile.h
     Horo/WorldStreaming/WorldPartitionRegistry.h
@@ -404,6 +411,8 @@ horo_configure_target_header_boundary(HoroRenderApi PUBLIC_HEADERS
     Horo/Runtime/Render/RenderAdapter.h
     Horo/Runtime/Render/RenderAdapterErrors.h
     Horo/Runtime/Render/RenderBackend.h
+    Horo/Runtime/Render/RenderDisplay.h
+    Horo/Runtime/Render/RenderDisplayErrors.h
     Horo/Runtime/Render/RenderGraph.h
     Horo/Runtime/Render/RenderGraphExecution.h
     Horo/Runtime/Render/RenderGraphExecutionErrors.h
