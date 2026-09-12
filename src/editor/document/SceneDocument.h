@@ -575,9 +575,11 @@ namespace Horo::Editor {
 
     private:
         struct PrefabCommitContext;
-        [[nodiscard]] Result<SceneCommandResult> CommitNavigationComponents(SceneObjectId object,
-                                                                            std::optional<Runtime::NavigationSurfaceComponent> surface,
-                                                                            std::optional<Runtime::NavigationRegionComponent> region);
+        struct ObjectCommitContext;
+        [[nodiscard]] Result<SceneCommandResult> CommitObject(ObjectCommitContext context);
+        [[nodiscard]] Result<SceneCommandResult> CommitNavigationComponents(
+            SceneObjectId object, const std::optional<Runtime::NavigationSurfaceComponent> *surface,
+            const std::optional<Runtime::NavigationRegionComponent> *region);
 
         /** @brief Commits one validated prefab delta through the shared document/history transition. */
         [[nodiscard]] Result<SceneCommandResult> CommitPrefab(PrefabCommitContext context);

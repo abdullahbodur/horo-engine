@@ -958,6 +958,12 @@ namespace Horo::Editor {
         bool advanceInstanceId{};
     };
 
+    struct SceneDocumentCommandExecutor::ObjectCommitContext final {
+        SceneCommandDelta delta;
+        SceneObjectId object;
+        DocumentChangeKind kind;
+    };
+
     struct EditorHistory::Impl {
         Impl() {
             undo.reserve(kMaximumHistoryEntries);
@@ -1180,6 +1186,19 @@ namespace Horo::Editor {
     SceneDocumentCommandExecutor::SceneDocumentCommandExecutor(SceneDocument &document, EditorHistory &history) noexcept
         : m_document(document), m_history(history) {}
 
+    /** @copydoc SceneDocumentCommandExecutor::CommitObject */
+    Result<SceneCommandResult> SceneDocumentCommandExecutor::CommitObject(ObjectCommitContext context) {
+        const std::size_t memoryBytes = EstimateMemoryBytes(context.delta, 1);
+        const DocumentStateId beforeState = m_document.m_state;
+        ApplyDelta(m_document.m_objects, context.delta);
+        ++m_document.m_revision.value;
+        m_document.m_state = DocumentStateId{m_document.m_nextStateId++};
+        std::vector affected{context.object};
+        PushHistory(*m_history.m_impl, HistoryRecord{beforeState, m_document.m_state, std::move(context.delta), affected, memoryBytes});
+        return Result<SceneCommandResult>::Success(
+            {context.object, m_document.m_revision, m_document.m_state, context.kind, std::move(affected), true});
+    }
+
     /** @copydoc SceneDocumentCommandExecutor::CommitPrefab */
     Result<SceneCommandResult> SceneDocumentCommandExecutor::CommitPrefab(PrefabCommitContext context) {
         if (const Result<void> validHistory = ValidateHistoryDelta(context.delta, 1); validHistory.HasError())
@@ -1386,16 +1405,8 @@ namespace Horo::Editor {
                 SceneCommandResult{object->id, m_document.m_revision, m_document.m_state, DocumentChangeKind::ComponentChanged, {}, false});
         }
 
-        SceneCommandDelta delta = CameraChangedDelta{object->id, *object->components.camera, command.camera};
-        const std::size_t memoryBytes = EstimateMemoryBytes(delta, 1);
-        const DocumentStateId beforeState = m_document.m_state;
-        ApplyDelta(m_document.m_objects, delta);
-        ++m_document.m_revision.value;
-        m_document.m_state = DocumentStateId{m_document.m_nextStateId++};
-        std::vector affected{object->id};
-        PushHistory(*m_history.m_impl, HistoryRecord{beforeState, m_document.m_state, std::move(delta), affected, memoryBytes});
-        return Result<SceneCommandResult>::Success(SceneCommandResult{command.object, m_document.m_revision, m_document.m_state,
-                                                                      DocumentChangeKind::ComponentChanged, std::move(affected), true});
+        return CommitObject({CameraChangedDelta{object->id, *object->components.camera, command.camera}, command.object,
+                             DocumentChangeKind::ComponentChanged});
     }
 
     /** @copydoc SceneDocumentCommandExecutor::Execute(const SetSceneObjectLightCommand&) */
@@ -1420,16 +1431,8 @@ namespace Horo::Editor {
                 SceneCommandResult{object->id, m_document.m_revision, m_document.m_state, DocumentChangeKind::ComponentChanged, {}, false});
         }
 
-        SceneCommandDelta delta = LightChangedDelta{object->id, *object->components.light, command.light};
-        const std::size_t memoryBytes = EstimateMemoryBytes(delta, 1);
-        const DocumentStateId beforeState = m_document.m_state;
-        ApplyDelta(m_document.m_objects, delta);
-        ++m_document.m_revision.value;
-        m_document.m_state = DocumentStateId{m_document.m_nextStateId++};
-        std::vector affected{object->id};
-        PushHistory(*m_history.m_impl, HistoryRecord{beforeState, m_document.m_state, std::move(delta), affected, memoryBytes});
-        return Result<SceneCommandResult>::Success(SceneCommandResult{command.object, m_document.m_revision, m_document.m_state,
-                                                                      DocumentChangeKind::ComponentChanged, std::move(affected), true});
+        return CommitObject({LightChangedDelta{object->id, *object->components.light, command.light}, command.object,
+                             DocumentChangeKind::ComponentChanged});
     }
 
     /** @copydoc SceneDocumentCommandExecutor::Execute(const SetSceneObjectTriggerVolumeCommand&) */
@@ -1450,16 +1453,8 @@ namespace Horo::Editor {
                 SceneCommandResult{object->id, m_document.m_revision, m_document.m_state, DocumentChangeKind::ComponentChanged, {}, false});
         }
 
-        SceneCommandDelta delta = TriggerVolumeChangedDelta{object->id, *object->components.triggerVolume, command.triggerVolume};
-        const std::size_t memoryBytes = EstimateMemoryBytes(delta, 1);
-        const DocumentStateId beforeState = m_document.m_state;
-        ApplyDelta(m_document.m_objects, delta);
-        ++m_document.m_revision.value;
-        m_document.m_state = DocumentStateId{m_document.m_nextStateId++};
-        std::vector affected{object->id};
-        PushHistory(*m_history.m_impl, HistoryRecord{beforeState, m_document.m_state, std::move(delta), affected, memoryBytes});
-        return Result<SceneCommandResult>::Success(SceneCommandResult{command.object, m_document.m_revision, m_document.m_state,
-                                                                      DocumentChangeKind::ComponentChanged, std::move(affected), true});
+        return CommitObject({TriggerVolumeChangedDelta{object->id, *object->components.triggerVolume, command.triggerVolume},
+                             command.object, DocumentChangeKind::ComponentChanged});
     }
 
     /** @copydoc SceneDocumentCommandExecutor::Execute(const SetSceneObjectAudioSourceCommand&) */
@@ -1484,22 +1479,14 @@ namespace Horo::Editor {
                 SceneCommandResult{object->id, m_document.m_revision, m_document.m_state, DocumentChangeKind::ComponentChanged, {}, false});
         }
 
-        SceneCommandDelta delta = AudioSourceChangedDelta{object->id, *object->components.audioSource, command.audioSource};
-        const std::size_t memoryBytes = EstimateMemoryBytes(delta, 1);
-        const DocumentStateId beforeState = m_document.m_state;
-        ApplyDelta(m_document.m_objects, delta);
-        ++m_document.m_revision.value;
-        m_document.m_state = DocumentStateId{m_document.m_nextStateId++};
-        std::vector affected{object->id};
-        PushHistory(*m_history.m_impl, HistoryRecord{beforeState, m_document.m_state, std::move(delta), affected, memoryBytes});
-        return Result<SceneCommandResult>::Success(SceneCommandResult{command.object, m_document.m_revision, m_document.m_state,
-                                                                      DocumentChangeKind::ComponentChanged, std::move(affected), true});
+        return CommitObject({AudioSourceChangedDelta{object->id, *object->components.audioSource, command.audioSource}, command.object,
+                             DocumentChangeKind::ComponentChanged});
     }
 
     /** @copydoc SceneDocumentCommandExecutor::CommitNavigationComponents */
     Result<SceneCommandResult> SceneDocumentCommandExecutor::CommitNavigationComponents(
-        const SceneObjectId objectId, std::optional<Runtime::NavigationSurfaceComponent> surface,
-        std::optional<Runtime::NavigationRegionComponent> region) {
+        const SceneObjectId objectId, const std::optional<Runtime::NavigationSurfaceComponent> *surface,
+        const std::optional<Runtime::NavigationRegionComponent> *region) {
         const auto object = FindObject(m_document.m_objects, objectId);
         if (object == m_document.m_objects.end())
             return Result<SceneCommandResult>::Failure(
@@ -1508,8 +1495,10 @@ namespace Horo::Editor {
             return Result<SceneCommandResult>::Failure(LockedObjectError());
 
         SceneObjectComponentSet candidate = object->components;
-        candidate.navigationSurface = std::move(surface);
-        candidate.navigationRegion = std::move(region);
+        if (surface != nullptr)
+            candidate.navigationSurface = *surface;
+        if (region != nullptr)
+            candidate.navigationRegion = *region;
         if (Result<void> valid = ValidateComponents(candidate); valid.HasError())
             return Result<SceneCommandResult>::Failure(valid.ErrorValue());
         if (Result<void> valid =
@@ -1524,36 +1513,19 @@ namespace Horo::Editor {
                 {objectId, m_document.m_revision, m_document.m_state, DocumentChangeKind::ComponentChanged, {}, false});
         }
 
-        SceneCommandDelta delta =
-            NavigationComponentsChangedDelta{objectId, object->components.navigationSurface, candidate.navigationSurface,
-                                             object->components.navigationRegion, candidate.navigationRegion};
-        const std::size_t memoryBytes = EstimateMemoryBytes(delta, 1);
-        const DocumentStateId beforeState = m_document.m_state;
-        ApplyDelta(m_document.m_objects, delta);
-        ++m_document.m_revision.value;
-        m_document.m_state = DocumentStateId{m_document.m_nextStateId++};
-        std::vector affected{objectId};
-        PushHistory(*m_history.m_impl, HistoryRecord{beforeState, m_document.m_state, std::move(delta), affected, memoryBytes});
-        return Result<SceneCommandResult>::Success(
-            {objectId, m_document.m_revision, m_document.m_state, DocumentChangeKind::ComponentChanged, std::move(affected), true});
+        return CommitObject({NavigationComponentsChangedDelta{objectId, object->components.navigationSurface, candidate.navigationSurface,
+                                                              object->components.navigationRegion, candidate.navigationRegion},
+                             objectId, DocumentChangeKind::ComponentChanged});
     }
 
     /** @copydoc SceneDocumentCommandExecutor::Execute(const SetSceneNavigationSurfaceCommand&) */
     Result<SceneCommandResult> SceneDocumentCommandExecutor::Execute(const SetSceneNavigationSurfaceCommand &command) {
-        const auto object = FindObject(m_document.m_objects, command.object);
-        if (object == m_document.m_objects.end())
-            return Result<SceneCommandResult>::Failure(
-                MakeDocumentError(SceneDocumentErrors::ObjectNotFound, "Scene object does not exist."));
-        return CommitNavigationComponents(command.object, command.surface, object->components.navigationRegion);
+        return CommitNavigationComponents(command.object, &command.surface, nullptr);
     }
 
     /** @copydoc SceneDocumentCommandExecutor::Execute(const SetSceneNavigationRegionCommand&) */
     Result<SceneCommandResult> SceneDocumentCommandExecutor::Execute(const SetSceneNavigationRegionCommand &command) {
-        const auto object = FindObject(m_document.m_objects, command.object);
-        if (object == m_document.m_objects.end())
-            return Result<SceneCommandResult>::Failure(
-                MakeDocumentError(SceneDocumentErrors::ObjectNotFound, "Scene object does not exist."));
-        return CommitNavigationComponents(command.object, object->components.navigationSurface, command.region);
+        return CommitNavigationComponents(command.object, nullptr, &command.region);
     }
 
     /** @copydoc SceneDocumentCommandExecutor::Execute(const SetSceneObjectEditorStateCommand&) */
@@ -1566,16 +1538,8 @@ namespace Horo::Editor {
             return Result<SceneCommandResult>::Success(
                 {command.object, m_document.m_revision, m_document.m_state, DocumentChangeKind::EditorStateChanged, {}, false});
 
-        SceneCommandDelta delta = EditorStateChangedDelta{object->id, object->editorState, command.editorState};
-        const std::size_t memoryBytes = EstimateMemoryBytes(delta, 1);
-        const DocumentStateId beforeState = m_document.m_state;
-        ApplyDelta(m_document.m_objects, delta);
-        ++m_document.m_revision.value;
-        m_document.m_state = DocumentStateId{m_document.m_nextStateId++};
-        std::vector affected{object->id};
-        PushHistory(*m_history.m_impl, HistoryRecord{beforeState, m_document.m_state, std::move(delta), affected, memoryBytes});
-        return Result<SceneCommandResult>::Success(
-            {command.object, m_document.m_revision, m_document.m_state, DocumentChangeKind::EditorStateChanged, std::move(affected), true});
+        return CommitObject({EditorStateChangedDelta{object->id, object->editorState, command.editorState}, command.object,
+                             DocumentChangeKind::EditorStateChanged});
     }
 
     /** @copydoc SceneDocumentCommandExecutor::Execute(const AddSceneObjectComponentCommand&) */
@@ -1593,17 +1557,7 @@ namespace Horo::Editor {
                 SceneCommandResult{object->id, m_document.m_revision, m_document.m_state, DocumentChangeKind::ComponentChanged, {}, false});
         }
 
-        SceneCommandDelta delta = ComponentAddedDelta{object->id, command.type};
-        const std::size_t memoryBytes = EstimateMemoryBytes(delta, 1);
-        const DocumentStateId beforeState = m_document.m_state;
-        ApplyDelta(m_document.m_objects, delta);
-        ++m_document.m_revision.value;
-        m_document.m_state = DocumentStateId{m_document.m_nextStateId++};
-        std::vector affected{object->id};
-        PushHistory(*m_history.m_impl, HistoryRecord{beforeState, m_document.m_state, std::move(delta), affected, memoryBytes});
-
-        return Result<SceneCommandResult>::Success(SceneCommandResult{command.object, m_document.m_revision, m_document.m_state,
-                                                                      DocumentChangeKind::ComponentChanged, std::move(affected), true});
+        return CommitObject({ComponentAddedDelta{object->id, command.type}, command.object, DocumentChangeKind::ComponentChanged});
     }
 
     /** @copydoc SceneDocumentCommandExecutor::Execute(const RemoveSceneObjectComponentCommand&) */
@@ -1621,22 +1575,9 @@ namespace Horo::Editor {
                 SceneCommandResult{object->id, m_document.m_revision, m_document.m_state, DocumentChangeKind::ComponentChanged, {}, false});
         }
 
-        SceneCommandDelta delta = ComponentRemovedDelta{object->id,
-                                                        command.type,
-                                                        object->components.camera,
-                                                        object->components.light,
-                                                        object->components.triggerVolume,
-                                                        object->components.audioSource};
-        const std::size_t memoryBytes = EstimateMemoryBytes(delta, 1);
-        const DocumentStateId beforeState = m_document.m_state;
-        ApplyDelta(m_document.m_objects, delta);
-        ++m_document.m_revision.value;
-        m_document.m_state = DocumentStateId{m_document.m_nextStateId++};
-        std::vector affected{object->id};
-        PushHistory(*m_history.m_impl, HistoryRecord{beforeState, m_document.m_state, std::move(delta), affected, memoryBytes});
-
-        return Result<SceneCommandResult>::Success(SceneCommandResult{command.object, m_document.m_revision, m_document.m_state,
-                                                                      DocumentChangeKind::ComponentChanged, std::move(affected), true});
+        return CommitObject({ComponentRemovedDelta{object->id, command.type, object->components.camera, object->components.light,
+                                                   object->components.triggerVolume, object->components.audioSource},
+                             command.object, DocumentChangeKind::ComponentChanged});
     }
 
     /** @copydoc SceneDocumentCommandExecutor::Execute(const AttachSceneObjectBehaviorCommand&) */
@@ -1664,16 +1605,8 @@ namespace Horo::Editor {
         SceneCommandDelta delta = BehaviorsChangedDelta{object->id, object->components.behaviors, std::move(after)};
         if (const Result<void> valid = ValidateHistoryDelta(delta, 1); valid.HasError())
             return Result<SceneCommandResult>::Failure(valid.ErrorValue());
-        const std::size_t memoryBytes = EstimateMemoryBytes(delta, 1);
-        const DocumentStateId beforeState = m_document.m_state;
-        ApplyDelta(m_document.m_objects, delta);
         ++m_document.m_nextBehaviorInstanceId;
-        ++m_document.m_revision.value;
-        m_document.m_state = DocumentStateId{m_document.m_nextStateId++};
-        std::vector affected{object->id};
-        PushHistory(*m_history.m_impl, HistoryRecord{beforeState, m_document.m_state, std::move(delta), affected, memoryBytes});
-        return Result<SceneCommandResult>::Success(
-            {command.object, m_document.m_revision, m_document.m_state, DocumentChangeKind::ComponentChanged, std::move(affected), true});
+        return CommitObject({std::move(delta), command.object, DocumentChangeKind::ComponentChanged});
     }
 
     /** @copydoc SceneDocumentCommandExecutor::Execute(const SetSceneObjectBehaviorCommand&) */
@@ -1700,15 +1633,7 @@ namespace Horo::Editor {
         SceneCommandDelta delta = BehaviorsChangedDelta{object->id, object->components.behaviors, std::move(after)};
         if (const Result<void> valid = ValidateHistoryDelta(delta, 1); valid.HasError())
             return Result<SceneCommandResult>::Failure(valid.ErrorValue());
-        const std::size_t memoryBytes = EstimateMemoryBytes(delta, 1);
-        const DocumentStateId beforeState = m_document.m_state;
-        ApplyDelta(m_document.m_objects, delta);
-        ++m_document.m_revision.value;
-        m_document.m_state = DocumentStateId{m_document.m_nextStateId++};
-        std::vector affected{object->id};
-        PushHistory(*m_history.m_impl, HistoryRecord{beforeState, m_document.m_state, std::move(delta), affected, memoryBytes});
-        return Result<SceneCommandResult>::Success(
-            {command.object, m_document.m_revision, m_document.m_state, DocumentChangeKind::ComponentChanged, std::move(affected), true});
+        return CommitObject({std::move(delta), command.object, DocumentChangeKind::ComponentChanged});
     }
 
     /** @copydoc SceneDocumentCommandExecutor::Execute(const RemoveSceneObjectBehaviorCommand&) */
@@ -1727,16 +1652,8 @@ namespace Horo::Editor {
             removed == 0)
             return Result<SceneCommandResult>::Failure(
                 MakeDocumentError(SceneDocumentErrors::InvalidBehavior, "Behavior attachment does not exist."));
-        SceneCommandDelta delta = BehaviorsChangedDelta{object->id, object->components.behaviors, std::move(after)};
-        const std::size_t memoryBytes = EstimateMemoryBytes(delta, 1);
-        const DocumentStateId beforeState = m_document.m_state;
-        ApplyDelta(m_document.m_objects, delta);
-        ++m_document.m_revision.value;
-        m_document.m_state = DocumentStateId{m_document.m_nextStateId++};
-        std::vector affected{object->id};
-        PushHistory(*m_history.m_impl, HistoryRecord{beforeState, m_document.m_state, std::move(delta), affected, memoryBytes});
-        return Result<SceneCommandResult>::Success(
-            {command.object, m_document.m_revision, m_document.m_state, DocumentChangeKind::ComponentChanged, std::move(affected), true});
+        return CommitObject({BehaviorsChangedDelta{object->id, object->components.behaviors, std::move(after)}, command.object,
+                             DocumentChangeKind::ComponentChanged});
     }
 
     /** @copydoc SceneDocumentCommandExecutor::Execute(const DuplicateSceneObjectCommand&) */
