@@ -187,6 +187,7 @@ add_executable(HoroNetworkApiTests
         unit/runtime/networking/ProtocolIdentityTests.cpp
         unit/runtime/networking/ReplicationDescriptorTests.cpp
         unit/runtime/networking/ReplicationDescriptorRegistryTests.cpp
+        unit/runtime/networking/ReplicationRolesTests.cpp
         unit/runtime/networking/TransportCapabilitiesTests.cpp
         unit/runtime/networking/TransportBudgetTests.cpp
 )
@@ -1339,6 +1340,13 @@ add_executable(HoroRuntimeUiLayoutTests
 )
 target_compile_features(HoroRuntimeUiLayoutTests PRIVATE cxx_std_20)
 target_link_libraries(HoroRuntimeUiLayoutTests PRIVATE HoroEngine::RuntimeUi)
+add_executable(HoroRuntimeUiHitTestingTests
+        unit/runtime/ui/UiHitTestingTests.cpp
+        support/AllocationProbe.cpp
+)
+target_compile_features(HoroRuntimeUiHitTestingTests PRIVATE cxx_std_20)
+target_include_directories(HoroRuntimeUiHitTestingTests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+target_link_libraries(HoroRuntimeUiHitTestingTests PRIVATE HoroEngine::RuntimeUi)
 add_executable(HoroRuntimeSaveArchiveMetadataTests
         unit/runtime/save/SaveArchiveMetadataTests.cpp
 )
@@ -1747,6 +1755,7 @@ set(HORO_CATCH_TEST_TARGETS
         HoroRuntimeUiElementTreeTests
         HoroRuntimeUiRenderSnapshotTests
         HoroRuntimeUiLayoutTests
+        HoroRuntimeUiHitTestingTests
         HoroRuntimeSaveArchiveMetadataTests
         HoroRuntimeSaveArchiveFramingTests
         HoroRuntimeSaveSlotMetadataTests
