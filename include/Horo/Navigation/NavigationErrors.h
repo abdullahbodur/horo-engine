@@ -68,4 +68,18 @@ namespace Horo::Navigation::NavigationErrors {
     extern const ErrorCodeDescriptor ProjectProfileStale;
     /** @brief A profile aggregate, provider or usage exceeds an authoritative finite capacity. */
     extern const ErrorCodeDescriptor ProjectProfileCapacityExceeded;
+    /** @brief A NavMesh artifact header, coordinate frame, table, range, or semantic value is invalid. */
+    extern const ErrorCodeDescriptor NavMeshArtifactInvalid;
+    /** @brief A NavMesh artifact checksum, table partition, reference, or encoded payload is corrupt. */
+    extern const ErrorCodeDescriptor NavMeshArtifactCorrupt;
+    /** @brief A NavMesh artifact count, encoded size, decoded size, or owned storage exceeds a qualified bound. */
+    extern const ErrorCodeDescriptor NavMeshArtifactCapacityExceeded;
+    /** @brief A neutral or provider-private cooked format is not compatible with this consumer. */
+    extern const ErrorCodeDescriptor UnsupportedCookedVersion;
+    /** @brief An exact independently addressable NavMesh tile is absent. */
+    extern const ErrorCodeDescriptor NavMeshTileUnknown;
+    /** @brief No provider-private payload matches the exact requested provider fingerprint. */
+    extern const ErrorCodeDescriptor NavMeshProviderPayloadUnavailable;
+    /** @brief A provider-private payload exists but its version, endian, compression, or fingerprint is incompatible. */
+    extern const ErrorCodeDescriptor NavMeshProviderPayloadIncompatible;
 }  // namespace Horo::Navigation::NavigationErrors

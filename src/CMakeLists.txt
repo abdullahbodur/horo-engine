@@ -576,6 +576,7 @@ target_compile_features(HoroCinematicRuntime PUBLIC cxx_std_20)
 target_link_libraries(HoroCinematicRuntime PUBLIC HoroEngine::CinematicModel)
 
 add_library(HoroNavigationApi STATIC
+        runtime/navigation/api/NavMeshData.cpp
         runtime/navigation/api/NavigationAreas.cpp
         runtime/navigation/api/NavigationAgentProfiles.cpp
         runtime/navigation/api/NavigationCapabilities.cpp
