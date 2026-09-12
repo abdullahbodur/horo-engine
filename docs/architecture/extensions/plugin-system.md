@@ -612,6 +612,13 @@ module, contract-test, or archive filename would exceed the portable 255-byte
 component limit. Manifest schemas, validation, and distribution commands
 remain separately versioned SDK deliverables.
 
+The SDK also stages a platform-native `horo-extension-validate` executable and
+the matching V1 authoring schema. The command calls the same bounded manifest
+parser as `ExtensionHost`, emits deterministic human or JSON diagnostics with
+exact field paths, rejects unsupported requested schema versions, and never
+loads module code. The schema supports editor completion; the executable remains
+the behavioral authority for cross-field and identity-reference rules.
+
 Project gameplay modules may use the SDK-generation C++ boundary documented in
 [Gameplay Module Boundary](./gameplay-module-boundary.md). That boundary is
 rebuilt with the project and SDK generation; it is not the same compatibility

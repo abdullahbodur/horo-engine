@@ -25,6 +25,10 @@ function(horo_configure_extension_sdk)
         "${package_root}/bin/horo-scaffold-extension.py"
         COPYONLY)
     configure_file(
+        "${PROJECT_SOURCE_DIR}/sdk/schemas/extension-manifest-v1.schema.json"
+        "${package_root}/share/horo/extension-sdk/extension-manifest-v1.schema.json"
+        COPYONLY)
+    configure_file(
         "${PROJECT_SOURCE_DIR}/sdk/extension-sdk.json.in"
         "${package_root}/share/horo/extension-sdk/extension-sdk.json"
         @ONLY)

@@ -1468,6 +1468,38 @@ target_compile_features(HoroPackagedExtensionActivation PRIVATE cxx_std_20)
 target_include_directories(HoroPackagedExtensionActivation PRIVATE ${PROJECT_SOURCE_DIR}/tests/support)
 target_link_libraries(HoroPackagedExtensionActivation PRIVATE HoroEngine::Extensions)
 
+add_test(NAME HoroExtensionManifestValidatorValid
+    COMMAND "$<TARGET_FILE:horo-extension-validate>" --json --schema-version 1
+        "${PROJECT_SOURCE_DIR}/tests/fixtures/extensions/manifest-validator-valid.json")
+set_tests_properties(HoroExtensionManifestValidatorValid PROPERTIES
+    LABELS "extensions;sdk;cli"
+    PASS_REGULAR_EXPRESSION
+        "\\\"valid\\\":true,\\\"schemaVersion\\\":1,\\\"id\\\":\\\"com.horo.fixture.validator\\\"")
+
+add_test(NAME HoroExtensionManifestValidatorInvalid
+    COMMAND "$<TARGET_FILE:horo-extension-validate>" --json
+        "${PROJECT_SOURCE_DIR}/tests/fixtures/extensions/manifest-validator-invalid.json")
+set_tests_properties(HoroExtensionManifestValidatorInvalid PROPERTIES
+    LABELS "extensions;sdk;cli"
+    WILL_FAIL TRUE
+    PASS_REGULAR_EXPRESSION
+        "\\\"path\\\":\\\"\\$.futureAuthority\\\",\\\"code\\\":\\\"extension.manifest.unknown_field\\\"")
+
+add_test(NAME HoroExtensionManifestValidatorRejectsUnknownSchema
+    COMMAND "$<TARGET_FILE:horo-extension-validate>" --schema-version 2
+        "${PROJECT_SOURCE_DIR}/tests/fixtures/extensions/manifest-validator-valid.json")
+set_tests_properties(HoroExtensionManifestValidatorRejectsUnknownSchema PROPERTIES
+    LABELS "extensions;sdk;cli"
+    WILL_FAIL TRUE)
+
+add_test(NAME HoroExtensionManifestValidatorIsPackaged
+    COMMAND "${CMAKE_COMMAND}"
+        "-DVALIDATOR=${HORO_EXTENSION_SDK_PACKAGE_DIR}/bin/horo-extension-validate${CMAKE_EXECUTABLE_SUFFIX}"
+        "-DSCHEMA=${HORO_EXTENSION_SDK_PACKAGE_DIR}/share/horo/extension-sdk/extension-manifest-v1.schema.json"
+        -P "${PROJECT_SOURCE_DIR}/tests/cmake/VerifyExtensionValidatorPackage.cmake")
+set_tests_properties(HoroExtensionManifestValidatorIsPackaged PROPERTIES
+    LABELS "extensions;sdk;cli")
+
 add_executable(HoroExtensionManagerTests
         unit/extensions/ApplicationCapabilityRegistryTests.cpp
         unit/extensions/ExtensionActivationTransactionTests.cpp
