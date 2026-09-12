@@ -542,6 +542,20 @@ discoverability while already leased calls retain their admission lease. The
 registry exposes no concrete service pointer; capability-specific host adapters
 own invocation, scheduling, cancellation, and result storage.
 
+`BackendServiceRegistry` is the typed in-process adapter boundary behind those
+capability leases. The composition root publishes one stable service and contract
+identity bound to the exact capability provider version and generation. Callers
+resolve a one-shot typed operation handle, never the provider object or a reusable
+factory. The registry enforces the declared caller/owner-thread rule before entry,
+combines caller cancellation with provider-generation cancellation, attributes
+typed provider failures without flattening their cause, and owns reverse-order
+revocation. Revocation removes discovery first, cancels and drains admitted calls,
+then invokes the provider's `Shutdown()` exactly once. The contract depends only
+on Extensions and Foundation, so the same service is usable in graphical and
+headless composition without editor or renderer construction. External module C
+function tables remain behind a host-owned typed adapter and do not cross this C++
+boundary directly.
+
 ## Module Loading And ABI Boundary
 
 The generic module C ABI is a bootstrap/control boundary, not sufficient for every

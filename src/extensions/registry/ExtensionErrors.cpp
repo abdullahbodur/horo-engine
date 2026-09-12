@@ -183,6 +183,78 @@ namespace Horo::Extensions::ExtensionErrors {
         .userActionable = false,
     };
 
+    const ErrorCodeDescriptor BackendServiceInvalid{Domain,
+                                                    ErrorCode{"backend_service_invalid"},
+                                                    ErrorSeverity::Error,
+                                                    "The backend-service descriptor or request is invalid.",
+                                                    "Provide canonical identities and a complete typed provider contract.",
+                                                    false,
+                                                    false};
+    const ErrorCodeDescriptor BackendServiceDuplicate{Domain,
+                                                      ErrorCode{"backend_service_duplicate"},
+                                                      ErrorSeverity::Error,
+                                                      "The backend service is already registered.",
+                                                      "Publish only one live provider for each service identity.",
+                                                      false,
+                                                      false};
+    const ErrorCodeDescriptor BackendServiceUnavailable{Domain,
+                                                        ErrorCode{"backend_service_unavailable"},
+                                                        ErrorSeverity::Error,
+                                                        "The requested backend service is unavailable.",
+                                                        "Resolve a service from the current provider generation.",
+                                                        false,
+                                                        true};
+    const ErrorCodeDescriptor
+        BackendServiceContractMismatch{Domain,
+                                       ErrorCode{"backend_service_contract_mismatch"},
+                                       ErrorSeverity::Error,
+                                       "The backend service does not match the admitted capability contract.",
+                                       "Use the exact service contract, provider, version, and activation generation.",
+                                       false,
+                                       false};
+    const ErrorCodeDescriptor BackendServiceTypeMismatch{Domain,
+                                                         ErrorCode{"backend_service_type_mismatch"},
+                                                         ErrorSeverity::Error,
+                                                         "The backend service adapter type does not match the caller contract.",
+                                                         "Use the typed contract declared by the service export.",
+                                                         false,
+                                                         false};
+    const ErrorCodeDescriptor BackendServiceThreadViolation{Domain,
+                                                            ErrorCode{"backend_service_thread_violation"},
+                                                            ErrorSeverity::Error,
+                                                            "The backend service was called from a forbidden thread.",
+                                                            "Dispatch the operation through its declared host thread policy.",
+                                                            true,
+                                                            false};
+    const ErrorCodeDescriptor BackendServiceInvocationFailed{Domain,
+                                                             ErrorCode{"backend_service_invocation_failed"},
+                                                             ErrorSeverity::Error,
+                                                             "The backend service provider failed.",
+                                                             "Inspect the attributed provider error cause.",
+                                                             false,
+                                                             false};
+    const ErrorCodeDescriptor BackendServiceCancelled{Domain,
+                                                      ErrorCode{"backend_service_cancelled"},
+                                                      ErrorSeverity::Warning,
+                                                      "The backend service operation was cancelled.",
+                                                      "Retry only while the caller and provider generation remain active.",
+                                                      true,
+                                                      false};
+    const ErrorCodeDescriptor BackendServiceCapacityExceeded{Domain,
+                                                             ErrorCode{"backend_service_capacity_exceeded"},
+                                                             ErrorSeverity::Error,
+                                                             "The backend-service registry capacity was exceeded.",
+                                                             "Reduce the explicitly composed backend-service set.",
+                                                             false,
+                                                             false};
+    const ErrorCodeDescriptor BackendServiceShutdown{Domain,
+                                                     ErrorCode{"backend_service_shutdown"},
+                                                     ErrorSeverity::Error,
+                                                     "The backend-service registry is shutting down.",
+                                                     "Do not register or resolve services after host shutdown begins.",
+                                                     false,
+                                                     false};
+
     const ErrorCodeDescriptor ProjectValidatorRegistryInvalid{
         .domain = Domain,
         .code = ErrorCode{"project_validator_registry_invalid"},
