@@ -130,14 +130,14 @@ namespace Horo::Audio {
         }) ||
             std::ranges::find(retiredScenes_, reference.scene) != retiredScenes_.end())
             return Failure<void>(AudioErrors::RuntimeInactive);
-        const bool validReference = std::visit([this](const auto &value) {
-            using Value = std::decay_t<decltype(value)>;
+        if (const bool validReference = std::visit(
+                [this]<typename Value>(const Value &value) {
             if constexpr (std::is_same_v<Value, AudioVoiceHandle>)
                 return value.IsValid() && value.owner == descriptor_.owner;
             else
                 return ValidMemoryHandle(value, descriptor_.owner);
         }, reference.reference);
-        if (!validReference)
+            !validReference)
             return Failure<void>(AudioErrors::IdentityInvalid);
         if (std::ranges::find(callbackReferences_, reference) != callbackReferences_.end())
             return Failure<void>(AudioErrors::HandleStale);
@@ -172,8 +172,8 @@ namespace Horo::Audio {
     }
 
     /** @copydoc AudioLifecycleReconciler::PublishTerminal */
-    Result<void> AudioLifecycleReconciler::PublishTerminal(const AudioPendingOperation operation,
-                                                           const AudioTrackedCallbackReference reference,
+    Result<void> AudioLifecycleReconciler::PublishTerminal(const AudioPendingOperation &operation,
+                                                           const AudioTrackedCallbackReference &reference,
                                                            const AudioReconciliationReason reason) {
         const auto pending = std::ranges::find(pending_, operation);
         if (pending == pending_.end())
@@ -184,7 +184,7 @@ namespace Horo::Audio {
         if (terminal_.size() == descriptor_.maximumTerminalResults)
             return Failure<void>(AudioErrors::HandleCapacityExhausted);
 
-        terminal_.push_back({*pending, reason});
+        terminal_.emplace_back(*pending, reason);
         pending_.erase(pending);
         callbackReferences_.erase(callbackReference);
         return Result<void>::Success();
@@ -206,7 +206,7 @@ namespace Horo::Audio {
             return Failure<void>(AudioErrors::RuntimeInactive);
         if (sceneBarriers_.size() == descriptor_.maximumCallbackReferences)
             return Failure<void>(AudioErrors::HandleCapacityExhausted);
-        sceneBarriers_.push_back({scene, barrierSequence});
+        sceneBarriers_.emplace_back(scene, barrierSequence);
         lastAcceptedSequence_ = barrierSequence;
         return Result<void>::Success();
     }
@@ -221,11 +221,10 @@ namespace Horo::Audio {
             return Failure<void>(AudioErrors::HandleCapacityExhausted);
         if (const auto reconciled = ReconcileMatching(scene, AudioReconciliationReason::CancelledBySceneUnload); reconciled.HasError())
             return reconciled;
-        callbackReferences_.erase(std::remove_if(callbackReferences_.begin(), callbackReferences_.end(),
-                                                 [scene](const AudioTrackedCallbackReference &reference) {
+        const auto removed = std::ranges::remove_if(callbackReferences_, [scene](const AudioTrackedCallbackReference &reference) {
             return reference.scene == scene;
-        }),
-                                  callbackReferences_.end());
+        });
+        callbackReferences_.erase(removed.begin(), removed.end());
         sceneBarriers_.erase(barrier);
         retiredScenes_.push_back(scene);
         return Result<void>::Success();
@@ -242,12 +241,13 @@ namespace Horo::Audio {
 
     /** @copydoc AudioLifecycleReconciler::BeginShutdown */
     Result<void> AudioLifecycleReconciler::BeginShutdown() {
-        if (state_ == AudioLifecycleState::Stopped)
+        using enum AudioLifecycleState;
+        if (state_ == Stopped)
             return Result<void>::Success();
-        if (state_ == AudioLifecycleState::Stopping)
+        if (state_ == Stopping)
             return Result<void>::Success();
-        const bool alreadyQuiesced = state_ == AudioLifecycleState::Resetting && callbackQuiesced_;
-        state_ = AudioLifecycleState::Stopping;
+        const bool alreadyQuiesced = state_ == Resetting && callbackQuiesced_;
+        state_ = Stopping;
         callbackQuiesced_ = alreadyQuiesced;
         return Result<void>::Success();
     }
@@ -264,7 +264,7 @@ namespace Horo::Audio {
 
     /** @copydoc AudioLifecycleReconciler::CompleteDeviceReset */
     Result<void> AudioLifecycleReconciler::CompleteDeviceReset(const std::uint64_t nextCommandEpoch,
-                                                               const AudioDeviceEpoch nextCallbackEpoch, const bool backendDetached) {
+                                                               const AudioDeviceEpoch &nextCallbackEpoch, const bool backendDetached) {
         if (state_ != AudioLifecycleState::Resetting || !callbackQuiesced_ || !backendDetached)
             return Failure<void>(AudioErrors::RuntimeInactive);
         if (nextCommandEpoch <= descriptor_.commandEpoch || !ValidCallbackEpoch(nextCallbackEpoch, descriptor_.owner) ||
@@ -287,9 +287,10 @@ namespace Horo::Audio {
 
     /** @copydoc AudioLifecycleReconciler::CompleteShutdown */
     Result<void> AudioLifecycleReconciler::CompleteShutdown(const bool backendDetached) {
-        if (state_ == AudioLifecycleState::Stopped)
+        using enum AudioLifecycleState;
+        if (state_ == Stopped)
             return Result<void>::Success();
-        if (state_ != AudioLifecycleState::Stopping || (callbackAttached_ && (!callbackQuiesced_ || !backendDetached)))
+        if (state_ != Stopping || (callbackAttached_ && (!callbackQuiesced_ || !backendDetached)))
             return Failure<void>(AudioErrors::RuntimeInactive);
         const auto reason =
             activated_ ? AudioReconciliationReason::CancelledByShutdown : AudioReconciliationReason::CancelledByInitializationRollback;
@@ -299,7 +300,7 @@ namespace Horo::Audio {
         sceneBarriers_.clear();
         retiredScenes_.clear();
         callbackAttached_ = false;
-        state_ = AudioLifecycleState::Stopped;
+        state_ = Stopped;
         return Result<void>::Success();
     }
 
@@ -344,14 +345,15 @@ namespace Horo::Audio {
         const auto matches = [scene](const AudioPendingOperation &operation) {
             return !scene.has_value() || operation.scope.scene == *scene;
         };
-        const auto matchCount = static_cast<std::size_t>(std::ranges::count_if(pending_, matches));
-        if (matchCount > descriptor_.maximumTerminalResults - terminal_.size())
+        if (const auto matchCount = static_cast<std::size_t>(std::ranges::count_if(pending_, matches));
+            matchCount > descriptor_.maximumTerminalResults - terminal_.size())
             return Failure<void>(AudioErrors::HandleCapacityExhausted);
         for (const AudioPendingOperation &operation : pending_) {
             if (matches(operation))
-                terminal_.push_back({operation, reason});
+                terminal_.emplace_back(operation, reason);
         }
-        pending_.erase(std::remove_if(pending_.begin(), pending_.end(), matches), pending_.end());
+        const auto removed = std::ranges::remove_if(pending_, matches);
+        pending_.erase(removed.begin(), removed.end());
         return Result<void>::Success();
     }
 

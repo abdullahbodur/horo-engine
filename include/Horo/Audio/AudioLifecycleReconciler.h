@@ -171,7 +171,7 @@ namespace Horo::Audio {
          * @param backendDetached Whether native callback entry into the old epoch is impossible.
          * @return Success or typed identity, transition, capacity, or detachment failure with no partial change.
          */
-        [[nodiscard]] Result<void> CompleteDeviceReset(std::uint64_t nextCommandEpoch, AudioDeviceEpoch nextCallbackEpoch,
+        [[nodiscard]] Result<void> CompleteDeviceReset(std::uint64_t nextCommandEpoch, const AudioDeviceEpoch &nextCallbackEpoch,
                                                        bool backendDetached);
 
         /**
@@ -215,7 +215,7 @@ namespace Horo::Audio {
         /** @brief Validates and applies one resource terminal from the closed terminal-event variant. */
         [[nodiscard]] Result<void> ObserveTerminalValue(const AudioResourceReleaseEvent &event);
         /** @brief Publishes a validated exact terminal and retires its matching callback reference. */
-        [[nodiscard]] Result<void> PublishTerminal(AudioPendingOperation operation, AudioTrackedCallbackReference reference,
+        [[nodiscard]] Result<void> PublishTerminal(const AudioPendingOperation &operation, const AudioTrackedCallbackReference &reference,
                                                    AudioReconciliationReason reason);
         /** @brief Atomically moves matching pending operations into the retained terminal store. */
         [[nodiscard]] Result<void> ReconcileMatching(std::optional<AudioSceneContextHandle> scene, AudioReconciliationReason reason);
