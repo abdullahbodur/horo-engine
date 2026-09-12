@@ -17,7 +17,10 @@ jobs:
   sonar:
     name: SonarCloud
     runs-on: ubuntu-24.04
-    timeout-minutes: 40
+    # A cold build, coverage pass, and CFamily scan can exceed 40 minutes. Keep a
+    # bounded margin so the scan and Quality Gate wait can finish and publish the
+    # analysis cache instead of timing out at the save boundary.
+    timeout-minutes: 60
     if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
     env:
       CCACHE_BASEDIR: ${{ github.workspace }}
@@ -123,6 +126,24 @@ jobs:
             -DHORO_ENABLE_OPENTELEMETRY=ON
           cmake --build build/sonar --parallel
 
+      # Checkpoint build inputs before coverage and analysis. A later scan timeout
+      # must not discard the dependency and compiler work needed by the next run.
+      - name: Save FetchContent dependencies
+        if: ${{ !cancelled() && steps.build.outcome == 'success' && steps.deps.outputs.cache-hit != 'true' }}
+        uses: actions/cache/save@caa296126883cff596d87d8935842f9db880ef25
+        with:
+          path: |
+            .cmake/fetchcontent
+          key: ${{ steps.deps.outputs.cache-primary-key }}
+
+      - name: Save compiler cache
+        if: ${{ !cancelled() && steps.build.outcome == 'success' && steps.compiler.outputs.cache-hit != 'true' }}
+        uses: actions/cache/save@caa296126883cff596d87d8935842f9db880ef25
+        with:
+          path: |
+            ${{ github.workspace }}/.sonar/ccache
+          key: ${{ steps.compiler.outputs.cache-primary-key }}
+
       - name: Test and collect coverage
         id: coverage
         run: |
@@ -165,22 +186,6 @@ jobs:
             -Dsonar.cfamily.analysisCache.path="$GITHUB_WORKSPACE/.sonar/cfamily-cache" \
             -Dsonar.qualitygate.wait=true \
             -Dsonar.qualitygate.timeout=300
-
-      - name: Save FetchContent dependencies
-        if: ${{ !cancelled() && steps.build.outcome == 'success' && steps.deps.outputs.cache-hit != 'true' }}
-        uses: actions/cache/save@caa296126883cff596d87d8935842f9db880ef25
-        with:
-          path: |
-            .cmake/fetchcontent
-          key: ${{ steps.deps.outputs.cache-primary-key }}
-
-      - name: Save compiler cache
-        if: ${{ !cancelled() && steps.build.outcome == 'success' && steps.compiler.outputs.cache-hit != 'true' }}
-        uses: actions/cache/save@caa296126883cff596d87d8935842f9db880ef25
-        with:
-          path: |
-            ${{ github.workspace }}/.sonar/ccache
-          key: ${{ steps.compiler.outputs.cache-primary-key }}
 
       - name: Save Sonar caches
         if: ${{ !cancelled() && (steps.scan.outcome == 'success' || steps.scan.outcome == 'failure') && steps.sonar_cache.outputs.cache-hit != 'true' }}
