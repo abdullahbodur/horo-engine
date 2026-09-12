@@ -83,11 +83,8 @@ namespace {
         return std::move(built).Value();
     }
 
-    const ErrorCodeDescriptor ParticipantFailure{{"test.scene"},
-                                                 {"test.scene.participant"},
-                                                 ErrorSeverity::Error,
-                                                 "Injected participant failure.",
-                                                 "Disable the injected failure."};
+    const ErrorCodeDescriptor ParticipantFailure{ErrorDomainId{"test.scene"}, ErrorCode{"test.scene.participant"}, ErrorSeverity::Error,
+                                                 "Injected participant failure.", "Disable the injected failure."};
 
     class TrackingSceneCandidate final : public SceneActivationCandidate {
     public:
