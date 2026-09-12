@@ -248,6 +248,7 @@ add_library(HoroRuntimeUi STATIC
         runtime/ui/UiDocument.cpp
         runtime/ui/UiDiagnostics.cpp
         runtime/ui/UiElementTree.cpp
+        runtime/ui/UiEventDispatch.cpp
         runtime/ui/UiLayout.cpp
         runtime/ui/UiLayoutTypes.cpp
         runtime/ui/UiHitTesting.cpp

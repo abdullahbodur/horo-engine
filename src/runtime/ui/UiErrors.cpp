@@ -280,6 +280,74 @@ namespace Horo::Runtime::Ui::UiErrors {
                                     "Create a new store for the active runtime canvas before publishing interaction geometry.",
                                     false,
                                     false};
+    /** @copydoc EventDispatchInvalid */
+    const ErrorCodeDescriptor
+        EventDispatchInvalid{UiDomain,
+                             ErrorCode{"runtime_ui.event_dispatch.invalid"},
+                             ErrorSeverity::Error,
+                             "The Runtime UI routed event or route declaration is malformed.",
+                             "Provide a known event kind, non-zero sequence, exact target, and coherent pointer payload.",
+                             false,
+                             false};
+    /** @copydoc EventDispatchSourceStale */
+    const ErrorCodeDescriptor EventDispatchSourceStale{UiDomain,
+                                                       ErrorCode{"runtime_ui.event_dispatch.source_stale"},
+                                                       ErrorSeverity::Error,
+                                                       "The Runtime UI event route does not match the active retained-tree generation.",
+                                                       "Retarget against the current presented interaction and retained-tree revision.",
+                                                       true,
+                                                       false};
+    /** @copydoc EventDispatchModalBoundaryViolation */
+    const ErrorCodeDescriptor
+        EventDispatchModalBoundaryViolation{UiDomain,
+                                            ErrorCode{"runtime_ui.event_dispatch.modal_boundary_violation"},
+                                            ErrorSeverity::Error,
+                                            "The Runtime UI event target is outside the active modal route boundary.",
+                                            "Block the transition or target an element descended from the exact active modal root.",
+                                            false,
+                                            false};
+    /** @copydoc EventDispatchCapacityExceeded */
+    const ErrorCodeDescriptor EventDispatchCapacityExceeded{UiDomain,
+                                                            ErrorCode{"runtime_ui.event_dispatch.capacity_exceeded"},
+                                                            ErrorSeverity::Error,
+                                                            "The Runtime UI event route exceeds the dispatcher's preallocated depth.",
+                                                            "Use the retained tree's declared finite depth when creating the dispatcher.",
+                                                            false,
+                                                            false};
+    /** @copydoc EventDispatchRouteInvalidated */
+    const ErrorCodeDescriptor
+        EventDispatchRouteInvalidated{UiDomain,
+                                      ErrorCode{"runtime_ui.event_dispatch.route_invalidated"},
+                                      ErrorSeverity::Warning,
+                                      "A Runtime UI handler changed or destroyed the frozen routed-event path.",
+                                      "Stop the current route and retarget later input against the next presented interaction revision.",
+                                      false,
+                                      false};
+    /** @copydoc EventDispatchReentrant */
+    const ErrorCodeDescriptor EventDispatchReentrant{UiDomain,
+                                                     ErrorCode{"runtime_ui.event_dispatch.reentrant"},
+                                                     ErrorSeverity::Error,
+                                                     "A Runtime UI handler attempted nested dispatch through the active dispatcher.",
+                                                     "Queue the nested event for the next owner dispatch turn.",
+                                                     false,
+                                                     false};
+    /** @copydoc EventDispatchHandlerFailed */
+    const ErrorCodeDescriptor EventDispatchHandlerFailed{UiDomain,
+                                                         ErrorCode{"runtime_ui.event_dispatch.handler_failed"},
+                                                         ErrorSeverity::Error,
+                                                         "A Runtime UI routed handler threw across its callback boundary.",
+                                                         "Return a typed failure from the handler and keep callback exceptions contained.",
+                                                         false,
+                                                         false};
+    /** @copydoc EventDispatchLifecycleUnavailable */
+    const ErrorCodeDescriptor
+        EventDispatchLifecycleUnavailable{UiDomain,
+                                          ErrorCode{"runtime_ui.event_dispatch.lifecycle_unavailable"},
+                                          ErrorSeverity::Error,
+                                          "The Runtime UI event dispatcher is closed or cannot change lifecycle during dispatch.",
+                                          "Finish the active route or create a dispatcher for the current runtime canvas generation.",
+                                          false,
+                                          false};
     /** @copydoc RenderSnapshotInvalid */
     const ErrorCodeDescriptor RenderSnapshotInvalid{UiDomain,
                                                     ErrorCode{"runtime_ui.render_snapshot.invalid"},
