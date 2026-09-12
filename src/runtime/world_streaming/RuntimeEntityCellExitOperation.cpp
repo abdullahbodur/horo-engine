@@ -30,8 +30,8 @@ namespace Horo::WorldStreaming {
                 return Internal::Failure<void>(WorldStreamingErrors::RuntimeEntityCellExitInvalid);
 
             const auto sourceValid = ValidateWorldObjectOwnershipDescriptor(request.sourceOwnership);
-            const auto currentValid = ValidateWorldObjectOwnershipDescriptor(context.currentOwnership);
-            if (sourceValid.HasError() || currentValid.HasError())
+            if (const auto currentValid = ValidateWorldObjectOwnershipDescriptor(context.currentOwnership);
+                sourceValid.HasError() || currentValid.HasError())
                 return Internal::Failure<void>(WorldStreamingErrors::RuntimeEntityCellExitInvalid);
             return Result<void>::Success();
         }
@@ -216,6 +216,7 @@ namespace Horo::WorldStreaming {
     /** @copydoc RuntimeEntityCellExitOperation::Advance */
     Result<RuntimeEntityCellExitOperation> RuntimeEntityCellExitOperation::Advance(const RuntimeEntityCellExitHandle &expected,
                                                                                    const RuntimeEntityCellExitTransition transition) const {
+        using enum RuntimeEntityCellExitState;
         if (!expected.IsValid())
             return Internal::Failure<RuntimeEntityCellExitOperation>(WorldStreamingErrors::RuntimeEntityCellExitInvalid);
         if (expected != handle_)
@@ -223,16 +224,14 @@ namespace Horo::WorldStreaming {
         if (!IsKnown(transition))
             return Internal::Failure<RuntimeEntityCellExitOperation>(WorldStreamingErrors::RuntimeEntityCellExitUnsupported);
 
-        if (IsInterruption(transition) && state_ != RuntimeEntityCellExitState::RetiringSource) {
+        if (IsInterruption(transition) && state_ != RetiringSource) {
             const auto outcome = InterruptionOutcome(transition);
-            if (state_ == RuntimeEntityCellExitState::Queued || state_ == RuntimeEntityCellExitState::Admitted)
+            if (state_ == Queued || state_ == Admitted)
                 return Result<RuntimeEntityCellExitOperation>::Success(
-                    RuntimeEntityCellExitOperation{handle_, disposition_, source_, destination_, RuntimeEntityCellExitState::Terminal,
-                                                   outcome});
-            if (state_ == RuntimeEntityCellExitState::PreparingDestination || state_ == RuntimeEntityCellExitState::DestinationAccepted)
+                    RuntimeEntityCellExitOperation{handle_, disposition_, source_, destination_, Terminal, outcome});
+            if (state_ == PreparingDestination || state_ == DestinationAccepted)
                 return Result<RuntimeEntityCellExitOperation>::Success(
-                    RuntimeEntityCellExitOperation{handle_, disposition_, source_, destination_,
-                                                   RuntimeEntityCellExitState::RollingBackDestination, outcome});
+                    RuntimeEntityCellExitOperation{handle_, disposition_, source_, destination_, RollingBackDestination, outcome});
         }
 
         const auto rule = std::ranges::find_if(TransitionRules, [this, transition](const TransitionRule &candidate) {
