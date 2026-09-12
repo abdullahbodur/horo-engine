@@ -22,7 +22,10 @@ namespace Horo::Navigation {
 
         void SaturatingIncrement(std::atomic<std::uint64_t> &counter) noexcept {
             auto value = counter.load();
-            while (value != std::numeric_limits<std::uint64_t>::max() && !counter.compare_exchange_weak(value, value + 1U)) {
+            for (std::size_t attempt = 0; attempt < MaximumContentionAttempts && value != std::numeric_limits<std::uint64_t>::max();
+                 ++attempt) {
+                if (counter.compare_exchange_weak(value, value + 1U))
+                    return;
             }
         }
 
