@@ -2,6 +2,7 @@
 
 #include "Horo/Network/NetworkErrors.h"
 
+#include <algorithm>
 #include <limits>
 #include <new>
 #include <utility>
@@ -48,7 +49,7 @@ namespace Horo::Network {
         }
     }  // namespace
 
-    TransportBudgetController::TransportBudgetController(TransportBudgetCapacity capacity, TransportLimitPolicyV1 policy,
+    TransportBudgetController::TransportBudgetController(TransportBudgetCapacity capacity, const TransportLimitPolicyV1 &policy,
                                                          std::vector<ConnectionEntry> connections, std::vector<QueueEntry> queue,
                                                          std::vector<std::uint32_t> freeSlots) noexcept
         : capacity_(capacity), policy_(policy), connections_(std::move(connections)), queue_(std::move(queue)),
@@ -86,16 +87,12 @@ namespace Horo::Network {
             queuedBytes_ > candidate.maximumQueuedBytes || tickMessages_ > candidate.maximumMessagesPerTick ||
             tickBytes_ > candidate.maximumBytesPerTick)
             return false;
-        for (const auto &connection : connections_) {
-            if (!connection.active)
-                continue;
-            if (connection.queuedMessages > candidate.maximumQueuedMessagesPerConnection ||
-                connection.queuedBytes > candidate.maximumQueuedBytesPerConnection ||
-                connection.tickMessages > candidate.maximumMessagesPerConnectionPerTick ||
-                connection.tickBytes > candidate.maximumBytesPerConnectionPerTick)
-                return false;
-        }
-        return true;
+        return std::ranges::none_of(connections_, [&candidate](const ConnectionEntry &connection) {
+            return connection.active && (connection.queuedMessages > candidate.maximumQueuedMessagesPerConnection ||
+                                         connection.queuedBytes > candidate.maximumQueuedBytesPerConnection ||
+                                         connection.tickMessages > candidate.maximumMessagesPerConnectionPerTick ||
+                                         connection.tickBytes > candidate.maximumBytesPerConnectionPerTick);
+        });
     }
 
     /** @copydoc TransportBudgetController::ReplacePolicy */
@@ -160,8 +157,7 @@ namespace Horo::Network {
     }
 
     void TransportBudgetController::Release(QueueEntry &entry) noexcept {
-        auto *connection = FindConnection(entry.connection);
-        if (connection != nullptr) {
+        if (auto *connection = FindConnection(entry.connection); connection != nullptr) {
             --connection->queuedMessages;
             connection->queuedBytes -= entry.bytes;
             if (entry.previousForConnection == InvalidQueueSlot)
@@ -204,7 +200,7 @@ namespace Horo::Network {
     }
 
     TransportBudgetController::QueueEntry *TransportBudgetController::FindReplaceable(
-        ConnectionEntry &connection, const TransportBudgetSubmission &submission) noexcept {
+        const ConnectionEntry &connection, const TransportBudgetSubmission &submission) noexcept {
         auto slot = connection.queueHead;
         while (slot != InvalidQueueSlot) {
             auto &entry = queue_[slot];
@@ -236,18 +232,17 @@ namespace Horo::Network {
                AddFits(connection.tickBytes, bytes, policy_.maximumBytesPerConnectionPerTick);
     }
 
-    TransportBudgetDecision TransportBudgetController::Overload(ConnectionEntry &connection, const TransportTrafficClass traffic) noexcept {
+    TransportBudgetDecision TransportBudgetController::Overload(ConnectionEntry &connection,
+                                                                const TransportTrafficClass traffic) const noexcept {
+        using enum TransportBudgetAdmission;
         if (connection.lastSaturationTick != tick_) {
             connection.lastSaturationTick = tick_;
             if (connection.saturationTicks != std::numeric_limits<std::uint32_t>::max())
                 ++connection.saturationTicks;
         }
         if (connection.saturationTicks >= policy_.saturationGraceTicks)
-            return {TransportBudgetAdmission::ConnectionMustClose, {}, 0};
-        return {traffic == TransportTrafficClass::ReplaceableState ? TransportBudgetAdmission::DroppedReplaceable
-                                                                   : TransportBudgetAdmission::Count,
-                {},
-                0};
+            return {ConnectionMustClose, {}, 0};
+        return {traffic == TransportTrafficClass::ReplaceableState ? DroppedReplaceable : Count, {}, 0};
     }
 
     TransportQueueTicket TransportBudgetController::AllocateTicket() {
