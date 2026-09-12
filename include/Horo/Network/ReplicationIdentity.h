@@ -51,6 +51,7 @@ namespace Horo::Network {
     struct ReplicationFieldIdentityTag;
     struct ReplicationValueTypeIdentityTag;
     struct ReplicationCodecIdentityTag;
+    struct ReplicationConditionIdentityTag;
 
     /** @brief Globally stable semantic identity of one replication schema. */
     using ReplicationSchemaId = ReplicationIdentity<ReplicationSchemaIdentityTag, std::uint64_t>;
@@ -60,6 +61,8 @@ namespace Horo::Network {
     using ReplicationValueTypeId = ReplicationIdentity<ReplicationValueTypeIdentityTag, std::uint32_t>;
     /** @brief Stable semantic identity of a registered canonical field codec. */
     using ReplicationCodecId = ReplicationIdentity<ReplicationCodecIdentityTag, std::uint32_t>;
+    /** @brief Stable semantic identity of one registered custom replication condition. */
+    using ReplicationConditionId = ReplicationIdentity<ReplicationConditionIdentityTag, std::uint32_t>;
 
     /** @brief Explicit schema version; major changes are not implicitly compatible. */
     struct ReplicationSchemaVersion final {
