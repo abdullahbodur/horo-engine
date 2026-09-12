@@ -152,7 +152,7 @@ namespace Horo::Network {
             return Fail<void>(NetworkErrors::TransportShuttingDown);
 
         std::unique_lock pollGuard{pollMutex_, std::defer_lock};
-        if (!pollGuard.try_lock())
+        if (const bool acquired = pollGuard.try_lock(); !acquired)
             return Fail<void>(NetworkErrors::NetworkIoPollBusy);
 
         std::uint64_t generation{};
