@@ -304,6 +304,18 @@ namespace Horo::WorldStreaming::WorldStreamingErrors {
     extern const ErrorCodeDescriptor ObjectOwnershipCapacityExceeded;
     /** @brief Ownership admission is closed because its authority is cancelling or shut down. */
     extern const ErrorCodeDescriptor ObjectOwnershipLifecycleUnavailable;
+    /** @brief A runtime-entity cell-exit request, context, handle, or capacity is malformed. */
+    extern const ErrorCodeDescriptor RuntimeEntityCellExitInvalid;
+    /** @brief A runtime-entity cell-exit policy, successor, or transition value is unsupported. */
+    extern const ErrorCodeDescriptor RuntimeEntityCellExitUnsupported;
+    /** @brief A cell-exit command or source observation does not name the current entity and cell generation. */
+    extern const ErrorCodeDescriptor RuntimeEntityCellExitStale;
+    /** @brief The bounded cell-exit owner cannot admit another in-flight transaction. */
+    extern const ErrorCodeDescriptor RuntimeEntityCellExitCapacityExceeded;
+    /** @brief Runtime-entity cell-exit admission is cancelling or closed. */
+    extern const ErrorCodeDescriptor RuntimeEntityCellExitLifecycleUnavailable;
+    /** @brief A known runtime-entity cell-exit transition is illegal from the current phase. */
+    extern const ErrorCodeDescriptor RuntimeEntityCellExitTransitionInvalid;
     /** @brief A partition capability snapshot or project-settings request is structurally invalid. */
     extern const ErrorCodeDescriptor PartitionSettingsInvalid;
     /** @brief A precision or package mode is unsupported by the selected project profile or host. */
