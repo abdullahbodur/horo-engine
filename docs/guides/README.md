@@ -28,6 +28,8 @@ workflows.
   publish immutable generation-pinned indices and run bounded allocation-free queries.
 - [World Streaming Priority Policy Migration](./world-streaming-priority-policy-migration.md):
   rank bounded cell-work snapshots with revision fences, stable ties, and capped age.
+- [World Streaming Cell Stability Migration](./world-streaming-cell-stability-migration.md):
+  replace boundary flapping and unload cooldowns with fenced hysteresis and linger decisions.
 - [XR Coordinate and Pose Contract Migration](./xr-coordinate-pose-migration.md):
   publish generation-fenced coordinate, validity, and time evidence without native
   backend leakage or implicit clock conversion.

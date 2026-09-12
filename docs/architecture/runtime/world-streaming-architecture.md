@@ -580,6 +580,24 @@ the ranked prefix to the separate scheduler/budget authority, which remains
 responsible for capacity, pins, required content and retirement.
 
 Loss of all demands starts the configured linger timer; new demand cancels linger.
+`StreamingCellStabilityPolicy` makes that rule an explicit pure per-cell transition
+contract. A cell enters only at or inside the inclusive enter margin, remains held
+through the inclusive exit margin, and begins its unscaled monotonic linger interval
+only after demand is absent or beyond that exit boundary. Exact reentry cancels
+linger; expiry returns an explicit Unloaded decision so the authority releases its
+bounded record. Pinned demand bypasses geometric thresholds but never the configured
+tracked-cell ceiling.
+
+Every decision carries the exact policy identity/revision, partition epoch, cell,
+observation time, retained residency, and linger origin. Replaced policy/partition
+facts and backward service time are stale. The evaluator allocates nothing and owns
+no clock, registry, cell residency, reservation, or ambient mutable state; the
+streaming authority owns the optional prior snapshot and applies a successful next
+state transactionally. Cancellation and shutdown close new stability evaluation,
+while the authority's existing retirement path remains responsible for draining
+resources. Zero linger explicitly disables retention rather than selecting a hidden
+fallback.
+
 CellBudgetExceeded leaves an unadmitted request pending and re-evaluated under queue
 and byte caps; it does not put an unallocated cell into Failed. Preflight reports
 permanently oversized cells distinctly so they do not retry forever.
