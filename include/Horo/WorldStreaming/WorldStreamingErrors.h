@@ -164,6 +164,18 @@ namespace Horo::WorldStreaming::WorldStreamingErrors {
     extern const ErrorCodeDescriptor CellCandidateUnavailable;
     /** @brief Candidate preparation is closed by cancellation or shutdown. */
     extern const ErrorCodeDescriptor CellCandidateLifecycleUnavailable;
+    /** @brief A cell activation identity, fence, requirement or receipt is malformed. */
+    extern const ErrorCodeDescriptor CellActivationInvalid;
+    /** @brief A prepared receipt or commit command names another operation, generation or service revision. */
+    extern const ErrorCodeDescriptor CellActivationStale;
+    /** @brief The required Scene/provider receipt set is missing, duplicated or otherwise incomplete. */
+    extern const ErrorCodeDescriptor CellActivationIncomplete;
+    /** @brief A required receipt set exceeds its mandatory admission ceiling. */
+    extern const ErrorCodeDescriptor CellActivationCapacityExceeded;
+    /** @brief Cell activation admission or publication is closed by cancellation, shutdown or terminal ownership. */
+    extern const ErrorCodeDescriptor CellActivationLifecycleUnavailable;
+    /** @brief Publication was requested outside CommitDeferredLifecycleChanges. */
+    extern const ErrorCodeDescriptor CellActivationSafePointUnavailable;
     /** @brief A spatial-assignment request is empty, malformed, or has unordered/out-of-partition bounds. */
     extern const ErrorCodeDescriptor SpatialAssignmentInvalid;
     /** @brief A spatial-assignment request repeats one stable authored-object address. */

@@ -335,6 +335,30 @@ namespace Horo::WorldStreaming::WorldStreamingErrors {
         Describe("world_streaming.cell_candidate.lifecycle_unavailable", ErrorSeverity::Warning,
                  "Candidate preparation is closed by cancellation or shutdown.",
                  "Retire the submitted operation or prepare under a new active owner lifetime.", false);
+    const ErrorCodeDescriptor CellActivationInvalid =
+        Describe("world_streaming.cell_activation.invalid", ErrorSeverity::Error,
+                 "A cell activation identity, operation, requirement, or prepared receipt is malformed.",
+                 "Submit one valid Activating operation and a canonical complete receipt set.", true);
+    const ErrorCodeDescriptor CellActivationStale =
+        Describe("world_streaming.cell_activation.stale", ErrorSeverity::Warning,
+                 "A prepared receipt or commit command names another operation, generation, or service revision.",
+                 "Roll back the stale receipts and prepare again for the current cell attempt.", false);
+    const ErrorCodeDescriptor CellActivationIncomplete =
+        Describe("world_streaming.cell_activation.incomplete", ErrorSeverity::Error,
+                 "The required Scene and provider receipt set is incomplete or mismatched.",
+                 "Acquire exactly one matching prepared receipt for every required participant.", true);
+    const ErrorCodeDescriptor CellActivationCapacityExceeded =
+        Describe("world_streaming.cell_activation.capacity_exceeded", ErrorSeverity::Error,
+                 "A required activation receipt set exceeds its mandatory admission ceiling.",
+                 "Reduce required providers or explicitly admit a larger supported receipt ceiling.", true);
+    const ErrorCodeDescriptor CellActivationLifecycleUnavailable =
+        Describe("world_streaming.cell_activation.lifecycle_unavailable", ErrorSeverity::Warning,
+                 "Cell activation is cancelled, closed, already terminal, or unavailable during shutdown.",
+                 "Retire the prepared attempt or create a fresh activation under an active owner lifetime.", false);
+    const ErrorCodeDescriptor CellActivationSafePointUnavailable =
+        Describe("world_streaming.cell_activation.safe_point_unavailable", ErrorSeverity::Warning,
+                 "Prepared cell publication was requested outside CommitDeferredLifecycleChanges.",
+                 "Defer the complete transaction to the Scene structural commit phase.", false);
     const ErrorCodeDescriptor SpatialAssignmentInvalid =
         Describe("world_streaming.spatial_assignment.invalid", ErrorSeverity::Error,
                  "A spatial-assignment request is empty, malformed, or outside the partition content bounds.",
