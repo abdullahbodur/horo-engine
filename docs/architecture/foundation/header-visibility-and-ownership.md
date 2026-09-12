@@ -638,6 +638,24 @@ invalidated and recooked from authoritative navigation source. Provider-private 
 are optional exact-match accelerators and never replace portable metadata as semantic
 authority.
 
+## NAV-003.2 Migration Notes
+
+`HoroEngine::NavigationApi` additionally owns
+`Horo/Navigation/NavigationBakeInput.h`. The header composes only existing
+Foundation-owned math/digest values and NavigationApi-owned profile, registry and
+source-geometry contracts; it adds no Assets, RuntimeScene, Physics, provider,
+filesystem, job-system or editor dependency. Generated isolated public-header
+consumers verify the same staged Foundation-only dependency boundary.
+
+Bake callers migrate from iterating raw source snapshots directly to
+`NavigationBakeInputSnapshot::Create`, passing one exact revision fence plus stable
+surface/profile/source bindings and modifier volumes. Tile builders consume only the
+canonical partition, triangle and modifier spans. Final publication calls
+`ValidatePublication` with the current complete revision/source evidence and operation
+state. Existing geometry callers remain source-compatible because the new coordinate
+convention defaults to canonical right-handed Y-up metres; noncanonical producers must
+declare axes and metres-per-unit explicitly rather than pre-swizzling undocumented data.
+
 ## PCG-2.2 Migration Notes
 
 `HoroEngine::PCG` additionally owns `Horo/PCG/PCGGraphAsset.h`; the target remains

@@ -62,6 +62,20 @@ namespace Horo::Navigation::NavigationErrors {
     extern const ErrorCodeDescriptor SourceGeometryCapacityExceeded;
     /** @brief Captured source revision or digest evidence no longer matches authoritative geometry. */
     extern const ErrorCodeDescriptor SourceGeometryStale;
+    /** @brief Bake-input revisions, identities, transforms, bounds, modes or resolved partitions are malformed. */
+    extern const ErrorCodeDescriptor BakeInputInvalid;
+    /** @brief A bake surface or modifier references an absent profile, source, surface, filter or area. */
+    extern const ErrorCodeDescriptor BakeInputReferenceMissing;
+    /** @brief Canonical bake-input capture exceeds a qualified count, work-unit or owned-byte bound. */
+    extern const ErrorCodeDescriptor BakeInputCapacityExceeded;
+    /** @brief A captured bake revision, request generation or source provenance no longer matches current authority. */
+    extern const ErrorCodeDescriptor BakeInputStale;
+    /** @brief The owning operation was cancelled before the bake-input publication barrier. */
+    extern const ErrorCodeDescriptor BakeInputCancelled;
+    /** @brief The owning operation failed before the bake-input publication barrier. */
+    extern const ErrorCodeDescriptor BakeInputFailed;
+    /** @brief Application shutdown closed bake-input publication admission. */
+    extern const ErrorCodeDescriptor BakeInputShuttingDown;
     /** @brief A project profile identity, revision, capability requirement or finite capacity is malformed. */
     extern const ErrorCodeDescriptor ProjectProfileInvalid;
     /** @brief A profile candidate or preview preference does not target the current project revision. */

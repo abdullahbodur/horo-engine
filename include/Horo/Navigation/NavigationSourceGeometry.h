@@ -40,6 +40,22 @@ namespace Horo::Navigation {
         Count,
     };
 
+    /** @brief Closed source-coordinate conventions normalized at the navigation geometry boundary. */
+    enum class NavigationSourceCoordinateSystem : std::uint8_t {
+        RightHandedYUp,
+        RightHandedZUp,
+        LeftHandedYUp,
+        Count,
+    };
+
+    /** @brief Explicit source units and axes converted to canonical right-handed Y-up metres before local transforms. */
+    struct NavigationSourceCoordinateConvention final {
+        NavigationSourceCoordinateSystem system{NavigationSourceCoordinateSystem::RightHandedYUp};
+        float metersPerUnit{1.0F};
+
+        [[nodiscard]] constexpr auto operator<=>(const NavigationSourceCoordinateConvention &) const noexcept = default;
+    };
+
     /** @brief Producer-authored material slot retained for diagnostics without importing Physics or Renderer types. */
     struct NavigationSourceMaterialSlot final {
         std::uint32_t value{};
@@ -76,6 +92,7 @@ namespace Horo::Navigation {
         NavigationSourceContributionId contribution;
         NavigationSourceRevision revision;
         Sha256Digest contentDigest{};
+        NavigationSourceCoordinateConvention coordinates{};
         Math::Transform localToCanonicalMeters{};
         std::span<const Math::Vec3> vertices;
         std::span<const NavigationSourceTriangleInput> triangles;
@@ -110,6 +127,7 @@ namespace Horo::Navigation {
         NavigationSourceContributionId contribution;
         NavigationSourceRevision revision;
         Sha256Digest contentDigest{};
+        NavigationSourceCoordinateConvention coordinates{};
         Math::Transform localToCanonicalMeters{};
         std::uint32_t firstVertex{};
         std::uint32_t vertexCount{};

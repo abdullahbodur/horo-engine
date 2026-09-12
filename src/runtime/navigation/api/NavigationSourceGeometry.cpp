@@ -3,7 +3,10 @@
 #include "Horo/Navigation/NavigationErrors.h"
 
 #include <algorithm>
+#include <cmath>
 #include <limits>
+#include <string>
+#include <string_view>
 #include <tuple>
 #include <utility>
 
@@ -15,6 +18,21 @@ namespace Horo::Navigation {
 
         [[nodiscard]] constexpr bool IsKnownProducer(const NavigationSourceProducerKind kind) noexcept {
             return kind >= NavigationSourceProducerKind::StaticCollider && kind < NavigationSourceProducerKind::Count;
+        }
+
+        [[nodiscard]] constexpr bool IsKnownCoordinateSystem(const NavigationSourceCoordinateSystem system) noexcept {
+            return system >= NavigationSourceCoordinateSystem::RightHandedYUp && system < NavigationSourceCoordinateSystem::Count;
+        }
+
+        [[nodiscard]] std::string SourceContext(const NavigationSourceContributionInput &input, const std::string_view reason) {
+            return "Navigation source producer " + std::to_string(input.producer.Value()) + ", contribution " +
+                   std::to_string(input.contribution.Value()) + ": " + std::string(reason);
+        }
+
+        template <typename T>
+        [[nodiscard]] Result<T> SourceFailure(const ErrorCodeDescriptor &descriptor, const NavigationSourceContributionInput &input,
+                                              const std::string_view reason) {
+            return Result<T>::Failure(MakeError(descriptor, SourceContext(input, reason)));
         }
 
         [[nodiscard]] constexpr bool IsValidLimits(const NavigationSourceGeometryLimits &limits) noexcept {
@@ -95,12 +113,29 @@ namespace Horo::Navigation {
 
         [[nodiscard]] Result<void> ValidateInputMetadata(const NavigationSourceContributionInput &input) {
             if (!IsKnownProducer(input.kind))
-                return Failure<void>(NavigationErrors::SourceGeometryUnsupported);
+                return SourceFailure<void>(NavigationErrors::SourceGeometryUnsupported, input, "producer kind is unsupported");
             if (!input.producer.IsValid() || !input.contribution.IsValid() || !input.revision.IsValid() || input.vertices.empty() ||
-                input.triangles.empty() || !HasPositiveScale(input.localToCanonicalMeters) ||
-                input.localToCanonicalMeters.TryToMatrix().HasError())
-                return Failure<void>(NavigationErrors::SourceGeometryInvalid);
+                input.triangles.empty() || !IsKnownCoordinateSystem(input.coordinates.system) ||
+                !std::isfinite(input.coordinates.metersPerUnit) || input.coordinates.metersPerUnit <= 0.0F ||
+                !HasPositiveScale(input.localToCanonicalMeters) || input.localToCanonicalMeters.TryToMatrix().HasError())
+                return SourceFailure<void>(NavigationErrors::SourceGeometryInvalid, input,
+                                           "identity, geometry, coordinates, or transform is invalid");
             return Result<void>::Success();
+        }
+
+        [[nodiscard]] Math::Vec3 ToCanonicalAxes(const Math::Vec3 vertex, const NavigationSourceCoordinateConvention coordinates) noexcept {
+            const auto scaled = vertex * coordinates.metersPerUnit;
+            switch (coordinates.system) {
+                case NavigationSourceCoordinateSystem::RightHandedYUp:
+                    return scaled;
+                case NavigationSourceCoordinateSystem::RightHandedZUp:
+                    return {scaled.x, scaled.z, -scaled.y};
+                case NavigationSourceCoordinateSystem::LeftHandedYUp:
+                    return {scaled.x, scaled.y, -scaled.z};
+                case NavigationSourceCoordinateSystem::Count:
+                    break;
+            }
+            return {};
         }
 
         [[nodiscard]] bool HasValidIndices(const NavigationSourceTriangleInput &triangle, const std::size_t vertexCount) noexcept {
@@ -113,9 +148,10 @@ namespace Horo::Navigation {
                                                            std::vector<Math::Vec3> &vertices) {
             const auto matrix = input.localToCanonicalMeters.TryToMatrix().Value();
             for (const auto vertex : input.vertices) {
-                auto transformed = Math::TryTransformPoint(matrix, vertex);
+                auto transformed = Math::TryTransformPoint(matrix, ToCanonicalAxes(vertex, input.coordinates));
                 if (transformed.HasError())
-                    return Failure<void>(NavigationErrors::SourceGeometryInvalid);
+                    return SourceFailure<void>(NavigationErrors::SourceGeometryInvalid, input,
+                                               "a source vertex is non-finite after coordinate normalization");
                 vertices.push_back(std::move(transformed).Value());
             }
             return Result<void>::Success();
@@ -126,12 +162,15 @@ namespace Horo::Navigation {
                                                   const std::uint32_t firstVertex, const std::vector<Math::Vec3> &vertices,
                                                   std::vector<NavigationSourceTriangle> &triangles) {
             if (!triangle.area.IsValid() || !HasValidIndices(triangle, input.vertices.size()))
-                return Failure<void>(NavigationErrors::SourceGeometryInvalid);
+                return SourceFailure<void>(NavigationErrors::SourceGeometryInvalid, input,
+                                           "a triangle has an invalid area or index topology");
             const auto first = firstVertex + triangle.vertexIndices[0];
-            const auto second = firstVertex + triangle.vertexIndices[1];
-            const auto third = firstVertex + triangle.vertexIndices[2];
+            const auto reversesWinding = input.coordinates.system == NavigationSourceCoordinateSystem::LeftHandedYUp;
+            const auto second = firstVertex + triangle.vertexIndices[reversesWinding ? 2 : 1];
+            const auto third = firstVertex + triangle.vertexIndices[reversesWinding ? 1 : 2];
             if (!IsNonDegenerate(vertices[first], vertices[second], vertices[third]))
-                return Failure<void>(NavigationErrors::SourceGeometryInvalid);
+                return SourceFailure<void>(NavigationErrors::SourceGeometryInvalid, input,
+                                           "a triangle is non-finite or degenerate after coordinate normalization");
             triangles.push_back({
                 .vertexIndices = {first, second, third},
                 .area = triangle.area,
@@ -154,12 +193,13 @@ namespace Horo::Navigation {
                                                       std::vector<NavigationSourceContribution> &contributions) {
             const auto firstVertex = static_cast<std::uint32_t>(vertices.size());
             const auto firstTriangle = static_cast<std::uint32_t>(triangles.size());
-            if (AppendCanonicalVertices(input, vertices).HasError())
-                return Failure<void>(NavigationErrors::SourceGeometryInvalid);
+            if (auto appended = AppendCanonicalVertices(input, vertices); appended.HasError())
+                return Result<void>::Failure(appended.ErrorValue());
             for (std::size_t index = 0; index < input.triangles.size(); ++index) {
-                if (AppendTriangle(input, input.triangles[index], static_cast<std::uint32_t>(index), firstVertex, vertices, triangles)
-                        .HasError())
-                    return Failure<void>(NavigationErrors::SourceGeometryInvalid);
+                if (auto appended =
+                        AppendTriangle(input, input.triangles[index], static_cast<std::uint32_t>(index), firstVertex, vertices, triangles);
+                    appended.HasError())
+                    return Result<void>::Failure(appended.ErrorValue());
             }
 
             contributions.push_back({
@@ -168,6 +208,7 @@ namespace Horo::Navigation {
                 .contribution = input.contribution,
                 .revision = input.revision,
                 .contentDigest = input.contentDigest,
+                .coordinates = input.coordinates,
                 .localToCanonicalMeters = input.localToCanonicalMeters,
                 .firstVertex = firstVertex,
                 .vertexCount = static_cast<std::uint32_t>(input.vertices.size()),
@@ -231,7 +272,7 @@ namespace Horo::Navigation {
         triangles.reserve(static_cast<std::size_t>(totals.Value().triangles));
         for (const auto *input : ordered) {
             if (const auto appended = AppendContribution(*input, vertices, triangles, contributions); appended.HasError())
-                return Failure<NavigationSourceGeometrySnapshot>(NavigationErrors::SourceGeometryInvalid);
+                return Result<NavigationSourceGeometrySnapshot>::Failure(appended.ErrorValue());
         }
         return Result<NavigationSourceGeometrySnapshot>::Success(
             NavigationSourceGeometrySnapshot{revision, limits, std::move(contributions), std::move(vertices), std::move(triangles)});

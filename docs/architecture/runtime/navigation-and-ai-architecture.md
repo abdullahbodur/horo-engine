@@ -507,7 +507,10 @@ that larger bake-input capture. It accepts only immutable static-collider, terra
 procedural-generation, and approved-custom contribution views. There is deliberately
 no renderer producer kind or renderer dependency: an explicit render-derived policy,
 if introduced later, must remain versioned and cannot displace available canonical
-collision/navigation geometry. Capture validates positive canonical-metre transforms,
+collision/navigation geometry. Each contribution declares right-handed Y-up,
+right-handed Z-up, or left-handed Y-up axes plus a finite positive metres-per-unit
+scale. Capture converts axes and units first, repairs winding for handedness changes,
+then applies the positive canonical-metre transform. Capture validates those conventions,
 finite transformed vertices, indexed non-degenerate triangles, stable producer and
 contribution identities, area/material semantics, and qualified contribution, vertex,
 triangle, and owned-byte bounds before publishing any snapshot.
@@ -519,6 +522,26 @@ immutable views. Before later bake adoption, the owner supplies the complete cur
 source observation set; any capture-revision, source-revision, digest, missing, or
 additional contribution mismatch rejects the attempt as stale. The snapshot itself
 has no clock, worker, cancellation, publication, or shutdown lifecycle.
+
+`NavigationBakeInputSnapshot` is the NAV-003.2 composition boundary above that
+geometry snapshot. It accepts stable surface/profile/source bindings and modifier
+volumes in arbitrary order, resolves every profile, area and query filter against one
+immutable capture, drops filter-excluded triangles, transforms modifier bounds to
+canonical right-handed Y-up metres, and emits contiguous tile-builder partitions.
+Profiles and referenced areas are identity-sorted; partitions are sorted by profile
+and surface; source bindings add producer and contribution identity; modifiers add
+their stable identity. The snapshot retains complete triangle provenance and computes
+one deterministic fingerprint over the resulting canonical values.
+
+Capture is bounded independently by profile, referenced-area, surface-binding, modifier, emitted-
+triangle, work-unit and total-owned-byte ceilings. Missing references, duplicate keys,
+non-finite or degenerate values, and capacity exhaustion fail the complete transaction
+without truncation. Final adoption requires the exact request generation plus
+definition, Scene, registry, project-profile, coordinate-policy and geometry revisions,
+then revalidates the complete producer revision/digest observation set. Cancelled,
+failed, superseded and shutdown operation states are explicit non-publishable results;
+the snapshot does not itself schedule jobs or own the operation lifecycle defined by
+ADR-106.
 
 Bake captures one bounded revision-consistent snapshot with exact project, Scene,
 definition, registry, package, geometry, profile, settings, coordinate, schema,
