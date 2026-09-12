@@ -97,6 +97,7 @@ horo_configure_target_header_boundary(HoroPackages PUBLIC_HEADERS
     Horo/Packages/PackageLockfile.h
     Horo/Packages/PackagePath.h
     Horo/Packages/PackageArchive.h
+    Horo/Packages/PackageCache.h
     Horo/Packages/PackageFileManifest.h
 )
 horo_configure_target_header_boundary(HoroProjectMigrations)
