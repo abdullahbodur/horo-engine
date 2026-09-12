@@ -44,8 +44,8 @@ thread while the world remains unpublished. Active-world changes are rejected
 until the tick-addressed safe-point command ingestion introduced by CHR-001.4 is
 available.
 
-Production hosts inject `PhysicsSceneActivationParticipant` into
-`RuntimeSceneService`. The aggregate service prepares detached paired Physics and
+Production hosts link `HoroEngine::PhysicsSceneIntegration` and inject its
+`PhysicsSceneActivationParticipant` into `RuntimeSceneService`. The aggregate service prepares detached paired Physics and
 Character worlds, preserves the old bundle when participant preparation or final
 evidence validation fails, and shuts Character down before Physics during
 replacement, unload, and host shutdown.

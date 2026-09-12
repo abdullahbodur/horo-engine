@@ -86,7 +86,10 @@ locomotion, slope, step and gravity policy remains in
 `CharacterControllerDescriptor`.
 
 The public lifecycle surfaces are `Horo/Physics/CharacterWorld.h` and the
-Physics-owned `Horo/Physics/PhysicsSceneActivation.h` participant. The Physics
+`HoroPhysicsSceneIntegration` adapter owning the
+`Horo/Physics/PhysicsSceneActivation.h` participant. The adapter is the explicit
+composition boundary that may depend on both Physics and RuntimeScene; neither
+core target reverses the architecture dependency direction. The Physics
 runtime issues historically monotonic world identities, so recreating a participant
 cannot reuse one. The application-owned activation authority supplies a coherent
 collision-filter and local-origin generation snapshot for each candidate. Physics

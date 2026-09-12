@@ -248,7 +248,6 @@ horo_configure_target_header_boundary(HoroPhysics PUBLIC_HEADERS
     Horo/Physics/PhysicsMetrics.h
     Horo/Physics/PhysicsPose.h
     Horo/Physics/PhysicsQuery.h
-    Horo/Physics/PhysicsSceneActivation.h
     Horo/Physics/PhysicsShapeDescriptor.h
     Horo/Physics/PhysicsStepPolicy.h
     Horo/Physics/PhysicsTickPipeline.h
@@ -256,6 +255,10 @@ horo_configure_target_header_boundary(HoroPhysics PUBLIC_HEADERS
     Horo/Physics/PhysicsWorldBudgets.h
     Horo/Physics/PhysicsWorldDescriptor.h
     Horo/Physics/PhysicsWorldSettings.h
+)
+
+horo_configure_target_header_boundary(HoroPhysicsSceneIntegration PUBLIC_HEADERS
+    Horo/Physics/PhysicsSceneActivation.h
 )
 horo_configure_target_header_boundary(HoroAI PUBLIC_HEADERS
     Horo/AI/AIErrors.h

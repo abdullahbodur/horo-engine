@@ -458,7 +458,6 @@ add_library(HoroPhysics STATIC
         physics/PhysicsMetrics.cpp
         physics/PhysicsPose.cpp
         physics/PhysicsQuery.cpp
-        physics/PhysicsSceneActivation.cpp
         physics/PhysicsShapeDescriptor.cpp
         physics/PhysicsStepPolicy.cpp
         physics/PhysicsWorld.cpp
@@ -468,7 +467,7 @@ add_library(HoroPhysics STATIC
 )
 add_library(HoroEngine::Physics ALIAS HoroPhysics)
 target_compile_features(HoroPhysics PUBLIC cxx_std_20)
-target_link_libraries(HoroPhysics PUBLIC HoroEngine::Foundation HoroEngine::Assets HoroEngine::RuntimeScene)
+target_link_libraries(HoroPhysics PUBLIC HoroEngine::Foundation HoroEngine::Assets)
 if(HORO_BUILD_PHYSICS_NATIVE)
     target_sources(HoroPhysics PRIVATE
         physics/CanonicalPhysicsRuntime.cpp
@@ -484,6 +483,11 @@ if(HORO_BUILD_PHYSICS_NATIVE)
 else()
     target_sources(HoroPhysics PRIVATE physics/CanonicalPhysicsRuntimeOmitted.cpp physics/CanonicalSolverOmitted.cpp)
 endif()
+
+add_library(HoroPhysicsSceneIntegration STATIC physics/PhysicsSceneActivation.cpp)
+add_library(HoroEngine::PhysicsSceneIntegration ALIAS HoroPhysicsSceneIntegration)
+target_compile_features(HoroPhysicsSceneIntegration PUBLIC cxx_std_20)
+target_link_libraries(HoroPhysicsSceneIntegration PUBLIC HoroEngine::Physics HoroEngine::RuntimeScene)
 
 add_library(HoroAI STATIC
         runtime/ai/api/AIErrors.cpp

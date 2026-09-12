@@ -23,6 +23,7 @@ horo_allow_target_dependencies(TARGET HoroAudioCommands DEPENDENCIES HoroAudioMe
 horo_allow_target_dependencies(TARGET HoroAudioBackendContract DEPENDENCIES HoroAudioApi)
 horo_allow_target_dependencies(TARGET HoroAudioNull DEPENDENCIES HoroAudioBackendContract HoroAudioCommands)
 horo_allow_target_dependencies(TARGET HoroPhysics DEPENDENCIES HoroFoundation HoroAssets)
+horo_allow_target_dependencies(TARGET HoroPhysicsSceneIntegration DEPENDENCIES HoroPhysics HoroRuntimeScene)
 horo_allow_target_dependencies(TARGET HoroAI DEPENDENCIES HoroFoundation)
 horo_allow_target_dependencies(TARGET HoroAnimationApi DEPENDENCIES HoroFoundation HoroAssets)
 horo_allow_target_dependencies(TARGET HoroPCG DEPENDENCIES HoroFoundation)
@@ -100,6 +101,7 @@ horo_allow_target_dependencies(TARGET HoroEditor
         HoroRenderFrontend
         HoroRuntime
         HoroRuntimeScene
+        HoroPhysicsSceneIntegration
         HoroExtensions
         HoroPlatform
         HoroProjectMigrations
