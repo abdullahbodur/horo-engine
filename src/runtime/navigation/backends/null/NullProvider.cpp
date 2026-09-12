@@ -25,7 +25,10 @@ namespace Horo::Navigation {
             }
 
             /** @copydoc INavigationQueryBackend::FindPath */
-            [[nodiscard]] Result<NavigationPath> FindPath(const NavigationPathRequest &, const CancellationToken &) const override {
+            [[nodiscard]] Result<NavigationPath> FindPath(const NavigationPathRequest &,
+                                                          const CancellationToken &cancellation) const override {
+                if (cancellation.IsCancellationRequested())
+                    return Result<NavigationPath>::Failure(MakeError(NavigationErrors::QueryCancelled));
                 return Result<NavigationPath>::Failure(MakeError(NavigationErrors::NoNavigationData));
             }
         };
