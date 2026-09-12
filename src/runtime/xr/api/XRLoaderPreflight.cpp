@@ -4,9 +4,14 @@
 
 namespace Horo::XR {
     namespace {
-        /** @brief Creates a failed result from one stable XR descriptor. */
-        template <typename Value> [[nodiscard]] Result<Value> Reject(const ErrorCodeDescriptor &descriptor) {
-            return Result<Value>::Failure(MakeError(descriptor));
+        /** @brief Creates a failed loader-preflight formation result from one stable XR descriptor. */
+        [[nodiscard]] Result<XRLoaderPreflightSnapshot> RejectPreflight(const ErrorCodeDescriptor &descriptor) {
+            return Result<XRLoaderPreflightSnapshot>::Failure(MakeError(descriptor));
+        }
+
+        /** @brief Creates a failed loader-preflight revalidation result from one stable XR descriptor. */
+        [[nodiscard]] Result<void> RejectRevalidation(const ErrorCodeDescriptor &descriptor) {
+            return Result<void>::Failure(MakeError(descriptor));
         }
 
         /** @brief Checks one closed inclusive loader API interval. */
@@ -101,25 +106,25 @@ namespace Horo::XR {
             !request.productProfile.IsValid() || request.loaderSource >= XRLoaderSourcePolicy::Count ||
             request.productMode >= XRPreflightProductMode::Count || request.runtimeSelection >= XRRuntimeSelectionPolicy::Count ||
             !ValidVersionRange(request.admittedLoaderVersions))
-            return Reject<XRLoaderPreflightSnapshot>(XRErrors::LoaderPreflightInvalid);
+            return RejectPreflight(XRErrors::LoaderPreflightInvalid);
         if (request.cancellationRequested)
-            return Reject<XRLoaderPreflightSnapshot>(XRErrors::LoaderPreflightCancelled);
+            return RejectPreflight(XRErrors::LoaderPreflightCancelled);
         if (request.runtimeSelection == XRRuntimeSelectionPolicy::ApprovedDeveloperOverride &&
             (request.productMode != XRPreflightProductMode::Development || !request.developerOverrideApproved))
-            return Reject<XRLoaderPreflightSnapshot>(XRErrors::RuntimeOverrideRejected);
+            return RejectPreflight(XRErrors::RuntimeOverrideRejected);
         if (request.runtimeSelection == XRRuntimeSelectionPolicy::SystemDefault && request.developerOverrideApproved)
-            return Reject<XRLoaderPreflightSnapshot>(XRErrors::LoaderPreflightInvalid);
+            return RejectPreflight(XRErrors::LoaderPreflightInvalid);
         if (!evidence.attempt.IsValid() || evidence.attempt != request.attempt)
-            return Reject<XRLoaderPreflightSnapshot>(XRErrors::LoaderPreflightStale);
+            return RejectPreflight(XRErrors::LoaderPreflightStale);
         if (evidence.loader >= XRLoaderAvailability::Count || evidence.runtime >= XRRuntimeAvailability::Count ||
             evidence.system >= XRSystemAvailability::Count || evidence.consumedProbeSteps == 0 ||
             evidence.consumedProbeSteps > MaximumXRLoaderPreflightSteps || !ConsistentEvidence(evidence))
-            return Reject<XRLoaderPreflightSnapshot>(XRErrors::LoaderPreflightInvalid);
+            return RejectPreflight(XRErrors::LoaderPreflightInvalid);
         if (const auto *failure = DiscoveryFailure(evidence); failure != nullptr)
-            return Reject<XRLoaderPreflightSnapshot>(*failure);
+            return RejectPreflight(*failure);
         if (evidence.loaderApiVersion < request.admittedLoaderVersions.minimum ||
             evidence.loaderApiVersion > request.admittedLoaderVersions.maximum)
-            return Reject<XRLoaderPreflightSnapshot>(XRErrors::LoaderIncompatible);
+            return RejectPreflight(XRErrors::LoaderIncompatible);
         return Result<XRLoaderPreflightSnapshot>::Success(XRLoaderPreflightSnapshot{request, evidence});
     }
 
@@ -185,10 +190,10 @@ namespace Horo::XR {
                                            const XRBackendId expectedBackend, const XRInstallRecordId expectedInstallRecord,
                                            const XRProductProfileId expectedProductProfile) {
         if (!activeAttempt.IsValid() || !expectedBackend.IsValid() || !expectedInstallRecord.IsValid() || !expectedProductProfile.IsValid())
-            return Reject<void>(XRErrors::LoaderPreflightInvalid);
+            return RejectRevalidation(XRErrors::LoaderPreflightInvalid);
         if (snapshot.Attempt() != activeAttempt || snapshot.Backend() != expectedBackend ||
             snapshot.InstallRecord() != expectedInstallRecord || snapshot.ProductProfile() != expectedProductProfile)
-            return Reject<void>(XRErrors::LoaderPreflightStale);
+            return RejectRevalidation(XRErrors::LoaderPreflightStale);
         return Result<void>::Success();
     }
 }  // namespace Horo::XR
