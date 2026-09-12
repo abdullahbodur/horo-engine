@@ -33,10 +33,11 @@ namespace Horo::Runtime {
         }
 
         /** @brief Encodes phase coverage so only overlapping declarations are duplicates. */
-        [[nodiscard]] std::uint8_t DependencyPhaseMask(const SaveParticipantDependencyPhase phase) noexcept {
-            if (phase == SaveParticipantDependencyPhase::CaptureAndRestore)
-                return 0b11U;
-            return phase == SaveParticipantDependencyPhase::Capture ? 0b01U : 0b10U;
+        [[nodiscard]] std::byte DependencyPhaseMask(const SaveParticipantDependencyPhase phase) noexcept {
+            using enum SaveParticipantDependencyPhase;
+            if (phase == CaptureAndRestore)
+                return std::byte{0b11};
+            return phase == Capture ? std::byte{0b01} : std::byte{0b10};
         }
 
         /** @brief Reports whether the descriptor declares one supported semantic scope. */
@@ -53,8 +54,8 @@ namespace Horo::Runtime {
 
         /** @brief Reports whether role flags are non-empty and contain only supported bits. */
         [[nodiscard]] bool HasValidRoles(const SaveParticipantRole roles) noexcept {
-            constexpr auto kSupportedRoles = std::byte{static_cast<std::uint8_t>(SaveParticipantRole::Capture)} |
-                                             std::byte{static_cast<std::uint8_t>(SaveParticipantRole::Restore)};
+            using enum SaveParticipantRole;
+            constexpr auto kSupportedRoles = std::byte{static_cast<std::uint8_t>(Capture)} | std::byte{static_cast<std::uint8_t>(Restore)};
             const auto encodedRoles = std::byte{static_cast<std::uint8_t>(roles)};
             return encodedRoles != std::byte{} && (encodedRoles & ~kSupportedRoles) == std::byte{};
         }
@@ -83,10 +84,11 @@ namespace Horo::Runtime {
 
         /** @brief Reports whether a dependency phase is a supported closed value. */
         [[nodiscard]] bool IsKnown(const SaveParticipantDependencyPhase phase) noexcept {
+            using enum SaveParticipantDependencyPhase;
             switch (phase) {
-                case SaveParticipantDependencyPhase::Capture:
-                case SaveParticipantDependencyPhase::Restore:
-                case SaveParticipantDependencyPhase::CaptureAndRestore:
+                case Capture:
+                case Restore:
+                case CaptureAndRestore:
                     return true;
             }
             return false;
@@ -94,31 +96,33 @@ namespace Horo::Runtime {
 
         /** @brief Reports whether an edge applies to one operation role. */
         [[nodiscard]] bool AppliesTo(const SaveParticipantDependencyPhase phase, const SaveParticipantRole role) noexcept {
+            using enum SaveParticipantRole;
             if (phase == SaveParticipantDependencyPhase::CaptureAndRestore)
                 return true;
-            if (role == SaveParticipantRole::Capture)
+            if (role == Capture)
                 return phase == SaveParticipantDependencyPhase::Capture;
             return phase == SaveParticipantDependencyPhase::Restore;
         }
 
         /** @brief Formats one dependency phase for actionable diagnostics. */
         [[nodiscard]] std::string_view PhaseName(const SaveParticipantRole role) noexcept {
-            return role == SaveParticipantRole::Capture ? "capture" : "restore";
+            using enum SaveParticipantRole;
+            return role == Capture ? "capture" : "restore";
         }
 
         /** @brief Validates dependency identity, self-reference, and uniqueness rules. */
         [[nodiscard]] Result<void> ValidateDependencyMetadata(const CanonicalStateParticipantDescriptor &descriptor) {
             if (descriptor.dependencies.size() > MaximumSaveParticipantCount)
                 return Result<void>::Failure(MakeError(SaveErrors::ParticipantDescriptorInvalid));
-            std::unordered_map<SaveParticipantId, std::uint8_t, SaveParticipantIdHash> coveredPhases;
+            std::unordered_map<SaveParticipantId, std::byte, SaveParticipantIdHash> coveredPhases;
             coveredPhases.reserve(descriptor.dependencies.size());
             for (const SaveParticipantDependency &dependency : descriptor.dependencies) {
                 if (!dependency.participant.IsValid() || dependency.participant == descriptor.participant ||
                     !IsKnown(dependency.requirement) || !IsKnown(dependency.phase))
                     return Result<void>::Failure(MakeError(SaveErrors::ParticipantDescriptorInvalid));
-                const std::uint8_t phaseMask = DependencyPhaseMask(dependency.phase);
-                std::uint8_t &existingMask = coveredPhases[dependency.participant];
-                if ((existingMask & phaseMask) != 0)
+                const std::byte phaseMask = DependencyPhaseMask(dependency.phase);
+                std::byte &existingMask = coveredPhases[dependency.participant];
+                if ((existingMask & phaseMask) != std::byte{})
                     return Result<void>::Failure(MakeError(SaveErrors::ParticipantDescriptorInvalid));
                 existingMask |= phaseMask;
                 const bool captureCompatible = !AppliesTo(dependency.phase, SaveParticipantRole::Capture) ||
@@ -155,6 +159,36 @@ namespace Horo::Runtime {
             return indices;
         }
 
+        /** @brief Adds one applicable validated dependency edge to a phase graph. */
+        [[nodiscard]] Result<void> AddPhaseDependency(PhasePlanGraph &graph, const std::vector<SaveParticipantBinding> &bindings,
+                                                      const ParticipantIndices &indices, const SaveParticipantRole role,
+                                                      const std::size_t dependentIndex,
+                                                      const CanonicalStateParticipantDescriptor &descriptor,
+                                                      const SaveParticipantDependency &dependency) {
+            if (!AppliesTo(dependency.phase, role))
+                return Result<void>::Success();
+            const auto found = indices.find(dependency.participant);
+            if (found == indices.end()) {
+                if (dependency.requirement == SaveParticipantDependencyRequirement::Optional)
+                    return Result<void>::Success();
+                return Result<void>::Failure(
+                    MakeError(SaveErrors::ParticipantDependencyMissing, "Participant '" + descriptor.participant.Value() +
+                                                                            "' requires missing " + std::string{PhaseName(role)} +
+                                                                            " dependency '" + dependency.participant.Value() + "'."));
+            }
+            if (const CanonicalStateParticipantDescriptor &provider = bindings[found->second].Descriptor();
+                !HasSaveParticipantRole(provider.roles, role)) {
+                return Result<void>::Failure(MakeError(SaveErrors::ParticipantDependencyPhaseIncompatible,
+                                                       "Participant '" + descriptor.participant.Value() + "' depends on '" +
+                                                           provider.participant.Value() + "' during " + std::string{PhaseName(role)} +
+                                                           ", but the dependency does not support that phase."));
+            }
+            graph.dependents[found->second].push_back(dependentIndex);
+            graph.dependencies[dependentIndex].push_back(found->second);
+            ++graph.dependencyCounts[dependentIndex];
+            return Result<void>::Success();
+        }
+
         /** @brief Builds and validates the dependency graph for one operation phase. */
         [[nodiscard]] Result<PhasePlanGraph> PreparePhaseGraph(const std::vector<SaveParticipantBinding> &bindings,
                                                                const ParticipantIndices &indices, const SaveParticipantRole role) {
@@ -166,28 +200,9 @@ namespace Horo::Runtime {
                     continue;
                 ++graph.participantCount;
                 for (const SaveParticipantDependency &dependency : descriptor.dependencies) {
-                    if (!AppliesTo(dependency.phase, role))
-                        continue;
-                    const auto found = indices.find(dependency.participant);
-                    if (found == indices.end()) {
-                        if (dependency.requirement == SaveParticipantDependencyRequirement::Optional)
-                            continue;
-                        return Result<PhasePlanGraph>::Failure(MakeError(SaveErrors::ParticipantDependencyMissing,
-                                                                         "Participant '" + descriptor.participant.Value() +
-                                                                             "' requires missing " + std::string{PhaseName(role)} +
-                                                                             " dependency '" + dependency.participant.Value() + "'."));
+                    if (auto added = AddPhaseDependency(graph, bindings, indices, role, index, descriptor, dependency); added.HasError()) {
+                        return Result<PhasePlanGraph>::Failure(added.ErrorValue());
                     }
-                    const CanonicalStateParticipantDescriptor &provider = bindings[found->second].Descriptor();
-                    if (!HasSaveParticipantRole(provider.roles, role)) {
-                        return Result<PhasePlanGraph>::Failure(MakeError(SaveErrors::ParticipantDependencyPhaseIncompatible,
-                                                                         "Participant '" + descriptor.participant.Value() +
-                                                                             "' depends on '" + provider.participant.Value() + "' during " +
-                                                                             std::string{PhaseName(role)} +
-                                                                             ", but the dependency does not support that phase."));
-                    }
-                    graph.dependents[found->second].push_back(index);
-                    graph.dependencies[index].push_back(found->second);
-                    ++graph.dependencyCounts[index];
                 }
             }
             return Result<PhasePlanGraph>::Success(std::move(graph));
@@ -220,9 +235,13 @@ namespace Horo::Runtime {
             std::vector<std::uint8_t> colors(bindings.size());
             std::vector<std::size_t> path;
             std::vector<std::size_t> cycle;
-            for (std::size_t index = 0; index < bindings.size() && cycle.empty(); ++index) {
-                if (!emitted[index] && colors[index] == 0)
+            std::size_t index{};
+            for (const std::uint8_t color : colors) {
+                if (!cycle.empty())
+                    break;
+                if (!emitted[index] && color == 0)
                     static_cast<void>(FindCycleFrom(index, graph, emitted, colors, path, cycle));
+                ++index;
             }
             std::ranges::sort(cycle, {}, [&bindings](const std::size_t index) {
                 return ParticipantOrderKey(bindings[index]);
