@@ -115,6 +115,17 @@ namespace Horo::Network {
         return Result<void>::Success();
     }
 
+    /** @copydoc PeerSessionLifecycle::PublishFailureOrClose */
+    Result<void> PeerSessionLifecycle::PublishFailureOrClose(const NetworkFailureKind failure, const PeerSessionTerminalKind kind,
+                                                             const std::uint64_t nowTick) {
+        if (state_ == PeerSessionState::Closing)
+            return CompleteClose(connection_, sessionGeneration_, nowTick);
+        auto terminal = SessionFailure(failure);
+        if (terminal.HasError())
+            return Result<void>::Failure(terminal.ErrorValue());
+        return PublishTerminal(kind, nowTick, std::move(terminal).Value());
+    }
+
     /** @copydoc PeerSessionLifecycle::BeginNegotiation */
     Result<void> PeerSessionLifecycle::BeginNegotiation(const ConnectionHandle connection,
                                                         const NetworkOperationGeneration sessionGeneration, const std::uint64_t nowTick) {
@@ -236,16 +247,13 @@ namespace Horo::Network {
                                                       const NetworkFailureKind failure, const std::uint64_t nowTick) {
         if (auto valid = MutableOperation(connection, sessionGeneration); valid.HasError())
             return valid;
-        if (state_ == PeerSessionState::Closing)
-            return CompleteClose(connection, sessionGeneration, nowTick);
-        if (failure != NetworkFailureKind::ProtocolMalformed && failure != NetworkFailureKind::ProtocolIncompatible)
-            return Result<void>::Failure(MakeError(NetworkErrors::NetworkLifecycleInvalid));
-        if (state_ != PeerSessionState::Negotiating)
-            return Result<void>::Failure(MakeError(NetworkErrors::NetworkLifecycleTransitionInvalid));
-        auto terminal = SessionFailure(failure);
-        if (terminal.HasError())
-            return Result<void>::Failure(terminal.ErrorValue());
-        return PublishTerminal(PeerSessionTerminalKind::ProtocolRejected, nowTick, std::move(terminal).Value());
+        if (state_ != PeerSessionState::Closing) {
+            if (failure != NetworkFailureKind::ProtocolMalformed && failure != NetworkFailureKind::ProtocolIncompatible)
+                return Result<void>::Failure(MakeError(NetworkErrors::NetworkLifecycleInvalid));
+            if (state_ != PeerSessionState::Negotiating)
+                return Result<void>::Failure(MakeError(NetworkErrors::NetworkLifecycleTransitionInvalid));
+        }
+        return PublishFailureOrClose(failure, PeerSessionTerminalKind::ProtocolRejected, nowTick);
     }
 
     /** @copydoc PeerSessionLifecycle::RejectAuthentication */
@@ -254,14 +262,10 @@ namespace Horo::Network {
                                                             const std::uint64_t nowTick) {
         if (auto valid = MutableOperation(connection, sessionGeneration); valid.HasError())
             return valid;
-        if (state_ == PeerSessionState::Closing)
-            return CompleteClose(connection, sessionGeneration, nowTick);
-        if (state_ != PeerSessionState::Authenticating && state_ != PeerSessionState::Activating)
+        if (state_ != PeerSessionState::Closing && state_ != PeerSessionState::Authenticating && state_ != PeerSessionState::Activating)
             return Result<void>::Failure(MakeError(NetworkErrors::NetworkLifecycleTransitionInvalid));
-        auto terminal = SessionFailure(NetworkFailureKind::SessionAuthenticationRejected);
-        if (terminal.HasError())
-            return Result<void>::Failure(terminal.ErrorValue());
-        return PublishTerminal(PeerSessionTerminalKind::AuthenticationRejected, nowTick, std::move(terminal).Value());
+        return PublishFailureOrClose(NetworkFailureKind::SessionAuthenticationRejected, PeerSessionTerminalKind::AuthenticationRejected,
+                                     nowTick);
     }
 
     /** @copydoc PeerSessionLifecycle::FailTransport */
@@ -269,15 +273,10 @@ namespace Horo::Network {
                                                      const NetworkFailureKind failure, const std::uint64_t nowTick) {
         if (auto valid = MutableOperation(connection, sessionGeneration); valid.HasError())
             return valid;
-        if (state_ == PeerSessionState::Closing)
-            return CompleteClose(connection, sessionGeneration, nowTick);
-        if (failure != NetworkFailureKind::NameResolutionFailed && failure != NetworkFailureKind::TransportUnavailable &&
-            failure != NetworkFailureKind::TransportSaturated)
+        if (state_ != PeerSessionState::Closing && failure != NetworkFailureKind::NameResolutionFailed &&
+            failure != NetworkFailureKind::TransportUnavailable && failure != NetworkFailureKind::TransportSaturated)
             return Result<void>::Failure(MakeError(NetworkErrors::NetworkLifecycleInvalid));
-        auto terminal = SessionFailure(failure);
-        if (terminal.HasError())
-            return Result<void>::Failure(terminal.ErrorValue());
-        return PublishTerminal(PeerSessionTerminalKind::TransportFailed, nowTick, std::move(terminal).Value());
+        return PublishFailureOrClose(failure, PeerSessionTerminalKind::TransportFailed, nowTick);
     }
 
     /** @copydoc PeerSessionLifecycle::Cancel */
@@ -285,12 +284,7 @@ namespace Horo::Network {
                                               const std::uint64_t nowTick) {
         if (auto valid = MutableOperation(connection, sessionGeneration); valid.HasError())
             return valid;
-        if (state_ == PeerSessionState::Closing)
-            return CompleteClose(connection, sessionGeneration, nowTick);
-        auto terminal = SessionFailure(NetworkFailureKind::SessionCancelled);
-        if (terminal.HasError())
-            return Result<void>::Failure(terminal.ErrorValue());
-        return PublishTerminal(PeerSessionTerminalKind::LocalCancellation, nowTick, std::move(terminal).Value());
+        return PublishFailureOrClose(NetworkFailureKind::SessionCancelled, PeerSessionTerminalKind::LocalCancellation, nowTick);
     }
 
     /** @copydoc PeerSessionLifecycle::Expire */

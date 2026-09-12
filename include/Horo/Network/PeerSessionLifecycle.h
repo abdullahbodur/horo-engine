@@ -169,6 +169,8 @@ namespace Horo::Network {
         [[nodiscard]] Result<void> MutableOperation(ConnectionHandle connection, NetworkOperationGeneration sessionGeneration) const;
         [[nodiscard]] Result<void> PublishTerminal(PeerSessionTerminalKind kind, std::uint64_t nowTick,
                                                    std::optional<NetworkTerminalRecord> failure = {}, CloseReasonId closeReason = {});
+        /** @brief Preserves a pending graceful close or publishes one canonical failure terminal. */
+        [[nodiscard]] Result<void> PublishFailureOrClose(NetworkFailureKind failure, PeerSessionTerminalKind kind, std::uint64_t nowTick);
         [[nodiscard]] Result<NetworkTerminalRecord> SessionFailure(NetworkFailureKind kind) const;
 
         ConnectionHandle connection_{};
