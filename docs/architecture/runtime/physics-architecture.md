@@ -340,6 +340,33 @@ Conflicting writes are rejected or ordered by an explicit controller contract.
 A dynamic body cannot also be silently overwritten by an arbitrary transform
 system after the physics step.
 
+## Dynamic Body Inputs
+
+`PhysicsBodyDynamicsCommand` is the backend-neutral fixed-tick contract for dynamic
+forces, impulses, torques, angular impulses, per-body gravity scale and linear or
+angular velocity controls. Commands carry the exact tick, scene generation,
+generation-checked body handle, stable source and source-owned sequence. A receiving
+world revalidates that complete frame and the live dynamic-body generation before
+bounded queue admission; producer timing, worker completion and native body IDs are
+never ordering inputs.
+
+Linear force and torque are SI rates integrated exactly once by the owning fixed
+tick. Linear and angular impulses are instantaneous SI changes and are never scaled
+by render delta or applied a second time during presentation. An optional force or
+impulse application point is an absolute coordinate in the active world's local-origin
+meter frame, never a body-relative offset; absence means center of mass. Gravity scale multiplies the world's immutable gravity
+vector and does not mutate world settings. Version one admits finite non-negative
+gravity scales through `100`.
+
+Velocity controls explicitly select set or additive semantics. Their vectors must
+fit the body's admitted linear/angular speed ceilings; the live owner also validates
+the resulting value for an additive command before mutation. Static and kinematic
+bodies reject this physical-input contract because their transform authority remains
+host-owned. Every command names `WakeIfSleeping` or `PreserveSleeping`; zero-valued
+commands are valid and the latter policy never creates an implicit wake transition.
+Unknown modes, stale handles, wrong scene/tick affinity, non-finite inputs and values
+outside the CanonicalV1 command bounds fail before solver mutation.
+
 ## Structural Changes
 
 Creating or removing bodies, changing shapes, and modifying constraints while
