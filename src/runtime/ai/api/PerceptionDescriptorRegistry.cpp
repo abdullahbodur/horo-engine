@@ -31,7 +31,7 @@ namespace Horo::AI {
             return origin.kind < PerceptionDescriptorSourceKind::Count && origin.provider.IsValid() && origin.version != 0;
         }
 
-        [[nodiscard]] bool ValidName(const std::string &name, const PerceptionDescriptorRegistryLimits &limits) noexcept {
+        [[nodiscard]] bool ValidName(const std::string_view name, const PerceptionDescriptorRegistryLimits &limits) noexcept {
             return !name.empty() && name.size() <= limits.maximumDisplayNameBytes && name.find('\0') == std::string::npos;
         }
 
@@ -96,24 +96,25 @@ namespace Horo::AI {
                                                                      const std::span<const SenseTypeDescriptor> senses,
                                                                      const std::span<const StimulusTypeDescriptor> stimuli,
                                                                      const PerceptionCapabilitySet availableCapabilities) noexcept {
+            using enum PerceptionListenerAvailability;
             const auto sense = FindDescriptor(senses, listener.sense);
             if (sense == senses.end() || sense->identity != listener.sense)
-                return PerceptionListenerAvailability::MissingSense;
+                return MissingSense;
             if (sense->origin.version < listener.minimumSenseVersion || sense->origin.version > listener.maximumSenseVersion)
-                return PerceptionListenerAvailability::IncompatibleSense;
+                return IncompatibleSense;
             PerceptionCapabilitySet required = listener.requiredCapabilities.Union(sense->requiredCapabilities);
             for (const PerceptionStimulusRequirement &requirement : std::span{listener.stimuli}.first(listener.stimulusCount)) {
                 const auto stimulus = FindDescriptor(stimuli, requirement.identity);
                 if (stimulus == stimuli.end() || stimulus->identity != requirement.identity)
-                    return PerceptionListenerAvailability::MissingStimulus;
+                    return MissingStimulus;
                 if (stimulus->payloadVersion < requirement.minimumPayloadVersion ||
                     stimulus->payloadVersion > requirement.maximumPayloadVersion)
-                    return PerceptionListenerAvailability::IncompatibleStimulus;
+                    return IncompatibleStimulus;
                 required = required.Union(stimulus->requiredCapabilities);
             }
             if (!availableCapabilities.Contains(required))
-                return PerceptionListenerAvailability::CapabilityUnavailable;
-            return PerceptionListenerAvailability::Available;
+                return CapabilityUnavailable;
+            return Available;
         }
 
         /** @brief Validates, sorts, and rejects collisions in the two type descriptor domains. */
