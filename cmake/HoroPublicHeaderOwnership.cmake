@@ -336,6 +336,9 @@ horo_configure_target_header_boundary(HoroTerrainApi PUBLIC_HEADERS
 horo_configure_target_header_boundary(HoroNavigationNull PUBLIC_HEADERS
     Horo/Navigation/Backends/NullProvider.h
 )
+horo_configure_target_header_boundary(HoroNavigationRecastDetour PUBLIC_HEADERS
+    Horo/Navigation/Backends/RecastDetourProvider.h
+)
 horo_configure_target_header_boundary(HoroWorldStreaming PUBLIC_HEADERS
     Horo/WorldStreaming/NetworkStreamingAuthority.h
     Horo/WorldStreaming/OriginFrame.h

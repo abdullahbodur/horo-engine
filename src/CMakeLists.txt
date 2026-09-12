@@ -614,6 +614,22 @@ add_library(HoroEngine::NavigationNull ALIAS HoroNavigationNull)
 target_compile_features(HoroNavigationNull PUBLIC cxx_std_20)
 target_link_libraries(HoroNavigationNull PUBLIC HoroEngine::NavigationApi)
 
+add_library(HoroNavigationRecastDetour STATIC)
+add_library(HoroEngine::NavigationRecastDetour ALIAS HoroNavigationRecastDetour)
+target_compile_features(HoroNavigationRecastDetour PUBLIC cxx_std_20)
+target_link_libraries(HoroNavigationRecastDetour PUBLIC HoroEngine::NavigationApi)
+if(HORO_BUILD_NAVIGATION_RECAST_DETOUR)
+    target_sources(HoroNavigationRecastDetour PRIVATE
+            runtime/navigation/backends/recast_detour/RecastDetourProvider.cpp
+            runtime/navigation/backends/recast_detour/RecastDetourProviderValidation.h
+    )
+    target_link_libraries(HoroNavigationRecastDetour PRIVATE HoroThirdPartyDetour)
+else()
+    target_sources(HoroNavigationRecastDetour PRIVATE
+            runtime/navigation/backends/recast_detour/RecastDetourProviderOmitted.cpp
+    )
+endif()
+
 add_library(HoroWorldStreaming STATIC
         runtime/world_streaming/NetworkStreamingAuthority.cpp
         runtime/world_streaming/OriginFrame.cpp

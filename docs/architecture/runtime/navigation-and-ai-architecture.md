@@ -98,6 +98,14 @@ translates Horo values and typed errors at the interface boundary. Query instanc
 are exclusively leased per job; mutable crowd/tile-cache instances have one writer and
 are never concurrently queried while being mutated.
 
+The initial `HoroEngine::NavigationRecastDetour` implementation accepts a bounded,
+borrowed Horo polygon-topology descriptor at composition, validates and copies it
+transactionally, and prepares a fixed pool of Detour query objects and scratch. Calls
+beyond the declared lease count return `AdmissionRejected` without waiting. Exact world
+and topology generations are checked before native work; malformed topology, allocation
+failure, cancellation, and stale requests remain typed Horo failures. The descriptor is
+an activation seam, not the durable NavMesh artifact schema owned by NAV-002.7.
+
 Private runtime and build source groups are separate. A runtime-only provider composition
 excludes Recast voxelization/build objects and their private link dependencies; enabling
 the bake capability adds them for tools. Runtime topology/crowd support retains only its

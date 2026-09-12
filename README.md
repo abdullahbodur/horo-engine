@@ -53,6 +53,9 @@ cmake --build build/skeleton --parallel
 ```
 
 `HORO_BUILD_PHYSICS_NATIVE` defaults to `ON` for the pinned private CPU solver.
+`HORO_BUILD_NAVIGATION_RECAST_DETOUR` defaults to `ON` for the pinned private grounded
+navigation query provider; set it to `OFF` for compositions that deliberately omit the
+real provider dependency.
 Set it to `OFF` for a Physics-omitted composition; the typed descriptor API still
 builds, but the native compatibility check reports unavailable. Linking Physics
 does not register native types, initialize a world or activate simulation.

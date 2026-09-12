@@ -38,6 +38,9 @@ workflows.
 - [CPU Particle Spawn Pipeline Migration](./cpu-particle-spawn-pipeline-migration.md):
   prepare deterministic continuous/burst birth, descriptor initialization and expiry
   over fixed SoA capacity without steady-state allocation.
+- [Grounded Navigation Provider Composition](./grounded-navigation-provider-composition.md):
+  compose the pinned Detour runtime provider from neutral topology with explicit
+  capacity, world-generation, cancellation, and teardown behavior.
 
 ## Writing a Guide
 

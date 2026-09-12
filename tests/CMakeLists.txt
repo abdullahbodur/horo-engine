@@ -358,6 +358,16 @@ target_include_directories(HoroNavigationApiTests PRIVATE ${CMAKE_CURRENT_SOURCE
 target_link_libraries(HoroNavigationApiTests PRIVATE HoroEngine::NavigationApi HoroEngine::NavigationNull)
 horo_register_catch_test(HoroNavigationApiTests LABELS "unit;navigation;headless")
 
+if(HORO_BUILD_NAVIGATION_RECAST_DETOUR)
+    add_executable(HoroNavigationRecastDetourTests
+            unit/runtime/navigation/RecastDetourProviderTests.cpp
+    )
+    target_compile_features(HoroNavigationRecastDetourTests PRIVATE cxx_std_20)
+    target_include_directories(HoroNavigationRecastDetourTests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/support)
+    target_link_libraries(HoroNavigationRecastDetourTests PRIVATE HoroEngine::NavigationRecastDetour)
+    horo_register_catch_test(HoroNavigationRecastDetourTests LABELS "unit;navigation;headless;provider")
+endif()
+
 add_executable(HoroXRApiTests
         support/AllocationProbe.cpp
         unit/runtime/xr/XRApiContractTests.cpp
