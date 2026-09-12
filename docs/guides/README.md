@@ -24,6 +24,8 @@ workflows.
   authored, persistent, cell-bound, and runtime-spawned ownership admission.
 - [World Layer Ownership Migration](./world-layer-ownership-migration.md): preserve stable
   layer identity while separating placement, residency, audience, and control authority.
+- [World Layer State Migration](./world-layer-state-migration.md): keep Loaded and
+  Activated guarantees ordered and independent from physical cell residency.
 - [World Partition Capability Profile Migration](./world-partition-capability-profile-migration.md):
   validate project grid, precision, capacity, and package settings without fallback.
 - [World Partition Registry Snapshot Migration](./world-partition-registry-migration.md):

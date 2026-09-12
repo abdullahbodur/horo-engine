@@ -2,6 +2,7 @@
 #include "GameplayRuntimeTestSupport.h"
 #include "Horo/Gameplay/BehaviorRuntime.h"
 #include "Horo/Gameplay/ComponentRegistry.h"
+#include "Horo/Gameplay/GameAssetTypeRegistry.h"
 #include "Horo/Gameplay/GameModuleHost.h"
 #include "Horo/Gameplay/GameplayErrors.h"
 #include "Horo/Gameplay/GameplayRegistrationRuntime.h"
@@ -123,6 +124,9 @@ TEST_CASE("game module host validates fingerprint and keeps factories alive thro
     REQUIRE(loaded.Value()->Components().IsFrozen());
     REQUIRE(loaded.Value()->Components().Descriptors().size() == 1);
     REQUIRE(loaded.Value()->Components().Descriptors().front().typeId.Value() == "game.tests.movement_settings");
+    REQUIRE(loaded.Value()->AssetTypes().IsFrozen());
+    REQUIRE(loaded.Value()->AssetTypes().Registrations().size() == 1);
+    REQUIRE(loaded.Value()->AssetTypes().Registrations().front().descriptor.typeId.Value() == "game.tests.quest_definition");
     REQUIRE(loaded.Value()->Services().IsFrozen());
     REQUIRE(loaded.Value()->Services().Registrations().size() == 1);
     REQUIRE(loaded.Value()->Systems().IsFrozen());

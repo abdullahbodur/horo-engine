@@ -103,6 +103,30 @@ namespace Horo::Runtime::SaveErrors {
     const ErrorCodeDescriptor ArchiveChunkHashMismatch{kDomain, ErrorCode{"save.archive.chunk_hash_mismatch"}, kError,
                                                        "Decoded save chunk bytes do not match their declared digest.",
                                                        "Reject the archive and retain it for corruption diagnostics."};
+    const ErrorCodeDescriptor CanonicalCodecInvalid{kDomain, ErrorCode{"save.canonical_codec.invalid"}, kError,
+                                                    "A canonical save codec argument is invalid.",
+                                                    "Supply a valid schema argument or caller-owned value."};
+    const ErrorCodeDescriptor CanonicalCodecCorrupt{kDomain, ErrorCode{"save.canonical_codec.corrupt"}, kError,
+                                                    "Canonical save value wire bytes are corrupt.",
+                                                    "Reject malformed, truncated, noncanonical, or trailing value bytes."};
+    const ErrorCodeDescriptor CanonicalCodecLimitExceeded{kDomain, ErrorCode{"save.canonical_codec.limit_exceeded"}, kError,
+                                                          "A canonical save value exceeds an admission bound.",
+                                                          "Reduce the value or revise the trusted participant codec limits."};
+    const ErrorCodeDescriptor CanonicalCodecDuplicate{kDomain, ErrorCode{"save.canonical_codec.duplicate"}, kError,
+                                                      "A canonical collection contains a duplicate encoded identity.",
+                                                      "Provide unique map keys, set values, and record field identities."};
+    const ErrorCodeDescriptor CanonicalCodecNonFinite{kDomain, ErrorCode{"save.canonical_codec.non_finite"}, kError,
+                                                      "A canonical floating-point value is not finite.",
+                                                      "Map special values explicitly in the versioned participant adapter."};
+    const ErrorCodeDescriptor CanonicalCodecUtf8Invalid{kDomain, ErrorCode{"save.canonical_codec.utf8_invalid"}, kError,
+                                                        "Canonical string bytes are not valid UTF-8 scalar values.",
+                                                        "Supply validated UTF-8 without implicit codec normalization."};
+    const ErrorCodeDescriptor CanonicalCodecConfigurationInvalid{kDomain, ErrorCode{"save.canonical_codec.configuration_invalid"}, kError,
+                                                                 "Canonical codec limits are invalid.",
+                                                                 "Provide finite non-zero internally coherent trusted limits."};
+    const ErrorCodeDescriptor CanonicalCodecAllocationFailed{kDomain, ErrorCode{"save.canonical_codec.allocation_failed"}, kError,
+                                                             "Canonical codec storage allocation failed.",
+                                                             "Reduce admitted data or memory pressure before retrying."};
     const ErrorCodeDescriptor SaveRootConfigurationInvalid{kDomain, ErrorCode{"save.root.configuration_invalid"}, kError,
                                                            "The platform save-root configuration is invalid.",
                                                            "Provide the required absolute platform state directory."};
@@ -140,6 +164,37 @@ namespace Horo::Runtime::SaveErrors {
     const ErrorCodeDescriptor SlotGenerationConflict{kDomain, ErrorCode{"save.slot.generation_conflict"}, kError,
                                                      "A save-slot replacement does not advance the same logical slot.",
                                                      "Keep the slot identity and allocate a new publication generation."};
+    const ErrorCodeDescriptor OperationInvalid{kDomain, ErrorCode{"save.operation.invalid"}, kError,
+                                               "An asynchronous save operation descriptor or handle is invalid.",
+                                               "Use a non-zero application operation identity and finite callback capacity."};
+    const ErrorCodeDescriptor OperationAllocationFailed{kDomain,
+                                                        ErrorCode{"save.operation.allocation_failed"},
+                                                        kError,
+                                                        "Asynchronous save operation state could not be allocated.",
+                                                        "Release admitted operation memory and retry later.",
+                                                        true};
+    const ErrorCodeDescriptor OperationTransitionInvalid{kDomain, ErrorCode{"save.operation.transition_invalid"}, kError,
+                                                         "An asynchronous save operation transition is invalid.",
+                                                         "Publish bounded monotonic progress and enter the commit gate before success."};
+    const ErrorCodeDescriptor
+        OperationCallbackCapacityExceeded{kDomain, ErrorCode{"save.operation.callback_capacity_exceeded"}, kError,
+                                          "The asynchronous save operation cannot retain another completion callback.",
+                                          "Use the admitted callback capacity or poll the immutable operation snapshot."};
+    const ErrorCodeDescriptor OperationCallbackInvalid{kDomain, ErrorCode{"save.operation.callback_invalid"}, kError,
+                                                       "An asynchronous save operation completion callback is empty.",
+                                                       "Register a callable completion observer."};
+    const ErrorCodeDescriptor OperationCancelled{kDomain, ErrorCode{"save.operation.cancelled"}, kError,
+                                                 "The asynchronous save operation was cancelled before commit.",
+                                                 "Retry only while the owning session and request remain valid."};
+    const ErrorCodeDescriptor OperationDeadlineExceeded{kDomain,
+                                                        ErrorCode{"save.operation.deadline_exceeded"},
+                                                        kError,
+                                                        "The asynchronous save operation deadline elapsed before commit.",
+                                                        "Retry with an appropriate admitted deadline if the operation remains valid.",
+                                                        true};
+    const ErrorCodeDescriptor OperationAbandoned{kDomain, ErrorCode{"save.operation.abandoned"}, kError,
+                                                 "The asynchronous save operation producer ended without a terminal result.",
+                                                 "Keep the producer alive until it completes, fails, or observes cancellation."};
     const ErrorCodeDescriptor CompositionUnsupported{kDomain, ErrorCode{"save.composition.unsupported"}, kError,
                                                      "The selected save composition does not support persistence.",
                                                      "Select a save-capable product composition before admission."};

@@ -95,6 +95,7 @@ TEST_CASE("project gameplay registry merges a fingerprinted native module with L
     REQUIRE_FALSE(registry->HasBlockingDiagnostics());
     REQUIRE(registry->Registry().Find(Gameplay::BehaviorTypeId::Parse("game.tests.dynamic_mover").Value()) != nullptr);
     REQUIRE(registry->Registry().Find(Gameplay::BehaviorTypeId::Parse("game.tests.watched").Value()) != nullptr);
+    REQUIRE(registry->AssetTypes().Find(Gameplay::GameAssetTypeId::Parse("game.tests.quest_definition").Value()) != nullptr);
     REQUIRE_FALSE(registry->ConsumeNativeArtifactChange());
     const std::filesystem::path manifestPath = project.root / ".horo" / "local" / "gameplay_module.json";
     std::error_code timeError;
@@ -123,6 +124,8 @@ TEST_CASE("project gameplay registry reports native sources without a published 
     auto registry = Editor::ProjectGameplayRegistry::Discover(project.root);
     REQUIRE(registry->HasBlockingDiagnostics());
     REQUIRE(registry->Diagnostics().front().source == project.root / ".horo" / "local" / "gameplay_module.json");
+    REQUIRE(registry->AssetTypes().IsFrozen());
+    REQUIRE(registry->AssetTypes().Registrations().empty());
 }
 
 TEST_CASE("project gameplay registry preserves and restores an unloaded native generation") {

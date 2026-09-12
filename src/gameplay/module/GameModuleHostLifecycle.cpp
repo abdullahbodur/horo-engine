@@ -66,12 +66,15 @@ namespace Horo::Gameplay {
 
     Result<void> LoadedGameModule::Impl::RegisterAndStart(const std::span<const GameplayCapabilityId> hostCapabilities) {
         components = std::make_unique<ComponentRegistry>();
+        assetTypes = std::make_unique<GameAssetTypeRegistry>(moduleId);
         services = std::make_unique<GameServiceRegistry>(moduleId);
         systems = std::make_unique<SystemRegistry>(moduleId);
-        GameRegistrationContext registration{moduleId, *components, *systems, *services};
+        GameRegistrationContext registration{moduleId, *components, *systems, *services, *assetTypes};
         if (Result<void> registered = InvokeRegister(*gameplayModule, registration); registered.HasError())
             return registered;
         if (Result<void> frozen = components->Freeze(); frozen.HasError())
+            return frozen;
+        if (Result<void> frozen = assetTypes->Freeze(); frozen.HasError())
             return frozen;
         if (Result<void> frozen = services->Freeze(hostCapabilities); frozen.HasError())
             return frozen;
@@ -125,6 +128,7 @@ namespace Horo::Gameplay {
         if (gameplayModule != nullptr && startAttempted)
             gameplayModule->Stop(runtimeContext);  // NOSONAR: exact-generation module boundary; path analysis is unrelated.
         projectServices.reset();
+        assetTypes.reset();
         if (gameplayModule != nullptr) {
             destroy(gameplayModule);
             gameplayModule = nullptr;

@@ -106,6 +106,10 @@ namespace Horo::Editor {
         return *this;
     }
 
+    ProjectGameplayRegistry::ProjectGameplayRegistry(ConstructionToken) {
+        static_cast<void>(missingAssetTypes_.Freeze());
+    }
+
     ProjectGameplayRegistry::LuaSourceStat ProjectGameplayRegistry::ReadLuaSourceStat(const std::filesystem::path &source,
                                                                                       std::error_code &error) {
         const std::filesystem::path metadata{source.string() + ".meta"};
@@ -299,6 +303,11 @@ namespace Horo::Editor {
     /** @copydoc ProjectGameplayRegistry::Registry */
     const Gameplay::BehaviorRegistry &ProjectGameplayRegistry::Registry() const noexcept {
         return registry_;
+    }
+
+    /** @copydoc ProjectGameplayRegistry::AssetTypes */
+    const Gameplay::GameAssetTypeRegistry &ProjectGameplayRegistry::AssetTypes() const noexcept {
+        return nativeModule_ != nullptr ? nativeModule_->AssetTypes() : missingAssetTypes_;
     }
 
     /** @copydoc ProjectGameplayRegistry::Diagnostics */

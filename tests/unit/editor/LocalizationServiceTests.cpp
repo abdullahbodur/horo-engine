@@ -202,6 +202,7 @@ namespace {
         REQUIRE((service.Get("editor", "workspace.content_browser.empty") == "This folder is empty."));
         REQUIRE((service.Get("editor", "workspace.global_dock.tab.assets") == "Assets"));
         REQUIRE((service.Get("editor", "workspace.global_dock.tab.localization") == "L10n"));
+        REQUIRE((service.Get("editor", "workspace.game_asset.category.missing") == "Missing Gameplay Asset Type"));
         assertGlobalDockKeysExist(service);
         assertContentBrowserKeysExist(service);
         assertRecoveryKeysExist(service);
@@ -217,6 +218,7 @@ namespace {
         REQUIRE((service.Get("editor", "workspace.content_browser.empty") == "Bu klasör boş."));
         REQUIRE((service.Get("editor", "workspace.global_dock.tab.assets") == "Varlıklar"));
         REQUIRE((service.Get("editor", "workspace.global_dock.tab.localization") == "L10n"));
+        REQUIRE((service.Get("editor", "workspace.game_asset.category.missing") == "Eksik Oynanış Asset Türü"));
         assertGlobalDockKeysExist(service);
         assertContentBrowserKeysExist(service);
         assertRecoveryKeysExist(service);
