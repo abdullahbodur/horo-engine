@@ -43,6 +43,13 @@ return horo.behavior {
         return Tests::SingleBehaviorSceneDefinition(SceneDefinitionId{5}, SceneDefinitionRevision{1}, SceneObjectId{2},
                                                     BehaviorInstanceId{8}, Type(), {BehaviorField{"speed", 2.0}});
     }
+
+    /** @brief Registers one Lua program and activates the shared runtime fixture. */
+    Tests::ActiveBehaviorRuntime ActivateProgram(LuaBehaviorProgram &program, const SceneRuntimeId runtimeId, BehaviorRegistry &registry) {
+        REQUIRE(registry.Register(program.Registration()).HasValue());
+        REQUIRE(registry.Freeze().HasValue());
+        return Tests::ActivateBehaviorRuntime(Definition(), runtimeId, registry);
+    }
 }  // namespace
 
 TEST_CASE("Lua behavior uses the shared lifecycle input fields and deferred transform boundary") {
@@ -51,9 +58,7 @@ TEST_CASE("Lua behavior uses the shared lifecycle input fields and deferred tran
     REQUIRE(program.Value()->Descriptor().displayName == "Lua Mover");
 
     BehaviorRegistry registry;
-    REQUIRE(registry.Register(program.Value()->Registration()).HasValue());
-    REQUIRE(registry.Freeze().HasValue());
-    Tests::ActiveBehaviorRuntime active = Tests::ActivateBehaviorRuntime(Definition(), SceneRuntimeId{15}, registry);
+    Tests::ActiveBehaviorRuntime active = ActivateProgram(*program.Value(), SceneRuntimeId{15}, registry);
 
     const GameplayInputAction move{GameplayActionId{"game.tests.move"}, 3.0F, 0.0F, true, true, false};
     REQUIRE(Tests::FixedUpdateAndReadPosition(*active.scene, *active.runtime, SceneObjectId{2}, {&move, 1}).x == 6.0F);
@@ -102,9 +107,7 @@ return horo.behavior {
     auto program = LuaBehaviorProgram::Compile(source, Type(), "input_callback.horo_script");
     REQUIRE(program.HasValue());
     BehaviorRegistry registry;
-    REQUIRE(registry.Register(program.Value()->Registration()).HasValue());
-    REQUIRE(registry.Freeze().HasValue());
-    Tests::ActiveBehaviorRuntime active = Tests::ActivateBehaviorRuntime(Definition(), SceneRuntimeId{16}, registry);
+    Tests::ActiveBehaviorRuntime active = ActivateProgram(*program.Value(), SceneRuntimeId{16}, registry);
     const GameplayInputAction move{GameplayActionId{"game.tests.move"}, 4.0F, 2.0F, true, true, false};
     REQUIRE(Tests::FixedUpdateAndReadPosition(*active.scene, *active.runtime, SceneObjectId{2}, {&move, 1}).x == 4.0F);
 }
