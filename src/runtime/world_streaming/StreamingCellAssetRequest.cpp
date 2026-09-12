@@ -21,11 +21,13 @@ namespace Horo::WorldStreaming {
             return found != cells.end() && found->id == cell ? &*found : nullptr;
         }
 
-        [[nodiscard]] const CookedWorldCellManifestEntry *FindManifestCell(const CookedWorldIndexManifest &manifest,
-                                                                           const StreamingCellId &cell) {
+        [[nodiscard]] std::optional<std::size_t> FindManifestCellIndex(const CookedWorldIndexManifest &manifest,
+                                                                       const StreamingCellId &cell) {
             const auto cells = manifest.Cells();
             const auto found = std::ranges::lower_bound(cells, cell, StreamingCellCanonicalLess{}, &CookedWorldCellManifestEntry::cell);
-            return found != cells.end() && found->cell == cell ? &*found : nullptr;
+            if (found == cells.end() || found->cell != cell)
+                return std::nullopt;
+            return static_cast<std::size_t>(found - cells.begin());
         }
 
         [[nodiscard]] bool Matches(const CookedWorldCellManifestEntry &manifest,
@@ -49,10 +51,11 @@ namespace Horo::WorldStreaming {
                 return Internal::Failure<void>(WorldStreamingErrors::CellAssetRequestLifecycleUnavailable);
             if (context.operation != candidate.Operation() || context.operation.fence.partition != manifest.Descriptor().Partition())
                 return Internal::Failure<void>(WorldStreamingErrors::CellAssetRequestStale);
-            const auto *manifestCell = FindManifestCell(manifest, context.operation.fence.cell);
+            const auto manifestCell = FindManifestCellIndex(manifest, context.operation.fence.cell);
             const auto *descriptorCell = FindCell(manifest, context.operation.fence.cell);
-            if (!manifestCell || !descriptorCell || !Matches(*manifestCell, candidate.ManifestEntry()) ||
-                descriptorCell->package.chunkAsset != candidate.ChunkAsset())
+            if (!manifestCell || !descriptorCell || !Matches(manifest.Cells()[*manifestCell], candidate.ManifestEntry()) ||
+                descriptorCell->package.chunkAsset != candidate.ChunkAsset() ||
+                !std::ranges::equal(manifest.HardDependencies(*manifestCell), candidate.HardDependencies()))
                 return Internal::Failure<void>(WorldStreamingErrors::CellAssetRequestStale);
             if (candidate.HardDependencies().size() >= context.maximumRequests)
                 return Internal::Failure<void>(WorldStreamingErrors::CellAssetRequestCapacityExceeded);

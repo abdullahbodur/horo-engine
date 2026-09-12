@@ -13,5 +13,6 @@ revision. Failure, cancellation, replacement, shutdown, or partial child admissi
 publishes an aggregate batch.
 
 Hosts must configure a positive `maximumRequests`. Missing registry entries, unresolved
-manifest cells, stale generations, closed lifecycle, and over-capacity dependency trees
-return typed errors; no provider fallback or ambient registry lookup is performed.
+manifest cells, changed canonical dependency slices, stale generations, closed lifecycle,
+and over-capacity dependency trees return typed errors; no provider fallback or ambient
+registry lookup is performed.

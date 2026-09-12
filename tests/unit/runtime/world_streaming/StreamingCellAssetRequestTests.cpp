@@ -126,6 +126,11 @@ namespace Horo::WorldStreaming {
         context.operation = Operation(IdentityFrom<StreamingGeneration>(2));
         RequireError(RequestStreamingCellAssets(loads.Service(), fixture.registry, fixture.manifest, fixture.candidate, context),
                      WorldStreamingErrors::CellAssetRequestStale);
+        const std::array changedDependencies{Cell(1)};
+        const auto changedManifest = Manifest(changedDependencies);
+        context = AssetRequestContext();
+        RequireError(RequestStreamingCellAssets(loads.Service(), fixture.registry, changedManifest, fixture.candidate, context),
+                     WorldStreamingErrors::CellAssetRequestStale);
         const std::array missing{Asset(4), Asset(5)};
         fixture.registry = Registry(missing);
         context = AssetRequestContext();
