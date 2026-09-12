@@ -12,12 +12,7 @@ namespace Horo::WorldStreaming {
         using TestSupport::Layer;
         using TestSupport::RequireError;
         using TestSupport::World;
-
-        StreamingRuntimeOwnerToken WorldOwner(const std::uint64_t owner = 5, const std::uint64_t epoch = 1) {
-            return {.partition = World(),
-                    .epoch = IdentityFrom<PartitionEpoch>(epoch),
-                    .owner = IdentityFrom<StreamingRuntimeOwnerId>(owner)};
-        }
+        using TestSupport::WorldOwner;
 
         WorldLayerControlOwner StreamingOwner() {
             return {.world = WorldOwner(), .kind = WorldLayerControlOwnerKind::WorldStreaming};
@@ -58,6 +53,15 @@ namespace Horo::WorldStreaming {
             const auto result = AdvanceWorldLayerState(record, request, authorityState);
             REQUIRE(result.HasValue());
             record = result.Value();
+        }
+
+        void RequireIdempotentCancellation(WorldLayerStateRecord &record, const WorldLayerState rollbackState) {
+            Advance(record, WorldLayerStateTransition::Cancel, WorldLayerStateAuthorityState::Cancelling);
+            REQUIRE(record.state == rollbackState);
+            const auto rollbackRevision = record.revision;
+            Advance(record, WorldLayerStateTransition::Cancel, WorldLayerStateAuthorityState::Cancelling);
+            REQUIRE(record.state == rollbackState);
+            REQUIRE(record.revision.Value() == rollbackRevision.Value() + 1);
         }
 
         TEST_CASE("Layer state follows load activation deactivation and unload independently from cells",
@@ -106,8 +110,7 @@ namespace Horo::WorldStreaming {
                   "[unit][world_streaming][layer_state][cancellation]") {
             auto loading = Record();
             Advance(loading, WorldLayerStateTransition::BeginLoad);
-            Advance(loading, WorldLayerStateTransition::Cancel, WorldLayerStateAuthorityState::Cancelling);
-            REQUIRE(loading.state == WorldLayerState::Unloading);
+            RequireIdempotentCancellation(loading, WorldLayerState::Unloading);
             Advance(loading, WorldLayerStateTransition::CompleteUnload, WorldLayerStateAuthorityState::Cancelling);
             REQUIRE(loading.state == WorldLayerState::Unloaded);
 
@@ -115,8 +118,7 @@ namespace Horo::WorldStreaming {
             Advance(activating, WorldLayerStateTransition::BeginLoad);
             Advance(activating, WorldLayerStateTransition::CompleteLoad);
             Advance(activating, WorldLayerStateTransition::BeginActivation);
-            Advance(activating, WorldLayerStateTransition::Cancel, WorldLayerStateAuthorityState::Cancelling);
-            REQUIRE(activating.state == WorldLayerState::Deactivating);
+            RequireIdempotentCancellation(activating, WorldLayerState::Deactivating);
             Advance(activating, WorldLayerStateTransition::CompleteDeactivation, WorldLayerStateAuthorityState::Cancelling);
             REQUIRE(activating.state == WorldLayerState::Loaded);
 

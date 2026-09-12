@@ -97,6 +97,16 @@ namespace Horo::WorldStreaming {
                 return Failure<void>(WorldStreamingErrors::LayerStateLifecycleUnavailable);
             return Result<void>::Success();
         }
+
+        /** @brief Publish the next immutable layer-state record after a successful mutation. */
+        [[nodiscard]] Result<WorldLayerStateRecord> SuccessorRecord(const WorldLayerStateRecord &current,
+                                                                    const WorldLayerOwnershipDescriptor &ownership,
+                                                                    const WorldLayerState state) {
+            const auto nextRevision = NextWorldLayerStateRevision(current.revision);
+            if (nextRevision.HasError())
+                return Result<WorldLayerStateRecord>::Failure(nextRevision.ErrorValue());
+            return Result<WorldLayerStateRecord>::Success({.ownership = ownership, .revision = nextRevision.Value(), .state = state});
+        }
     }  // namespace
 
     /** @copydoc WorldLayerStateFence::IsValid */
@@ -150,11 +160,7 @@ namespace Horo::WorldStreaming {
         const auto nextState = ApplyTransition(current.state, request.transition);
         if (nextState.HasError())
             return Result<WorldLayerStateRecord>::Failure(nextState.ErrorValue());
-        const auto nextRevision = NextWorldLayerStateRevision(current.revision);
-        if (nextRevision.HasError())
-            return Result<WorldLayerStateRecord>::Failure(nextRevision.ErrorValue());
-        return Result<WorldLayerStateRecord>::Success(
-            {.ownership = current.ownership, .revision = nextRevision.Value(), .state = nextState.Value()});
+        return SuccessorRecord(current, current.ownership, nextState.Value());
     }
 
     /** @copydoc ReplaceWorldLayerStateOwnership */
@@ -178,11 +184,7 @@ namespace Horo::WorldStreaming {
         if (const auto admitted = ValidateWorldLayerOwnershipAdmission(ownershipRequest, ownershipContext); admitted.HasError())
             return Result<WorldLayerStateRecord>::Failure(admitted.ErrorValue());
 
-        const auto nextRevision = NextWorldLayerStateRevision(current.revision);
-        if (nextRevision.HasError())
-            return Result<WorldLayerStateRecord>::Failure(nextRevision.ErrorValue());
-        return Result<WorldLayerStateRecord>::Success(
-            {.ownership = replacement, .revision = nextRevision.Value(), .state = WorldLayerState::Unloaded});
+        return SuccessorRecord(current, replacement, WorldLayerState::Unloaded);
     }
 
     /** @copydoc NextWorldLayerStateRevision */
