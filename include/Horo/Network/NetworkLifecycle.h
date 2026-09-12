@@ -124,8 +124,8 @@ namespace Horo::Network {
 
     /** @brief Setup-time finite capacities for one owner-thread lifecycle registry. */
     struct NetworkLifecycleLimits final {
-        std::size_t maximumListeners{};   /**< Positive prepared listener slots. */
-        std::size_t maximumConnections{}; /**< Positive prepared connection slots. */
+        std::size_t maximumListeners{};   /**< Positive prepared listener slot-index range. */
+        std::size_t maximumConnections{}; /**< Positive prepared connection slot-index range. */
     };
 
     /**
@@ -133,7 +133,8 @@ namespace Horo::Network {
      *
      * All methods are called by one owner thread after normalized I/O completion drain. Native callbacks retain
      * only Horo handles and operation generations. Storage is prepared by Create; admission, transitions, timeout
-     * scans, cancellation, and shutdown do not grow it. A slot may be reused only by its exact next handle generation.
+     * scans, cancellation, and shutdown do not grow it. Handle slots directly index prepared storage, and a slot may be
+     * reused only by its exact next handle generation.
      */
     class NetworkLifecycleRegistry final {
     public:

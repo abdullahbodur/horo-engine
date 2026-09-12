@@ -17,8 +17,9 @@ replacement generation.
 
 ## Workflow
 
-1. Create one registry with finite listener and connection capacities during host
-   composition. Construction is the only storage-growth point.
+1. Create one registry with finite listener and connection slot-index ranges during
+   host composition. Construction is the only storage-growth point; handle slots
+   index this prepared storage directly.
 2. Pair each admitted bind, resolve, or connect with a non-zero
    `NetworkOperationGeneration`. Retain that pair in the private native callback
    context.

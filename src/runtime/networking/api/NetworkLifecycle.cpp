@@ -80,38 +80,32 @@ namespace Horo::Network {
 
         template <typename Slots, typename Handle, typename Factory>
         [[nodiscard]] Result<void> AdmitPreparedSlot(Slots &slots, const Handle handle, Factory &&makeEntry) {
-            typename Slots::value_type *freeSlot = nullptr;
-            for (auto &slot : slots) {
-                if (!slot.has_value()) {
-                    if (freeSlot == nullptr)
-                        freeSlot = &slot;
-                    continue;
-                }
-                if (slot->handle.Slot() != handle.Slot())
-                    continue;
-                if (slot->handle == handle)
-                    return Fail<void>(NetworkErrors::NetworkLifecycleInvalid);
-                if (!slot->terminal.has_value())
-                    return Fail<void>(NetworkErrors::TerminalGenerationStale);
-                if (auto expected = slot->handle.NextGeneration(); expected.HasError() || expected.Value() != handle)
-                    return Fail<void>(NetworkErrors::TerminalGenerationStale);
+            const std::size_t index = handle.Slot();
+            if (index >= slots.size())
+                return Fail<void>(NetworkErrors::NetworkLifecycleCapacityExceeded);
+            auto &slot = slots[index];
+            if (!slot.has_value()) {
                 slot.emplace(makeEntry());
                 return Result<void>::Success();
             }
-            if (freeSlot == nullptr)
-                return Fail<void>(NetworkErrors::NetworkLifecycleCapacityExceeded);
-            freeSlot->emplace(makeEntry());
+            if (slot->handle == handle)
+                return Fail<void>(NetworkErrors::NetworkLifecycleInvalid);
+            if (!slot->terminal.has_value())
+                return Fail<void>(NetworkErrors::TerminalGenerationStale);
+            if (auto expected = slot->handle.NextGeneration(); expected.HasError() || expected.Value() != handle)
+                return Fail<void>(NetworkErrors::TerminalGenerationStale);
+            slot.emplace(makeEntry());
             return Result<void>::Success();
         }
 
         template <typename Slots, typename Handle>
         [[nodiscard]] auto *FindExact(Slots &slots, const Handle handle, const NetworkOperationGeneration operation) noexcept {
             using Entry = typename Slots::value_type::value_type;
-            for (auto &slot : slots) {
-                if (slot.has_value() && slot->handle == handle && slot->operation == operation)
-                    return &*slot;
-            }
-            return static_cast<Entry *>(nullptr);
+            const std::size_t index = handle.Slot();
+            if (index >= slots.size())
+                return static_cast<Entry *>(nullptr);
+            auto &slot = slots[index];
+            return slot.has_value() && slot->handle == handle && slot->operation == operation ? &*slot : nullptr;
         }
 
         template <typename Entry, typename State, typename Finalize>
@@ -148,7 +142,9 @@ namespace Horo::Network {
 
         template <typename Snapshot, typename Slots, typename Handle, typename Project>
         [[nodiscard]] Result<Snapshot> ProjectSnapshot(const Slots &slots, const Handle handle, Project &&project) {
-            for (const auto &slot : slots) {
+            const std::size_t index = handle.Slot();
+            if (index < slots.size()) {
+                const auto &slot = slots[index];
                 if (slot.has_value() && slot->handle == handle)
                     return Result<Snapshot>::Success(project(*slot));
             }

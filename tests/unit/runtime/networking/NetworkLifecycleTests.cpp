@@ -10,11 +10,11 @@ namespace Horo::Network {
     using TestSupport::RequireError;
 
     namespace {
-        ListenerHandle Listener(const std::uint32_t slot = 1, const std::uint32_t generation = 1) {
+        ListenerHandle Listener(const std::uint32_t slot = 0, const std::uint32_t generation = 1) {
             return ListenerHandle::Create(slot, generation).Value();
         }
 
-        ConnectionHandle Connection(const std::uint32_t slot = 1, const std::uint32_t generation = 1) {
+        ConnectionHandle Connection(const std::uint32_t slot = 0, const std::uint32_t generation = 1) {
             return ConnectionHandle::Create(slot, generation).Value();
         }
 
@@ -74,7 +74,7 @@ namespace Horo::Network {
 
     TEST_CASE("Cancellation wins exactly once and replacement fences stale completions", "[unit][network][lifecycle]") {
         auto registry = Registry();
-        const ConnectionHandle first = Connection(3, 7);
+        const ConnectionHandle first = Connection(2, 7);
         const ConnectionHandle replacement = first.NextGeneration().Value();
         REQUIRE(registry.AdmitConnection(first, Operation(4), false, 20).HasValue());
         REQUIRE(registry.CancelConnection(first, Operation(4)).HasValue());
@@ -92,14 +92,14 @@ namespace Horo::Network {
 
     TEST_CASE("Connection deadline scan is bounded deterministic and terminalizes each operation once", "[unit][network][lifecycle]") {
         auto registry = Registry();
-        REQUIRE(registry.AdmitConnection(Connection(1), Operation(1), false, 10).HasValue());
-        REQUIRE(registry.AdmitConnection(Connection(2), Operation(2), true, 20).HasValue());
+        REQUIRE(registry.AdmitConnection(Connection(0), Operation(1), false, 10).HasValue());
+        REQUIRE(registry.AdmitConnection(Connection(1), Operation(2), true, 20).HasValue());
         REQUIRE(registry.ExpireConnections(9).Value() == 0);
         REQUIRE(registry.ExpireConnections(10).Value() == 1);
         REQUIRE(registry.ExpireConnections(20).Value() == 1);
         REQUIRE(registry.ExpireConnections(100).Value() == 0);
-        REQUIRE(registry.Connection(Connection(1)).Value().state == NetworkConnectionState::TimedOut);
-        REQUIRE(registry.Connection(Connection(2)).Value().terminal->Failure()->Kind() == NetworkFailureKind::SessionTimedOut);
+        REQUIRE(registry.Connection(Connection(0)).Value().state == NetworkConnectionState::TimedOut);
+        REQUIRE(registry.Connection(Connection(1)).Value().terminal->Failure()->Kind() == NetworkFailureKind::SessionTimedOut);
     }
 
     TEST_CASE("Lifecycle validation rejects malformed terminals stale generations and exhausted capacity", "[unit][network][lifecycle]") {
@@ -113,11 +113,11 @@ namespace Horo::Network {
                      NetworkErrors::NetworkLifecycleInvalid);
 
         auto registry = Registry({1, 1});
-        REQUIRE(registry.AdmitListener(Listener(1), Operation(1)).HasValue());
-        RequireError(registry.AdmitListener(Listener(2), Operation(2)), NetworkErrors::NetworkLifecycleCapacityExceeded);
-        REQUIRE(registry.AdmitConnection(Connection(1), Operation(1), false, 10).HasValue());
-        RequireError(registry.AdmitConnection(Connection(2), Operation(2), false, 10), NetworkErrors::NetworkLifecycleCapacityExceeded);
-        RequireError(registry.AdmitConnection(Connection(1, 3), Operation(3), false, 10), NetworkErrors::TerminalGenerationStale);
+        REQUIRE(registry.AdmitListener(Listener(0), Operation(1)).HasValue());
+        RequireError(registry.AdmitListener(Listener(1), Operation(2)), NetworkErrors::NetworkLifecycleCapacityExceeded);
+        REQUIRE(registry.AdmitConnection(Connection(0), Operation(1), false, 10).HasValue());
+        RequireError(registry.AdmitConnection(Connection(1), Operation(2), false, 10), NetworkErrors::NetworkLifecycleCapacityExceeded);
+        RequireError(registry.AdmitConnection(Connection(0, 3), Operation(3), false, 10), NetworkErrors::TerminalGenerationStale);
     }
 
     TEST_CASE("Lifecycle shutdown is idempotent and preserves already published terminal evidence", "[unit][network][lifecycle]") {
