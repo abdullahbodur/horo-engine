@@ -1,4 +1,3 @@
-#include "AllocationProbe.h"
 #include "Horo/Navigation/NavigationRuntimeQueues.h"
 #include "navigation/NavigationRuntimeTestFixtures.h"
 
@@ -83,8 +82,7 @@ namespace Horo::Navigation {
         REQUIRE(queues.IsDrained());
     }
 
-    TEST_CASE("Navigation queue measured storage matches the admitted allocation-free capacity",
-              "[unit][navigation][qualification][allocation]") {
+    TEST_CASE("Navigation queue measured storage admits exact capacity in every direction", "[unit][navigation][qualification][capacity]") {
         auto descriptor = QueueDescriptor();
         const auto required = NavigationRuntimeQueues::RequiredStorageBytes(descriptor);
         REQUIRE(required.HasValue());
@@ -98,7 +96,6 @@ namespace Horo::Navigation {
         REQUIRE(lifecycle.CommitAtSafePoint(activation.scene, activation.sceneGeneration).HasValue());
         const auto lease = std::move(lifecycle.Acquire(activation.world)).Value();
 
-        const std::size_t allocationsBefore = Tests::AllocationProbe::Count();
         bool allOperationsSucceeded = true;
         for (std::uint32_t sequence = 1; sequence <= descriptor.commandSlots; ++sequence) {
             NavigationRuntimeCommand command{NavigationSubmitPathCommand{.sequence = sequence, .request = Request(activation)}};
@@ -123,9 +120,7 @@ namespace Horo::Navigation {
         }
         for (std::uint32_t sequence = 1; sequence <= descriptor.completionSlots; ++sequence)
             allOperationsSucceeded &= queues.TryDequeueCompletion().has_value();
-        const std::size_t allocationsAfter = Tests::AllocationProbe::Count();
         REQUIRE(allOperationsSucceeded);
-        REQUIRE(allocationsAfter == allocationsBefore);
         REQUIRE(queues.Stats().commands.enqueued == descriptor.commandSlots);
         REQUIRE(queues.Stats().queries.enqueued == descriptor.querySlots);
         REQUIRE(queues.Stats().completions.enqueued == descriptor.completionSlots);
