@@ -27,7 +27,7 @@ control.
 6. Use the exact current revision and non-wrapping successor for replacement. Treat
    every typed failure as a no-mutation result.
 7. For a runtime-control owner change, obtain a current handoff receipt from the
-   composition owner. Present its exact source owner, target owner lifetime,
+   composition owner. Present its exact stable layer, source owner, target owner lifetime,
    authorization identity/generation and ownership revision against the matching
    validated target-lifetime snapshot. Do not reuse a receipt after either authority
    lifetime changes, and never rewind a same-owner generation.

@@ -83,6 +83,7 @@ namespace Horo::WorldStreaming {
         WorldLayerControlHandoffGeneration generation{}; /**< Exact non-replayable authorization generation. */
         WorldLayerControlOwner currentOwner{};           /**< Exact authority granting the handoff. */
         WorldLayerControlOwner targetOwner{};            /**< Exact target authority lifetime being admitted. */
+        StreamingLayerId layer{};                        /**< Exact stable layer identity authorized to hand off. */
         WorldLayerRevision expectedRevision{};           /**< Exact ownership publication authorized to hand off. */
 
         /** @brief Checks receipt identity and exact source/target owner coherence. @return True when structurally usable. */

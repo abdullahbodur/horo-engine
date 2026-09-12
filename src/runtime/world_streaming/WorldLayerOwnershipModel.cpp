@@ -83,6 +83,7 @@ namespace Horo::WorldStreaming {
             if (!context.handoff->IsValid())
                 return Failure<void>(WorldStreamingErrors::LayerOwnershipInvalid);
             if (!All(std::array{context.handoff->authorization.currentOwner == context.current->owner,
+                                context.handoff->authorization.layer == context.current->layer,
                                 context.handoff->authorization.expectedRevision == context.current->revision,
                                 context.handoff->validatedTarget.world == context.expectedWorld})) {
                 return Failure<void>(WorldStreamingErrors::LayerOwnershipOwnerStale);
@@ -120,7 +121,8 @@ namespace Horo::WorldStreaming {
             if (!receipt.IsValid())
                 return Failure<void>(WorldStreamingErrors::LayerOwnershipInvalid);
             if (!All(std::array{receipt == context.handoff->authorization, receipt.currentOwner == current.owner,
-                                receipt.targetOwner == request.candidate.owner, receipt.expectedRevision == current.revision,
+                                receipt.targetOwner == request.candidate.owner, receipt.layer == current.layer,
+                                receipt.layer == request.candidate.layer, receipt.expectedRevision == current.revision,
                                 receipt.targetOwner == context.handoff->validatedTarget})) {
                 return Failure<void>(WorldStreamingErrors::LayerOwnershipOwnerStale);
             }
@@ -171,8 +173,8 @@ namespace Horo::WorldStreaming {
 
     /** @copydoc WorldLayerControlHandoffReceipt::IsValid */
     bool WorldLayerControlHandoffReceipt::IsValid() const noexcept {
-        return All(std::array{id.IsValid(), generation.IsValid(), currentOwner.IsValid(), targetOwner.IsValid(), expectedRevision.IsValid(),
-                              currentOwner.world == targetOwner.world, currentOwner != targetOwner});
+        return All(std::array{id.IsValid(), generation.IsValid(), currentOwner.IsValid(), targetOwner.IsValid(), layer.IsValid(),
+                              expectedRevision.IsValid(), currentOwner.world == targetOwner.world, currentOwner != targetOwner});
     }
 
     /** @copydoc WorldLayerValidatedHandoffContext::IsValid */

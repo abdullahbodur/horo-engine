@@ -877,8 +877,8 @@ Admission is pure and bounded. Insert requires available capacity, while replace
 requires the exact current revision and its non-wrapping successor. Placement,
 residency, audience and stable layer identity cannot change during replacement.
 Only a runtime-controlled layer may change its explicit control owner. Such a change
-requires a `WorldLayerControlHandoffReceipt` that binds the exact current owner,
-ownership revision, target owner lifetime, authorization identity and authorization
+requires a `WorldLayerControlHandoffReceipt` that binds the exact stable layer,
+current owner, ownership revision, target owner lifetime, authorization identity and authorization
 generation. Admission compares that receipt with the authority snapshot's current
 authorization and separately validated target lifetime. Same-lineage owner generations
 must advance; replay, rewind, expired targets and unauthorized cross-role or cross-owner
