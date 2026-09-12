@@ -63,6 +63,16 @@ namespace Horo::Runtime::Ui {
         return lastPresentedInteraction_;
     }
 
+    /** @copydoc UiPresentedInteractionState::View */
+    UiRenderViewId UiPresentedInteractionState::View() const noexcept {
+        return view_;
+    }
+
+    /** @copydoc UiPresentedInteractionState::Canvas */
+    UiCanvasInstanceId UiPresentedInteractionState::Canvas() const noexcept {
+        return canvas_;
+    }
+
     UiPresentedInteractionState::UiPresentedInteractionState(const UiRenderViewId view, const UiCanvasInstanceId canvas) noexcept
         : view_(view), canvas_(canvas) {}
 }  // namespace Horo::Runtime::Ui
