@@ -191,11 +191,6 @@ namespace Horo::Runtime::Ui {
         }
     }  // namespace
 
-    /** @copydoc UiLogicalExtent::IsValid */
-    bool UiLogicalExtent::IsValid() const noexcept {
-        return width >= 0 && height >= 0;
-    }
-
     /** @copydoc UiLogicalTransform::IsValid */
     bool UiLogicalTransform::IsValid() const noexcept {
         return std::ranges::all_of(values, [](const float value) {

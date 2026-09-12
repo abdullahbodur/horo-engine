@@ -614,4 +614,30 @@ namespace Horo::WorldStreaming::WorldStreamingErrors {
         Describe("world_streaming.partition_settings.lifecycle_unavailable", ErrorSeverity::Warning,
                  "Partition settings admission is cancelling or closed.",
                  "Wait for a new active project settings owner before admitting dependent work.", false);
+    const ErrorCodeDescriptor CellAssetRequestInvalid =
+        Describe("world_streaming.cell_asset_request.invalid", ErrorSeverity::Error,
+                 "A cell asset request identity, fence, or mandatory limit is malformed.",
+                 "Provide a valid request identity, exact operation fence, and positive bounded request ceiling.", true);
+    const ErrorCodeDescriptor CellAssetRequestStale =
+        Describe("world_streaming.cell_asset_request.stale", ErrorSeverity::Warning,
+                 "A cell asset request names a replaced candidate or mounted partition.",
+                 "Discard it and submit from the current generation-pinned candidate.", false);
+    const ErrorCodeDescriptor CellAssetRequestUnavailable =
+        Describe("world_streaming.cell_asset_request.unavailable", ErrorSeverity::Error,
+                 "A manifest dependency or registered cooked asset cannot be resolved.",
+                 "Rebuild the manifest and registry so every hard dependency has one exact cooked package.", false);
+    const ErrorCodeDescriptor CellAssetRequestCapacityExceeded =
+        Describe("world_streaming.cell_asset_request.capacity_exceeded", ErrorSeverity::Error,
+                 "The candidate dependency tree exceeds its explicit request ceiling.",
+                 "Raise the supported ceiling or reduce the canonical hard-dependency set before admission.", false);
+    const ErrorCodeDescriptor CellAssetRequestLifecycleUnavailable =
+        Describe("world_streaming.cell_asset_request.lifecycle_unavailable", ErrorSeverity::Warning,
+                 "Asset request admission is cancelling, closed, or no longer controllable.",
+                 "Wait for retirement or submit through a new active request owner.", false);
+    const ErrorCodeDescriptor CellAssetRequestNotReady =
+        Describe("world_streaming.cell_asset_request.not_ready", ErrorSeverity::Info, "The aggregate still has provider work in flight.",
+                 "Poll without blocking and consume only after the request reaches a terminal state.", true);
+    const ErrorCodeDescriptor CellAssetRequestConsumed =
+        Describe("world_streaming.cell_asset_request.consumed", ErrorSeverity::Error, "The terminal aggregate result was already consumed.",
+                 "Retain the owned batch returned by the first successful terminal take.", false);
 }  // namespace Horo::WorldStreaming::WorldStreamingErrors

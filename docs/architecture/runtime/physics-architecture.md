@@ -120,6 +120,15 @@ even if a host releases its runtime wrapper too early. Normal composition still
 destroys scene worlds before the process runtime. Repeated world/runtime shutdown
 is idempotent, and no process-global static initializer starts the native lifecycle.
 
+World reset is an owner-thread transaction that closes admission, retires the native
+world, invalidates its published identity, clears queued commands and every publication
+domain, and rebuilds an unpublished candidate from the same immutable settings. A
+successful reset returns to `PreparedSolver` or `PreparedNull` and requires a new
+host-issued generation before work resumes; repeated reset while prepared is a no-op.
+Scene unload is a distinct idempotent terminal path that retires the world before
+component storage disappears. Fatal solver or joined-child failure retains the exact
+typed error and prior coherent publication until reset, scene unload or shutdown.
+
 Expected stage failures return `physics.initialization.failed` after reverse-order
 rollback. Horo ownership-allocation failure is contained before returning a typed
 capacity error. Native Jolt allocation cannot unwind through its no-exception frames:

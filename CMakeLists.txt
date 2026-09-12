@@ -19,6 +19,11 @@ endif()
 set(HORO_GAMEPLAY_SDK_FINGERPRINT
     "horo-${HORO_ENGINE_VERSION}-gameplay-sdk1-${CMAKE_CXX_COMPILER_ID}-${CMAKE_CXX_COMPILER_VERSION}-${CMAKE_SYSTEM_NAME}-${CMAKE_SYSTEM_PROCESSOR}"
 )
+set(HORO_EXTENSION_SDK_VERSION "${HORO_ENGINE_VERSION}")
+set(HORO_EXTENSION_ABI_MAJOR_VERSION 1)
+set(HORO_EXTENSION_ABI_PUBLISHED_MINOR 1)
+set(HORO_EXTENSION_ABI_MIN_HOST_MINOR 0)
+set(HORO_EXTENSION_ABI_MAX_HOST_MAJOR_EXCLUSIVE 2)
 
 # New project layout is being introduced incrementally. Legacy source is parked
 # under deprecated/ as migration reference and is intentionally not part of target
@@ -69,11 +74,13 @@ include(Dependencies)
 include(GenerateBuildInfo)
 find_package(Python3 REQUIRED COMPONENTS Interpreter)
 include(HoroGameplayModule)
+include(HoroExtensionSdk)
 include(GenerateProjectMigrations)
 include(GenerateProjectCompatibility)
 include(HoroTargetBoundaries)
 include(HoroDependencyDirection)
 
+horo_configure_extension_sdk()
 
 if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/src/CMakeLists.txt")
     add_subdirectory(src)
