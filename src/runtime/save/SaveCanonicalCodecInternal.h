@@ -9,6 +9,7 @@
 #include <ranges>
 #include <span>
 #include <type_traits>
+#include <vector>
 
 namespace Horo::Runtime::CanonicalCodecDetail {
     [[nodiscard]] inline bool ValidLimits(const CanonicalCodecLimits &value) noexcept {
@@ -48,4 +49,29 @@ namespace Horo::Runtime::CanonicalCodecDetail {
             depth = std::max(depth, value.StructuralDepth());
         return depth;
     }
+
+    template <typename Value, typename Less, typename Equal>
+    [[nodiscard]] std::vector<const Value *> OrderedUnique(const std::span<const Value> values, Less less, Equal equal, bool &duplicate) {
+        std::vector<const Value *> ordered;
+        ordered.reserve(values.size());
+        for (const auto &value : values)
+            ordered.push_back(&value);
+        std::ranges::sort(ordered, less);
+        duplicate = false;
+        for (std::size_t index = 1; index < ordered.size(); ++index) {
+            if (equal(*ordered[index - 1], *ordered[index])) {
+                duplicate = true;
+                break;
+            }
+        }
+        return ordered;
+    }
 }  // namespace Horo::Runtime::CanonicalCodecDetail
+
+namespace Horo::Runtime {
+    struct CanonicalPathNode final {
+        CanonicalFieldId field;
+        std::shared_ptr<const CanonicalPathNode> parent;
+        std::size_t depth{};
+    };
+}  // namespace Horo::Runtime

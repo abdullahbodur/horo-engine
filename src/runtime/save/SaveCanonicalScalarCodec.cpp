@@ -6,11 +6,17 @@
 #include <array>
 #include <bit>
 #include <cmath>
+#include <limits>
 #include <new>
 #include <ranges>
 #include <type_traits>
 
 namespace Horo::Runtime {
+    static_assert(sizeof(float) == sizeof(std::uint32_t) && std::numeric_limits<float>::is_iec559,
+                  "Canonical binary32 requires a 32-bit IEC 559 float.");
+    static_assert(sizeof(double) == sizeof(std::uint64_t) && std::numeric_limits<double>::is_iec559,
+                  "Canonical binary64 requires a 64-bit IEC 559 double.");
+
     template <typename Unsigned> Result<void> CanonicalValueWriter::WriteUnsigned(const Unsigned value) {
         return Append(CanonicalCodecDetail::ToLittleEndian(value));
     }
@@ -66,6 +72,8 @@ namespace Horo::Runtime {
 
     /** @copydoc CanonicalValueWriter::WriteFloat32 */
     Result<void> CanonicalValueWriter::WriteFloat32(float value) {
+        if (!CanonicalCodecDetail::ValidLimits(limits_))
+            return Fail(ErrorAt(SaveErrors::CanonicalCodecConfigurationInvalid));
         if (!std::isfinite(value))
             return Fail(ErrorAt(SaveErrors::CanonicalCodecNonFinite));
         if (value == 0)
@@ -75,6 +83,8 @@ namespace Horo::Runtime {
 
     /** @copydoc CanonicalValueWriter::WriteFloat64 */
     Result<void> CanonicalValueWriter::WriteFloat64(double value) {
+        if (!CanonicalCodecDetail::ValidLimits(limits_))
+            return Fail(ErrorAt(SaveErrors::CanonicalCodecConfigurationInvalid));
         if (!std::isfinite(value))
             return Fail(ErrorAt(SaveErrors::CanonicalCodecNonFinite));
         if (value == 0)
@@ -84,6 +94,8 @@ namespace Horo::Runtime {
 
     /** @copydoc CanonicalValueWriter::WriteUtf8 */
     Result<void> CanonicalValueWriter::WriteUtf8(const std::string_view value) {
+        if (!CanonicalCodecDetail::ValidLimits(limits_))
+            return Fail(ErrorAt(SaveErrors::CanonicalCodecConfigurationInvalid));
         if (value.size() > limits_.maximumStringBytes)
             return Fail(ErrorAt(SaveErrors::CanonicalCodecLimitExceeded));
         if (!IsValidUtf8ScalarSequence(value))
@@ -227,10 +239,11 @@ namespace Horo::Runtime {
         auto charged = Charge(size.Value());
         if (charged.HasError())
             return Result<std::vector<std::byte>>::Failure(charged.ErrorValue());
+        Error allocationFailure = ErrorAt(SaveErrors::CanonicalCodecAllocationFailed);
         try {
             return Result<std::vector<std::byte>>::Success({encoded.Value().begin(), encoded.Value().end()});
         } catch (const std::bad_alloc &) {
-            return Result<std::vector<std::byte>>::Failure(ErrorAt(SaveErrors::CanonicalCodecAllocationFailed));
+            return Result<std::vector<std::byte>>::Failure(std::move(allocationFailure));
         }
     }
 
@@ -238,16 +251,17 @@ namespace Horo::Runtime {
     Result<std::string> CanonicalValueReader::ReadUtf8() {
         auto bytes = ReadBytes(limits_.maximumStringBytes);
         if (bytes.HasError())
-            return Result<std::string>::Failure(bytes.ErrorValue());
+            return Result<std::string>::Failure(std::move(bytes).ErrorValue());
         auto charged = Charge(bytes.Value().size());
         if (charged.HasError())
             return Result<std::string>::Failure(charged.ErrorValue());
+        Error allocationFailure = ErrorAt(SaveErrors::CanonicalCodecAllocationFailed);
         try {
             std::string value{reinterpret_cast<const char *>(bytes.Value().data()), bytes.Value().size()};
             return IsValidUtf8ScalarSequence(value) ? Result<std::string>::Success(std::move(value))
                                                     : Result<std::string>::Failure(ErrorAt(SaveErrors::CanonicalCodecCorrupt));
         } catch (const std::bad_alloc &) {
-            return Result<std::string>::Failure(ErrorAt(SaveErrors::CanonicalCodecAllocationFailed));
+            return Result<std::string>::Failure(std::move(allocationFailure));
         }
     }
 

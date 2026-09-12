@@ -39,8 +39,6 @@ target_include_directories(HoroFoundation
         PRIVATE
         $<TARGET_PROPERTY:nlohmann_json::nlohmann_json,INTERFACE_INCLUDE_DIRECTORIES>
 )
-target_link_libraries(HoroFoundation PRIVATE utf8proc)
-
 add_library(HoroSecurity STATIC
         security/SecurityErrors.cpp
         security/SecureMemory.cpp

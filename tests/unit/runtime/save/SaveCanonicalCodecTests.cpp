@@ -151,7 +151,12 @@ namespace {
     TEST_CASE("Canonical fixed-width and math values round trip", "[runtime][save][canonical-codec]") {
         CanonicalValueWriter writer;
         REQUIRE(writer.WriteUInt8(std::numeric_limits<std::uint8_t>::max()).HasValue());
+        REQUIRE(writer.WriteUInt16(std::numeric_limits<std::uint16_t>::max()).HasValue());
+        REQUIRE(writer.WriteUInt32(std::numeric_limits<std::uint32_t>::max()).HasValue());
         REQUIRE(writer.WriteUInt64(std::numeric_limits<std::uint64_t>::max()).HasValue());
+        REQUIRE(writer.WriteInt8(std::numeric_limits<std::int8_t>::min()).HasValue());
+        REQUIRE(writer.WriteInt16(std::numeric_limits<std::int16_t>::min()).HasValue());
+        REQUIRE(writer.WriteInt32(std::numeric_limits<std::int32_t>::min()).HasValue());
         REQUIRE(writer.WriteInt64(std::numeric_limits<std::int64_t>::min()).HasValue());
         REQUIRE(writer.WriteVec3({1.0F, -2.0F, 3.5F}).HasValue());
         REQUIRE(writer.WriteQuaternion({0.0F, 0.5F, 0.0F, 0.5F}).HasValue());
@@ -159,7 +164,12 @@ namespace {
 
         auto reader = ReaderFor(encoded);
         CHECK(reader.ReadUInt8().Value() == std::numeric_limits<std::uint8_t>::max());
+        CHECK(reader.ReadUInt16().Value() == std::numeric_limits<std::uint16_t>::max());
+        CHECK(reader.ReadUInt32().Value() == std::numeric_limits<std::uint32_t>::max());
         CHECK(reader.ReadUInt64().Value() == std::numeric_limits<std::uint64_t>::max());
+        CHECK(reader.ReadInt8().Value() == std::numeric_limits<std::int8_t>::min());
+        CHECK(reader.ReadInt16().Value() == std::numeric_limits<std::int16_t>::min());
+        CHECK(reader.ReadInt32().Value() == std::numeric_limits<std::int32_t>::min());
         CHECK(reader.ReadInt64().Value() == std::numeric_limits<std::int64_t>::min());
         const Math::Vec3 expectedVector{1.0F, -2.0F, 3.5F};
         const Math::Quaternion expectedRotation{0.0F, 0.5F, 0.0F, 0.5F};
@@ -253,6 +263,101 @@ namespace {
         CHECK(decoded.ErrorValue().code.Value() == SaveErrors::CanonicalCodecLimitExceeded.code.Value());
     }
 
+    TEST_CASE("Canonical decoded-memory budget is shared across child readers", "[runtime][save][canonical-codec]") {
+        CanonicalValueWriter textWriter;
+        REQUIRE(textWriter.WriteUtf8("four").HasValue());
+        const auto text = Finish(std::move(textWriter));
+        const std::array children{text, text};
+        CanonicalValueWriter sequenceWriter;
+        REQUIRE(sequenceWriter.WriteSequence(children).HasValue());
+        const auto encoded = Finish(std::move(sequenceWriter));
+
+        CanonicalCodecLimits limits;
+        limits.maximumDecodedBytes = 2 * sizeof(CanonicalDecodedValue) + 8;
+        auto reader = ReaderFor(encoded, limits);
+        auto decoded = reader.ReadSequence();
+        REQUIRE(decoded.HasValue());
+        auto first = decoded.Value()[0].OpenReader();
+        REQUIRE(first.HasValue());
+        auto firstReader = std::move(first).Value();
+        CHECK(firstReader.ReadUtf8().HasValue());
+        auto second = decoded.Value()[1].OpenReader();
+        REQUIRE(second.HasValue());
+        auto secondReader = std::move(second).Value();
+        const auto exhausted = secondReader.ReadUtf8();
+        REQUIRE(exhausted.HasError());
+        CHECK(exhausted.ErrorValue().code.Value() == SaveErrors::CanonicalCodecLimitExceeded.code.Value());
+    }
+
+    TEST_CASE("Canonical collection readers reject forged counts before decoded allocation", "[runtime][save][canonical-codec]") {
+        const std::array forgedCount{std::byte{1}, std::byte{}, std::byte{}, std::byte{}};
+        CanonicalCodecLimits limits;
+        limits.maximumDecodedBytes = 1;
+        auto sequence = CanonicalValueReader::Create(forgedCount, limits);
+        auto set = CanonicalValueReader::Create(forgedCount, limits);
+        auto map = CanonicalValueReader::Create(forgedCount, limits);
+        auto record = CanonicalValueReader::Create(forgedCount, limits);
+        REQUIRE(sequence.HasValue());
+        REQUIRE(set.HasValue());
+        REQUIRE(map.HasValue());
+        REQUIRE(record.HasValue());
+        CHECK(std::move(sequence).Value().ReadSequence().ErrorValue().code.Value() == SaveErrors::CanonicalCodecCorrupt.code.Value());
+        CHECK(std::move(set).Value().ReadSet().ErrorValue().code.Value() == SaveErrors::CanonicalCodecCorrupt.code.Value());
+        CHECK(std::move(map).Value().ReadMap().ErrorValue().code.Value() == SaveErrors::CanonicalCodecCorrupt.code.Value());
+        CHECK(std::move(record).Value().ReadRecord().ErrorValue().code.Value() == SaveErrors::CanonicalCodecCorrupt.code.Value());
+    }
+
+    TEST_CASE("Canonical opaque bytes round trip with an explicit caller bound", "[runtime][save][canonical-codec]") {
+        const std::array bytes{std::byte{0x00}, std::byte{0x7f}, std::byte{0xff}};
+        CanonicalValueWriter writer;
+        REQUIRE(writer.WriteBytes(bytes).HasValue());
+        const auto encoded = Finish(std::move(writer));
+        auto reader = ReaderFor(encoded);
+        const auto decoded = reader.ReadBytes(bytes.size());
+        REQUIRE(decoded.HasValue());
+        CHECK(std::ranges::equal(decoded.Value(), bytes));
+    }
+
+    TEST_CASE("Canonical malformed UTF-8 and floating special values are corrupt wire", "[runtime][save][canonical-codec]") {
+        const std::array malformedUtf8{std::byte{2}, std::byte{}, std::byte{}, std::byte{}, std::byte{0xc0}, std::byte{0x80}};
+        auto utf8Reader = CanonicalValueReader::Create(malformedUtf8);
+        REQUIRE(utf8Reader.HasValue());
+        CHECK(std::move(utf8Reader).Value().ReadUtf8().ErrorValue().code.Value() == SaveErrors::CanonicalCodecCorrupt.code.Value());
+
+        const std::array negativeZero{std::byte{}, std::byte{}, std::byte{}, std::byte{0x80}};
+        auto negativeZeroReader = CanonicalValueReader::Create(negativeZero);
+        REQUIRE(negativeZeroReader.HasValue());
+        CHECK(std::move(negativeZeroReader).Value().ReadFloat32().ErrorValue().code.Value() ==
+              SaveErrors::CanonicalCodecCorrupt.code.Value());
+
+        CanonicalValueWriter writer;
+        CHECK(writer.WriteFloat64(std::numeric_limits<double>::infinity()).HasError());
+    }
+
+    TEST_CASE("Canonical field context is fallible and shared by nested diagnostics", "[runtime][save][canonical-codec]") {
+        auto outerResult = CanonicalValueWriter{}.ForField(Field(3));
+        REQUIRE(outerResult.HasValue());
+        auto outer = std::move(outerResult).Value();
+        auto innerResult = outer.ForField(Field(7));
+        REQUIRE(innerResult.HasValue());
+        auto inner = std::move(innerResult).Value();
+        const auto failure = inner.WriteFloat32(std::numeric_limits<float>::quiet_NaN());
+        REQUIRE(failure.HasError());
+        REQUIRE(failure.ErrorValue().diagnostics.size() == 1);
+        CHECK(failure.ErrorValue().diagnostics[0].location.source == "canonical/field:3/field:7");
+
+        const std::array fields{CanonicalRecordField{Field(1), EncodeUInt32(7)}};
+        CanonicalValueWriter recordWriter;
+        REQUIRE(recordWriter.WriteRecord(fields).HasValue());
+        const auto encoded = Finish(std::move(recordWriter));
+        CanonicalCodecLimits limits;
+        limits.maximumDecodedBytes = sizeof(CanonicalDecodedField);
+        auto reader = ReaderFor(encoded, limits);
+        const auto decoded = reader.ReadRecord();
+        REQUIRE(decoded.HasError());
+        CHECK(decoded.ErrorValue().code.Value() == SaveErrors::CanonicalCodecLimitExceeded.code.Value());
+    }
+
     TEST_CASE("Canonical reader reports exact byte offsets and corruption category", "[runtime][save][canonical-codec]") {
         const std::array truncated{std::byte{2}, std::byte{0}, std::byte{0}, std::byte{0}, std::byte{'a'}};
         auto created = CanonicalValueReader::Create(truncated);
@@ -326,6 +431,14 @@ namespace {
         const auto invalid = CanonicalValueReader::Create({}, invalidLimits);
         REQUIRE(invalid.HasError());
         CHECK(invalid.ErrorValue().code.Value() == SaveErrors::CanonicalCodecConfigurationInvalid.code.Value());
+
+        CanonicalValueWriter invalidWriter{invalidLimits};
+        const auto invalidFloat = invalidWriter.WriteFloat32(std::numeric_limits<float>::quiet_NaN());
+        REQUIRE(invalidFloat.HasError());
+        CHECK(invalidFloat.ErrorValue().code.Value() == SaveErrors::CanonicalCodecConfigurationInvalid.code.Value());
+        CanonicalValueWriter invalidFieldWriter{invalidLimits};
+        CHECK(invalidFieldWriter.ForField(Field(1)).ErrorValue().code.Value() ==
+              SaveErrors::CanonicalCodecConfigurationInvalid.code.Value());
 
         const std::array invalidBool{std::byte{2}};
         auto boolReader = CanonicalValueReader::Create(invalidBool);

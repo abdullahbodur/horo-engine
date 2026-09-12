@@ -7,7 +7,7 @@
 #include <vector>
 
 namespace Horo::Runtime {
-    Result<CanonicalDecodedValue> CanonicalValueReader::ReadChild(std::vector<CanonicalFieldId> path) {
+    Result<CanonicalDecodedValue> CanonicalValueReader::ReadChild(std::shared_ptr<const CanonicalPathNode> path) {
         auto size = ReadLength(limits_.maximumBytes);
         if (size.HasError())
             return Result<CanonicalDecodedValue>::Failure(size.ErrorValue());
@@ -25,9 +25,10 @@ namespace Horo::Runtime {
         auto count = ReadLength(limits_.maximumCollectionElements);
         if (count.HasError())
             return Result<std::vector<CanonicalDecodedValue>>::Failure(count.ErrorValue());
-        auto charged = ChargeElements(count.Value(), sizeof(CanonicalDecodedValue));
+        auto charged = AdmitElements(count.Value(), sizeof(CanonicalDecodedValue), sizeof(std::uint32_t));
         if (charged.HasError())
             return Result<std::vector<CanonicalDecodedValue>>::Failure(charged.ErrorValue());
+        Error allocationFailure = ErrorAt(SaveErrors::CanonicalCodecAllocationFailed);
         try {
             std::vector<CanonicalDecodedValue> values;
             values.reserve(count.Value());
@@ -39,7 +40,7 @@ namespace Horo::Runtime {
             }
             return Result<std::vector<CanonicalDecodedValue>>::Success(std::move(values));
         } catch (const std::bad_alloc &) {
-            return Result<std::vector<CanonicalDecodedValue>>::Failure(ErrorAt(SaveErrors::CanonicalCodecAllocationFailed));
+            return Result<std::vector<CanonicalDecodedValue>>::Failure(std::move(allocationFailure));
         }
     }
 
@@ -53,12 +54,13 @@ namespace Horo::Runtime {
             return Result<std::optional<CanonicalDecodedValue>>::Failure(present.ErrorValue());
         if (!present.Value())
             return Result<std::optional<CanonicalDecodedValue>>::Success(std::nullopt);
+        Error allocationFailure = ErrorAt(SaveErrors::CanonicalCodecAllocationFailed);
         try {
             auto value = ReadChild(path_);
             return value.HasError() ? Result<std::optional<CanonicalDecodedValue>>::Failure(value.ErrorValue())
                                     : Result<std::optional<CanonicalDecodedValue>>::Success(std::move(value).Value());
         } catch (const std::bad_alloc &) {
-            return Result<std::optional<CanonicalDecodedValue>>::Failure(ErrorAt(SaveErrors::CanonicalCodecAllocationFailed));
+            return Result<std::optional<CanonicalDecodedValue>>::Failure(std::move(allocationFailure));
         }
     }
 
@@ -72,13 +74,14 @@ namespace Horo::Runtime {
             return Result<std::pair<std::uint32_t, CanonicalDecodedValue>>::Failure(index.ErrorValue());
         if (!alternativeCount || index.Value() >= alternativeCount)
             return Result<std::pair<std::uint32_t, CanonicalDecodedValue>>::Failure(ErrorAt(SaveErrors::CanonicalCodecCorrupt));
+        Error allocationFailure = ErrorAt(SaveErrors::CanonicalCodecAllocationFailed);
         try {
             auto value = ReadChild(path_);
             return value.HasError()
                        ? Result<std::pair<std::uint32_t, CanonicalDecodedValue>>::Failure(value.ErrorValue())
                        : Result<std::pair<std::uint32_t, CanonicalDecodedValue>>::Success({index.Value(), std::move(value).Value()});
         } catch (const std::bad_alloc &) {
-            return Result<std::pair<std::uint32_t, CanonicalDecodedValue>>::Failure(ErrorAt(SaveErrors::CanonicalCodecAllocationFailed));
+            return Result<std::pair<std::uint32_t, CanonicalDecodedValue>>::Failure(std::move(allocationFailure));
         }
     }
 
@@ -90,9 +93,10 @@ namespace Horo::Runtime {
         auto count = ReadLength(limits_.maximumCollectionElements);
         if (count.HasError())
             return Result<std::vector<CanonicalDecodedMapEntry>>::Failure(count.ErrorValue());
-        auto charged = ChargeElements(count.Value(), sizeof(CanonicalDecodedMapEntry));
+        auto charged = AdmitElements(count.Value(), sizeof(CanonicalDecodedMapEntry), 2 * sizeof(std::uint32_t));
         if (charged.HasError())
             return Result<std::vector<CanonicalDecodedMapEntry>>::Failure(charged.ErrorValue());
+        Error allocationFailure = ErrorAt(SaveErrors::CanonicalCodecAllocationFailed);
         try {
             std::vector<CanonicalDecodedMapEntry> entries;
             entries.reserve(count.Value());
@@ -109,7 +113,7 @@ namespace Horo::Runtime {
             }
             return Result<std::vector<CanonicalDecodedMapEntry>>::Success(std::move(entries));
         } catch (const std::bad_alloc &) {
-            return Result<std::vector<CanonicalDecodedMapEntry>>::Failure(ErrorAt(SaveErrors::CanonicalCodecAllocationFailed));
+            return Result<std::vector<CanonicalDecodedMapEntry>>::Failure(std::move(allocationFailure));
         }
     }
 
@@ -121,9 +125,10 @@ namespace Horo::Runtime {
         auto count = ReadLength(limits_.maximumCollectionElements);
         if (count.HasError())
             return Result<std::vector<CanonicalDecodedValue>>::Failure(count.ErrorValue());
-        auto charged = ChargeElements(count.Value(), sizeof(CanonicalDecodedValue));
+        auto charged = AdmitElements(count.Value(), sizeof(CanonicalDecodedValue), sizeof(std::uint32_t));
         if (charged.HasError())
             return Result<std::vector<CanonicalDecodedValue>>::Failure(charged.ErrorValue());
+        Error allocationFailure = ErrorAt(SaveErrors::CanonicalCodecAllocationFailed);
         try {
             std::vector<CanonicalDecodedValue> values;
             values.reserve(count.Value());
@@ -137,7 +142,7 @@ namespace Horo::Runtime {
             }
             return Result<std::vector<CanonicalDecodedValue>>::Success(std::move(values));
         } catch (const std::bad_alloc &) {
-            return Result<std::vector<CanonicalDecodedValue>>::Failure(ErrorAt(SaveErrors::CanonicalCodecAllocationFailed));
+            return Result<std::vector<CanonicalDecodedValue>>::Failure(std::move(allocationFailure));
         }
     }
 
@@ -149,9 +154,10 @@ namespace Horo::Runtime {
         auto count = ReadLength(limits_.maximumFields);
         if (count.HasError())
             return Result<std::vector<CanonicalDecodedField>>::Failure(count.ErrorValue());
-        auto charged = ChargeElements(count.Value(), sizeof(CanonicalDecodedField));
+        auto charged = AdmitElements(count.Value(), sizeof(CanonicalDecodedField), 2 * sizeof(std::uint32_t));
         if (charged.HasError())
             return Result<std::vector<CanonicalDecodedField>>::Failure(charged.ErrorValue());
+        Error allocationFailure = ErrorAt(SaveErrors::CanonicalCodecAllocationFailed);
         try {
             std::vector<CanonicalDecodedField> fields;
             fields.reserve(count.Value());
@@ -162,8 +168,10 @@ namespace Horo::Runtime {
                 auto id = CanonicalFieldId::Create(rawId.Value());
                 if (id.HasError() || (!fields.empty() && !(fields.back().id < id.Value())))
                     return Result<std::vector<CanonicalDecodedField>>::Failure(ErrorAt(SaveErrors::CanonicalCodecCorrupt));
-                auto childPath = path_;
-                childPath.push_back(id.Value());
+                auto pathCharge = Charge(sizeof(CanonicalPathNode));
+                if (pathCharge.HasError())
+                    return Result<std::vector<CanonicalDecodedField>>::Failure(pathCharge.ErrorValue());
+                auto childPath = std::make_shared<CanonicalPathNode>(CanonicalPathNode{id.Value(), path_, path_ ? path_->depth + 1 : 1});
                 auto value = ReadChild(std::move(childPath));
                 if (value.HasError())
                     return Result<std::vector<CanonicalDecodedField>>::Failure(value.ErrorValue());
@@ -171,7 +179,7 @@ namespace Horo::Runtime {
             }
             return Result<std::vector<CanonicalDecodedField>>::Success(std::move(fields));
         } catch (const std::bad_alloc &) {
-            return Result<std::vector<CanonicalDecodedField>>::Failure(ErrorAt(SaveErrors::CanonicalCodecAllocationFailed));
+            return Result<std::vector<CanonicalDecodedField>>::Failure(std::move(allocationFailure));
         }
     }
 }  // namespace Horo::Runtime

@@ -21,6 +21,7 @@
 namespace Horo::Runtime {
     class CanonicalValueReader;
     struct CanonicalReadState;
+    struct CanonicalPathNode;
 
     /** @brief Stable nonzero numeric record-field identity. */
     class CanonicalFieldId final {
@@ -84,14 +85,14 @@ namespace Horo::Runtime {
         friend class CanonicalValueReader;
 
         CanonicalDecodedValue(std::span<const std::byte> bytes, CanonicalCodecLimits limits, std::shared_ptr<CanonicalReadState> state,
-                              std::size_t depth, std::vector<CanonicalFieldId> path)
+                              std::size_t depth, std::shared_ptr<const CanonicalPathNode> path)
             : bytes_(bytes), limits_(limits), state_(std::move(state)), depth_(depth), path_(std::move(path)) {}
 
         std::span<const std::byte> bytes_;
         CanonicalCodecLimits limits_;
         std::shared_ptr<CanonicalReadState> state_;
         std::size_t depth_{};
-        std::vector<CanonicalFieldId> path_;
+        std::shared_ptr<const CanonicalPathNode> path_;
     };
 
     /** @brief One sealed field supplied to deterministic record encoding. */
@@ -123,9 +124,9 @@ namespace Horo::Runtime {
     public:
         /** @brief Creates an empty sticky-failure writer. @param limits Trusted nonzero codec bounds. */
         explicit CanonicalValueWriter(CanonicalCodecLimits limits = {});
-        /** @brief Creates a writer whose diagnostics append one field identity. @param field Stable field identity. @return Child writer.
-         */
-        [[nodiscard]] CanonicalValueWriter ForField(CanonicalFieldId field) const;
+        /** @brief Creates a writer whose diagnostics append one field identity. @param field Stable field identity. @return Child writer
+         * or typed configuration/allocation failure. */
+        [[nodiscard]] Result<CanonicalValueWriter> ForField(CanonicalFieldId field) const;
         /** @brief Writes a canonical zero-or-one boolean. @param value Value to append. @return Success or typed failure. */
         [[nodiscard]] Result<void> WriteBool(bool value);
         /** @brief Writes an unsigned fixed-width scalar. @param value Value to append. @return Success or typed failure. */
@@ -179,7 +180,7 @@ namespace Horo::Runtime {
         [[nodiscard]] Result<CanonicalEncodedValue> Finalize() &&;
 
     private:
-        CanonicalValueWriter(CanonicalCodecLimits limits, std::vector<CanonicalFieldId> path);
+        CanonicalValueWriter(CanonicalCodecLimits limits, std::shared_ptr<const CanonicalPathNode> path);
         [[nodiscard]] Result<void> Append(std::span<const std::byte> value);
         [[nodiscard]] Result<void> AppendLengthDelimited(std::span<const std::byte> value);
         [[nodiscard]] Result<void> CommitStaged(CanonicalValueWriter &&staging);
@@ -190,10 +191,10 @@ namespace Horo::Runtime {
         template <typename Unsigned> [[nodiscard]] Result<void> WriteUnsigned(Unsigned value);
         template <typename Signed> [[nodiscard]] Result<void> WriteSigned(Signed value);
         CanonicalCodecLimits limits_;
-        std::vector<CanonicalFieldId> path_;
+        std::shared_ptr<const CanonicalPathNode> path_;
         std::vector<std::byte> bytes_;
         std::size_t structuralDepth_{};
-        std::optional<Error> failure_;
+        const ErrorCodeDescriptor *failure_{};
     };
 
     /** @brief Reader sharing memory admission and structural depth across child values. */
@@ -262,12 +263,13 @@ namespace Horo::Runtime {
     private:
         friend class CanonicalDecodedValue;
         CanonicalValueReader(std::span<const std::byte> bytes, CanonicalCodecLimits limits, std::shared_ptr<CanonicalReadState> state,
-                             std::size_t depth, std::vector<CanonicalFieldId> path);
+                             std::size_t depth, std::shared_ptr<const CanonicalPathNode> path);
         [[nodiscard]] Result<std::size_t> ReadLength(std::size_t maximum);
-        [[nodiscard]] Result<CanonicalDecodedValue> ReadChild(std::vector<CanonicalFieldId> path);
+        [[nodiscard]] Result<CanonicalDecodedValue> ReadChild(std::shared_ptr<const CanonicalPathNode> path);
         [[nodiscard]] Result<void> AdmitComposite() const;
         [[nodiscard]] Result<void> Charge(std::size_t bytes);
         [[nodiscard]] Result<void> ChargeElements(std::size_t count, std::size_t elementSize);
+        [[nodiscard]] Result<void> AdmitElements(std::size_t count, std::size_t elementSize, std::size_t minimumWireBytesPerElement);
         [[nodiscard]] Error ErrorAt(const ErrorCodeDescriptor &descriptor) const;
         [[nodiscard]] Result<void> ReadFloatComponents(std::span<float> components);
         template <typename Unsigned> [[nodiscard]] Result<Unsigned> ReadUnsigned();
@@ -276,7 +278,7 @@ namespace Horo::Runtime {
         CanonicalCodecLimits limits_;
         std::shared_ptr<CanonicalReadState> state_;
         std::size_t depth_{};
-        std::vector<CanonicalFieldId> path_;
+        std::shared_ptr<const CanonicalPathNode> path_;
         std::size_t offset_{};
     };
 }  // namespace Horo::Runtime

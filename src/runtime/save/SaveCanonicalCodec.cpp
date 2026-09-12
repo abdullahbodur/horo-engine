@@ -4,6 +4,7 @@
 #include "SaveCanonicalCodecInternal.h"
 
 #include <algorithm>
+#include <array>
 #include <limits>
 #include <new>
 #include <string>
@@ -14,6 +15,31 @@ namespace Horo::Runtime {
         std::size_t decodedBytes{};
     };
 
+    namespace {
+        void AppendPath(std::string &source, const CanonicalPathNode *node) {
+            if (!node)
+                return;
+            AppendPath(source, node->parent.get());
+            source += "/field:" + std::to_string(node->field.Value());
+        }
+
+        const ErrorCodeDescriptor &DescriptorFor(const Error &error) noexcept {
+            const std::array descriptors{&SaveErrors::CanonicalCodecInvalid,
+                                         &SaveErrors::CanonicalCodecCorrupt,
+                                         &SaveErrors::CanonicalCodecLimitExceeded,
+                                         &SaveErrors::CanonicalCodecDuplicate,
+                                         &SaveErrors::CanonicalCodecNonFinite,
+                                         &SaveErrors::CanonicalCodecUtf8Invalid,
+                                         &SaveErrors::CanonicalCodecConfigurationInvalid,
+                                         &SaveErrors::CanonicalCodecAllocationFailed};
+            for (const auto *descriptor : descriptors) {
+                if (error.code.Value() == descriptor->code.Value())
+                    return *descriptor;
+            }
+            return SaveErrors::CanonicalCodecInvalid;
+        }
+    }  // namespace
+
     /** @copydoc CanonicalFieldId::Create */
     Result<CanonicalFieldId> CanonicalFieldId::Create(const ValueType value) {
         return value ? Result<CanonicalFieldId>::Success(CanonicalFieldId{value})
@@ -23,21 +49,29 @@ namespace Horo::Runtime {
     /** @copydoc CanonicalValueWriter::CanonicalValueWriter */
     CanonicalValueWriter::CanonicalValueWriter(const CanonicalCodecLimits limits) : limits_(limits) {}
 
-    CanonicalValueWriter::CanonicalValueWriter(const CanonicalCodecLimits limits, std::vector<CanonicalFieldId> path)
+    CanonicalValueWriter::CanonicalValueWriter(const CanonicalCodecLimits limits, std::shared_ptr<const CanonicalPathNode> path)
         : limits_(limits), path_(std::move(path)) {}
 
     /** @copydoc CanonicalValueWriter::ForField */
-    CanonicalValueWriter CanonicalValueWriter::ForField(const CanonicalFieldId field) const {
-        auto path = path_;
-        path.push_back(field);
-        return CanonicalValueWriter{limits_, std::move(path)};
+    Result<CanonicalValueWriter> CanonicalValueWriter::ForField(const CanonicalFieldId field) const {
+        if (!CanonicalCodecDetail::ValidLimits(limits_))
+            return Result<CanonicalValueWriter>::Failure(ErrorAt(SaveErrors::CanonicalCodecConfigurationInvalid));
+        const std::size_t depth = path_ ? path_->depth + 1 : 1;
+        if (depth > limits_.maximumNestingDepth)
+            return Result<CanonicalValueWriter>::Failure(ErrorAt(SaveErrors::CanonicalCodecLimitExceeded));
+        Error allocationFailure = ErrorAt(SaveErrors::CanonicalCodecAllocationFailed);
+        try {
+            auto path = std::make_shared<CanonicalPathNode>(CanonicalPathNode{field, path_, depth});
+            return Result<CanonicalValueWriter>::Success(CanonicalValueWriter{limits_, std::move(path)});
+        } catch (const std::bad_alloc &) {
+            return Result<CanonicalValueWriter>::Failure(std::move(allocationFailure));
+        }
     }
 
     Error CanonicalValueWriter::ErrorAt(const ErrorCodeDescriptor &descriptor) const {
         Error error = MakeError(descriptor);
         std::string source{"canonical"};
-        for (const auto field : path_)
-            source += "/field:" + std::to_string(field.Value());
+        AppendPath(source, path_.get());
         error.diagnostics.push_back(
             {DiagnosticCode{"save.canonical_codec.location"},
              DiagnosticSeverity::Error,
@@ -48,23 +82,25 @@ namespace Horo::Runtime {
     }
 
     Result<void> CanonicalValueWriter::Fail(Error error) {
-        if (!failure_)
-            failure_ = std::move(error);
-        return Result<void>::Failure(*failure_);
+        if (failure_)
+            return Result<void>::Failure(ErrorAt(*failure_));
+        failure_ = &DescriptorFor(error);
+        return Result<void>::Failure(std::move(error));
     }
 
     Result<void> CanonicalValueWriter::Append(const std::span<const std::byte> value) {
         if (failure_)
-            return Result<void>::Failure(*failure_);
+            return Result<void>::Failure(ErrorAt(*failure_));
         if (!CanonicalCodecDetail::ValidLimits(limits_))
             return Fail(ErrorAt(SaveErrors::CanonicalCodecConfigurationInvalid));
         if (value.size() > limits_.maximumBytes || bytes_.size() > limits_.maximumBytes - value.size())
             return Fail(ErrorAt(SaveErrors::CanonicalCodecLimitExceeded));
+        Error allocationFailure = ErrorAt(SaveErrors::CanonicalCodecAllocationFailed);
         try {
             bytes_.insert(bytes_.end(), value.begin(), value.end());
             return Result<void>::Success();
         } catch (const std::bad_alloc &) {
-            return Fail(ErrorAt(SaveErrors::CanonicalCodecAllocationFailed));
+            return Fail(std::move(allocationFailure));
         }
     }
 
@@ -80,6 +116,8 @@ namespace Horo::Runtime {
     }
 
     Result<void> CanonicalValueWriter::AdmitComposite(const std::size_t childDepth) {
+        if (failure_)
+            return Result<void>::Failure(ErrorAt(*failure_));
         if (!CanonicalCodecDetail::ValidLimits(limits_))
             return Fail(ErrorAt(SaveErrors::CanonicalCodecConfigurationInvalid));
         if (childDepth >= limits_.maximumNestingDepth)
@@ -91,7 +129,7 @@ namespace Horo::Runtime {
     /** @copydoc CanonicalValueWriter::Finalize */
     Result<CanonicalEncodedValue> CanonicalValueWriter::Finalize() && {
         if (failure_)
-            return Result<CanonicalEncodedValue>::Failure(*failure_);
+            return Result<CanonicalEncodedValue>::Failure(ErrorAt(*failure_));
         if (!CanonicalCodecDetail::ValidLimits(limits_))
             return Result<CanonicalEncodedValue>::Failure(ErrorAt(SaveErrors::CanonicalCodecConfigurationInvalid));
         return Result<CanonicalEncodedValue>::Success(CanonicalEncodedValue{std::move(bytes_), structuralDepth_});
@@ -99,7 +137,7 @@ namespace Horo::Runtime {
 
     CanonicalValueReader::CanonicalValueReader(std::span<const std::byte> bytes, CanonicalCodecLimits limits,
                                                std::shared_ptr<CanonicalReadState> state, const std::size_t depth,
-                                               std::vector<CanonicalFieldId> path)
+                                               std::shared_ptr<const CanonicalPathNode> path)
         : bytes_(bytes), limits_(limits), state_(std::move(state)), depth_(depth), path_(std::move(path)) {}
 
     /** @copydoc CanonicalValueReader::Create */
@@ -108,28 +146,24 @@ namespace Horo::Runtime {
             return Result<CanonicalValueReader>::Failure(MakeError(SaveErrors::CanonicalCodecConfigurationInvalid));
         if (bytes.size() > limits.maximumBytes)
             return Result<CanonicalValueReader>::Failure(MakeError(SaveErrors::CanonicalCodecLimitExceeded));
+        Error allocationFailure = MakeError(SaveErrors::CanonicalCodecAllocationFailed);
         try {
             return Result<CanonicalValueReader>::Success(
                 CanonicalValueReader{bytes, limits, std::make_shared<CanonicalReadState>(), 0, {}});
         } catch (const std::bad_alloc &) {
-            return Result<CanonicalValueReader>::Failure(MakeError(SaveErrors::CanonicalCodecAllocationFailed));
+            return Result<CanonicalValueReader>::Failure(std::move(allocationFailure));
         }
     }
 
     /** @copydoc CanonicalDecodedValue::OpenReader */
     Result<CanonicalValueReader> CanonicalDecodedValue::OpenReader() const {
-        try {
-            return Result<CanonicalValueReader>::Success(CanonicalValueReader{bytes_, limits_, state_, depth_, path_});
-        } catch (const std::bad_alloc &) {
-            return Result<CanonicalValueReader>::Failure(MakeError(SaveErrors::CanonicalCodecAllocationFailed));
-        }
+        return Result<CanonicalValueReader>::Success(CanonicalValueReader{bytes_, limits_, state_, depth_, path_});
     }
 
     Error CanonicalValueReader::ErrorAt(const ErrorCodeDescriptor &descriptor) const {
         Error error = MakeError(descriptor);
         std::string source{"canonical"};
-        for (const auto field : path_)
-            source += "/field:" + std::to_string(field.Value());
+        AppendPath(source, path_.get());
         error.diagnostics.push_back(
             {DiagnosticCode{"save.canonical_codec.location"},
              DiagnosticSeverity::Error,
@@ -150,6 +184,14 @@ namespace Horo::Runtime {
         if (elementSize != 0 && count > std::numeric_limits<std::size_t>::max() / elementSize)
             return Result<void>::Failure(ErrorAt(SaveErrors::CanonicalCodecLimitExceeded));
         return Charge(count * elementSize);
+    }
+
+    Result<void> CanonicalValueReader::AdmitElements(const std::size_t count, const std::size_t elementSize,
+                                                     const std::size_t minimumWireBytesPerElement) {
+        const std::size_t remainingBytes = offset_ <= bytes_.size() ? bytes_.size() - offset_ : 0;
+        if (minimumWireBytesPerElement != 0 && count > remainingBytes / minimumWireBytesPerElement)
+            return Result<void>::Failure(ErrorAt(SaveErrors::CanonicalCodecCorrupt));
+        return ChargeElements(count, elementSize);
     }
 
     Result<void> CanonicalValueReader::AdmitComposite() const {
