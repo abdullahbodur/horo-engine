@@ -23,15 +23,9 @@ namespace Horo::Navigation {
         using TestSupport::Id;
         using TestSupport::RequireError;
 
-        struct OwnedContribution final {
+        struct OwnedContribution final : TestSupport::OwnedTriangleContribution {
             NavigationSourceProducerKind kind{NavigationSourceProducerKind::StaticCollider};
-            NavigationSourceProducerId producer{Id<NavigationSourceProducerId>(1)};
-            NavigationSourceContributionId contribution{Id<NavigationSourceContributionId>(1)};
-            NavigationSourceRevision revision{Id<NavigationSourceRevision>(1)};
-            Sha256Digest digest{Digest(1)};
             Math::Transform transform{};
-            std::vector<Math::Vec3> vertices{TestSupport::UnitTriangleVertices()};
-            std::vector<NavigationSourceTriangleInput> triangles{TestSupport::UnitTriangle(Id<NavigationAreaId>(1), 7)};
 
             [[nodiscard]] NavigationSourceContributionInput View() const {
                 return {

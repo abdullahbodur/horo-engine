@@ -30,6 +30,15 @@ namespace Horo::Navigation::TestSupport {
         return {{.vertexIndices = {0, 1, 2}, .area = area, .materialSlot = {.value = materialSlot}}};
     }
 
+    struct OwnedTriangleContribution {
+        NavigationSourceProducerId producer{Id<NavigationSourceProducerId>(1)};
+        NavigationSourceContributionId contribution{Id<NavigationSourceContributionId>(1)};
+        NavigationSourceRevision revision{Id<NavigationSourceRevision>(1)};
+        Sha256Digest digest{Digest(1)};
+        std::vector<Math::Vec3> vertices{UnitTriangleVertices()};
+        std::vector<NavigationSourceTriangleInput> triangles{UnitTriangle(Id<NavigationAreaId>(1), 7)};
+    };
+
     template <typename T> void RequireError(const Result<T> &result, const ErrorCodeDescriptor &expected) {
         REQUIRE(result.HasError());
         REQUIRE(result.ErrorValue().domain.Value() == expected.domain.Value());

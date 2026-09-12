@@ -34,14 +34,7 @@ namespace Horo::Navigation {
                     .geometry = Id<NavigationSourceSnapshotRevision>(7)};
         }
 
-        struct OwnedContribution final {
-            NavigationSourceProducerId producer{Id<NavigationSourceProducerId>(1)};
-            NavigationSourceContributionId contribution{Id<NavigationSourceContributionId>(1)};
-            NavigationSourceRevision revision{Id<NavigationSourceRevision>(1)};
-            Sha256Digest digest{Digest(1)};
-            std::vector<Math::Vec3> vertices{TestSupport::UnitTriangleVertices()};
-            std::vector<NavigationSourceTriangleInput> triangles{TestSupport::UnitTriangle(Id<NavigationAreaId>(1), 7)};
-
+        struct OwnedContribution final : TestSupport::OwnedTriangleContribution {
             [[nodiscard]] NavigationSourceContributionInput View() const {
                 return {.producer = producer,
                         .contribution = contribution,
