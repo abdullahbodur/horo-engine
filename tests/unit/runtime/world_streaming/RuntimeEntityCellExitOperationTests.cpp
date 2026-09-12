@@ -13,6 +13,13 @@ namespace Horo::WorldStreaming {
         using TestSupport::RequireError;
         using TestSupport::World;
 
+        constexpr auto InterruptionCases = std::to_array<std::pair<RuntimeEntityCellExitTransition, RuntimeEntityCellExitOutcome>>({
+            {RuntimeEntityCellExitTransition::Cancel, RuntimeEntityCellExitOutcome::Cancelled},
+            {RuntimeEntityCellExitTransition::Fail, RuntimeEntityCellExitOutcome::Failed},
+            {RuntimeEntityCellExitTransition::Replace, RuntimeEntityCellExitOutcome::Replaced},
+            {RuntimeEntityCellExitTransition::Shutdown, RuntimeEntityCellExitOutcome::Shutdown},
+        });
+
         [[nodiscard]] StreamingRuntimeOwnerToken WorldOwner(const std::uint64_t epoch = 3) {
             return {
                 .partition = World(),
@@ -103,6 +110,20 @@ namespace Horo::WorldStreaming {
             return operation.Advance(operation.Handle(), transition).Value();
         }
 
+        [[nodiscard]] RuntimeEntityCellExitOperation AdmittedHandoff() {
+            const auto request = HandoffRequest();
+            auto operation = RuntimeEntityCellExitOperation::Create(request, Context(request.sourceOwnership)).Value();
+            return Advance(std::move(operation), RuntimeEntityCellExitTransition::Admit);
+        }
+
+        [[nodiscard]] RuntimeEntityCellExitOperation PreparedHandoff() {
+            return Advance(AdmittedHandoff(), RuntimeEntityCellExitTransition::BeginDestinationPreparation);
+        }
+
+        [[nodiscard]] RuntimeEntityCellExitOperation AcceptedHandoff() {
+            return Advance(PreparedHandoff(), RuntimeEntityCellExitTransition::AcceptDestination);
+        }
+
         TEST_CASE("Runtime entity retires only through the exact source-cell transaction",
                   "[unit][world_streaming][runtime_entity_cell_exit][retire]") {
             const auto request = RetireRequest();
@@ -125,15 +146,9 @@ namespace Horo::WorldStreaming {
 
         TEST_CASE("Required handoff accepts an exact ownership successor before source retirement",
                   "[unit][world_streaming][runtime_entity_cell_exit][handoff]") {
-            const auto request = HandoffRequest();
-            auto operation = RuntimeEntityCellExitOperation::Create(request, Context(request.sourceOwnership)).Value();
+            auto operation = AcceptedHandoff();
             REQUIRE(operation.Disposition() == RuntimeEntityCellExitDisposition::Handoff);
-            REQUIRE(operation.DestinationOwnership() == request.destination);
-
-            operation = Advance(std::move(operation), RuntimeEntityCellExitTransition::Admit);
-            operation = Advance(std::move(operation), RuntimeEntityCellExitTransition::BeginDestinationPreparation);
-            REQUIRE_FALSE(operation.IsCommitted());
-            operation = Advance(std::move(operation), RuntimeEntityCellExitTransition::AcceptDestination);
+            REQUIRE(operation.DestinationOwnership() == HandoffRequest().destination);
             REQUIRE(operation.State() == RuntimeEntityCellExitState::DestinationAccepted);
             REQUIRE_FALSE(operation.IsCommitted());
             operation = Advance(std::move(operation), RuntimeEntityCellExitTransition::BeginSourceRetirement);
@@ -215,17 +230,8 @@ namespace Horo::WorldStreaming {
 
         TEST_CASE("Pre-commit interruption preserves the source and rolls back only prepared destination work",
                   "[unit][world_streaming][runtime_entity_cell_exit][rollback]") {
-            constexpr auto cases = std::to_array<std::pair<RuntimeEntityCellExitTransition, RuntimeEntityCellExitOutcome>>({
-                {RuntimeEntityCellExitTransition::Cancel, RuntimeEntityCellExitOutcome::Cancelled},
-                {RuntimeEntityCellExitTransition::Fail, RuntimeEntityCellExitOutcome::Failed},
-                {RuntimeEntityCellExitTransition::Replace, RuntimeEntityCellExitOutcome::Replaced},
-                {RuntimeEntityCellExitTransition::Shutdown, RuntimeEntityCellExitOutcome::Shutdown},
-            });
-            const auto request = HandoffRequest();
-            for (const auto [transition, outcome] : cases) {
-                auto operation = RuntimeEntityCellExitOperation::Create(request, Context(request.sourceOwnership)).Value();
-                operation = Advance(std::move(operation), RuntimeEntityCellExitTransition::Admit);
-                operation = Advance(std::move(operation), RuntimeEntityCellExitTransition::BeginDestinationPreparation);
+            for (const auto [transition, outcome] : InterruptionCases) {
+                auto operation = PreparedHandoff();
                 const auto uninterrupted = operation;
                 operation = Advance(std::move(operation), transition);
                 REQUIRE(operation.State() == RuntimeEntityCellExitState::RollingBackDestination);
@@ -240,21 +246,14 @@ namespace Horo::WorldStreaming {
 
         TEST_CASE("Interruption before destination resources exist terminates without a false rollback barrier",
                   "[unit][world_streaming][runtime_entity_cell_exit][cancellation]") {
-            constexpr auto cases = std::to_array<std::pair<RuntimeEntityCellExitTransition, RuntimeEntityCellExitOutcome>>({
-                {RuntimeEntityCellExitTransition::Cancel, RuntimeEntityCellExitOutcome::Cancelled},
-                {RuntimeEntityCellExitTransition::Fail, RuntimeEntityCellExitOutcome::Failed},
-                {RuntimeEntityCellExitTransition::Replace, RuntimeEntityCellExitOutcome::Replaced},
-                {RuntimeEntityCellExitTransition::Shutdown, RuntimeEntityCellExitOutcome::Shutdown},
-            });
             const auto request = HandoffRequest();
-            for (const auto [transition, outcome] : cases) {
+            for (const auto [transition, outcome] : InterruptionCases) {
                 auto queued = RuntimeEntityCellExitOperation::Create(request, Context(request.sourceOwnership)).Value();
                 queued = Advance(std::move(queued), transition);
                 REQUIRE(queued.IsTerminal());
                 REQUIRE(queued.Outcome() == outcome);
 
-                auto admitted = RuntimeEntityCellExitOperation::Create(request, Context(request.sourceOwnership)).Value();
-                admitted = Advance(std::move(admitted), RuntimeEntityCellExitTransition::Admit);
+                auto admitted = AdmittedHandoff();
                 admitted = Advance(std::move(admitted), transition);
                 REQUIRE(admitted.IsTerminal());
                 REQUIRE(admitted.Outcome() == outcome);
@@ -263,11 +262,7 @@ namespace Horo::WorldStreaming {
 
         TEST_CASE("Accepted destination still rolls back on replacement before commit",
                   "[unit][world_streaming][runtime_entity_cell_exit][replacement]") {
-            const auto request = HandoffRequest();
-            auto operation = RuntimeEntityCellExitOperation::Create(request, Context(request.sourceOwnership)).Value();
-            operation = Advance(std::move(operation), RuntimeEntityCellExitTransition::Admit);
-            operation = Advance(std::move(operation), RuntimeEntityCellExitTransition::BeginDestinationPreparation);
-            operation = Advance(std::move(operation), RuntimeEntityCellExitTransition::AcceptDestination);
+            auto operation = AcceptedHandoff();
             operation = Advance(std::move(operation), RuntimeEntityCellExitTransition::Replace);
             REQUIRE(operation.State() == RuntimeEntityCellExitState::RollingBackDestination);
             REQUIRE(operation.Outcome() == RuntimeEntityCellExitOutcome::Replaced);
@@ -276,11 +271,7 @@ namespace Horo::WorldStreaming {
 
         TEST_CASE("Shutdown drains a committed handoff without changing its canonical outcome",
                   "[unit][world_streaming][runtime_entity_cell_exit][shutdown]") {
-            const auto request = HandoffRequest();
-            auto operation = RuntimeEntityCellExitOperation::Create(request, Context(request.sourceOwnership)).Value();
-            operation = Advance(std::move(operation), RuntimeEntityCellExitTransition::Admit);
-            operation = Advance(std::move(operation), RuntimeEntityCellExitTransition::BeginDestinationPreparation);
-            operation = Advance(std::move(operation), RuntimeEntityCellExitTransition::AcceptDestination);
+            auto operation = AcceptedHandoff();
             operation = Advance(std::move(operation), RuntimeEntityCellExitTransition::BeginSourceRetirement);
             operation = Advance(std::move(operation), RuntimeEntityCellExitTransition::Shutdown);
             REQUIRE(operation.State() == RuntimeEntityCellExitState::RetiringSource);

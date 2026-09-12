@@ -1,6 +1,7 @@
 #include "Horo/WorldStreaming/RuntimeEntityCellExitOperation.h"
 
 #include "Horo/WorldStreaming/WorldStreamingErrors.h"
+#include "WorldStreamingInternal.h"
 
 #include <algorithm>
 #include <array>
@@ -8,10 +9,6 @@
 
 namespace Horo::WorldStreaming {
     namespace {
-        template <typename T> [[nodiscard]] Result<T> Failure(const ErrorCodeDescriptor &descriptor) {
-            return Result<T>::Failure(MakeError(descriptor));
-        }
-
         [[nodiscard]] bool IsKnown(const RuntimeEntityCellExitTransition transition) noexcept {
             return transition >= RuntimeEntityCellExitTransition::Admit &&
                    transition <= RuntimeEntityCellExitTransition::AcknowledgeDestinationRollback;
@@ -30,31 +27,31 @@ namespace Horo::WorldStreaming {
                                                                                const RuntimeEntityCellExitAdmissionContext &context) {
             if (!request.handle.IsValid() || !context.expectedWorld.IsValid() || !context.retiringCell.IsValid() ||
                 !IsKnown(context.state) || context.operationCapacity == 0 || context.inFlightOperations > context.operationCapacity)
-                return Failure<RuntimeEntityCellExitDisposition>(WorldStreamingErrors::RuntimeEntityCellExitInvalid);
+                return Internal::Failure<RuntimeEntityCellExitDisposition>(WorldStreamingErrors::RuntimeEntityCellExitInvalid);
 
             const auto sourceValid = ValidateWorldObjectOwnershipDescriptor(request.sourceOwnership);
             const auto currentValid = ValidateWorldObjectOwnershipDescriptor(context.currentOwnership);
             if (sourceValid.HasError() || currentValid.HasError())
-                return Failure<RuntimeEntityCellExitDisposition>(WorldStreamingErrors::RuntimeEntityCellExitInvalid);
+                return Internal::Failure<RuntimeEntityCellExitDisposition>(WorldStreamingErrors::RuntimeEntityCellExitInvalid);
             if (!IsRuntimeCellOwnership(request.sourceOwnership) || !IsRuntimeCellOwnership(context.currentOwnership))
-                return Failure<RuntimeEntityCellExitDisposition>(WorldStreamingErrors::RuntimeEntityCellExitUnsupported);
+                return Internal::Failure<RuntimeEntityCellExitDisposition>(WorldStreamingErrors::RuntimeEntityCellExitUnsupported);
 
             if (request.handle.entity != request.sourceOwnership.runtimeSpawned ||
                 request.handle.source != request.sourceOwnership.owner.cell || context.retiringCell != request.handle.source ||
                 request.sourceOwnership != context.currentOwnership || request.sourceOwnership.owner.world != context.expectedWorld)
-                return Failure<RuntimeEntityCellExitDisposition>(WorldStreamingErrors::RuntimeEntityCellExitStale);
+                return Internal::Failure<RuntimeEntityCellExitDisposition>(WorldStreamingErrors::RuntimeEntityCellExitStale);
             if (context.state != WorldObjectOwnershipOwnerState::Active)
-                return Failure<RuntimeEntityCellExitDisposition>(WorldStreamingErrors::RuntimeEntityCellExitLifecycleUnavailable);
+                return Internal::Failure<RuntimeEntityCellExitDisposition>(WorldStreamingErrors::RuntimeEntityCellExitLifecycleUnavailable);
             if (context.inFlightOperations == context.operationCapacity)
-                return Failure<RuntimeEntityCellExitDisposition>(WorldStreamingErrors::RuntimeEntityCellExitCapacityExceeded);
+                return Internal::Failure<RuntimeEntityCellExitDisposition>(WorldStreamingErrors::RuntimeEntityCellExitCapacityExceeded);
 
             if (request.sourceOwnership.cellExitPolicy == WorldObjectCellExitPolicy::Retire) {
                 if (request.destination.has_value())
-                    return Failure<RuntimeEntityCellExitDisposition>(WorldStreamingErrors::RuntimeEntityCellExitUnsupported);
+                    return Internal::Failure<RuntimeEntityCellExitDisposition>(WorldStreamingErrors::RuntimeEntityCellExitUnsupported);
                 return Result<RuntimeEntityCellExitDisposition>::Success(RuntimeEntityCellExitDisposition::Retire);
             }
             if (request.sourceOwnership.cellExitPolicy != WorldObjectCellExitPolicy::RequireHandoff || !request.destination.has_value())
-                return Failure<RuntimeEntityCellExitDisposition>(WorldStreamingErrors::RuntimeEntityCellExitUnsupported);
+                return Internal::Failure<RuntimeEntityCellExitDisposition>(WorldStreamingErrors::RuntimeEntityCellExitUnsupported);
 
             const WorldObjectOwnershipRequest ownershipRequest{
                 .candidate = *request.destination,
@@ -71,7 +68,7 @@ namespace Horo::WorldStreaming {
             if (admission.HasError())
                 return Result<RuntimeEntityCellExitDisposition>::Failure(admission.ErrorValue());
             if (admission.Value() != WorldObjectOwnershipAdmissionKind::Handoff)
-                return Failure<RuntimeEntityCellExitDisposition>(WorldStreamingErrors::RuntimeEntityCellExitUnsupported);
+                return Internal::Failure<RuntimeEntityCellExitDisposition>(WorldStreamingErrors::RuntimeEntityCellExitUnsupported);
             return Result<RuntimeEntityCellExitDisposition>::Success(RuntimeEntityCellExitDisposition::Handoff);
         }
 
@@ -193,11 +190,11 @@ namespace Horo::WorldStreaming {
     Result<RuntimeEntityCellExitOperation> RuntimeEntityCellExitOperation::Advance(const RuntimeEntityCellExitHandle &expected,
                                                                                    const RuntimeEntityCellExitTransition transition) const {
         if (!expected.IsValid())
-            return Failure<RuntimeEntityCellExitOperation>(WorldStreamingErrors::RuntimeEntityCellExitInvalid);
+            return Internal::Failure<RuntimeEntityCellExitOperation>(WorldStreamingErrors::RuntimeEntityCellExitInvalid);
         if (expected != handle_)
-            return Failure<RuntimeEntityCellExitOperation>(WorldStreamingErrors::RuntimeEntityCellExitStale);
+            return Internal::Failure<RuntimeEntityCellExitOperation>(WorldStreamingErrors::RuntimeEntityCellExitStale);
         if (!IsKnown(transition))
-            return Failure<RuntimeEntityCellExitOperation>(WorldStreamingErrors::RuntimeEntityCellExitUnsupported);
+            return Internal::Failure<RuntimeEntityCellExitOperation>(WorldStreamingErrors::RuntimeEntityCellExitUnsupported);
 
         if (IsInterruption(transition) && state_ != RuntimeEntityCellExitState::RetiringSource) {
             const auto outcome = InterruptionOutcome(transition);
@@ -216,7 +213,7 @@ namespace Horo::WorldStreaming {
                    (candidate.anyDisposition || candidate.requiredDisposition == disposition_);
         });
         if (rule == TransitionRules.end())
-            return Failure<RuntimeEntityCellExitOperation>(WorldStreamingErrors::RuntimeEntityCellExitTransitionInvalid);
+            return Internal::Failure<RuntimeEntityCellExitOperation>(WorldStreamingErrors::RuntimeEntityCellExitTransitionInvalid);
         const auto successorOutcome = rule->retainOutcome ? outcome_ : rule->outcome;
         return Result<RuntimeEntityCellExitOperation>::Success(
             RuntimeEntityCellExitOperation{handle_, disposition_, source_, destination_, rule->destination, successorOutcome});
