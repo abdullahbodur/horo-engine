@@ -277,7 +277,7 @@ def write_project(root: Path, package_id: str, name: str, version: str, shape: s
         (root / "tests" / f"{module.suffix}_contract.c").write_text(  # Closed-table child in owned staging root; NOSONAR
             render(CONTRACT_TEST, replacements), encoding="utf-8"
         )
-    (root / "README.md").write_text(
+    (root / "README.md").write_text(  # Fixed child in owned staging root; NOSONAR
         f"# {name}\n\nGenerated `{shape}` Horo extension scaffold.\n\n"
         "Configure with `HoroEngineExtensionSdk_DIR` pointing to the SDK's "
         "`lib/cmake/HoroEngineExtensionSdk` directory. Build, run CTest, then build "
