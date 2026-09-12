@@ -46,15 +46,7 @@ namespace Horo::Navigation {
             REQUIRE(workerRecord->worldLease.IsRevoked());
             REQUIRE(workerRecord->worldLease.Cancellation().IsCancellationRequested());
 
-            NavigationQueuedCompletion stale{
-                .acceptedSequence = workerRecord->acceptedSequence,
-                .handle = workerRecord->handle,
-                .scene = active.scene,
-                .sceneGeneration = active.sceneGeneration,
-                .world = active.world,
-                .topology = active.topology,
-                .outcome = NavigationCancelled{},
-            };
+            auto stale = TestSupport::CancelledCompletion(active, workerRecord->acceptedSequence, workerRecord->handle);
             REQUIRE(queues.TryEnqueueCompletion(stale) == NavigationQueueEnqueueResult::Enqueued);
             const auto drained = queues.TryDequeueCompletion();
             REQUIRE(drained.has_value());
@@ -125,15 +117,7 @@ namespace Horo::Navigation {
         for (std::uint32_t sequence = 1; sequence <= descriptor.querySlots; ++sequence)
             REQUIRE(queues.TryDequeueQuery().has_value());
         for (std::uint32_t sequence = 1; sequence <= descriptor.completionSlots; ++sequence) {
-            NavigationQueuedCompletion completion{
-                .acceptedSequence = sequence,
-                .handle = RequestHandle(activation.world, sequence),
-                .scene = activation.scene,
-                .sceneGeneration = activation.sceneGeneration,
-                .world = activation.world,
-                .topology = activation.topology,
-                .outcome = NavigationCancelled{},
-            };
+            auto completion = TestSupport::CancelledCompletion(activation, sequence, RequestHandle(activation.world, sequence));
             REQUIRE(queues.TryEnqueueCompletion(completion) == NavigationQueueEnqueueResult::Enqueued);
         }
         for (std::uint32_t sequence = 1; sequence <= descriptor.completionSlots; ++sequence)

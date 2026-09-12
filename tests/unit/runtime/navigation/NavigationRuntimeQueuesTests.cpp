@@ -102,15 +102,7 @@ namespace Horo::Navigation {
         REQUIRE(transferred->worldLease.Descriptor() == Activation());
 
         const auto activation = Activation();
-        NavigationQueuedCompletion completion{
-            .acceptedSequence = transferred->acceptedSequence,
-            .handle = transferred->handle,
-            .scene = activation.scene,
-            .sceneGeneration = activation.sceneGeneration,
-            .world = activation.world,
-            .topology = activation.topology,
-            .outcome = NavigationCancelled{},
-        };
+        auto completion = TestSupport::CancelledCompletion(activation, transferred->acceptedSequence, transferred->handle);
         REQUIRE(queues.TryEnqueueCompletion(completion) == NavigationQueueEnqueueResult::Enqueued);
         auto received = queues.TryDequeueCompletion();
         REQUIRE(received.has_value());

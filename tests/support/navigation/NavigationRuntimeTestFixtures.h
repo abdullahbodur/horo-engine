@@ -87,27 +87,6 @@ namespace Horo::Navigation::TestSupport {
         return {.world = world, .slot = {.index = index, .generation = generation}};
     }
 
-    [[nodiscard]] inline NavigationPathRequest PathRequest(const NavigationWorldActivationDescriptor &activation) {
-        auto request = PathRequest(activation.world, activation.topology);
-        request.start = {};
-        request.destination = {1.0F, 0.0F, 1.0F};
-        return request;
-    }
-
-    [[nodiscard]] inline NavigationRuntimeQueueDescriptor QueueDescriptor(const std::uint32_t slots = 8) {
-        return {
-            .commandSlots = slots,
-            .querySlots = slots,
-            .completionSlots = slots,
-            .maximumOwnedBytes = std::numeric_limits<std::size_t>::max(),
-        };
-    }
-
-    [[nodiscard]] inline NavRequestHandle RequestHandle(const NavigationWorldId world = World(), const std::uint32_t index = 3,
-                                                        const std::uint32_t generation = 2) {
-        return {.world = world, .slot = {.index = index, .generation = generation}};
-    }
-
     [[nodiscard]] inline NavigationQueuedCompletion CancelledCompletion(const NavigationWorldActivationDescriptor &activation,
                                                                         const std::uint64_t sequence, const NavRequestHandle handle) {
         return {
