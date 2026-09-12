@@ -329,6 +329,19 @@ succeeds. Provider failure, cancellation, malformed output, unregistration, or
 shutdown discards the transaction-local staging set and cannot expose partial
 output.
 
+`ToolchainProviderRegistry` is the host-owned `toolchain.provider` invocation
+gateway. A publication declares canonical provider identity, activation
+generation, and the logical tools it may request; it never declares executable
+paths or receives the platform process runner. A provider submits a bounded
+logical tool and argument intent. Host policy resolves that intent into the
+complete shell-free platform request, including the executable, final arguments,
+working directory, environment, timeout, termination grace, output bounds, and
+output callback. The registry then invokes only `IExternalProcessRunner`,
+preserves provider/tool attribution, and wraps policy or platform failures with
+their typed cause. Releasing a publication or beginning shutdown revokes future
+calls and requests cancellation of every admitted process for that exact
+generation.
+
 `editor.status_item` contributions are declarative bounded snapshots; they do
 not receive ImGui callbacks. The shell owns validation, active-panel visibility,
 width admission, overflow, localization, modal input exclusion, and typed
