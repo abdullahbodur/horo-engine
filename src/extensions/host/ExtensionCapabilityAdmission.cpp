@@ -11,9 +11,10 @@
 
 namespace Horo::Extensions {
     struct ExtensionCapabilityAdmissionState final {
-        std::string extensionId;
-        std::string moduleId;
-        std::uint64_t activationGeneration{};
+        ExtensionCapabilityAdmissionState(std::string extensionId, std::string moduleId, const std::uint64_t activationGeneration)
+            : activation(std::move(extensionId), std::move(moduleId), activationGeneration) {}
+
+        ExtensionActivationIdentity activation;
         std::uint64_t policyRevision{};
         std::atomic_bool active{true};
     };
@@ -97,6 +98,25 @@ namespace Horo::Extensions {
         }
     }  // namespace
 
+    ExtensionActivationIdentity::ExtensionActivationIdentity(std::string extensionId, std::string moduleId,
+                                                             const std::uint64_t generation) noexcept
+        : extensionId_(std::move(extensionId)), moduleId_(std::move(moduleId)), generation_(generation) {}
+
+    /** @copydoc ExtensionActivationIdentity::ExtensionId */
+    const std::string &ExtensionActivationIdentity::ExtensionId() const noexcept {
+        return extensionId_;
+    }
+
+    /** @copydoc ExtensionActivationIdentity::ModuleId */
+    const std::string &ExtensionActivationIdentity::ModuleId() const noexcept {
+        return moduleId_;
+    }
+
+    /** @copydoc ExtensionActivationIdentity::Generation */
+    std::uint64_t ExtensionActivationIdentity::Generation() const noexcept {
+        return generation_;
+    }
+
     ExtensionCapabilityUseLease::ExtensionCapabilityUseLease(std::shared_ptr<const ExtensionCapabilityAdmissionState> state,
                                                              ExtensionCapabilityId capability)
         : state_(std::move(state)), capability_(std::move(capability)) {}
@@ -104,6 +124,16 @@ namespace Horo::Extensions {
     /** @copydoc ExtensionCapabilityUseLease::Capability */
     const ExtensionCapabilityId &ExtensionCapabilityUseLease::Capability() const noexcept {
         return capability_;
+    }
+
+    /** @copydoc ExtensionCapabilityUseLease::Activation */
+    const ExtensionActivationIdentity &ExtensionCapabilityUseLease::Activation() const noexcept {
+        return state_->activation;
+    }
+
+    /** @copydoc ExtensionCapabilityUseLease::IsUsable */
+    bool ExtensionCapabilityUseLease::IsUsable() const noexcept {
+        return state_ != nullptr && state_->active.load(std::memory_order_acquire);
     }
 
     ExtensionCapabilityHandle::ExtensionCapabilityHandle(std::shared_ptr<const ExtensionCapabilityAdmissionState> state,
@@ -115,19 +145,9 @@ namespace Horo::Extensions {
         return capability_;
     }
 
-    /** @copydoc ExtensionCapabilityHandle::ExtensionId */
-    const std::string &ExtensionCapabilityHandle::ExtensionId() const noexcept {
-        return state_->extensionId;
-    }
-
-    /** @copydoc ExtensionCapabilityHandle::ModuleId */
-    const std::string &ExtensionCapabilityHandle::ModuleId() const noexcept {
-        return state_->moduleId;
-    }
-
-    /** @copydoc ExtensionCapabilityHandle::ActivationGeneration */
-    std::uint64_t ExtensionCapabilityHandle::ActivationGeneration() const noexcept {
-        return state_->activationGeneration;
+    /** @copydoc ExtensionCapabilityHandle::Activation */
+    const ExtensionActivationIdentity &ExtensionCapabilityHandle::Activation() const noexcept {
+        return state_->activation;
     }
 
     /** @copydoc ExtensionCapabilityHandle::AcquireUse */
@@ -138,7 +158,9 @@ namespace Horo::Extensions {
             return Result<ExtensionCapabilityUseLease>::Failure(MakeError(ExtensionErrors::CapabilityRevoked));
         if (!state_->active.load(std::memory_order_acquire))
             return Result<ExtensionCapabilityUseLease>::Failure(MakeError(ExtensionErrors::CapabilityRevoked));
-        if (extensionId != state_->extensionId || moduleId != state_->moduleId || activationGeneration != state_->activationGeneration) {
+        const ExtensionActivationIdentity &activation = state_->activation;
+        if (extensionId != activation.ExtensionId() || moduleId != activation.ModuleId() ||
+            activationGeneration != activation.Generation()) {
             return Result<ExtensionCapabilityUseLease>::Failure(
                 MakeError(ExtensionErrors::PermissionDenied, "Capability handle does not belong to the calling activation."));
         }
@@ -188,10 +210,8 @@ namespace Horo::Extensions {
             capabilities.push_back(entry.capability);
         }
         std::ranges::sort(capabilities, {}, &ExtensionCapabilityId::value);
-        auto state = std::make_shared<ExtensionCapabilityAdmissionState>();
-        state->extensionId = request.extensionId;
-        state->moduleId = request.moduleId;
-        state->activationGeneration = request.activationGeneration;
+        auto state =
+            std::make_shared<ExtensionCapabilityAdmissionState>(request.extensionId, request.moduleId, request.activationGeneration);
         state->policyRevision = policy.revision;
         return Result<ExtensionCapabilityAdmission>::Success(ExtensionCapabilityAdmission{std::move(state), std::move(capabilities)});
     }

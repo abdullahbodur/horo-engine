@@ -15,6 +15,7 @@
 namespace Horo::Gameplay {
     class BehaviorRegistry;
     class ComponentRegistry;
+    class GameAssetTypeRegistry;
     class GameServiceRegistry;
     class SystemRegistry;
 
@@ -34,8 +35,16 @@ namespace Horo::Gameplay {
         [[nodiscard]] const std::filesystem::path &LoadedArtifactPath() const noexcept;
         /** @brief Returns the frozen descriptor registry while the module is loaded. */
         [[nodiscard]] const BehaviorRegistry &Registry() const noexcept;
+        /**
+         * @brief Copies native behavior registrations into an unfrozen host registry and binds their module generation.
+         * @param destination Host-owned aggregate registry that will expose the copied native factories.
+         * @return Success or the first typed registration failure.
+         */
+        [[nodiscard]] Result<void> ContributeBehaviorsTo(BehaviorRegistry &destination) const;
         /** @brief Returns the frozen project component metadata while the module is loaded. */
         [[nodiscard]] const ComponentRegistry &Components() const noexcept;
+        /** @brief Returns frozen project asset metadata and exact-generation processing bindings. */
+        [[nodiscard]] const GameAssetTypeRegistry &AssetTypes() const noexcept;
         /** @brief Returns the frozen project service descriptors while the module is loaded. */
         [[nodiscard]] const GameServiceRegistry &Services() const noexcept;
         /** @brief Returns the frozen project system schedule while the module is loaded. */
@@ -46,12 +55,23 @@ namespace Horo::Gameplay {
         [[nodiscard]] std::span<const GameplayCapabilityId> Capabilities() const noexcept;
         /** @brief Returns the cancellation token revoked before module shutdown or replacement. */
         [[nodiscard]] CancellationToken Cancellation() const noexcept;
+        /**
+         * @brief Cancels and quiesces module-owned work, captures state, and stops callbacks before unload.
+         * @return Bounded module snapshot only when the generation proves it is safe to unload.
+         */
+        [[nodiscard]] Result<GameModuleReloadSnapshot> PrepareReload();
+        /**
+         * @brief Restores compatible state into this newly started module generation.
+         * @param snapshot State captured from the previous compatible generation.
+         * @return Success or a typed restore failure.
+         */
+        [[nodiscard]] Result<void> RestoreReload(const GameModuleReloadSnapshot &snapshot);
 
     private:
         friend class GameModuleHost;
         struct Impl;
-        explicit LoadedGameModule(std::unique_ptr<Impl> impl) noexcept;
-        std::unique_ptr<Impl> impl_;
+        explicit LoadedGameModule(std::shared_ptr<Impl> impl) noexcept;
+        std::shared_ptr<Impl> impl_;
     };
 
     /** @brief Loader used by editor play sessions and packaged runtime composition. */
@@ -77,9 +97,9 @@ namespace Horo::Gameplay {
          * @param expectation Manifest identity selected by the active engine/toolchain build.
          * @return Independently loaded candidate; its shadow artifact is removed after unload.
          *
-         * The currently active module can remain loaded while this candidate is validated. The
-         * caller still owns the fixed-tick safe-point swap and must destroy every old behavior
-         * instance before releasing the previous LoadedGameModule.
+         * A native hot-reload caller must invoke this only after behavior instances and the
+         * previous LoadedGameModule have been destroyed. The host does not implicitly sequence
+         * generations or make two project modules safe to coexist.
          */
         [[nodiscard]] Result<std::unique_ptr<LoadedGameModule>> LoadShadowCopy(const std::filesystem::path &libraryPath,
                                                                                const std::filesystem::path &shadowRoot,

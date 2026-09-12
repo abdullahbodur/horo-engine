@@ -85,6 +85,26 @@ limits through structured counters and diagnostics. Per-controller capsule,
 locomotion, slope, step and gravity policy remains in
 `CharacterControllerDescriptor`.
 
+The public lifecycle surfaces are `Horo/Physics/CharacterWorld.h` and the
+`HoroPhysicsSceneIntegration` adapter owning the
+`Horo/Physics/PhysicsSceneActivation.h` participant. The adapter is the explicit
+composition boundary that may depend on both Physics and RuntimeScene; neither
+core target reverses the architecture dependency direction. The Physics
+runtime issues historically monotonic world identities, so recreating a participant
+cannot reuse one. The application-owned activation authority supplies a coherent
+collision-filter and local-origin generation snapshot for each candidate. Physics
+revalidates that evidence immediately before publication. Character issues its own
+never-reused process-local world identity while preparing the bounded slot table.
+`RuntimeSceneService` owns one aggregate of the detached Scene and fully finalized
+participant candidates. After all fallible preparation and evidence validation
+succeeds, one no-fail aggregate ownership switch publishes it; failure retires only
+the candidate and leaves the old aggregate visible. `Shutdown` is idempotent, drains
+every owned controller record, and runs before the paired Physics world is retired.
+Slot reuse advances a non-wrapping generation; exhausted slots are retired instead
+of allowing an older handle to alias a replacement. Until CHR-001.4 supplies
+fixed-tick safe-point commands, active controller creation and destruction are
+rejected.
+
 The Horo algorithm performs bounded overlap recovery, support classification,
 platform carry, capsule sweep/slide, guarded step-up/forward/down, vertical motion,
 ground snap and contact canonicalization. It borrows one read-only world/tick-

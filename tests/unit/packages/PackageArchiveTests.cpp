@@ -1,10 +1,9 @@
 #include "Horo/Packages/PackageArchive.h"
+#include "PackageArchiveTestSupport.h"
 
 #include <algorithm>
 #include <array>
 #include <catch2/catch_test_macros.hpp>
-#include <cstdlib>
-#include <memory>
 #include <miniz.h>
 #include <nlohmann/json.hpp>
 
@@ -25,11 +24,7 @@ namespace {
         Json entries = Json::array();
         for (const auto &file : files) {
             if (!file.name.ends_with('/')) {
-                entries.push_back({{"path", file.name},
-                                   {"size", file.content.size()},
-                                   {"sha256", Horo::FormatSha256(Horo::ComputeSha256(std::as_bytes(std::span{file.content})))},
-                                   {"executable", false},
-                                   {"contributionRoot", nullptr}});
+                entries.push_back(Horo::Tests::Packages::FileInventoryEntry(file.name, file.content));
             }
         }
         return {{"schemaVersion", 1}, {"files", entries}};
@@ -46,14 +41,7 @@ namespace {
                                                 static_cast<mz_uint>(localExtra.size()), centralExtra.data(),
                                                 static_cast<mz_uint>(centralExtra.size())));
         }
-        void *buffer = nullptr;
-        std::size_t size = 0;
-        REQUIRE(mz_zip_writer_finalize_heap_archive(&zip, &buffer, &size));
-        const std::unique_ptr<void, decltype(&std::free)> owner{buffer, &std::free};
-        const auto *bytes = static_cast<const std::byte *>(buffer);
-        std::vector<std::byte> result(bytes, bytes + size);
-        REQUIRE(mz_zip_writer_end(&zip));
-        return result;
+        return Horo::Tests::Packages::FinalizeArchive(zip);
     }
 
     std::size_t CentralOffset(const std::vector<std::byte> &bytes, const mz_uint index) {

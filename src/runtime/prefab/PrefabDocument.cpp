@@ -1,5 +1,7 @@
 #include "Horo/Prefab/PrefabDocument.h"
 
+#include "Horo/Foundation/Utf8.h"
+
 #include <algorithm>
 #include <cstdint>
 #include <string>
@@ -7,7 +9,6 @@
 #include <type_traits>
 #include <unordered_map>
 #include <unordered_set>
-#include <utf8proc.h>
 #include <variant>
 
 namespace Horo::Prefab {
@@ -16,21 +17,6 @@ namespace Horo::Prefab {
         [[nodiscard]] bool IsCanonicalProjectVersion(const Application::HoroVersion &version) {
             const auto parsed = Application::ParseHoroVersion(Application::FormatHoroVersion(version));
             return parsed.HasValue() && parsed.Value() == version;
-        }
-
-        /** @brief Validates a complete UTF-8 byte sequence without normalizing caller-owned display text. */
-        [[nodiscard]] bool IsValidUtf8(const std::string_view text) noexcept {
-            const auto *cursor = reinterpret_cast<const utf8proc_uint8_t *>(text.data());
-            auto remaining = static_cast<utf8proc_ssize_t>(text.size());
-            while (remaining > 0) {
-                utf8proc_int32_t codepoint{};
-                const utf8proc_ssize_t decoded = utf8proc_iterate(cursor, remaining, &codepoint);
-                if (decoded <= 0)
-                    return false;
-                cursor += decoded;
-                remaining -= decoded;
-            }
-            return true;
         }
 
         /** @brief Adds bytes without exceeding the document payload limit. */
@@ -101,7 +87,7 @@ namespace Horo::Prefab {
         /** @brief Validates and accounts for one hierarchy object's portable data. */
         [[nodiscard]] Result<void> ValidateObject(const PrefabObjectNode &object, std::size_t &payloadBytes,
                                                   const PrefabProjectPolicy &limits) {
-            if (object.name.size() > MaximumPrefabObjectNameBytes || !IsValidUtf8(object.name) ||
+            if (object.name.size() > MaximumPrefabObjectNameBytes || !IsValidUtf8ScalarSequence(object.name) ||
                 !object.localTransform.TryToMatrix().HasValue())
                 return Result<void>::Failure(MakeError(PrefabErrors::DocumentInvalid));
             if (object.components.size() > limits.maximumComponentsPerObject ||

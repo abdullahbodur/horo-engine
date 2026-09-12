@@ -77,6 +77,7 @@ namespace Horo::Extensions::Tests {
         editor.dependencies.push_back("com.example.backend");
 
         ExtensionManifest manifest;
+        manifest.id = "com.example.package";
         manifest.modules = {editor, scripting, backend};
         manifest.contributions = {{.type = "editor.panel", .id = "com.example.panel", .owningModule = editor.id},
                                   {.type = "application.service", .id = "com.example.backend-service", .owningModule = backend.id}};
@@ -86,17 +87,71 @@ namespace Horo::Extensions::Tests {
         CHECK(interactive.Value().moduleIds ==
               std::vector<std::string>{"com.example.backend", "com.example.editor", "com.example.scripting"});
         CHECK(interactive.Value().contributions.size() == 2);
+        REQUIRE(interactive.Value().serviceImports.size() == 1);
+        CHECK(interactive.Value().serviceImports.front().Status() == ExtensionServiceImportStatus::Bound);
+        CHECK(interactive.Value().serviceImports.front().ConsumerExtensionId() == manifest.id);
+        CHECK(interactive.Value().serviceImports.front().ConsumerModuleId() == scripting.id);
+        CHECK(interactive.Value().serviceImports.front().ProviderModuleId() == backend.id);
+        CHECK(interactive.Value().serviceImports.front().ProviderVersion() == "2.1.0");
 
         std::ranges::reverse(manifest.modules);
         const auto reordered = ResolveExtensionModules(manifest, Host(ExtensionHostProfile::Interactive));
         REQUIRE(reordered.HasValue());
         CHECK(reordered.Value().moduleIds == interactive.Value().moduleIds);
+        CHECK(reordered.Value().serviceImports.front().ProviderModuleId() == interactive.Value().serviceImports.front().ProviderModuleId());
 
         const auto headless = ResolveExtensionModules(manifest, Host(ExtensionHostProfile::Headless));
         REQUIRE(headless.HasValue());
         CHECK(headless.Value().moduleIds == std::vector<std::string>{"com.example.backend", "com.example.scripting"});
         REQUIRE(headless.Value().contributions.size() == 1);
         CHECK(headless.Value().contributions.front().owningModule == backend.id);
+    }
+
+    TEST_CASE("Extension module resolution records optional import failures without load-order fallback", "[Extensions][Resolution]") {
+        ExtensionModuleManifest provider = Module("com.example.provider", ExtensionModuleRole::BackendCapability);
+        provider.exports.push_back({.id = "com.example.service", .contract = "com.example.contract", .version = "1.4.0"});
+        ExtensionModuleManifest consumer = Module("com.example.consumer", ExtensionModuleRole::BackendCapability);
+        consumer.imports.push_back({.id = "com.example.missing-import",
+                                    .service = "com.example.missing",
+                                    .contract = "com.example.contract",
+                                    .minimumVersion = "1.0.0",
+                                    .required = false});
+        consumer.imports.push_back({.id = "com.example.incompatible-import",
+                                    .service = "com.example.service",
+                                    .contract = "com.example.contract",
+                                    .minimumVersion = "2.0.0",
+                                    .required = false});
+        ExtensionManifest manifest;
+        manifest.modules = {consumer, provider};
+
+        const auto resolved = ResolveExtensionModules(manifest, Host(ExtensionHostProfile::Headless));
+        REQUIRE(resolved.HasValue());
+        REQUIRE(resolved.Value().serviceImports.size() == 2);
+        CHECK(resolved.Value().serviceImports[0].Status() == ExtensionServiceImportStatus::Incompatible);
+        CHECK(resolved.Value().serviceImports[0].ProviderModuleId() == provider.id);
+        CHECK(resolved.Value().serviceImports[1].Status() == ExtensionServiceImportStatus::Unavailable);
+        CHECK(resolved.Value().serviceImports[1].ProviderModuleId().empty());
+    }
+
+    TEST_CASE("Headless resolution excludes presentation modules without promoting optional imports to required dependencies",
+              "[Extensions][Resolution][Headless]") {
+        ExtensionModuleManifest presentation = Module("com.example.presentation", ExtensionModuleRole::EditorPresentation);
+        ExtensionModuleManifest tooling = Module("com.example.tooling", ExtensionModuleRole::HeadlessTooling);
+        tooling.imports.push_back({.id = "com.example.presentation.import",
+                                   .service = "com.example.presentation.service",
+                                   .contract = "com.example.presentation.contract",
+                                   .minimumVersion = "1.0.0",
+                                   .required = false});
+        ExtensionManifest manifest;
+        manifest.id = "com.example.optional-presentation";
+        manifest.modules = {presentation, tooling};
+
+        const auto resolved = ResolveExtensionModules(manifest, Host(ExtensionHostProfile::Headless));
+        REQUIRE(resolved.HasValue());
+        CHECK(resolved.Value().moduleIds == std::vector<std::string>{tooling.id});
+        REQUIRE(resolved.Value().serviceImports.size() == 1);
+        CHECK(resolved.Value().serviceImports.front().Status() == ExtensionServiceImportStatus::Unavailable);
+        CHECK_FALSE(resolved.Value().serviceImports.front().IsRequired());
     }
 
     TEST_CASE("Extension module resolution reports complete graph failures", "[Extensions][Resolution]") {
@@ -111,6 +166,10 @@ namespace Horo::Extensions::Tests {
             RequireResolutionError(result, "Duplicate service export");
             CHECK_THAT(result.ErrorValue().message, Catch::Matchers::ContainsSubstring(first.id));
             CHECK_THAT(result.ErrorValue().message, Catch::Matchers::ContainsSubstring(second.id));
+            std::ranges::reverse(manifest.modules);
+            const auto reordered = ResolveExtensionModules(manifest, Host(ExtensionHostProfile::Interactive));
+            RequireResolutionError(reordered, "Duplicate service export");
+            CHECK(reordered.ErrorValue().message == result.ErrorValue().message);
         }
 
         SECTION("missing and incompatible imports identify consumers and providers") {

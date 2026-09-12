@@ -69,9 +69,6 @@ namespace Horo::Assets::CookErrors {
         constexpr auto kCookError = ErrorSeverity::Error;
     }  // namespace
 
-    const ErrorCodeDescriptor InvalidTarget{kCookDomain, ErrorCode{"asset.cook.invalid_target"}, kCookError,
-                                            "Cook target ID is not canonical.",
-                                            "Use a lowercase hyphen-separated identifier such as headless-null."};
     const ErrorCodeDescriptor UnsupportedFormat{kCookDomain, ErrorCode{"asset.cook.unsupported_format"}, kCookError,
                                                 "Cooked artifact format version is unsupported.",
                                                 "Use a compatible engine version or re-cook the asset."};

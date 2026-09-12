@@ -648,6 +648,54 @@ namespace Horo::WorldStreaming::WorldStreamingErrors {
         Describe("world_streaming.layer_ownership.lifecycle_unavailable", ErrorSeverity::Warning,
                  "The layer-ownership authority is cancelling or closed to publication.",
                  "Finish retirement or publish to a new active mounted-world authority.", false);
+    const ErrorCodeDescriptor LayerFilterInvalid =
+        Describe("world_streaming.layer_filter.invalid", ErrorSeverity::Error,
+                 "A layer-filter policy, context, candidate snapshot, or output request is malformed.",
+                 "Provide exact typed identities, canonical unique candidates, positive limits, and complete caller-owned output.", true);
+    const ErrorCodeDescriptor LayerFilterUnsupported =
+        Describe("world_streaming.layer_filter.unsupported", ErrorSeverity::Error,
+                 "A layer target, optional policy, flag set, or classification mapping is unsupported or contradictory.",
+                 "Use a supported editor/client/server target and keep persistent policy consistent with manifest flags.", true);
+    const ErrorCodeDescriptor LayerFilterStale =
+        Describe("world_streaming.layer_filter.stale", ErrorSeverity::Warning,
+                 "A layer-filter pass no longer names the current mounted world or immutable policy revision.",
+                 "Capture the current world owner and filter-policy publication before retrying.", false);
+    const ErrorCodeDescriptor LayerFilterIdentityConflict =
+        Describe("world_streaming.layer_filter.identity_conflict", ErrorSeverity::Error,
+                 "A layer-filter input snapshot repeats one stable source layer identity.",
+                 "Supply each stable layer identity exactly once in canonical ascending order.", true);
+    const ErrorCodeDescriptor LayerFilterCapacityExceeded =
+        Describe("world_streaming.layer_filter.capacity_exceeded", ErrorSeverity::Error,
+                 "A layer-filter pass exceeds its bounded candidate or output decision capacity.",
+                 "Reduce the immutable candidate snapshot or supply complete output storage within the configured ceiling.", false);
+    const ErrorCodeDescriptor LayerFilterLifecycleUnavailable =
+        Describe("world_streaming.layer_filter.lifecycle_unavailable", ErrorSeverity::Warning,
+                 "Layer filtering is unavailable while its authority is cancelling or closed.",
+                 "Use an active mounted-world filtering authority and current policy snapshot.", false);
+    const ErrorCodeDescriptor LayerStateInvalid =
+        Describe("world_streaming.layer_state.invalid", ErrorSeverity::Error,
+                 "A layer-state record, fence, or authority snapshot is malformed.",
+                 "Provide exact world, layer, ownership and state revisions with positive bounded capacity.", true);
+    const ErrorCodeDescriptor LayerStateUnsupported =
+        Describe("world_streaming.layer_state.unsupported", ErrorSeverity::Error,
+                 "A layer-state value or transition command is unsupported.",
+                 "Use the closed load, activation, deactivation, unload, cancellation, and failure transition contract.", true);
+    const ErrorCodeDescriptor LayerStateStale =
+        Describe("world_streaming.layer_state.stale", ErrorSeverity::Warning,
+                 "A layer-state command no longer names the current world, layer, ownership revision, or state revision.",
+                 "Capture the current layer-state fence before retrying the command.", false);
+    const ErrorCodeDescriptor LayerStateCapacityExceeded =
+        Describe("world_streaming.layer_state.capacity_exceeded", ErrorSeverity::Error,
+                 "The bounded layer-state authority cannot admit another stable layer.",
+                 "Retire an existing layer record or increase the host-configured capacity.", false);
+    const ErrorCodeDescriptor LayerStateTransitionInvalid =
+        Describe("world_streaming.layer_state.transition_invalid", ErrorSeverity::Error,
+                 "The requested layer-state transition is illegal from the current ordered state.",
+                 "Reload the current state and request the next legal load, activation, deactivation, or unload edge.", false);
+    const ErrorCodeDescriptor LayerStateLifecycleUnavailable =
+        Describe("world_streaming.layer_state.lifecycle_unavailable", ErrorSeverity::Warning,
+                 "Layer-state admission or forward progress is unavailable during cancellation or after shutdown.",
+                 "Drain admitted work to Unloaded or create a state record under a new active owner lifetime.", false);
     const ErrorCodeDescriptor RuntimeEntityCellExitInvalid =
         Describe("world_streaming.runtime_entity_cell_exit.invalid", ErrorSeverity::Error,
                  "A runtime-entity cell-exit request, context, handle, or capacity is malformed.",

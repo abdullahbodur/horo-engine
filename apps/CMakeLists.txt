@@ -19,6 +19,24 @@ target_compile_definitions(horo-engine PRIVATE
 )
 target_link_libraries(horo-engine PRIVATE HoroEngine::Application HoroHostModuleComposition)
 
+add_executable(horo-extension-validate
+    horo-extension-validate/main.cpp
+)
+target_compile_features(horo-extension-validate PRIVATE cxx_std_20)
+target_link_libraries(horo-extension-validate PRIVATE HoroEngine::Extensions)
+set(HORO_EXTENSION_VALIDATOR_SDK_PATH
+    "${HORO_EXTENSION_SDK_PACKAGE_DIR}/bin/horo-extension-validate${CMAKE_EXECUTABLE_SUFFIX}")
+add_custom_command(
+    OUTPUT "${HORO_EXTENSION_VALIDATOR_SDK_PATH}"
+    COMMAND "${CMAKE_COMMAND}" -E copy_if_different
+        "$<TARGET_FILE:horo-extension-validate>"
+        "${HORO_EXTENSION_VALIDATOR_SDK_PATH}"
+    DEPENDS horo-extension-validate
+    COMMENT "Staging the extension manifest validator in the SDK"
+    VERBATIM)
+add_custom_target(HoroExtensionSdkValidatorStage ALL
+    DEPENDS "${HORO_EXTENSION_VALIDATOR_SDK_PATH}")
+
 # The graphical executable is an optional composition root. Foundation and
 # headless hosts must remain buildable when the GUI adapter is intentionally off.
 if(HORO_BUILD_EDITOR_GUI)
@@ -143,6 +161,7 @@ if(HORO_BUILD_EDITOR_GUI)
             HoroEngine::RenderFrontend
             HoroEngine::Runtime
             HoroEngine::RuntimeScene
+            HoroEngine::PhysicsSceneIntegration
             HoroEngine::Extensions
             HoroEngine::Platform
             HoroEngine::ProjectMigrations

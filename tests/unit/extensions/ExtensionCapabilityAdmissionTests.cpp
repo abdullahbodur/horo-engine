@@ -47,12 +47,14 @@ namespace Horo::Extensions::Tests {
         auto importer = admitted.Value().Grant({"horo.assets.import"});
         REQUIRE(importer.HasValue());
         CHECK(importer.Value().Capability().value == "horo.assets.import");
-        CHECK(importer.Value().ExtensionId() == "com.example.asset-tools");
-        CHECK(importer.Value().ModuleId() == "com.example.asset-tools.backend");
-        CHECK(importer.Value().ActivationGeneration() == 12);
+        CHECK(importer.Value().Activation().ExtensionId() == "com.example.asset-tools");
+        CHECK(importer.Value().Activation().ModuleId() == "com.example.asset-tools.backend");
+        CHECK(importer.Value().Activation().Generation() == 12);
         auto use = importer.Value().AcquireUse("com.example.asset-tools", "com.example.asset-tools.backend", 12);
         REQUIRE(use.HasValue());
         CHECK(use.Value().Capability().value == "horo.assets.import");
+        CHECK(use.Value().Activation().Generation() == 12);
+        CHECK(use.Value().IsUsable());
 
         RequireErrorCode(admitted.Value().Grant({"horo.process.execute"}), "capability_unavailable");
     }

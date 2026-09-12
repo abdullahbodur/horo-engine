@@ -31,5 +31,13 @@ Extensions declare the exact minimum host minor they require through
 `horo_extension_query`; incompatible hosts reject the module before load.
 
 See `share/horo/extension-sdk/extension-sdk.json` for machine-readable package
-metadata. Manifest schemas, project scaffolding, validation, and distribution
-tools are separate SDK deliverables.
+metadata. Validate a manifest without loading extension code with:
+
+```text
+bin/horo-extension-validate --json --schema-version 1 extension.json
+```
+
+The matching authoring schema is
+`share/horo/extension-sdk/extension-manifest-v1.schema.json`. The validator is
+the behavioral authority and reports stable codes plus exact JSON field paths.
+Project scaffolding and distribution tools are separate SDK deliverables.

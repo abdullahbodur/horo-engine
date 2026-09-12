@@ -10,23 +10,39 @@ Game modules may register asset types for source assets owned by the project:
 
 ```cpp
 struct GameAssetTypeDescriptor {
-    AssetTypeId typeId;
-    std::span<const FileExtension> sourceExtensions;
-    uint32_t importerVersion;
-    AuthoringMetadata authoring;
-    AssetImporterFactory importer;
-    AssetCookerFactory cooker;
-    RuntimeAssetLoaderFactory runtimeLoader;
+    GameAssetTypeId typeId;
+    uint32_t schemaVersion;
+    std::vector<std::string> sourceExtensions;
+    std::vector<AssetCookTargetId> cookTargets;
+    GameAssetEditorRepresentation editor;
+};
+
+struct GameAssetHandlerBinding {
+    void* userData;
+    ImportCallback importAsset;
+    SerializeCallback serializeAsset;
+    CookCallback cookAsset;
 };
 ```
 
-The asset pipeline owns import, cook, cache invalidation, and dependency
-tracking. Game importers and cookers are deterministic functions over source
-files, sidecar metadata, target profile, and declared dependencies. They do not
-mutate scenes or editor state during import.
+The gameplay boundary validates and freezes these exact-generation callbacks
+without adding a dependency from the engine asset core to project code. Authored
+bytes use the host-owned `SerializedGameAsset` envelope described by
+[Gameplay Module Boundary](./gameplay-module-boundary.md). Import and serialization
+must return the registered type and current schema. Cook accepts only a current
+envelope and declared target. Game importers and cookers are deterministic
+functions over their bounded inputs and do not mutate scenes or editor state.
 
 Editor asset browsers use the descriptor's authoring metadata to show
-game-owned asset types, icons, validation diagnostics, and import settings.
+game-owned asset types, icons, validation diagnostics, and typed fields.
+When code is missing or schema-skewed, the generic editor projection is read-only
+and retains the opaque bytes, stable type identity, schema version, and payload
+size. Missing-code presentation is a semantic fallback resolved by the editor
+host through `workspace.game_asset.category.missing`; no gameplay-facing model
+contains hard-coded host copy. Inspection descriptors and editor field lists are
+owned snapshots that remain valid after registry replacement or project close.
+The projection does not synthesize a replacement payload or silently select
+another handler.
 Runtime code accesses loaded assets through `AssetAccess` handles or leases, not
 raw file paths. Asset loads may be asynchronous through the asset system's task
 contract; gameplay jobs request work through approved asset APIs instead of
@@ -144,6 +160,13 @@ module-allocated state behind that system. All module-owned system instances,
 callbacks, queued continuations, and jobs are destroyed or invalidated before
 `Stop()` returns and before the dynamic library is unloaded.
 
+Every behavior and system runtime created from a native registry acquires an
+exact-generation lease. The lease pins the module implementation, registries,
+factory functions, and dynamic library even if the public loaded-module wrapper
+is released. Native reload retirement is restart-required while any such external
+runtime remains alive; normal play-session quiescence destroys its runtime before
+asking the module to prepare for unload.
+
 System callbacks are invalid after module stop. A scene cannot keep a callable,
 vtable pointer, function pointer, or type-erased deleter that points into an
 unloaded game module.
@@ -195,6 +218,12 @@ termination, crash, or OS kill provides no gameplay callback guarantee; the OS
 reclaims process resources. Host-level emergency shutdown still invalidates
 module callbacks and releases owned host resources where the platform permits,
 but behavior authors must not rely on `OnDestroy()` for durable persistence.
+
+Behavior callback exceptions are contained at the runtime boundary. A throwing
+`OnCreate()` still schedules `OnDestroy()` before the factory instance is released;
+a throwing `OnEnable()` schedules both `OnDisable()` and `OnDestroy()`. Each cleanup
+callback is attempted independently, the factory destroy binding always runs, and
+activation returns a typed factory failure when activation or cleanup throws.
 
 The editor play-session controller uses the following explicit state machine:
 
