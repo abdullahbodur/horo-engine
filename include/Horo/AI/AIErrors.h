@@ -24,6 +24,10 @@ namespace Horo::AI::AIErrors {
     extern const ErrorCodeDescriptor TaskTransitionInvalid;
     /** @brief A failed AI task omitted a valid typed failure family or cause. */
     extern const ErrorCodeDescriptor TaskFailureInvalid;
+    /** @brief The selected composition deliberately provides no gameplay-AI runtime. */
+    extern const ErrorCodeDescriptor RuntimeUnavailable;
+    /** @brief A gameplay-AI runtime or deterministic harness exhausted its declared capacity. */
+    extern const ErrorCodeDescriptor TaskCapacityExceeded;
     /** @brief A blackboard schema or key descriptor has an invalid representation. */
     extern const ErrorCodeDescriptor BlackboardSchemaInvalid;
     /** @brief A blackboard schema or collection exceeds its fixed contract capacity. */
