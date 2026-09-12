@@ -573,6 +573,10 @@ recorded thread. Every registration also carries an opaque shared executable-cod
 lease. A deadline breach makes `RestartRequired` sticky and retains the service,
 code lease, and registry state in a process-lifetime quarantine; teardown never
 destroys or unloads code that may still be active or awaiting safe destruction.
+The application composition owns one backend-service registry per process. Once
+that registry enters process-lifetime quarantine, replacement is a process restart;
+attempting to quarantine a second registry fails fast instead of creating an
+unbounded collection of executable-code leases.
 
 ## Module Loading And ABI Boundary
 

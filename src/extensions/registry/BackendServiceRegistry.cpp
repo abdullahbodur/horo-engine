@@ -7,6 +7,7 @@
 #include <array>
 #include <atomic>
 #include <condition_variable>
+#include <exception>
 #include <format>
 #include <mutex>
 #include <ranges>
@@ -27,8 +28,7 @@ namespace Horo::Extensions {
 
     struct BackendServiceProviderState final {
         BackendServiceDescriptor descriptor;
-        std::shared_ptr<void> service;
-        BackendServiceCodeLease codeLease{BackendServiceCodeLease::Retain(std::shared_ptr<const void>{})};
+        Detail::BackendServiceOwnedImplementation implementation{BackendServiceCodeLease::Retain(std::shared_ptr<const void>{}), {}};
         const void *typeTag{};
         void (*shutdown)(void *) noexcept {};
         std::thread::id ownerThread;
@@ -53,7 +53,6 @@ namespace Horo::Extensions {
         std::atomic_bool stagingShutdown{};
         std::uint64_t nextRegistrationSequence{};
         std::shared_ptr<BackendServiceRegistryState> restartQuarantine;
-        BackendServiceRegistryState *nextQuarantined{};
         bool quarantined{};
         bool shutdown{};
     };
@@ -65,11 +64,6 @@ namespace Horo::Extensions {
         };
 
         thread_local ExecutingProviderStack ExecutingProviders;
-
-        struct RetiredProviderStorage final {
-            BackendServiceCodeLease codeLease;
-            std::shared_ptr<void> service;
-        };
 
         [[nodiscard]] bool IsExecuting(const BackendServiceProviderState *provider) noexcept {
             const auto end = ExecutingProviders.providers.begin() + static_cast<std::ptrdiff_t>(ExecutingProviders.size);
@@ -138,7 +132,7 @@ namespace Horo::Extensions {
             }
 
             provider->lifecycle = BackendServiceProviderLifecycle::Finalizing;
-            std::shared_ptr<void> service = provider->service;
+            std::shared_ptr<void> service = provider->implementation.service;
             const auto shutdown = provider->shutdown;
             lock.unlock();
             shutdown(service.get());
@@ -150,7 +144,7 @@ namespace Horo::Extensions {
                 return BackendServiceRetirementDisposition::RestartRequired;
             }
             service.reset();
-            RetiredProviderStorage retired{std::move(provider->codeLease), std::move(provider->service)};
+            Detail::BackendServiceOwnedImplementation retired = std::move(provider->implementation);
             provider->lifecycle = BackendServiceProviderLifecycle::Shutdown;
             lock.unlock();
             provider->drained.notify_all();
@@ -227,14 +221,15 @@ namespace Horo::Extensions {
 
         void QuarantineForRestart(const std::shared_ptr<BackendServiceRegistryState> &registry) noexcept {
             static std::mutex mutex;
-            static BackendServiceRegistryState *head{};
+            static BackendServiceRegistryState *quarantinedRegistry{};
             std::scoped_lock lock{mutex};
             if (registry->quarantined)
                 return;
+            if (quarantinedRegistry != nullptr)
+                std::terminate();
             registry->restartQuarantine = registry;
-            registry->nextQuarantined = head;
             registry->quarantined = true;
-            head = registry.get();
+            quarantinedRegistry = registry.get();
         }
 
     }  // namespace
@@ -316,7 +311,7 @@ namespace Horo::Extensions {
         }
 
         void *BackendServiceObject(const std::shared_ptr<BackendServiceProviderState> &provider) noexcept {
-            return provider->service.get();
+            return provider->implementation.service.get();
         }
 
         Error AttributeBackendServiceError(const BackendServiceDescriptor &provider, Error cause) {
@@ -377,11 +372,10 @@ namespace Horo::Extensions {
 
     /** @copydoc BackendServiceRegistry::Register */
     Result<BackendServiceRegistration> BackendServiceRegistry::RegisterErased(BackendServiceDescriptor descriptor,
-                                                                              std::shared_ptr<void> service,
-                                                                              BackendServiceCodeLease codeLease, const void *typeTag,
-                                                                              const ShutdownFunction shutdown) {
-        const std::array invalid{!ValidDescriptor(descriptor), service == nullptr, codeLease.owner_ == nullptr, typeTag == nullptr,
-                                 shutdown == nullptr};
+                                                                              Detail::BackendServiceOwnedImplementation implementation,
+                                                                              const void *typeTag, const ShutdownFunction shutdown) {
+        const std::array invalid{!ValidDescriptor(descriptor), implementation.service == nullptr,
+                                 implementation.codeLease.owner_ == nullptr, typeTag == nullptr, shutdown == nullptr};
         if (std::ranges::find(invalid, true) != invalid.end())
             return Result<BackendServiceRegistration>::Failure(MakeError(ExtensionErrors::BackendServiceInvalid));
         std::scoped_lock lock{state_->mutex};
@@ -404,8 +398,7 @@ namespace Horo::Extensions {
 
         auto provider = std::make_shared<BackendServiceProviderState>();
         provider->descriptor = std::move(descriptor);
-        provider->service = std::move(service);
-        provider->codeLease = std::move(codeLease);
+        provider->implementation = std::move(implementation);
         provider->typeTag = typeTag;
         provider->shutdown = shutdown;
         provider->ownerThread = std::this_thread::get_id();

@@ -21,6 +21,7 @@ namespace Horo::Extensions {
     struct BackendServiceProviderState;
     struct BackendServiceRegistryState;
     class BackendServiceCallAdmission;
+    class BackendServiceRegistry;
 
     namespace Detail {
         [[nodiscard]] Result<BackendServiceCallAdmission> BeginBackendServiceCall(
@@ -78,6 +79,14 @@ namespace Horo::Extensions {
 
         std::shared_ptr<const void> owner_;
     };
+
+    namespace Detail {
+        /** @brief Ordering-safe ownership of one service object and the code required to destroy it. */
+        struct BackendServiceOwnedImplementation final {
+            BackendServiceCodeLease codeLease;
+            std::shared_ptr<void> service;
+        };
+    }  // namespace Detail
 
     /** @brief Immutable service identity, capability binding, and invocation policy. */
     struct BackendServiceDescriptor final {
@@ -255,8 +264,8 @@ namespace Horo::Extensions {
             }
         [[nodiscard]] Result<BackendServiceRegistration> Register(BackendServiceDescriptor descriptor, std::unique_ptr<Service> service,
                                                                   BackendServiceCodeLease codeLease) {
-            std::shared_ptr<void> erased{std::move(service)};
-            return RegisterErased(std::move(descriptor), std::move(erased), std::move(codeLease), &Detail::BackendServiceTypeTag<Service>,
+            Detail::BackendServiceOwnedImplementation implementation{std::move(codeLease), std::shared_ptr<void>{std::move(service)}};
+            return RegisterErased(std::move(descriptor), std::move(implementation), &Detail::BackendServiceTypeTag<Service>,
                                   [](void *object) noexcept {
                 static_cast<Service *>(object)->Shutdown();
             });
@@ -297,9 +306,9 @@ namespace Horo::Extensions {
 
     private:
         using ShutdownFunction = void (*)(void *) noexcept;
-        [[nodiscard]] Result<BackendServiceRegistration> RegisterErased(BackendServiceDescriptor descriptor, std::shared_ptr<void> service,
-                                                                        BackendServiceCodeLease codeLease, const void *typeTag,
-                                                                        ShutdownFunction shutdown);
+        [[nodiscard]] Result<BackendServiceRegistration> RegisterErased(BackendServiceDescriptor descriptor,
+                                                                        Detail::BackendServiceOwnedImplementation implementation,
+                                                                        const void *typeTag, ShutdownFunction shutdown);
         [[nodiscard]] Result<std::shared_ptr<BackendServiceProviderState>> ResolveErased(
             const ApplicationCapabilityProviderDescriptor &authority, const BackendServiceId &serviceId,
             const BackendServiceContractId &contractId, const void *typeTag) const;

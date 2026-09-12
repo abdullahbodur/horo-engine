@@ -41,6 +41,11 @@ lease, and the reverse-ordered retirement coordinator retains that lease through
 Registry and registration owners are non-assignable lifetime boundaries; retirement
 operations return their infallible typed disposition directly rather than wrapping
 it in an error result with no failure state.
+The service object and code lease transfer as one ordering-safe storage value from
+the public registration boundary onward. Every rejection, allocation unwind,
+successful shutdown, and quarantine path destroys the service before releasing the
+code that contains its deleter. Composition permits only one quarantined registry
+per process and treats any attempted replacement as a fail-fast restart violation.
 
 `Horo/Vfx/VfxQualityPolicy.h` is owned by `HoroVfxApi`. It adds backend-neutral
 immutable capability/policy evidence and pure admission decisions; consumers keep

@@ -66,6 +66,37 @@ namespace Horo::Extensions::Tests {
             void Shutdown() noexcept {}
         };
 
+        struct PrepublicationLifetimeAudit final {
+            bool serviceDestroyed{};
+            bool codeReleasedAfterService{};
+        };
+
+        class DestructionObservedService final {
+        public:
+            explicit DestructionObservedService(std::shared_ptr<PrepublicationLifetimeAudit> audit) noexcept : audit_(std::move(audit)) {}
+
+            ~DestructionObservedService() {
+                audit_->serviceDestroyed = true;
+            }
+
+            void Shutdown() noexcept {}
+
+        private:
+            std::shared_ptr<PrepublicationLifetimeAudit> audit_;
+        };
+
+        class DestructionObservedCode final {
+        public:
+            explicit DestructionObservedCode(std::shared_ptr<PrepublicationLifetimeAudit> audit) noexcept : audit_(std::move(audit)) {}
+
+            ~DestructionObservedCode() {
+                audit_->codeReleasedAfterService = audit_->serviceDestroyed;
+            }
+
+        private:
+            std::shared_ptr<PrepublicationLifetimeAudit> audit_;
+        };
+
         class OwnerThreadShutdownService final {
         public:
             struct Audit final {
@@ -331,10 +362,15 @@ namespace Horo::Extensions::Tests {
         BackendServiceRegistry services;
         auto invalid = Descriptor();
         invalid.providerGeneration = 0;
-        RequireErrorCode(services.Register(std::move(invalid),
-                                           std::make_unique<ArithmeticService>(std::make_shared<ArithmeticServiceAudit>()),
-                                           TestCodeLease()),
+        auto lifetimeAudit = std::make_shared<PrepublicationLifetimeAudit>();
+        auto codeOwner = std::make_shared<DestructionObservedCode>(lifetimeAudit);
+        auto codeLease = BackendServiceCodeLease::Retain(codeOwner);
+        codeOwner.reset();
+        RequireErrorCode(services.Register(std::move(invalid), std::make_unique<DestructionObservedService>(lifetimeAudit),
+                                           std::move(codeLease)),
                          "backend_service_invalid");
+        CHECK(lifetimeAudit->serviceDestroyed);
+        CHECK(lifetimeAudit->codeReleasedAfterService);
         RequireErrorCode(services.Register(Descriptor(), std::make_unique<ArithmeticService>(std::make_shared<ArithmeticServiceAudit>()),
                                            BackendServiceCodeLease::Retain(std::shared_ptr<int>{})),
                          "backend_service_invalid");
