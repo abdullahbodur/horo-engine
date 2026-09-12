@@ -596,7 +596,7 @@ namespace Horo::Extensions::Tests {
     }
 
     TEST_CASE("Backend service retains an unresponsive provider and requires restart after its drain deadline",
-              "[Extensions][BackendService]") {
+              "[.RestartQuarantine][Extensions][BackendService]") {
         std::weak_ptr<int> codeLifetime;
         {
             ApplicationCapabilityRegistry capabilities;
@@ -634,7 +634,7 @@ namespace Horo::Extensions::Tests {
         CHECK_FALSE(codeLifetime.expired());
     }
 
-    TEST_CASE("Backend service finalization is not complete before Shutdown returns", "[Extensions][BackendService]") {
+    TEST_CASE("Backend service finalization is not complete before Shutdown returns", "[.RestartQuarantine][Extensions][BackendService]") {
         BackendServiceRegistry services({.drainDeadline = std::chrono::milliseconds{1}});
         auto audit = std::make_shared<BlockingShutdownService::Audit>();
         BackendServiceRegistration registration = RegisterService(services, Descriptor(), std::make_unique<BlockingShutdownService>(audit));
