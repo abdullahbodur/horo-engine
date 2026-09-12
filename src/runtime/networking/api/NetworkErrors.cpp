@@ -229,6 +229,61 @@ namespace Horo::Network::NetworkErrors {
         .retryable = false,
         .userActionable = true,
     };
+    const ErrorCodeDescriptor ReplicationRoleContextInvalid{
+        .domain = NetworkDomain,
+        .code = ErrorCode{"network.replication.role_context_invalid"},
+        .defaultSeverity = ErrorSeverity::Error,
+        .summary = "The pinned replication role context is malformed or mixes unrelated identity generations.",
+        .remediationHint = "Use one valid session, object, schema version, role, peer, and owner binding from the same immutable snapshot.",
+        .retryable = false,
+        .userActionable = true,
+    };
+    const ErrorCodeDescriptor ReplicationAuthorityDenied{
+        .domain = NetworkDomain,
+        .code = ErrorCode{"network.replication.authority_denied"},
+        .defaultSeverity = ErrorSeverity::Error,
+        .summary = "The current world role cannot originate canonical replicated state.",
+        .remediationHint =
+            "Submit an allowed typed command to the authority server; client ownership never grants canonical write authority.",
+        .retryable = false,
+        .userActionable = false,
+    };
+    const ErrorCodeDescriptor ReplicationRoleTransitionStale{
+        .domain = NetworkDomain,
+        .code = ErrorCode{"network.replication.role_transition_stale"},
+        .defaultSeverity = ErrorSeverity::Warning,
+        .summary = "The replication role transition revision is stale or does not match the pending safe point.",
+        .remediationHint = "Rebuild the complete transition from the current immutable role binding.",
+        .retryable = true,
+        .userActionable = false,
+    };
+    const ErrorCodeDescriptor ReplicationRoleTransitionPending{
+        .domain = NetworkDomain,
+        .code = ErrorCode{"network.replication.role_transition_pending"},
+        .defaultSeverity = ErrorSeverity::Warning,
+        .summary = "A replication role transition is already staged.",
+        .remediationHint = "Commit or discard the staged transition at the owner safe point before staging another.",
+        .retryable = true,
+        .userActionable = false,
+    };
+    const ErrorCodeDescriptor ReplicationRoleWrongThread{
+        .domain = NetworkDomain,
+        .code = ErrorCode{"network.replication.role_wrong_thread"},
+        .defaultSeverity = ErrorSeverity::Error,
+        .summary = "Replication role state was accessed from a non-owner thread.",
+        .remediationHint = "Transfer the complete command to the runtime owner-thread safe point.",
+        .retryable = true,
+        .userActionable = false,
+    };
+    const ErrorCodeDescriptor ReplicationRoleShuttingDown{
+        .domain = NetworkDomain,
+        .code = ErrorCode{"network.replication.role_shutting_down"},
+        .defaultSeverity = ErrorSeverity::Error,
+        .summary = "Replication role state is shutting down.",
+        .remediationHint = "Reject late work and bind it only to a new active session/object generation.",
+        .retryable = false,
+        .userActionable = false,
+    };
     const ErrorCodeDescriptor TransportCapabilityDescriptorInvalid{
         .domain = NetworkDomain,
         .code = ErrorCode{"network.transport.capability_descriptor_invalid"},
