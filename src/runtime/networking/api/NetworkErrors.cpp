@@ -445,6 +445,34 @@ namespace Horo::Network::NetworkErrors {
         .retryable = false,
         .userActionable = true,
     };
+    const ErrorCodeDescriptor HandshakeInvalid{
+        .domain = NetworkDomain,
+        .code = ErrorCode{"network.handshake.invalid"},
+        .defaultSeverity = ErrorSeverity::Error,
+        .summary = "The protocol handshake input or local policy is malformed.",
+        .remediationHint =
+            "Use version-one bounded declarations, valid identities and ranges, canonical feature sets, and a future deadline.",
+        .retryable = false,
+        .userActionable = true,
+    };
+    const ErrorCodeDescriptor HandshakeIncompatible{
+        .domain = NetworkDomain,
+        .code = ErrorCode{"network.handshake.incompatible"},
+        .defaultSeverity = ErrorSeverity::Error,
+        .summary = "The peer and local handshake requirements have no explicit compatible selection.",
+        .remediationHint = "Align protocol, schema, mandatory features, compression, and transport requirements before retrying.",
+        .retryable = false,
+        .userActionable = true,
+    };
+    const ErrorCodeDescriptor HandshakeStateInvalid{
+        .domain = NetworkDomain,
+        .code = ErrorCode{"network.handshake.state_invalid"},
+        .defaultSeverity = ErrorSeverity::Error,
+        .summary = "The handshake operation is invalid for its current lifecycle state.",
+        .remediationHint = "Retain the first terminal result and start a new connection and session generation for another attempt.",
+        .retryable = false,
+        .userActionable = false,
+    };
     const ErrorCodeDescriptor MessageEnvelopeInvalid{
         .domain = NetworkDomain,
         .code = ErrorCode{"network.message.envelope_invalid"},
