@@ -39,13 +39,6 @@ namespace Horo::Runtime::Ui {
     /** @brief Exact Horo resource-source generation expected by extraction. */
     using UiRenderResourceRevision = UiRevision<UiRenderResourceRevisionTag>;
 
-    /** @brief Finite affine logical transform; translation uses logical DIP units. */
-    struct UiLogicalTransform final {
-        std::array<float, 6> values{1.0F, 0.0F, 0.0F, 1.0F, 0.0F, 0.0F}; /**< Row-major 2x3 affine values. */
-        [[nodiscard]] bool IsValid() const noexcept;
-        [[nodiscard]] auto operator<=>(const UiLogicalTransform &) const noexcept = default;
-    };
-
     /** @brief Finite normalized linear RGBA color. */
     struct UiLinearColor final {
         float red{};       /**< Linear red in [0, 1]. */

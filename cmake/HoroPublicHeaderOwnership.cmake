@@ -124,6 +124,7 @@ horo_configure_target_header_boundary(HoroRuntimeUi PUBLIC_HEADERS
     Horo/Runtime/Ui/UiDiagnostics.h
     Horo/Runtime/Ui/UiElementTree.h
     Horo/Runtime/Ui/UiLayout.h
+    Horo/Runtime/Ui/UiHitTesting.h
     Horo/Runtime/Ui/UiRenderSnapshot.h
     Horo/Runtime/Ui/UiPresentationReceipt.h
 )

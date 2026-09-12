@@ -65,6 +65,10 @@ namespace Horo::Runtime::Ui {
         [[nodiscard]] UiRenderSnapshotRevision LastObservedSnapshot() const noexcept;
         /** @brief Returns the last successfully presented interaction revision, or invalid zero before presentation. */
         [[nodiscard]] UiInteractionRevision LastPresentedInteraction() const noexcept;
+        /** @brief Returns the exact tracked view incarnation. @return Immutable view identity. */
+        [[nodiscard]] UiRenderViewId View() const noexcept;
+        /** @brief Returns the exact tracked canvas incarnation. @return Immutable canvas identity. */
+        [[nodiscard]] UiCanvasInstanceId Canvas() const noexcept;
 
     private:
         UiPresentedInteractionState(UiRenderViewId view, UiCanvasInstanceId canvas) noexcept;
