@@ -278,7 +278,7 @@ namespace Horo::Runtime::Ui {
          * @param invalidation Exact tree revision, element, and work strength.
          * @return Success or typed validation/capacity/lifecycle failure.
          */
-        [[nodiscard]] Result<void> Invalidate(UiLayoutInvalidation invalidation);
+        [[nodiscard]] Result<void> Invalidate(const UiLayoutInvalidation &invalidation);
         /** @brief Evaluates dirty work and atomically publishes a complete immutable generation.
          * @param tree Exact active retained tree.
          * @param request Coherent source revisions, root geometry, and synchronous evaluator.

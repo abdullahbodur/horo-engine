@@ -131,6 +131,11 @@ namespace Horo::Runtime::Ui {
                 slots.push_back(std::make_shared<UiLayoutSnapshot::Storage>(source.elementCapacity));
         }
 
+        Storage(const Storage &) = delete;
+        Storage &operator=(const Storage &) = delete;
+        Storage(Storage &&) = delete;
+        Storage &operator=(Storage &&) = delete;
+
         ~Storage() {
             ReleaseCurrent();
         }
@@ -199,6 +204,14 @@ namespace Horo::Runtime::Ui {
             }
         }
 
+        void MarkMeasureDirtyToRoot(std::uint32_t index) noexcept {
+            while (index != NoParent) {
+                candidateNodes[index].measureDirty = true;
+                candidateNodes[index].arrangeDirty = true;
+                index = candidateNodes[index].parent;
+            }
+        }
+
         [[nodiscard]] Result<void> ApplyInvalidations(const UiRuntimeTreeRevision treeRevision) {
             for (const auto &invalidation : invalidations) {
                 if (!IsDirtyKind(invalidation.kind) || !invalidation.tree.IsValid())
@@ -241,14 +254,12 @@ namespace Horo::Runtime::Ui {
         }
 
         [[nodiscard]] Result<void> ResolveConstraints(const UiLayoutUpdateRequest &request) {
-            for (std::uint32_t index = 0; index < candidateNodes.size(); ++index) {
-                auto &node = candidateNodes[index];
+            for (const Node &node : candidateNodes) {
                 if (!node.measureDirty || node.childCount == 0)
                     continue;
                 constraintScratch.resize(node.childCount);
                 const UiLayoutChildConstraintRequest childRequest{node.element, node.constraints, ChildHandles(node)};
-                const auto resolved = request.evaluator->ResolveChildConstraints(childRequest, constraintScratch);
-                if (resolved.HasError())
+                if (const auto resolved = request.evaluator->ResolveChildConstraints(childRequest, constraintScratch); resolved.HasError())
                     return Result<void>::Failure(resolved.ErrorValue());
                 for (std::uint32_t offset = 0; offset < node.childCount; ++offset) {
                     if (!constraintScratch[offset].IsValid())
@@ -285,8 +296,7 @@ namespace Horo::Runtime::Ui {
 
         [[nodiscard]] Result<bool> ArrangeNodes(const UiLayoutUpdateRequest &request, const bool remeasure) {
             bool needsRemeasure = false;
-            for (std::uint32_t index = 0; index < candidateNodes.size(); ++index) {
-                auto &node = candidateNodes[index];
+            for (Node &node : candidateNodes) {
                 if (!node.arrangeDirty)
                     continue;
                 rectangleScratch.resize(node.childCount);
@@ -311,12 +321,7 @@ namespace Horo::Runtime::Ui {
                         (child.measurement.dependsOnParentHeight &&
                          previousAssignment.extent.height != child.assignedContent.extent.height);
                     if (dependent) {
-                        auto dirtyIndex = candidateChildren[node.firstChild + offset];
-                        while (dirtyIndex != NoParent) {
-                            candidateNodes[dirtyIndex].measureDirty = true;
-                            candidateNodes[dirtyIndex].arrangeDirty = true;
-                            dirtyIndex = candidateNodes[dirtyIndex].parent;
-                        }
+                        MarkMeasureDirtyToRoot(candidateChildren[node.firstChild + offset]);
                         needsRemeasure = true;
                     }
                 }
@@ -515,24 +520,25 @@ namespace Horo::Runtime::Ui {
     UiLayoutEngine &UiLayoutEngine::operator=(UiLayoutEngine &&) noexcept = default;
 
     /** @copydoc UiLayoutEngine::Invalidate */
-    Result<void> UiLayoutEngine::Invalidate(const UiLayoutInvalidation invalidation) {
+    Result<void> UiLayoutEngine::Invalidate(const UiLayoutInvalidation &invalidation) {
         if (!storage_ || storage_->lifecycle != UiLayoutEngineState::Active)
             return Failure(UiErrors::LayoutLifecycleUnavailable);
         if (!invalidation.tree.IsValid() || !IsDirtyKind(invalidation.kind) ||
             (invalidation.kind != UiLayoutDirtyKind::All && !invalidation.element.IsValid()))
             return Failure(UiErrors::LayoutInvalid);
-        const auto all = std::ranges::find(storage_->invalidations, UiLayoutDirtyKind::All, &UiLayoutInvalidation::kind);
-        if (all != storage_->invalidations.end())
+        if (const auto all = std::ranges::find(storage_->invalidations, UiLayoutDirtyKind::All, &UiLayoutInvalidation::kind);
+            all != storage_->invalidations.end())
             return Result<void>::Success();
         if (invalidation.kind == UiLayoutDirtyKind::All) {
             storage_->invalidations.clear();
             storage_->invalidations.push_back(invalidation);
             return Result<void>::Success();
         }
-        const auto existing = std::ranges::find_if(storage_->invalidations, [&invalidation](const UiLayoutInvalidation &queued) {
+        if (const auto existing = std::ranges::find_if(storage_->invalidations,
+                                                       [&invalidation](const UiLayoutInvalidation &queued) {
             return queued.tree == invalidation.tree && queued.element == invalidation.element;
         });
-        if (existing != storage_->invalidations.end()) {
+            existing != storage_->invalidations.end()) {
             existing->kind = std::max(existing->kind, invalidation.kind);
             return Result<void>::Success();
         }
