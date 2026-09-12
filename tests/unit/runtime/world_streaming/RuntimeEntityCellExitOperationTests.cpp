@@ -8,6 +8,7 @@
 
 namespace Horo::WorldStreaming {
     namespace {
+        using TestSupport::Asset;
         using TestSupport::IdentityFrom;
         using TestSupport::Layer;
         using TestSupport::RequireError;
@@ -185,6 +186,29 @@ namespace Horo::WorldStreaming {
             RequireError(RuntimeEntityCellExitOperation::Create(request, context), WorldStreamingErrors::RuntimeEntityCellExitStale);
         }
 
+        TEST_CASE("Cell-exit creation rejects malformed and non-runtime source authority",
+                  "[unit][world_streaming][runtime_entity_cell_exit][validation]") {
+            auto request = RetireRequest();
+            auto context = Context(request.sourceOwnership);
+            request.sourceOwnership.revision = {};
+            RequireError(RuntimeEntityCellExitOperation::Create(request, context), WorldStreamingErrors::RuntimeEntityCellExitInvalid);
+
+            request = RetireRequest();
+            context = Context(request.sourceOwnership);
+            context.currentOwnership.owner = {};
+            RequireError(RuntimeEntityCellExitOperation::Create(request, context), WorldStreamingErrors::RuntimeEntityCellExitInvalid);
+
+            request = RetireRequest();
+            request.sourceOwnership.objectClass = WorldObjectOwnershipClass::AuthoredSpatial;
+            request.sourceOwnership.authored = {
+                .page = Asset(),
+                .object = 3,
+            };
+            request.sourceOwnership.runtimeSpawned = {};
+            context = Context(request.sourceOwnership);
+            RequireError(RuntimeEntityCellExitOperation::Create(request, context), WorldStreamingErrors::RuntimeEntityCellExitUnsupported);
+        }
+
         TEST_CASE("Cell-exit admission enforces structural lifecycle and in-flight capacity bounds",
                   "[unit][world_streaming][runtime_entity_cell_exit][admission]") {
             const auto request = RetireRequest();
@@ -267,6 +291,18 @@ namespace Horo::WorldStreaming {
             REQUIRE(operation.State() == RuntimeEntityCellExitState::RollingBackDestination);
             REQUIRE(operation.Outcome() == RuntimeEntityCellExitOutcome::Replaced);
             REQUIRE_FALSE(operation.IsCommitted());
+        }
+
+        TEST_CASE("Shutdown is idempotent while an interrupted destination rolls back",
+                  "[unit][world_streaming][runtime_entity_cell_exit][rollback][shutdown]") {
+            auto operation = PreparedHandoff();
+            operation = Advance(std::move(operation), RuntimeEntityCellExitTransition::Fail);
+            operation = Advance(std::move(operation), RuntimeEntityCellExitTransition::Shutdown);
+            REQUIRE(operation.State() == RuntimeEntityCellExitState::RollingBackDestination);
+            REQUIRE(operation.Outcome() == RuntimeEntityCellExitOutcome::Failed);
+            operation = Advance(std::move(operation), RuntimeEntityCellExitTransition::AcknowledgeDestinationRollback);
+            REQUIRE(operation.IsTerminal());
+            REQUIRE(operation.Outcome() == RuntimeEntityCellExitOutcome::Failed);
         }
 
         TEST_CASE("Shutdown drains a committed handoff without changing its canonical outcome",
