@@ -152,6 +152,22 @@ namespace Horo::Network {
         }
     }
 
+    TEST_CASE("Jitter greater than latency clamps negative delay without unsigned underflow", "[unit][network][transport-null]") {
+        auto descriptor = Descriptor(DeterministicTransportMode::Simulated);
+        descriptor.scenario.latencyTicks = 0;
+        descriptor.scenario.jitterTicks = 2;
+        auto transport = Transport(descriptor);
+        REQUIRE(transport.Open(Connection()).HasValue());
+        std::array<DeterministicTransportEvent, 8> events{};
+        REQUIRE(transport.Advance(1, events).Value() == 0);
+
+        const std::array payload{std::byte{1}};
+        for (std::size_t index = 0; index < events.size(); ++index)
+            REQUIRE(transport.Send(Connection(), Channel(), TransportTrafficClass::Reliable, 0, payload).HasValue());
+
+        REQUIRE(transport.Advance(3, events).Value() == events.size());
+    }
+
     TEST_CASE("Deterministic transport preserves bounds cancellation disconnect and shutdown", "[unit][network][transport-null]") {
         auto descriptor = Descriptor(DeterministicTransportMode::Loopback);
         descriptor.maximumScheduledDeliveries = 1;
