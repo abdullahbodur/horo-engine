@@ -235,8 +235,8 @@ namespace Horo::Navigation::NavigationErrors {
         .code = ErrorCode{"navigation.source_geometry.invalid"},
         .defaultSeverity = ErrorSeverity::Error,
         .summary = "A navigation bake-source geometry snapshot is invalid.",
-        .remediationHint = "Provide stable identities, finite canonical transforms and vertices, valid non-degenerate indexed triangles, "
-                           "and positive bounds.",
+        .remediationHint = "Provide stable identities, explicit finite coordinate units, finite canonical transforms and vertices, valid "
+                           "non-degenerate indexed triangles, and positive bounds.",
         .retryable = false,
         .userActionable = true,
     };
@@ -266,6 +266,69 @@ namespace Horo::Navigation::NavigationErrors {
         .summary = "Navigation source geometry changed after immutable capture.",
         .remediationHint = "Capture a new complete geometry snapshot before continuing or publishing the bake attempt.",
         .retryable = true,
+        .userActionable = false,
+    };
+    const ErrorCodeDescriptor BakeInputInvalid{
+        .domain = NavigationDomain,
+        .code = ErrorCode{"navigation.bake_input.invalid"},
+        .defaultSeverity = ErrorSeverity::Error,
+        .summary = "The canonical navigation bake input is invalid.",
+        .remediationHint = "Use exact non-zero revisions, stable identities, finite non-degenerate bounds and coherent surface partitions.",
+        .retryable = false,
+        .userActionable = true,
+    };
+    const ErrorCodeDescriptor BakeInputReferenceMissing{
+        .domain = NavigationDomain,
+        .code = ErrorCode{"navigation.bake_input.reference_missing"},
+        .defaultSeverity = ErrorSeverity::Error,
+        .summary = "A canonical navigation bake input reference is missing.",
+        .remediationHint = "Resolve every surface, profile, source contribution, filter and area against the same immutable capture.",
+        .retryable = false,
+        .userActionable = true,
+    };
+    const ErrorCodeDescriptor BakeInputCapacityExceeded{
+        .domain = NavigationDomain,
+        .code = ErrorCode{"navigation.bake_input.capacity_exceeded"},
+        .defaultSeverity = ErrorSeverity::Error,
+        .summary = "Canonical navigation bake input exceeds a qualified capture bound.",
+        .remediationHint = "Reduce the bake scope or select a qualified lower-detail source without truncating accepted input.",
+        .retryable = false,
+        .userActionable = true,
+    };
+    const ErrorCodeDescriptor BakeInputStale{
+        .domain = NavigationDomain,
+        .code = ErrorCode{"navigation.bake_input.stale"},
+        .defaultSeverity = ErrorSeverity::Warning,
+        .summary = "Navigation bake input changed before publication.",
+        .remediationHint = "Capture the latest complete revision set and source observations before retrying the bake.",
+        .retryable = true,
+        .userActionable = false,
+    };
+    const ErrorCodeDescriptor BakeInputCancelled{
+        .domain = NavigationDomain,
+        .code = ErrorCode{"navigation.bake_input.cancelled"},
+        .defaultSeverity = ErrorSeverity::Info,
+        .summary = "Navigation bake input publication was cancelled.",
+        .remediationHint = "Submit a new bake only if the owning operation still requires the output.",
+        .retryable = true,
+        .userActionable = false,
+    };
+    const ErrorCodeDescriptor BakeInputFailed{
+        .domain = NavigationDomain,
+        .code = ErrorCode{"navigation.bake_input.failed"},
+        .defaultSeverity = ErrorSeverity::Error,
+        .summary = "The navigation bake operation failed before publication.",
+        .remediationHint = "Preserve the prior published generation and inspect the owning operation failure before retrying.",
+        .retryable = false,
+        .userActionable = false,
+    };
+    const ErrorCodeDescriptor BakeInputShuttingDown{
+        .domain = NavigationDomain,
+        .code = ErrorCode{"navigation.bake_input.shutting_down"},
+        .defaultSeverity = ErrorSeverity::Info,
+        .summary = "Navigation bake publication is closed for application shutdown.",
+        .remediationHint = "Do not publish or restart bake work after the application begins shutdown.",
+        .retryable = false,
         .userActionable = false,
     };
     const ErrorCodeDescriptor ProjectProfileInvalid{
