@@ -8,9 +8,24 @@
 #include "Horo/Gameplay/BehaviorRegistry.h"
 #include "Horo/Runtime/Scene/RuntimeScene.h"
 
+#include <cstddef>
 #include <memory>
+#include <vector>
 
 namespace Horo::Gameplay {
+    /** @brief Runtime-only state captured for one stable behavior attachment. */
+    struct BehaviorInstanceReloadState {
+        BehaviorInstanceId instanceId;
+        BehaviorTypeId typeId;
+        std::vector<std::byte> payload;
+        bool started{};
+    };
+
+    /** @brief Complete bounded behavior snapshot used by one native reload transaction. */
+    struct BehaviorRuntimeReloadSnapshot {
+        std::vector<BehaviorInstanceReloadState> instances;
+    };
+
     /** @brief Explicit per-scene bounds for behavior instances and deferred custom events. */
     struct BehaviorRuntimeLimits {
         std::size_t maximumInstances{16'384};
@@ -41,6 +56,17 @@ namespace Horo::Gameplay {
         [[nodiscard]] Result<void> SetEnabled(BehaviorInstanceId instance, bool enabled);
         /** @brief Runs disable/destroy and releases every module-owned instance exactly once. */
         void Shutdown() noexcept;
+        /**
+         * @brief Captures runtime-only state for every instance before shutdown.
+         * @return Complete bounded snapshot or a typed failure that leaves this runtime active.
+         */
+        [[nodiscard]] Result<BehaviorRuntimeReloadSnapshot> CaptureReloadSnapshot() const;
+        /**
+         * @brief Restores an exact snapshot into newly created compatible instances.
+         * @param snapshot State matched by stable behavior instance and type identity.
+         * @return Success or a typed mismatch/restore failure.
+         */
+        [[nodiscard]] Result<void> RestoreReloadSnapshot(const BehaviorRuntimeReloadSnapshot &snapshot);
         /** @brief Reports the number of constructed scene-scoped instances. */
         [[nodiscard]] std::size_t InstanceCount() const noexcept;
 

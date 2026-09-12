@@ -6,12 +6,14 @@
  */
 
 #include "Horo/Gameplay/Behavior.h"
+#include "Horo/Gameplay/GameAsset.h"
 #include "Horo/Gameplay/GameplayRegistration.h"
 
 #include <cstddef>
 #include <cstdint>
 #include <span>
 #include <string_view>
+#include <vector>
 
 #if defined(_WIN32)
 #define HORO_GAME_EXPORT __declspec(dllexport)
@@ -21,15 +23,18 @@
 
 namespace Horo::Gameplay {
     class ComponentRegistry;
+    class GameAssetTypeRegistry;
     class GameServiceRegistry;
     class SystemRegistry;
 
-    inline constexpr std::uint32_t GameplaySdkBoundaryVersion = 4;
+    inline constexpr std::uint32_t GameplaySdkBoundaryVersion = 5;
     inline constexpr std::uint32_t GameplayDescriptorBundleSchemaVersion = 1;
+    inline constexpr std::uint32_t GameModuleReloadSnapshotSchemaVersion = 1;
     inline constexpr std::size_t MaximumGeneratedBehaviorDescriptors = 4096;
     inline constexpr std::size_t MaximumGeneratedDescriptorDiagnostics = 256;
     inline constexpr std::size_t MaximumGeneratedDiagnosticCodeBytes = 160;
     inline constexpr std::size_t MaximumGeneratedDiagnosticMessageBytes = 1024;
+    inline constexpr std::size_t MaximumGameModuleReloadStateBytes = 16U * 1024U * 1024U;
     inline constexpr std::string_view GetGameModuleDescriptorSymbol = "GetGameModuleDescriptor";
     inline constexpr std::string_view GetGameplayDescriptorBundleSymbol = "GetGameplayDescriptorBundle";
     inline constexpr std::string_view CreateGameModuleSymbol = "CreateGameModule";
@@ -53,12 +58,19 @@ namespace Horo::Gameplay {
         std::span<const GameplayCapabilityId> capabilities; /**< Explicit host and project-service capability grants. */
     };
 
+    /** @brief Module-global state captured only after owned work and callbacks are quiescent. */
+    struct GameModuleReloadSnapshot {
+        std::uint32_t schemaVersion{GameModuleReloadSnapshotSchemaVersion};
+        std::vector<std::byte> payload;
+    };
+
     /** @brief Declarative registration capabilities exposed before gameplay startup. */
     struct GameRegistrationContext {
         std::string_view moduleId;
         ComponentRegistry &components;
         SystemRegistry &systems;
         GameServiceRegistry &services;
+        GameAssetTypeRegistry &assetTypes;
     };
 
     /** @brief Project-owned module lifecycle valid only for one exact compatible SDK generation. */
@@ -66,7 +78,7 @@ namespace Horo::Gameplay {
     public:
         virtual ~IGameModule() = default;
         /**
-         * @brief Registers project-owned component, system, and service metadata without activating runtime behavior.
+         * @brief Registers project-owned component, system, service, and asset metadata without activating runtime behavior.
          * @param context Host-owned open registration transaction.
          * @return Success or a typed validation error that prevents startup.
          */
@@ -82,6 +94,19 @@ namespace Horo::Gameplay {
          * @param context Runtime context used by the active generation.
          */
         virtual void Stop(GameRuntimeContext &context) noexcept = 0;
+        /**
+         * @brief Closes callback/job admission, joins owned work, and captures reloadable module state.
+         * @param context Active generation context whose cancellation token has been revoked by the host.
+         * @return Bounded snapshot only when the module proves it is safe to unload; otherwise restart-required.
+         */
+        [[nodiscard]] virtual Result<GameModuleReloadSnapshot> PrepareReload(GameRuntimeContext &context);
+        /**
+         * @brief Restores compatible module-global state after the replacement generation starts.
+         * @param snapshot Snapshot captured from the previous generation.
+         * @param context Active replacement generation context.
+         * @return Success or a typed restore failure that triggers rollback.
+         */
+        [[nodiscard]] virtual Result<void> RestoreReload(const GameModuleReloadSnapshot &snapshot, GameRuntimeContext &context);
     };
 
     using GetGameModuleDescriptorFunction = const GameModuleDescriptor *(*)() noexcept;

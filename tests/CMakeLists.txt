@@ -37,6 +37,17 @@ add_test(NAME HoroExtensionSdkExternalConsumerTest
 set_tests_properties(HoroExtensionSdkExternalConsumerTest PROPERTIES
     LABELS "extensions;sdk;cmake")
 
+add_test(NAME HoroExtensionSdkReconfigureTest
+    COMMAND "${CMAKE_COMMAND}"
+        "-DHORO_ENGINE_SOURCE_DIR=${PROJECT_SOURCE_DIR}"
+        "-DHORO_TEST_BINARY_DIR=${CMAKE_CURRENT_BINARY_DIR}/extension-sdk-reconfigure"
+        "-DCMAKE_GENERATOR=${CMAKE_GENERATOR}"
+        "-DCMAKE_GENERATOR_PLATFORM=${CMAKE_GENERATOR_PLATFORM}"
+        "-DCMAKE_GENERATOR_TOOLSET=${CMAKE_GENERATOR_TOOLSET}"
+        -P "${PROJECT_SOURCE_DIR}/tests/cmake/RunExtensionSdkReconfigureTest.cmake")
+set_tests_properties(HoroExtensionSdkReconfigureTest PROPERTIES
+    LABELS "extensions;sdk;cmake")
+
 add_test(NAME HoroExtensionScaffoldsTest
     COMMAND "${CMAKE_COMMAND}"
         "-DHORO_EXTENSION_SDK_PACKAGE_DIR=${HORO_EXTENSION_SDK_PACKAGE_DIR}"
@@ -101,8 +112,9 @@ add_executable(HoroPackageValidationTests
     unit/packages/PackageLockfileTests.cpp
     unit/packages/PackagePathTests.cpp
     unit/packages/PackageArchiveTests.cpp
+    unit/packages/PackageCacheTests.cpp
     unit/packages/PackageFileManifestTests.cpp)
-target_link_libraries(HoroPackageValidationTests PRIVATE HoroEngine::Packages nlohmann_json::nlohmann_json miniz)
+target_link_libraries(HoroPackageValidationTests PRIVATE HoroEngine::Packages HoroEngine::Platform nlohmann_json::nlohmann_json miniz)
 horo_register_catch_test(HoroPackageValidationTests LABELS "packages;headless")
 
 if (HORO_ENABLE_IMGUI_UI_TESTS)
@@ -269,6 +281,7 @@ horo_register_catch_test(HoroAudioCommandTests LABELS "unit;audio;headless")
 add_executable(HoroPhysicsTests
         unit/runtime/physics/CharacterControllerContractsTests.cpp
         unit/runtime/physics/CharacterWorldSettingsTests.cpp
+        unit/runtime/physics/CharacterWorldTests.cpp
         unit/runtime/physics/CanonicalSolverTests.cpp
         unit/runtime/physics/PhysicsBodyDescriptorTests.cpp
         unit/runtime/physics/PhysicsBodyDynamicsTests.cpp
@@ -283,6 +296,7 @@ add_executable(HoroPhysicsTests
         unit/runtime/physics/PhysicsMetricsTests.cpp
         unit/runtime/physics/PhysicsPoseTests.cpp
         unit/runtime/physics/PhysicsQueryTests.cpp
+        unit/runtime/physics/PhysicsSceneActivationTests.cpp
         unit/runtime/physics/PhysicsShapeDescriptorTests.cpp
         unit/runtime/physics/PhysicsStepPolicyTests.cpp
         unit/runtime/physics/PhysicsWorldBudgetsTests.cpp
@@ -293,7 +307,7 @@ add_executable(HoroPhysicsTests
 target_compile_features(HoroPhysicsTests PRIVATE cxx_std_20)
 target_include_directories(HoroPhysicsTests PRIVATE ${PROJECT_SOURCE_DIR}/src/physics)
 target_compile_definitions(HoroPhysicsTests PRIVATE HORO_TEST_PHYSICS_NATIVE=$<BOOL:${HORO_BUILD_PHYSICS_NATIVE}>)
-target_link_libraries(HoroPhysicsTests PRIVATE HoroEngine::Physics HoroEngine::Runtime HoroEngine::Platform)
+target_link_libraries(HoroPhysicsTests PRIVATE HoroEngine::Physics HoroEngine::PhysicsSceneIntegration HoroEngine::Runtime HoroEngine::Platform)
 horo_register_catch_test(HoroPhysicsTests LABELS "unit;physics;headless")
 
 add_executable(HoroAITests
@@ -470,7 +484,9 @@ add_executable(HoroWorldStreamingTests
         unit/runtime/world_streaming/StreamingSourceRangeTests.cpp
         unit/runtime/world_streaming/WorldCellQuantizationTests.cpp
         unit/runtime/world_streaming/WorldPartitionDescriptorTests.cpp
+        unit/runtime/world_streaming/WorldLayerFilteringTests.cpp
         unit/runtime/world_streaming/WorldLayerOwnershipModelTests.cpp
+        unit/runtime/world_streaming/WorldLayerStateTests.cpp
         unit/runtime/world_streaming/WorldObjectOwnershipTests.cpp
         unit/runtime/world_streaming/WorldPartitionCapabilityProfileTests.cpp
         unit/runtime/world_streaming/WorldPartitionRegistryTests.cpp
@@ -525,15 +541,18 @@ endif()
 add_executable(HoroGameplayRuntimeTests
         unit/gameplay/BehaviorRuntimeTests.cpp
         unit/gameplay/ComponentRegistryTests.cpp
+        unit/gameplay/GameAssetTypeRegistryTests.cpp
         unit/gameplay/GameplayRegistrationTests.cpp
 )
 target_compile_features(HoroGameplayRuntimeTests PRIVATE cxx_std_20)
+target_include_directories(HoroGameplayRuntimeTests PRIVATE "${PROJECT_SOURCE_DIR}/tests/helpers")
 target_link_libraries(HoroGameplayRuntimeTests PRIVATE HoroEngine::GameplayRuntime)
 horo_add_gameplay_module(HoroTestGameModule
         MODULE_ID game.tests
         NO_MANIFEST
         SOURCES ${CMAKE_CURRENT_SOURCE_DIR}/fixtures/gameplay_module/TestGameModule.cpp
 )
+target_include_directories(HoroTestGameModule PRIVATE "${PROJECT_SOURCE_DIR}/tests/helpers")
 get_property(HORO_TEST_GAME_MODULE_REVISION_FILE TARGET HoroTestGameModule PROPERTY HORO_GAMEPLAY_DESCRIPTOR_REVISION_FILE)
 add_executable(HoroGameModuleHostTests
         unit/gameplay/GameModuleHostTests.cpp
@@ -549,6 +568,7 @@ add_dependencies(HoroGameModuleHostTests HoroTestGameModule)
 add_executable(HoroLuaBehaviorTests
         unit/gameplay/LuaBehaviorTests.cpp
 )
+target_include_directories(HoroLuaBehaviorTests PRIVATE "${PROJECT_SOURCE_DIR}/tests/helpers")
 target_compile_features(HoroLuaBehaviorTests PRIVATE cxx_std_20)
 target_link_libraries(HoroLuaBehaviorTests PRIVATE HoroEngine::GameplayLua)
 add_executable(HoroEditorPlaySessionControllerTests
@@ -829,10 +849,17 @@ target_link_libraries(HoroWorkspaceSplitterInteractionTests PRIVATE HoroEngine::
 if (HORO_BUILD_EDITOR_GUI)
     add_executable(HoroEditorWorkspaceControllerTests
             unit/editor/EditorWorkspaceControllerTests.cpp
+            unit/editor/EditorWorkspaceNativeGameplayReloadTests.cpp
     )
 
+    target_include_directories(HoroEditorWorkspaceControllerTests PRIVATE "${PROJECT_SOURCE_DIR}/tests/helpers")
     target_compile_features(HoroEditorWorkspaceControllerTests PRIVATE cxx_std_20)
+    target_compile_definitions(HoroEditorWorkspaceControllerTests PRIVATE
+            HORO_TEST_GAME_MODULE_PATH="$<TARGET_FILE:HoroTestGameModule>"
+            HORO_TEST_GAME_MODULE_REVISION_PATH="${HORO_TEST_GAME_MODULE_REVISION_FILE}"
+    )
     target_link_libraries(HoroEditorWorkspaceControllerTests PRIVATE HoroEngine::Gui nlohmann_json::nlohmann_json)
+    add_dependencies(HoroEditorWorkspaceControllerTests HoroTestGameModule)
 endif ()
 
 add_executable(HoroGameplayBehaviorFilenameModalStateTests
@@ -1292,9 +1319,11 @@ add_executable(HoroRuntimeSaveNamespaceTests
 target_compile_features(HoroRuntimeSaveNamespaceTests PRIVATE cxx_std_20)
 target_link_libraries(HoroRuntimeSaveNamespaceTests PRIVATE HoroEngine::Runtime)
 add_executable(HoroRuntimeSaveParticipantRegistryTests
+        support/AllocationProbe.cpp
         unit/runtime/save/SaveParticipantRegistryTests.cpp
 )
 target_compile_features(HoroRuntimeSaveParticipantRegistryTests PRIVATE cxx_std_20)
+target_include_directories(HoroRuntimeSaveParticipantRegistryTests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/support)
 target_link_libraries(HoroRuntimeSaveParticipantRegistryTests PRIVATE HoroEngine::Runtime)
 add_executable(HoroRuntimeSaveCaptureSnapshotTests
         unit/runtime/save/SaveCaptureSnapshotTests.cpp
@@ -1369,6 +1398,13 @@ add_executable(HoroRuntimeSaveSlotMetadataTests
 )
 target_compile_features(HoroRuntimeSaveSlotMetadataTests PRIVATE cxx_std_20)
 target_link_libraries(HoroRuntimeSaveSlotMetadataTests PRIVATE HoroEngine::Runtime)
+add_executable(HoroRuntimeSaveOperationTests
+        support/AllocationProbe.cpp
+        unit/runtime/save/SaveOperationTests.cpp
+)
+target_compile_features(HoroRuntimeSaveOperationTests PRIVATE cxx_std_20)
+target_include_directories(HoroRuntimeSaveOperationTests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+target_link_libraries(HoroRuntimeSaveOperationTests PRIVATE HoroEngine::Runtime)
 add_executable(HoroRuntimeSaveTestCompositionsTests
         unit/runtime/save/SaveTestCompositionsTests.cpp
 )
@@ -1505,6 +1541,47 @@ target_compile_features(HoroPackagedExtensionActivation PRIVATE cxx_std_20)
 target_include_directories(HoroPackagedExtensionActivation PRIVATE ${PROJECT_SOURCE_DIR}/tests/support)
 target_link_libraries(HoroPackagedExtensionActivation PRIVATE HoroEngine::Extensions)
 
+add_test(NAME HoroExtensionManifestValidatorValid
+    COMMAND "$<TARGET_FILE:horo-extension-validate>" --json --schema-version 1
+        "${PROJECT_SOURCE_DIR}/tests/fixtures/extensions/manifest-validator-valid.json")
+set_tests_properties(HoroExtensionManifestValidatorValid PROPERTIES
+    LABELS "extensions;sdk;cli"
+    PASS_REGULAR_EXPRESSION
+        "\\\"valid\\\":true,\\\"schemaVersion\\\":1,\\\"id\\\":\\\"com.horo.fixture.validator\\\"")
+
+add_test(NAME HoroExtensionManifestValidatorInvalid
+    COMMAND "${CMAKE_COMMAND}"
+        "-DVALIDATOR=$<TARGET_FILE:horo-extension-validate>"
+        "-DMANIFEST=${PROJECT_SOURCE_DIR}/tests/fixtures/extensions/manifest-validator-invalid.json"
+        -P "${PROJECT_SOURCE_DIR}/tests/cmake/VerifyExtensionValidatorFailure.cmake")
+set_tests_properties(HoroExtensionManifestValidatorInvalid PROPERTIES
+    LABELS "extensions;sdk;cli")
+
+add_test(NAME HoroExtensionManifestValidatorContracts
+    COMMAND "${CMAKE_COMMAND}"
+        "-DVALIDATOR=$<TARGET_FILE:horo-extension-validate>"
+        "-DTEST_DIRECTORY=${CMAKE_CURRENT_BINARY_DIR}/extension-validator-contracts"
+        "-DESCAPED_MANIFEST=${PROJECT_SOURCE_DIR}/tests/fixtures/extensions/manifest-validator-escaped-path.json"
+        -P "${PROJECT_SOURCE_DIR}/tests/cmake/VerifyExtensionValidatorContracts.cmake")
+set_tests_properties(HoroExtensionManifestValidatorContracts PROPERTIES
+    LABELS "extensions;sdk;cli")
+
+add_test(NAME HoroExtensionManifestValidatorRejectsUnknownSchema
+    COMMAND "${CMAKE_COMMAND}"
+        "-DVALIDATOR=$<TARGET_FILE:horo-extension-validate>"
+        "-DMANIFEST=${PROJECT_SOURCE_DIR}/tests/fixtures/extensions/manifest-validator-valid.json"
+        -P "${PROJECT_SOURCE_DIR}/tests/cmake/VerifyExtensionValidatorUsageFailure.cmake")
+set_tests_properties(HoroExtensionManifestValidatorRejectsUnknownSchema PROPERTIES
+    LABELS "extensions;sdk;cli")
+
+add_test(NAME HoroExtensionManifestValidatorIsPackaged
+    COMMAND "${CMAKE_COMMAND}"
+        "-DVALIDATOR=${HORO_EXTENSION_SDK_PACKAGE_DIR}/bin/horo-extension-validate${CMAKE_EXECUTABLE_SUFFIX}"
+        "-DSCHEMA=${HORO_EXTENSION_SDK_PACKAGE_DIR}/share/horo/extension-sdk/extension-manifest-v1.schema.json"
+        -P "${PROJECT_SOURCE_DIR}/tests/cmake/VerifyExtensionValidatorPackage.cmake")
+set_tests_properties(HoroExtensionManifestValidatorIsPackaged PROPERTIES
+    LABELS "extensions;sdk;cli")
+
 add_executable(HoroExtensionManagerTests
         unit/extensions/ApplicationCapabilityRegistryTests.cpp
         unit/extensions/ExtensionActivationTransactionTests.cpp
@@ -1554,6 +1631,20 @@ add_executable(HoroPipelineStepRegistryTests
 target_compile_features(HoroPipelineStepRegistryTests PRIVATE cxx_std_20)
 target_link_libraries(HoroPipelineStepRegistryTests PRIVATE HoroEngine::Extensions Catch2::Catch2WithMain)
 add_test(NAME HoroPipelineStepRegistryTests COMMAND HoroPipelineStepRegistryTests)
+
+add_library(HoroBackendServiceReference STATIC
+        fixtures/extensions/BackendServiceReference.cpp
+)
+target_compile_features(HoroBackendServiceReference PUBLIC cxx_std_20)
+target_include_directories(HoroBackendServiceReference PUBLIC ${PROJECT_SOURCE_DIR}/tests/fixtures/extensions)
+target_link_libraries(HoroBackendServiceReference PUBLIC HoroEngine::Extensions)
+
+add_executable(HoroBackendServiceRegistryTests
+        unit/extensions/BackendServiceRegistryTests.cpp
+)
+target_compile_features(HoroBackendServiceRegistryTests PRIVATE cxx_std_20)
+target_link_libraries(HoroBackendServiceRegistryTests PRIVATE HoroBackendServiceReference Catch2::Catch2WithMain)
+add_test(NAME HoroBackendServiceRegistryTests COMMAND HoroBackendServiceRegistryTests)
 
 add_executable(HoroToolchainProviderRegistryTests
         unit/extensions/ToolchainProviderRegistryTests.cpp
@@ -1775,6 +1866,7 @@ set(HORO_CATCH_TEST_TARGETS
         HoroRuntimeSaveCanonicalCodecTests
         HoroRuntimeSaveReferenceTests
         HoroRuntimeSaveSlotMetadataTests
+        HoroRuntimeSaveOperationTests
         HoroRuntimeSaveTestCompositionsTests
         HoroRuntimeSceneTests
         HoroRuntimeSavedSceneBootstrapTests

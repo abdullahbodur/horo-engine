@@ -22,6 +22,30 @@ namespace Horo::Assets {
 
 namespace Horo::Runtime {
     class RuntimeScene;
+    class RuntimeSceneView;
+
+    /** @brief Detached subsystem state prepared for one aggregate runtime-scene candidate. */
+    class SceneActivationCandidate {
+    public:
+        virtual ~SceneActivationCandidate() = default;
+        /** @brief Revalidates authoritative evidence immediately before aggregate publication. */
+        [[nodiscard]] virtual Result<void> ValidatePublication() const = 0;
+        /** @brief Closes subsystem admission and releases fully prepared state; safe before or after publication. */
+        virtual void Shutdown() noexcept = 0;
+    };
+
+    /** @brief Host-injected subsystem participating in aggregate runtime-scene publication. */
+    class SceneActivationParticipant {
+    public:
+        virtual ~SceneActivationParticipant() = default;
+        /** @brief Prepares and fully finalizes detached subsystem state for an unpublished scene candidate.
+         * @param definition Validated immutable scene definition.
+         * @param scene Borrowed unpublished scene candidate.
+         * @return Owned candidate ready for evidence validation and no-fail aggregate publication, or a typed error.
+         */
+        [[nodiscard]] virtual Result<std::unique_ptr<SceneActivationCandidate>> Prepare(const RuntimeSceneDefinition &definition,
+                                                                                        RuntimeSceneView scene) = 0;
+    };
 
     /** @brief Unique identity of one activated runtime-scene instance. */
     struct SceneRuntimeId {
@@ -271,6 +295,9 @@ namespace Horo::Runtime {
          * service. @param loads Load service that outlives this service. @param limits Per-candidate preparation limits. */
         RuntimeSceneService(Assets::AssetRegistry &registry, Assets::AssetLoadService &loads, RuntimeSceneAssetLimits limits = {});
         ~RuntimeSceneService() override;
+        /** @brief Adds one owned activation participant before startup. @param participant Non-null unique owner.
+         * @return Success or a typed invalid-input/lifecycle error. */
+        [[nodiscard]] Result<void> AddActivationParticipant(std::unique_ptr<SceneActivationParticipant> participant);
         /** @brief Queues validated preparation and later safe-point activation. Asset-bearing definitions pin the current
          * registry snapshot and load through the injected service. @param definition Immutable scene definition consumed by
          * the operation; lvalue callers retain source compatibility through a boundary copy. @param config Generation retirement policy.
@@ -307,15 +334,30 @@ namespace Horo::Runtime {
         };
 
         struct Preparation;
+
+        struct SceneAggregate final {
+            SceneAggregate() = default;
+            SceneAggregate(const SceneAggregate &) = delete;
+            SceneAggregate &operator=(const SceneAggregate &) = delete;
+            SceneAggregate(SceneAggregate &&) noexcept = default;
+            SceneAggregate &operator=(SceneAggregate &&) noexcept = default;
+
+            std::unique_ptr<RuntimeScene> scene;
+            std::vector<std::unique_ptr<SceneActivationCandidate>> candidates;
+        };
+
         [[nodiscard]] Result<void> BeginPreparation(RuntimeSceneDefinition definition, RuntimeSceneConfig config);
         [[nodiscard]] Result<void> PopulatePreparationEntries(Preparation &prep, const RuntimeSceneDefinition &definition) const;
         void AdvancePreparation();
         void CancelPreparation(bool waitForCompletion) noexcept;
         [[nodiscard]] Result<void> SubmitPreparationLoads();
+        [[nodiscard]] Result<void> PrepareParticipants(const RuntimeSceneDefinition &definition);
+        static void ShutdownCandidates(std::vector<std::unique_ptr<SceneActivationCandidate>> &candidates) noexcept;
         [[nodiscard]] Result<void> CommitDeferredChanges();
 
-        std::unique_ptr<RuntimeScene> active_;
-        std::unique_ptr<RuntimeScene> pending_;
+        SceneAggregate active_;
+        SceneAggregate pending_;
+        std::vector<std::unique_ptr<SceneActivationParticipant>> participants_;
         std::unique_ptr<Preparation> preparation_;
         std::optional<SceneCommandBuffer> structuralCommands_;
         std::optional<StructuralCommitResult> structuralResult_;

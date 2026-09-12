@@ -21,6 +21,8 @@ namespace Horo::Character::CharacterErrors {
     extern const ErrorCodeDescriptor RequestInvalid;
     /** @brief Controller, contact or result storage exhausted its admitted bound. */
     extern const ErrorCodeDescriptor CapacityExceeded;
+    /** @brief Every controller slot retired at the non-wrapping generation ceiling. */
+    extern const ErrorCodeDescriptor GenerationExhausted;
     /** @brief The Character-world lifecycle phase cannot admit the operation. */
     extern const ErrorCodeDescriptor InvalidState;
     /** @brief An enum or operation is unknown to the active Character contract. */

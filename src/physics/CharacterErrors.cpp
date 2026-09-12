@@ -36,6 +36,9 @@ namespace Horo::Character::CharacterErrors {
     const ErrorCodeDescriptor CapacityExceeded =
         Descriptor("character.capacity.exceeded", "A Character operation exceeded its admitted bounded capacity.",
                    "Lower the requested contact count or admit a larger qualified profile.", true);
+    const ErrorCodeDescriptor GenerationExhausted =
+        Descriptor("character.generation.exhausted", "Every Character controller slot reached its generation ceiling.",
+                   "Replace the Character world with a fresh process-local world generation.", true);
     const ErrorCodeDescriptor InvalidState =
         Descriptor("character.state.invalid", "The Character world lifecycle cannot admit this operation.",
                    "Submit work only during the declared fixed-tick owner phase.");

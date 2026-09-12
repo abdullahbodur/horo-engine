@@ -501,6 +501,7 @@ namespace Horo::Gameplay {
         impl->descriptor = std::move(parsed).Value().descriptor;
         impl->source = std::move(source);
         impl->sourceName = std::move(sourceName);
+        impl->limits = limits;
         return Result<std::unique_ptr<LuaBehaviorProgram>>::Success(
             std::unique_ptr<LuaBehaviorProgram>{new LuaBehaviorProgram{std::move(impl)}});  // NOSONAR(cpp:S5950)
     }
@@ -544,6 +545,16 @@ namespace Horo::Gameplay {
     /** @copydoc LuaBehaviorProgram::Registration */
     BehaviorRegistration LuaBehaviorProgram::Registration() noexcept {
         return {impl_->descriptor, {this, &LuaBehaviorProgram::CreateInstance, &LuaBehaviorProgram::DestroyInstance}};
+    }
+
+    /** @copydoc LuaBehaviorProgram::Clone */
+    Result<std::unique_ptr<LuaBehaviorProgram>> LuaBehaviorProgram::Clone() const {
+        auto cloned = Compile(impl_->source, impl_->descriptor.typeId, impl_->sourceName, impl_->limits);
+        if (cloned.HasError())
+            return Result<std::unique_ptr<LuaBehaviorProgram>>::Failure(cloned.ErrorValue());
+        std::unique_ptr<LuaBehaviorProgram> program = std::move(cloned).Value();
+        program->impl_->revision = impl_->revision;
+        return Result<std::unique_ptr<LuaBehaviorProgram>>::Success(std::move(program));
     }
 
     /** @copydoc LuaBehaviorProgram::ReplaceCompatible */

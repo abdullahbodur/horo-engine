@@ -45,6 +45,11 @@ namespace Horo::Gameplay {
         /** @brief Returns a factory binding valid while this program remains alive. */
         [[nodiscard]] BehaviorRegistration Registration() noexcept;
         /**
+         * @brief Clones the exact validated source generation without reading mutable project files.
+         * @return Independent program with the same descriptor, source, limits, and revision.
+         */
+        [[nodiscard]] Result<std::unique_ptr<LuaBehaviorProgram>> Clone() const;
+        /**
          * @brief Atomically accepts a compatible candidate for safe-point reload.
          * @param candidate Fully validated candidate with the same stable schema and schedule.
          * @return Success or a typed incompatibility error; the previous source remains active on failure.

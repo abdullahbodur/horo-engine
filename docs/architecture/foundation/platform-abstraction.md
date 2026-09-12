@@ -93,6 +93,14 @@ synchronization according to host policy, capacity inspection, and immediate
 OS-held exclusive locking. Lock-file text is diagnostic only; ownership lives
 in the native handle and is released by RAII or process termination.
 
+Operations that create a lock file or destination file also create missing
+parent directories. This is part of the `DurableFileSystem` contract rather
+than a native-adapter convenience, allowing bounded clients such as the package
+cache to publish a fresh directory hierarchy through the durable abstraction.
+Existing alternative adapters must adopt this behavior before serving those
+clients; the native implementation and fresh-root package-cache regressions are
+the compatibility reference.
+
 ## User Directories
 
 The platform service resolves logical directories:

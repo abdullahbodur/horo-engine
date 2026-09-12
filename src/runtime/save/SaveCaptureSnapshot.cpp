@@ -273,9 +273,7 @@ namespace Horo::Runtime {
 
         try {
             usageCheckpoint = usage_;
-            for (const SaveParticipantBinding &binding : participants_.Bindings()) {
-                if (!HasSaveParticipantRole(binding.Descriptor().roles, SaveParticipantRole::Capture))
-                    continue;
+            for (const SaveParticipantBinding &binding : participants_.CaptureBindings()) {
                 const Result<void> captured = CaptureBinding(binding);
                 if (captured.HasError()) {
                     Error error = captured.ErrorValue();
