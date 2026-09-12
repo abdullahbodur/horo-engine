@@ -83,8 +83,11 @@ namespace {
     void CheckOwnerReadOnly(const std::filesystem::path &path) {
         const auto permissions = std::filesystem::status(path).permissions();
         CHECK((permissions & std::filesystem::perms::owner_read) != std::filesystem::perms::none);
-        CHECK((permissions & (std::filesystem::perms::owner_write | std::filesystem::perms::group_all |
-                              std::filesystem::perms::others_all)) == std::filesystem::perms::none);
+        CHECK((permissions & (std::filesystem::perms::owner_write | std::filesystem::perms::group_write |
+                              std::filesystem::perms::others_write)) == std::filesystem::perms::none);
+#ifndef _WIN32
+        CHECK((permissions & (std::filesystem::perms::group_all | std::filesystem::perms::others_all)) == std::filesystem::perms::none);
+#endif
     }
 
     const Horo::ErrorCodeDescriptor InjectedPermissionFailure{
