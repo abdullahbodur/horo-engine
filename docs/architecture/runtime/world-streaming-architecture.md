@@ -875,10 +875,43 @@ An object whose current cell policy is `Retire` cannot be handed off; changing i
 owner requires a current `RequireHandoff` publication rather than overriding the
 retirement decision during replacement.
 
-This contract does not move entities, retain components, serialize runtime state or
-coordinate cell retirement. WST-005.8 owns the transactional runtime-spawned handoff
-state machine; SAV-004.3 owns durable identity and persistence. Hosts consume this
-policy at those explicit boundaries instead of creating a second ownership registry.
+This policy contract does not move entities, retain components or serialize runtime
+state. `RuntimeEntityCellExitOperation` is the WST-005.8 transactional executor that
+coordinates the retirement boundary without becoming a second ownership registry.
+SAV-004.3 continues to own durable identity and persistence.
+
+Each cell-exit operation owns immutable copies of the exact current ownership fact,
+optional handoff successor, runtime entity identity, operation identity and source-cell
+generation. Creation compares that source observation with an authority-owned current
+fact and exact retiring-cell fence, and charges the operation against a positive bounded
+in-flight ceiling. A stale entity, ownership revision, world lifetime or cell generation,
+closed/cancelling owner, exhausted capacity, malformed descriptor or policy mismatch
+fails before work is admitted.
+
+`Retire` policy follows admit, source retirement and exact retirement acknowledgement.
+`RequireHandoff` follows admit, destination preparation, destination acceptance, source
+retirement and exact acknowledgement. Destination acceptance is still staged: the
+source remains canonical until `BeginSourceRetirement` atomically publishes the validated
+ownership successor at the owner safe point and begins retiring the old entity
+representation. A handoff successor is the exact next ownership revision and names a
+different valid owner; it cannot reuse the source cell as a no-op migration.
+
+Cancellation, failure, replacement and shutdown before that commit boundary preserve
+the source entity. If destination work was prepared or accepted, the operation remains
+in `RollingBackDestination` until the exact rollback acknowledgement arrives. Queued or
+merely admitted work can terminate immediately because it owns no destination resources.
+After commit, cancellation, failure and replacement cannot rewind canonical ownership;
+shutdown uses the normal source-retirement drain and retains the committed `Retired` or
+`HandedOff` outcome. A stale acknowledgement cannot retire a replacement operation or a
+new cell generation.
+
+The operation value never moves ECS components itself. The Scene/runtime host performs
+preparation, ownership publication and representation retirement at its legal safe
+points, then advances the immutable operation with the same exact handle. The old and
+new representations, prepared destination state and in-flight operation all remain
+charged to their owning budgets until acknowledgement. A shutdown that cannot obtain
+the required final acknowledgement reports the host's bounded drain failure; it must not
+fabricate a terminal operation or discard retained resources.
 
 ### Spanning-object cook policy
 
@@ -1335,6 +1368,32 @@ it. Cancellation and shutdown close new preparation, and a replacement generatio
 cannot publish an older candidate. This boundary performs no I/O, decompression,
 provider invocation, owner-thread transition or partial publication. The owner revalidates the exact
 operation fence before the later atomic commit.
+
+`StreamingCellAssetRequest` is the WST-005.4 asynchronous ownership boundary. It
+resolves the candidate package followed by canonical hard-dependency packages against
+the same immutable manifest and asset-registry revision, validates the complete bounded
+request set and exact canonical dependency slice before submission, and forwards one
+explicit parent cancellation token to every `AssetLoadService` child. The move-only
+aggregate controller never blocks while polling, requests cancellation on drop, and
+publishes owned bytes only after every child reaches success. Partial admission, provider
+failure, cancellation, replacement, and shutdown publish no batch; callers must revalidate
+the retained operation fence before commit. World Streaming does not discover a provider,
+retry with another backend, or translate a missing hard dependency into an optional result.
+
+`StreamingCellActivationTransaction` is the WST-005.5 owner-safe publication
+boundary. The authority supplies the complete required Scene/provider participant
+set and transfers exactly one prepared, generation-fenced receipt for each entry.
+Preparation validates identities, immutable service revisions, exact operation
+fences, uniqueness and a mandatory receipt ceiling before any live state changes.
+The move-only transaction owns every receipt until it publishes all of them in
+canonical participant order at `CommitDeferredLifecycleChanges`, or rolls all of
+them back in reverse order. Publication is a bounded no-fail transfer; it performs
+no I/O, allocation, waiting or provider discovery. Commit revalidates the complete
+current operation snapshot, including its phase and outcome; matching only the
+operation handle and generation fence is insufficient. A stale fence, replacement,
+cancellation or shutdown before publication rolls back the complete set and leaves
+the active Scene unchanged. Calling another frame phase cannot publish and retains
+the prepared transaction for the declared Scene safe point.
 
 ```text
 Admitted I/O -> Integrity checks -> Independent bounded block decode
