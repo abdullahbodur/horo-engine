@@ -3,8 +3,10 @@
 #include "Horo/WorldStreaming/WorldStreamingErrors.h"
 
 #include <algorithm>
+#include <functional>
 #include <iterator>
 #include <limits>
+#include <optional>
 #include <type_traits>
 #include <utility>
 
@@ -54,12 +56,13 @@ namespace Horo::WorldStreaming {
             return true;
         }
 
-        [[nodiscard]] Result<std::size_t> ResolveManifestCell(const CookedWorldIndexManifest &manifest, const StreamingCellId &cell) {
-            const auto records = manifest.Cells();
-            const auto found = std::ranges::lower_bound(records, cell, StreamingCellCanonicalLess{}, &CookedWorldCellManifestEntry::cell);
-            if (found == records.end() || found->cell != cell)
-                return Failure<std::size_t>(WorldStreamingErrors::CellCandidateUnavailable);
-            return Result<std::size_t>::Success(static_cast<std::size_t>(std::distance(records.begin(), found)));
+        template <typename Entry, typename Projection>
+        [[nodiscard]] std::optional<std::size_t> FindCell(const std::span<const Entry> entries, const StreamingCellId &cell,
+                                                          Projection identity) {
+            const auto found = std::ranges::lower_bound(entries, cell, StreamingCellCanonicalLess{}, identity);
+            if (found == entries.end() || std::invoke(identity, *found) != cell)
+                return std::nullopt;
+            return static_cast<std::size_t>(std::distance(entries.begin(), found));
         }
 
         [[nodiscard]] Result<void> ValidateContext(const CookedWorldIndexManifest &manifest, const StreamingCellCandidateContext &context) {
@@ -194,24 +197,28 @@ namespace Horo::WorldStreaming {
                                                                  const StreamingCellHeaderView &header) {
         if (const auto validContext = ValidateContext(manifest, context); validContext.HasError())
             return Result<StreamingCellCandidate>::Failure(validContext.ErrorValue());
-        const auto cellIndex = ResolveManifestCell(manifest, context.operation.fence.cell);
-        if (cellIndex.HasError())
-            return Result<StreamingCellCandidate>::Failure(cellIndex.ErrorValue());
-        const auto index = cellIndex.Value();
-        const auto manifestRecord = manifest.Cells()[index];
+        const auto manifestCells = manifest.Cells();
+        const auto cellIndex = FindCell(manifestCells, context.operation.fence.cell, &CookedWorldCellManifestEntry::cell);
+        if (!cellIndex.has_value())
+            return Failure<StreamingCellCandidate>(WorldStreamingErrors::CellCandidateUnavailable);
+        const auto index = *cellIndex;
+        const auto &manifestRecord = manifestCells[index];
         if (const auto validHeader = ValidateHeaderIdentity(manifestRecord, context, header); validHeader.HasError())
             return Result<StreamingCellCandidate>::Failure(validHeader.ErrorValue());
         if (const auto validPayloads = ValidatePayloadTable(header); validPayloads.HasError())
             return Result<StreamingCellCandidate>::Failure(validPayloads.ErrorValue());
 
         const auto descriptorCells = manifest.Descriptor().Cells();
+        const auto descriptorIndex = FindCell(descriptorCells, context.operation.fence.cell, &WorldPartitionCellDescriptor::id);
+        if (!descriptorIndex.has_value())
+            return Failure<StreamingCellCandidate>(WorldStreamingErrors::CellCandidateStale);
         const auto manifestDependencies = manifest.HardDependencies(index);
         if (manifestDependencies.size() > context.maximumDependencies)
             return Failure<StreamingCellCandidate>(WorldStreamingErrors::CellCandidateCapacityExceeded);
         std::vector<StreamingCellPayloadHeader> payloads{header.payloads.begin(), header.payloads.end()};
         std::vector<StreamingCellId> hardDependencies{manifestDependencies.begin(), manifestDependencies.end()};
-        return Result<StreamingCellCandidate>::Success(StreamingCellCandidate{context.operation, descriptorCells[index].package.chunkAsset,
-                                                                              manifestRecord, header.compression, std::move(payloads),
-                                                                              std::move(hardDependencies)});
+        return Result<StreamingCellCandidate>::Success(
+            StreamingCellCandidate{context.operation, descriptorCells[*descriptorIndex].package.chunkAsset, manifestRecord,
+                                   header.compression, std::move(payloads), std::move(hardDependencies)});
     }
 }  // namespace Horo::WorldStreaming
