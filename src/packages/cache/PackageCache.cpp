@@ -1,5 +1,6 @@
 #include "Horo/Packages/PackageCache.h"
 
+#include <array>
 #include <atomic>
 #include <fstream>
 #include <limits>
@@ -44,18 +45,9 @@ namespace Horo::Packages {
         }
 
         [[nodiscard]] const char *ReasonName(const PackageQuarantineReason reason) noexcept {
-            switch (reason) {
-                case PackageQuarantineReason::HashMismatch:
-                    return "hash-mismatch";
-                case PackageQuarantineReason::InvalidArchive:
-                    return "invalid-archive";
-                case PackageQuarantineReason::VerificationFailure:
-                    return "verification-failure";
-                case PackageQuarantineReason::CorruptCacheEntry:
-                    return "corrupt-cache-entry";
-                default:
-                    return nullptr;
-            }
+            static constexpr std::array Names{"hash-mismatch", "invalid-archive", "verification-failure", "corrupt-cache-entry"};
+            const auto index = static_cast<std::size_t>(reason);
+            return index < Names.size() ? Names[index] : nullptr;
         }
 
         [[nodiscard]] std::filesystem::path ArchivePath(const std::filesystem::path &root, const Sha256Digest &digest) {
