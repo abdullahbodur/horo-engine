@@ -268,6 +268,7 @@ namespace Horo::Extensions::Tests {
         auto requiring = registry.Register(Descriptor("step.requires", {{"artifact.missing"}}, {}), noOp);
         REQUIRE(requiring.HasValue());
         RequireError(registry.Execute(missingInput, {}), "pipeline_graph_invalid");
+        CHECK(noOp->calls == 0U);
 
         registry.BeginShutdown();
         CHECK(registry.IsShutdown());

@@ -10,6 +10,7 @@
 #include <mutex>
 #include <optional>
 #include <ranges>
+#include <set>
 #include <string_view>
 #include <utility>
 
@@ -157,14 +158,25 @@ namespace Horo::Extensions {
             return Result<std::vector<std::size_t>>::Success(std::move(order));
         }
 
-        [[nodiscard]] Result<void> ValidateOutputConflicts(const std::span<const PipelineArtifactView> initialArtifacts,
-                                                           const std::vector<std::shared_ptr<PipelineStepProviderState>> &providers) {
-            for (const auto &provider : providers) {
-                for (const PipelineArtifactId &output : provider->descriptor.outputs) {
-                    if (std::ranges::binary_search(initialArtifacts, output.value, {}, &PipelineArtifactView::id))
+        [[nodiscard]] Result<void> ValidateArtifactGraph(const std::span<const PipelineArtifactView> initialArtifacts,
+                                                         const std::vector<std::shared_ptr<PipelineStepProviderState>> &providers,
+                                                         const std::span<const std::size_t> order) {
+            std::set<std::string_view, std::less<>> available;
+            for (const PipelineArtifactView &artifact : initialArtifacts)
+                available.emplace(artifact.id);
+            for (const std::size_t index : order) {
+                const auto &descriptor = providers[index]->descriptor;
+                for (const PipelineArtifactId &required : descriptor.inputs) {
+                    if (!available.contains(required.value))
+                        return Result<void>::Failure(MakeError(ExtensionErrors::PipelineGraphInvalid,
+                                                               std::format("Pipeline step '{}' requires missing artifact '{}'.",
+                                                                           descriptor.stepId.value, required.value)));
+                }
+                for (const PipelineArtifactId &output : descriptor.outputs) {
+                    if (!available.emplace(output.value).second)
                         return Result<void>::Failure(
                             MakeError(ExtensionErrors::PipelineGraphInvalid,
-                                      std::format("Pipeline output '{}' conflicts with an initial artifact.", output.value)));
+                                      std::format("Pipeline output '{}' conflicts with an available artifact.", output.value)));
                 }
             }
             return Result<void>::Success();
@@ -369,7 +381,7 @@ namespace Horo::Extensions {
             return Result<PipelineRunResult>::Failure(order.ErrorValue());
         if (cancellation.IsCancellationRequested())
             return Result<PipelineRunResult>::Failure(CancellationFailure(nullptr));
-        if (const auto valid = ValidateOutputConflicts(initialArtifacts, *providers); valid.HasError())
+        if (const auto valid = ValidateArtifactGraph(initialArtifacts, *providers, order.Value()); valid.HasError())
             return Result<PipelineRunResult>::Failure(valid.ErrorValue());
 
         ArtifactIndex available;
