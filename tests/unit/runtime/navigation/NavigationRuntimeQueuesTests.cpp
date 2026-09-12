@@ -195,9 +195,10 @@ namespace Horo::Navigation {
         auto queues = std::move(NavigationRuntimeQueues::Create(QueueDescriptor())).Value();
         NavigationRuntimeCommand command{NavigationSubmitPathCommand{.sequence = 1, .request = Request()}};
         const auto allocationsBefore = Tests::AllocationProbe::Count();
-        REQUIRE(queues.TryEnqueueCommand(command) == NavigationQueueEnqueueResult::Enqueued);
+        const auto enqueueResult = queues.TryEnqueueCommand(command);
         auto dequeued = queues.TryDequeueCommand();
         const auto allocationsAfter = Tests::AllocationProbe::Count();
+        REQUIRE(enqueueResult == NavigationQueueEnqueueResult::Enqueued);
         REQUIRE(dequeued.has_value());
         REQUIRE(allocationsAfter == allocationsBefore);
     }
