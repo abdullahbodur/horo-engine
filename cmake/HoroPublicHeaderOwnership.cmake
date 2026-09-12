@@ -239,6 +239,7 @@ horo_configure_target_header_boundary(HoroPhysics PUBLIC_HEADERS
     Horo/Physics/CharacterErrors.h
     Horo/Physics/CharacterWorldSettings.h
     Horo/Physics/PhysicsBodyDescriptor.h
+    Horo/Physics/PhysicsBodyDynamics.h
     Horo/Physics/PhysicsCapabilities.h
     Horo/Physics/PhysicsCollisionSchema.h
     Horo/Physics/PhysicsConstraintDescriptor.h
