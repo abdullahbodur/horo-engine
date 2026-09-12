@@ -178,12 +178,11 @@ namespace Horo::WorldStreaming {
             std::sort(index.cellSlots.begin() + static_cast<std::ptrdiff_t>(begin),
                       index.cellSlots.begin() + static_cast<std::ptrdiff_t>(end), [&index, axis](const auto left, const auto right) {
                 const auto leftCenter = Center(index.cellBounds[left], axis);
-                const auto rightCenter = Center(index.cellBounds[right], axis);
-                if (leftCenter != rightCenter)
+                if (const auto rightCenter = Center(index.cellBounds[right], axis); leftCenter != rightCenter)
                     return leftCenter < rightCenter;
                 return left < right;
             });
-            const auto middle = begin + ((end - begin) / 2);
+            const auto middle = std::midpoint(begin, end);
             const auto left = BuildNode(index, begin, middle);
             const auto right = BuildNode(index, middle, end);
             index.nodes[nodeSlot] = {bounds, 0, 0, left, right};
@@ -341,14 +340,14 @@ namespace Horo::WorldStreaming {
         const auto countedResult = TraverseIndex(state_->spatialIndex, cells, query, {}, state_->binding);
         if (countedResult.HasError())
             return Result<WorldPartitionSpatialQueryResult>::Failure(countedResult.ErrorValue());
-        const auto counted = countedResult.Value();
+        const auto &counted = countedResult.Value();
         if (counted.matches > state_->limits.queryResults || counted.matches > output.size())
             return Failure<WorldPartitionSpatialQueryResult>(WorldStreamingErrors::PartitionRegistryCapacityExceeded);
 
         const auto writtenResult = TraverseIndex(state_->spatialIndex, cells, query, output, state_->binding);
         if (writtenResult.HasError())
             return Result<WorldPartitionSpatialQueryResult>::Failure(writtenResult.ErrorValue());
-        const auto written = writtenResult.Value();
+        const auto &written = writtenResult.Value();
         std::sort(output.begin(), output.begin() + static_cast<std::ptrdiff_t>(written.matches), [](const auto &left, const auto &right) {
             return left.slot < right.slot;
         });
