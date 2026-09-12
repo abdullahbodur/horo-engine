@@ -68,7 +68,9 @@ namespace Horo::AI {
 
         /** @brief Constructs a one-capability set. @param capability Capability bit to set. @return Typed capability set. */
         [[nodiscard]] static constexpr PerceptionCapabilitySet Of(const PerceptionCapability capability) noexcept {
-            return {std::uint32_t{1} << static_cast<std::uint8_t>(capability)};
+            const auto index = static_cast<std::uint8_t>(capability);
+            return index < static_cast<std::uint8_t>(PerceptionCapability::Count) ? PerceptionCapabilitySet{std::uint32_t{1} << index}
+                                                                                  : PerceptionCapabilitySet{~std::uint32_t{}};
         }
 
         /** @brief Tests whether all requested capabilities are present. @param required Required subset. @return True on inclusion. */

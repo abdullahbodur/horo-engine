@@ -201,6 +201,9 @@ namespace Horo::AI {
             const std::array overLimit{senses[0], Sense(2, PerceptionDescriptorSourceKind::Native, 1, "Hearing")};
             ExpectError(PerceptionDescriptorRegistry::Capture({.senses = overLimit}, {}, noSenseCapacity),
                         AIErrors::PerceptionDescriptorLimitExceeded);
+
+            const auto invalidCapabilities = PerceptionCapabilitySet::Of(static_cast<PerceptionCapability>(255));
+            ExpectError(PerceptionDescriptorRegistry::Capture({}, invalidCapabilities), AIErrors::PerceptionDescriptorInvalid);
         }
 
         TEST_CASE("Captured perception registry owns immutable source data", "[unit][ai][perception][registry]") {
