@@ -7,6 +7,7 @@
 #include <exception>
 #include <mutex>
 #include <new>
+#include <tuple>
 #include <type_traits>
 #include <utility>
 #include <vector>
@@ -33,14 +34,12 @@ namespace Horo::Runtime {
             std::vector<SaveOperationCompletionCallback> callbacks;
         };
 
-        enum class TransitionAction : std::uint8_t {
-            PublishProgress,
-            Complete,
-            Fail
-        };
+        struct TransitionRequest;
+        using TransitionHandler = SaveOperationTransitionResult (*)(const std::shared_ptr<SharedState> &, TransitionRequest &,
+                                                                    CompletionDispatch &) noexcept;
 
         struct TransitionRequest final {
-            TransitionAction action{TransitionAction::PublishProgress};
+            TransitionHandler handler{};
             SaveOperationStage stage{SaveOperationStage::Queued};
             SaveOperationProgress progress{};
             SaveOperationCommitOutcome outcome{SaveOperationCommitOutcome::NotCommitted};
@@ -69,7 +68,7 @@ namespace Horo::Runtime {
             StagePolicy{{InvalidStageRank, InvalidStageRank, InvalidStageRank, InvalidStageRank, InvalidStageRank, InvalidStageRank,
                          InvalidStageRank, InvalidStageRank, InvalidStageRank, InvalidStageRank, InvalidStageRank, 1, InvalidStageRank},
                         SaveOperationStage::RefreshingCatalog,
-                        SaveOperationStage::RefreshingCatalog,
+                        SaveOperationStage::Queued,
                         false},
             StagePolicy{{InvalidStageRank, InvalidStageRank, InvalidStageRank, InvalidStageRank, InvalidStageRank, 2, InvalidStageRank,
                          InvalidStageRank, InvalidStageRank, InvalidStageRank, InvalidStageRank, InvalidStageRank, 1},
@@ -89,12 +88,8 @@ namespace Horo::Runtime {
             return state.terminalSnapshot.has_value();
         }
 
-        [[nodiscard]] bool IsKnown(const SaveOperationKind kind) noexcept {
-            return static_cast<std::uint8_t>(kind) <= static_cast<std::uint8_t>(SaveOperationKind::Delete);
-        }
-
-        [[nodiscard]] bool IsKnown(const SaveOperationStage stage) noexcept {
-            return static_cast<std::uint8_t>(stage) <= static_cast<std::uint8_t>(SaveOperationStage::Deleting);
+        template <typename Enum> [[nodiscard]] bool IsKnown(const Enum value, const Enum last) noexcept {
+            return static_cast<std::uint8_t>(value) <= static_cast<std::uint8_t>(last);
         }
 
         [[nodiscard]] bool RequiresCommit(const SaveOperationKind kind) noexcept {
@@ -109,18 +104,15 @@ namespace Horo::Runtime {
             return PolicyFor(kind).commitStage;
         }
 
-        [[nodiscard]] bool IsKnown(const SaveOperationCommitOutcome outcome) noexcept {
-            return static_cast<std::uint8_t>(outcome) <= static_cast<std::uint8_t>(SaveOperationCommitOutcome::Unknown);
-        }
-
         [[nodiscard]] bool IsReadyForCommit(const SharedState &state) noexcept {
             const StagePolicy &policy = PolicyFor(state.snapshot.kind);
-            return policy.requiresCommit && state.snapshot.stage == policy.readyStage &&
-                   state.snapshot.progress.completedUnits == state.snapshot.progress.totalUnits;
+            return std::tuple{policy.requiresCommit, state.snapshot.stage,
+                              state.snapshot.progress.completedUnits == state.snapshot.progress.totalUnits} ==
+                   std::tuple{true, policy.readyStage, true};
         }
 
         [[nodiscard]] bool IsAllowedProgressStage(const SharedState &state, const SaveOperationStage stage) noexcept {
-            if (!IsKnown(stage))
+            if (!IsKnown(stage, SaveOperationStage::Deleting))
                 return false;
             const StagePolicy &policy = PolicyFor(state.snapshot.kind);
             const std::uint8_t nextRank = policy.ranks[static_cast<std::uint8_t>(stage)];
@@ -130,7 +122,7 @@ namespace Horo::Runtime {
                 return stage == policy.commitStage;
             const std::uint8_t currentRank =
                 state.snapshot.stage == SaveOperationStage::Queued ? 0 : policy.ranks[static_cast<std::uint8_t>(state.snapshot.stage)];
-            return (!policy.requiresCommit || stage != policy.commitStage) && nextRank >= currentRank;
+            return std::pair{stage != policy.commitStage, nextRank >= currentRank} == std::pair{true, true};
         }
 
         [[nodiscard]] SaveCancellationReason PendingCancellation(SharedState &state,
@@ -202,7 +194,7 @@ namespace Horo::Runtime {
         }
 
         [[nodiscard]] bool IsValidProgress(const SaveOperationProgress progress) noexcept {
-            return progress.totalUnits != 0 && progress.completedUnits <= progress.totalUnits;
+            return std::pair{progress.totalUnits != 0, progress.completedUnits <= progress.totalUnits} == std::pair{true, true};
         }
 
         [[nodiscard]] int CompareFractions(std::uint64_t leftNumerator, std::uint64_t leftDenominator, std::uint64_t rightNumerator,
@@ -237,27 +229,31 @@ namespace Horo::Runtime {
                                     snapshot.progress.totalUnits) < 0;
         }
 
-        [[nodiscard]] SaveOperationTransitionResult PublishProgressLocked(SharedState &state, const TransitionRequest &request) noexcept {
-            if (!IsAllowedProgressStage(state, request.stage) || !IsValidProgress(request.progress) ||
-                IsProgressRegression(state.snapshot, request.stage, request.progress))
+        [[nodiscard]] bool IsValidProgressTransition(const SharedState &state, const TransitionRequest &request) noexcept {
+            return std::array{IsAllowedProgressStage(state, request.stage), IsValidProgress(request.progress),
+                              !IsProgressRegression(state.snapshot, request.stage, request.progress)} == std::array{true, true, true};
+        }
+
+        [[nodiscard]] SaveOperationTransitionResult PublishProgressLocked(const std::shared_ptr<SharedState> &state,
+                                                                          TransitionRequest &request, CompletionDispatch &) noexcept {
+            if (!IsValidProgressTransition(*state, request))
                 return SaveOperationTransitionResult::InvalidTransition;
-            state.snapshot.state = SaveOperationState::Running;
-            state.snapshot.stage = request.stage;
-            state.snapshot.progress = request.progress;
-            ++state.snapshot.revision;
+            state->snapshot.state = SaveOperationState::Running;
+            state->snapshot.stage = request.stage;
+            state->snapshot.progress = request.progress;
+            ++state->snapshot.revision;
             return SaveOperationTransitionResult::Applied;
         }
 
         [[nodiscard]] SaveOperationTransitionResult CompleteLocked(const std::shared_ptr<SharedState> &state,
                                                                    const TransitionRequest &request,
                                                                    CompletionDispatch &dispatch) noexcept {
-            if (!IsKnown(request.outcome))
-                return SaveOperationTransitionResult::InvalidTransition;
-            const bool validMutation =
-                RequiresCommit(state->snapshot.kind) && state->commitStarted && request.outcome == SaveOperationCommitOutcome::Committed;
-            const bool validQuery = !RequiresCommit(state->snapshot.kind) && !state->commitStarted &&
-                                    request.outcome == SaveOperationCommitOutcome::NotCommitted;
-            if (!validMutation && !validQuery)
+            constexpr std::array validCompletions{
+                std::tuple{true, true, SaveOperationCommitOutcome::Committed},
+                std::tuple{false, false, SaveOperationCommitOutcome::NotCommitted},
+            };
+            const auto transition = std::tuple{RequiresCommit(state->snapshot.kind), state->commitStarted, request.outcome};
+            if (std::ranges::find(validCompletions, transition) == validCompletions.end())
                 return SaveOperationTransitionResult::InvalidTransition;
             dispatch = TerminalizeLocked(state, SaveOperationState::Completed, request.outcome);
             return SaveOperationTransitionResult::Applied;
@@ -265,25 +261,16 @@ namespace Horo::Runtime {
 
         [[nodiscard]] SaveOperationTransitionResult FailLocked(const std::shared_ptr<SharedState> &state, TransitionRequest &request,
                                                                CompletionDispatch &dispatch) noexcept {
-            if (!IsKnown(request.outcome) || request.outcome == SaveOperationCommitOutcome::Committed ||
-                (!state->commitStarted && request.outcome != SaveOperationCommitOutcome::NotCommitted))
+            constexpr std::array validFailures{
+                std::pair{false, SaveOperationCommitOutcome::NotCommitted},
+                std::pair{true, SaveOperationCommitOutcome::NotCommitted},
+                std::pair{true, SaveOperationCommitOutcome::Unknown},
+            };
+            const auto transition = std::pair{state->commitStarted, request.outcome};
+            if (std::ranges::find(validFailures, transition) == validFailures.end())
                 return SaveOperationTransitionResult::InvalidTransition;
             dispatch = TerminalizeLocked(state, SaveOperationState::Failed, request.outcome, std::move(request.error));
             return SaveOperationTransitionResult::Applied;
-        }
-
-        [[nodiscard]] SaveOperationTransitionResult ApplyTransitionLocked(const std::shared_ptr<SharedState> &state,
-                                                                          TransitionRequest &request,
-                                                                          CompletionDispatch &dispatch) noexcept {
-            switch (request.action) {
-                case TransitionAction::PublishProgress:
-                    return PublishProgressLocked(*state, request);
-                case TransitionAction::Complete:
-                    return CompleteLocked(state, request, dispatch);
-                case TransitionAction::Fail:
-                    return FailLocked(state, request, dispatch);
-            }
-            return SaveOperationTransitionResult::InvalidTransition;
         }
 
         [[nodiscard]] SaveOperationTransitionResult ApplyTransition(const std::shared_ptr<SharedState> &state,
@@ -302,7 +289,7 @@ namespace Horo::Runtime {
                     dispatch = CancelLocked(state, cancellation);
                     result = SaveOperationTransitionResult::CancellationWon;
                 } else {
-                    result = ApplyTransitionLocked(state, request, dispatch);
+                    result = request.handler(state, request, dispatch);
                 }
             }
             Dispatch(dispatch);
@@ -341,7 +328,8 @@ namespace Horo::Runtime {
 
     /** @copydoc SaveOperationSnapshot::IsTerminal */
     bool SaveOperationSnapshot::IsTerminal() const noexcept {
-        return state >= SaveOperationState::Completed && state <= SaveOperationState::Cancelled;
+        constexpr std::array terminalStates{SaveOperationState::Completed, SaveOperationState::Failed, SaveOperationState::Cancelled};
+        return std::ranges::find(terminalStates, state) != terminalStates.end();
     }
 
     SaveOperationHandle::SaveOperationHandle(std::shared_ptr<SaveOperationDetail::SharedState> state) noexcept : state_(std::move(state)) {}
@@ -434,7 +422,7 @@ namespace Horo::Runtime {
     SaveOperationTransitionResult SaveOperationController::PublishProgress(const SaveOperationStage stage,
                                                                            const SaveOperationProgress progress,
                                                                            const std::chrono::steady_clock::time_point now) {
-        return ApplyTransition(state_, now, {.action = TransitionAction::PublishProgress, .stage = stage, .progress = progress});
+        return ApplyTransition(state_, now, {.handler = PublishProgressLocked, .stage = stage, .progress = progress});
     }
 
     /** @copydoc SaveOperationController::ObserveCancellation */
@@ -500,13 +488,13 @@ namespace Horo::Runtime {
     /** @copydoc SaveOperationController::Complete */
     SaveOperationTransitionResult SaveOperationController::Complete(const SaveOperationCommitOutcome outcome,
                                                                     const std::chrono::steady_clock::time_point now) {
-        return ApplyTransition(state_, now, {.action = TransitionAction::Complete, .outcome = outcome});
+        return ApplyTransition(state_, now, {.handler = CompleteLocked, .outcome = outcome});
     }
 
     /** @copydoc SaveOperationController::Fail */
     SaveOperationTransitionResult SaveOperationController::Fail(Error error, const SaveOperationCommitOutcome outcome,
                                                                 const std::chrono::steady_clock::time_point now) {
-        return ApplyTransition(state_, now, {.action = TransitionAction::Fail, .outcome = outcome, .error = std::move(error)});
+        return ApplyTransition(state_, now, {.handler = FailLocked, .outcome = outcome, .error = std::move(error)});
     }
 
     void SaveOperationController::Abandon() noexcept {
@@ -515,8 +503,10 @@ namespace Horo::Runtime {
 
     /** @copydoc CreateSaveOperation */
     Result<SaveOperationController> CreateSaveOperation(SaveOperationDescriptor descriptor) {
-        if (descriptor.operation == 0 || descriptor.maximumCompletionCallbacks == 0 ||
-            descriptor.maximumCompletionCallbacks > MaximumSaveOperationCompletionCallbacks || !IsKnown(descriptor.kind))
+        const std::array invalidDescriptor{descriptor.operation == 0, descriptor.maximumCompletionCallbacks == 0,
+                                           descriptor.maximumCompletionCallbacks > MaximumSaveOperationCompletionCallbacks,
+                                           !IsKnown(descriptor.kind, SaveOperationKind::Delete)};
+        if (std::ranges::find(invalidDescriptor, true) != invalidDescriptor.end())
             return Result<SaveOperationController>::Failure(MakeError(SaveErrors::OperationInvalid));
         try {
             auto state = std::make_shared<SaveOperationDetail::SharedState>();

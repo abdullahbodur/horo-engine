@@ -256,6 +256,10 @@ TEST_CASE("Completion callback exceptions do not suppress later observers", "[un
     }).HasValue());
     CHECK(controller.Complete(SaveOperationCommitOutcome::NotCommitted) == SaveOperationTransitionResult::Applied);
     CHECK(calls.load() == 1);
+    CHECK(handle
+              .OnCompletion([](const SaveOperationSnapshot &) {
+        throw 9;
+    }).HasValue());
 }
 
 TEST_CASE("Controller move assignment installs replacement before abandonment callbacks", "[unit][runtime][save][operation]") {
@@ -337,14 +341,72 @@ TEST_CASE("Invalid commit outcome representations never publish terminal state",
     CHECK(query.Fail(MakeError(SaveErrors::CompositionInjectedFailure), invalidOutcome) ==
           SaveOperationTransitionResult::InvalidTransition);
     CHECK_FALSE(Snapshot(queryHandle).IsTerminal());
+
+    auto mutation = Operation(SaveOperationKind::Delete, 52);
+    const auto mutationHandle = mutation.Handle();
+    REQUIRE(mutation.PublishProgress(SaveOperationStage::Deleting, {1, 1}) == SaveOperationTransitionResult::Applied);
+    REQUIRE(mutation.BeginCommit() == SaveCommitGateResult::Entered);
+    CHECK(mutation.Complete(invalidOutcome) == SaveOperationTransitionResult::InvalidTransition);
+    CHECK(mutation.Fail(MakeError(SaveErrors::CompositionInjectedFailure), invalidOutcome) ==
+          SaveOperationTransitionResult::InvalidTransition);
+    CHECK_FALSE(Snapshot(mutationHandle).IsTerminal());
+    CHECK(mutation.Fail(MakeError(SaveErrors::CompositionInjectedFailure), SaveOperationCommitOutcome::Unknown) ==
+          SaveOperationTransitionResult::Applied);
 }
 
-TEST_CASE("Operation admission reports typed allocation failure", "[unit][runtime][save][operation]") {
+TEST_CASE("Operation admission maps every allocation point to typed failure", "[unit][runtime][save][operation]") {
     const SaveOperationDescriptor descriptor{.operation = 51, .kind = SaveOperationKind::Save, .maximumCompletionCallbacks = 1};
-    Tests::AllocationProbe::ScopedFailure failure;
-    const auto created = CreateSaveOperation(descriptor);
-    REQUIRE(created.HasError());
-    CHECK(created.ErrorValue().code.Value() == SaveErrors::OperationAllocationFailed.code.Value());
+    bool admitted = false;
+    for (std::size_t successfulAllocations = 0; successfulAllocations < 16 && !admitted; ++successfulAllocations) {
+        auto created = [&] {
+            Tests::AllocationProbe::ScopedFailure failure{successfulAllocations};
+            return CreateSaveOperation(descriptor);
+        }();
+        admitted = created.HasValue();
+        if (!admitted)
+            CHECK(created.ErrorValue().code.Value() == SaveErrors::OperationAllocationFailed.code.Value());
+    }
+    CHECK(admitted);
+}
+
+TEST_CASE("Terminal transitions and abandonment allocate no storage after admission", "[unit][runtime][save][operation]") {
+    auto cancelled = Operation(SaveOperationKind::Save, 53);
+    const auto cancelledHandle = cancelled.Handle();
+    SaveCancellationRequestResult request;
+    SaveCommitGateResult cancelledGate;
+    {
+        Tests::AllocationProbe::ScopedFailure failure;
+        request = cancelledHandle.RequestCancellation();
+        cancelledGate = cancelled.BeginCommit();
+    }
+    CHECK(request == SaveCancellationRequestResult::Requested);
+    CHECK(cancelledGate == SaveCommitGateResult::CancellationWon);
+
+    auto completed = Operation(SaveOperationKind::RefreshCatalog, 54);
+    SaveOperationTransitionResult completion;
+    {
+        Tests::AllocationProbe::ScopedFailure failure;
+        completion = completed.Complete(SaveOperationCommitOutcome::NotCommitted);
+    }
+    CHECK(completion == SaveOperationTransitionResult::Applied);
+
+    auto failed = Operation(SaveOperationKind::Save, 55);
+    SaveOperationTransitionResult failureResult;
+    Error failureError = MakeError(SaveErrors::CompositionInjectedFailure);
+    {
+        Tests::AllocationProbe::ScopedFailure failure;
+        failureResult = failed.Fail(std::move(failureError), SaveOperationCommitOutcome::NotCommitted);
+    }
+    CHECK(failureResult == SaveOperationTransitionResult::Applied);
+
+    auto abandonedController = Operation(SaveOperationKind::Save, 56);
+    const SaveOperationHandle abandoned = abandonedController.Handle();
+    std::optional<SaveOperationController> owner{std::move(abandonedController)};
+    {
+        Tests::AllocationProbe::ScopedFailure failure;
+        owner.reset();
+    }
+    CHECK(Snapshot(abandoned).state == SaveOperationState::Failed);
 }
 
 TEST_CASE("Producer release terminalizes an abandoned operation", "[unit][runtime][save][operation]") {
@@ -402,6 +464,11 @@ TEST_CASE("Cancellation and commit gate races have one atomic winner", "[unit][r
     for (int iteration = 0; iteration < 64; ++iteration) {
         auto controller = Operation(SaveOperationKind::Delete, static_cast<OperationId>(iteration + 200));
         const auto handle = controller.Handle();
+        std::atomic<int> callbacks{};
+        REQUIRE(handle
+                    .OnCompletion([&callbacks](const SaveOperationSnapshot &) {
+            ++callbacks;
+        }).HasValue());
         REQUIRE(controller.PublishProgress(SaveOperationStage::Deleting, {1, 1}) == SaveOperationTransitionResult::Applied);
         std::barrier start{2};
         SaveCancellationRequestResult cancellation = SaveCancellationRequestResult::InvalidHandle;
@@ -423,6 +490,7 @@ TEST_CASE("Cancellation and commit gate races have one atomic winner", "[unit][r
             CHECK(cancellation == SaveCancellationRequestResult::Requested);
             CHECK(Snapshot(handle).state == SaveOperationState::Cancelled);
         }
+        CHECK(callbacks.load() == 1);
     }
 }
 
