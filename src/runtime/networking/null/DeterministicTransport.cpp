@@ -9,12 +9,12 @@
 
 namespace Horo::Network {
     namespace {
-        template <typename T> [[nodiscard]] Result<T> Fail(const ErrorCodeDescriptor &descriptor) {
-            return Result<T>::Failure(MakeError(descriptor));
-        }
-
         [[nodiscard]] bool ValidRate(const std::uint16_t value) noexcept {
             return value <= 10'000;
+        }
+
+        template <typename T> [[nodiscard]] Result<T> Fail(const ErrorCodeDescriptor &descriptor) {
+            return Result<T>::Failure(MakeError(descriptor));
         }
 
         [[nodiscard]] bool ValidScenario(const DeterministicTransportDescriptor &descriptor) noexcept {
