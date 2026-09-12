@@ -8,7 +8,9 @@
 #include <cstddef>
 
 namespace Horo::Network {
+    using TestSupport::Connection;
     using TestSupport::RequireError;
+    using TestSupport::Session;
     using TestSupport::WireIdentity;
 
     namespace {
@@ -18,14 +20,6 @@ namespace Horo::Network {
 
         [[nodiscard]] constexpr std::size_t Index(const HandshakeCompression compression) noexcept {
             return static_cast<std::size_t>(compression);
-        }
-
-        [[nodiscard]] ConnectionHandle Connection(const std::uint32_t generation = 3) {
-            return ConnectionHandle::Create(2, generation).Value();
-        }
-
-        [[nodiscard]] NetworkOperationGeneration Session(const std::uint64_t generation = 7) {
-            return NetworkOperationGeneration::Create(generation).Value();
         }
 
         struct Fixture final {
