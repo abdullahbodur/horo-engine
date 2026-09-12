@@ -631,3 +631,31 @@ backend type crosses the boundary. Callers that previously inferred readiness fr
 source validity must now retain an exact registry snapshot, call `ValidatePCGGraph`,
 and hand the returned generation-fenced dependency order to the later compiler. There
 is no compatibility path for ambient runtime discovery or best-effort fallback.
+
+## Runtime Save Operation Boundary
+
+`[SAV-001.6]` adds `Horo/Runtime/Save/SaveOperation.h` to `HoroEngine::Runtime`.
+The public contract reuses the application-owned Foundation `OperationId` and exposes
+only typed save stages, exact bounded progress, immutable terminal evidence,
+cooperative cancellation and completion observation. It owns no scheduler, storage,
+filesystem, cloud, scene, editor, UI or backend capability. The generated standalone
+Runtime public-header consumer compiles the contract through its registered owner.
+
+Runtime save producers create the move-only controller only after application
+operation admission, retain it until exactly one terminal result is published and
+hand copyable handles to polling or callback consumers. Existing ad hoc save-job IDs
+must migrate to the application `OperationStore` identity instead of creating another
+operation store. Callers request cancellation without waiting; producers observe it
+before entering `BeginCommit`. Once that atomic gate succeeds, cancellation is too
+late and terminal publication reports the actual committed, not-committed or unknown
+outcome. Completion callbacks are bounded, run outside the operation lock on the
+registering or terminalizing thread and must remain non-blocking. Admission also
+preallocates cancellation and abandonment failures plus callback storage. A terminal
+transition moves the final snapshot into retained immutable in-state storage before
+releasing observers, so destructor-driven abandonment and callback dispatch cannot
+lose terminal publication to a later allocation failure. Admission allocation failure
+has its own typed identity. Each operation kind has a closed monotonic stage order and
+an exact completed predecessor for `BeginCommit`; pre-commit stages cannot be published
+after the gate. Handles retain shared state across user callbacks, and producer
+replacement detaches prior state before abandonment dispatch so reentrant release or
+move assignment cannot invalidate callback evidence or orphan the installed operation.

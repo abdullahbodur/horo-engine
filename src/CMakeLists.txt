@@ -203,6 +203,7 @@ add_library(HoroRuntime STATIC
         runtime/save/SaveCanonicalCompositeWriter.cpp
         runtime/save/SaveCanonicalCompositeReader.cpp
         runtime/save/SaveSlotMetadata.cpp
+        runtime/save/SaveOperation.cpp
         runtime/save/SaveTestCompositions.cpp
 )
 add_library(HoroEngine::Runtime ALIAS HoroRuntime)

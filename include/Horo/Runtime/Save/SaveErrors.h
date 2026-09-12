@@ -108,6 +108,22 @@ namespace Horo::Runtime::SaveErrors {
     extern const ErrorCodeDescriptor SlotDisplayMetadataInvalid;
     /** @brief A replacement changed logical slot identity or reused the committed generation. */
     extern const ErrorCodeDescriptor SlotGenerationConflict;
+    /** @brief An asynchronous save operation descriptor or handle is invalid. */
+    extern const ErrorCodeDescriptor OperationInvalid;
+    /** @brief Asynchronous save operation state or callback storage could not be allocated. */
+    extern const ErrorCodeDescriptor OperationAllocationFailed;
+    /** @brief An asynchronous save operation progress or terminal transition is invalid. */
+    extern const ErrorCodeDescriptor OperationTransitionInvalid;
+    /** @brief The bounded completion callback capacity is exhausted. */
+    extern const ErrorCodeDescriptor OperationCallbackCapacityExceeded;
+    /** @brief A completion callback is empty and cannot be registered. */
+    extern const ErrorCodeDescriptor OperationCallbackInvalid;
+    /** @brief Cooperative cancellation won before the operation commit gate. */
+    extern const ErrorCodeDescriptor OperationCancelled;
+    /** @brief The operation deadline elapsed before the commit gate. */
+    extern const ErrorCodeDescriptor OperationDeadlineExceeded;
+    /** @brief The operation producer was released without publishing a terminal result. */
+    extern const ErrorCodeDescriptor OperationAbandoned;
     /** @brief The selected save composition explicitly does not support persistence. */
     extern const ErrorCodeDescriptor CompositionUnsupported;
     /** @brief Deterministic composition limits or a submitted request are malformed. */
