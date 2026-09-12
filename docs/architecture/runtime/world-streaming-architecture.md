@@ -849,6 +849,46 @@ Replacement and shutdown never rewrite or delete an already published page in pl
 Provider integration, merge UI and Editor persistence remain application/Editor
 responsibilities layered over this contract rather than alternate sources of truth.
 
+### World layer type and control ownership
+
+`WorldLayerOwnershipDescriptor` is the inert WST-006.1 contract for the stable
+identity, classification and control authority of one world layer. It reuses the
+manifest-issued `StreamingLayerId`; a runtime publication never renames a layer or
+creates a replacement identity from its display name, array position, target filter
+or current state. `WorldLayerRevision` is a separate non-wrapping compare-and-swap
+revision and is not a partition epoch or cell residency generation.
+
+Placement, residency and audience are orthogonal typed dimensions. Placement is
+`Spatial` or `NonSpatial`; residency is `Persistent`, `Streamed` or
+`RuntimeControlled`; audience is `Runtime` or `EditorOnly`. Consequently a persistent
+spatial layer, demand-loaded non-spatial layer or editor-only spatial layer can be
+represented without overloaded flags. Loaded/Activated state remains independent
+from physical cell residency and is owned by WST-006.2. Target filtering consumes the
+audience and stable identity in WST-006.3 without rewriting source identities.
+
+Every fact carries the exact mounted `StreamingRuntimeOwnerToken` plus one exclusive
+control authority. World Streaming controls runtime-visible persistent and streamed
+layers without a second authority token. Editor-only layers carry an explicit editor
+document authority identity and generation. Runtime-controlled layers carry an
+explicit gameplay-script or network-replication authority identity and generation;
+neither authority may mutate cell residency or bypass the World Streaming ledger.
+
+Admission is pure and bounded. Insert requires available capacity, while replacement
+requires the exact current revision and its non-wrapping successor. Placement,
+residency, audience and stable layer identity cannot change during replacement.
+Only a runtime-controlled layer may change its explicit control owner. Such a change
+requires a `WorldLayerControlHandoffReceipt` that binds the exact stable layer,
+current owner, ownership revision, target owner lifetime, authorization identity and authorization
+generation. Admission compares that receipt with the authority snapshot's current
+authorization and separately validated target lifetime. Same-lineage owner generations
+must advance; replay, rewind, expired targets and unauthorized cross-role or cross-owner
+changes fail closed. A successful change is reported as a handoff. A context containing
+a current record must charge at least one layer. Invalid, contradictory, stale-world,
+stale-owner, stale-revision, identity-conflicting, over-capacity, cancelling and closed
+requests fail without partial publication. The contract owns no editor document, cell
+state, gameplay script, network session or service pointer and performs no registration
+or lifecycle callback.
+
 ### Persistent, non-spatial and dynamic ownership policy
 
 `WorldObjectOwnershipDescriptor` is the inert WST-001.7 policy fact that separates
@@ -875,10 +915,43 @@ An object whose current cell policy is `Retire` cannot be handed off; changing i
 owner requires a current `RequireHandoff` publication rather than overriding the
 retirement decision during replacement.
 
-This contract does not move entities, retain components, serialize runtime state or
-coordinate cell retirement. WST-005.8 owns the transactional runtime-spawned handoff
-state machine; SAV-004.3 owns durable identity and persistence. Hosts consume this
-policy at those explicit boundaries instead of creating a second ownership registry.
+This policy contract does not move entities, retain components or serialize runtime
+state. `RuntimeEntityCellExitOperation` is the WST-005.8 transactional executor that
+coordinates the retirement boundary without becoming a second ownership registry.
+SAV-004.3 continues to own durable identity and persistence.
+
+Each cell-exit operation owns immutable copies of the exact current ownership fact,
+optional handoff successor, runtime entity identity, operation identity and source-cell
+generation. Creation compares that source observation with an authority-owned current
+fact and exact retiring-cell fence, and charges the operation against a positive bounded
+in-flight ceiling. A stale entity, ownership revision, world lifetime or cell generation,
+closed/cancelling owner, exhausted capacity, malformed descriptor or policy mismatch
+fails before work is admitted.
+
+`Retire` policy follows admit, source retirement and exact retirement acknowledgement.
+`RequireHandoff` follows admit, destination preparation, destination acceptance, source
+retirement and exact acknowledgement. Destination acceptance is still staged: the
+source remains canonical until `BeginSourceRetirement` atomically publishes the validated
+ownership successor at the owner safe point and begins retiring the old entity
+representation. A handoff successor is the exact next ownership revision and names a
+different valid owner; it cannot reuse the source cell as a no-op migration.
+
+Cancellation, failure, replacement and shutdown before that commit boundary preserve
+the source entity. If destination work was prepared or accepted, the operation remains
+in `RollingBackDestination` until the exact rollback acknowledgement arrives. Queued or
+merely admitted work can terminate immediately because it owns no destination resources.
+After commit, cancellation, failure and replacement cannot rewind canonical ownership;
+shutdown uses the normal source-retirement drain and retains the committed `Retired` or
+`HandedOff` outcome. A stale acknowledgement cannot retire a replacement operation or a
+new cell generation.
+
+The operation value never moves ECS components itself. The Scene/runtime host performs
+preparation, ownership publication and representation retirement at its legal safe
+points, then advances the immutable operation with the same exact handle. The old and
+new representations, prepared destination state and in-flight operation all remain
+charged to their owning budgets until acknowledgement. A shutdown that cannot obtain
+the required final acknowledgement reports the host's bounded drain failure; it must not
+fabricate a terminal operation or discard retained resources.
 
 ### Spanning-object cook policy
 
