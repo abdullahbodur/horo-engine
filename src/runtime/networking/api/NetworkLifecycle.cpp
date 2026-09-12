@@ -28,7 +28,7 @@ namespace Horo::Network {
                     failureKind = NetworkFailureKind::SessionTimedOut;
                     break;
                 case Shutdown:
-                    failureKind = NetworkFailureKind::SessionShuttingDown;
+                    failureKind = NetworkFailureKind::SessionShutdown;
                     break;
                 case Closed:
                 case Failed:
@@ -174,10 +174,10 @@ namespace Horo::Network {
             const NetworkFailureKind observed = failure->Kind();
             if ((kind == NetworkLifecycleTerminalKind::Cancelled && observed != NetworkFailureKind::SessionCancelled) ||
                 (kind == NetworkLifecycleTerminalKind::TimedOut && observed != NetworkFailureKind::SessionTimedOut) ||
-                (kind == NetworkLifecycleTerminalKind::Shutdown && observed != NetworkFailureKind::SessionShuttingDown) ||
+                (kind == NetworkLifecycleTerminalKind::Shutdown && observed != NetworkFailureKind::SessionShutdown) ||
                 (kind == NetworkLifecycleTerminalKind::Failed &&
                  (observed == NetworkFailureKind::SessionCancelled || observed == NetworkFailureKind::SessionTimedOut ||
-                  observed == NetworkFailureKind::SessionShuttingDown)))
+                  observed == NetworkFailureKind::SessionShutdown)))
                 return Fail<NetworkLifecycleTerminal>(NetworkErrors::NetworkLifecycleInvalid);
         }
         return Result<NetworkLifecycleTerminal>::Success(NetworkLifecycleTerminal{kind, std::move(failure)});
