@@ -203,6 +203,12 @@ namespace Horo::Editor {
 
         using ContentBrowserPathMoves = std::vector<std::pair<std::filesystem::path, std::filesystem::path>>;
 
+        struct NativeGameplayReloadTransaction {
+            NativeGameplayRollbackArtifact rollbackArtifact;
+            EditorPlayReloadSnapshot playSnapshot;
+            Gameplay::GameModuleReloadSnapshot moduleSnapshot;
+        };
+
         [[nodiscard]] bool ProcessDocumentCommand(const EditorWorkspaceViewCommandData &cmd);
         [[nodiscard]] bool ProcessPlayCommand(const EditorWorkspaceViewCommandData &cmd);
         [[nodiscard]] bool ProcessSceneObjectCommand(const EditorWorkspaceViewCommandData &cmd);
@@ -304,6 +310,13 @@ namespace Horo::Editor {
         void RefreshAvailableBehaviorProjection();
         void ApplyPendingGameplayRegistry();
         void ApplyNativeGameplayReload();
+        [[nodiscard]] Result<NativeGameplayReloadTransaction> PrepareNativeGameplayReload(const std::filesystem::path &projectRoot);
+        [[nodiscard]] Result<std::unique_ptr<ProjectGameplayRegistry>> LoadNativeGameplayCandidate(
+            const std::filesystem::path &projectRoot) const;
+        [[nodiscard]] Result<void> ActivateNativeGameplayGeneration(ProjectGameplayRegistry &generation,
+                                                                    const NativeGameplayReloadTransaction &transaction);
+        void RollbackNativeGameplayReload(const std::filesystem::path &projectRoot, NativeGameplayReloadTransaction transaction,
+                                          Error candidateError);
         void ReimportContentBrowserAsset(const std::filesystem::path &absolutePath);
         void RevealContentBrowserEntry(const std::filesystem::path &absolutePath);
         void OpenDiagnosticSource(const DiagnosticSourceRequest &source);

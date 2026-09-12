@@ -40,6 +40,14 @@ namespace {
                "ctx.transform.set_position(x+" +
                std::to_string(amount) + ",y,z) end }";
     }
+
+    void WriteNativeManifest(const TemporaryProject &project) {
+        const std::string manifest = "{\n  \"schemaVersion\": 1,\n  \"moduleId\": \"game.tests\",\n  \"buildFingerprint\": \"" +
+                                     std::string{Gameplay::CurrentGameplayBuildFingerprint()} + "\",\n  \"descriptorRevision\": " +
+                                     std::to_string(Tests::ReadDescriptorRevision(HORO_TEST_GAME_MODULE_REVISION_PATH)) +
+                                     ",\n  \"artifactPath\": \"" + std::filesystem::path{HORO_TEST_GAME_MODULE_PATH}.string() + "\"\n}\n";
+        Write(project.root / ".horo" / "local" / "gameplay_module.json", manifest);
+    }
 }  // namespace
 
 TEST_CASE("project gameplay registry discovers and safely reloads compatible Lua source") {
@@ -84,11 +92,7 @@ TEST_CASE("project gameplay registry merges a fingerprinted native module with L
     const std::filesystem::path source = project.root / "assets" / "scripts" / "Watched.horo_script";
     Write(source, Source(1));
     Write(source.string() + ".meta", R"({"schemaVersion":1,"runtime":"lua","behaviorTypeId":"game.tests.watched"})");
-    const std::string manifest = "{\n  \"schemaVersion\": 1,\n  \"moduleId\": \"game.tests\",\n  \"buildFingerprint\": \"" +
-                                 std::string{Gameplay::CurrentGameplayBuildFingerprint()} + "\",\n  \"descriptorRevision\": " +
-                                 std::to_string(Tests::ReadDescriptorRevision(HORO_TEST_GAME_MODULE_REVISION_PATH)) +
-                                 ",\n  \"artifactPath\": \"" + std::filesystem::path{HORO_TEST_GAME_MODULE_PATH}.string() + "\"\n}\n";
-    Write(project.root / ".horo" / "local" / "gameplay_module.json", manifest);
+    WriteNativeManifest(project);
 
     auto registry = Editor::ProjectGameplayRegistry::Discover(project.root);
     REQUIRE_FALSE(registry->HasBlockingDiagnostics());
@@ -114,12 +118,7 @@ TEST_CASE("project gameplay registry reports native sources without a published 
 
 TEST_CASE("project gameplay registry preserves and restores an unloaded native generation") {
     TemporaryProject project;
-    const std::uint64_t revision = Tests::ReadDescriptorRevision(HORO_TEST_GAME_MODULE_REVISION_PATH);
-    const std::string manifest = "{\n  \"schemaVersion\": 1,\n  \"moduleId\": \"game.tests\",\n  \"buildFingerprint\": \"" +
-                                 std::string{Gameplay::CurrentGameplayBuildFingerprint()} +
-                                 "\",\n  \"descriptorRevision\": " + std::to_string(revision) + ",\n  \"artifactPath\": \"" +
-                                 std::filesystem::path{HORO_TEST_GAME_MODULE_PATH}.string() + "\"\n}\n";
-    Write(project.root / ".horo" / "local" / "gameplay_module.json", manifest);
+    WriteNativeManifest(project);
 
     auto registry = Editor::ProjectGameplayRegistry::Discover(project.root);
     REQUIRE_FALSE(registry->HasBlockingDiagnostics());

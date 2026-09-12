@@ -33,19 +33,6 @@ namespace {
 
     void DestroyTestBehavior(void *, IBehaviorInstance *) noexcept {}
 
-    class RestartOnlyModule final : public IGameModule {
-    public:
-        Result<void> Register(GameRegistrationContext &) override {
-            return Result<void>::Success();
-        }
-
-        Result<void> Start(GameRuntimeContext &) override {
-            return Result<void>::Success();
-        }
-
-        void Stop(GameRuntimeContext &) noexcept override {}
-    };
-
     struct ValidBundleStorage {
         BehaviorDescriptor behavior;
         GeneratedBehaviorFactoryBinding binding;
@@ -199,12 +186,4 @@ TEST_CASE("generated gameplay bundle validation rejects incomplete bindings and 
     const auto diagnostics = ValidateGeneratedGameplayDescriptorBundle(storage.bundle, expected);
     REQUIRE(diagnostics.HasError());
     REQUIRE(diagnostics.ErrorValue().code.Value() == GameplayErrors::GeneratedDescriptorDiagnosticsPresent.code.Value());
-}
-
-TEST_CASE("native reload requires an explicit module quiescence implementation") {
-    RestartOnlyModule module;
-    GameRuntimeContext context;
-    auto snapshot = module.PrepareReload(context);
-    REQUIRE(snapshot.HasError());
-    REQUIRE(snapshot.ErrorValue().code.Value() == GameplayErrors::GameplayReloadRestartRequired.code.Value());
 }

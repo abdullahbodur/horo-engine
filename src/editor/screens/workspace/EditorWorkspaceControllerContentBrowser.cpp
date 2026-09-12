@@ -37,6 +37,22 @@ namespace Horo::Editor {
             return error ? absolute : canonical;
         }
 
+        void RemoveNativeRollbackArtifact(const std::filesystem::path &path) noexcept {
+            std::error_code ignored;
+            std::filesystem::remove(path, ignored);
+        }
+
+        [[nodiscard]] Error NativeGenerationError(const ProjectGameplayRegistry &generation, const std::string_view fallback) {
+            if (!generation.Diagnostics().empty())
+                return generation.Diagnostics().front().error;
+            return MakeError(Gameplay::GameplayErrors::GameplayReloadRestoreFailed, std::string{fallback});
+        }
+
+        void LogNativeReloadFailure(const std::string_view phase, const Error &error) {
+            LOG_ERROR("editor.gameplay", "Native gameplay reload %.*s: %s", static_cast<int>(phase.size()), phase.data(),
+                      error.message.c_str());
+        }
+
         [[nodiscard]] bool IsDirectContentBrowserEntry(const ContentBrowserDirectory &directory, const std::filesystem::path &candidate) {
             if (!candidate.is_absolute())
                 return false;
@@ -750,94 +766,89 @@ namespace Horo::Editor {
             return;
 
         const std::filesystem::path projectRoot{m_viewModel.projectRoot};
-        auto preserved =
-            m_gameplayRegistry->PreserveNativeArtifactForRollback(projectRoot / ".horo" / "local" / "gameplay_module_rollback");
-        if (preserved.HasError()) {
-            LOG_ERROR("editor.gameplay", "Native reload requires a process restart because rollback could not be prepared: %s",
-                      preserved.ErrorValue().message.c_str());
+        auto prepared = PrepareNativeGameplayReload(projectRoot);
+        if (prepared.HasError()) {
+            LogNativeReloadFailure("could not prepare safely", prepared.ErrorValue());
             return;
         }
-        const auto removePreservedArtifact = [&preserved]() noexcept {
-            std::error_code ignored;
-            std::filesystem::remove(preserved.Value().path, ignored);
-        };
+        m_gameplayRegistry.reset();
+        auto candidate = LoadNativeGameplayCandidate(projectRoot);
+        if (candidate.HasValue()) {
+            std::unique_ptr<ProjectGameplayRegistry> generation = std::move(candidate).Value();
+            if (Result<void> activated = ActivateNativeGameplayGeneration(*generation, prepared.Value()); activated.HasValue()) {
+                m_gameplayRegistry = std::move(generation);
+                RemoveNativeRollbackArtifact(prepared.Value().rollbackArtifact.path);
+                RefreshAvailableBehaviorProjection();
+                LOG_INFO("editor.gameplay", "Native gameplay generation reloaded transactionally at a fixed-tick safe point.");
+                return;
+            } else {
+                Error candidateError = activated.ErrorValue();
+                generation.reset();
+                RollbackNativeGameplayReload(projectRoot, std::move(prepared).Value(), std::move(candidateError));
+                return;
+            }
+        }
+        RollbackNativeGameplayReload(projectRoot, std::move(prepared).Value(), candidate.ErrorValue());
+    }
 
+    Result<EditorWorkspaceController::NativeGameplayReloadTransaction> EditorWorkspaceController::PrepareNativeGameplayReload(
+        const std::filesystem::path &projectRoot) {
+        auto preserved =
+            m_gameplayRegistry->PreserveNativeArtifactForRollback(projectRoot / ".horo" / "local" / "gameplay_module_rollback");
+        if (preserved.HasError())
+            return Result<NativeGameplayReloadTransaction>::Failure(preserved.ErrorValue());
         auto playSnapshot = m_playSession.QuiesceForReload();
         if (playSnapshot.HasError()) {
-            removePreservedArtifact();
-            LOG_ERROR("editor.gameplay", "Native reload was rejected before module replacement: %s",
-                      playSnapshot.ErrorValue().message.c_str());
-            return;
+            RemoveNativeRollbackArtifact(preserved.Value().path);
+            return Result<NativeGameplayReloadTransaction>::Failure(playSnapshot.ErrorValue());
         }
         auto moduleSnapshot = m_gameplayRegistry->PrepareNativeReload();
         if (moduleSnapshot.HasError()) {
             Error error = moduleSnapshot.ErrorValue();
-            removePreservedArtifact();
+            RemoveNativeRollbackArtifact(preserved.Value().path);
             m_playSession.DegradeAfterReload(error);
-            LOG_ERROR("editor.gameplay", "Native reload requires a process restart: %s", error.message.c_str());
-            return;
+            return Result<NativeGameplayReloadTransaction>::Failure(std::move(error));
         }
+        return Result<NativeGameplayReloadTransaction>::Success(
+            {std::move(preserved).Value(), std::move(playSnapshot).Value(), std::move(moduleSnapshot).Value()});
+    }
 
-        m_gameplayRegistry.reset();
+    Result<std::unique_ptr<ProjectGameplayRegistry>> EditorWorkspaceController::LoadNativeGameplayCandidate(
+        const std::filesystem::path &projectRoot) const {
         std::unique_ptr<ProjectGameplayRegistry> candidate = ProjectGameplayRegistry::Discover(projectRoot);
-        Error candidateError = MakeError(Gameplay::GameplayErrors::GameplayReloadRestoreFailed,
-                                         "The replacement native gameplay generation could not be activated.");
-        bool candidateReady = candidate->HasNativeModule() && !candidate->HasBlockingDiagnostics();
-        if (!candidateReady && !candidate->Diagnostics().empty())
-            candidateError = candidate->Diagnostics().front().error;
-        if (candidateReady) {
-            if (Result<void> restored = candidate->RestoreNativeReload(moduleSnapshot.Value()); restored.HasError()) {
-                candidateError = restored.ErrorValue();
-                candidateReady = false;
-            }
-        }
-        if (candidateReady) {
-            if (Result<void> restored = m_playSession.RestoreAfterReload(candidate->Registry(), playSnapshot.Value());
-                restored.HasError()) {
-                candidateError = restored.ErrorValue();
-                candidateReady = false;
-            }
-        }
-        if (candidateReady) {
-            m_gameplayRegistry = std::move(candidate);
-            removePreservedArtifact();
-            RefreshAvailableBehaviorProjection();
-            LOG_INFO("editor.gameplay", "Native gameplay generation reloaded transactionally at a fixed-tick safe point.");
-            return;
-        }
+        if (!candidate->HasNativeModule() || candidate->HasBlockingDiagnostics())
+            return Result<std::unique_ptr<ProjectGameplayRegistry>>::Failure(
+                NativeGenerationError(*candidate, "The replacement native gameplay generation could not be loaded."));
+        return Result<std::unique_ptr<ProjectGameplayRegistry>>::Success(std::move(candidate));
+    }
 
-        candidate.reset();
-        std::unique_ptr<ProjectGameplayRegistry> rollback = ProjectGameplayRegistry::DiscoverRollback(projectRoot, preserved.Value());
-        bool rollbackReady = rollback->HasNativeModule() && !rollback->HasBlockingDiagnostics();
-        Error rollbackError = MakeError(Gameplay::GameplayErrors::GameplayReloadRestoreFailed,
-                                        "The previous native gameplay generation could not be restored.");
-        if (!rollbackReady && !rollback->Diagnostics().empty())
-            rollbackError = rollback->Diagnostics().front().error;
-        if (rollbackReady) {
-            if (Result<void> restored = rollback->RestoreNativeReload(moduleSnapshot.Value()); restored.HasError()) {
-                rollbackError = restored.ErrorValue();
-                rollbackReady = false;
-            }
-        }
-        if (rollbackReady) {
-            if (Result<void> restored = m_playSession.RestoreAfterReload(rollback->Registry(), playSnapshot.Value()); restored.HasError()) {
-                rollbackError = restored.ErrorValue();
-                rollbackReady = false;
-            }
-        }
-        removePreservedArtifact();
-        if (rollbackReady) {
+    Result<void> EditorWorkspaceController::ActivateNativeGameplayGeneration(ProjectGameplayRegistry &generation,
+                                                                             const NativeGameplayReloadTransaction &transaction) {
+        if (Result<void> restored = generation.RestoreNativeReload(transaction.moduleSnapshot); restored.HasError())
+            return restored;
+        return m_playSession.RestoreAfterReload(generation.Registry(), transaction.playSnapshot);
+    }
+
+    void EditorWorkspaceController::RollbackNativeGameplayReload(const std::filesystem::path &projectRoot,
+                                                                 NativeGameplayReloadTransaction transaction, Error candidateError) {
+        std::unique_ptr<ProjectGameplayRegistry> rollback =
+            ProjectGameplayRegistry::DiscoverRollback(projectRoot, transaction.rollbackArtifact);
+        Error rollbackError = NativeGenerationError(*rollback, "The previous native gameplay generation could not be loaded.");
+        const bool ready = rollback->HasNativeModule() && !rollback->HasBlockingDiagnostics();
+        Result<void> activated =
+            ready ? ActivateNativeGameplayGeneration(*rollback, transaction) : Result<void>::Failure(std::move(rollbackError));
+        RemoveNativeRollbackArtifact(transaction.rollbackArtifact.path);
+        if (activated.HasValue()) {
             m_gameplayRegistry = std::move(rollback);
             RefreshAvailableBehaviorProjection();
-            LOG_ERROR("editor.gameplay", "Native gameplay candidate was rejected and the previous generation was restored: %s",
-                      candidateError.message.c_str());
+            LogNativeReloadFailure("rejected the candidate and restored the previous generation", candidateError);
             return;
         }
-
         rollback.reset();
+        rollbackError = activated.ErrorValue();
         m_playSession.DegradeAfterReload(rollbackError);
-        LOG_ERROR("editor.gameplay", "Native gameplay reload and rollback failed; Play Mode was stopped: candidate='%s', rollback='%s'",
-                  candidateError.message.c_str(), rollbackError.message.c_str());
+        LogNativeReloadFailure("could not restore the candidate", candidateError);
+        LogNativeReloadFailure("could not restore the previous generation; Play Mode was stopped", rollbackError);
     }
 
     bool EditorWorkspaceController::CopyContentBrowserAssetTo(const std::filesystem::path &absoluteSource,
