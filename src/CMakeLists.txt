@@ -456,7 +456,10 @@ target_link_libraries(HoroAudioCommands PUBLIC HoroEngine::AudioMemory)
 add_library(HoroPhysics STATIC
         physics/CharacterControllerContracts.cpp
         physics/CharacterErrors.cpp
+        physics/CharacterControllerRegistry.h
+        physics/CharacterWorld.cpp
         physics/CharacterWorldSettings.cpp
+        physics/GenerationalSlotStorage.h
         physics/PhysicsBodyDescriptor.cpp
         physics/PhysicsBodyDynamics.cpp
         physics/PhysicsCapabilities.cpp
@@ -497,6 +500,11 @@ if(HORO_BUILD_PHYSICS_NATIVE)
 else()
     target_sources(HoroPhysics PRIVATE physics/CanonicalPhysicsRuntimeOmitted.cpp physics/CanonicalSolverOmitted.cpp)
 endif()
+
+add_library(HoroPhysicsSceneIntegration STATIC physics/PhysicsSceneActivation.cpp)
+add_library(HoroEngine::PhysicsSceneIntegration ALIAS HoroPhysicsSceneIntegration)
+target_compile_features(HoroPhysicsSceneIntegration PUBLIC cxx_std_20)
+target_link_libraries(HoroPhysicsSceneIntegration PUBLIC HoroEngine::Physics HoroEngine::RuntimeScene)
 
 add_library(HoroAI STATIC
         runtime/ai/api/AIErrors.cpp

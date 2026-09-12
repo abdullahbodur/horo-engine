@@ -270,6 +270,7 @@ horo_register_catch_test(HoroAudioCommandTests LABELS "unit;audio;headless")
 add_executable(HoroPhysicsTests
         unit/runtime/physics/CharacterControllerContractsTests.cpp
         unit/runtime/physics/CharacterWorldSettingsTests.cpp
+        unit/runtime/physics/CharacterWorldTests.cpp
         unit/runtime/physics/CanonicalSolverTests.cpp
         unit/runtime/physics/PhysicsBodyDescriptorTests.cpp
         unit/runtime/physics/PhysicsBodyDynamicsTests.cpp
@@ -284,6 +285,7 @@ add_executable(HoroPhysicsTests
         unit/runtime/physics/PhysicsMetricsTests.cpp
         unit/runtime/physics/PhysicsPoseTests.cpp
         unit/runtime/physics/PhysicsQueryTests.cpp
+        unit/runtime/physics/PhysicsSceneActivationTests.cpp
         unit/runtime/physics/PhysicsShapeDescriptorTests.cpp
         unit/runtime/physics/PhysicsStepPolicyTests.cpp
         unit/runtime/physics/PhysicsWorldBudgetsTests.cpp
@@ -294,7 +296,7 @@ add_executable(HoroPhysicsTests
 target_compile_features(HoroPhysicsTests PRIVATE cxx_std_20)
 target_include_directories(HoroPhysicsTests PRIVATE ${PROJECT_SOURCE_DIR}/src/physics)
 target_compile_definitions(HoroPhysicsTests PRIVATE HORO_TEST_PHYSICS_NATIVE=$<BOOL:${HORO_BUILD_PHYSICS_NATIVE}>)
-target_link_libraries(HoroPhysicsTests PRIVATE HoroEngine::Physics HoroEngine::Runtime HoroEngine::Platform)
+target_link_libraries(HoroPhysicsTests PRIVATE HoroEngine::Physics HoroEngine::PhysicsSceneIntegration HoroEngine::Runtime HoroEngine::Platform)
 horo_register_catch_test(HoroPhysicsTests LABELS "unit;physics;headless")
 
 add_executable(HoroAITests

@@ -4,24 +4,19 @@
  * @brief Target-private bounded storage for world-scoped Physics handles and native mappings.
  */
 
+#include "GenerationalSlotStorage.h"
 #include "Horo/Physics/PhysicsIdentity.h"
 #include "Horo/Physics/PhysicsWorldBudgets.h"
 
 #include <cstddef>
 #include <format>
-#include <limits>
 #include <new>
-#include <optional>
 #include <type_traits>
 #include <utility>
-#include <vector>
 
 namespace Horo::Physics::Detail {
     /** @brief Testable registry limits; production uses the full non-wrapping generation range. */
-    struct PhysicsHandleRegistryLimits final {
-        std::uint32_t maximumSlots{};
-        std::uint32_t maximumGeneration{std::numeric_limits<std::uint32_t>::max()};
-    };
+    using PhysicsHandleRegistryLimits = GenerationalSlotStorageLimits;
 
     /**
      * @brief Owns one typed world-local mapping without exposing its private value across the Physics target.
@@ -62,24 +57,13 @@ namespace Horo::Physics::Detail {
         PhysicsHandleRegistry &operator=(const PhysicsHandleRegistry &) = delete;
 
         PhysicsHandleRegistry(PhysicsHandleRegistry &&other) noexcept
-            : limits_(other.limits_), entries_(std::move(other.entries_)), owner_(std::exchange(other.owner_, {})),
-              freeHead_(std::exchange(other.freeHead_, InvalidSlot)), activeCount_(std::exchange(other.activeCount_, 0)),
-              exhaustedCount_(std::exchange(other.exhaustedCount_, 0)) {
-            other.limits_ = {};
-            other.entries_.clear();
-        }
+            : storage_(std::move(other.storage_)), owner_(std::exchange(other.owner_, {})) {}
 
         PhysicsHandleRegistry &operator=(PhysicsHandleRegistry &&other) noexcept {
             if (this == &other)
                 return *this;
-            limits_ = other.limits_;
-            entries_ = std::move(other.entries_);
+            storage_ = std::move(other.storage_);
             owner_ = std::exchange(other.owner_, {});
-            freeHead_ = std::exchange(other.freeHead_, InvalidSlot);
-            activeCount_ = std::exchange(other.activeCount_, 0);
-            exhaustedCount_ = std::exchange(other.exhaustedCount_, 0);
-            other.limits_ = {};
-            other.entries_.clear();
             return *this;
         }
 
@@ -107,16 +91,10 @@ namespace Horo::Physics::Detail {
         [[nodiscard]] Result<Handle> Acquire(Value value) {
             if (!owner_.IsValid())
                 return Result<Handle>::Failure(MakeError(PhysicsErrors::InvalidState, "Physics registry owner is not active."));
-            if (freeHead_ == InvalidSlot)
+            const std::optional<GenerationalSlot> slot = storage_.Acquire(std::move(value));
+            if (!slot)
                 return Result<Handle>::Failure(MakeError(FullError()));
-
-            const std::uint32_t slotIndex = freeHead_;
-            Entry &entry = entries_[slotIndex];
-            freeHead_ = entry.nextFree;
-            entry.nextFree = InvalidSlot;
-            entry.value.emplace(std::move(value));
-            ++activeCount_;
-            return Result<Handle>::Success(Handle{owner_, {slotIndex, entry.generation}});
+            return Result<Handle>::Success(Handle{owner_, {slot->index, slot->generation}});
         }
 
         /**
@@ -124,19 +102,12 @@ namespace Horo::Physics::Detail {
          * @param handle Borrowed Horo identity.
          * @return Borrowed mapping, or a stable malformed/foreign/stale/state error before native access.
          */
-        [[nodiscard]] Result<Value *> Resolve(const Handle &handle) {
-            const auto resolved = ResolveIndex(handle);
-            if (resolved.HasError())
-                return Result<Value *>::Failure(resolved.ErrorValue());
-            return Result<Value *>::Success(&*entries_[resolved.Value()].value);
-        }
-
-        /** @copydoc Resolve */
         [[nodiscard]] Result<const Value *> Resolve(const Handle &handle) const {
-            const auto resolved = ResolveIndex(handle);
-            if (resolved.HasError())
-                return Result<const Value *>::Failure(resolved.ErrorValue());
-            return Result<const Value *>::Success(&*entries_[resolved.Value()].value);
+            const Result<void> owner = ValidateOwner(handle);
+            if (owner.HasError())
+                return Result<const Value *>::Failure(owner.ErrorValue());
+            const Value *value = storage_.Resolve(handle.slot.index, handle.slot.generation);
+            return value ? Result<const Value *>::Success(value) : Result<const Value *>::Failure(HandleError(handle));
         }
 
         /**
@@ -145,21 +116,11 @@ namespace Horo::Physics::Detail {
          * @return Success, or a stable malformed/foreign/stale/state error without changing storage.
          */
         [[nodiscard]] Result<void> Remove(const Handle &handle) {
-            const auto resolved = ResolveIndex(handle);
-            if (resolved.HasError())
-                return Result<void>::Failure(resolved.ErrorValue());
-
-            Entry &entry = entries_[resolved.Value()];
-            entry.value.reset();
-            --activeCount_;
-            if (entry.generation == limits_.maximumGeneration) {
-                ++exhaustedCount_;
-                return Result<void>::Success();
-            }
-            ++entry.generation;
-            entry.nextFree = freeHead_;
-            freeHead_ = resolved.Value();
-            return Result<void>::Success();
+            const Result<void> owner = ValidateOwner(handle);
+            if (owner.HasError())
+                return owner;
+            return storage_.Remove(handle.slot.index, handle.slot.generation) ? Result<void>::Success()
+                                                                              : Result<void>::Failure(HandleError(handle));
         }
 
         /** @brief Returns whether activation bound a world generation. */
@@ -169,53 +130,25 @@ namespace Horo::Physics::Detail {
 
         /** @brief Returns the immutable slot bound allocated during preparation. */
         [[nodiscard]] std::size_t Capacity() const noexcept {
-            return entries_.size();
+            return storage_.Capacity();
         }
 
         /** @brief Returns the number of currently resolvable values. */
         [[nodiscard]] std::size_t ActiveCount() const noexcept {
-            return activeCount_;
-        }
-
-        /** @brief Returns the number of slots permanently retired at the generation ceiling. */
-        [[nodiscard]] std::size_t ExhaustedCount() const noexcept {
-            return exhaustedCount_;
+            return storage_.ActiveCount();
         }
 
     private:
-        static constexpr std::uint32_t InvalidSlot = std::numeric_limits<std::uint32_t>::max();
-
-        struct Entry final {
-            std::optional<Value> value;
-            std::uint32_t generation{1};
-            std::uint32_t nextFree{InvalidSlot};
-        };
-
-        explicit PhysicsHandleRegistry(const PhysicsHandleRegistryLimits limits) : limits_(limits), entries_(limits.maximumSlots) {
-            if (entries_.empty())
-                return;
-            for (std::uint32_t slot = 0; slot + 1 < limits.maximumSlots; ++slot)
-                entries_[slot].nextFree = slot + 1;
-            freeHead_ = 0;
-        }
+        explicit PhysicsHandleRegistry(const PhysicsHandleRegistryLimits limits) : storage_(limits) {}
 
         [[nodiscard]] const ErrorCodeDescriptor &FullError() const noexcept {
-            return !entries_.empty() && exhaustedCount_ == entries_.size() ? PhysicsErrors::GenerationExhausted
-                                                                           : PhysicsErrors::CapacityExceeded;
+            return storage_.AllSlotsExhausted() ? PhysicsErrors::GenerationExhausted : PhysicsErrors::CapacityExceeded;
         }
 
-        [[nodiscard]] Result<std::uint32_t> ResolveIndex(const Handle &handle) const {
+        [[nodiscard]] Result<void> ValidateOwner(const Handle &handle) const {
             if (!owner_.IsValid())
-                return Result<std::uint32_t>::Failure(MakeError(PhysicsErrors::InvalidState, "Physics registry owner is not active."));
-            const auto owner = ValidatePhysicsHandleOwner(handle, owner_);
-            if (owner.HasError())
-                return Result<std::uint32_t>::Failure(owner.ErrorValue());
-            if (handle.slot.index >= entries_.size())
-                return Result<std::uint32_t>::Failure(HandleError(handle));
-            const Entry &entry = entries_[handle.slot.index];
-            if (!entry.value.has_value() || entry.generation != handle.slot.generation)
-                return Result<std::uint32_t>::Failure(HandleError(handle));
-            return Result<std::uint32_t>::Success(handle.slot.index);
+                return Result<void>::Failure(MakeError(PhysicsErrors::InvalidState, "Physics registry owner is not active."));
+            return ValidatePhysicsHandleOwner(handle, owner_);
         }
 
         [[nodiscard]] static Error HandleError(const Handle &handle) {
@@ -223,11 +156,7 @@ namespace Horo::Physics::Detail {
                                                                      handle.world.Value(), handle.slot.index, handle.slot.generation));
         }
 
-        PhysicsHandleRegistryLimits limits_;
-        std::vector<Entry> entries_;
+        GenerationalSlotStorage<Value> storage_;
         PhysicsWorldId owner_;
-        std::uint32_t freeHead_{InvalidSlot};
-        std::size_t activeCount_{};
-        std::size_t exhaustedCount_{};
     };
 }  // namespace Horo::Physics::Detail

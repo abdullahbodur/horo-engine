@@ -244,6 +244,7 @@ horo_configure_target_header_boundary(HoroInput PUBLIC_HEADERS
 horo_configure_target_header_boundary(HoroPhysics PUBLIC_HEADERS
     Horo/Physics/CharacterControllerContracts.h
     Horo/Physics/CharacterErrors.h
+    Horo/Physics/CharacterWorld.h
     Horo/Physics/CharacterWorldSettings.h
     Horo/Physics/PhysicsBodyDescriptor.h
     Horo/Physics/PhysicsBodyDynamics.h
@@ -266,6 +267,10 @@ horo_configure_target_header_boundary(HoroPhysics PUBLIC_HEADERS
     Horo/Physics/PhysicsWorldBudgets.h
     Horo/Physics/PhysicsWorldDescriptor.h
     Horo/Physics/PhysicsWorldSettings.h
+)
+
+horo_configure_target_header_boundary(HoroPhysicsSceneIntegration PUBLIC_HEADERS
+    Horo/Physics/PhysicsSceneActivation.h
 )
 horo_configure_target_header_boundary(HoroAI PUBLIC_HEADERS
     Horo/AI/AIErrors.h

@@ -143,6 +143,7 @@ if(HORO_BUILD_EDITOR_GUI)
             HoroEngine::RenderFrontend
             HoroEngine::Runtime
             HoroEngine::RuntimeScene
+            HoroEngine::PhysicsSceneIntegration
             HoroEngine::Extensions
             HoroEngine::Platform
             HoroEngine::ProjectMigrations
