@@ -29,6 +29,18 @@ namespace Horo::WorldStreaming {
                    transition == CompleteUnload || transition == Cancel || transition == Fail;
         }
 
+        /** @brief Resolve cancellation to the deterministic rollback state for in-flight work. */
+        [[nodiscard]] Result<WorldLayerState> ApplyCancellation(const WorldLayerState state) {
+            using enum WorldLayerState;
+            if (state == Loading)
+                return Result<WorldLayerState>::Success(Unloading);
+            if (state == Activating)
+                return Result<WorldLayerState>::Success(Deactivating);
+            if (state == Deactivating || state == Unloading)
+                return Result<WorldLayerState>::Success(state);
+            return Failure<WorldLayerState>(WorldStreamingErrors::LayerStateTransitionInvalid);
+        }
+
         [[nodiscard]] Result<WorldLayerState> ApplyTransition(const WorldLayerState state, const WorldLayerStateTransition transition) {
             using enum WorldLayerState;
             using enum WorldLayerStateTransition;
@@ -66,13 +78,7 @@ namespace Horo::WorldStreaming {
                         return Result<WorldLayerState>::Success(Unloaded);
                     break;
                 case Cancel:
-                    if (state == Loading)
-                        return Result<WorldLayerState>::Success(Unloading);
-                    if (state == Activating)
-                        return Result<WorldLayerState>::Success(Deactivating);
-                    if (state == Deactivating || state == Unloading)
-                        return Result<WorldLayerState>::Success(state);
-                    break;
+                    return ApplyCancellation(state);
                 case Fail:
                     if (state == Loading || state == Activating || state == Deactivating || state == Unloading)
                         return Result<WorldLayerState>::Success(Failed);
