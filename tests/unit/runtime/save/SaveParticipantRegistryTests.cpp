@@ -1,7 +1,7 @@
+#include "AllocationProbe.h"
 #include "Horo/Runtime/Save/SaveCaptureSnapshot.h"
 #include "Horo/Runtime/Save/SaveErrors.h"
 #include "SaveCaptureSnapshotTestUtils.h"
-#include "AllocationProbe.h"
 
 #include <catch2/catch_test_macros.hpp>
 #include <memory>
@@ -224,8 +224,7 @@ namespace Horo::Runtime {
             REQUIRE(registry.Register(Descriptor("horo.test.allocation"), adapter).HasValue());
             const std::uint64_t generation = registry.Generation();
             bool reachedSuccessfulSnapshot = false;
-            for (std::size_t successfulAllocations = 0; successfulAllocations < 64 && !reachedSuccessfulSnapshot;
-                 ++successfulAllocations) {
+            for (std::size_t successfulAllocations = 0; successfulAllocations < 64 && !reachedSuccessfulSnapshot; ++successfulAllocations) {
                 auto snapshot = [&] {
                     Tests::AllocationProbe::ScopedFailure failure{successfulAllocations};
                     return registry.Snapshot();
@@ -288,10 +287,8 @@ namespace Horo::Runtime {
             }
             REQUIRE(*destructionCount == 0);
             CHECK(ParticipantIds(retainedSnapshot.Bindings()) == std::vector<std::string>{"horo.test.first", "horo.test.second"});
-            CHECK(ParticipantIds(retainedSnapshot.CaptureBindings()) ==
-                  std::vector<std::string>{"horo.test.first", "horo.test.second"});
-            CHECK(ParticipantIds(retainedSnapshot.RestoreBindings()) ==
-                  std::vector<std::string>{"horo.test.first", "horo.test.second"});
+            CHECK(ParticipantIds(retainedSnapshot.CaptureBindings()) == std::vector<std::string>{"horo.test.first", "horo.test.second"});
+            CHECK(ParticipantIds(retainedSnapshot.RestoreBindings()) == std::vector<std::string>{"horo.test.first", "horo.test.second"});
             retainedSnapshot = {};
             REQUIRE(*destructionCount == 2);
         }
