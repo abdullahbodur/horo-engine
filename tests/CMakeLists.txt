@@ -1490,6 +1490,13 @@ target_compile_features(HoroProjectValidatorRegistryTests PRIVATE cxx_std_20)
 target_link_libraries(HoroProjectValidatorRegistryTests PRIVATE HoroEngine::Extensions Catch2::Catch2WithMain)
 add_test(NAME HoroProjectValidatorRegistryTests COMMAND HoroProjectValidatorRegistryTests)
 
+add_executable(HoroPipelineStepRegistryTests
+        unit/extensions/PipelineStepRegistryTests.cpp
+)
+target_compile_features(HoroPipelineStepRegistryTests PRIVATE cxx_std_20)
+target_link_libraries(HoroPipelineStepRegistryTests PRIVATE HoroEngine::Extensions Catch2::Catch2WithMain)
+add_test(NAME HoroPipelineStepRegistryTests COMMAND HoroPipelineStepRegistryTests)
+
 add_executable(HoroSecurityBaselineTests unit/security/SecurityBaselineTests.cpp)
 target_compile_features(HoroSecurityBaselineTests PRIVATE cxx_std_20)
 target_link_libraries(HoroSecurityBaselineTests PRIVATE

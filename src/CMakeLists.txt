@@ -1199,6 +1199,7 @@ add_library(HoroExtensions STATIC
         extensions/marketplace/ExtensionMarketplace.cpp
         extensions/capabilities/asset_pipeline_points/ExternalAssetImporter.cpp
         extensions/capabilities/project_validator/ProjectValidatorRegistry.cpp
+        extensions/capabilities/pipeline_step/PipelineStepRegistry.cpp
 )
 
 add_library(HoroEngine::Extensions ALIAS HoroExtensions)
