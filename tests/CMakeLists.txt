@@ -1494,11 +1494,12 @@ set_tests_properties(HoroExtensionManifestValidatorContracts PROPERTIES
     LABELS "extensions;sdk;cli")
 
 add_test(NAME HoroExtensionManifestValidatorRejectsUnknownSchema
-    COMMAND "$<TARGET_FILE:horo-extension-validate>" --schema-version 2
-        "${PROJECT_SOURCE_DIR}/tests/fixtures/extensions/manifest-validator-valid.json")
+    COMMAND "${CMAKE_COMMAND}"
+        "-DVALIDATOR=$<TARGET_FILE:horo-extension-validate>"
+        "-DMANIFEST=${PROJECT_SOURCE_DIR}/tests/fixtures/extensions/manifest-validator-valid.json"
+        -P "${PROJECT_SOURCE_DIR}/tests/cmake/VerifyExtensionValidatorUsageFailure.cmake")
 set_tests_properties(HoroExtensionManifestValidatorRejectsUnknownSchema PROPERTIES
-    LABELS "extensions;sdk;cli"
-    WILL_FAIL TRUE)
+    LABELS "extensions;sdk;cli")
 
 add_test(NAME HoroExtensionManifestValidatorIsPackaged
     COMMAND "${CMAKE_COMMAND}"

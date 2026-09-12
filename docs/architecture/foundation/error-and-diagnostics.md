@@ -310,8 +310,8 @@ struct Diagnostic {
     DiagnosticCode code;
     DiagnosticSeverity severity;
     std::string message;
-    std::string path;
     SourceLocation location;
+    std::string path;
     std::vector<DiagnosticNote> notes;
     SuggestedAction action;
 };

@@ -55,7 +55,7 @@ if(NOT escaped_result EQUAL 1)
     message(FATAL_ERROR
         "escaped diagnostic: validator returned ${escaped_result}, expected 1: ${escaped_error}")
 endif()
-set(expected_path [=["path":"$.future:authority\"\\\u0001"]=])
+set(expected_path [=["path":"$[\"future:authority\\\"\\\\\\u0001\"]"]=])
 string(FIND "${escaped_output}" "${expected_path}" path_index)
 if(path_index EQUAL -1)
     message(FATAL_ERROR "escaped diagnostic path was not encoded exactly: ${escaped_output}")

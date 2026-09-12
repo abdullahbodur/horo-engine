@@ -207,6 +207,20 @@ namespace Horo::Extensions::ManifestParsing {
             return {line, column};
         }
 
+        [[nodiscard]] bool IsSimplePathKey(const std::string_view key) noexcept {
+            const auto isLetter = [](const char character) {
+                return (character >= 'a' && character <= 'z') || (character >= 'A' && character <= 'Z');
+            };
+            const auto isDigit = [](const char character) {
+                return character >= '0' && character <= '9';
+            };
+            if (key.empty() || (!isLetter(key.front()) && key.front() != '_'))
+                return false;
+            return std::ranges::all_of(key.substr(1), [isLetter, isDigit](const char character) {
+                return isLetter(character) || isDigit(character) || character == '_';
+            });
+        }
+
         [[nodiscard]] Result<Json> ParseJson(const std::string_view content, const ExtensionManifestLimits &limits) {
             try {
                 return Result<Json>::Success(BoundedJsonParser{limits}.Parse(content));
@@ -220,6 +234,8 @@ namespace Horo::Extensions::ManifestParsing {
     }  // namespace
 
     std::string ChildPath(const std::string_view parent, const std::string_view key) {
+        if (!IsSimplePathKey(key))
+            return std::format("{}[{}]", parent, Json(std::string{key}).dump());
         return std::format("{}.{}", parent, key);
     }
 
@@ -235,8 +251,8 @@ namespace Horo::Extensions::ManifestParsing {
             .code = DiagnosticCode{std::string{diagnosticCode}},
             .severity = DiagnosticSeverity::Error,
             .message = message,
-            .path = std::string{path},
             .location = SourceLocation{.source = std::string{ManifestSource}, .line = line, .column = column},
+            .path = std::string{path},
         });
         return error;
     }

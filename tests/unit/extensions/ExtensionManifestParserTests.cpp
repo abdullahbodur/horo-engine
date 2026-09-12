@@ -101,6 +101,11 @@ namespace Horo::Extensions::Tests {
             RequireError(result, "$.futureAuthority", "extension.manifest.unknown_field");
         }
 
+        SECTION("separator keys use unambiguous bracket notation") {
+            auto result = ParseExtensionManifest(R"json({"future.authority":true})json");
+            RequireError(result, R"path($["future.authority"])path", "extension.manifest.unknown_field");
+        }
+
         SECTION("unknown nested field") {
             auto result = ParseExtensionManifest(R"json({
                 "id":"com.example.test","version":"1.0.0",
