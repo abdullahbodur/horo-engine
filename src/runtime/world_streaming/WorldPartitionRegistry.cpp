@@ -6,20 +6,46 @@
 #include <array>
 #include <limits>
 #include <new>
+#include <numeric>
 #include <utility>
 #include <vector>
 
 namespace Horo::WorldStreaming {
+    namespace {
+        constexpr std::size_t SpatialIndexLeafCapacity = 8;
+        constexpr std::size_t SpatialIndexTraversalCapacity = 64;
+
+        /** @brief Flat immutable BVH node; leaves address a contiguous cell-slot range. */
+        struct SpatialIndexNode final {
+            WorldPartitionBounds bounds{};
+            std::uint32_t first{};
+            std::uint32_t count{};
+            std::uint32_t left{};
+            std::uint32_t right{};
+
+            [[nodiscard]] bool IsLeaf() const noexcept {
+                return count != 0;
+            }
+        };
+
+        /** @brief Publication-owned cell bounds, BVH permutation, and flat traversal nodes. */
+        struct SpatialIndex final {
+            std::vector<WorldPartitionBounds> cellBounds;
+            std::vector<std::uint32_t> cellSlots;
+            std::vector<SpatialIndexNode> nodes;
+        };
+    }  // namespace
+
     struct WorldPartitionRegistrySnapshot::State final {
         WorldPartitionRegistryBinding binding{};
         WorldPartitionRegistryLimits limits{};
         WorldPartitionDescriptor descriptor;
-        std::vector<WorldPartitionBounds> cellBounds;
+        SpatialIndex spatialIndex;
 
         State(WorldPartitionRegistryBinding bindingValue, const WorldPartitionRegistryLimits limitsValue,
-              WorldPartitionDescriptor descriptorValue, std::vector<WorldPartitionBounds> cellBoundsValue) noexcept
+              WorldPartitionDescriptor descriptorValue, SpatialIndex spatialIndexValue) noexcept
             : binding(std::move(bindingValue)), limits(limitsValue), descriptor(std::move(descriptorValue)),
-              cellBounds(std::move(cellBoundsValue)) {}
+              spatialIndex(std::move(spatialIndexValue)) {}
     };
 
     namespace {
@@ -31,6 +57,16 @@ namespace Horo::WorldStreaming {
             const auto minimum = bounds.minimum.Millimeters();
             const auto maximum = bounds.maximum.Millimeters();
             return minimum[0] <= maximum[0] && minimum[1] <= maximum[1] && minimum[2] <= maximum[2];
+        }
+
+        struct BoundsAxes final {
+            std::array<std::int64_t, 3> minimum{};
+            std::array<std::int64_t, 3> maximum{};
+        };
+
+        /** @brief Projects exact coordinate endpoints once for spatial predicates and BVH construction. */
+        [[nodiscard]] BoundsAxes Axes(const WorldPartitionBounds &bounds) noexcept {
+            return {bounds.minimum.Millimeters(), bounds.maximum.Millimeters()};
         }
 
         [[nodiscard]] bool MultiplyChecked(const std::int64_t value, const std::int64_t factor, std::int64_t &product) noexcept {
@@ -75,12 +111,39 @@ namespace Horo::WorldStreaming {
         }
 
         [[nodiscard]] bool Intersects(const WorldPartitionBounds &left, const WorldPartitionBounds &right) noexcept {
-            const auto leftMinimum = left.minimum.Millimeters();
-            const auto leftMaximum = left.maximum.Millimeters();
-            const auto rightMinimum = right.minimum.Millimeters();
-            const auto rightMaximum = right.maximum.Millimeters();
-            return leftMinimum[0] <= rightMaximum[0] && leftMaximum[0] >= rightMinimum[0] && leftMinimum[1] <= rightMaximum[1] &&
-                   leftMaximum[1] >= rightMinimum[1] && leftMinimum[2] <= rightMaximum[2] && leftMaximum[2] >= rightMinimum[2];
+            const auto leftAxes = Axes(left);
+            const auto rightAxes = Axes(right);
+            return leftAxes.minimum[0] <= rightAxes.maximum[0] && leftAxes.maximum[0] >= rightAxes.minimum[0] &&
+                   leftAxes.minimum[1] <= rightAxes.maximum[1] && leftAxes.maximum[1] >= rightAxes.minimum[1] &&
+                   leftAxes.minimum[2] <= rightAxes.maximum[2] && leftAxes.maximum[2] >= rightAxes.minimum[2];
+        }
+
+        [[nodiscard]] WorldPartitionBounds MergeBounds(const WorldPartitionBounds &left, const WorldPartitionBounds &right) noexcept {
+            const auto leftAxes = Axes(left);
+            const auto rightAxes = Axes(right);
+            return {Math::WorldCoordinate64::FromMillimeters(std::min(leftAxes.minimum[0], rightAxes.minimum[0]),
+                                                             std::min(leftAxes.minimum[1], rightAxes.minimum[1]),
+                                                             std::min(leftAxes.minimum[2], rightAxes.minimum[2])),
+                    Math::WorldCoordinate64::FromMillimeters(std::max(leftAxes.maximum[0], rightAxes.maximum[0]),
+                                                             std::max(leftAxes.maximum[1], rightAxes.maximum[1]),
+                                                             std::max(leftAxes.maximum[2], rightAxes.maximum[2]))};
+        }
+
+        [[nodiscard]] std::int64_t Center(const WorldPartitionBounds &bounds, const std::size_t axis) noexcept {
+            const auto minimum = bounds.minimum.Millimeters()[axis];
+            const auto maximum = bounds.maximum.Millimeters()[axis];
+            return std::midpoint(minimum, maximum);
+        }
+
+        [[nodiscard]] std::size_t LongestAxis(const WorldPartitionBounds &bounds) noexcept {
+            const auto minimum = bounds.minimum.Millimeters();
+            const auto maximum = bounds.maximum.Millimeters();
+            const std::array extents{static_cast<std::uint64_t>(maximum[0]) - static_cast<std::uint64_t>(minimum[0]),
+                                     static_cast<std::uint64_t>(maximum[1]) - static_cast<std::uint64_t>(minimum[1]),
+                                     static_cast<std::uint64_t>(maximum[2]) - static_cast<std::uint64_t>(minimum[2])};
+            if (extents[1] > extents[0] && extents[1] >= extents[2])
+                return 1;
+            return extents[2] > extents[0] ? 2 : 0;
         }
 
         [[nodiscard]] bool Matches(const WorldPartitionCellDescriptor &cell, const WorldPartitionBounds &cellBounds,
@@ -98,23 +161,114 @@ namespace Horo::WorldStreaming {
             return std::ranges::binary_search(descriptor.Layers(), layer, {}, &WorldLayerDescriptor::id);
         }
 
-        [[nodiscard]] Result<std::vector<WorldPartitionBounds>> BuildCellBounds(const WorldPartitionDescriptor &descriptor,
-                                                                                const WorldPartitionRegistryLimits limits) {
+        /** @brief Recursively partitions one non-empty slot range into a deterministic balanced BVH. */
+        [[nodiscard]] std::uint32_t BuildNode(SpatialIndex &index, const std::size_t begin, const std::size_t end) {
+            WorldPartitionBounds bounds = index.cellBounds[index.cellSlots[begin]];
+            for (std::size_t slot = begin + 1; slot < end; ++slot)
+                bounds = MergeBounds(bounds, index.cellBounds[index.cellSlots[slot]]);
+
+            const auto nodeSlot = static_cast<std::uint32_t>(index.nodes.size());
+            index.nodes.emplace_back();
+            if (end - begin <= SpatialIndexLeafCapacity) {
+                index.nodes[nodeSlot] = {bounds, static_cast<std::uint32_t>(begin), static_cast<std::uint32_t>(end - begin), 0, 0};
+                return nodeSlot;
+            }
+
+            const auto axis = LongestAxis(bounds);
+            std::sort(index.cellSlots.begin() + static_cast<std::ptrdiff_t>(begin),
+                      index.cellSlots.begin() + static_cast<std::ptrdiff_t>(end), [&index, axis](const auto left, const auto right) {
+                const auto leftCenter = Center(index.cellBounds[left], axis);
+                const auto rightCenter = Center(index.cellBounds[right], axis);
+                if (leftCenter != rightCenter)
+                    return leftCenter < rightCenter;
+                return left < right;
+            });
+            const auto middle = begin + ((end - begin) / 2);
+            const auto left = BuildNode(index, begin, middle);
+            const auto right = BuildNode(index, middle, end);
+            index.nodes[nodeSlot] = {bounds, 0, 0, left, right};
+            return nodeSlot;
+        }
+
+        /** @brief Transactionally builds all immutable query acceleration data for one publication. */
+        [[nodiscard]] Result<SpatialIndex> BuildSpatialIndex(const WorldPartitionDescriptor &descriptor,
+                                                             const WorldPartitionRegistryLimits limits) {
             if (descriptor.Cells().size() > limits.cells)
-                return Failure<std::vector<WorldPartitionBounds>>(WorldStreamingErrors::PartitionRegistryCapacityExceeded);
-            std::vector<WorldPartitionBounds> bounds;
+                return Failure<SpatialIndex>(WorldStreamingErrors::PartitionRegistryCapacityExceeded);
+            SpatialIndex index;
             try {
-                bounds.reserve(descriptor.Cells().size());
+                const auto cellCount = descriptor.Cells().size();
+                const auto leafCount = (cellCount + SpatialIndexLeafCapacity - 1) / SpatialIndexLeafCapacity;
+                index.cellBounds.reserve(cellCount);
+                index.cellSlots.resize(cellCount);
+                index.nodes.reserve(leafCount == 0 ? 0 : leafCount * 2 - 1);
             } catch (const std::bad_alloc &) {
-                return Failure<std::vector<WorldPartitionBounds>>(WorldStreamingErrors::PartitionRegistryStorageUnavailable);
+                return Failure<SpatialIndex>(WorldStreamingErrors::PartitionRegistryStorageUnavailable);
             }
             for (const auto &cell : descriptor.Cells()) {
                 WorldPartitionBounds cellBounds{};
                 if (!CellBounds(descriptor.Grid(), cell.id, cellBounds))
-                    return Failure<std::vector<WorldPartitionBounds>>(WorldStreamingErrors::PartitionRegistryUnsupported);
-                bounds.emplace_back(cellBounds);
+                    return Failure<SpatialIndex>(WorldStreamingErrors::PartitionRegistryUnsupported);
+                index.cellBounds.emplace_back(cellBounds);
             }
-            return Result<std::vector<WorldPartitionBounds>>::Success(std::move(bounds));
+            std::iota(index.cellSlots.begin(), index.cellSlots.end(), 0U);
+            try {
+                if (!index.cellSlots.empty())
+                    static_cast<void>(BuildNode(index, 0, index.cellSlots.size()));
+            } catch (const std::bad_alloc &) {
+                return Failure<SpatialIndex>(WorldStreamingErrors::PartitionRegistryStorageUnavailable);
+            }
+            return Result<SpatialIndex>::Success(std::move(index));
+        }
+
+        /** @brief Internal traversal counters used for capacity preflight and returned work evidence. */
+        struct QueryWork final {
+            std::size_t matches{};
+            std::size_t candidates{};
+            std::size_t nodes{};
+        };
+
+        /** @brief Tests one bounded leaf and optionally writes matching generation-fenced handles. */
+        void VisitLeaf(const SpatialIndexNode &node, const SpatialIndex &index, const std::span<const WorldPartitionCellDescriptor> cells,
+                       const WorldPartitionSpatialQuery &query, const std::span<WorldPartitionCellHandle> output,
+                       const WorldPartitionRegistryBinding &binding, QueryWork &work) noexcept {
+            for (std::size_t offset = 0; offset < node.count; ++offset) {
+                const auto cellSlot = index.cellSlots[node.first + offset];
+                ++work.candidates;
+                if (!Matches(cells[cellSlot], index.cellBounds[cellSlot], query))
+                    continue;
+                if (!output.empty())
+                    output[work.matches] = {binding, cellSlot, cells[cellSlot].id};
+                ++work.matches;
+            }
+        }
+
+        /** @brief Traverses intersecting nodes with fixed stack storage and no allocation. */
+        [[nodiscard]] Result<QueryWork> TraverseIndex(const SpatialIndex &index, const std::span<const WorldPartitionCellDescriptor> cells,
+                                                      const WorldPartitionSpatialQuery &query,
+                                                      const std::span<WorldPartitionCellHandle> output,
+                                                      const WorldPartitionRegistryBinding &binding) noexcept {
+            QueryWork work{};
+            if (index.nodes.empty())
+                return Result<QueryWork>::Success(work);
+            std::array<std::uint32_t, SpatialIndexTraversalCapacity> stack{};
+            std::size_t pending = 1;
+            stack[0] = 0;
+            while (pending != 0) {
+                const auto &node = index.nodes[stack[--pending]];
+                ++work.nodes;
+                if (!Intersects(node.bounds, query.bounds))
+                    continue;
+                if (node.IsLeaf()) {
+                    VisitLeaf(node, index, cells, query, output, binding, work);
+                    continue;
+                }
+                if (pending > stack.size() - 2)
+                    return Failure<QueryWork>(WorldStreamingErrors::PartitionRegistryUnsupported);
+                stack[pending++] = node.right;
+                stack[pending++] = node.left;
+            }
+            return Result<QueryWork>::Success(work);
         }
     }  // namespace
 
@@ -173,34 +327,32 @@ namespace Horo::WorldStreaming {
     }
 
     /** @copydoc WorldPartitionRegistrySnapshot::Query */
-    Result<std::size_t> WorldPartitionRegistrySnapshot::Query(const WorldPartitionSpatialQuery &query,
-                                                              const std::span<WorldPartitionCellHandle> output) const {
+    Result<WorldPartitionSpatialQueryResult> WorldPartitionRegistrySnapshot::Query(const WorldPartitionSpatialQuery &query,
+                                                                                   const std::span<WorldPartitionCellHandle> output) const {
         if (!IsValid() || !Ordered(query.bounds) || output.empty())
-            return Failure<std::size_t>(WorldStreamingErrors::PartitionRegistryInvalid);
+            return Failure<WorldPartitionSpatialQueryResult>(WorldStreamingErrors::PartitionRegistryInvalid);
         if (query.layer.has_value() && !query.layer->IsValid())
-            return Failure<std::size_t>(WorldStreamingErrors::PartitionRegistryInvalid);
+            return Failure<WorldPartitionSpatialQueryResult>(WorldStreamingErrors::PartitionRegistryInvalid);
         if (query.layer.has_value() && !IsDeclaredLayer(state_->descriptor, *query.layer))
-            return Failure<std::size_t>(WorldStreamingErrors::PartitionRegistryUnsupported);
+            return Failure<WorldPartitionSpatialQueryResult>(WorldStreamingErrors::PartitionRegistryUnsupported);
         if (query.lod.has_value() && *query.lod >= state_->descriptor.Grid().LodLevels())
-            return Failure<std::size_t>(WorldStreamingErrors::PartitionRegistryUnsupported);
-        std::size_t matches{};
+            return Failure<WorldPartitionSpatialQueryResult>(WorldStreamingErrors::PartitionRegistryUnsupported);
         const auto cells = Cells();
-        for (std::size_t index = 0; index < cells.size(); ++index) {
-            if (Matches(cells[index], state_->cellBounds[index], query))
-                ++matches;
-        }
-        if (matches > state_->limits.queryResults || matches > output.size())
-            return Failure<std::size_t>(WorldStreamingErrors::PartitionRegistryCapacityExceeded);
+        const auto countedResult = TraverseIndex(state_->spatialIndex, cells, query, {}, state_->binding);
+        if (countedResult.HasError())
+            return Result<WorldPartitionSpatialQueryResult>::Failure(countedResult.ErrorValue());
+        const auto counted = countedResult.Value();
+        if (counted.matches > state_->limits.queryResults || counted.matches > output.size())
+            return Failure<WorldPartitionSpatialQueryResult>(WorldStreamingErrors::PartitionRegistryCapacityExceeded);
 
-        std::size_t written{};
-        for (std::size_t index = 0; index < cells.size(); ++index) {
-            const auto &cell = cells[index];
-            if (!Matches(cell, state_->cellBounds[index], query))
-                continue;
-            output[written] = {state_->binding, static_cast<std::uint32_t>(index), cell.id};
-            ++written;
-        }
-        return Result<std::size_t>::Success(written);
+        const auto writtenResult = TraverseIndex(state_->spatialIndex, cells, query, output, state_->binding);
+        if (writtenResult.HasError())
+            return Result<WorldPartitionSpatialQueryResult>::Failure(writtenResult.ErrorValue());
+        const auto written = writtenResult.Value();
+        std::sort(output.begin(), output.begin() + static_cast<std::ptrdiff_t>(written.matches), [](const auto &left, const auto &right) {
+            return left.slot < right.slot;
+        });
+        return Result<WorldPartitionSpatialQueryResult>::Success({state_->binding, written.matches, counted.candidates, counted.nodes});
     }
 
     WorldPartitionRegistry::WorldPartitionRegistry(ConstructionKey, const WorldPartitionRegistryId registry,
@@ -228,9 +380,9 @@ namespace Horo::WorldStreaming {
             return Failure<void>(WorldStreamingErrors::PartitionRegistryLifecycleUnavailable);
         if (!revision.IsValid() || descriptor.Partition() != owner_.partition)
             return Failure<void>(WorldStreamingErrors::PartitionRegistryInvalid);
-        auto cellBounds = BuildCellBounds(descriptor, limits_);
-        if (cellBounds.HasError())
-            return Result<void>::Failure(cellBounds.ErrorValue());
+        auto spatialIndex = BuildSpatialIndex(descriptor, limits_);
+        if (spatialIndex.HasError())
+            return Result<void>::Failure(spatialIndex.ErrorValue());
 
         const auto current = std::atomic_load(&state_);
         if (current != nullptr && current->binding.revision.Value() == std::numeric_limits<std::uint64_t>::max())
@@ -242,7 +394,7 @@ namespace Horo::WorldStreaming {
         try {
             auto next =
                 std::make_shared<WorldPartitionRegistrySnapshot::State>(WorldPartitionRegistryBinding{registry_, revision, owner_}, limits_,
-                                                                        std::move(descriptor), std::move(cellBounds).Value());
+                                                                        std::move(descriptor), std::move(spatialIndex).Value());
             std::atomic_store(&state_, std::shared_ptr<const WorldPartitionRegistrySnapshot::State>{std::move(next)});
             return Result<void>::Success();
         } catch (const std::bad_alloc &) {

@@ -72,6 +72,14 @@ namespace Horo::WorldStreaming {
         std::optional<std::uint8_t> lod{};       /**< Exact LOD filter, or every declared LOD. */
     };
 
+    /** @brief Bounded spatial-index query evidence for one immutable registry publication. */
+    struct WorldPartitionSpatialQueryResult final {
+        WorldPartitionRegistryBinding binding{}; /**< Exact immutable publication evaluated by the query. */
+        std::size_t matches{};                   /**< Canonically ordered handles written to caller storage. */
+        std::size_t candidatesExamined{};        /**< Exact cell candidates tested after index pruning. */
+        std::size_t nodesVisited{};              /**< Immutable spatial-index nodes visited. */
+    };
+
     /** @brief Lifecycle gate for registry publication and new snapshot capture. */
     enum class WorldPartitionRegistryState : std::uint8_t {
         Active,
@@ -112,9 +120,10 @@ namespace Horo::WorldStreaming {
          * @brief Executes a bounded allocation-free intersection query in canonical cell order.
          * @param query Ordered exact bounds and optional layer/LOD filters.
          * @param output Caller-owned handle storage; no element is modified on failure.
-         * @return Number of written handles or a typed invalid/unsupported/capacity failure.
+         * @return Publication-fenced written-count and bounded index-work evidence, or a typed failure.
          */
-        [[nodiscard]] Result<std::size_t> Query(const WorldPartitionSpatialQuery &query, std::span<WorldPartitionCellHandle> output) const;
+        [[nodiscard]] Result<WorldPartitionSpatialQueryResult> Query(const WorldPartitionSpatialQuery &query,
+                                                                     std::span<WorldPartitionCellHandle> output) const;
 
     private:
         friend class WorldPartitionRegistry;
