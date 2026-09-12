@@ -248,8 +248,8 @@ namespace Horo::Runtime {
             if (!lead.has_value() || index + lead->continuationCount >= text.size())
                 return std::nullopt;
             std::uint32_t codepoint = lead->codepoint;
-            for (std::size_t offset = 1; offset <= lead->continuationCount; ++offset) {
-                const auto continuation = ByteAt(text, index + offset);
+            for (const char encoded : text.substr(index + 1, lead->continuationCount)) {
+                const auto continuation = static_cast<std::byte>(static_cast<unsigned char>(encoded));
                 if ((continuation & std::byte{0xc0}) != std::byte{0x80})
                     return std::nullopt;
                 codepoint = (codepoint << 6U) | std::to_integer<std::uint8_t>(continuation & std::byte{0x3f});
