@@ -13,7 +13,8 @@ owner of prepared Scene and feature-provider receipts.
 3. Build the complete `StreamingCellActivationRequirement` set and call `Prepare`
    with the exact Activating `StreamingCellOperation` and a positive receipt bound.
 4. Invoke `Commit` only during `CommitDeferredLifecycleChanges`, after revalidating
-   the current operation fence and authority lifecycle.
+   the authority lifecycle, and pass the complete current `StreamingCellOperation`
+   snapshot. A matching handle alone does not prove the operation is still Activating.
 
 Do not invoke provider publication individually. Missing, duplicated, stale or
 over-capacity receipt sets fail preparation and roll back every supplied receipt.

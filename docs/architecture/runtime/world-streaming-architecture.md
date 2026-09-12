@@ -1355,7 +1355,9 @@ fences, uniqueness and a mandatory receipt ceiling before any live state changes
 The move-only transaction owns every receipt until it publishes all of them in
 canonical participant order at `CommitDeferredLifecycleChanges`, or rolls all of
 them back in reverse order. Publication is a bounded no-fail transfer; it performs
-no I/O, allocation, waiting or provider discovery. A stale fence, replacement,
+no I/O, allocation, waiting or provider discovery. Commit revalidates the complete
+current operation snapshot, including its phase and outcome; matching only the
+operation handle and generation fence is insufficient. A stale fence, replacement,
 cancellation or shutdown before publication rolls back the complete set and leaves
 the active Scene unchanged. Calling another frame phase cannot publish and retains
 the prepared transaction for the declared Scene safe point.

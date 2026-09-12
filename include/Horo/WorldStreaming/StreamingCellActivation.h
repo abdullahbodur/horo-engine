@@ -113,13 +113,13 @@ namespace Horo::WorldStreaming {
 
         /**
          * @brief Publishes the complete prepared set at the exact Scene structural safe point.
-         * @param expected Exact current operation and generation fence.
+         * @param expected Exact current operation snapshot and generation fence.
          * @param commitPoint Current owner phase; only CommitDeferredLifecycleChanges is accepted.
          * @param lifecycle Current authority lifecycle; cancellation/shutdown rolls the transaction back.
          * @return Success or typed stale, safe-point, lifecycle or already-terminal failure.
          * @post Success publishes every receipt once in canonical participant order. Failure after a stale/lifecycle check rolls all back.
          */
-        [[nodiscard]] Result<void> Commit(const StreamingCellOperationHandle &expected, StreamingCellActivationCommitPoint commitPoint,
+        [[nodiscard]] Result<void> Commit(const StreamingCellOperation &expected, StreamingCellActivationCommitPoint commitPoint,
                                           StreamingCellActivationLifecycle lifecycle);
 
         /** @brief Explicitly rolls back every prepared receipt in reverse publication order; idempotent. */

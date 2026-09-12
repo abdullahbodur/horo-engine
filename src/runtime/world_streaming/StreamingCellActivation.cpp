@@ -138,7 +138,7 @@ namespace Horo::WorldStreaming {
     }
 
     /** @copydoc StreamingCellActivationTransaction::Commit */
-    Result<void> StreamingCellActivationTransaction::Commit(const StreamingCellOperationHandle &expected,
+    Result<void> StreamingCellActivationTransaction::Commit(const StreamingCellOperation &expected,
                                                             const StreamingCellActivationCommitPoint commitPoint,
                                                             const StreamingCellActivationLifecycle lifecycle) {
         if (state_ != StreamingCellActivationState::Prepared)
@@ -151,7 +151,9 @@ namespace Horo::WorldStreaming {
             Rollback();
             return Internal::Failure<void>(WorldStreamingErrors::CellActivationLifecycleUnavailable);
         }
-        if (!expected.IsValid() || expected != context_.operation.Handle()) {
+        if (!expected.Handle().IsValid() || expected.Handle() != context_.operation.Handle() ||
+            expected.Kind() != context_.operation.Kind() || expected.State() != context_.operation.State() ||
+            expected.Outcome() != context_.operation.Outcome()) {
             Rollback();
             return Internal::Failure<void>(WorldStreamingErrors::CellActivationStale);
         }

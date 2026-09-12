@@ -99,13 +99,13 @@ namespace Horo::WorldStreaming {
             REQUIRE(transaction.State() == StreamingCellActivationState::Prepared);
             REQUIRE(transaction.Requirements()[0].participant == Requirement(10).participant);
             REQUIRE(transaction
-                        .Commit(operation.Handle(), StreamingCellActivationCommitPoint::CommitDeferredLifecycleChanges,
+                        .Commit(operation, StreamingCellActivationCommitPoint::CommitDeferredLifecycleChanges,
                                 StreamingCellActivationLifecycle::Active)
                         .HasValue());
             REQUIRE(transaction.State() == StreamingCellActivationState::Published);
             REQUIRE(log.published == std::vector<std::uint64_t>{10, 20, 30});
             REQUIRE(log.rolledBack.empty());
-            RequireError(transaction.Commit(operation.Handle(), StreamingCellActivationCommitPoint::CommitDeferredLifecycleChanges,
+            RequireError(transaction.Commit(operation, StreamingCellActivationCommitPoint::CommitDeferredLifecycleChanges,
                                             StreamingCellActivationLifecycle::Active),
                          WorldStreamingErrors::CellActivationLifecycleUnavailable);
         }
@@ -119,7 +119,7 @@ namespace Horo::WorldStreaming {
                 StreamingCellActivationTransaction::Prepare(Context(operation), required, Receipts(required, operation.Handle(), log))
                     .Value();
 
-            RequireError(transaction.Commit(operation.Handle(), StreamingCellActivationCommitPoint::PreUpdate,
+            RequireError(transaction.Commit(operation, StreamingCellActivationCommitPoint::PreUpdate,
                                             StreamingCellActivationLifecycle::Active),
                          WorldStreamingErrors::CellActivationSafePointUnavailable);
             REQUIRE(transaction.State() == StreamingCellActivationState::Prepared);
@@ -127,7 +127,7 @@ namespace Horo::WorldStreaming {
             REQUIRE(log.rolledBack.empty());
         }
 
-        TEST_CASE("Stale generation and shutdown roll back every prepared receipt in reverse order",
+        TEST_CASE("Stale operation snapshots and shutdown roll back every prepared receipt in reverse order",
                   "[unit][world_streaming][activation][rollback]") {
             const auto operation = Activating();
             const std::vector required{Requirement(10), Requirement(20), Requirement(30)};
@@ -138,7 +138,7 @@ namespace Horo::WorldStreaming {
             auto replacement = operation.Handle();
             replacement.operation = IdentityFrom<StreamingCellOperationId>(10);
             replacement.fence.generation = IdentityFrom<StreamingGeneration>(2);
-            RequireError(stale.Commit(replacement, StreamingCellActivationCommitPoint::CommitDeferredLifecycleChanges,
+            RequireError(stale.Commit(Activating(replacement), StreamingCellActivationCommitPoint::CommitDeferredLifecycleChanges,
                                       StreamingCellActivationLifecycle::Active),
                          WorldStreamingErrors::CellActivationStale);
             REQUIRE(stale.State() == StreamingCellActivationState::RolledBack);
@@ -149,10 +149,23 @@ namespace Horo::WorldStreaming {
             auto shutdown = StreamingCellActivationTransaction::Prepare(Context(operation), required,
                                                                         Receipts(required, operation.Handle(), shutdownLog))
                                 .Value();
-            RequireError(shutdown.Commit(operation.Handle(), StreamingCellActivationCommitPoint::CommitDeferredLifecycleChanges,
+            RequireError(shutdown.Commit(operation, StreamingCellActivationCommitPoint::CommitDeferredLifecycleChanges,
                                          StreamingCellActivationLifecycle::Closed),
                          WorldStreamingErrors::CellActivationLifecycleUnavailable);
             REQUIRE(shutdownLog.rolledBack == std::vector<std::uint64_t>{30, 20, 10});
+
+            ReceiptLog cancelledLog;
+            auto cancelled = StreamingCellActivationTransaction::Prepare(Context(operation), required,
+                                                                         Receipts(required, operation.Handle(), cancelledLog))
+                                 .Value();
+            const auto retiring = Advance(operation, StreamingCellOperationTransition::Cancel);
+            REQUIRE(retiring.Handle() == operation.Handle());
+            RequireError(cancelled.Commit(retiring, StreamingCellActivationCommitPoint::CommitDeferredLifecycleChanges,
+                                          StreamingCellActivationLifecycle::Active),
+                         WorldStreamingErrors::CellActivationStale);
+            REQUIRE(cancelled.State() == StreamingCellActivationState::RolledBack);
+            REQUIRE(cancelledLog.published.empty());
+            REQUIRE(cancelledLog.rolledBack == std::vector<std::uint64_t>{30, 20, 10});
         }
 
         TEST_CASE("Activation preparation rejects incomplete duplicate over-capacity and stale receipt sets transactionally",
