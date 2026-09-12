@@ -155,6 +155,38 @@ namespace Horo::Packages {
             return Result<std::string>::Failure(MakeError(IoFailure, "Package quarantine identity capacity was exhausted."));
         }
 
+        /** @brief Publishes the inert diagnostic before its quarantined artifact can become visible. */
+        [[nodiscard]] Result<void> PublishQuarantineDiagnostic(DurableFileSystem &files, const std::filesystem::path &root,
+                                                               const std::filesystem::path &diagnostic,
+                                                               const PackageQuarantineRecord &record) {
+            const std::filesystem::path staging = root / "staging" / (record.quarantineId + ".diagnostic.tmp");
+            const std::string json = QuarantineJson(record);
+            if (auto write = files.WriteDurable(staging, std::as_bytes(std::span{json})); write.HasError())
+                return Result<void>::Failure(StorageError(write.ErrorValue(), "write quarantine diagnostics"));
+            if (auto publish = files.AtomicReplace(staging, diagnostic); publish.HasError()) {
+                BestEffortRemove(files, staging);
+                return Result<void>::Failure(StorageError(publish.ErrorValue(), "publish quarantine diagnostics"));
+            }
+            return Result<void>::Success();
+        }
+
+        /** @brief Selects an existing corrupt entry or durably stages caller-provided failed bytes. */
+        [[nodiscard]] Result<std::filesystem::path> PrepareQuarantineArtifact(DurableFileSystem &files, const std::filesystem::path &root,
+                                                                              const std::string_view quarantineId,
+                                                                              const std::span<const std::byte> bytes,
+                                                                              const std::optional<std::filesystem::path> &existingPath) {
+            if (existingPath.has_value())
+                return Result<std::filesystem::path>::Success(*existingPath);
+            const std::filesystem::path staging = root / "staging" / (std::string{quarantineId} + ".artifact.tmp");
+            if (auto write = files.WriteDurable(staging, bytes); write.HasError())
+                return Result<std::filesystem::path>::Failure(StorageError(write.ErrorValue(), "write quarantined bytes"));
+            if (auto permissions = MakeReadOnly(staging); permissions.HasError()) {
+                BestEffortRemove(files, staging);
+                return Result<std::filesystem::path>::Failure(permissions.ErrorValue());
+            }
+            return Result<std::filesystem::path>::Success(staging);
+        }
+
         [[nodiscard]] Result<PackageQuarantineRecord> QuarantineLocked(
             DurableFileSystem &files, const std::filesystem::path &root, std::span<const std::byte> bytes,
             const PackageQuarantineReason reason, const std::optional<Sha256Digest> expectedDigest,
@@ -174,34 +206,16 @@ namespace Horo::Packages {
                                            .byteSize = bytes.size()};
             const std::filesystem::path destination = root / "quarantine" / reasonName / record.quarantineId;
             const std::filesystem::path diagnostic = destination / "diagnostic.json";
-            const std::filesystem::path diagnosticStaging = root / "staging" / (record.quarantineId + ".diagnostic.tmp");
-            const std::string json = QuarantineJson(record);
-            if (auto write = files.WriteDurable(diagnosticStaging, std::as_bytes(std::span{json})); write.HasError())
-                return Result<PackageQuarantineRecord>::Failure(StorageError(write.ErrorValue(), "write quarantine diagnostics"));
-            if (auto publish = files.AtomicReplace(diagnosticStaging, diagnostic); publish.HasError()) {
-                BestEffortRemove(files, diagnosticStaging);
-                return Result<PackageQuarantineRecord>::Failure(StorageError(publish.ErrorValue(), "publish quarantine diagnostics"));
+            if (auto publish = PublishQuarantineDiagnostic(files, root, diagnostic, record); publish.HasError())
+                return Result<PackageQuarantineRecord>::Failure(publish.ErrorValue());
+            auto prepared = PrepareQuarantineArtifact(files, root, record.quarantineId, bytes, existingPath);
+            if (prepared.HasError()) {
+                BestEffortRemove(files, diagnostic);
+                return Result<PackageQuarantineRecord>::Failure(prepared.ErrorValue());
             }
-
-            const std::filesystem::path artifact = destination / "artifact.horopkg";
-            std::filesystem::path prepared;
-            if (existingPath.has_value()) {
-                prepared = *existingPath;
-            } else {
-                prepared = root / "staging" / (record.quarantineId + ".artifact.tmp");
-                if (auto write = files.WriteDurable(prepared, bytes); write.HasError()) {
-                    BestEffortRemove(files, diagnostic);
-                    return Result<PackageQuarantineRecord>::Failure(StorageError(write.ErrorValue(), "write quarantined bytes"));
-                }
-                if (auto permissions = MakeReadOnly(prepared); permissions.HasError()) {
-                    BestEffortRemove(files, prepared);
-                    BestEffortRemove(files, diagnostic);
-                    return Result<PackageQuarantineRecord>::Failure(permissions.ErrorValue());
-                }
-            }
-            if (auto publish = files.AtomicReplace(prepared, artifact); publish.HasError()) {
+            if (auto publish = files.AtomicReplace(prepared.Value(), destination / "artifact.horopkg"); publish.HasError()) {
                 if (!existingPath.has_value())
-                    BestEffortRemove(files, prepared);
+                    BestEffortRemove(files, prepared.Value());
                 BestEffortRemove(files, diagnostic);
                 return Result<PackageQuarantineRecord>::Failure(StorageError(publish.ErrorValue(), "isolate quarantined bytes"));
             }
