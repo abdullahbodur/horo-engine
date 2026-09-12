@@ -6,8 +6,10 @@
 #include <chrono>
 #include <format>
 #include <fstream>
+#include <functional>
 #include <nlohmann/json.hpp>
 #include <string>
+#include <string_view>
 #include <system_error>
 #include <variant>
 
@@ -378,42 +380,116 @@ namespace Horo::Editor {
             return Result<PrimitiveMeshDescriptor>::Success(std::move(descriptor));
         }
 
+        /** @brief Appends a navigation surface payload. */
+        void AppendNavigationSurface(Json &value, const Runtime::NavigationSurfaceComponent &surface) {
+            Json profiles = Json::array();
+            for (const Navigation::NavigationAgentProfileId profile : surface.profiles)
+                profiles.push_back(profile.Value());
+            value["navigationSurface"] = {
+                {"id", surface.id.Value()},
+                {"definition", surface.definition.ToString()},
+                {"schemaVersion", surface.schemaVersion},
+                {"generation", surface.generation},
+                {"bakeScope", surface.bakeScope == Runtime::NavigationBakeScope::ObjectSubtree ? "object_subtree" : "local_bounds"},
+                {"localBounds", surface.localBounds ? Json{{"center", Vec3Json(surface.localBounds->center)},
+                                                           {"halfExtents", Vec3Json(surface.localBounds->halfExtents)}}
+                                                    : Json(nullptr)},
+                {"profiles", std::move(profiles)},
+                {"enabled", surface.enabled},
+            };
+        }
+
+        /** @brief Appends a navigation region payload. */
+        void AppendNavigationRegion(Json &value, const Runtime::NavigationRegionComponent &region) {
+            value["navigationRegion"] = {
+                {"id", region.id.Value()},
+                {"surface", region.surface.Value()},
+                {"schemaVersion", region.schemaVersion},
+                {"generation", region.generation},
+                {"localBounds",
+                 {{"center", Vec3Json(region.localBounds.center)}, {"halfExtents", Vec3Json(region.localBounds.halfExtents)}}},
+                {"sourceSelection", region.sourceSelection == Runtime::NavigationRegionSourceSelection::ExplicitContributors
+                                        ? "explicit_contributors"
+                                        : "static_collision_in_bounds"},
+                {"mode", region.mode == Runtime::NavigationRegionMode::Include ? "include" : "exclude"},
+                {"enabled", region.enabled},
+            };
+        }
+
+        /** @brief Appends a navigation modifier payload. */
+        void AppendNavigationModifier(Json &value, const Runtime::NavigationModifierComponent &modifier) {
+            Json volume;
+            if (const auto *box = std::get_if<Runtime::NavigationLocalBounds>(&modifier.volume)) {
+                volume = {{"shape", "box"}, {"center", Vec3Json(box->center)}, {"halfExtents", Vec3Json(box->halfExtents)}};
+            } else {
+                const Runtime::NavigationCylinderVolume &cylinder = std::get<Runtime::NavigationCylinderVolume>(modifier.volume);
+                volume = {{"shape", "cylinder"},
+                          {"center", Vec3Json(cylinder.center)},
+                          {"radius", cylinder.radius},
+                          {"halfHeight", cylinder.halfHeight}};
+            }
+            using enum Runtime::NavigationModifierOperation;
+            const char *operation = "exclude";
+            if (modifier.operation == OverrideArea)
+                operation = "override_area";
+            else if (modifier.operation == OverrideAreaAndCost)
+                operation = "override_area_and_cost";
+            value["navigationModifier"] = {
+                {"id", modifier.id.Value()},
+                {"surface", modifier.surface.Value()},
+                {"schemaVersion", modifier.schemaVersion},
+                {"generation", modifier.generation},
+                {"volume", std::move(volume)},
+                {"operation", operation},
+                {"area", modifier.area ? Json(modifier.area->Value()) : Json(nullptr)},
+                {"traversalCost", modifier.traversalCost.has_value() ? Json(*modifier.traversalCost) : Json(nullptr)},
+                {"enabled", modifier.enabled},
+            };
+        }
+
+        /** @brief Appends a navigation link payload. */
+        void AppendNavigationLink(Json &value, const Runtime::NavigationLinkComponent &link) {
+            Json profiles = Json::array();
+            for (const Navigation::NavigationAgentProfileId profile : link.profiles)
+                profiles.push_back(profile.Value());
+            using enum Runtime::NavigationLinkKind;
+            const char *kind = "teleport";
+            if (link.kind == Jump)
+                kind = "jump";
+            else if (link.kind == Ladder)
+                kind = "ladder";
+            else if (link.kind == Door)
+                kind = "door";
+            value["navigationLink"] = {
+                {"id", link.id.Value()},
+                {"schemaVersion", link.schemaVersion},
+                {"generation", link.generation},
+                {"start",
+                 {{"surface", link.start.surface.Value()},
+                  {"localPosition", Vec3Json(link.start.localPosition)},
+                  {"connectionRadiusMeters", link.start.connectionRadiusMeters}}},
+                {"end",
+                 {{"surface", link.end.surface.Value()},
+                  {"localPosition", Vec3Json(link.end.localPosition)},
+                  {"connectionRadiusMeters", link.end.connectionRadiusMeters}}},
+                {"kind", kind},
+                {"direction", link.direction == Runtime::NavigationLinkDirection::StartToEnd ? "start_to_end" : "bidirectional"},
+                {"profiles", std::move(profiles)},
+                {"traversalCost", link.traversalCost},
+                {"enabled", link.enabled},
+            };
+        }
+
         /** @brief Appends optional navigation authoring payloads without increasing the core component serializer's branching. */
         void AppendNavigationComponents(Json &value, const SceneObjectComponentSet &components) {
-            if (components.navigationSurface) {
-                const Runtime::NavigationSurfaceComponent &surface = *components.navigationSurface;
-                Json profiles = Json::array();
-                for (const Navigation::NavigationAgentProfileId profile : surface.profiles)
-                    profiles.push_back(profile.Value());
-                value["navigationSurface"] = {
-                    {"id", surface.id.Value()},
-                    {"definition", surface.definition.ToString()},
-                    {"schemaVersion", surface.schemaVersion},
-                    {"generation", surface.generation},
-                    {"bakeScope", surface.bakeScope == Runtime::NavigationBakeScope::ObjectSubtree ? "object_subtree" : "local_bounds"},
-                    {"localBounds", surface.localBounds ? Json{{"center", Vec3Json(surface.localBounds->center)},
-                                                               {"halfExtents", Vec3Json(surface.localBounds->halfExtents)}}
-                                                        : Json(nullptr)},
-                    {"profiles", std::move(profiles)},
-                    {"enabled", surface.enabled},
-                };
-            }
-            if (components.navigationRegion) {
-                const Runtime::NavigationRegionComponent &region = *components.navigationRegion;
-                value["navigationRegion"] = {
-                    {"id", region.id.Value()},
-                    {"surface", region.surface.Value()},
-                    {"schemaVersion", region.schemaVersion},
-                    {"generation", region.generation},
-                    {"localBounds",
-                     {{"center", Vec3Json(region.localBounds.center)}, {"halfExtents", Vec3Json(region.localBounds.halfExtents)}}},
-                    {"sourceSelection", region.sourceSelection == Runtime::NavigationRegionSourceSelection::ExplicitContributors
-                                            ? "explicit_contributors"
-                                            : "static_collision_in_bounds"},
-                    {"mode", region.mode == Runtime::NavigationRegionMode::Include ? "include" : "exclude"},
-                    {"enabled", region.enabled},
-                };
-            }
+            if (components.navigationSurface)
+                AppendNavigationSurface(value, *components.navigationSurface);
+            if (components.navigationRegion)
+                AppendNavigationRegion(value, *components.navigationRegion);
+            if (components.navigationModifier)
+                AppendNavigationModifier(value, *components.navigationModifier);
+            if (components.navigationLink)
+                AppendNavigationLink(value, *components.navigationLink);
         }
 
         [[nodiscard]] Json ComponentsJson(const SceneObjectComponentSet &components) {
@@ -560,19 +636,46 @@ namespace Horo::Editor {
             return Result<Runtime::NavigationLocalBounds>::Success({center.Value(), halfExtents.Value()});
         }
 
+        [[nodiscard]] bool HasNavigationComponentHeader(const Json &value) {
+            return value.is_object() && value.contains("id") && value["id"].is_number_unsigned() && value.contains("schemaVersion") &&
+                   value["schemaVersion"].is_number_unsigned() && value.contains("generation") && value["generation"].is_number_unsigned();
+        }
+
+        [[nodiscard]] bool HasNavigationSurfaceReference(const Json &value) {
+            return HasNavigationComponentHeader(value) && value.contains("surface") && value["surface"].is_number_unsigned();
+        }
+
+        [[nodiscard]] Result<std::vector<Navigation::NavigationAgentProfileId>> ParseNavigationProfiles(const Json &values) {
+            if (!values.is_array())
+                return Result<std::vector<Navigation::NavigationAgentProfileId>>::Failure(
+                    PersistenceError(SceneInvalid, "Navigation profiles must be an array."));
+            std::vector<Navigation::NavigationAgentProfileId> profiles;
+            profiles.reserve(values.size());
+            for (const Json &value : values) {
+                if (!value.is_number_unsigned())
+                    return Result<std::vector<Navigation::NavigationAgentProfileId>>::Failure(
+                        PersistenceError(SceneInvalid, "Navigation profile identity is invalid."));
+                auto profile = Navigation::NavigationAgentProfileId::Create(value.get<std::uint64_t>());
+                if (profile.HasError())
+                    return Result<std::vector<Navigation::NavigationAgentProfileId>>::Failure(
+                        PersistenceError(SceneInvalid, "Navigation profile identity is invalid."));
+                profiles.push_back(profile.Value());
+            }
+            return Result<std::vector<Navigation::NavigationAgentProfileId>>::Success(std::move(profiles));
+        }
+
         [[nodiscard]] Result<Runtime::NavigationSurfaceComponent> ParseNavigationSurface(const Json &value) {
-            if (!value.is_object() || !value.contains("id") || !value["id"].is_number_unsigned() || !value.contains("definition") ||
-                !value["definition"].is_string() || !value.contains("schemaVersion") || !value["schemaVersion"].is_number_unsigned() ||
-                !value.contains("generation") || !value["generation"].is_number_unsigned() || !value.contains("bakeScope") ||
-                !value["bakeScope"].is_string() || !value.contains("localBounds") || !value.contains("profiles") ||
-                !value["profiles"].is_array()) {
+            if (!HasNavigationComponentHeader(value) || !value.contains("definition") || !value["definition"].is_string() ||
+                !value.contains("bakeScope") || !value["bakeScope"].is_string() || !value.contains("localBounds") ||
+                !value.contains("profiles")) {
                 return Result<Runtime::NavigationSurfaceComponent>::Failure(
                     PersistenceError(SceneInvalid, "Navigation surface schema is incomplete."));
             }
             auto id = Navigation::SurfaceId::Create(value["id"].get<std::uint64_t>());
             auto definition = Assets::AssetId::Parse(value["definition"].get<std::string>());
+            auto profiles = ParseNavigationProfiles(value["profiles"]);
             const std::string scope = value["bakeScope"].get<std::string>();
-            if (id.HasError() || definition.HasError() || (scope != "object_subtree" && scope != "local_bounds"))
+            if (id.HasError() || definition.HasError() || profiles.HasError() || (scope != "object_subtree" && scope != "local_bounds"))
                 return Result<Runtime::NavigationSurfaceComponent>::Failure(
                     PersistenceError(SceneInvalid, "Navigation surface identities or scope are invalid."));
 
@@ -591,19 +694,9 @@ namespace Horo::Editor {
                 .bakeScope =
                     scope == "object_subtree" ? Runtime::NavigationBakeScope::ObjectSubtree : Runtime::NavigationBakeScope::LocalBounds,
                 .localBounds = bounds,
+                .profiles = std::move(profiles).Value(),
                 .enabled = value.value("enabled", true),
             };
-            surface.profiles.reserve(value["profiles"].size());
-            for (const Json &profileValue : value["profiles"]) {
-                if (!profileValue.is_number_unsigned())
-                    return Result<Runtime::NavigationSurfaceComponent>::Failure(
-                        PersistenceError(SceneInvalid, "Navigation surface profile identity is invalid."));
-                auto profile = Navigation::NavigationAgentProfileId::Create(profileValue.get<std::uint64_t>());
-                if (profile.HasError())
-                    return Result<Runtime::NavigationSurfaceComponent>::Failure(
-                        PersistenceError(SceneInvalid, "Navigation surface profile identity is invalid."));
-                surface.profiles.push_back(profile.Value());
-            }
             if (Runtime::ValidateNavigationSurfaceComponent(surface).HasError())
                 return Result<Runtime::NavigationSurfaceComponent>::Failure(
                     PersistenceError(SceneInvalid, "Navigation surface payload is invalid."));
@@ -611,10 +704,7 @@ namespace Horo::Editor {
         }
 
         [[nodiscard]] Result<Runtime::NavigationRegionComponent> ParseNavigationRegion(const Json &value) {
-            if (!value.is_object() || !value.contains("id") || !value["id"].is_number_unsigned() || !value.contains("surface") ||
-                !value["surface"].is_number_unsigned() || !value.contains("schemaVersion") ||
-                !value["schemaVersion"].is_number_unsigned() || !value.contains("generation") ||
-                !value["generation"].is_number_unsigned() || !value.contains("localBounds") || !value.contains("sourceSelection") ||
+            if (!HasNavigationSurfaceReference(value) || !value.contains("localBounds") || !value.contains("sourceSelection") ||
                 !value["sourceSelection"].is_string() || !value.contains("mode") || !value["mode"].is_string()) {
                 return Result<Runtime::NavigationRegionComponent>::Failure(
                     PersistenceError(SceneInvalid, "Navigation region schema is incomplete."));
@@ -632,18 +722,198 @@ namespace Horo::Editor {
             Runtime::NavigationRegionComponent region{
                 .id = id.Value(),
                 .surface = surface.Value(),
-                .schemaVersion = value["schemaVersion"].get<std::uint32_t>(),
-                .generation = value["generation"].get<std::uint64_t>(),
                 .localBounds = bounds.Value(),
                 .sourceSelection = source == "explicit_contributors" ? Runtime::NavigationRegionSourceSelection::ExplicitContributors
                                                                      : Runtime::NavigationRegionSourceSelection::StaticCollisionInBounds,
                 .mode = mode == "include" ? Runtime::NavigationRegionMode::Include : Runtime::NavigationRegionMode::Exclude,
                 .enabled = value.value("enabled", true),
             };
+            region.schemaVersion = value["schemaVersion"].get<std::uint32_t>();
+            region.generation = value["generation"].get<std::uint64_t>();
             if (Runtime::ValidateNavigationRegionComponent(region).HasError())
                 return Result<Runtime::NavigationRegionComponent>::Failure(
                     PersistenceError(SceneInvalid, "Navigation region payload is invalid."));
             return Result<Runtime::NavigationRegionComponent>::Success(region);
+        }
+
+        [[nodiscard]] Result<Runtime::NavigationModifierVolume> ParseNavigationModifierVolume(const Json &volumeValue) {
+            if (!volumeValue.contains("shape") || !volumeValue["shape"].is_string() || !volumeValue.contains("center"))
+                return Result<Runtime::NavigationModifierVolume>::Failure(
+                    PersistenceError(SceneInvalid, "Navigation modifier volume is invalid."));
+            auto center = ParseVec3(volumeValue["center"]);
+            const std::string shape = volumeValue["shape"].get<std::string>();
+            if (center.HasError() || (shape != "box" && shape != "cylinder"))
+                return Result<Runtime::NavigationModifierVolume>::Failure(
+                    PersistenceError(SceneInvalid, "Navigation modifier volume is invalid."));
+            if (shape == "box") {
+                if (!volumeValue.contains("halfExtents"))
+                    return Result<Runtime::NavigationModifierVolume>::Failure(
+                        PersistenceError(SceneInvalid, "Navigation modifier box is incomplete."));
+                auto bounds = ParseNavigationBounds(volumeValue);
+                if (bounds.HasError())
+                    return Result<Runtime::NavigationModifierVolume>::Failure(bounds.ErrorValue());
+                return Result<Runtime::NavigationModifierVolume>::Success(bounds.Value());
+            }
+            if (!volumeValue.contains("radius") || !volumeValue["radius"].is_number() || !volumeValue.contains("halfHeight") ||
+                !volumeValue["halfHeight"].is_number())
+                return Result<Runtime::NavigationModifierVolume>::Failure(
+                    PersistenceError(SceneInvalid, "Navigation modifier cylinder is incomplete."));
+            return Result<Runtime::NavigationModifierVolume>::Success(
+                Runtime::NavigationCylinderVolume{center.Value(), volumeValue["radius"].get<float>(),
+                                                  volumeValue["halfHeight"].get<float>()});
+        }
+
+        struct ParsedNavigationModifierPolicy final {
+            Runtime::NavigationModifierOperation operation;
+            std::optional<Navigation::NavigationAreaId> area;
+            std::optional<float> traversalCost;
+        };
+
+        [[nodiscard]] Result<ParsedNavigationModifierPolicy> ParseNavigationModifierPolicy(const Json &value) {
+            const std::string operationName = value["operation"].get<std::string>();
+            if (operationName != "exclude" && operationName != "override_area" && operationName != "override_area_and_cost")
+                return Result<ParsedNavigationModifierPolicy>::Failure(
+                    PersistenceError(SceneInvalid, "Navigation modifier operation is invalid."));
+            std::optional<Navigation::NavigationAreaId> area;
+            if (!value["area"].is_null()) {
+                if (!value["area"].is_number_unsigned())
+                    return Result<ParsedNavigationModifierPolicy>::Failure(
+                        PersistenceError(SceneInvalid, "Navigation modifier area is invalid."));
+                auto parsedArea = Navigation::NavigationAreaId::Create(value["area"].get<std::uint64_t>());
+                if (parsedArea.HasError())
+                    return Result<ParsedNavigationModifierPolicy>::Failure(
+                        PersistenceError(SceneInvalid, "Navigation modifier area is invalid."));
+                area = parsedArea.Value();
+            }
+            std::optional<float> traversalCost;
+            if (!value["traversalCost"].is_null()) {
+                if (!value["traversalCost"].is_number())
+                    return Result<ParsedNavigationModifierPolicy>::Failure(
+                        PersistenceError(SceneInvalid, "Navigation modifier traversal cost is invalid."));
+                traversalCost = value["traversalCost"].get<float>();
+            }
+            Runtime::NavigationModifierOperation operation = Runtime::NavigationModifierOperation::Exclude;
+            if (operationName == "override_area")
+                operation = Runtime::NavigationModifierOperation::OverrideArea;
+            else if (operationName == "override_area_and_cost")
+                operation = Runtime::NavigationModifierOperation::OverrideAreaAndCost;
+            return Result<ParsedNavigationModifierPolicy>::Success({operation, area, traversalCost});
+        }
+
+        [[nodiscard]] Result<Runtime::NavigationModifierComponent> ParseNavigationModifier(const Json &value) {
+            if (!HasNavigationSurfaceReference(value) || !value.contains("volume") || !value["volume"].is_object() ||
+                !value.contains("operation") || !value["operation"].is_string() || !value.contains("area") ||
+                !value.contains("traversalCost"))
+                return Result<Runtime::NavigationModifierComponent>::Failure(
+                    PersistenceError(SceneInvalid, "Navigation modifier schema is incomplete."));
+            auto id = Navigation::NavigationModifierId::Create(value["id"].get<std::uint64_t>());
+            auto surface = Navigation::SurfaceId::Create(value["surface"].get<std::uint64_t>());
+            auto volume = ParseNavigationModifierVolume(value["volume"]);
+            auto policy = ParseNavigationModifierPolicy(value);
+            if (id.HasError() || surface.HasError())
+                return Result<Runtime::NavigationModifierComponent>::Failure(
+                    PersistenceError(SceneInvalid, "Navigation modifier identity or surface is invalid."));
+            if (volume.HasError())
+                return Result<Runtime::NavigationModifierComponent>::Failure(volume.ErrorValue());
+            if (policy.HasError())
+                return Result<Runtime::NavigationModifierComponent>::Failure(policy.ErrorValue());
+            Runtime::NavigationModifierComponent modifier{
+                .id = id.Value(),
+                .surface = surface.Value(),
+                .volume = std::move(volume).Value(),
+                .operation = policy.Value().operation,
+                .area = policy.Value().area,
+                .traversalCost = policy.Value().traversalCost,
+                .enabled = value.value("enabled", true),
+            };
+            modifier.schemaVersion = value["schemaVersion"].get<std::uint32_t>();
+            modifier.generation = value["generation"].get<std::uint64_t>();
+            if (Runtime::ValidateNavigationModifierComponent(modifier).HasError())
+                return Result<Runtime::NavigationModifierComponent>::Failure(
+                    PersistenceError(SceneInvalid, "Navigation modifier payload is invalid."));
+            return Result<Runtime::NavigationModifierComponent>::Success(std::move(modifier));
+        }
+
+        [[nodiscard]] Result<Runtime::NavigationLinkEndpoint> ParseNavigationLinkEndpoint(const Json &value) {
+            if (!value.is_object() || !value.contains("surface") || !value["surface"].is_number_unsigned() ||
+                !value.contains("localPosition") || !value.contains("connectionRadiusMeters") ||
+                !value["connectionRadiusMeters"].is_number()) {
+                return Result<Runtime::NavigationLinkEndpoint>::Failure(
+                    PersistenceError(SceneInvalid, "Navigation link endpoint schema is incomplete."));
+            }
+            auto surface = Navigation::SurfaceId::Create(value["surface"].get<std::uint64_t>());
+            auto position = ParseVec3(value["localPosition"]);
+            if (surface.HasError() || position.HasError())
+                return Result<Runtime::NavigationLinkEndpoint>::Failure(
+                    PersistenceError(SceneInvalid, "Navigation link endpoint is invalid."));
+            return Result<Runtime::NavigationLinkEndpoint>::Success(
+                {surface.Value(), position.Value(), value["connectionRadiusMeters"].get<float>()});
+        }
+
+        [[nodiscard]] Result<Runtime::NavigationLinkKind> ParseNavigationLinkKind(const std::string_view name) {
+            using enum Runtime::NavigationLinkKind;
+            if (name == "jump")
+                return Result<Runtime::NavigationLinkKind>::Success(Jump);
+            if (name == "ladder")
+                return Result<Runtime::NavigationLinkKind>::Success(Ladder);
+            if (name == "door")
+                return Result<Runtime::NavigationLinkKind>::Success(Door);
+            if (name == "teleport")
+                return Result<Runtime::NavigationLinkKind>::Success(Teleport);
+            return Result<Runtime::NavigationLinkKind>::Failure(PersistenceError(SceneInvalid, "Navigation link kind is invalid."));
+        }
+
+        [[nodiscard]] Result<Runtime::NavigationLinkDirection> ParseNavigationLinkDirection(const std::string_view name) {
+            if (name == "start_to_end")
+                return Result<Runtime::NavigationLinkDirection>::Success(Runtime::NavigationLinkDirection::StartToEnd);
+            if (name == "bidirectional")
+                return Result<Runtime::NavigationLinkDirection>::Success(Runtime::NavigationLinkDirection::Bidirectional);
+            return Result<Runtime::NavigationLinkDirection>::Failure(
+                PersistenceError(SceneInvalid, "Navigation link direction is invalid."));
+        }
+
+        [[nodiscard]] Result<Runtime::NavigationLinkComponent> ParseNavigationLink(const Json &value) {
+            if (!HasNavigationComponentHeader(value) || !value.contains("start") || !value.contains("end") || !value.contains("kind") ||
+                !value["kind"].is_string() || !value.contains("direction") || !value["direction"].is_string() ||
+                !value.contains("profiles") || !value.contains("traversalCost") || !value["traversalCost"].is_number()) {
+                return Result<Runtime::NavigationLinkComponent>::Failure(
+                    PersistenceError(SceneInvalid, "Navigation link schema is incomplete."));
+            }
+            auto id = Navigation::NavigationLinkId::Create(value["id"].get<std::uint64_t>());
+            auto start = ParseNavigationLinkEndpoint(value["start"]);
+            auto end = ParseNavigationLinkEndpoint(value["end"]);
+            auto kind = ParseNavigationLinkKind(value["kind"].get<std::string>());
+            auto direction = ParseNavigationLinkDirection(value["direction"].get<std::string>());
+            auto profiles = ParseNavigationProfiles(value["profiles"]);
+            if (id.HasError())
+                return Result<Runtime::NavigationLinkComponent>::Failure(
+                    PersistenceError(SceneInvalid, "Navigation link identity is invalid."));
+            if (start.HasError())
+                return Result<Runtime::NavigationLinkComponent>::Failure(start.ErrorValue());
+            if (end.HasError())
+                return Result<Runtime::NavigationLinkComponent>::Failure(end.ErrorValue());
+            if (kind.HasError())
+                return Result<Runtime::NavigationLinkComponent>::Failure(kind.ErrorValue());
+            if (direction.HasError())
+                return Result<Runtime::NavigationLinkComponent>::Failure(direction.ErrorValue());
+            if (profiles.HasError())
+                return Result<Runtime::NavigationLinkComponent>::Failure(profiles.ErrorValue());
+            Runtime::NavigationLinkComponent link{
+                .id = id.Value(),
+                .schemaVersion = value["schemaVersion"].get<std::uint32_t>(),
+                .generation = value["generation"].get<std::uint64_t>(),
+                .start = start.Value(),
+                .end = end.Value(),
+                .kind = kind.Value(),
+                .direction = direction.Value(),
+                .profiles = std::move(profiles).Value(),
+                .traversalCost = value["traversalCost"].get<float>(),
+                .enabled = value.value("enabled", true),
+            };
+            if (Runtime::ValidateNavigationLinkComponent(link).HasError())
+                return Result<Runtime::NavigationLinkComponent>::Failure(
+                    PersistenceError(SceneInvalid, "Navigation link payload is invalid."));
+            return Result<Runtime::NavigationLinkComponent>::Success(std::move(link));
         }
 
         [[nodiscard]] Result<Gameplay::BehaviorComponent> ParseSingleBehavior(const Json &behavior) {
@@ -698,51 +968,44 @@ namespace Horo::Editor {
             return Result<std::vector<Gameplay::BehaviorComponent>>::Success(std::move(parsedList));
         }
 
+        /** @brief Parses an optional named component into its destination when present. */
+        template <typename Component, typename Parser>
+        [[nodiscard]] Result<void> ParseOptionalComponent(const Json &value, const std::string_view name,
+                                                          std::optional<Component> &destination, Parser &&parser) {
+            if (!value.contains(name))
+                return Result<void>::Success();
+            auto parsed = std::invoke(std::forward<Parser>(parser), value[name]);
+            if (parsed.HasError())
+                return Result<void>::Failure(parsed.ErrorValue());
+            destination = std::move(parsed).Value();
+            return Result<void>::Success();
+        }
+
         [[nodiscard]] Result<SceneObjectComponentSet> ParseComponents(const Json &value) {
             if (!value.is_object()) {
                 return Result<SceneObjectComponentSet>::Failure(PersistenceError(SceneInvalid, "Components must be an object."));
             }
             SceneObjectComponentSet components;
-            if (value.contains("camera")) {
-                auto camera = ParseCameraComponent(value["camera"]);
-                if (camera.HasError()) {
-                    return Result<SceneObjectComponentSet>::Failure(camera.ErrorValue());
-                }
-                components.camera = std::move(camera).Value();
-            }
-            if (value.contains("light")) {
-                auto light = ParseLightComponent(value["light"]);
-                if (light.HasError()) {
-                    return Result<SceneObjectComponentSet>::Failure(light.ErrorValue());
-                }
-                components.light = std::move(light).Value();
-            }
-            if (value.contains("triggerVolume")) {
-                auto trigger = ParseTriggerVolumeComponent(value["triggerVolume"]);
-                if (trigger.HasError()) {
-                    return Result<SceneObjectComponentSet>::Failure(trigger.ErrorValue());
-                }
-                components.triggerVolume = std::move(trigger).Value();
-            }
-            if (value.contains("audioSource")) {
-                auto audio = ParseAudioSourceComponent(value["audioSource"]);
-                if (audio.HasError()) {
-                    return Result<SceneObjectComponentSet>::Failure(audio.ErrorValue());
-                }
-                components.audioSource = std::move(audio).Value();
-            }
-            if (value.contains("navigationSurface")) {
-                auto surface = ParseNavigationSurface(value["navigationSurface"]);
-                if (surface.HasError())
-                    return Result<SceneObjectComponentSet>::Failure(surface.ErrorValue());
-                components.navigationSurface = std::move(surface).Value();
-            }
-            if (value.contains("navigationRegion")) {
-                auto region = ParseNavigationRegion(value["navigationRegion"]);
-                if (region.HasError())
-                    return Result<SceneObjectComponentSet>::Failure(region.ErrorValue());
-                components.navigationRegion = std::move(region).Value();
-            }
+            const auto parse = [&]<typename Component, typename Parser>(const std::string_view name, std::optional<Component> &destination,
+                                                                        Parser &&parser) -> Result<void> {
+                return ParseOptionalComponent(value, name, destination, std::forward<Parser>(parser));
+            };
+            if (auto parsed = parse("camera", components.camera, ParseCameraComponent); parsed.HasError())
+                return Result<SceneObjectComponentSet>::Failure(parsed.ErrorValue());
+            if (auto parsed = parse("light", components.light, ParseLightComponent); parsed.HasError())
+                return Result<SceneObjectComponentSet>::Failure(parsed.ErrorValue());
+            if (auto parsed = parse("triggerVolume", components.triggerVolume, ParseTriggerVolumeComponent); parsed.HasError())
+                return Result<SceneObjectComponentSet>::Failure(parsed.ErrorValue());
+            if (auto parsed = parse("audioSource", components.audioSource, ParseAudioSourceComponent); parsed.HasError())
+                return Result<SceneObjectComponentSet>::Failure(parsed.ErrorValue());
+            if (auto parsed = parse("navigationSurface", components.navigationSurface, ParseNavigationSurface); parsed.HasError())
+                return Result<SceneObjectComponentSet>::Failure(parsed.ErrorValue());
+            if (auto parsed = parse("navigationRegion", components.navigationRegion, ParseNavigationRegion); parsed.HasError())
+                return Result<SceneObjectComponentSet>::Failure(parsed.ErrorValue());
+            if (auto parsed = parse("navigationModifier", components.navigationModifier, ParseNavigationModifier); parsed.HasError())
+                return Result<SceneObjectComponentSet>::Failure(parsed.ErrorValue());
+            if (auto parsed = parse("navigationLink", components.navigationLink, ParseNavigationLink); parsed.HasError())
+                return Result<SceneObjectComponentSet>::Failure(parsed.ErrorValue());
             if (value.contains("behaviors")) {
                 auto behaviors = ParseBehaviors(value["behaviors"]);
                 if (behaviors.HasError()) {

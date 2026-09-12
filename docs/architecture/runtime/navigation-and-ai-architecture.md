@@ -63,6 +63,24 @@ requires the ADR-104 upgrade/recook/qualification process.
 Crowd types belong here because gameplay consumers need them to request agent creation
 and movement. Scheduler queues, logical agent storage, and vendor crowd state do not.
 
+`NavMeshData` is the version-one immutable cooked grounded-surface contract. Its
+fixed header declares the exact neutral format, little-endian byte order, compression,
+profile identity/build geometry/digest, global-origin coordinate frame, metric tile grid, table counts, encoded
+and decoded byte sizes, and payload checksum before any decoded-table allocation.
+Project limits may lower but never exceed compiled ceilings. Every tile has one stable
+`(x, z, layer)` key, finite bounds, contiguous vertex/polygon/adjacency/link/provenance
+ranges and its own checksum, so a streaming adapter can validate and address a tile
+without accepting neighboring tiles. Complete artifact publication additionally requires
+strictly ordered unique keys and an exact gap-free partition of every declared table.
+
+Portable vertices, polygons, adjacency, traversal areas, off-mesh links and source
+provenance remain the semantic authority. Optional provider payload bytes occupy a
+separate opaque byte table with independent fingerprint, format version, endian,
+compression, decoded-size bound and checksum metadata. A provider receives those bytes
+only on an exact compatibility match; mismatch is a typed cooked-version failure and
+absence is distinct from corruption. Provider payloads can always be discarded without
+changing portable topology meaning.
+
 Separate provider capabilities in `NavigationBackend.h`:
 
 - `INavigationQueryBackend`: bounded spatial queries over pinned immutable topology.
@@ -461,15 +479,24 @@ stable Scene object/component/contribution IDs. Moving or renaming source preser
 those identities. Render geometry is not implicit input; every geometry contribution
 names an exact validated source/collision artifact.
 
-The initial typed Scene boundary exposes `NavigationSurfaceComponent` and
-`NavigationRegionComponent`. A surface pins its definition `AssetId`, grounded
+The typed Scene boundary exposes `NavigationSurfaceComponent`,
+`NavigationRegionComponent`, `NavigationModifierComponent`, and
+`NavigationLinkComponent`. A surface pins its definition `AssetId`, grounded
 profile set, component generation, enabled state, and object-subtree or explicit
 local-bounds bake scope. A region has a distinct stable identity, references one
 exact surface, and declares finite local bounds plus include/exclude and source
-selection policy. Scene-wide validation rejects duplicate identities and missing
-surface references before history or runtime publication. Runtime conversion uses
-only one committed Scene state and carries its identity as the definition revision;
-editor drafts, generated topology, and provider handles never cross this boundary.
+selection policy. A modifier owns a stable identity, one exact surface reference,
+and a finite object-local box or Y-axis cylinder whose closed operation is
+exclusion, area override, or area-and-cost override. A grounded link is owned by
+its containing Scene object, has ordered start/end endpoints with exact surface
+references, selects intersection-compatible grounded profiles, and records an
+explicit start-to-end or bidirectional policy; endpoint order is never inferred or
+canonicalized away. Scene-wide validation rejects malformed payloads, duplicate
+identities, missing surfaces, coincident endpoints, and profile incompatibility
+before history or runtime publication. Runtime conversion uses only one committed
+Scene state and carries its identity as the definition revision; disabled
+components remain authored but are absent from that runtime projection, and editor
+drafts, generated topology, and provider handles never cross this boundary.
 `HoroRuntimeScene` therefore has one deliberate public dependency on the
 backend-neutral `HoroNavigationApi`; the edge carries only typed identities and
 component validation. Navigation providers and `HoroNavigationRuntime` remain

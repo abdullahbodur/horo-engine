@@ -7,6 +7,7 @@
 #include "Horo/Editor/WorkspacePanelRegistry.h"
 #include "Horo/Foundation/Logging/Logger.h"
 #include "Horo/Foundation/PathUtils.h"
+#include "Horo/Gameplay/GameplayErrors.h"
 #include "editor/document/EditorViewportPicking.h"
 #include "editor/document/RuntimeSceneConversion.h"
 #include "editor/document/SceneDocumentComparison.h"
@@ -227,7 +228,7 @@ namespace Horo::Editor {
 
     void EditorWorkspaceController::UpdateGameplaySources(const float elapsedSeconds) {
         UpdateGameplayBuild(elapsedSeconds);
-        if (m_gameplayRegistry == nullptr || !std::isfinite(elapsedSeconds) || elapsedSeconds <= 0.0F)
+        if (m_nativeGameplayReloadQuarantined || m_gameplayRegistry == nullptr || !std::isfinite(elapsedSeconds) || elapsedSeconds <= 0.0F)
             return;
         m_gameplaySourceWatchElapsedSeconds += elapsedSeconds;
         if (m_gameplaySourceWatchElapsedSeconds < 0.5F)
@@ -238,6 +239,10 @@ namespace Horo::Editor {
                       diagnostic.error.message.c_str());
         if (!m_gameplayRegistry->ConsumeNativeArtifactChange())
             return;
+        if (m_playSession.IsActive()) {
+            m_nativeGameplayReloadPending = true;
+            return;
+        }
         std::unique_ptr<ProjectGameplayRegistry> candidate = ProjectGameplayRegistry::Discover(m_viewModel.projectRoot);
         if (candidate->HasBlockingDiagnostics()) {
             for (const ProjectGameplayDiagnostic &diagnostic : candidate->Diagnostics())
@@ -245,12 +250,8 @@ namespace Horo::Editor {
                           diagnostic.error.message.c_str());
             return;
         }
-        if (m_playSession.IsActive())
-            m_pendingGameplayRegistry = std::move(candidate);
-        else {
-            m_gameplayRegistry = std::move(candidate);
-            RefreshAvailableBehaviorProjection();
-        }
+        m_gameplayRegistry = std::move(candidate);
+        RefreshAvailableBehaviorProjection();
     }
 
     /** @copydoc EditorWorkspaceController::UpdateAutosave */
@@ -1118,6 +1119,12 @@ namespace Horo::Editor {
 
     void EditorWorkspaceController::StartPlaySession() {
         LOG_INFO("editor.play_session", "StartPlaySession initiated for project '%s'.", m_viewModel.projectRoot.c_str());
+        if (m_nativeGameplayReloadQuarantined) {
+            m_viewModel.playState = EditorPlayState::Failed;
+            m_viewModel.playError = MakeError(Gameplay::GameplayErrors::GameplayReloadRestartRequired).message;
+            LOG_ERROR("editor.play_session", "%s", m_viewModel.playError.c_str());
+            return;
+        }
         if (HasNativeGameplaySources() && (m_gameplayBuilds == nullptr || !m_gameplayBuilds->IsUpToDate(MakeGameplayBuildRequest()))) {
             LOG_INFO("editor.play_session", "Native gameplay build required before play. Starting gameplay build...");
             StartGameplayBuild(true);
@@ -1157,6 +1164,7 @@ namespace Horo::Editor {
 
     void EditorWorkspaceController::StopPlaySession() {
         m_playSession.Stop();
+        m_nativeGameplayReloadPending = false;
         if (m_pendingGameplayRegistry && !m_pendingGameplayRegistry->HasBlockingDiagnostics()) {
             m_gameplayRegistry = std::move(m_pendingGameplayRegistry);
             RefreshAvailableBehaviorProjection();
@@ -1183,6 +1191,9 @@ namespace Horo::Editor {
             case EditorPlaySessionState::Paused:
                 m_viewModel.playState = EditorPlayState::Paused;
                 break;
+            case EditorPlaySessionState::Reloading:
+                m_viewModel.playState = EditorPlayState::Starting;
+                break;
             case EditorPlaySessionState::Stopping:
                 m_viewModel.playState = EditorPlayState::Stopping;
                 break;
@@ -1204,6 +1215,7 @@ namespace Horo::Editor {
                                                     const double fixedDeltaSeconds) {
         if (!std::isfinite(fixedDeltaSeconds) || fixedDeltaSeconds <= 0.0)
             return;
+        ApplyNativeGameplayReload();
         ApplyPendingGameplayRegistry();
         if (const Result<void> updated = m_playSession.FixedUpdate(input, Gameplay::FixedDeltaTime{fixedDeltaSeconds}); updated.HasError())
             LOG_ERROR("editor.play_mode", "Play Mode fixed update failed: %s", updated.ErrorValue().message.c_str());

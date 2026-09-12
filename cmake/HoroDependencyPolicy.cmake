@@ -24,6 +24,7 @@ horo_allow_target_dependencies(TARGET HoroAudioCommands DEPENDENCIES HoroAudioMe
 horo_allow_target_dependencies(TARGET HoroAudioBackendContract DEPENDENCIES HoroAudioApi)
 horo_allow_target_dependencies(TARGET HoroAudioNull DEPENDENCIES HoroAudioBackendContract HoroAudioCommands)
 horo_allow_target_dependencies(TARGET HoroPhysics DEPENDENCIES HoroFoundation HoroAssets)
+horo_allow_target_dependencies(TARGET HoroPhysicsSceneIntegration DEPENDENCIES HoroPhysics HoroRuntimeScene)
 horo_allow_target_dependencies(TARGET HoroAI DEPENDENCIES HoroFoundation)
 horo_allow_target_dependencies(TARGET HoroAnimationApi DEPENDENCIES HoroFoundation HoroAssets)
 horo_allow_target_dependencies(TARGET HoroPCG DEPENDENCIES HoroFoundation)
@@ -93,6 +94,8 @@ horo_allow_target_dependencies(TARGET HoroExtensions
 # Executables are composition roots and may select any production module.
 horo_allow_target_dependencies(TARGET HoroHostModuleComposition DEPENDENCIES HoroFoundation)
 horo_allow_target_dependencies(TARGET horo-engine DEPENDENCIES HoroApplication HoroHostModuleComposition)
+horo_allow_target_dependencies(TARGET horo-extension-validate DEPENDENCIES HoroExtensions)
+horo_allow_target_dependencies(TARGET HoroExtensionSdkValidatorStage DEPENDENCIES horo-extension-validate)
 horo_allow_target_dependencies(TARGET HoroEditor
     DEPENDENCIES
         HoroGui
@@ -101,6 +104,7 @@ horo_allow_target_dependencies(TARGET HoroEditor
         HoroRenderFrontend
         HoroRuntime
         HoroRuntimeScene
+        HoroPhysicsSceneIntegration
         HoroExtensions
         HoroPlatform
         HoroProjectMigrations

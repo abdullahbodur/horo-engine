@@ -29,6 +29,23 @@ namespace {
         };
     }
 
+    [[nodiscard]] Runtime::NavigationModifierComponent Modifier(const std::uint64_t id = 3, const std::uint64_t surface = 1) {
+        return {
+            .id = Navigation::NavigationModifierId::Create(id).Value(),
+            .surface = Navigation::SurfaceId::Create(surface).Value(),
+        };
+    }
+
+    [[nodiscard]] Runtime::NavigationLinkComponent Link(const std::uint64_t id = 4, const std::uint64_t startSurface = 1,
+                                                        const std::uint64_t endSurface = 1) {
+        return {
+            .id = Navigation::NavigationLinkId::Create(id).Value(),
+            .start = {.surface = Navigation::SurfaceId::Create(startSurface).Value(), .localPosition = {0.0F, 0.0F, 0.0F}},
+            .end = {.surface = Navigation::SurfaceId::Create(endSurface).Value(), .localPosition = {2.0F, 0.0F, 0.0F}},
+            .profiles = {Navigation::NavigationAgentProfileId::Create(7).Value()},
+        };
+    }
+
     TEST_CASE("Navigation Scene components validate bounded typed payloads", "[unit][navigation][scene]") {
         auto surface = Surface();
         REQUIRE(Runtime::ValidateNavigationSurfaceComponent(surface).HasValue());
@@ -47,6 +64,45 @@ namespace {
         REQUIRE(Runtime::ValidateNavigationRegionComponent(region).HasValue());
         region.localBounds.halfExtents.z = 0.0F;
         REQUIRE(Runtime::ValidateNavigationRegionComponent(region).HasError());
+
+        auto modifier = Modifier();
+        REQUIRE(Runtime::ValidateNavigationModifierComponent(modifier).HasValue());
+        modifier.volume = Runtime::NavigationCylinderVolume{.radius = 2.0F, .halfHeight = 3.0F};
+        modifier.operation = Runtime::NavigationModifierOperation::OverrideAreaAndCost;
+        modifier.area = Navigation::NavigationAreaId::Create(9).Value();
+        modifier.traversalCost = 1.5F;
+        REQUIRE(Runtime::ValidateNavigationModifierComponent(modifier).HasValue());
+        modifier.traversalCost = std::nullopt;
+        REQUIRE(Runtime::ValidateNavigationModifierComponent(modifier).HasError());
+        modifier.operation = Runtime::NavigationModifierOperation::Exclude;
+        REQUIRE(Runtime::ValidateNavigationModifierComponent(modifier).HasError());
+        modifier = Modifier();
+        modifier.volume = Runtime::NavigationCylinderVolume{.radius = 0.0F, .halfHeight = 1.0F};
+        REQUIRE(Runtime::ValidateNavigationModifierComponent(modifier).HasError());
+        modifier = Modifier();
+        modifier.operation = Runtime::NavigationModifierOperation::OverrideAreaAndCost;
+        modifier.area = Navigation::NavigationAreaId::Create(9).Value();
+        modifier.traversalCost = -1.0F;
+        REQUIRE(Runtime::ValidateNavigationModifierComponent(modifier).HasError());
+
+        auto link = Link();
+        REQUIRE(Runtime::ValidateNavigationLinkComponent(link).HasValue());
+        link.direction = Runtime::NavigationLinkDirection::Bidirectional;
+        REQUIRE(Runtime::ValidateNavigationLinkComponent(link).HasValue());
+        link.end.localPosition = link.start.localPosition;
+        REQUIRE(Runtime::ValidateNavigationLinkComponent(link).HasError());
+        link = Link();
+        link.profiles.push_back(link.profiles.front());
+        REQUIRE(Runtime::ValidateNavigationLinkComponent(link).HasError());
+        link = Link();
+        link.start.connectionRadiusMeters = 0.0F;
+        REQUIRE(Runtime::ValidateNavigationLinkComponent(link).HasError());
+        link = Link();
+        link.profiles.clear();
+        REQUIRE(Runtime::ValidateNavigationLinkComponent(link).HasError());
+        link = Link();
+        link.traversalCost = -1.0F;
+        REQUIRE(Runtime::ValidateNavigationLinkComponent(link).HasError());
     }
 
     TEST_CASE("Navigation Scene identity validation rejects conflicts and missing surfaces", "[unit][navigation][scene]") {
@@ -60,16 +116,39 @@ namespace {
         REQUIRE(Runtime::ValidateNavigationSceneComponents(surfaces, duplicateRegions).HasError());
         const std::array missingRegions{Region(2, 99)};
         REQUIRE(Runtime::ValidateNavigationSceneComponents(surfaces, missingRegions).HasError());
+
+        const std::array modifiers{Modifier()};
+        const std::array links{Link()};
+        REQUIRE(Runtime::ValidateNavigationSceneComponents(surfaces, regions, modifiers, links).HasValue());
+        const std::array duplicateModifiers{Modifier(), Modifier()};
+        REQUIRE(Runtime::ValidateNavigationSceneComponents(surfaces, regions, duplicateModifiers, links).HasError());
+        const std::array duplicateLinks{Link(), Link()};
+        REQUIRE(Runtime::ValidateNavigationSceneComponents(surfaces, regions, modifiers, duplicateLinks).HasError());
+        const std::array missingModifiers{Modifier(3, 99)};
+        REQUIRE(Runtime::ValidateNavigationSceneComponents(surfaces, regions, missingModifiers, links).HasError());
+        const std::array missingLinks{Link(4, 1, 99)};
+        REQUIRE(Runtime::ValidateNavigationSceneComponents(surfaces, regions, modifiers, missingLinks).HasError());
+
+        auto incompatible = Link();
+        incompatible.profiles = {Navigation::NavigationAgentProfileId::Create(8).Value()};
+        const std::array incompatibleLinks{incompatible};
+        const auto mismatch = Runtime::ValidateNavigationSceneComponents(surfaces, regions, modifiers, incompatibleLinks);
+        REQUIRE(mismatch.HasError());
+        REQUIRE(mismatch.ErrorValue().code.Value() == Navigation::NavigationErrors::SceneProfileMismatch.code.Value());
     }
 
     TEST_CASE("Runtime definition pins committed navigation generations and rejects missing references", "[unit][navigation][scene]") {
         Runtime::SceneDefinitionBuilder valid{Runtime::SceneDefinitionId{3}, Runtime::SceneDefinitionRevision{11}};
         valid.Add({.object = Runtime::SceneObjectId{1}, .components = {.navigationSurface = Surface()}});
         valid.Add({.object = Runtime::SceneObjectId{2}, .components = {.navigationRegion = Region()}});
+        valid.Add({.object = Runtime::SceneObjectId{3}, .components = {.navigationModifier = Modifier()}});
+        valid.Add({.object = Runtime::SceneObjectId{4}, .components = {.navigationLink = Link()}});
         auto definition = std::move(valid).Build();
         REQUIRE(definition.HasValue());
         REQUIRE(definition.Value().Revision().value == 11);
         REQUIRE(definition.Value().Entities()[0].components.navigationSurface->generation == 1);
+        REQUIRE(definition.Value().Entities()[2].components.navigationModifier->id == Modifier().id);
+        REQUIRE(definition.Value().Entities()[3].components.navigationLink->direction == Runtime::NavigationLinkDirection::StartToEnd);
 
         Runtime::SceneDefinitionBuilder missing{Runtime::SceneDefinitionId{3}, Runtime::SceneDefinitionRevision{12}};
         missing.Add({.object = Runtime::SceneObjectId{2}, .components = {.navigationRegion = Region()}});

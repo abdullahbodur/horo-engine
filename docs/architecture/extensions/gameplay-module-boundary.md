@@ -97,13 +97,14 @@ LoadLibrary
   -> GetGameplayDescriptorBundle
   -> validate manifest identity, complete registrations, diagnostics, and lifecycle callbacks
   -> CreateGameModule
-  -> Register components, systems, and services
+  -> Register components, systems, services, and game-owned asset types
   -> freeze every registration transaction
   -> create project services in provider-first order
   -> Start
   -> request cancellation
   -> Stop
   -> stop and destroy project services in reverse order
+  -> release game-owned asset processing bindings
   -> DestroyGameModule
   -> UnloadLibrary
 ```
@@ -164,6 +165,65 @@ Game-owned IDs use the `game.<project_or_module>.*` namespace. Engine-owned IDs
 use `engine.*`. Duplicate IDs across all loaded engine and game descriptors fail
 registration; registration never selects one conflicting descriptor by load
 order.
+
+### Game-Owned Asset Types
+
+`GameAssetTypeRegistry` is the project gameplay boundary for asset types whose
+schema and processing behavior belong to the game. It is a host-owned
+registration transaction and is frozen before `IGameModule::Start`. Project code
+contributes a copied `GameAssetTypeDescriptor` plus exact-SDK-generation import,
+serialization, and cook callbacks; the engine asset core does not link project
+code or retain a native project object layout.
+
+Every type uses a stable `game.<module>.<asset_type>` identity. A descriptor owns
+one non-zero current schema version, bounded lowercase source extensions,
+explicit canonical `AssetCookTargetId` values from the shared Foundation
+contract, and rendering-neutral editor metadata. The editor
+metadata contains a display name, category, icon role, and stable typed field
+descriptors. It does not expose ImGui, editor services, renderer handles, or
+localized host UI callbacks to gameplay code.
+
+Authored data is stored in `SerializedGameAsset`:
+
+```cpp
+struct SerializedGameAsset {
+    GameAssetTypeId typeId;
+    uint32_t schemaVersion;
+    GameAssetPayloadEncoding encoding;
+    std::vector<std::byte> payload;
+};
+```
+
+The envelope and bytes are host-owned and remain valid without the module. The
+callbacks operate only through bounded borrowed inputs and return owned bytes:
+
+- import accepts a descriptor-declared source extension and must return the
+  registered type and current schema;
+- serialization converts generic editor payload into the registered type's
+  current persistent envelope;
+- cook accepts only a current envelope and descriptor-declared target and returns
+  bounded cooked bytes;
+- callback exceptions, wrong type/schema output, oversized output, and unsupported
+  extensions or targets become typed errors without replacing authored data.
+
+When the descriptor is absent, `Inspect` reports `MissingDescriptor` without
+invoking code or mutating bytes. `DescribeForEditor` returns a read-only generic
+model containing the stable type ID, schema version, payload size, and missing-
+type semantic fallback. The editor host resolves
+`GameAssetEditorFallback::MissingDescriptor` through the
+`workspace.game_asset.category.missing` localization key; gameplay code does not
+own fallback copy. Inspection results and editor models own descriptor and field
+snapshots, so they remain valid after registry replacement or project close.
+When compatible code returns, the same envelope resolves to
+the restored descriptor. Older or newer schemas remain read-only and retain
+their exact bytes until an explicit migration contract is available. Import,
+serialization, and cook fail with `gameplay.asset_handler_unavailable` while the
+handler is missing; silent fallback cooking is forbidden.
+
+The registry retains module-owned callback addresses only while the owning
+`LoadedGameModule` and dynamic library are alive. The host destroys the asset
+registry before destroying the module or unloading the library. Quiescing active
+work before replacement is owned by the native reload transaction.
 
 Manual `Register()` code is for native/static non-behavior descriptors that
 cannot be discovered from project assets or annotated source. Object-attached
@@ -407,12 +467,22 @@ contracts.
 
 Native gameplay code reload, when enabled in development:
 
-- occurs only at a runtime safe point
-- stops affected systems and joins module-owned jobs
-- transfers only explicitly preservable state through a hot-reload adapter
-- invalidates all module-owned callbacks and function pointers
-- reloads through a versioned module boundary
-- recreates systems and restores compatible state
+- occurs only at the owner-thread fixed-tick safe point
+- captures bounded behavior-instance state by stable instance and type ID
+- revokes the old generation's cancellation token before calling
+  `IGameModule::PrepareReload`
+- requires that callback to close callback/job admission, join owned work, and
+  return a bounded module snapshot; the default is restart-required
+- stops behaviors, services, and the module before destroying its registries and
+  unloading its shadow library
+- closes exact-generation runtime admission before checking retirement, then
+  refuses retirement while any external behavior or system runtime still holds
+  a lease; destroying the public module wrapper alone cannot unload code
+  referenced by one of those runtimes, and no new runtime can join a closing
+  generation
+- loads and validates the replacement only after the old generation is gone
+- calls `IGameModule::RestoreReload`, recreates behavior instances against the
+  unchanged runtime scene, and restores compatible state
 
 The project module build publishes `.horo/local/gameplay_module.json` only after
 the complete dynamic library and generated descriptor bundle succeed. The
@@ -426,15 +496,24 @@ revision before changing the active registry. Native and script descriptors are
 then committed into one frozen registry transaction. A duplicate ID across the
 two sources rejects the candidate rather than selecting by load order.
 
-During Play, an accepted candidate waits for the next fixed-tick boundary. The
-old behavior runtime is shut down while its module remains loaded, replacement
-instances are created against the unchanged runtime scene, and only then is the
-old module released. Candidate activation failure reconstructs the previous
-runtime against the same scene; if rollback also fails, the play session enters
-the explicit failed state.
+During Play, an artifact-manifest transition is recorded without loading a
+candidate. At the next fixed-tick boundary, the editor executes one explicit
+`Begin -> Retire -> TryActivate -> Commit` transaction. `Begin` takes cleanup
+ownership of a preserved native artifact and clones the exact in-memory last-good
+Lua program generation, including its watcher baseline. `Retire` captures behavior
+and module state and proves old-generation quiescence before any code is unloaded.
+Candidate activation never rereads mutable Lua source from disk. Candidate failure
+uses `Rollback` to shadow-load the preserved native artifact and reinstall cloned
+Lua programs, restoring module and behavior state against the unchanged runtime
+scene. The rollback artifact is removed by transaction ownership after commit,
+successful rollback, or any early exit. The authoring document is never part of
+this transaction.
 
-If any unload precondition cannot be proven, the editor requests a play-session
-or process restart instead of unloading unsafe C++ code.
+If any unload precondition cannot be proven, the cancellation token remains
+revoked and the transaction enters `Degraded`. The generation is quarantined for
+the remainder of the workspace session: source watching, registry refresh, further
+reload attempts, and new Play admission are blocked with an explicit process-restart
+diagnostic. This prevents overlap with an incompletely retired native generation.
 
 Shipping builds do not load unsigned replacement gameplay code.
 

@@ -64,11 +64,11 @@ device backend.
 
 | Real target (alias) | Availability | Owner and public/private boundary | Direct first-party dependencies |
 |---|---|---|---|
-| `HoroFoundation` (`HoroEngine::Foundation`) | Always | Owns Foundation primitives, immutable host-published error-code registry snapshots, diagnostics, logging, telemetry facade, jobs, configuration, paths, hashing, strings, and `Math/SceneMath.h`. Implementation is under `src/foundation/`. | None |
+| `HoroFoundation` (`HoroEngine::Foundation`) | Always | Owns Foundation primitives, canonical cross-subsystem asset cook-target identity, immutable host-published error-code registry snapshots, diagnostics, logging, telemetry facade, jobs, configuration, paths, hashing, strings, and shared `Math/**` contracts. Implementation is under `src/foundation/`. | None |
 | `HoroCliHost` (`HoroEngine::CliHost`) | Always | Owns inert CLI descriptors, bounded host-policy validation, immutable command registration, deterministic discovery/help, and the bounded typed pre-dispatch parser under `Cli/**`. Parsing consumes only explicit argv, resolved configuration snapshots, path-normalizer seams, and selected stdin; dispatch, presentation, and adapter execution are not yet part of this target. | Foundation (public), nlohmann_json (private) |
 | `HoroOpenTelemetry` (`HoroEngine::OpenTelemetry`) | `HORO_ENABLE_OPENTELEMETRY` | Owns the optional OTLP sink and `Foundation/Telemetry/OpenTelemetrySink.h`; the concrete exporter dependencies are private. | Foundation (public) |
 | `HoroPlatform` (`HoroEngine::Platform`) | Always | Owns `Platform/**` dynamic-library and process contracts plus POSIX/Windows implementations. OS headers and `dl` are private. | Foundation (public) |
-| `HoroPackages` (`HoroEngine::Packages`) | Always | Owns canonical package paths, the typed file inventory and immutable archive verification under `Packages/**`. JSON, miniz and Unicode normalization remain private; install/trust/semantic package-manifest services are not implemented by this target yet. | Foundation (public) |
+| `HoroPackages` (`HoroEngine::Packages`) | Always | Owns canonical package paths, the typed file inventory, immutable archive verification, and content-addressed cache/quarantine under `Packages/**`. JSON, miniz and Unicode normalization remain private; install/trust/semantic package-manifest services are not implemented by this target yet. | Foundation (public) |
 | `HoroApplication` (`HoroEngine::Application`) | Always | Owns project version, compatibility, migration planning/execution, and host observability contracts in `Application/**`, except gameplay build. Generated compatibility data is private. | Foundation (public) |
 | `HoroProjectMigrations` (`HoroEngine::ProjectMigrations`) | Always | Owns generated concrete migration catalog composition. It intentionally exposes the Application migration contract rather than a separate header family. | Application (public) |
 | `HoroRuntime` (`HoroEngine::Runtime`) | Always | Owns frame scheduling, runtime lifecycle, and runtime host contracts in `Runtime/FrameScheduler.h`, `Runtime/RuntimeLifecycle.h`, and `Runtime/RuntimeHost.h`. | Foundation (public) |
@@ -84,7 +84,7 @@ device backend.
 
 | Real target (alias) | Availability | Owner and public/private boundary | Direct first-party dependencies |
 |---|---|---|---|
-| `HoroGameplayApi` (`HoroEngine::GameplayApi`) | Always | Owns the project-facing gameplay descriptor, behavior type, native behavior, module, and error contracts under `Gameplay/**`. | Foundation (public) |
+| `HoroGameplayApi` (`HoroEngine::GameplayApi`) | Always | Owns project-facing gameplay descriptors, game-owned asset types, behavior types, native behavior, module, and error contracts under `Gameplay/**`. | Foundation (public) |
 | `HoroGameplayRuntime` (`HoroEngine::GameplayRuntime`) | Always | Owns `Gameplay/BehaviorRegistry.h` and `Gameplay/BehaviorRuntime.h` and authoritative behavior execution. | GameplayApi, RuntimeScene (public) |
 | `HoroGameplayModuleHost` (`HoroEngine::GameplayModuleHost`) | Always | Owns `Gameplay/GameModuleHost.h` and dynamic project-module loading. Native dynamic loading stays private. | GameplayRuntime (public), Platform (private) |
 | `HoroGameplayLua` (`HoroEngine::GameplayLua`) | Always | Owns `Gameplay/LuaBehavior.h` and the concrete Lua behavior adapter. Lua and JSON dependencies are private. | GameplayRuntime (public) |
@@ -124,21 +124,38 @@ device backend.
 
 ## Public Header Inventory And Boundary
 
-There are 136 non-placeholder headers under `include/Horo/` at this snapshot:
+There are 388 non-placeholder headers under `include/Horo/` at this snapshot:
 
 | Public path | Header count | Semantic owner |
 |---|---:|---|
-| `Application/` | 6 | Application, except `GameplayBuildService.h` owned by GameplayBuild |
+| `AI/` | 5 | AiRuntime and AiNavigationAdapter |
+| `Animation/` | 8 | Animation |
+| `Application/` | 7 | Application, except `GameplayBuildService.h` owned by GameplayBuild |
 | `Assets/` | 14 | Assets |
-| `Editor/` | 46 | EditorModel, EditorServices, and Gui; ownership is not physically separated |
-| `Extensions/` | 6 | Extensions |
-| `Foundation/` | 28 | Foundation, except the optional OpenTelemetry sink header |
-| `Gameplay/` | 9 | GameplayApi, GameplayRuntime, GameplayModuleHost, and GameplayLua |
-| `Math/` | 1 | Foundation |
-| `Platform/` | 3 | Platform |
-| `Runtime/` | 16 | Runtime, Input, RuntimeScene, SceneModel, RenderApi, RenderBackendRegistry, RenderFrontend, and RenderNull |
-| `XR/` | 4 | XRApi |
-| `Terrain/` | 2 | TerrainApi |
+| `Audio/` | 20 | AudioApi and AudioRuntime |
+| `Cinematic/` | 9 | CinematicModel and CinematicRuntime |
+| `Cli/` | 5 | CliHost |
+| `Destruction/` | 7 | DestructionApi and DestructionRuntime |
+| `Editor/` | 48 | EditorModel, EditorServices, and Gui |
+| `Extensions/` | 12 | Extensions |
+| `Foundation/` | 34 | Foundation, except the optional OpenTelemetry sink header |
+| `Gameplay/` | 17 | GameplayApi, GameplayRuntime, GameplayModuleHost, GameplayBuild, and GameplayLua |
+| `Math/` | 2 | Foundation |
+| `Navigation/` | 13 | NavigationApi and NavigationRuntime |
+| `Network/` | 19 | NetworkApi and NetworkRuntime |
+| `Packages/` | 5 | Packages |
+| `PCG/` | 8 | PcgApi and PcgRuntime |
+| `Physics/` | 23 | Physics |
+| `Platform/` | 6 | Platform |
+| `PlatformServices/` | 10 | PlatformServices |
+| `Prefab/` | 4 | Prefab |
+| `Release/` | 4 | ReleaseModel |
+| `Runtime/` | 56 | Runtime subsystem targets, including scene, rendering, input, UI, materials, and VFX |
+| `Security/` | 4 | Security |
+| `Terrain/` | 4 | TerrainApi and TerrainRuntime |
+| `Vfx/` | 6 | VfxApi and VfxRuntime |
+| `WorldStreaming/` | 30 | WorldStreamingApi, WorldStreamingRuntime, and adapters |
+| `XR/` | 8 | XRApi and XRRuntime |
 
 The current CMake boundary is broader than this semantic ownership map:
 

@@ -1,9 +1,26 @@
 #include "Horo/Navigation/NavigationErrors.h"
 
+#include <string>
+#include <string_view>
+
 namespace Horo::Navigation::NavigationErrors {
     namespace {
         const ErrorDomainId NavigationDomain{"horo.navigation"};
-    }
+
+        [[nodiscard]] ErrorCodeDescriptor MakeNavMeshArtifactError(const std::string_view code, const ErrorSeverity severity,
+                                                                   const std::string_view summary, const std::string_view remediationHint,
+                                                                   const bool userActionable) {
+            return {
+                .domain = NavigationDomain,
+                .code = ErrorCode{std::string{code}},
+                .defaultSeverity = severity,
+                .summary = summary,
+                .remediationHint = remediationHint,
+                .retryable = false,
+                .userActionable = userActionable,
+            };
+        }
+    }  // namespace
 
     const ErrorCodeDescriptor IdentityInvalid{
         .domain = NavigationDomain,
@@ -278,12 +295,40 @@ namespace Horo::Navigation::NavigationErrors {
         .retryable = false,
         .userActionable = true,
     };
+    const ErrorCodeDescriptor NavMeshArtifactInvalid =
+        MakeNavMeshArtifactError("navigation.navmesh_artifact.invalid", ErrorSeverity::Error,
+                                 "The cooked NavMesh artifact schema is invalid.",
+                                 "Reject the candidate and recook from validated navigation source data.", true);
+    const ErrorCodeDescriptor NavMeshArtifactCorrupt =
+        MakeNavMeshArtifactError("navigation.navmesh_artifact.corrupt", ErrorSeverity::Error,
+                                 "The cooked NavMesh artifact failed integrity or table validation.",
+                                 "Discard the corrupt generation and recook it from authoritative source data.", true);
+    const ErrorCodeDescriptor NavMeshArtifactCapacityExceeded =
+        MakeNavMeshArtifactError("navigation.navmesh_artifact.capacity_exceeded", ErrorSeverity::Error,
+                                 "The cooked NavMesh artifact exceeds a qualified count or byte bound.",
+                                 "Reduce the bake scope or select an explicitly qualified higher-capacity profile.", true);
+    const ErrorCodeDescriptor UnsupportedCookedVersion =
+        MakeNavMeshArtifactError("navigation.navmesh_artifact.unsupported_version", ErrorSeverity::Error,
+                                 "The cooked NavMesh format is incompatible with this consumer.",
+                                 "Recook with a compatible neutral and provider payload format.", true);
+    const ErrorCodeDescriptor NavMeshTileUnknown =
+        MakeNavMeshArtifactError("navigation.navmesh_artifact.tile_unknown", ErrorSeverity::Warning,
+                                 "The requested NavMesh tile is absent from the artifact.",
+                                 "Request an exact published tile coordinate and layer from the artifact manifest.", false);
+    const ErrorCodeDescriptor NavMeshProviderPayloadUnavailable =
+        MakeNavMeshArtifactError("navigation.navmesh_artifact.provider_payload_unavailable", ErrorSeverity::Warning,
+                                 "No provider-private payload matches the requested provider fingerprint.",
+                                 "Use the portable NavMesh data or recook an optional payload for the selected provider.", false);
+    const ErrorCodeDescriptor NavMeshProviderPayloadIncompatible =
+        MakeNavMeshArtifactError("navigation.navmesh_artifact.provider_payload_incompatible", ErrorSeverity::Error,
+                                 "The provider-private NavMesh payload is incompatible with the selected provider.",
+                                 "Discard the optional payload and use portable data, or recook it for the exact provider format.", true);
     const ErrorCodeDescriptor SceneComponentInvalid{
         .domain = NavigationDomain,
         .code = ErrorCode{"navigation.scene_component_invalid"},
         .defaultSeverity = ErrorSeverity::Error,
         .summary = "A Scene navigation component is invalid.",
-        .remediationHint = "Repair the component identity, version, bounds, definition, profiles, or source policy.",
+        .remediationHint = "Repair the component identity, version, bounds, definition, surface, profiles, area, direction, or cost.",
         .retryable = false,
         .userActionable = true,
     };
@@ -292,7 +337,7 @@ namespace Horo::Navigation::NavigationErrors {
         .code = ErrorCode{"navigation.scene_component_conflict"},
         .defaultSeverity = ErrorSeverity::Error,
         .summary = "Scene navigation component identities conflict.",
-        .remediationHint = "Assign distinct stable surface and region identities before committing the Scene.",
+        .remediationHint = "Assign distinct stable identities within each navigation component domain before committing the Scene.",
         .retryable = false,
         .userActionable = true,
     };
@@ -300,8 +345,17 @@ namespace Horo::Navigation::NavigationErrors {
         .domain = NavigationDomain,
         .code = ErrorCode{"navigation.scene_surface_missing"},
         .defaultSeverity = ErrorSeverity::Error,
-        .summary = "A Scene navigation region references a missing surface.",
-        .remediationHint = "Restore the exact surface or explicitly retarget the region.",
+        .summary = "A Scene navigation component references a missing surface.",
+        .remediationHint = "Restore the exact surface or explicitly retarget the region, modifier, or link endpoint.",
+        .retryable = false,
+        .userActionable = true,
+    };
+    const ErrorCodeDescriptor SceneProfileMismatch{
+        .domain = NavigationDomain,
+        .code = ErrorCode{"navigation.scene_profile_mismatch"},
+        .defaultSeverity = ErrorSeverity::Error,
+        .summary = "A grounded navigation link has incompatible endpoint profiles.",
+        .remediationHint = "Select only grounded profiles present on both exact endpoint surfaces.",
         .retryable = false,
         .userActionable = true,
     };

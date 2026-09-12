@@ -20,6 +20,33 @@ Public placement is a compatibility commitment, not merely a convenient include
 path. Moving a source header into `include/Horo/` requires a stable owner, a narrow
 contract, Doxygen documentation, migration notes, and consumer coverage.
 
+## EXT-002.11 Migration Notes
+
+`HoroEngine::Extensions` owns the new
+`Horo/Extensions/BackendServiceRegistry.h` public contract. Backend-only service
+adapters link Extensions directly and publish typed service implementations only
+from an application composition root. This is the first callable backend-service
+registry, so no existing caller signature changes. Future callers replace direct
+provider pointers or reusable factories with one-shot calls resolved through an
+exact `ApplicationCapabilityProviderLease`; provider-native ABI tables remain
+private to their host adapter. The generated Extensions public-header consumer
+compiles the new header through its sole owning target.
+The lifecycle API returns a typed retirement disposition: a bounded drain can
+complete, defer to the outermost re-entrant call, require owner-thread finalization,
+or retain the provider and require restart after the shared deadline. Composition
+must finalize owner-thread retirements on the recorded provider thread; no deadline
+path destroys live provider code. Each registration supplies an opaque shared code
+lease, and the reverse-ordered retirement coordinator retains that lease through
+`Shutdown()`, service destruction, and any process-lifetime restart quarantine.
+Registry and registration owners are non-assignable lifetime boundaries; retirement
+operations return their infallible typed disposition directly rather than wrapping
+it in an error result with no failure state.
+The service object and code lease transfer as one ordering-safe storage value from
+the public registration boundary onward. Every rejection, allocation unwind,
+successful shutdown, and quarantine path destroys the service before releasing the
+code that contains its deleter. Composition permits only one quarantined registry
+per process and treats any attempted replacement as a fail-fast restart violation.
+
 `Horo/Vfx/VfxQualityPolicy.h` is owned by `HoroVfxApi`. It adds backend-neutral
 immutable capability/policy evidence and pure admission decisions; consumers keep
 linking `HoroEngine::VfxApi`, and no include spelling or existing caller migrates.
@@ -141,6 +168,20 @@ that previously returned a bare `vector<Diagnostic>` should create a bounded
 finding through a module-owned descriptor, then return
 `Result<ValidationResult>`. Existing non-validation `Result<T>` APIs and
 `Error::diagnostics` callers do not change.
+
+## GAM-001.5 Migration Notes
+
+`HoroEngine::Foundation` owns the canonical
+`Horo/Foundation/AssetCookTargetId.h` public contract shared by Assets and
+GameplayApi. Existing asset-pipeline consumers may keep including
+`Horo/Assets/AssetCook.h` and using `Horo::Assets::AssetCookTargetId`; that name
+is an alias to the single Foundation-owned type, so persisted cook-target text
+and the existing 16-bit envelope limit remain compatible. Gameplay descriptors
+use the same type but admission retains its narrower 96-byte project-module
+boundary. New direct consumers link Foundation and include the owning header;
+they must not introduce a second parser or stringly typed target identity. The
+generated Foundation public-header consumer and Assets/Gameplay callers cover
+the ownership migration.
 
 ## CIN-001.4 Migration Notes
 
@@ -581,6 +622,22 @@ revalidate generation/state/capability revisions before live operations. Ad-hoc 
 registries, mutable record exposure, native handles and silently widened queries have no
 compatibility path.
 
+## NAV-002.7 Migration Notes
+
+`HoroEngine::NavigationApi` additionally owns `Horo/Navigation/NavMeshData.h`.
+The public contract depends only on existing Foundation, SceneMath and NavigationApi
+types; it exposes no Recast/Detour header, handle, flag, allocator, codec or filesystem
+type. The generated staged public-header consumer therefore continues to enforce the
+backend-neutral boundary.
+
+Earlier borrowed polygon topology remains a provider activation seam and is not a
+persisted format. Cook, cache, cell-packaging and runtime-loading work must migrate to
+the versioned `NavMeshData` contract rather than serialize that activation descriptor.
+There is no byte-level legacy migration: unsupported or corrupt derived output is
+invalidated and recooked from authoritative navigation source. Provider-private payloads
+are optional exact-match accelerators and never replace portable metadata as semantic
+authority.
+
 ## PCG-2.2 Migration Notes
 
 `HoroEngine::PCG` additionally owns `Horo/PCG/PCGGraphAsset.h`; the target remains
@@ -604,3 +661,48 @@ backend type crosses the boundary. Callers that previously inferred readiness fr
 source validity must now retain an exact registry snapshot, call `ValidatePCGGraph`,
 and hand the returned generation-fenced dependency order to the later compiler. There
 is no compatibility path for ambient runtime discovery or best-effort fallback.
+
+## Runtime Save Operation Boundary
+
+`[SAV-001.6]` adds `Horo/Runtime/Save/SaveOperation.h` to `HoroEngine::Runtime`.
+The public contract reuses the application-owned Foundation `OperationId` and exposes
+only typed save stages, exact bounded progress, immutable terminal evidence,
+cooperative cancellation and completion observation. It owns no scheduler, storage,
+filesystem, cloud, scene, editor, UI or backend capability. The generated standalone
+Runtime public-header consumer compiles the contract through its registered owner.
+
+Runtime save producers create the move-only controller only after application
+operation admission, retain it until exactly one terminal result is published and
+hand copyable handles to polling or callback consumers. Existing ad hoc save-job IDs
+must migrate to the application `OperationStore` identity instead of creating another
+operation store. Callers request cancellation without waiting; producers observe it
+before entering `BeginCommit`. Once that atomic gate succeeds, cancellation is too
+late and terminal publication reports the actual committed, not-committed or unknown
+outcome. Completion callbacks are bounded, run outside the operation lock on the
+registering or terminalizing thread and must remain non-blocking. Admission also
+preallocates cancellation and abandonment failures plus callback storage. A terminal
+transition moves the final snapshot into retained immutable in-state storage before
+releasing observers, so destructor-driven abandonment and callback dispatch cannot
+lose terminal publication to a later allocation failure. Admission allocation failure
+has its own typed identity. Each operation kind has a closed monotonic stage order and
+an exact completed predecessor for `BeginCommit`; pre-commit stages cannot be published
+after the gate. Handles retain shared state across user callbacks, and producer
+replacement detaches prior state before abandonment dispatch so reentrant release or
+move assignment cannot invalidate callback evidence or orphan the installed operation.
+
+## Runtime Save Participant Ordering Boundary
+
+`[SAV-001.8]` extends the existing `SaveParticipantRegistry.h` contract without
+changing target ownership. Dependency edges now carry required/optional policy and
+an exact capture, restore or combined phase. Registry snapshots retain their
+identity-sorted canonical binding view and additionally publish stable topological
+capture and restore plans. Equivalent participant sets therefore produce the same
+orders regardless of registration timing, addresses or unordered-container order.
+Non-overlapping capture and restore edges to one provider remain distinct, while
+overlapping declarations are invalid. Registry allocation failures are typed and do
+not advance the published generation without the corresponding membership change.
+
+Existing `SaveParticipantId` dependency initializers retain their required-both
+meaning; callers that intended optional or phase-specific behavior must migrate to
+an explicit `SaveParticipantDependency` value. The generated Runtime public-header
+consumer continues to cover the extended Foundation-only surface.

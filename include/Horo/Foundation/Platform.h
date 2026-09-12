@@ -62,21 +62,22 @@ namespace Horo {
     public:
         virtual ~DurableFileSystem() = default;
 
-        /** @brief Immediately acquires an exclusive OS lock. @param path Lock-file path. @param ownerMetadata Diagnostic-only owner text.
-         * @return Move-only lock or typed busy/I/O failure. */
+        /** @brief Creates missing parent directories and immediately acquires an exclusive OS lock. @param path Lock-file path.
+         * @param ownerMetadata Diagnostic-only owner text. @return Move-only lock or typed busy/I/O failure. */
         [[nodiscard]] virtual Result<ExclusiveFileLock> TryAcquireExclusive(const std::filesystem::path &path,
                                                                             std::string_view ownerMetadata) = 0;
         /** @brief Queries filesystem capacity. @param path Path on the target filesystem. @return Currently available bytes or typed I/O
          * failure. */
         [[nodiscard]] virtual Result<std::uint64_t> AvailableBytes(const std::filesystem::path &path) const = 0;
-        /** @brief Writes and flushes a complete file. @param path Destination path. @param bytes Complete contents. @return Success after
-         * file and directory durability, or typed I/O failure. */
+        /** @brief Creates missing parent directories, then writes and flushes a complete file. @param path Destination path.
+         * @param bytes Complete contents. @return Success after file and directory durability, or typed I/O failure. */
         [[nodiscard]] virtual Result<void> WriteDurable(const std::filesystem::path &path, std::span<const std::byte> bytes) = 0;
-        /** @brief Copies and flushes a file. @param source Existing source file. @param destination Destination on the transaction
-         * filesystem. @return Success after destination durability, or typed I/O failure. */
+        /** @brief Creates missing destination parents, then copies and flushes a file. @param source Existing source file.
+         * @param destination Destination on the transaction filesystem. @return Success after destination durability, or typed I/O failure.
+         */
         [[nodiscard]] virtual Result<void> CopyDurable(const std::filesystem::path &source, const std::filesystem::path &destination) = 0;
-        /** @brief Atomically replaces a destination. @param prepared Same-filesystem prepared file. @param destination Published
-         * destination. @return Success after directory durability, or typed I/O failure. */
+        /** @brief Creates missing destination parents, then atomically replaces a destination. @param prepared Same-filesystem prepared
+         * file. @param destination Published destination. @return Success after directory durability, or typed I/O failure. */
         [[nodiscard]] virtual Result<void> AtomicReplace(const std::filesystem::path &prepared,
                                                          const std::filesystem::path &destination) = 0;
         /** @brief Durably removes a file. @param path File to remove. @return Success after directory durability, or typed I/O failure. */

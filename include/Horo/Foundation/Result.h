@@ -37,9 +37,16 @@ namespace Horo {
             return std::move(std::get<T>(m_value));
         }
 
-        [[nodiscard]] const Error &ErrorValue() const {
+        /** @brief Returns the stored error by immutable reference. @return Borrowed error. */
+        [[nodiscard]] const Error &ErrorValue() const & {
             assert(HasError());
             return std::get<Error>(m_value);
+        }
+
+        /** @brief Transfers the stored error from an expiring result. @return Owned error reference for immediate move. */
+        [[nodiscard]] Error &&ErrorValue() && {
+            assert(HasError());
+            return std::move(std::get<Error>(m_value));
         }
 
     private:
@@ -69,9 +76,16 @@ namespace Horo {
             return !HasValue();
         }
 
-        [[nodiscard]] const Error &ErrorValue() const {
+        /** @brief Returns the stored error by immutable reference. @return Borrowed error. */
+        [[nodiscard]] const Error &ErrorValue() const & {
             assert(HasError());
             return *m_error;
+        }
+
+        /** @brief Transfers the stored error from an expiring result. @return Owned error reference for immediate move. */
+        [[nodiscard]] Error &&ErrorValue() && {
+            assert(HasError());
+            return std::move(*m_error);
         }
 
     private:

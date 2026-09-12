@@ -25,6 +25,7 @@ namespace Horo::Extensions::Tests {
             REQUIRE(error.diagnostics.size() == 1);
             CHECK(error.diagnostics.front().code.Value() == diagnosticCode);
             CHECK(error.diagnostics.front().message == error.message);
+            CHECK(error.diagnostics.front().path == path);
             CHECK(error.diagnostics.front().location.source == "extension.json");
         }
     }  // namespace
@@ -100,6 +101,11 @@ namespace Horo::Extensions::Tests {
             RequireError(result, "$.futureAuthority", "extension.manifest.unknown_field");
         }
 
+        SECTION("separator keys use unambiguous bracket notation") {
+            auto result = ParseExtensionManifest(R"json({"future.authority":true})json");
+            RequireError(result, R"path($["future.authority"])path", "extension.manifest.unknown_field");
+        }
+
         SECTION("unknown nested field") {
             auto result = ParseExtensionManifest(R"json({
                 "id":"com.example.test","version":"1.0.0",
@@ -144,7 +150,7 @@ namespace Horo::Extensions::Tests {
                 "roles": ["editor-presentation"],
                 "dependencies": ["com.example.hybrid.backend"],
                 "imports": [{"id": "com.example.hybrid.import", "service": "com.example.hybrid.service",
-                             "contract": "com.horo.example", "minimumVersion": "2.0.0"}]
+                             "contract": "com.horo.example", "minimumVersion": "2.0.0", "required": false}]
             }]
         })json");
 
@@ -158,6 +164,26 @@ namespace Horo::Extensions::Tests {
         CHECK(result.Value().modules.front().exports.front().id == "com.example.hybrid.service");
         CHECK(result.Value().modules.back().dependencies.front() == "com.example.hybrid.backend");
         CHECK(result.Value().modules.back().imports.front().minimumVersion == "2.0.0");
+        CHECK_FALSE(result.Value().modules.back().imports.front().required);
+
+        auto defaultRequired = ParseExtensionManifest(R"json({
+            "id":"com.example.default-required","version":"1.0.0","modules":[{
+                "id":"com.example.default-required.backend","version":"1.0.0","kind":"native",
+                "imports":[{"id":"com.example.default-required.import","service":"com.example.service",
+                            "contract":"com.example.contract","minimumVersion":"1.0.0"}]
+            }]
+        })json");
+        REQUIRE(defaultRequired.HasValue());
+        CHECK(defaultRequired.Value().modules.front().imports.front().required);
+
+        auto nonBooleanRequired = ParseExtensionManifest(R"json({
+            "id":"com.example.invalid-required","version":"1.0.0","modules":[{
+                "id":"com.example.invalid-required.backend","version":"1.0.0","kind":"native",
+                "imports":[{"id":"com.example.invalid-required.import","service":"com.example.service",
+                            "contract":"com.example.contract","minimumVersion":"1.0.0","required":"no"}]
+            }]
+        })json");
+        RequireError(nonBooleanRequired, "$.modules[0].imports[0].required", "extension.manifest.invalid_type");
 
         auto unknownRole = ParseExtensionManifest(R"json({
             "id":"com.example.test","version":"1.0.0",

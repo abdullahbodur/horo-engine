@@ -68,10 +68,26 @@ namespace Horo::Navigation::NavigationErrors {
     extern const ErrorCodeDescriptor ProjectProfileStale;
     /** @brief A profile aggregate, provider or usage exceeds an authoritative finite capacity. */
     extern const ErrorCodeDescriptor ProjectProfileCapacityExceeded;
-    /** @brief A Scene navigation surface or region payload is malformed or exceeds its authored bounds. */
+    /** @brief A NavMesh artifact header, coordinate frame, table, range, or semantic value is invalid. */
+    extern const ErrorCodeDescriptor NavMeshArtifactInvalid;
+    /** @brief A NavMesh artifact checksum, table partition, reference, or encoded payload is corrupt. */
+    extern const ErrorCodeDescriptor NavMeshArtifactCorrupt;
+    /** @brief A NavMesh artifact count, encoded size, decoded size, or owned storage exceeds a qualified bound. */
+    extern const ErrorCodeDescriptor NavMeshArtifactCapacityExceeded;
+    /** @brief A neutral or provider-private cooked format is not compatible with this consumer. */
+    extern const ErrorCodeDescriptor UnsupportedCookedVersion;
+    /** @brief An exact independently addressable NavMesh tile is absent. */
+    extern const ErrorCodeDescriptor NavMeshTileUnknown;
+    /** @brief No provider-private payload matches the exact requested provider fingerprint. */
+    extern const ErrorCodeDescriptor NavMeshProviderPayloadUnavailable;
+    /** @brief A provider-private payload exists but its version, endian, compression, or fingerprint is incompatible. */
+    extern const ErrorCodeDescriptor NavMeshProviderPayloadIncompatible;
+    /** @brief A Scene navigation surface, region, modifier, or link payload is malformed or exceeds authored bounds. */
     extern const ErrorCodeDescriptor SceneComponentInvalid;
-    /** @brief Stable surface or region identities collide in one committed Scene snapshot. */
+    /** @brief Stable identities collide within a Scene navigation component domain. */
     extern const ErrorCodeDescriptor SceneComponentConflict;
-    /** @brief A Scene navigation region references a surface absent from the same committed snapshot. */
+    /** @brief A Scene navigation region, modifier, or link endpoint references an absent surface. */
     extern const ErrorCodeDescriptor SceneSurfaceMissing;
+    /** @brief A grounded link selects a profile absent from one or both endpoint surfaces. */
+    extern const ErrorCodeDescriptor SceneProfileMismatch;
 }  // namespace Horo::Navigation::NavigationErrors

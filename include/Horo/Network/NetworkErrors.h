@@ -56,6 +56,18 @@ namespace Horo::Network::NetworkErrors {
     extern const ErrorCodeDescriptor ReplicationSchemaUnknown;
     /** @brief Descriptor snapshot construction exceeded its explicit finite capacity. */
     extern const ErrorCodeDescriptor ReplicationCapacityExceeded;
+    /** @brief A pinned replication role, peer, object, schema, or record context is malformed. */
+    extern const ErrorCodeDescriptor ReplicationRoleContextInvalid;
+    /** @brief A client role attempted to originate authority-server canonical state. */
+    extern const ErrorCodeDescriptor ReplicationAuthorityDenied;
+    /** @brief A role transition was based on a stale revision or committed at the wrong safe point. */
+    extern const ErrorCodeDescriptor ReplicationRoleTransitionStale;
+    /** @brief A second role transition was staged before the prior transition committed. */
+    extern const ErrorCodeDescriptor ReplicationRoleTransitionPending;
+    /** @brief Replication role state was accessed from a thread other than its owner. */
+    extern const ErrorCodeDescriptor ReplicationRoleWrongThread;
+    /** @brief Replication role state rejected work after shutdown. */
+    extern const ErrorCodeDescriptor ReplicationRoleShuttingDown;
     /** @brief Transport capability evidence or a bounded requirement is malformed. */
     extern const ErrorCodeDescriptor TransportCapabilityDescriptorInvalid;
     /** @brief Transport capability evidence changed after the caller captured its revision. */

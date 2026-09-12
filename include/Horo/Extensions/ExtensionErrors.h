@@ -33,6 +33,26 @@ namespace Horo::Extensions::ExtensionErrors {
     extern const ErrorCodeDescriptor CapabilityRegistryCapacityExceeded;
     /** @brief The application capability registry is shutting down. */
     extern const ErrorCodeDescriptor CapabilityRegistryShutdown;
+    /** @brief A backend-service descriptor or requested identity is malformed. */
+    extern const ErrorCodeDescriptor BackendServiceInvalid;
+    /** @brief A backend service identity already has a published provider. */
+    extern const ErrorCodeDescriptor BackendServiceDuplicate;
+    /** @brief No live backend service exists for the requested identity. */
+    extern const ErrorCodeDescriptor BackendServiceUnavailable;
+    /** @brief The resolved provider does not implement the requested stable contract. */
+    extern const ErrorCodeDescriptor BackendServiceContractMismatch;
+    /** @brief The caller's C++ contract type does not match the registered adapter. */
+    extern const ErrorCodeDescriptor BackendServiceTypeMismatch;
+    /** @brief A backend service was called outside its declared thread rule. */
+    extern const ErrorCodeDescriptor BackendServiceThreadViolation;
+    /** @brief A backend provider operation failed while preserving its typed cause. */
+    extern const ErrorCodeDescriptor BackendServiceInvocationFailed;
+    /** @brief A backend service operation was cooperatively cancelled. */
+    extern const ErrorCodeDescriptor BackendServiceCancelled;
+    /** @brief The bounded backend-service registry is full. */
+    extern const ErrorCodeDescriptor BackendServiceCapacityExceeded;
+    /** @brief Backend-service registration and invocation admission are closed. */
+    extern const ErrorCodeDescriptor BackendServiceShutdown;
     /** @brief A project-validator descriptor, snapshot, finding, or limit is malformed. */
     extern const ErrorCodeDescriptor ProjectValidatorRegistryInvalid;
     /** @brief A project-validator identity already has a published provider. */
@@ -63,4 +83,18 @@ namespace Horo::Extensions::ExtensionErrors {
     extern const ErrorCodeDescriptor PipelineStepInvocationFailed;
     /** @brief A pipeline run was cancelled and discarded all staged outputs. */
     extern const ErrorCodeDescriptor PipelineRunCancelled;
+    /** @brief A toolchain provider descriptor, authority, intent, or resolved process request is malformed. */
+    extern const ErrorCodeDescriptor ToolchainProviderRegistryInvalid;
+    /** @brief A toolchain provider contribution identity is already published. */
+    extern const ErrorCodeDescriptor ToolchainProviderRegistryDuplicate;
+    /** @brief The bounded toolchain provider registry is full. */
+    extern const ErrorCodeDescriptor ToolchainProviderRegistryCapacityExceeded;
+    /** @brief Toolchain provider registration and new invocation admission are closed. */
+    extern const ErrorCodeDescriptor ToolchainProviderRegistryShutdown;
+    /** @brief The exact requested toolchain provider generation is absent or revoked. */
+    extern const ErrorCodeDescriptor ToolchainProviderUnavailable;
+    /** @brief Host policy rejected a provider's logical invocation intent. */
+    extern const ErrorCodeDescriptor ToolchainPolicyRejected;
+    /** @brief An approved tool failed at the platform process boundary. */
+    extern const ErrorCodeDescriptor ToolchainInvocationFailed;
 }  // namespace Horo::Extensions::ExtensionErrors
