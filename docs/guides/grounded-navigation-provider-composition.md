@@ -31,9 +31,16 @@ durable asset format and must not be serialized as one.
 4. Acquire a `NavigationWorldReadLease` on the lifecycle owner thread before dispatching
    worker work. The lease pins the provider and exposes cooperative cancellation; workers
    must reject result publication when `IsRevoked()` becomes true.
-5. Use `Pause`/`Resume` only for unchanged-world admission. Replacement, `Unload`, and
+5. Prepare `NavigationRuntimeQueues` with power-of-two command/query/completion capacities
+   and an aggregate owned-byte ceiling. Callers, the owner, and workers move fully owned
+   records across their respective direction. A full/contended/closed result leaves the
+   submitted record with the caller; no queue operation blocks, allocates, invokes provider
+   work, or completes a request inline.
+6. Use `Pause`/`Resume` only for unchanged-world admission. Replacement, `Unload`, and
    `BeginShutdown` revoke admission and cancel outstanding leases. Call `CollectRetired`
-   at owner safe points until shutdown reaches `Closed`; it never blocks for a worker.
+   at owner safe points until shutdown reaches `Closed`; it never blocks for a worker. Close
+   runtime admission before producer shutdown, join provider jobs through the bounded host
+   policy, then close and drain completions before Scene/provider destruction.
 
 ## Troubleshooting
 
@@ -49,10 +56,11 @@ durable asset format and must not be serialized as one.
 
 ## Limitations
 
-This delivery provides immutable grounded path queries plus transactional per-Scene provider
-publication and retirement. Durable tiled artifact serialization, runtime tile streaming,
-Recast bake/cook, dynamic carving, and crowd behavior remain owned by their focused NAV
-tickets.
+This delivery provides immutable grounded path queries, transactional per-Scene provider
+publication and retirement, and bounded command/query/completion transport. The later
+coordinator owns request-record allocation, provider dispatch, terminal precedence, and
+owner-thread publication. Durable tiled artifact serialization, runtime tile streaming,
+Recast bake/cook, dynamic carving, and crowd behavior remain owned by focused NAV tickets.
 
 ## Validation Record
 

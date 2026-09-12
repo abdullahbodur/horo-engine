@@ -587,6 +587,7 @@ target_compile_features(HoroNavigationApi PUBLIC cxx_std_20)
 target_link_libraries(HoroNavigationApi PUBLIC HoroEngine::Foundation)
 
 add_library(HoroNavigationRuntime STATIC
+        runtime/navigation/runtime/NavigationRuntimeQueues.cpp
         runtime/navigation/runtime/NavigationWorldLifecycle.cpp
 )
 add_library(HoroEngine::NavigationRuntime ALIAS HoroNavigationRuntime)

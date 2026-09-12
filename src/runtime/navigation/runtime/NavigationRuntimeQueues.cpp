@@ -1,0 +1,290 @@
+#include "Horo/Navigation/NavigationRuntimeQueues.h"
+
+#include "Horo/Navigation/NavigationErrors.h"
+
+#include <algorithm>
+#include <array>
+#include <atomic>
+#include <bit>
+#include <cmath>
+#include <limits>
+#include <new>
+#include <type_traits>
+#include <utility>
+
+namespace Horo::Navigation {
+    namespace {
+        constexpr std::size_t MaximumContentionAttempts = 64;
+
+        template <typename T> [[nodiscard]] Result<T> Failure(const ErrorCodeDescriptor &descriptor) {
+            return Result<T>::Failure(MakeError(descriptor));
+        }
+
+        void SaturatingIncrement(std::atomic<std::uint64_t> &counter) noexcept {
+            auto value = counter.load();
+            while (value != std::numeric_limits<std::uint64_t>::max() && !counter.compare_exchange_weak(value, value + 1U)) {
+            }
+        }
+
+        struct AtomicQueueStats final {
+            std::atomic<std::uint64_t> enqueued{};
+            std::atomic<std::uint64_t> dequeued{};
+            std::atomic<std::uint64_t> rejectedFull{};
+            std::atomic<std::uint64_t> rejectedClosed{};
+
+            [[nodiscard]] NavigationQueueStats Snapshot() const noexcept {
+                return {
+                    .enqueued = enqueued.load(),
+                    .dequeued = dequeued.load(),
+                    .rejectedFull = rejectedFull.load(),
+                    .rejectedClosed = rejectedClosed.load(),
+                };
+            }
+        };
+
+        template <typename T> class BoundedMpmcQueue final {
+            static_assert(std::is_nothrow_move_constructible_v<T>);
+
+            struct alignas(64) Slot final {
+                std::atomic<std::size_t> sequence{};
+                std::optional<T> record;
+            };
+
+        public:
+            explicit BoundedMpmcQueue(const std::size_t capacity)
+                : slots_(std::make_unique<Slot[]>(capacity)), capacity_(capacity), mask_(capacity - 1U) {
+                for (std::size_t index = 0; index < capacity; ++index)
+                    slots_[index].sequence.store(index);
+            }
+
+            [[nodiscard]] static bool ValidCapacity(const std::uint32_t capacity) noexcept {
+                return capacity >= 2U && capacity <= MaximumNavigationRuntimeQueueSlots && std::has_single_bit(capacity);
+            }
+
+            [[nodiscard]] static std::optional<std::size_t> StorageBytes(const std::uint32_t capacity) noexcept {
+                if (!ValidCapacity(capacity) || capacity > std::numeric_limits<std::size_t>::max() / sizeof(Slot))
+                    return std::nullopt;
+                return static_cast<std::size_t>(capacity) * sizeof(Slot);
+            }
+
+            [[nodiscard]] NavigationQueueEnqueueResult TryPush(T &record) noexcept {
+                if (closed_.load()) {
+                    SaturatingIncrement(stats_.rejectedClosed);
+                    return NavigationQueueEnqueueResult::Closed;
+                }
+
+                auto position = enqueuePosition_.load();
+                for (std::size_t attempt = 0; attempt < MaximumContentionAttempts; ++attempt) {
+                    Slot &slot = slots_[position & mask_];
+                    const std::size_t sequence = slot.sequence.load();
+                    const auto difference = static_cast<std::intptr_t>(sequence) - static_cast<std::intptr_t>(position);
+                    if (difference == 0) {
+                        if (!enqueuePosition_.compare_exchange_weak(position, position + 1U))
+                            continue;
+                        slot.record.emplace(std::move(record));
+                        count_.fetch_add(1U);
+                        slot.sequence.store(position + 1U);
+                        SaturatingIncrement(stats_.enqueued);
+                        return NavigationQueueEnqueueResult::Enqueued;
+                    }
+                    if (difference < 0)
+                        break;
+                    position = enqueuePosition_.load();
+                }
+                SaturatingIncrement(stats_.rejectedFull);
+                return NavigationQueueEnqueueResult::Full;
+            }
+
+            [[nodiscard]] std::optional<T> TryPop() noexcept {
+                auto position = dequeuePosition_.load();
+                for (std::size_t attempt = 0; attempt < MaximumContentionAttempts; ++attempt) {
+                    Slot &slot = slots_[position & mask_];
+                    const std::size_t sequence = slot.sequence.load();
+                    const auto difference = static_cast<std::intptr_t>(sequence) - static_cast<std::intptr_t>(position + 1U);
+                    if (difference == 0) {
+                        if (!dequeuePosition_.compare_exchange_weak(position, position + 1U))
+                            continue;
+                        std::optional<T> record{std::move(slot.record)};
+                        slot.record.reset();
+                        count_.fetch_sub(1U);
+                        slot.sequence.store(position + capacity_);
+                        SaturatingIncrement(stats_.dequeued);
+                        return record;
+                    }
+                    if (difference < 0)
+                        return std::nullopt;
+                    position = dequeuePosition_.load();
+                }
+                return std::nullopt;
+            }
+
+            void Close() noexcept {
+                closed_.store(true);
+            }
+
+            [[nodiscard]] bool IsClosedAndEmpty() const noexcept {
+                return closed_.load() && count_.load() == 0;
+            }
+
+            [[nodiscard]] NavigationQueueStats Stats() const noexcept {
+                return stats_.Snapshot();
+            }
+
+        private:
+            std::unique_ptr<Slot[]> slots_;
+            std::size_t capacity_{};
+            std::size_t mask_{};
+            alignas(64) std::atomic<std::size_t> enqueuePosition_{};
+            alignas(64) std::atomic<std::size_t> dequeuePosition_{};
+            alignas(64) std::atomic<std::size_t> count_{};
+            std::atomic<bool> closed_{false};
+            AtomicQueueStats stats_;
+        };
+
+        [[nodiscard]] bool IsValidPathRequest(const NavigationPathRequest &request) noexcept {
+            return request.world.IsValid() && request.topology.IsValid() && Math::IsFinite(request.start) &&
+                   Math::IsFinite(request.destination) && request.requirement.query < NavigationQueryKind::Count &&
+                   request.requirement.quality < NavigationQualityLevel::Count && request.requirement.limits.maximumNodeExpansions > 0 &&
+                   request.requirement.limits.maximumResultPoints > 0 &&
+                   std::isfinite(request.requirement.limits.maximumSearchDistanceMeters) &&
+                   request.requirement.limits.maximumSearchDistanceMeters > 0.0F;
+        }
+
+        [[nodiscard]] bool IsValidCommand(const NavigationRuntimeCommand &command) noexcept {
+            return std::visit([](const auto &value) {
+                using Value = std::decay_t<decltype(value)>;
+                if constexpr (std::is_same_v<Value, NavigationSubmitPathCommand>)
+                    return value.sequence != 0 && IsValidPathRequest(value.request);
+                else
+                    return value.sequence != 0 && value.world.IsValid() && value.request.IsValid() && value.request.world == value.world;
+            }, command);
+        }
+
+        [[nodiscard]] bool IsValidQuery(const NavigationQueuedQuery &query) noexcept {
+            if (query.acceptedSequence == 0 || !query.handle.IsValid() || !query.worldLease.IsValid() || !IsValidPathRequest(query.request))
+                return false;
+            const NavigationWorldActivationDescriptor &descriptor = query.worldLease.Descriptor();
+            return query.handle.world == query.request.world && descriptor.world == query.request.world &&
+                   descriptor.topology == query.request.topology && !query.worldLease.IsRevoked();
+        }
+
+        [[nodiscard]] bool IsValidCompletion(const NavigationQueuedCompletion &completion) noexcept {
+            return completion.acceptedSequence != 0 && completion.handle.IsValid() && completion.scene.IsValid() &&
+                   completion.sceneGeneration.IsValid() && completion.world.IsValid() && completion.topology.IsValid() &&
+                   completion.handle.world == completion.world;
+        }
+
+        [[nodiscard]] std::optional<std::size_t> RequiredStorage(const NavigationRuntimeQueueDescriptor &descriptor) noexcept {
+            const std::array storage{
+                BoundedMpmcQueue<NavigationRuntimeCommand>::StorageBytes(descriptor.commandSlots),
+                BoundedMpmcQueue<NavigationQueuedQuery>::StorageBytes(descriptor.querySlots),
+                BoundedMpmcQueue<NavigationQueuedCompletion>::StorageBytes(descriptor.completionSlots),
+            };
+            if (std::ranges::any_of(storage, [](const auto &value) {
+                return !value.has_value();
+            }))
+                return std::nullopt;
+            std::size_t total{};
+            for (const auto bytes : storage) {
+                if (*bytes > std::numeric_limits<std::size_t>::max() - total)
+                    return std::nullopt;
+                total += *bytes;
+            }
+            return total;
+        }
+    }  // namespace
+
+    struct NavigationRuntimeQueues::State final {
+        explicit State(const NavigationRuntimeQueueDescriptor &descriptor)
+            : commands(descriptor.commandSlots), queries(descriptor.querySlots), completions(descriptor.completionSlots) {}
+
+        BoundedMpmcQueue<NavigationRuntimeCommand> commands;
+        BoundedMpmcQueue<NavigationQueuedQuery> queries;
+        BoundedMpmcQueue<NavigationQueuedCompletion> completions;
+    };
+
+    NavigationRuntimeQueues::NavigationRuntimeQueues(std::unique_ptr<State> state) noexcept : state_(std::move(state)) {}
+
+    /** @copydoc NavigationRuntimeQueues::Create */
+    Result<NavigationRuntimeQueues> NavigationRuntimeQueues::Create(const NavigationRuntimeQueueDescriptor &descriptor) {
+        if (const auto required = RequiredStorage(descriptor); !required || descriptor.maximumOwnedBytes < *required)
+            return Failure<NavigationRuntimeQueues>(NavigationErrors::CapacityExceeded);
+        try {
+            return Result<NavigationRuntimeQueues>::Success(NavigationRuntimeQueues{std::make_unique<State>(descriptor)});
+        } catch (const std::bad_alloc &) {
+            return Failure<NavigationRuntimeQueues>(NavigationErrors::CapacityExceeded);
+        }
+    }
+
+    /** @copydoc NavigationRuntimeQueues::NavigationRuntimeQueues(NavigationRuntimeQueues&&) */
+    NavigationRuntimeQueues::NavigationRuntimeQueues(NavigationRuntimeQueues &&other) noexcept = default;
+    /** @copydoc NavigationRuntimeQueues::~NavigationRuntimeQueues */
+    NavigationRuntimeQueues::~NavigationRuntimeQueues() = default;
+
+    /** @copydoc NavigationRuntimeQueues::TryEnqueueCommand */
+    NavigationQueueEnqueueResult NavigationRuntimeQueues::TryEnqueueCommand(NavigationRuntimeCommand &command) noexcept {
+        if (!state_ || !IsValidCommand(command))
+            return NavigationQueueEnqueueResult::InvalidRecord;
+        return state_->commands.TryPush(command);
+    }
+
+    /** @copydoc NavigationRuntimeQueues::TryDequeueCommand */
+    std::optional<NavigationRuntimeCommand> NavigationRuntimeQueues::TryDequeueCommand() noexcept {
+        return state_ ? state_->commands.TryPop() : std::nullopt;
+    }
+
+    /** @copydoc NavigationRuntimeQueues::TryEnqueueQuery */
+    NavigationQueueEnqueueResult NavigationRuntimeQueues::TryEnqueueQuery(NavigationQueuedQuery &query) noexcept {
+        if (!state_ || !IsValidQuery(query))
+            return NavigationQueueEnqueueResult::InvalidRecord;
+        return state_->queries.TryPush(query);
+    }
+
+    /** @copydoc NavigationRuntimeQueues::TryDequeueQuery */
+    std::optional<NavigationQueuedQuery> NavigationRuntimeQueues::TryDequeueQuery() noexcept {
+        return state_ ? state_->queries.TryPop() : std::nullopt;
+    }
+
+    /** @copydoc NavigationRuntimeQueues::TryEnqueueCompletion */
+    NavigationQueueEnqueueResult NavigationRuntimeQueues::TryEnqueueCompletion(NavigationQueuedCompletion &completion) noexcept {
+        if (!state_ || !IsValidCompletion(completion))
+            return NavigationQueueEnqueueResult::InvalidRecord;
+        return state_->completions.TryPush(completion);
+    }
+
+    /** @copydoc NavigationRuntimeQueues::TryDequeueCompletion */
+    std::optional<NavigationQueuedCompletion> NavigationRuntimeQueues::TryDequeueCompletion() noexcept {
+        return state_ ? state_->completions.TryPop() : std::nullopt;
+    }
+
+    /** @copydoc NavigationRuntimeQueues::CloseAdmission */
+    void NavigationRuntimeQueues::CloseAdmission() noexcept {
+        if (!state_)
+            return;
+        state_->commands.Close();
+        state_->queries.Close();
+    }
+
+    /** @copydoc NavigationRuntimeQueues::CloseCompletions */
+    void NavigationRuntimeQueues::CloseCompletions() noexcept {
+        if (state_)
+            state_->completions.Close();
+    }
+
+    /** @copydoc NavigationRuntimeQueues::IsDrained */
+    bool NavigationRuntimeQueues::IsDrained() const noexcept {
+        return !state_ ||
+               (state_->commands.IsClosedAndEmpty() && state_->queries.IsClosedAndEmpty() && state_->completions.IsClosedAndEmpty());
+    }
+
+    /** @copydoc NavigationRuntimeQueues::Stats */
+    NavigationRuntimeQueueStats NavigationRuntimeQueues::Stats() const noexcept {
+        if (!state_)
+            return {};
+        return {
+            .commands = state_->commands.Stats(),
+            .queries = state_->queries.Stats(),
+            .completions = state_->completions.Stats(),
+        };
+    }
+}  // namespace Horo::Navigation

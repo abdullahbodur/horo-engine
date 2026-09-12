@@ -360,6 +360,8 @@ target_link_libraries(HoroNavigationApiTests PRIVATE HoroEngine::NavigationApi H
 horo_register_catch_test(HoroNavigationApiTests LABELS "unit;navigation;headless")
 
 add_executable(HoroNavigationRuntimeTests
+        support/AllocationProbe.cpp
+        unit/runtime/navigation/NavigationRuntimeQueuesTests.cpp
         unit/runtime/navigation/NavigationWorldLifecycleTests.cpp
 )
 target_compile_features(HoroNavigationRuntimeTests PRIVATE cxx_std_20)

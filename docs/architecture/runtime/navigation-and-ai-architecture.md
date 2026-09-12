@@ -95,6 +95,17 @@ so provider storage is reclaimed only after the final lease drains. Lifecycle mu
 lease acquisition are owner-thread operations; acquired leases and cancellation tokens may
 cross workers. Shutdown never blocks a frame thread waiting for those workers.
 
+`NavigationRuntimeQueues` is the prepared transport boundary around that lifetime authority.
+It owns separate power-of-two command, query, and completion rings with explicit capacities
+and one aggregate storage ceiling. Publication is bounded, nonblocking and allocation-free;
+the record moves only after a producer owns a slot, so full, contended, invalid, and closed
+outcomes leave caller ownership intact. Query records carry their world lease, request
+cancellation, and operation context by value. Completion records carry exact Scene, world,
+topology, request-handle, and admission-order fences. No queue executes provider work or
+callbacks. Shutdown closes command/query admission, joins producers and provider jobs under
+the host shutdown policy, closes completion publication, and drains terminal candidates on
+the owner before destroying Scene or provider storage.
+
 `DynamicObstacleOverlay` records logical Horo obstacle changes; the topology backend
 owns concrete carving and private tile-cache mutation. The crowd coordinator selects
 agents, stable ordering, budgets, and target ticks; the crowd backend owns provider-specific
