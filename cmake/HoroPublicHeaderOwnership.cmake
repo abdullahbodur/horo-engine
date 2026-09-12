@@ -5,6 +5,7 @@ include_guard(GLOBAL)
 message(STATUS "Configuring target-specific public header boundaries")
 
 horo_configure_target_header_boundary(HoroFoundation PUBLIC_HEADERS
+    Horo/Foundation/AssetCookTargetId.h
     Horo/Foundation/BuildOutputStore.h
     Horo/Foundation/CancellationToken.h
     Horo/Foundation/Configuration.h

@@ -118,7 +118,7 @@ namespace {
                         .typeId = GameAssetTypeId::Parse("game.tests.quest_definition").Value(),
                         .schemaVersion = 1,
                         .sourceExtensions = {"quest"},
-                        .cookTargets = {"headless-null"},
+                        .cookTargets = {AssetCookTargetId::Parse("headless-null").Value()},
                         .editor =
                             {
                                 .displayName = "Quest Definition",

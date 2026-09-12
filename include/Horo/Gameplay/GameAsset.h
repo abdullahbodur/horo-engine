@@ -5,6 +5,7 @@
  * @brief Stable project-owned asset data, editor metadata, and processing bindings.
  */
 
+#include "Horo/Foundation/AssetCookTargetId.h"
 #include "Horo/Foundation/CancellationToken.h"
 #include "Horo/Foundation/Result.h"
 
@@ -14,13 +15,13 @@
 #include <span>
 #include <string>
 #include <string_view>
+#include <utility>
 #include <vector>
 
 namespace Horo::Gameplay {
     inline constexpr std::size_t MaximumGameAssetTypeIdBytes = 96;
     inline constexpr std::size_t MaximumGameAssetFieldIdBytes = 96;
     inline constexpr std::size_t MaximumGameAssetExtensionBytes = 32;
-    inline constexpr std::size_t MaximumGameAssetCookTargetBytes = 96;
     inline constexpr std::size_t MaximumGameAssetEditorTextBytes = 256;
     inline constexpr std::size_t MaximumGameAssetTypes = 256;
     inline constexpr std::size_t MaximumGameAssetFields = 256;
@@ -101,11 +102,11 @@ namespace Horo::Gameplay {
 
     /** @brief Complete declarative contract for one project-owned asset type. */
     struct GameAssetTypeDescriptor {
-        GameAssetTypeId typeId;                    /**< Stable persistent type identity. */
-        std::uint32_t schemaVersion{1};            /**< Current authored payload schema. */
-        std::vector<std::string> sourceExtensions; /**< Accepted lowercase source extensions without dots. */
-        std::vector<std::string> cookTargets;      /**< Explicit supported canonical target IDs. */
-        GameAssetEditorRepresentation editor;      /**< Declarative generic editor projection. */
+        GameAssetTypeId typeId;                     /**< Stable persistent type identity. */
+        std::uint32_t schemaVersion{1};             /**< Current authored payload schema. */
+        std::vector<std::string> sourceExtensions;  /**< Accepted lowercase source extensions without dots. */
+        std::vector<AssetCookTargetId> cookTargets; /**< Explicit supported canonical target IDs. */
+        GameAssetEditorRepresentation editor;       /**< Declarative generic editor projection. */
     };
 
     /** @brief Encoding of opaque authored bytes retained independently from gameplay code. */
@@ -138,7 +139,7 @@ namespace Horo::Gameplay {
     /** @brief Borrowed authored asset and explicit target submitted to the project-owned cooker. */
     struct GameAssetCookInput {
         const SerializedGameAsset &asset;
-        std::string_view target;
+        AssetCookTargetId target;
     };
 
     /** @brief Exact-generation project callbacks for import, serialization, and cooking. */

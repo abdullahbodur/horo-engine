@@ -8,35 +8,10 @@
 
 namespace Horo::Gameplay::Detail {
     namespace {
-        [[nodiscard]] bool BelongsToModule(const std::string_view value, const std::string_view moduleId) noexcept {
-            return value.size() > moduleId.size() + 1 && value.starts_with(moduleId) && value[moduleId.size()] == '.';
-        }
-
         [[nodiscard]] bool IsExtension(const std::string_view value) noexcept {
             return !value.empty() && value.size() <= MaximumGameAssetExtensionBytes && std::ranges::all_of(value, [](const char character) {
                 return IsAsciiLower(character) || IsAsciiDigit(character);
             });
-        }
-
-        [[nodiscard]] bool IsCookTarget(const std::string_view value) noexcept {
-            if (value.empty() || value.size() > MaximumGameAssetCookTargetBytes)
-                return false;
-            bool hasSeparator = false;
-            std::size_t segmentStart = 0;
-            for (std::size_t index = 0; index <= value.size(); ++index) {
-                const bool atEnd = index == value.size();
-                if (!atEnd && value[index] != '-')
-                    continue;
-                if (index == segmentStart || !IsAsciiLower(value[segmentStart]))
-                    return false;
-                if (!std::ranges::all_of(value.substr(segmentStart + 1, index - segmentStart - 1), [](const char character) {
-                    return IsAsciiLower(character) || IsAsciiDigit(character);
-                }))
-                    return false;
-                segmentStart = index + 1;
-                hasSeparator = hasSeparator || !atEnd;
-            }
-            return hasSeparator;
         }
 
         [[nodiscard]] bool HasUniqueStrings(const std::span<const std::string> values) {
@@ -59,17 +34,27 @@ namespace Horo::Gameplay::Detail {
                        ids.emplace(field.id.Value()).second;
             });
         }
+
+        [[nodiscard]] bool HasValidSourceExtensions(const GameAssetTypeDescriptor &descriptor) {
+            return !descriptor.sourceExtensions.empty() && descriptor.sourceExtensions.size() <= MaximumGameAssetSourceExtensions &&
+                   HasUniqueStrings(descriptor.sourceExtensions) && std::ranges::all_of(descriptor.sourceExtensions, IsExtension);
+        }
+
+        [[nodiscard]] bool HasValidCookTargets(const GameAssetTypeDescriptor &descriptor) {
+            return !descriptor.cookTargets.empty() && descriptor.cookTargets.size() <= MaximumGameAssetCookTargets &&
+                   !ContainsInvalidOrDuplicateIds(std::span<const AssetCookTargetId>{descriptor.cookTargets});
+        }
+
+        [[nodiscard]] bool HasCompleteHandlers(const GameAssetHandlerBinding &handler) noexcept {
+            return handler.importAsset != nullptr && handler.serializeAsset != nullptr && handler.cookAsset != nullptr;
+        }
     }  // namespace
 
     Result<void> ValidateGameAssetRegistration(const GameAssetTypeRegistration &registration, const std::string_view moduleId) {
         const GameAssetTypeDescriptor &descriptor = registration.descriptor;
         if (!descriptor.typeId.IsValid() || !BelongsToModule(descriptor.typeId.Value(), moduleId) || descriptor.schemaVersion == 0 ||
-            descriptor.sourceExtensions.empty() || descriptor.sourceExtensions.size() > MaximumGameAssetSourceExtensions ||
-            descriptor.cookTargets.empty() || descriptor.cookTargets.size() > MaximumGameAssetCookTargets ||
-            registration.handler.importAsset == nullptr || registration.handler.serializeAsset == nullptr ||
-            registration.handler.cookAsset == nullptr || !HasValidEditorMetadata(descriptor.editor) ||
-            !HasUniqueStrings(descriptor.sourceExtensions) || !HasUniqueStrings(descriptor.cookTargets) ||
-            !std::ranges::all_of(descriptor.sourceExtensions, IsExtension) || !std::ranges::all_of(descriptor.cookTargets, IsCookTarget))
+            !HasValidSourceExtensions(descriptor) || !HasValidCookTargets(descriptor) || !HasValidEditorMetadata(descriptor.editor) ||
+            !HasCompleteHandlers(registration.handler))
             return Result<void>::Failure(MakeError(GameplayErrors::InvalidGameAssetDescriptor));
         return Result<void>::Success();
     }

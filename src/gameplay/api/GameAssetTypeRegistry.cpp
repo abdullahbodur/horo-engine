@@ -21,7 +21,7 @@ namespace Horo::Gameplay {
             return std::ranges::find(descriptor.sourceExtensions, extension) != descriptor.sourceExtensions.end();
         }
 
-        [[nodiscard]] bool HandlesTarget(const GameAssetTypeDescriptor &descriptor, const std::string_view target) noexcept {
+        [[nodiscard]] bool HandlesTarget(const GameAssetTypeDescriptor &descriptor, const AssetCookTargetId &target) noexcept {
             return std::ranges::find(descriptor.cookTargets, target) != descriptor.cookTargets.end();
         }
 
@@ -40,7 +40,9 @@ namespace Horo::Gameplay {
     }  // namespace
 
     /** @copydoc GameAssetTypeRegistry::GameAssetTypeRegistry */
-    GameAssetTypeRegistry::GameAssetTypeRegistry(std::string moduleId) : moduleId_(std::move(moduleId)) {}
+    GameAssetTypeRegistry::GameAssetTypeRegistry(std::string moduleId, const GameAssetProcessingLimits limits)
+        : moduleId_(std::move(moduleId)), limits_{.maximumInputBytes = std::min(limits.maximumInputBytes, MaximumGameAssetPayloadBytes),
+                                                  .maximumCookedBytes = std::min(limits.maximumCookedBytes, MaximumGameAssetCookedBytes)} {}
 
     /** @copydoc GameAssetTypeRegistry::Register */
     Result<void> GameAssetTypeRegistry::Register(GameAssetTypeRegistration registration) {
@@ -106,7 +108,7 @@ namespace Horo::Gameplay {
             status = GameAssetInspectionStatus::OlderSchema;
         else if (asset.schemaVersion > descriptor.schemaVersion)
             status = GameAssetInspectionStatus::NewerSchema;
-        return Result<GameAssetInspection>::Success({.status = status, .descriptor = &descriptor});
+        return Result<GameAssetInspection>::Success({.status = status, .descriptor = descriptor});
     }
 
     /** @copydoc GameAssetTypeRegistry::DescribeForEditor */
@@ -120,31 +122,40 @@ namespace Horo::Gameplay {
             .schemaVersion = asset.schemaVersion,
             .status = inspection.status,
             .displayName = asset.typeId.Value(),
-            .category = "Missing Gameplay Asset Type",
             .iconName = "asset-unknown",
             .payloadBytes = asset.payload.size(),
             .readOnly = true,
         };
-        if (inspection.descriptor != nullptr) {
+        if (inspection.descriptor.has_value()) {
             model.displayName = inspection.descriptor->editor.displayName;
             model.category = inspection.descriptor->editor.category;
             model.iconName = inspection.descriptor->editor.iconName;
             model.fields = inspection.descriptor->editor.fields;
             model.readOnly = inspection.status != GameAssetInspectionStatus::Current;
+            model.fallback = GameAssetEditorFallback::None;
         }
         return Result<GameAssetEditorModel>::Success(std::move(model));
+    }
+
+    /** @copydoc GameAssetTypeRegistry::GetRegistrationForProcessing */
+    Result<const GameAssetTypeRegistration *> GameAssetTypeRegistry::GetRegistrationForProcessing(const GameAssetTypeId &typeId) const {
+        if (!frozen_)
+            return Result<const GameAssetTypeRegistration *>::Failure(
+                MakeError(GameplayErrors::InvalidGameAssetProcessingInput, "Freeze the gameplay asset registry before processing."));
+        const GameAssetTypeRegistration *registration = Find(typeId);
+        if (registration == nullptr)
+            return Result<const GameAssetTypeRegistration *>::Failure(MakeError(GameplayErrors::GameAssetHandlerUnavailable));
+        return Result<const GameAssetTypeRegistration *>::Success(registration);
     }
 
     /** @copydoc GameAssetTypeRegistry::Import */
     Result<SerializedGameAsset> GameAssetTypeRegistry::Import(const GameAssetTypeId &typeId, const GameAssetImportInput &input,
                                                               const CancellationToken &cancellation) const {
-        if (!frozen_)
-            return Result<SerializedGameAsset>::Failure(
-                MakeError(GameplayErrors::InvalidGameAssetProcessingInput, "Freeze the gameplay asset registry before processing."));
-        const GameAssetTypeRegistration *registration = Find(typeId);
-        if (registration == nullptr)
-            return Result<SerializedGameAsset>::Failure(MakeError(GameplayErrors::GameAssetHandlerUnavailable));
-        if (!HandlesExtension(registration->descriptor, input.sourceExtension) || input.sourceBytes.size() > MaximumGameAssetPayloadBytes)
+        const auto resolved = GetRegistrationForProcessing(typeId);
+        if (resolved.HasError())
+            return Result<SerializedGameAsset>::Failure(resolved.ErrorValue());
+        const GameAssetTypeRegistration *registration = resolved.Value();
+        if (!HandlesExtension(registration->descriptor, input.sourceExtension) || input.sourceBytes.size() > limits_.maximumInputBytes)
             return Result<SerializedGameAsset>::Failure(MakeError(GameplayErrors::InvalidGameAssetProcessingInput));
         return ValidateProcessedAsset(Invoke<decltype(registration->handler.importAsset), GameAssetImportInput,
                                              SerializedGameAsset>(registration->handler.importAsset, registration->handler.userData, input,
@@ -155,13 +166,11 @@ namespace Horo::Gameplay {
     /** @copydoc GameAssetTypeRegistry::Serialize */
     Result<SerializedGameAsset> GameAssetTypeRegistry::Serialize(const GameAssetTypeId &typeId, const GameAssetSerializationInput &input,
                                                                  const CancellationToken &cancellation) const {
-        if (!frozen_)
-            return Result<SerializedGameAsset>::Failure(
-                MakeError(GameplayErrors::InvalidGameAssetProcessingInput, "Freeze the gameplay asset registry before processing."));
-        const GameAssetTypeRegistration *registration = Find(typeId);
-        if (registration == nullptr)
-            return Result<SerializedGameAsset>::Failure(MakeError(GameplayErrors::GameAssetHandlerUnavailable));
-        if (input.editorPayload.size() > MaximumGameAssetPayloadBytes ||
+        const auto resolved = GetRegistrationForProcessing(typeId);
+        if (resolved.HasError())
+            return Result<SerializedGameAsset>::Failure(resolved.ErrorValue());
+        const GameAssetTypeRegistration *registration = resolved.Value();
+        if (input.editorPayload.size() > limits_.maximumInputBytes ||
             (input.encoding != GameAssetPayloadEncoding::CanonicalJson && input.encoding != GameAssetPayloadEncoding::Binary))
             return Result<SerializedGameAsset>::Failure(MakeError(GameplayErrors::InvalidGameAssetProcessingInput));
         return ValidateProcessedAsset(Invoke<decltype(registration->handler.serializeAsset), GameAssetSerializationInput,
@@ -174,20 +183,18 @@ namespace Horo::Gameplay {
     /** @copydoc GameAssetTypeRegistry::Cook */
     Result<std::vector<std::byte>> GameAssetTypeRegistry::Cook(const GameAssetCookInput &input,
                                                                const CancellationToken &cancellation) const {
-        if (!frozen_)
-            return Result<std::vector<std::byte>>::Failure(
-                MakeError(GameplayErrors::InvalidGameAssetProcessingInput, "Freeze the gameplay asset registry before processing."));
         if (const Result<void> valid = ValidateSerializedGameAsset(input.asset); valid.HasError())
             return Result<std::vector<std::byte>>::Failure(valid.ErrorValue());
-        const GameAssetTypeRegistration *registration = Find(input.asset.typeId);
-        if (registration == nullptr)
-            return Result<std::vector<std::byte>>::Failure(MakeError(GameplayErrors::GameAssetHandlerUnavailable));
+        const auto resolved = GetRegistrationForProcessing(input.asset.typeId);
+        if (resolved.HasError())
+            return Result<std::vector<std::byte>>::Failure(resolved.ErrorValue());
+        const GameAssetTypeRegistration *registration = resolved.Value();
         if (input.asset.schemaVersion != registration->descriptor.schemaVersion || !HandlesTarget(registration->descriptor, input.target))
             return Result<std::vector<std::byte>>::Failure(MakeError(GameplayErrors::InvalidGameAssetProcessingInput));
         auto cooked = Invoke<decltype(registration->handler.cookAsset), GameAssetCookInput,
                              std::vector<std::byte>>(registration->handler.cookAsset, registration->handler.userData, input, cancellation,
                                                      "Gameplay asset cook callback threw an exception.");
-        if (cooked.HasValue() && cooked.Value().size() > MaximumGameAssetCookedBytes)
+        if (cooked.HasValue() && cooked.Value().size() > limits_.maximumCookedBytes)
             return Result<std::vector<std::byte>>::Failure(MakeError(GameplayErrors::GameAssetProcessingFailed));
         return cooked;
     }

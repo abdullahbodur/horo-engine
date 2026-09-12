@@ -177,7 +177,8 @@ code or retain a native project object layout.
 
 Every type uses a stable `game.<module>.<asset_type>` identity. A descriptor owns
 one non-zero current schema version, bounded lowercase source extensions,
-explicit cook targets, and rendering-neutral editor metadata. The editor
+explicit canonical `AssetCookTargetId` values from the shared Foundation
+contract, and rendering-neutral editor metadata. The editor
 metadata contains a display name, category, icon role, and stable typed field
 descriptors. It does not expose ImGui, editor services, renderer handles, or
 localized host UI callbacks to gameplay code.
@@ -208,7 +209,12 @@ callbacks operate only through bounded borrowed inputs and return owned bytes:
 When the descriptor is absent, `Inspect` reports `MissingDescriptor` without
 invoking code or mutating bytes. `DescribeForEditor` returns a read-only generic
 model containing the stable type ID, schema version, payload size, and missing-
-type presentation. When compatible code returns, the same envelope resolves to
+type semantic fallback. The editor host resolves
+`GameAssetEditorFallback::MissingDescriptor` through the
+`workspace.game_asset.category.missing` localization key; gameplay code does not
+own fallback copy. Inspection results and editor models own descriptor and field
+snapshots, so they remain valid after registry replacement or project close.
+When compatible code returns, the same envelope resolves to
 the restored descriptor. Older or newer schemas remain read-only and retain
 their exact bytes until an explicit migration contract is available. Import,
 serialization, and cook fail with `gameplay.asset_handler_unavailable` while the

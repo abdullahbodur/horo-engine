@@ -7,6 +7,7 @@
 
 #include "Horo/Gameplay/GameAsset.h"
 
+#include <optional>
 #include <span>
 #include <string>
 #include <vector>
@@ -22,8 +23,14 @@ namespace Horo::Gameplay {
 
     /** @brief Immutable compatibility result that never changes the persistent payload. */
     struct GameAssetInspection {
-        GameAssetInspectionStatus status{GameAssetInspectionStatus::MissingDescriptor};
-        const GameAssetTypeDescriptor *descriptor{};
+        GameAssetInspectionStatus status{GameAssetInspectionStatus::MissingDescriptor}; /**< Compatibility classification. */
+        std::optional<GameAssetTypeDescriptor> descriptor;                              /**< Owning descriptor snapshot, when present. */
+    };
+
+    /** @brief Semantic presentation state resolved to localized copy by the editor host. */
+    enum class GameAssetEditorFallback : std::uint8_t {
+        None,
+        MissingDescriptor,
     };
 
     /** @brief Generic editor projection available even when gameplay code is missing. */
@@ -34,16 +41,27 @@ namespace Horo::Gameplay {
         std::string displayName;
         std::string category;
         std::string iconName;
-        std::span<const GameAssetEditorFieldDescriptor> fields;
+        std::vector<GameAssetEditorFieldDescriptor> fields;
         std::size_t payloadBytes{};
         bool readOnly{true};
+        GameAssetEditorFallback fallback{GameAssetEditorFallback::MissingDescriptor}; /**< Host-localized fallback state. */
+    };
+
+    /** @brief Explicit host processing bounds for game-owned asset callbacks. */
+    struct GameAssetProcessingLimits {
+        std::size_t maximumInputBytes{MaximumGameAssetPayloadBytes}; /**< Maximum borrowed import or editor input. */
+        std::size_t maximumCookedBytes{MaximumGameAssetCookedBytes}; /**< Maximum callback-produced cook payload. */
     };
 
     /** @brief Host-owned game asset registry frozen before module startup or asset processing. */
     class GameAssetTypeRegistry final {
     public:
-        /** @brief Creates an open registry restricted to one project module namespace. */
-        explicit GameAssetTypeRegistry(std::string moduleId);
+        /**
+         * @brief Creates an open registry restricted to one project module namespace.
+         * @param moduleId Stable project module namespace owning every registered type.
+         * @param limits Host-enforced processing input and output bounds.
+         */
+        explicit GameAssetTypeRegistry(std::string moduleId, GameAssetProcessingLimits limits = {});
 
         /**
          * @brief Copies one asset descriptor and its exact-generation callbacks into the transaction.
@@ -100,8 +118,12 @@ namespace Horo::Gameplay {
         [[nodiscard]] Result<std::vector<std::byte>> Cook(const GameAssetCookInput &input, const CancellationToken &cancellation) const;
 
     private:
+        /** @brief Resolves a frozen processing registration or returns the typed lifecycle/availability error. */
+        [[nodiscard]] Result<const GameAssetTypeRegistration *> GetRegistrationForProcessing(const GameAssetTypeId &typeId) const;
+
         std::string moduleId_;
         std::vector<GameAssetTypeRegistration> registrations_;
+        GameAssetProcessingLimits limits_;
         bool frozen_{false};
     };
 }  // namespace Horo::Gameplay

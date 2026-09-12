@@ -1,4 +1,5 @@
 add_library(HoroFoundation STATIC
+        foundation/AssetCookTargetId.cpp
         foundation/FoundationErrors.cpp
         foundation/modules/ModuleActivationContext.cpp
         foundation/modules/ModuleDescriptor.cpp

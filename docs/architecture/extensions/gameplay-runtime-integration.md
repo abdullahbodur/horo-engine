@@ -13,7 +13,7 @@ struct GameAssetTypeDescriptor {
     GameAssetTypeId typeId;
     uint32_t schemaVersion;
     std::vector<std::string> sourceExtensions;
-    std::vector<std::string> cookTargets;
+    std::vector<AssetCookTargetId> cookTargets;
     GameAssetEditorRepresentation editor;
 };
 
@@ -37,8 +37,12 @@ Editor asset browsers use the descriptor's authoring metadata to show
 game-owned asset types, icons, validation diagnostics, and typed fields.
 When code is missing or schema-skewed, the generic editor projection is read-only
 and retains the opaque bytes, stable type identity, schema version, and payload
-size. It does not synthesize a replacement payload or silently select another
-handler.
+size. Missing-code presentation is a semantic fallback resolved by the editor
+host through `workspace.game_asset.category.missing`; no gameplay-facing model
+contains hard-coded host copy. Inspection descriptors and editor field lists are
+owned snapshots that remain valid after registry replacement or project close.
+The projection does not synthesize a replacement payload or silently select
+another handler.
 Runtime code accesses loaded assets through `AssetAccess` handles or leases, not
 raw file paths. Asset loads may be asynchronous through the asset system's task
 contract; gameplay jobs request work through approved asset APIs instead of
