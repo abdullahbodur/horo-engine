@@ -11,6 +11,7 @@
 #include <new>
 #include <type_traits>
 #include <utility>
+#include <vector>
 
 namespace Horo::Navigation {
     namespace {
@@ -54,8 +55,7 @@ namespace Horo::Navigation {
             };
 
         public:
-            explicit BoundedMpmcQueue(const std::size_t capacity)
-                : slots_(std::make_unique<Slot[]>(capacity)), capacity_(capacity), mask_(capacity - 1U) {
+            explicit BoundedMpmcQueue(const std::size_t capacity) : slots_(capacity), capacity_(capacity), mask_(capacity - 1U) {
                 for (std::size_t index = 0; index < capacity; ++index)
                     slots_[index].sequence.store(index);
             }
@@ -71,26 +71,26 @@ namespace Horo::Navigation {
             }
 
             [[nodiscard]] NavigationQueueEnqueueResult TryPush(T &record) noexcept {
+                using enum NavigationQueueEnqueueResult;
                 if (closed_.load()) {
                     SaturatingIncrement(stats_.rejectedClosed);
-                    return NavigationQueueEnqueueResult::Closed;
+                    return Closed;
                 }
 
-                const auto claim = TryClaim(enqueuePosition_, 0);
-                if (claim) {
+                if (const auto claim = TryClaim(enqueuePosition_, 0); claim.has_value()) {
                     claim->slot->record.emplace(std::move(record));
                     count_.fetch_add(1U);
                     claim->slot->sequence.store(claim->position + 1U);
                     SaturatingIncrement(stats_.enqueued);
-                    return NavigationQueueEnqueueResult::Enqueued;
+                    return Enqueued;
                 }
                 SaturatingIncrement(stats_.rejectedFull);
-                return NavigationQueueEnqueueResult::Full;
+                return Full;
             }
 
             [[nodiscard]] std::optional<T> TryPop() noexcept {
                 const auto claim = TryClaim(dequeuePosition_, 1U);
-                if (!claim)
+                if (!claim.has_value())
                     return std::nullopt;
                 std::optional<T> record{std::move(claim->slot->record)};
                 claim->slot->record.reset();
@@ -136,7 +136,7 @@ namespace Horo::Navigation {
                 return std::nullopt;
             }
 
-            std::unique_ptr<Slot[]> slots_;
+            std::vector<Slot> slots_;
             std::size_t capacity_{};
             std::size_t mask_{};
             alignas(64) std::atomic<std::size_t> enqueuePosition_{};
@@ -156,8 +156,7 @@ namespace Horo::Navigation {
         }
 
         [[nodiscard]] bool IsValidCommand(const NavigationRuntimeCommand &command) noexcept {
-            return std::visit([](const auto &value) {
-                using Value = std::decay_t<decltype(value)>;
+            return std::visit([]<typename Value>(const Value &value) {
                 if constexpr (std::is_same_v<Value, NavigationSubmitPathCommand>)
                     return value.sequence != 0 && IsValidPathRequest(value.request);
                 else if constexpr (std::is_same_v<Value, NavigationCancelRequestCommand>)
@@ -214,7 +213,7 @@ namespace Horo::Navigation {
 
     /** @copydoc NavigationRuntimeQueues::Create */
     Result<NavigationRuntimeQueues> NavigationRuntimeQueues::Create(const NavigationRuntimeQueueDescriptor &descriptor) {
-        if (const auto required = RequiredStorage(descriptor); !required || descriptor.maximumOwnedBytes < *required)
+        if (const auto required = RequiredStorage(descriptor); !required.has_value() || descriptor.maximumOwnedBytes < *required)
             return Failure<NavigationRuntimeQueues>(NavigationErrors::CapacityExceeded);
         try {
             return Result<NavigationRuntimeQueues>::Success(NavigationRuntimeQueues{std::make_unique<State>(descriptor)});
@@ -226,7 +225,7 @@ namespace Horo::Navigation {
     /** @copydoc NavigationRuntimeQueues::RequiredStorageBytes */
     Result<std::size_t> NavigationRuntimeQueues::RequiredStorageBytes(const NavigationRuntimeQueueDescriptor &descriptor) {
         const auto required = RequiredStorage(descriptor);
-        if (!required)
+        if (!required.has_value())
             return Failure<std::size_t>(NavigationErrors::CapabilityDescriptorInvalid);
         return Result<std::size_t>::Success(*required);
     }
