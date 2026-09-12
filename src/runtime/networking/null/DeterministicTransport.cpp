@@ -58,8 +58,8 @@ namespace Horo::Network {
     DeterministicTransport::DeterministicTransport(DeterministicTransportDescriptor descriptor, TransportBudgetController budget,
                                                    std::unique_ptr<ScheduledDelivery[]> deliveries,
                                                    std::unique_ptr<std::byte[]> payloadStorage) noexcept
-        : descriptor_(descriptor), budget_(std::move(budget)), deliveries_(std::move(deliveries)),
-          payloadStorage_(std::move(payloadStorage)), randomState_(descriptor.scenario.seed) {}
+        : descriptor_(std::move(descriptor)), budget_(std::move(budget)), deliveries_(std::move(deliveries)),
+          payloadStorage_(std::move(payloadStorage)), randomState_(descriptor_.scenario.seed) {}
 
     /** @copydoc DeterministicTransport::Create */
     Result<DeterministicTransport> DeterministicTransport::Create(const DeterministicTransportDescriptor &descriptor) {
@@ -200,8 +200,9 @@ namespace Horo::Network {
             return Fail<ImpairmentPlan>(NetworkErrors::TransportBudgetCapacityExceeded);
         }
         const auto required = plan.lost ? 0U : plan.fragmentCount * plan.copyCount;
-        const auto reclaimable = traffic == TransportTrafficClass::ReplaceableState ? MatchingDeliveries(connection, replaceableKey) : 0U;
-        if (required > FreeDeliveries() + reclaimable) {
+        if (const auto reclaimable =
+                traffic == TransportTrafficClass::ReplaceableState ? MatchingDeliveries(connection, replaceableKey) : 0U;
+            required > FreeDeliveries() + reclaimable) {
             randomState_ = plan.randomBeforeAdmission;
             return Fail<ImpairmentPlan>(NetworkErrors::TransportBudgetCapacityExceeded);
         }
@@ -233,9 +234,11 @@ namespace Horo::Network {
                 return Result<DeterministicSendResult>::Failure(scheduled.ErrorValue());
             }
         }
-        const auto outcome = plan.copyCount == 2              ? DeterministicSendOutcome::ScheduledWithDuplicate
-                             : decision.admission == Replaced ? DeterministicSendOutcome::Replaced
-                                                              : DeterministicSendOutcome::Scheduled;
+        auto outcome = DeterministicSendOutcome::Scheduled;
+        if (plan.copyCount == 2)
+            outcome = DeterministicSendOutcome::ScheduledWithDuplicate;
+        else if (decision.admission == Replaced)
+            outcome = DeterministicSendOutcome::Replaced;
         return Result<DeterministicSendResult>::Success({outcome, plan.fragmentCount, plan.copyCount});
     }
 
@@ -331,8 +334,7 @@ namespace Horo::Network {
                 ++discarded;
             }
         }
-        auto closed = budget_.CloseConnection(connection);
-        if (closed.HasError())
+        if (auto closed = budget_.CloseConnection(connection); closed.HasError())
             return Result<std::size_t>::Failure(closed.ErrorValue());
         auto &event = deliveries_[descriptor_.maximumScheduledDeliveries + connection.Slot()];
         if (event.connection == connection && event.kind == DeterministicTransportEventKind::Disconnected)
