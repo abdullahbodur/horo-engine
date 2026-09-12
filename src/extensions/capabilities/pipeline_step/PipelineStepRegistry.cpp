@@ -90,9 +90,10 @@ namespace Horo::Extensions {
         [[nodiscard]] std::optional<std::vector<std::shared_ptr<PipelineStepProviderState>>> SnapshotProviders(
             const std::shared_ptr<PipelineStepRegistryState> &state) {
             std::scoped_lock lock{state->mutex};
-            if (state->shutdown)
-                return std::nullopt;
-            return state->providers;
+            std::optional<std::vector<std::shared_ptr<PipelineStepProviderState>>> snapshot;
+            if (!state->shutdown)
+                snapshot.emplace(state->providers);
+            return snapshot;
         }
 
         [[nodiscard]] Error InvocationFailure(const PipelineStepDescriptor &descriptor, Error cause = {}) {
@@ -298,12 +299,13 @@ namespace Horo::Extensions {
     void PipelineStepRegistration::Reset() {
         if (provider_ == nullptr)
             return;
-        if (auto registry = registry_.lock())
+        auto registry = registry_.lock();
+        if (registry != nullptr)
             RemoveProvider(registry, provider_);
         else
             provider_->registered.store(false, std::memory_order_release);
-        provider_.reset();
         registry_.reset();
+        provider_.reset();
     }
 
     /** @copydoc PipelineStepRegistration::IsRegistered */
@@ -420,13 +422,14 @@ namespace Horo::Extensions {
 
     /** @copydoc PipelineStepRegistry::BeginShutdown */
     void PipelineStepRegistry::BeginShutdown() {  // NOSONAR(cpp:S5817) Terminal admission mutation belongs to the owner facade.
-        if (state_ == nullptr)
+        const auto state = state_;
+        if (state == nullptr)
             return;
-        std::scoped_lock lock{state_->mutex};
-        state_->shutdown = true;
-        for (const auto &provider : state_->providers)
+        std::scoped_lock lock{state->mutex};
+        state->shutdown = true;
+        for (const auto &provider : state->providers)
             provider->registered.store(false, std::memory_order_release);
-        state_->providers.clear();
+        state->providers.clear();
     }
 
     /** @copydoc PipelineStepRegistry::IsShutdown */
