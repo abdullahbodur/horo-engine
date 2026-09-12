@@ -10,6 +10,7 @@
 #include <string>
 #include <thread>
 #include <utility>
+#include <vector>
 
 namespace Horo::Extensions::Tests {
     namespace {
@@ -47,6 +48,44 @@ namespace Horo::Extensions::Tests {
         class OtherService final {
         public:
             void Shutdown() noexcept {}
+        };
+
+        class OrderedShutdownService final {
+        public:
+            OrderedShutdownService(std::shared_ptr<std::vector<int>> order, const int value) noexcept
+                : order_(std::move(order)), value_(value) {}
+
+            void Shutdown() noexcept {
+                order_->push_back(value_);
+            }
+
+        private:
+            std::shared_ptr<std::vector<int>> order_;
+            int value_{};
+        };
+
+        class NoopService final {
+        public:
+            void Shutdown() noexcept {}
+        };
+
+        class SelfStoppingService final {
+        public:
+            SelfStoppingService(BackendServiceRegistry &registry, std::shared_ptr<std::atomic_int> shutdownCount) noexcept
+                : registry_(registry), shutdownCount_(std::move(shutdownCount)) {}
+
+            [[nodiscard]] Result<SumResponse> Stop(const SumRequest &, const BackendServiceCallContext &) {
+                registry_.BeginShutdown();
+                return Result<SumResponse>::Success({42});
+            }
+
+            void Shutdown() noexcept {
+                ++*shutdownCount_;
+            }
+
+        private:
+            BackendServiceRegistry &registry_;
+            std::shared_ptr<std::atomic_int> shutdownCount_;
         };
 
         [[nodiscard]] BackendServiceDescriptor Descriptor(const BackendServiceThreadRule threadRule = BackendServiceThreadRule::AnyThread) {
@@ -199,5 +238,52 @@ namespace Horo::Extensions::Tests {
         CHECK_FALSE(registration.Value().IsRegistered());
         RequireErrorCode(services.Register(Descriptor(), std::make_unique<ArithmeticService>(std::make_shared<ArithmeticServiceAudit>())),
                          "backend_service_shutdown");
+    }
+
+    TEST_CASE("Backend service registry shuts services down in reverse registration order", "[Extensions][BackendService]") {
+        BackendServiceRegistry services;
+        auto order = std::make_shared<std::vector<int>>();
+        std::vector<BackendServiceRegistration> registrations;
+        for (int index = 1; index <= 3; ++index) {
+            auto descriptor = Descriptor();
+            descriptor.serviceId.value += std::to_string(index);
+            auto registered = services.Register(std::move(descriptor), std::make_unique<OrderedShutdownService>(order, index));
+            REQUIRE(registered.HasValue());
+            registrations.push_back(std::move(registered).Value());
+        }
+
+        services.BeginShutdown();
+        CHECK(*order == std::vector<int>{3, 2, 1});
+    }
+
+    TEST_CASE("Backend service registry enforces its publication bound", "[Extensions][BackendService]") {
+        BackendServiceRegistry services;
+        std::vector<BackendServiceRegistration> registrations;
+        registrations.reserve(BackendServiceRegistry::MaximumServices);
+        for (std::size_t index = 0; index < BackendServiceRegistry::MaximumServices; ++index) {
+            auto descriptor = Descriptor();
+            descriptor.serviceId.value = "com.example.service" + std::to_string(index);
+            auto registered = services.Register(std::move(descriptor), std::make_unique<NoopService>());
+            REQUIRE(registered.HasValue());
+            registrations.push_back(std::move(registered).Value());
+        }
+        auto overflow = Descriptor();
+        overflow.serviceId.value = "com.example.overflow";
+        RequireErrorCode(services.Register(std::move(overflow), std::make_unique<NoopService>()), "backend_service_capacity_exceeded");
+    }
+
+    TEST_CASE("Backend service defers self-initiated shutdown until its active call exits", "[Extensions][BackendService]") {
+        Fixture fixture;
+        auto shutdownCount = std::make_shared<std::atomic_int>();
+        auto registration = fixture.services.Register(Descriptor(), std::make_unique<SelfStoppingService>(fixture.services, shutdownCount));
+        REQUIRE(registration.HasValue());
+        auto call = fixture.services.Resolve<SelfStoppingService>(CapabilityLease(fixture.capabilities, fixture.admission),
+                                                                  {"com.example.math"}, {"com.example.math.v1"});
+        REQUIRE(call.HasValue());
+
+        auto stopped = std::move(call).Value().Invoke(&SelfStoppingService::Stop, SumRequest{});
+        RequireErrorCode(stopped, "backend_service_cancelled");
+        CHECK(shutdownCount->load() == 1);
+        CHECK(fixture.services.IsShutdown());
     }
 }  // namespace Horo::Extensions::Tests
