@@ -98,6 +98,8 @@ namespace Horo::Extensions {
 
         std::shared_ptr<BackendServiceProviderState> provider_;
         BackendServiceCallContext context_;
+        BackendServiceProviderState *previousExecutingProvider_{};
+        bool ownsExecutionSlot_{};
     };
 
     namespace Detail {

@@ -556,6 +556,13 @@ headless composition without editor or renderer construction. External module C
 function tables remain behind a host-owned typed adapter and do not cross this C++
 boundary directly.
 
+Provider operations do not own host lifecycle, but a defensive re-entrant shutdown
+request cannot wait on its own call. That provider is marked revoked and cancelled
+immediately; its final call guard performs the deferred `Shutdown()` after the
+operation returns. Ordinary host-driven revocation remains synchronous and requires
+providers to cooperate with cancellation, because releasing or timing out a still-
+executing in-process service would make its code and object lifetime unsafe.
+
 ## Module Loading And ABI Boundary
 
 The generic module C ABI is a bootstrap/control boundary, not sufficient for every
