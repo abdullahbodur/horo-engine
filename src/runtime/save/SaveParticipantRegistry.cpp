@@ -112,6 +112,7 @@ namespace Horo::Runtime {
 
         /** @brief Validates dependency identity, self-reference, and uniqueness rules. */
         [[nodiscard]] Result<void> ValidateDependencyMetadata(const CanonicalStateParticipantDescriptor &descriptor) {
+            using enum SaveParticipantRole;
             if (descriptor.dependencies.size() > MaximumSaveParticipantCount)
                 return Result<void>::Failure(MakeError(SaveErrors::ParticipantDescriptorInvalid));
             std::unordered_map<SaveParticipantId, std::byte, SaveParticipantIdHash> coveredPhases;
@@ -125,10 +126,8 @@ namespace Horo::Runtime {
                 if ((existingMask & phaseMask) != std::byte{})
                     return Result<void>::Failure(MakeError(SaveErrors::ParticipantDescriptorInvalid));
                 existingMask |= phaseMask;
-                const bool captureCompatible = !AppliesTo(dependency.phase, SaveParticipantRole::Capture) ||
-                                               HasSaveParticipantRole(descriptor.roles, SaveParticipantRole::Capture);
-                const bool restoreCompatible = !AppliesTo(dependency.phase, SaveParticipantRole::Restore) ||
-                                               HasSaveParticipantRole(descriptor.roles, SaveParticipantRole::Restore);
+                const bool captureCompatible = !AppliesTo(dependency.phase, Capture) || HasSaveParticipantRole(descriptor.roles, Capture);
+                const bool restoreCompatible = !AppliesTo(dependency.phase, Restore) || HasSaveParticipantRole(descriptor.roles, Restore);
                 if (!captureCompatible || !restoreCompatible) {
                     return Result<void>::Failure(MakeError(SaveErrors::ParticipantDependencyPhaseIncompatible,
                                                            "Participant '" + descriptor.participant.Value() + "' declares dependency '" +
@@ -247,8 +246,8 @@ namespace Horo::Runtime {
                 return ParticipantOrderKey(bindings[index]);
             });
             std::string message = std::string{PhaseName(role)} + " participant dependency cycle involves";
-            for (const std::size_t index : cycle)
-                message += " '" + bindings[index].Descriptor().participant.Value() + "'";
+            for (const std::size_t cycleIndex : cycle)
+                message += " '" + bindings[cycleIndex].Descriptor().participant.Value() + "'";
             message += ".";
             return MakeError(SaveErrors::ParticipantDependencyCycle, std::move(message));
         }
