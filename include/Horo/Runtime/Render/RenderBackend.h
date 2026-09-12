@@ -6,6 +6,7 @@
  */
 
 #include "Horo/Foundation/Result.h"
+#include "Horo/Runtime/Render/PresentMode.h"
 #include "Horo/Runtime/Render/RenderAdapter.h"
 #include "Horo/Runtime/Render/RenderScene.h"
 #include "Horo/Runtime/Render/Texture.h"
@@ -79,12 +80,6 @@ namespace Horo::Render {
         std::string displayName;
         RenderHostWindowRequirements windowRequirements;
         bool supportsInteractivePresentation{false};
-    };
-
-    /** @brief Backend-neutral presentation pacing policy. */
-    enum class PresentMode : std::uint8_t {
-        Fifo,
-        Immediate,
     };
 
     /** @brief Host-owned renderer initialization policy with no native API values. */
