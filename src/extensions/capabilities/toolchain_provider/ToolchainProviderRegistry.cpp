@@ -62,11 +62,9 @@ namespace Horo::Extensions {
             if (Text::IsBlank(request.executable) || request.executable.find('\0') != std::string::npos || request.timeout.count() <= 0 ||
                 request.gracefulTermination.count() < 0 || request.maximumLineBytes == 0U)
                 return false;
-            for (const std::string &argument : request.arguments) {
-                if (argument.find('\0') != std::string::npos)
-                    return false;
-            }
-            return true;
+            return std::ranges::none_of(request.arguments, [](const std::string &argument) {
+                return argument.find('\0') != std::string::npos;
+            });
         }
 
         [[nodiscard]] Result<ExternalProcessRequest> ResolveAndValidateRequest(const IToolchainInvocationPolicy &policy,
