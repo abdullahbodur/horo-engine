@@ -432,6 +432,9 @@ namespace Horo::Network {
                                      AuthenticationAuthorities authorities, std::uint64_t deadlineTick) noexcept;
         [[nodiscard]] bool Owns(ConnectionHandle connection, NetworkOperationGeneration sessionGeneration) const noexcept;
         [[nodiscard]] Result<AuthenticationResult> Reject(const ErrorCodeDescriptor &error, AuthenticationFailureClass failure);
+        /** @brief Runs the ordered host-authority chain after cheap hostile-input validation. */
+        [[nodiscard]] Result<AuthenticationResult> VerifyWithAuthorities(const AuthenticationResponseView &response,
+                                                                         const PeerAuthenticationEvidence &evidence, std::uint64_t nowTick);
 
         NetworkTrustPolicySnapshot policy_{};
         AuthenticationChallenge challenge_{};

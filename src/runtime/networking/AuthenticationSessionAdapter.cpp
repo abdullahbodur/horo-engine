@@ -116,44 +116,15 @@ namespace Horo::Network {
         return Result<AuthenticationResult>::Failure(MakeError(error));
     }
 
-    /** @copydoc AuthenticationSessionAdapter::Authenticate */
-    Result<AuthenticationResult> AuthenticationSessionAdapter::Authenticate(
-        const ConnectionHandle connection, const NetworkOperationGeneration sessionGeneration, const AuthenticationResponseView &response,
-        const PeerAuthenticationEvidence &evidence, const std::uint64_t nowTick, const TransportAdmissionState operation) {
-        if (!Owns(connection, sessionGeneration))
-            return Result<AuthenticationResult>::Failure(MakeError(NetworkErrors::NetworkLifecycleOperationStale));
-        if (state_ == AuthenticationState::ShuttingDown)
-            return Result<AuthenticationResult>::Failure(MakeError(NetworkErrors::SessionShuttingDown));
-        if (state_ != AuthenticationState::AwaitingProof)
-            return Result<AuthenticationResult>::Failure(MakeError(NetworkErrors::AuthenticationStateInvalid));
-        if (operation == TransportAdmissionState::Cancelled)
-            return Reject(NetworkErrors::SessionCancelled, AuthenticationFailureClass::Cancelled);
-        if (operation == TransportAdmissionState::ShuttingDown) {
-            state_ = AuthenticationState::ShuttingDown;
-            failure_ = AuthenticationFailureClass::Shutdown;
-            return Result<AuthenticationResult>::Failure(MakeError(NetworkErrors::SessionShuttingDown));
-        }
-        if (operation != TransportAdmissionState::Accepting || nowTick == 0)
-            return Reject(NetworkErrors::AuthenticationInvalid, AuthenticationFailureClass::Malformed);
-        if (nowTick >= deadlineTick_) {
-            state_ = AuthenticationState::TimedOut;
-            failure_ = AuthenticationFailureClass::TimedOut;
-            return Result<AuthenticationResult>::Failure(MakeError(NetworkErrors::SessionTimedOut));
-        }
-        if (response.contractVersion != AuthenticationContractVersion || response.proof.empty() ||
-            response.proof.size() > policy_.maximumProofBytes || response.proof.size() > MaximumAuthenticationProofBytes)
-            return Reject(NetworkErrors::AuthenticationInvalid, AuthenticationFailureClass::Malformed);
-        if (response.policy != policy_.id || response.policyRevision != policy_.revision ||
-            response.transcriptDigest != challenge_.transcriptDigest)
-            return Reject(NetworkErrors::AuthenticationIncompatible, AuthenticationFailureClass::Incompatible);
-        if (!ValidTransportEvidence(evidence, challenge_, policy_))
-            return Reject(NetworkErrors::AuthenticationIncompatible, AuthenticationFailureClass::Incompatible);
+    /** @copydoc AuthenticationSessionAdapter::VerifyWithAuthorities */
+    Result<AuthenticationResult> AuthenticationSessionAdapter::VerifyWithAuthorities(const AuthenticationResponseView &response,
+                                                                                     const PeerAuthenticationEvidence &evidence,
+                                                                                     const std::uint64_t nowTick) {
         if (!authorities_.certificates || !authorities_.peers || !authorities_.credentials || !authorities_.privateKeys ||
             !authorities_.certificates->Available() || !authorities_.peers->Available() || !authorities_.credentials->Available() ||
             !authorities_.privateKeys->Available())
             return Reject(NetworkErrors::AuthenticationTrustUnavailable, AuthenticationFailureClass::TrustUnavailable);
 
-        state_ = AuthenticationState::Authenticating;
         const auto certificate = authorities_.certificates->Verify({challenge_, evidence.certificate});
         if (certificate.HasError())
             return Reject(NetworkErrors::AuthenticationRejected, AuthenticationFailureClass::Rejected);
@@ -188,6 +159,42 @@ namespace Horo::Network {
         state_ = AuthenticationState::Accepted;
         failure_ = AuthenticationFailureClass::None;
         return Result<AuthenticationResult>::Success(accepted_);
+    }
+
+    /** @copydoc AuthenticationSessionAdapter::Authenticate */
+    Result<AuthenticationResult> AuthenticationSessionAdapter::Authenticate(
+        const ConnectionHandle connection, const NetworkOperationGeneration sessionGeneration, const AuthenticationResponseView &response,
+        const PeerAuthenticationEvidence &evidence, const std::uint64_t nowTick, const TransportAdmissionState operation) {
+        if (!Owns(connection, sessionGeneration))
+            return Result<AuthenticationResult>::Failure(MakeError(NetworkErrors::NetworkLifecycleOperationStale));
+        if (state_ == AuthenticationState::ShuttingDown)
+            return Result<AuthenticationResult>::Failure(MakeError(NetworkErrors::SessionShuttingDown));
+        if (state_ != AuthenticationState::AwaitingProof)
+            return Result<AuthenticationResult>::Failure(MakeError(NetworkErrors::AuthenticationStateInvalid));
+        if (operation == TransportAdmissionState::Cancelled)
+            return Reject(NetworkErrors::SessionCancelled, AuthenticationFailureClass::Cancelled);
+        if (operation == TransportAdmissionState::ShuttingDown) {
+            state_ = AuthenticationState::ShuttingDown;
+            failure_ = AuthenticationFailureClass::Shutdown;
+            return Result<AuthenticationResult>::Failure(MakeError(NetworkErrors::SessionShuttingDown));
+        }
+        if (operation != TransportAdmissionState::Accepting || nowTick == 0)
+            return Reject(NetworkErrors::AuthenticationInvalid, AuthenticationFailureClass::Malformed);
+        if (nowTick >= deadlineTick_) {
+            state_ = AuthenticationState::TimedOut;
+            failure_ = AuthenticationFailureClass::TimedOut;
+            return Result<AuthenticationResult>::Failure(MakeError(NetworkErrors::SessionTimedOut));
+        }
+        if (response.contractVersion != AuthenticationContractVersion || response.proof.empty() ||
+            response.proof.size() > policy_.maximumProofBytes || response.proof.size() > MaximumAuthenticationProofBytes)
+            return Reject(NetworkErrors::AuthenticationInvalid, AuthenticationFailureClass::Malformed);
+        if (response.policy != policy_.id || response.policyRevision != policy_.revision ||
+            response.transcriptDigest != challenge_.transcriptDigest)
+            return Reject(NetworkErrors::AuthenticationIncompatible, AuthenticationFailureClass::Incompatible);
+        if (!ValidTransportEvidence(evidence, challenge_, policy_))
+            return Reject(NetworkErrors::AuthenticationIncompatible, AuthenticationFailureClass::Incompatible);
+        state_ = AuthenticationState::Authenticating;
+        return VerifyWithAuthorities(response, evidence, nowTick);
     }
 
     /** @copydoc AuthenticationSessionAdapter::Expire */
