@@ -51,16 +51,20 @@ namespace Horo::Character::Detail {
 
         /** @brief Resolves one exact live record to a borrow bounded by registry mutation or destruction. */
         [[nodiscard]] Result<const Value *> Resolve(const CharacterControllerHandle &handle) const {
-            return storage_.ResolveOwned(handle, [this](const auto &candidate) {
-                return ValidateCharacterControllerHandleOwner(candidate, sceneGeneration_, world_);
-            }, HandleError);
+            const Result<void> owner = ValidateCharacterControllerHandleOwner(handle, sceneGeneration_, world_);
+            if (owner.HasError())
+                return Result<const Value *>::Failure(owner.ErrorValue());
+            const Value *value = storage_.Resolve(handle.slot.index, handle.slot.generation);
+            return value ? Result<const Value *>::Success(value) : Result<const Value *>::Failure(HandleError(handle));
         }
 
         /** @brief Removes one exact live generation and recycles or permanently retires its slot. */
         [[nodiscard]] Result<void> Remove(const CharacterControllerHandle &handle) {
-            return storage_.RemoveOwned(handle, [this](const auto &candidate) {
-                return ValidateCharacterControllerHandleOwner(candidate, sceneGeneration_, world_);
-            }, HandleError);
+            const Result<void> owner = ValidateCharacterControllerHandleOwner(handle, sceneGeneration_, world_);
+            if (owner.HasError())
+                return owner;
+            return storage_.Remove(handle.slot.index, handle.slot.generation) ? Result<void>::Success()
+                                                                              : Result<void>::Failure(HandleError(handle));
         }
 
         /** @brief Destroys every resident record without allocating; the registry is terminal afterward. */

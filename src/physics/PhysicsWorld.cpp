@@ -42,6 +42,7 @@ namespace Horo::Physics {
         Detail::CanonicalRuntimeHandle native;
         JobSystem *solverJobs{};
         std::vector<const PhysicsWorldId *> identities;
+        std::uint64_t nextWorldIdentity{1};
     };
 
     /** @brief Owns one candidate's settings/native state and unregisters its identity before releasing the runtime lease. */
@@ -360,6 +361,19 @@ namespace Horo::Physics {
             return Result<std::unique_ptr<PhysicsWorld>>::Failure(
                 MakeError(PhysicsErrors::CapacityExceeded, "Unable to allocate Physics world ownership state."));
         }
+    }
+
+    /** @copydoc PhysicsRuntime::IssueWorldIdentity */
+    Result<PhysicsWorldId> PhysicsRuntime::IssueWorldIdentity() {
+        if (impl_->ownerThread != std::this_thread::get_id())
+            return Result<PhysicsWorldId>::Failure(MakeError(PhysicsErrors::ThreadAffinityViolation));
+        if (impl_->state != PhysicsRuntimeState::Ready)
+            return Result<PhysicsWorldId>::Failure(MakeError(PhysicsErrors::InvalidState));
+        if (impl_->nextWorldIdentity == 0)
+            return Result<PhysicsWorldId>::Failure(MakeError(PhysicsErrors::GenerationExhausted));
+        const std::uint64_t issued = impl_->nextWorldIdentity;
+        impl_->nextWorldIdentity = issued == std::numeric_limits<std::uint64_t>::max() ? 0 : issued + 1;
+        return PhysicsWorldId::Create(issued);
     }
 
     /** @copydoc PhysicsRuntime::Shutdown */

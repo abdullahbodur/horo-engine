@@ -91,12 +91,12 @@ namespace {
 
     class TrackingSceneCandidate final : public SceneActivationCandidate {
     public:
-        TrackingSceneCandidate(std::vector<std::string> &events, std::string name, const bool failActivation)
-            : events_(&events), name_(std::move(name)), failActivation_(failActivation) {}
+        TrackingSceneCandidate(std::vector<std::string> &events, std::string name, const bool failValidation)
+            : events_(&events), name_(std::move(name)), failValidation_(failValidation) {}
 
-        Result<void> Activate() override {
-            events_->push_back("activate:" + name_);
-            if (failActivation_)
+        Result<void> ValidatePublication() const override {
+            events_->push_back("validate:" + name_);
+            if (failValidation_)
                 return Result<void>::Failure(MakeError(ParticipantFailure));
             return Result<void>::Success();
         }
@@ -108,7 +108,7 @@ namespace {
     private:
         std::vector<std::string> *events_{};
         std::string name_;
-        bool failActivation_{};
+        bool failValidation_{};
     };
 
     class TrackingSceneParticipant final : public SceneActivationParticipant {
@@ -117,12 +117,15 @@ namespace {
 
         Result<std::unique_ptr<SceneActivationCandidate>> Prepare(const RuntimeSceneDefinition &, RuntimeSceneView) override {
             events_->push_back("prepare:" + name_);
-            const bool fail = std::exchange(failActivation, false);
+            if (std::exchange(failPreparation, false))
+                return Result<std::unique_ptr<SceneActivationCandidate>>::Failure(MakeError(ParticipantFailure));
+            const bool fail = std::exchange(failValidation, false);
             return Result<std::unique_ptr<SceneActivationCandidate>>::Success(
                 std::make_unique<TrackingSceneCandidate>(*events_, name_, fail));
         }
 
-        bool failActivation{};
+        bool failPreparation{};
+        bool failValidation{};
 
     private:
         std::vector<std::string> *events_{};
@@ -714,7 +717,7 @@ namespace {
         service.Shutdown();
     }
 
-    TEST_CASE("Aggregate scene participants roll back candidates and retire in reverse dependency order",
+    TEST_CASE("Aggregate scene participants prepare fully, publish once, and retire in reverse dependency order",
               "[unit][runtime][scene][activation]") {
         std::vector<std::string> events;
         RuntimeSceneService service;
@@ -730,12 +733,25 @@ namespace {
         const SceneRuntimeId active = service.ActiveScene()->RuntimeId();
 
         events.clear();
-        secondState->failActivation = true;
+        secondState->failPreparation = true;
+        Check(service.QueuePreparation(Definition(2)).HasError());
+        Check(service.ActiveScene()->RuntimeId() == active);
+        Check(events == std::vector<std::string>{"prepare:first", "prepare:second", "shutdown:first"});
+
+        events.clear();
+        secondState->failValidation = true;
         Check(service.QueuePreparation(Definition(2)).HasValue());
         Check(service.OnPhase(RuntimePhase::CommitDeferredLifecycleChanges, Context(cancellation.Token())).HasValue());
         Check(service.TakeOperationError().has_value());
         Check(service.ActiveScene()->RuntimeId() == active);
-        Check(events == std::vector<std::string>{"prepare:first", "prepare:second", "activate:first", "activate:second", "shutdown:second",
+        Check(events == std::vector<std::string>{"prepare:first", "prepare:second", "validate:first", "validate:second", "shutdown:second",
+                                                 "shutdown:first"});
+
+        events.clear();
+        Check(service.QueuePreparation(Definition(3)).HasValue());
+        Check(service.OnPhase(RuntimePhase::CommitDeferredLifecycleChanges, Context(cancellation.Token())).HasValue());
+        Check(service.ActiveScene()->RuntimeId() != active);
+        Check(events == std::vector<std::string>{"prepare:first", "prepare:second", "validate:first", "validate:second", "shutdown:second",
                                                  "shutdown:first"});
 
         events.clear();

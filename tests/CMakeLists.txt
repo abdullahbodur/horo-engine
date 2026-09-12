@@ -231,8 +231,8 @@ horo_register_catch_test(HoroAudioCommandTests LABELS "unit;audio;headless")
 
 add_executable(HoroPhysicsTests
         unit/runtime/physics/CharacterControllerContractsTests.cpp
-        unit/runtime/physics/CharacterWorldTests.cpp
         unit/runtime/physics/CharacterWorldSettingsTests.cpp
+        unit/runtime/physics/CharacterWorldTests.cpp
         unit/runtime/physics/CanonicalSolverTests.cpp
         unit/runtime/physics/PhysicsBodyDescriptorTests.cpp
         unit/runtime/physics/PhysicsCollisionSchemaTests.cpp
@@ -245,6 +245,7 @@ add_executable(HoroPhysicsTests
         unit/runtime/physics/PhysicsMetricsTests.cpp
         unit/runtime/physics/PhysicsPoseTests.cpp
         unit/runtime/physics/PhysicsQueryTests.cpp
+        unit/runtime/physics/PhysicsSceneActivationTests.cpp
         unit/runtime/physics/PhysicsShapeDescriptorTests.cpp
         unit/runtime/physics/PhysicsStepPolicyTests.cpp
         unit/runtime/physics/PhysicsWorldBudgetsTests.cpp

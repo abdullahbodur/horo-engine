@@ -7,6 +7,7 @@
 #include <functional>
 #include <limits>
 #include <new>
+#include <thread>
 #include <utility>
 
 namespace Horo::Physics {
@@ -15,17 +16,12 @@ namespace Horo::Physics {
         class PhysicsSceneCandidate final : public Runtime::SceneActivationCandidate {
         public:
             PhysicsSceneCandidate(std::unique_ptr<PhysicsWorld> physics, std::unique_ptr<Character::CharacterWorld> character,
-                                  const PhysicsWorldId identity) noexcept
-                : physics_(std::move(physics)), character_(std::move(character)), identity_(identity) {}
+                                  const PhysicsSceneActivationAuthority &authority, const PhysicsSceneActivationEvidence evidence) noexcept
+                : physics_(std::move(physics)), character_(std::move(character)), authority_(&authority), evidence_(evidence) {}
 
-            [[nodiscard]] Result<void> Activate() override {
-                if (const Result<void> activated = physics_->Activate(identity_); activated.HasError())
-                    return activated;
-                if (const Result<void> activated = character_->Activate(); activated.HasError()) {
-                    Shutdown();
-                    return activated;
-                }
-                return Result<void>::Success();
+            [[nodiscard]] Result<void> ValidatePublication() const override {
+                return authority_->IsCurrent(evidence_) ? Result<void>::Success()
+                                                        : Result<void>::Failure(MakeError(PhysicsErrors::QuerySnapshotStale));
             }
 
             void Shutdown() noexcept override {
@@ -36,40 +32,77 @@ namespace Horo::Physics {
         private:
             std::unique_ptr<PhysicsWorld> physics_;
             std::unique_ptr<Character::CharacterWorld> character_;
-            PhysicsWorldId identity_;
+            const PhysicsSceneActivationAuthority *authority_{};
+            PhysicsSceneActivationEvidence evidence_;
         };
     }  // namespace
 
+    /** @copydoc PhysicsSceneActivationAuthority::PhysicsSceneActivationAuthority */
+    PhysicsSceneActivationAuthority::PhysicsSceneActivationAuthority() noexcept : ownerThread_(std::this_thread::get_id()) {}
+
+    /** @copydoc PhysicsSceneActivationAuthority::Capture */
+    PhysicsSceneActivationEvidence PhysicsSceneActivationAuthority::Capture() const noexcept {
+        return current_;
+    }
+
+    /** @copydoc PhysicsSceneActivationAuthority::IsCurrent */
+    bool PhysicsSceneActivationAuthority::IsCurrent(const PhysicsSceneActivationEvidence evidence) const noexcept {
+        return std::this_thread::get_id() == ownerThread_ && evidence == current_;
+    }
+
+    Result<void> PhysicsSceneActivationAuthority::Advance(std::uint64_t &generation) {
+        if (std::this_thread::get_id() != ownerThread_)
+            return Result<void>::Failure(MakeError(PhysicsErrors::ThreadAffinityViolation));
+        if (generation == std::numeric_limits<std::uint64_t>::max())
+            return Result<void>::Failure(MakeError(PhysicsErrors::GenerationExhausted));
+        ++generation;
+        return Result<void>::Success();
+    }
+
+    /** @copydoc PhysicsSceneActivationAuthority::AdvanceCollisionFilterGeneration */
+    Result<void> PhysicsSceneActivationAuthority::AdvanceCollisionFilterGeneration() {
+        return Advance(current_.collisionFilterGeneration);
+    }
+
+    /** @copydoc PhysicsSceneActivationAuthority::AdvanceOriginGeneration */
+    Result<void> PhysicsSceneActivationAuthority::AdvanceOriginGeneration() {
+        return Advance(current_.originGeneration);
+    }
+
     /** @copydoc PhysicsSceneActivationParticipant::PhysicsSceneActivationParticipant */
     PhysicsSceneActivationParticipant::PhysicsSceneActivationParticipant(PhysicsRuntime &runtime,
+                                                                         PhysicsSceneActivationAuthority &authority,
                                                                          PhysicsSceneActivationSettings settings) noexcept
-        : runtime_(&runtime), settings_(std::move(settings)) {}
+        : runtime_(&runtime), authority_(&authority), settings_(std::move(settings)) {}
 
     /** @copydoc PhysicsSceneActivationParticipant::Prepare */
     Result<std::unique_ptr<Runtime::SceneActivationCandidate>> PhysicsSceneActivationParticipant::Prepare(
         const Runtime::RuntimeSceneDefinition &, const Runtime::RuntimeSceneView scene) {
-        const std::array valid{runtime_->State() == PhysicsRuntimeState::Ready, scene.IsCurrent(), scene.RuntimeId().IsValid(),
-                               settings_.collisionFilterGeneration != 0, settings_.originGeneration != 0};
+        const std::array valid{runtime_->State() == PhysicsRuntimeState::Ready, scene.IsCurrent(), scene.RuntimeId().IsValid()};
         if (!std::ranges::all_of(valid, std::identity{}))
             return Result<std::unique_ptr<Runtime::SceneActivationCandidate>>::Failure(MakeError(PhysicsErrors::WorldInvalid));
-        if (nextWorldIdentity_ == std::numeric_limits<std::uint64_t>::max())
-            return Result<std::unique_ptr<Runtime::SceneActivationCandidate>>::Failure(MakeError(PhysicsErrors::GenerationExhausted));
 
-        const auto identity = PhysicsWorldId::Create(nextWorldIdentity_);
+        const PhysicsSceneActivationEvidence evidence = authority_->Capture();
+        const auto identity = runtime_->IssueWorldIdentity();
         if (identity.HasError())
             return Result<std::unique_ptr<Runtime::SceneActivationCandidate>>::Failure(identity.ErrorValue());
         auto physics = runtime_->PrepareWorld(settings_.physics);
         if (physics.HasError())
             return Result<std::unique_ptr<Runtime::SceneActivationCandidate>>::Failure(physics.ErrorValue());
-        auto character = Character::CharacterWorld::Prepare({scene.RuntimeId().value, identity.Value(), settings_.collisionFilterGeneration,
-                                                             settings_.originGeneration},
+        auto character = Character::CharacterWorld::Prepare({scene.RuntimeId().value, identity.Value(), evidence.collisionFilterGeneration,
+                                                             evidence.originGeneration},
                                                             settings_.character);
         if (character.HasError())
             return Result<std::unique_ptr<Runtime::SceneActivationCandidate>>::Failure(character.ErrorValue());
+        if (const Result<void> activated = physics.Value()->Activate(identity.Value()); activated.HasError())
+            return Result<std::unique_ptr<Runtime::SceneActivationCandidate>>::Failure(activated.ErrorValue());
+        if (const Result<void> activated = character.Value()->Activate(); activated.HasError()) {
+            physics.Value()->Shutdown();
+            return Result<std::unique_ptr<Runtime::SceneActivationCandidate>>::Failure(activated.ErrorValue());
+        }
         try {
             auto candidate =
-                std::make_unique<PhysicsSceneCandidate>(std::move(physics).Value(), std::move(character).Value(), identity.Value());
-            ++nextWorldIdentity_;
+                std::make_unique<PhysicsSceneCandidate>(std::move(physics).Value(), std::move(character).Value(), *authority_, evidence);
             return Result<std::unique_ptr<Runtime::SceneActivationCandidate>>::Success(std::move(candidate));
         } catch (const std::bad_alloc &) {
             return Result<std::unique_ptr<Runtime::SceneActivationCandidate>>::Failure(MakeError(PhysicsErrors::CapacityExceeded));

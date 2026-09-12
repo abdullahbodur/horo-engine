@@ -19,6 +19,8 @@ namespace Horo {
 }
 
 namespace Horo::Physics {
+    class PhysicsSceneActivationParticipant;
+
     /** @brief Explicit process composition; headless hosts use Canonical when simulation is required. */
     enum class PhysicsRuntimeMode : std::uint8_t {
         Canonical = 0,
@@ -94,7 +96,11 @@ namespace Horo::Physics {
 
     private:
         friend class PhysicsWorld;
+        friend class PhysicsSceneActivationParticipant;
         struct Impl;
+
+        /** @brief Issues one never-reused process-runtime world identity, consuming it even if later preparation fails. */
+        [[nodiscard]] Result<PhysicsWorldId> IssueWorldIdentity();
 
         /** @brief Retains the successfully prepared process owner. @param impl Owned shared runtime state. */
         explicit PhysicsRuntime(std::shared_ptr<Impl> impl) noexcept : impl_(std::move(impl)) {}

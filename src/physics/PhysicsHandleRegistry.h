@@ -103,9 +103,11 @@ namespace Horo::Physics::Detail {
          * @return Borrowed mapping, or a stable malformed/foreign/stale/state error before native access.
          */
         [[nodiscard]] Result<const Value *> Resolve(const Handle &handle) const {
-            return storage_.ResolveOwned(handle, [this](const auto &candidate) {
-                return ValidateOwner(candidate);
-            }, HandleError);
+            const Result<void> owner = ValidateOwner(handle);
+            if (owner.HasError())
+                return Result<const Value *>::Failure(owner.ErrorValue());
+            const Value *value = storage_.Resolve(handle.slot.index, handle.slot.generation);
+            return value ? Result<const Value *>::Success(value) : Result<const Value *>::Failure(HandleError(handle));
         }
 
         /**
@@ -114,9 +116,11 @@ namespace Horo::Physics::Detail {
          * @return Success, or a stable malformed/foreign/stale/state error without changing storage.
          */
         [[nodiscard]] Result<void> Remove(const Handle &handle) {
-            return storage_.RemoveOwned(handle, [this](const auto &candidate) {
-                return ValidateOwner(candidate);
-            }, HandleError);
+            const Result<void> owner = ValidateOwner(handle);
+            if (owner.HasError())
+                return owner;
+            return storage_.Remove(handle.slot.index, handle.slot.generation) ? Result<void>::Success()
+                                                                              : Result<void>::Failure(HandleError(handle));
         }
 
         /** @brief Returns whether activation bound a world generation. */

@@ -28,9 +28,9 @@ namespace Horo::Runtime {
     class SceneActivationCandidate {
     public:
         virtual ~SceneActivationCandidate() = default;
-        /** @brief Publishes already-prepared subsystem state at the owner safe point. */
-        [[nodiscard]] virtual Result<void> Activate() = 0;
-        /** @brief Closes subsystem admission and releases state; safe after preparation or publication. */
+        /** @brief Revalidates authoritative evidence immediately before aggregate publication. */
+        [[nodiscard]] virtual Result<void> ValidatePublication() const = 0;
+        /** @brief Closes subsystem admission and releases fully prepared state; safe before or after publication. */
         virtual void Shutdown() noexcept = 0;
     };
 
@@ -38,7 +38,11 @@ namespace Horo::Runtime {
     class SceneActivationParticipant {
     public:
         virtual ~SceneActivationParticipant() = default;
-        /** @brief Prepares detached subsystem state for an unpublished scene candidate. */
+        /** @brief Prepares and fully finalizes detached subsystem state for an unpublished scene candidate.
+         * @param definition Validated immutable scene definition.
+         * @param scene Borrowed unpublished scene candidate.
+         * @return Owned candidate ready for evidence validation and no-fail aggregate publication, or a typed error.
+         */
         [[nodiscard]] virtual Result<std::unique_ptr<SceneActivationCandidate>> Prepare(const RuntimeSceneDefinition &definition,
                                                                                         RuntimeSceneView scene) = 0;
     };
@@ -330,6 +334,18 @@ namespace Horo::Runtime {
         };
 
         struct Preparation;
+
+        struct SceneAggregate final {
+            SceneAggregate() = default;
+            SceneAggregate(const SceneAggregate &) = delete;
+            SceneAggregate &operator=(const SceneAggregate &) = delete;
+            SceneAggregate(SceneAggregate &&) noexcept = default;
+            SceneAggregate &operator=(SceneAggregate &&) noexcept = default;
+
+            std::unique_ptr<RuntimeScene> scene;
+            std::vector<std::unique_ptr<SceneActivationCandidate>> candidates;
+        };
+
         [[nodiscard]] Result<void> BeginPreparation(RuntimeSceneDefinition definition, RuntimeSceneConfig config);
         [[nodiscard]] Result<void> PopulatePreparationEntries(Preparation &prep, const RuntimeSceneDefinition &definition) const;
         void AdvancePreparation();
@@ -339,11 +355,9 @@ namespace Horo::Runtime {
         static void ShutdownCandidates(std::vector<std::unique_ptr<SceneActivationCandidate>> &candidates) noexcept;
         [[nodiscard]] Result<void> CommitDeferredChanges();
 
-        std::unique_ptr<RuntimeScene> active_;
-        std::unique_ptr<RuntimeScene> pending_;
+        SceneAggregate active_;
+        SceneAggregate pending_;
         std::vector<std::unique_ptr<SceneActivationParticipant>> participants_;
-        std::vector<std::unique_ptr<SceneActivationCandidate>> activeCandidates_;
-        std::vector<std::unique_ptr<SceneActivationCandidate>> pendingCandidates_;
         std::unique_ptr<Preparation> preparation_;
         std::optional<SceneCommandBuffer> structuralCommands_;
         std::optional<StructuralCommitResult> structuralResult_;

@@ -12,15 +12,19 @@ parallel.
 During aggregate scene candidate preparation:
 
 1. Capture and validate one immutable `CharacterWorldSettings` snapshot.
-2. Supply the exact scene, paired `PhysicsWorldId`, collision-filter, and local-origin
-   generations in a `CharacterWorldPreparationDescriptor`. The manager issues a
-   never-reused process-local `CharacterWorldId`; callers cannot select or recycle it.
-3. Call `CharacterWorld::Prepare`. This allocates the complete controller slot table
+2. Capture collision-filter and local-origin generations from the application-owned
+   `PhysicsSceneActivationAuthority`; do not synthesize generation literals.
+3. Obtain the paired `PhysicsWorldId` from the owning `PhysicsRuntime`. Its identity
+   stream survives participant recreation and consumes failed preparation attempts.
+4. Supply the exact scene, paired world, collision-filter, and local-origin generations
+   in a `CharacterWorldPreparationDescriptor`. The manager issues a never-reused
+   process-local `CharacterWorldId`; callers cannot select or recycle it.
+5. Call `CharacterWorld::Prepare`. This allocates the complete controller slot table
    and returns an unpublished candidate with its completed owner descriptor.
-4. Create candidate controllers with descriptors bound to the same three owner
+6. Create candidate controllers with descriptors bound to the same three owner
    generations. A failure leaves existing slots and generations unchanged.
-5. Call `Activate` only when the Scene, Physics, and Character candidates can be
-   published together without further allocation.
+7. Fully finalize the detached Physics and Character worlds, then revalidate the
+   captured authority evidence immediately before one no-fail aggregate publication.
 
 On unload or failed aggregate publication, call `Shutdown` before retiring the
 paired Physics world. Shutdown is idempotent and drains every owned controller
@@ -42,6 +46,6 @@ available.
 
 Production hosts inject `PhysicsSceneActivationParticipant` into
 `RuntimeSceneService`. The aggregate service prepares detached paired Physics and
-Character worlds, preserves the old bundle when either participant preparation or
-activation fails, and shuts Character down before Physics during replacement,
-unload, and host shutdown.
+Character worlds, preserves the old bundle when participant preparation or final
+evidence validation fails, and shuts Character down before Physics during
+replacement, unload, and host shutdown.
