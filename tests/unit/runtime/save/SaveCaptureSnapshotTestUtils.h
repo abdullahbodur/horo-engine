@@ -54,6 +54,15 @@ namespace Horo::Runtime::CaptureTestSupport {
         std::shared_ptr<int> destructionCount_;
     };
 
+    [[nodiscard]] inline std::shared_ptr<const ICanonicalStateAdapter> OrderRecordingAdapter(
+        std::shared_ptr<std::vector<std::string>> order, std::shared_ptr<int> destructionCount) {
+        return std::make_shared<
+            CallbackCaptureAdapter>([order = std::move(order)](const CanonicalCaptureContext &context, ICanonicalCaptureSink &) {
+            order->push_back(context.participant.Value());
+            return Result<CanonicalCaptureDisposition>::Success(CanonicalCaptureDisposition::Omitted);
+        }, std::move(destructionCount));
+    }
+
     class SegmentedTestPayload final : public IImmutableCanonicalPayload {
     public:
         explicit SegmentedTestPayload(std::vector<std::vector<std::byte>> segments,

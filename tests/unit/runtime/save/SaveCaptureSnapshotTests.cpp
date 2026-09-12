@@ -102,16 +102,9 @@ namespace Horo::Runtime {
             auto consumer = Descriptor("project.capture.a_consumer", {Test::Id<SaveRecordId>(26)}, false);
             consumer.dependencies = {{Participant("project.capture.z_provider"), SaveParticipantDependencyRequirement::Required,
                                       SaveParticipantDependencyPhase::Capture}};
-            Register(registry, std::move(consumer),
-                     std::make_shared<CallbackCaptureAdapter>([order](const CanonicalCaptureContext &context, ICanonicalCaptureSink &) {
-                order->push_back(context.participant.Value());
-                return Result<CanonicalCaptureDisposition>::Success(CanonicalCaptureDisposition::Omitted);
-            }, destructionCount));
+            Register(registry, std::move(consumer), OrderRecordingAdapter(order, destructionCount));
             Register(registry, Descriptor("project.capture.z_provider", {Test::Id<SaveRecordId>(27)}, false),
-                     std::make_shared<CallbackCaptureAdapter>([order](const CanonicalCaptureContext &context, ICanonicalCaptureSink &) {
-                order->push_back(context.participant.Value());
-                return Result<CanonicalCaptureDisposition>::Success(CanonicalCaptureDisposition::Omitted);
-            }, destructionCount));
+                     OrderRecordingAdapter(order, destructionCount));
             const SaveParticipantRegistrySnapshot participants = registry.Snapshot().Value();
             auto builder = RuntimeSaveCaptureBuilder::Create(Provenance(participants), participants).Value();
 

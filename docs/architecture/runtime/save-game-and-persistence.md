@@ -162,7 +162,12 @@ ID whenever multiple nodes are ready. Registration order, addresses and unordere
 container iteration never break ties. Missing required dependencies, present
 dependencies without the declared phase capability and cycles fail snapshot
 publication with diagnostics naming the involved stable IDs; optional absence alone
-does not fail. The identity-sorted binding view remains the canonical manifest/query
+does not fail. Separate capture and restore edges may name the same provider and carry
+different absence policies; overlapping phase coverage for one provider is rejected.
+Cycle diagnostics name one actual deterministic cycle rather than downstream blocked
+participants. Allocation failure returns a typed registry error, and fallible insertion
+completes before generation publication so membership and generation remain atomic.
+The identity-sorted binding view remains the canonical manifest/query
 projection and is not used as an execution plan.
 
 Schematic interface shapes (not new installed headers):

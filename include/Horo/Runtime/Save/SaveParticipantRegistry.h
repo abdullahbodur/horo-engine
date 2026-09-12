@@ -229,8 +229,6 @@ namespace Horo::Runtime {
         [[nodiscard]] std::uint64_t Generation() const noexcept;
 
     private:
-        [[nodiscard]] Result<void> AdvanceGeneration();
-
         std::vector<SaveParticipantBinding> bindings_;
         std::uint64_t generation_{1};
         bool closed_{false};

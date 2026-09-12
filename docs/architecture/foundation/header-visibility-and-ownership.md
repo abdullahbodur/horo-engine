@@ -613,6 +613,9 @@ an exact capture, restore or combined phase. Registry snapshots retain their
 identity-sorted canonical binding view and additionally publish stable topological
 capture and restore plans. Equivalent participant sets therefore produce the same
 orders regardless of registration timing, addresses or unordered-container order.
+Non-overlapping capture and restore edges to one provider remain distinct, while
+overlapping declarations are invalid. Registry allocation failures are typed and do
+not advance the published generation without the corresponding membership change.
 
 Existing `SaveParticipantId` dependency initializers retain their required-both
 meaning; callers that intended optional or phase-specific behavior must migrate to

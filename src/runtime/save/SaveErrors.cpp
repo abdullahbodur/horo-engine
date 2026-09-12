@@ -41,6 +41,12 @@ namespace Horo::Runtime::SaveErrors {
     const ErrorCodeDescriptor ParticipantRegistryCapacityExceeded{kDomain, ErrorCode{"save.participant.registry_capacity_exceeded"}, kError,
                                                                   "The save participant registry reached its bounded capacity.",
                                                                   "Reduce participant count or revise the explicit product limit."};
+    const ErrorCodeDescriptor ParticipantRegistryAllocationFailed{kDomain,
+                                                                  ErrorCode{"save.participant.registry_allocation_failed"},
+                                                                  kError,
+                                                                  "Save participant registry storage could not be allocated.",
+                                                                  "Release memory and retry composition before admitting save work.",
+                                                                  true};
     const ErrorCodeDescriptor ParticipantDependencyMissing{kDomain, ErrorCode{"save.participant.dependency_missing"}, kError,
                                                            "A required save participant dependency is absent.",
                                                            "Register every declared dependency before publishing a snapshot."};
