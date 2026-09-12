@@ -461,6 +461,20 @@ stable Scene object/component/contribution IDs. Moving or renaming source preser
 those identities. Render geometry is not implicit input; every geometry contribution
 names an exact validated source/collision artifact.
 
+The initial typed Scene boundary exposes `NavigationSurfaceComponent` and
+`NavigationRegionComponent`. A surface pins its definition `AssetId`, grounded
+profile set, component generation, enabled state, and object-subtree or explicit
+local-bounds bake scope. A region has a distinct stable identity, references one
+exact surface, and declares finite local bounds plus include/exclude and source
+selection policy. Scene-wide validation rejects duplicate identities and missing
+surface references before history or runtime publication. Runtime conversion uses
+only one committed Scene state and carries its identity as the definition revision;
+editor drafts, generated topology, and provider handles never cross this boundary.
+`HoroRuntimeScene` therefore has one deliberate public dependency on the
+backend-neutral `HoroNavigationApi`; the edge carries only typed identities and
+component validation. Navigation providers and `HoroNavigationRuntime` remain
+downstream and cannot enter Scene ownership or composition.
+
 `NavigationSourceGeometrySnapshot` is the owned NAV-002.6 geometry boundary inside
 that larger bake-input capture. It accepts only immutable static-collider, terrain,
 procedural-generation, and approved-custom contribution views. There is deliberately
@@ -1588,32 +1602,39 @@ These paradigms will integrate via dedicated provider extension seams without br
 
 ### Runtime Task & Lifecycle Alignment
 
+Implementation status on 12 September 2026: `HoroEngine::AI` provides the
+generation-fenced `AiTaskLifecycle` contract shared by native, script, and graph
+tasks. It owns the `Idle -> Running -> Succeeded | Failed | Cancelled` transition,
+one immutable terminal result, detached operation context, and post-terminal
+cleanup claim. Decision-plan execution and concrete task adapters remain later work.
+
+Headless hosts that deliberately omit gameplay AI compose `NullAiRuntime`. Its
+availability is always false and every task admission returns the typed
+`ai.runtime.unavailable` failure without starting a lifecycle or fabricating a
+successful decision. Focused lifecycle tests use a renderer-, audio-, editor-,
+and Scene-independent deterministic harness over small admitted blackboard schemas,
+typed agent/task generations, and declared scripted outcomes. The harness hashes
+canonical integer bytes and transition facts with fixed FNV-1a and exposes explicit
+cancellation, stale-completion, and capacity-rejection fault points.
+
 1. **Standard Execution Context**:
    - AI tasks evaluate through `BehaviorExecutionContext` (extending `BehaviorContext`), granting controlled access to scene resources, typed blackboard views, input, command buffers, and cancellation tokens.
    - `AIDecisionSystem` is the sole scheduling authority in `AiDecisionEvaluate` (ADR-021 `AiDecision`). `AiControllerComponent` and eligible `BehaviorComponent` attachments are inert plan bindings discovered by that system; components do not own runners. Generic `OnFixedUpdate` behaviors still run later in `Gameplay` / `CharacterControllerLocomotion`.
    - `GameplayInputAccess` is inherited for task parity with generic gameplay behaviors. It exposes only read-only semantic actions for possessed/player-controlled entities, never raw device state; NPC-only contexts receive a deterministic empty snapshot.
 
-```cpp
-enum class DecisionTaskStatus : uint8_t {
-    Success = 0,
-    Failure = 1,
-    Running = 2,
-    Aborted = 3,
-};
-
-class IDecisionTask {
-public:
-    virtual ~IDecisionTask() = default;
-    virtual DecisionTaskStatus OnEnter(BehaviorExecutionContext&) = 0;
-    virtual DecisionTaskStatus OnUpdate(BehaviorExecutionContext&, FixedDeltaTime) { return DecisionTaskStatus::Success; }
-    virtual void               OnAbort(BehaviorExecutionContext&) {}
-    virtual void               OnExit(BehaviorExecutionContext&, DecisionTaskStatus) {}
-};
-```
+`AiTaskOperationContext` captures only the persistent task definition, exact
+task/agent runtime handles, and cooperative cancellation token. It never retains
+mutable Scene state. `AIDecisionSystem` starts the lifecycle and calls
+`PrepareResume(FixedTick | Event, activeAgent)` before invoking task code. Detached
+worker completions return to that owner and call `CompleteSuccess` or
+`CompleteFailure`; both revalidate the exact agent generation and cancellation
+token before publishing. Native, script, and graph adapters do not define their
+own status vocabularies or terminal-result stores.
 
 1. **Cooperative Asynchronous Task Execution**:
-   - When a task returns `DecisionTaskStatus::Running`, it receives recurring update ticks until completion or abort.
-   - Long-running async requests (e.g. `MoveTo` navigation or animation playback) capture a `CancellationToken`. On abort, the task's `OnAbort()` cancels downstream subsystem requests cleanly.
+   - While a task is `Running`, `PrepareResume` admits recurring fixed-tick or event resumes until completion or cancellation.
+   - Long-running async requests (e.g. `MoveTo` navigation or animation playback) use the captured `CancellationToken`. Cancellation requested before admission, during execution, or after a worker completion is resolved at the serialized owner boundary. Whichever terminal transition publishes first remains immutable.
+   - Agent generation retirement publishes `Cancelled(AgentGenerationRetired)` before task-owned resources disappear. The lifecycle owner then claims cleanup exactly once and acknowledges completion after downstream requests and subscriptions are released. Late worker completions cannot replace that terminal result.
 
 1. **Safe-Point Hot Reload And Plan Replacement**:
    - Asset compilation produces a new `CookedDecisionPlan`.

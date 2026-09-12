@@ -281,6 +281,7 @@ target_compile_definitions(HoroGameplayApi PRIVATE
 )
 
 add_library(HoroRuntimeScene STATIC
+        runtime/scene/NavigationSceneComponents.cpp
         runtime/scene/RuntimeSceneDefinition.cpp
         runtime/scene/SavedSceneBootstrap.cpp
         runtime/scene/RuntimeScene.cpp
@@ -440,6 +441,7 @@ add_library(HoroAudioCommands STATIC
         audio/commands/AudioCommandBuffer.cpp
         audio/commands/AudioCommandStaging.cpp
         audio/commands/AudioEventQueue.cpp
+        audio/commands/AudioLifecycleReconciler.cpp
         audio/commands/ScheduledAudioCommandBatch.cpp
 )
 add_library(HoroEngine::AudioCommands ALIAS HoroAudioCommands)
@@ -494,8 +496,10 @@ endif()
 add_library(HoroAI STATIC
         runtime/ai/api/AIErrors.cpp
         runtime/ai/api/AIIdentity.cpp
+        runtime/ai/api/AITaskLifecycle.cpp
         runtime/ai/api/BlackboardInstance.cpp
         runtime/ai/api/BlackboardSchema.cpp
+        runtime/ai/api/NullAIRuntime.cpp
         runtime/ai/api/PerceptionDescriptorRegistry.cpp
 )
 add_library(HoroEngine::AI ALIAS HoroAI)
@@ -598,6 +602,7 @@ add_library(HoroNavigationApi STATIC
 add_library(HoroEngine::NavigationApi ALIAS HoroNavigationApi)
 target_compile_features(HoroNavigationApi PUBLIC cxx_std_20)
 target_link_libraries(HoroNavigationApi PUBLIC HoroEngine::Foundation)
+target_link_libraries(HoroRuntimeScene PUBLIC HoroEngine::NavigationApi)
 
 add_library(HoroNavigationRuntime STATIC
         runtime/navigation/runtime/NavigationRuntimeQueues.cpp
@@ -657,6 +662,7 @@ endif()
 add_library(HoroWorldStreaming STATIC
         runtime/world_streaming/NetworkStreamingAuthority.cpp
         runtime/world_streaming/OriginFrame.cpp
+        runtime/world_streaming/RuntimeEntityCellExitOperation.cpp
         runtime/world_streaming/CookedWorldIndexManifest.cpp
         runtime/world_streaming/FallbackStreamingProvider.cpp
         runtime/world_streaming/StreamingBudgetModel.cpp

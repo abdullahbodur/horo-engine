@@ -256,6 +256,7 @@ add_executable(HoroAudioCommandTests
     unit/runtime/audio/AudioCommandBufferTests.cpp
     unit/runtime/audio/AudioCommandStagingTests.cpp
     unit/runtime/audio/AudioEventQueueTests.cpp
+    unit/runtime/audio/AudioLifecycleReconcilerTests.cpp
     unit/runtime/audio/ScheduledAudioCommandBatchTests.cpp
 )
 target_compile_features(HoroAudioCommandTests PRIVATE cxx_std_20)
@@ -271,8 +272,9 @@ add_executable(HoroPhysicsTests
         unit/runtime/physics/PhysicsCollisionSchemaTests.cpp
         unit/runtime/physics/PhysicsConstraintDescriptorTests.cpp
         unit/runtime/physics/PhysicsCookedShapeDescriptorTests.cpp
-        unit/runtime/physics/PhysicsDiagnosticsTests.cpp
         unit/runtime/physics/PhysicsDeterminismPolicyTests.cpp
+        unit/runtime/physics/PhysicsDiagnosticsTests.cpp
+        unit/runtime/physics/PhysicsFoundationQualificationTests.cpp
         unit/runtime/physics/PhysicsHandleRegistryTests.cpp
         unit/runtime/physics/PhysicsIdentityTests.cpp
         unit/runtime/physics/PhysicsMetricsTests.cpp
@@ -293,8 +295,10 @@ horo_register_catch_test(HoroPhysicsTests LABELS "unit;physics;headless")
 
 add_executable(HoroAITests
         unit/runtime/ai/AIIdentityTests.cpp
+        unit/runtime/ai/AITaskLifecycleTests.cpp
         unit/runtime/ai/BlackboardInstanceTests.cpp
         unit/runtime/ai/BlackboardSchemaTests.cpp
+        unit/runtime/ai/NullAIRuntimeTests.cpp
         unit/runtime/ai/PerceptionDescriptorRegistryTests.cpp
 )
 target_compile_features(HoroAITests PRIVATE cxx_std_20)
@@ -442,6 +446,7 @@ horo_register_catch_test(HoroTerrainApiTests LABELS "unit;terrain;headless")
 add_executable(HoroWorldStreamingTests
         unit/runtime/world_streaming/NetworkStreamingAuthorityTests.cpp
         unit/runtime/world_streaming/OriginFrameTests.cpp
+        unit/runtime/world_streaming/RuntimeEntityCellExitOperationTests.cpp
         unit/runtime/world_streaming/CookedWorldIndexManifestTests.cpp
         unit/runtime/world_streaming/FallbackStreamingProviderTests.cpp
         unit/runtime/world_streaming/StreamingBudgetModelTests.cpp
@@ -1339,6 +1344,7 @@ add_executable(HoroRuntimeSaveTestCompositionsTests
 target_compile_features(HoroRuntimeSaveTestCompositionsTests PRIVATE cxx_std_20)
 target_link_libraries(HoroRuntimeSaveTestCompositionsTests PRIVATE HoroEngine::Runtime)
 add_executable(HoroRuntimeSceneTests
+        unit/runtime/scene/NavigationSceneComponentsTests.cpp
         unit/runtime/scene/RuntimeSceneTests.cpp
 )
 target_compile_features(HoroRuntimeSceneTests PRIVATE cxx_std_20)
