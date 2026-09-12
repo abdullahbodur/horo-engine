@@ -340,6 +340,42 @@ namespace Horo::Network::NetworkErrors {
         .retryable = false,
         .userActionable = false,
     };
+    const ErrorCodeDescriptor NetworkLifecycleInvalid{
+        .domain = NetworkDomain,
+        .code = ErrorCode{"network.lifecycle.invalid"},
+        .defaultSeverity = ErrorSeverity::Error,
+        .summary = "The listener or connection lifecycle request is malformed.",
+        .remediationHint = "Use valid exact handles, non-zero work generations, deadlines and terminal evidence.",
+        .retryable = false,
+        .userActionable = true,
+    };
+    const ErrorCodeDescriptor NetworkLifecycleCapacityExceeded{
+        .domain = NetworkDomain,
+        .code = ErrorCode{"network.lifecycle.capacity_exceeded"},
+        .defaultSeverity = ErrorSeverity::Error,
+        .summary = "The prepared network lifecycle registry is full.",
+        .remediationHint = "Close and replace an existing generation or increase the bounded setup capacity.",
+        .retryable = true,
+        .userActionable = true,
+    };
+    const ErrorCodeDescriptor NetworkLifecycleTransitionInvalid{
+        .domain = NetworkDomain,
+        .code = ErrorCode{"network.lifecycle.transition_invalid"},
+        .defaultSeverity = ErrorSeverity::Error,
+        .summary = "The requested network lifecycle transition is illegal.",
+        .remediationHint = "Advance only through the documented listener or connection state sequence.",
+        .retryable = false,
+        .userActionable = false,
+    };
+    const ErrorCodeDescriptor NetworkLifecycleOperationStale{
+        .domain = NetworkDomain,
+        .code = ErrorCode{"network.lifecycle.operation_stale"},
+        .defaultSeverity = ErrorSeverity::Warning,
+        .summary = "The network completion belongs to a stale handle or operation generation.",
+        .remediationHint = "Discard the completion and retain the current owner-published generation.",
+        .retryable = false,
+        .userActionable = false,
+    };
     const ErrorCodeDescriptor ProtocolIdentityDescriptorInvalid{
         .domain = NetworkDomain,
         .code = ErrorCode{"network.protocol.identity_descriptor_invalid"},

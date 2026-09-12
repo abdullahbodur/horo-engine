@@ -57,6 +57,8 @@ workflows.
   capability-resolved sensing-job snapshot.
 - [Network I/O Service Migration](./network-io-service-migration.md):
   normalize bounded private transport polling into owner-thread completion handoff.
+- [Network Lifecycle Migration](./network-lifecycle-migration.md):
+  adopt generation-fenced listener and connection transitions, deadlines, and exactly-once terminal results.
 
 ## Writing a Guide
 
