@@ -220,11 +220,9 @@ namespace Horo::Navigation {
                                                        NavigationBakePublicationState state = NavigationBakePublicationState::Ready) const;
 
     private:
-        NavigationBakeInputSnapshot(NavigationBakeInputRevisions revisions, NavigationBakeInputLimits limits, Sha256Digest fingerprint,
-                                    std::vector<NavigationResolvedBakeProfile> profiles, std::vector<NavigationResolvedBakeArea> areas,
-                                    std::vector<NavigationTileBuildPartition> partitions,
-                                    std::vector<NavigationTileBuildTriangle> triangles, std::vector<NavigationTileBuildModifier> modifiers,
-                                    NavigationSourceGeometrySnapshot geometry) noexcept;
+        struct ConstructionState;
+
+        explicit NavigationBakeInputSnapshot(ConstructionState &&state) noexcept;
 
         NavigationBakeInputRevisions revisions_;
         NavigationBakeInputLimits limits_;

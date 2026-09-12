@@ -1,10 +1,10 @@
 #include "Horo/Navigation/NavigationBakeInput.h"
 
 #include "Horo/Navigation/NavigationErrors.h"
+#include "NavigationBakeFingerprintInternal.h"
 
 #include <algorithm>
 #include <array>
-#include <bit>
 #include <cmath>
 #include <iterator>
 #include <limits>
@@ -17,7 +17,8 @@
 namespace Horo::Navigation {
     namespace {
         template <typename T> [[nodiscard]] Result<T> Failure(const ErrorCodeDescriptor &descriptor, std::string message = {}) {
-            return Result<T>::Failure(MakeError(descriptor, std::move(message)));
+            Error error = MakeError(descriptor, std::move(message));
+            return Result<T>::Failure(std::move(error));
         }
 
         [[nodiscard]] constexpr bool IsValid(const NavigationBakeInputRevisions &revisions) noexcept {
@@ -45,7 +46,10 @@ namespace Horo::Navigation {
         }
 
         [[nodiscard]] bool HasPositiveScale(const Math::Transform &transform) noexcept {
-            return transform.scale.x > 0.0F && transform.scale.y > 0.0F && transform.scale.z > 0.0F;
+            const std::array scales{transform.scale.x, transform.scale.y, transform.scale.z};
+            return std::ranges::all_of(scales, [](const float scale) {
+                return scale > 0.0F;
+            });
         }
 
         [[nodiscard]] bool IsNonDegenerate(const Math::Aabb &bounds) noexcept {
@@ -154,153 +158,42 @@ namespace Horo::Navigation {
             return true;
         }
 
-        class FingerprintBuilder final {
-        public:
-            FingerprintBuilder() noexcept {
-                static constexpr std::array<std::byte, 28> Domain{
-                    std::byte{0x68}, std::byte{0x6f}, std::byte{0x72}, std::byte{0x6f}, std::byte{0x2e}, std::byte{0x6e}, std::byte{0x61},
-                    std::byte{0x76}, std::byte{0x2e}, std::byte{0x62}, std::byte{0x61}, std::byte{0x6b}, std::byte{0x65}, std::byte{0x2e},
-                    std::byte{0x69}, std::byte{0x6e}, std::byte{0x70}, std::byte{0x75}, std::byte{0x74}, std::byte{0x2e}, std::byte{0x76},
-                    std::byte{0x31}, std::byte{0},    std::byte{0},    std::byte{0},    std::byte{0},    std::byte{0},    std::byte{1},
-                };
-                digest_ = ComputeSha256(std::span<const std::byte>{Domain});
-            }
+        [[nodiscard]] Result<NavigationAreaDescriptor> ResolveAndRememberArea(const NavigationAreaRegistry &registry,
+                                                                              const NavigationAreaId id, std::string context,
+                                                                              std::vector<NavigationResolvedBakeArea> &areas,
+                                                                              const std::size_t maximumAreas) {
+            auto resolved = ResolveArea(registry, id, std::move(context));
+            if (resolved.HasError())
+                return resolved;
+            if (!RememberArea(areas, resolved.Value(), maximumAreas))
+                return Failure<NavigationAreaDescriptor>(NavigationErrors::BakeInputCapacityExceeded);
+            return resolved;
+        }
 
-            void AddU64(const std::uint64_t value) noexcept {
-                std::array<std::byte, 8> bytes{};
-                for (std::size_t index = 0; index < bytes.size(); ++index)
-                    bytes[index] = static_cast<std::byte>((value >> ((bytes.size() - 1 - index) * 8)) & 0xFFU);
-                Add(bytes);
-            }
-
-            void AddU32(const std::uint32_t value) noexcept {
-                AddU64(value);
-            }
-
-            void AddFloat(const float value) noexcept {
-                AddU32(std::bit_cast<std::uint32_t>(value == 0.0F ? 0.0F : value));
-            }
-
-            void AddDigest(const Sha256Digest &value) noexcept {
-                std::array<std::byte, 32> bytes{};
-                for (std::size_t index = 0; index < bytes.size(); ++index)
-                    bytes[index] = static_cast<std::byte>(value.bytes[index]);
-                Add(bytes);
-            }
-
-            [[nodiscard]] const Sha256Digest &Finish() const noexcept {
-                return digest_;
-            }
-
-        private:
-            template <std::size_t Size> void Add(const std::array<std::byte, Size> &value) noexcept {
-                static_assert(Size <= 32);
-                std::array<std::byte, 64> input{};
-                for (std::size_t index = 0; index < digest_.bytes.size(); ++index)
-                    input[index] = static_cast<std::byte>(digest_.bytes[index]);
-                std::copy(value.begin(), value.end(), input.begin() + static_cast<std::ptrdiff_t>(digest_.bytes.size()));
-                digest_ = ComputeSha256(std::span{input}.first(digest_.bytes.size() + value.size()));
-            }
-
-            Sha256Digest digest_{};
+        struct CanonicalBakeStorage final {
+            std::vector<NavigationResolvedBakeProfile> profiles;
+            std::vector<NavigationResolvedBakeArea> areas;
+            std::vector<NavigationTileBuildPartition> partitions;
+            std::vector<NavigationTileBuildTriangle> triangles;
+            std::vector<NavigationTileBuildModifier> modifiers;
+            std::uint64_t workUnits{};
         };
 
-        void Add(FingerprintBuilder &builder, const NavigationBakeInputRevisions &revisions) noexcept {
-            builder.AddU64(revisions.definition.Value());
-            builder.AddU64(revisions.scene.Value());
-            builder.AddU64(revisions.areaRegistry.Value());
-            builder.AddU64(revisions.projectProfile.Value());
-            builder.AddU64(revisions.coordinates.Value());
-            builder.AddU64(revisions.geometry.Value());
-        }
-
-        void Add(FingerprintBuilder &builder, const Math::Vec3 value) noexcept {
-            builder.AddFloat(value.x);
-            builder.AddFloat(value.y);
-            builder.AddFloat(value.z);
-        }
-
-        [[nodiscard]] Sha256Digest Fingerprint(const NavigationBakeInputRevisions &revisions,
-                                               const std::vector<NavigationResolvedBakeProfile> &profiles,
-                                               const std::vector<NavigationResolvedBakeArea> &areas,
-                                               const std::vector<NavigationTileBuildPartition> &partitions,
-                                               const std::vector<NavigationTileBuildTriangle> &triangles,
-                                               const std::vector<NavigationTileBuildModifier> &modifiers) noexcept {
-            FingerprintBuilder builder;
-            Add(builder, revisions);
-            builder.AddU64(profiles.size());
-            for (const auto &profile : profiles) {
-                builder.AddU64(profile.id.Value());
-                builder.AddFloat(profile.buildGeometry.radiusMeters);
-                builder.AddFloat(profile.buildGeometry.heightMeters);
-                builder.AddFloat(profile.buildGeometry.maxSlopeDegrees);
-                builder.AddFloat(profile.buildGeometry.stepHeightMeters);
-                builder.AddFloat(profile.buildGeometry.cellSizeMeters);
-                builder.AddFloat(profile.buildGeometry.cellHeightMeters);
-                builder.AddFloat(profile.buildGeometry.minimumRegionSizeMeters);
-            }
-            builder.AddU64(areas.size());
-            for (const auto &area : areas) {
-                builder.AddU64(area.id.Value());
-                builder.AddU32(static_cast<std::uint32_t>(area.source.kind));
-                builder.AddU64(area.source.id.Value());
-                builder.AddFloat(area.traversalCost);
-                builder.AddU64(area.flags.bits);
-            }
-            builder.AddU64(partitions.size());
-            for (const auto &partition : partitions) {
-                builder.AddU64(partition.profile.Value());
-                builder.AddU64(partition.surface.Value());
-                builder.AddU64(partition.filter.Value());
-                builder.AddU32(partition.firstTriangle);
-                builder.AddU32(partition.triangleCount);
-                builder.AddU32(partition.firstModifier);
-                builder.AddU32(partition.modifierCount);
-            }
-            builder.AddU64(triangles.size());
-            for (const auto &triangle : triangles) {
-                for (const auto vertex : triangle.vertices)
-                    Add(builder, vertex);
-                builder.AddU64(triangle.area.Value());
-                builder.AddFloat(triangle.traversalCost);
-                builder.AddU32(triangle.materialSlot.value);
-                builder.AddU32(static_cast<std::uint32_t>(triangle.provenance.kind));
-                builder.AddU64(triangle.provenance.producer.Value());
-                builder.AddU64(triangle.provenance.contribution.Value());
-                builder.AddU64(triangle.provenance.revision.Value());
-                builder.AddDigest(triangle.provenance.contentDigest);
-                builder.AddU32(triangle.provenance.sourceTriangleIndex);
-            }
-            builder.AddU64(modifiers.size());
-            for (const auto &modifier : modifiers) {
-                builder.AddU64(modifier.profile.Value());
-                builder.AddU64(modifier.surface.Value());
-                builder.AddU64(modifier.id.Value());
-                builder.AddU32(static_cast<std::uint32_t>(modifier.mode));
-                builder.AddU64(modifier.area.Value());
-                Add(builder, modifier.canonicalBounds.minimum);
-                Add(builder, modifier.canonicalBounds.maximum);
-            }
-            return builder.Finish();
-        }
-
-        [[nodiscard]] Result<void> ValidateCapacity(
-            const NavigationBakeInputLimits &limits, const NavigationSourceGeometrySnapshot &geometry,
-            const std::vector<NavigationResolvedBakeProfile> &profiles, const std::vector<NavigationResolvedBakeArea> &areas,
-            const std::vector<NavigationTileBuildPartition> &partitions, const std::vector<NavigationTileBuildTriangle> &triangles,
-            const std::vector<NavigationTileBuildModifier> &modifiers, const std::uint64_t workUnits) {
-            if (triangles.size() > limits.maxTileTriangles || workUnits > limits.maxWorkUnits)
+        [[nodiscard]] Result<void> ValidateCapacity(const NavigationBakeInputLimits &limits,
+                                                    const NavigationSourceGeometrySnapshot &geometry, const CanonicalBakeStorage &storage) {
+            if (storage.triangles.size() > limits.maxTileTriangles || storage.workUnits > limits.maxWorkUnits)
                 return Failure<void>(NavigationErrors::BakeInputCapacityExceeded);
 
             std::uint64_t ownedBytes{};
             if (!AddStorage(geometry.Contributions().size(), sizeof(NavigationSourceContribution), ownedBytes) ||
                 !AddStorage(geometry.Vertices().size(), sizeof(Math::Vec3), ownedBytes) ||
                 !AddStorage(geometry.Triangles().size(), sizeof(NavigationSourceTriangle), ownedBytes) ||
-                !AddStorage(profiles.capacity(), sizeof(NavigationResolvedBakeProfile), ownedBytes) ||
-                !AddStorage(areas.capacity(), sizeof(NavigationResolvedBakeArea), ownedBytes) ||
-                !AddStorage(partitions.capacity(), sizeof(NavigationTileBuildPartition), ownedBytes) ||
-                !AddStorage(triangles.capacity(), sizeof(NavigationTileBuildTriangle), ownedBytes) ||
-                !AddStorage(modifiers.capacity(), sizeof(NavigationTileBuildModifier), ownedBytes) || ownedBytes > limits.maxOwnedBytes)
+                !AddStorage(storage.profiles.capacity(), sizeof(NavigationResolvedBakeProfile), ownedBytes) ||
+                !AddStorage(storage.areas.capacity(), sizeof(NavigationResolvedBakeArea), ownedBytes) ||
+                !AddStorage(storage.partitions.capacity(), sizeof(NavigationTileBuildPartition), ownedBytes) ||
+                !AddStorage(storage.triangles.capacity(), sizeof(NavigationTileBuildTriangle), ownedBytes) ||
+                !AddStorage(storage.modifiers.capacity(), sizeof(NavigationTileBuildModifier), ownedBytes) ||
+                ownedBytes > limits.maxOwnedBytes)
                 return Failure<void>(NavigationErrors::BakeInputCapacityExceeded);
             return Result<void>::Success();
         }
@@ -327,15 +220,6 @@ namespace Horo::Navigation {
                 return Failure<std::uint64_t>(NavigationErrors::BakeInputCapacityExceeded);
             return Result<std::uint64_t>::Success(capacity);
         }
-
-        struct CanonicalBakeStorage final {
-            std::vector<NavigationResolvedBakeProfile> profiles;
-            std::vector<NavigationResolvedBakeArea> areas;
-            std::vector<NavigationTileBuildPartition> partitions;
-            std::vector<NavigationTileBuildTriangle> triangles;
-            std::vector<NavigationTileBuildModifier> modifiers;
-            std::uint64_t workUnits{};
-        };
 
         [[nodiscard]] Result<std::vector<NavigationResolvedBakeProfile>> ResolveProfiles(
             const std::span<const NavigationAgentProfileDescriptor> profiles) {
@@ -413,11 +297,10 @@ namespace Horo::Navigation {
                                                            CanonicalBakeStorage &storage) {
             if (!TryAdd(storage.workUnits, 1, storage.workUnits) || storage.workUnits > limits.maxWorkUnits)
                 return Failure<void>(NavigationErrors::BakeInputCapacityExceeded);
-            auto area = ResolveArea(areaRegistry, sourceTriangle.area, SurfaceContext(surface, "a triangle area is missing"));
+            auto area = ResolveAndRememberArea(areaRegistry, sourceTriangle.area, SurfaceContext(surface, "a triangle area is missing"),
+                                               storage.areas, limits.maxAreas);
             if (area.HasError())
                 return Result<void>::Failure(area.ErrorValue());
-            if (!RememberArea(storage.areas, area.Value(), limits.maxAreas))
-                return Failure<void>(NavigationErrors::BakeInputCapacityExceeded);
             auto traversal = areaRegistry.ResolveTraversal(surface.filter, sourceTriangle.area);
             if (traversal.HasError())
                 return Result<void>::Failure(WrapError(NavigationErrors::BakeInputReferenceMissing, traversal.ErrorValue(),
@@ -499,11 +382,10 @@ namespace Horo::Navigation {
                 return Failure<void>(NavigationErrors::DescriptorConflict);
 
             for (const auto *modifier : ordered) {
-                auto area = ResolveArea(areaRegistry, modifier->area, ModifierContext(*modifier, "the assigned area is missing"));
+                auto area = ResolveAndRememberArea(areaRegistry, modifier->area, ModifierContext(*modifier, "the assigned area is missing"),
+                                                   storage.areas, limits.maxAreas);
                 if (area.HasError())
                     return Result<void>::Failure(area.ErrorValue());
-                if (!RememberArea(storage.areas, area.Value(), limits.maxAreas))
-                    return Failure<void>(NavigationErrors::BakeInputCapacityExceeded);
                 auto bounds = Math::TransformAabb(modifier->localBounds, modifier->localToCanonicalMeters.TryToMatrix().Value());
                 if (bounds.HasError() || !IsNonDegenerate(bounds.Value()))
                     return Failure<void>(NavigationErrors::BakeInputInvalid,
@@ -535,6 +417,18 @@ namespace Horo::Navigation {
             }
         }
     }  // namespace
+
+    struct NavigationBakeInputSnapshot::ConstructionState final {
+        NavigationBakeInputRevisions revisions;
+        NavigationBakeInputLimits limits;
+        Sha256Digest fingerprint;
+        std::vector<NavigationResolvedBakeProfile> profiles;
+        std::vector<NavigationResolvedBakeArea> areas;
+        std::vector<NavigationTileBuildPartition> partitions;
+        std::vector<NavigationTileBuildTriangle> triangles;
+        std::vector<NavigationTileBuildModifier> modifiers;
+        NavigationSourceGeometrySnapshot geometry;
+    };
 
     /** @copydoc NavigationBakeInputSnapshot::Create */
     Result<NavigationBakeInputSnapshot> NavigationBakeInputSnapshot::Create(
@@ -576,16 +470,20 @@ namespace Horo::Navigation {
                 return Result<NavigationBakeInputSnapshot>::Failure(resolved.ErrorValue());
             BindModifierRanges(storage);
 
-            if (const auto capacity = ValidateCapacity(limits, geometry, storage.profiles, storage.areas, storage.partitions,
-                                                       storage.triangles, storage.modifiers, storage.workUnits);
-                capacity.HasError())
+            if (const auto capacity = ValidateCapacity(limits, geometry, storage); capacity.HasError())
                 return Result<NavigationBakeInputSnapshot>::Failure(capacity.ErrorValue());
-            const auto fingerprint =
-                Fingerprint(revisions, storage.profiles, storage.areas, storage.partitions, storage.triangles, storage.modifiers);
-            return Result<NavigationBakeInputSnapshot>::Success(
-                NavigationBakeInputSnapshot{revisions, limits, fingerprint, std::move(storage.profiles), std::move(storage.areas),
-                                            std::move(storage.partitions), std::move(storage.triangles), std::move(storage.modifiers),
-                                            std::move(geometry)});
+            ConstructionState state{.revisions = revisions,
+                                    .limits = limits,
+                                    .fingerprint =
+                                        Internal::ComputeBakeInputFingerprint(revisions, storage.profiles, storage.areas,
+                                                                              storage.partitions, storage.triangles, storage.modifiers),
+                                    .profiles = std::move(storage.profiles),
+                                    .areas = std::move(storage.areas),
+                                    .partitions = std::move(storage.partitions),
+                                    .triangles = std::move(storage.triangles),
+                                    .modifiers = std::move(storage.modifiers),
+                                    .geometry = std::move(geometry)};
+            return Result<NavigationBakeInputSnapshot>::Success(NavigationBakeInputSnapshot{std::move(state)});
         } catch (const std::bad_alloc &) {
             return Failure<NavigationBakeInputSnapshot>(NavigationErrors::BakeInputCapacityExceeded);
         }
@@ -661,14 +559,8 @@ namespace Horo::Navigation {
         return Result<void>::Success();
     }
 
-    NavigationBakeInputSnapshot::NavigationBakeInputSnapshot(NavigationBakeInputRevisions revisions, NavigationBakeInputLimits limits,
-                                                             Sha256Digest fingerprint, std::vector<NavigationResolvedBakeProfile> profiles,
-                                                             std::vector<NavigationResolvedBakeArea> areas,
-                                                             std::vector<NavigationTileBuildPartition> partitions,
-                                                             std::vector<NavigationTileBuildTriangle> triangles,
-                                                             std::vector<NavigationTileBuildModifier> modifiers,
-                                                             NavigationSourceGeometrySnapshot geometry) noexcept
-        : revisions_(revisions), limits_(limits), fingerprint_(fingerprint), profiles_(std::move(profiles)), areas_(std::move(areas)),
-          partitions_(std::move(partitions)), triangles_(std::move(triangles)), modifiers_(std::move(modifiers)),
-          geometry_(std::move(geometry)) {}
+    NavigationBakeInputSnapshot::NavigationBakeInputSnapshot(ConstructionState &&state) noexcept
+        : revisions_(state.revisions), limits_(state.limits), fingerprint_(state.fingerprint), profiles_(std::move(state.profiles)),
+          areas_(std::move(state.areas)), partitions_(std::move(state.partitions)), triangles_(std::move(state.triangles)),
+          modifiers_(std::move(state.modifiers)), geometry_(std::move(state.geometry)) {}
 }  // namespace Horo::Navigation
