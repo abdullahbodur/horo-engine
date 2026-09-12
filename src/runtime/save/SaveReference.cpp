@@ -128,7 +128,9 @@ namespace Horo::Runtime {
             auto encoded = reader.ReadBytes(maximumBytes);
             if (encoded.HasError())
                 return Result<SaveParticipantId>::Failure(std::move(encoded).ErrorValue());
-            const std::string_view text{reinterpret_cast<const char *>(encoded.Value().data()), encoded.Value().size()};
+            const auto *textData =
+                reinterpret_cast<const char *>(encoded.Value().data());  // NOSONAR: parsing text requires a borrowed char view.
+            const std::string_view text{textData, encoded.Value().size()};
             Error corrupt = WireError(SaveErrors::ReferenceCorrupt, start);
             Error allocationFailure = WireError(SaveErrors::CanonicalCodecAllocationFailed, start);
             try {
@@ -193,20 +195,21 @@ namespace Horo::Runtime {
 
         [[nodiscard]] Result<SaveReferenceTarget> DecodePayload(const SaveReferenceWireTag tag, CanonicalValueReader &reader,
                                                                 const std::size_t maximumParticipantBytes) {
+            using enum SaveReferenceWireTag;
             switch (tag) {
-                case SaveReferenceWireTag::Null:
+                case Null:
                     return TargetResult(std::monostate{});
-                case SaveReferenceWireTag::Asset:
+                case Asset:
                     return DecodeAsset(reader);
-                case SaveReferenceWireTag::Scene:
+                case Scene:
                     return DecodeScene(reader);
-                case SaveReferenceWireTag::Entity:
+                case Entity:
                     return DecodeEntity(reader);
-                case SaveReferenceWireTag::Prefab:
+                case Prefab:
                     return DecodePrefab(reader);
-                case SaveReferenceWireTag::Participant:
+                case Participant:
                     return DecodeParticipant(reader, maximumParticipantBytes);
-                case SaveReferenceWireTag::Record:
+                case Record:
                     return DecodeRecord(reader, maximumParticipantBytes);
             }
             return Result<SaveReferenceTarget>::Failure(
@@ -220,8 +223,8 @@ namespace Horo::Runtime {
 
     /** @copydoc ValidateSaveReference */
     Result<void> ValidateSaveReference(const SaveReferenceTarget &target) {
-        const bool valid = std::visit([](const auto &value) {
-            using Value = std::decay_t<decltype(value)>;
+        const bool valid = std::visit([]<typename Target>(const Target &value) {
+            using Value = std::decay_t<Target>;
             if constexpr (std::is_same_v<Value, std::monostate>)
                 return true;
             else if constexpr (std::is_same_v<Value, SaveAssetReference>)
@@ -241,9 +244,8 @@ namespace Horo::Runtime {
     }
 
     /** @copydoc EncodeSaveReference */
-    Result<CanonicalEncodedValue> EncodeSaveReference(const SaveReferenceTarget &target, const CanonicalCodecLimits limits) {
-        auto validation = ValidateSaveReference(target);
-        if (validation.HasError())
+    Result<CanonicalEncodedValue> EncodeSaveReference(const SaveReferenceTarget &target, const CanonicalCodecLimits &limits) {
+        if (auto validation = ValidateSaveReference(target); validation.HasError())
             return Result<CanonicalEncodedValue>::Failure(std::move(validation).ErrorValue());
         CanonicalValueWriter writer{limits};
         auto written = std::visit([&writer](const auto &value) {
@@ -254,7 +256,7 @@ namespace Horo::Runtime {
     }
 
     /** @copydoc DecodeSaveReference */
-    Result<SaveReferenceTarget> DecodeSaveReference(const std::span<const std::byte> bytes, const CanonicalCodecLimits limits) {
+    Result<SaveReferenceTarget> DecodeSaveReference(const std::span<const std::byte> bytes, const CanonicalCodecLimits &limits) {
         auto created = CanonicalValueReader::Create(bytes, limits);
         if (created.HasError())
             return Result<SaveReferenceTarget>::Failure(std::move(created).ErrorValue());
@@ -273,27 +275,28 @@ namespace Horo::Runtime {
 
     /** @copydoc ValidateSaveReferenceResolution */
     Result<void> ValidateSaveReferenceResolution(const SaveReferenceResolution &resolution) {
-        auto original = ValidateSaveReference(resolution.original);
-        if (original.HasError())
+        if (auto original = ValidateSaveReference(resolution.original); original.HasError())
             return original;
         const bool hasContext = !std::holds_alternative<std::monostate>(resolution.original);
+        using enum SaveReferenceDisposition;
         switch (resolution.disposition) {
-            case SaveReferenceDisposition::Resolved:
+            case Resolved:
                 return resolution.replacement ? InvalidResolution() : Result<void>::Success();
-            case SaveReferenceDisposition::Missing:
-            case SaveReferenceDisposition::Deferred:
+            case Missing:
+            case Deferred:
                 return hasContext && !resolution.replacement ? Result<void>::Success() : InvalidResolution();
-            case SaveReferenceDisposition::Remapped:
+            case Remapped:
                 break;
             default:
                 return InvalidResolution();
         }
         if (!hasContext || !resolution.replacement || std::holds_alternative<std::monostate>(*resolution.replacement))
             return InvalidResolution();
-        auto replacement = ValidateSaveReference(*resolution.replacement);
-        if (replacement.HasError() || resolution.original.index() != resolution.replacement->index() ||
-            resolution.original == *resolution.replacement)
+        if (auto replacement = ValidateSaveReference(*resolution.replacement);
+            replacement.HasError() || resolution.original.index() != resolution.replacement->index() ||
+            resolution.original == *resolution.replacement) {
             return InvalidResolution();
+        }
         return Result<void>::Success();
     }
 }  // namespace Horo::Runtime

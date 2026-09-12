@@ -101,11 +101,13 @@ namespace Horo::Runtime {
 
     /** @brief Canonically encodes one flat durable reference. @param target Valid stable target. @param limits Codec bounds.
      * @return Sealed canonical value or typed validation, quota, or allocation failure. */
-    [[nodiscard]] Result<CanonicalEncodedValue> EncodeSaveReference(const SaveReferenceTarget &target, CanonicalCodecLimits limits = {});
+    [[nodiscard]] Result<CanonicalEncodedValue> EncodeSaveReference(const SaveReferenceTarget &target,
+                                                                    const CanonicalCodecLimits &limits = {});
 
     /** @brief Decodes one complete durable reference without resolving it. @param bytes Complete encoded value. @param limits Codec
      * bounds. @return Target or typed corruption, quota, configuration, or allocation failure. */
-    [[nodiscard]] Result<SaveReferenceTarget> DecodeSaveReference(std::span<const std::byte> bytes, CanonicalCodecLimits limits = {});
+    [[nodiscard]] Result<SaveReferenceTarget> DecodeSaveReference(std::span<const std::byte> bytes,
+                                                                  const CanonicalCodecLimits &limits = {});
 
     /** @brief Validates a separate reconciliation result. @param resolution Candidate result. @return Success or typed validation
      * error. */
