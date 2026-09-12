@@ -61,8 +61,9 @@ namespace Horo::WorldStreaming {
             request.minimumSpeedMillimetersPerSecond > request.maximumSpeedMillimetersPerSecond || request.pathHalfExtentMillimeters <= 0 ||
             request.pathHalfExtentMillimeters > StreamingSourceRangeLimits::MaximumExtentMillimeters)
             return Internal::Failure<StreamingPrefetchPolicy>(WorldStreamingErrors::PrefetchInvalid);
-        const std::uint64_t maximumPredictedDistance = (request.maximumSpeedMillimetersPerSecond * request.lookaheadMilliseconds) / 1'000U;
-        if (maximumPredictedDistance + static_cast<std::uint64_t>(request.pathHalfExtentMillimeters) >
+        if (const std::uint64_t maximumPredictedDistance =
+                (request.maximumSpeedMillimetersPerSecond * request.lookaheadMilliseconds) / 1'000U;
+            maximumPredictedDistance + static_cast<std::uint64_t>(request.pathHalfExtentMillimeters) >
             static_cast<std::uint64_t>(StreamingSourceRangeLimits::MaximumExtentMillimeters))
             return Internal::Failure<StreamingPrefetchPolicy>(WorldStreamingErrors::PrefetchInvalid);
         return Result<StreamingPrefetchPolicy>::Success(StreamingPrefetchPolicy{request});
@@ -97,17 +98,16 @@ namespace Horo::WorldStreaming {
             return Internal::Failure<StreamingPrefetchResult>(WorldStreamingErrors::PrefetchLifecycleUnavailable);
         if (!IsSupportedSource(observation.source.intent))
             return Internal::Failure<StreamingPrefetchResult>(WorldStreamingErrors::PrefetchUnsupported);
-        const auto validObservation = ValidateObservation(policy.request_, context, observation);
-        if (validObservation.HasError())
+        if (const auto validObservation = ValidateObservation(policy.request_, context, observation); validObservation.HasError())
             return Result<StreamingPrefetchResult>::Failure(validObservation.ErrorValue());
 
         const auto admission = ValidateStreamingSourceAdmission(observation.source, context.sourceAdmission);
         if (admission.HasError())
             return Result<StreamingPrefetchResult>::Failure(admission.ErrorValue());
 
-        const std::uint64_t minimumSpeedSquared =
-            policy.request_.minimumSpeedMillimetersPerSecond * policy.request_.minimumSpeedMillimetersPerSecond;
-        if (SpeedSquared(observation.velocity) < minimumSpeedSquared)
+        if (const std::uint64_t minimumSpeedSquared =
+                policy.request_.minimumSpeedMillimetersPerSecond * policy.request_.minimumSpeedMillimetersPerSecond;
+            SpeedSquared(observation.velocity) < minimumSpeedSquared)
             return Result<StreamingPrefetchResult>::Success(
                 {observation.source, admission.Value(), StreamingPrefetchDisposition::Inactive, std::nullopt});
 
