@@ -1,0 +1,35 @@
+# Horo Extension SDK @HORO_EXTENSION_SDK_VERSION@
+
+This self-contained package is the public C ABI surface for native Horo
+extensions. It has no compile-time engine or third-party dependencies and does
+not require an engine source checkout.
+
+Point `HoroEngineExtensionSdk_DIR` at
+`lib/cmake/HoroEngineExtensionSdk`, then consume the header-only target:
+
+```cmake
+find_package(HoroEngineExtensionSdk @HORO_EXTENSION_SDK_VERSION@ CONFIG REQUIRED)
+target_link_libraries(my_extension PRIVATE HoroEngine::ExtensionSdk)
+```
+
+Create a portable starter project with:
+
+```text
+python bin/horo-scaffold-extension.py --shape backend --id com.example.tools --name "Example Tools" --output example-tools
+```
+
+Supported shapes are `gui`, `backend`, `script`, and `hybrid`. Generated
+projects contain their manifest, C ABI entry modules, contract tests, and CPack
+ZIP packaging configuration.
+
+The SDK supports `horo-extension` host ABI versions from
+@HORO_EXTENSION_ABI_MAJOR_VERSION@.@HORO_EXTENSION_ABI_MIN_HOST_MINOR@
+(inclusive) to @HORO_EXTENSION_ABI_MAX_HOST_MAJOR_EXCLUSIVE@.0 (exclusive), and
+publishes declarations through ABI
+@HORO_EXTENSION_ABI_MAJOR_VERSION@.@HORO_EXTENSION_ABI_PUBLISHED_MINOR@.
+Extensions declare the exact minimum host minor they require through
+`horo_extension_query`; incompatible hosts reject the module before load.
+
+See `share/horo/extension-sdk/extension-sdk.json` for machine-readable package
+metadata. Manifest schemas, project scaffolding, validation, and distribution
+tools are separate SDK deliverables.
