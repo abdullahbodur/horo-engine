@@ -158,9 +158,9 @@ namespace Horo::Extensions {
             return Result<ExtensionCapabilityUseLease>::Failure(MakeError(ExtensionErrors::CapabilityRevoked));
         if (!state_->active.load(std::memory_order_acquire))
             return Result<ExtensionCapabilityUseLease>::Failure(MakeError(ExtensionErrors::CapabilityRevoked));
-        const ExtensionActivationIdentity &activation = state_->activation;
-        if (extensionId != activation.ExtensionId() || moduleId != activation.ModuleId() ||
-            activationGeneration != activation.Generation()) {
+        if (const ExtensionActivationIdentity &activation = state_->activation; extensionId != activation.ExtensionId() ||
+                                                                                moduleId != activation.ModuleId() ||
+                                                                                activationGeneration != activation.Generation()) {
             return Result<ExtensionCapabilityUseLease>::Failure(
                 MakeError(ExtensionErrors::PermissionDenied, "Capability handle does not belong to the calling activation."));
         }
