@@ -100,9 +100,7 @@ namespace Horo::Packages {
 
         [[nodiscard]] Result<void> MakeReadOnly(const std::filesystem::path &path) {
             std::error_code error;
-            constexpr auto ReadOnly =
-                std::filesystem::perms::owner_read | std::filesystem::perms::group_read | std::filesystem::perms::others_read;
-            std::filesystem::permissions(path, ReadOnly, std::filesystem::perm_options::replace, error);
+            std::filesystem::permissions(path, std::filesystem::perms::owner_read, std::filesystem::perm_options::replace, error);
             return error ? Result<void>::Failure(MakeError(IoFailure, "Package cache could not restrict artifact permissions."))
                          : Result<void>::Success();
         }
@@ -230,6 +228,8 @@ namespace Horo::Packages {
     /** @copydoc PackageCacheStore::Publish */
     Result<PackageCacheEntry> PackageCacheStore::Publish(const ValidatedPackageArchive &archive) {
         const Sha256Digest digest = archive.Digest();
+        if (auto compatible = VerifyExpected(archive.Bytes(), digest, limits_); compatible.HasError())
+            return Result<PackageCacheEntry>::Failure(compatible.ErrorValue());
         auto lock = Acquire(files_, root_, digest);
         if (lock.HasError())
             return Result<PackageCacheEntry>::Failure(lock.ErrorValue());

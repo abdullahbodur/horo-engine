@@ -160,7 +160,10 @@ namespace {
         CHECK_FALSE(first.Value().alreadyPresent);
         CHECK(first.Value().digest == digest);
         const auto permissions = std::filesystem::status(ActivePath(fixture.temporary.Path(), digest)).permissions();
+        CHECK((permissions & std::filesystem::perms::owner_read) != std::filesystem::perms::none);
         CHECK((permissions & std::filesystem::perms::owner_write) == std::filesystem::perms::none);
+        CHECK((permissions & std::filesystem::perms::group_all) == std::filesystem::perms::none);
+        CHECK((permissions & std::filesystem::perms::others_all) == std::filesystem::perms::none);
 
         const auto second = fixture.store.Publish(archive);
         REQUIRE(second.HasValue());
@@ -219,8 +222,13 @@ namespace {
         CHECK(result.Value().expectedDigest == expected);
         CHECK(result.Value().actualDigest == Horo::ComputeSha256(bytes));
         CHECK_FALSE(std::filesystem::exists(ActivePath(fixture.temporary.Path(), expected)));
-        CHECK(std::filesystem::is_regular_file(fixture.temporary.Path() / "quarantine" / "hash-mismatch" / result.Value().quarantineId /
-                                               "artifact.horopkg"));
+        const auto artifact = fixture.temporary.Path() / "quarantine" / "hash-mismatch" / result.Value().quarantineId / "artifact.horopkg";
+        CHECK(std::filesystem::is_regular_file(artifact));
+        const auto permissions = std::filesystem::status(artifact).permissions();
+        CHECK((permissions & std::filesystem::perms::owner_read) != std::filesystem::perms::none);
+        CHECK((permissions & std::filesystem::perms::owner_write) == std::filesystem::perms::none);
+        CHECK((permissions & std::filesystem::perms::group_all) == std::filesystem::perms::none);
+        CHECK((permissions & std::filesystem::perms::others_all) == std::filesystem::perms::none);
     }
 
     TEST_CASE("Package cache returns busy while publication or cleanup owns the digest lock", "[packages][cache][concurrency]") {
@@ -259,6 +267,11 @@ namespace {
         Horo::NativeDurableFileSystem files;
         CHECK(PackageCacheStore::Create(files, std::filesystem::path{"relative/cache"}).HasError());
         auto store = CreateStore(files, temporary.Path(), {.archiveBytes = 1});
+        const auto archive = VerifiedArchive();
+        const auto publish = store.Publish(archive);
+        REQUIRE(publish.HasError());
+        CHECK(publish.ErrorValue().code.Value() == "packages.validation.limit");
+        CHECK_FALSE(std::filesystem::exists(ActivePath(temporary.Path(), archive.Digest())));
         const std::array bytes{std::byte{1}, std::byte{2}};
         const auto result = store.Quarantine(bytes, PackageQuarantineReason::InvalidArchive);
         REQUIRE(result.HasError());
