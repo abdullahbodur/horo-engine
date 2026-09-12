@@ -50,6 +50,33 @@ namespace Horo::AI::AIErrors {
         .retryable = false,
         .userActionable = false,
     };
+    const ErrorCodeDescriptor TaskContextInvalid{
+        .domain = AiDomain,
+        .code = ErrorCode{"ai.task.context_invalid"},
+        .defaultSeverity = ErrorSeverity::Error,
+        .summary = "The AI task context is malformed or crosses runtime generations.",
+        .remediationHint = "Capture valid task and agent handles from the same active SceneRuntime incarnation.",
+        .retryable = false,
+        .userActionable = false,
+    };
+    const ErrorCodeDescriptor TaskTransitionInvalid{
+        .domain = AiDomain,
+        .code = ErrorCode{"ai.task.transition_invalid"},
+        .defaultSeverity = ErrorSeverity::Error,
+        .summary = "The AI task lifecycle operation is invalid for its current state.",
+        .remediationHint = "Start once, publish one terminal result, then claim and complete cleanup in order.",
+        .retryable = false,
+        .userActionable = false,
+    };
+    const ErrorCodeDescriptor TaskFailureInvalid{
+        .domain = AiDomain,
+        .code = ErrorCode{"ai.task.failure_invalid"},
+        .defaultSeverity = ErrorSeverity::Error,
+        .summary = "The AI task failure detail is missing a typed family or cause identity.",
+        .remediationHint = "Provide a known failure family and an owned non-empty typed Error cause.",
+        .retryable = false,
+        .userActionable = false,
+    };
     const ErrorCodeDescriptor BlackboardSchemaInvalid{
         .domain = AiDomain,
         .code = ErrorCode{"ai.blackboard.schema_invalid"},
