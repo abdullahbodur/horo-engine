@@ -63,6 +63,8 @@ workflows.
   adopt generation-fenced listener and connection transitions, deadlines, and exactly-once terminal results.
 - [Transport Budget Migration](./transport-budget-migration.md):
   enforce versioned connection, queue, byte, rate, and sustained-overload limits before backend mutation.
+- [Deterministic Network Transport Migration](./deterministic-network-transport-migration.md):
+  compose explicit network-disabled, loopback, and seeded impairment modes with bounded caller-thread delivery.
 
 ## Writing a Guide
 
