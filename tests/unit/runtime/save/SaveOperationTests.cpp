@@ -39,6 +39,15 @@ namespace {
         CHECK(error->domain.Value() == descriptor.domain.Value());
         CHECK(error->code.Value() == descriptor.code.Value());
     }
+
+    SaveOperationHandle CountCompletions(SaveOperationController &controller, std::atomic<int> &callbacks) {
+        const SaveOperationHandle handle = controller.Handle();
+        REQUIRE(handle
+                    .OnCompletion([&callbacks](const SaveOperationSnapshot &) {
+            ++callbacks;
+        }).HasValue());
+        return handle;
+    }
 }  // namespace
 
 TEST_CASE("Save operation admission uses application operation identities", "[unit][runtime][save][operation]") {
@@ -85,6 +94,7 @@ TEST_CASE("Save operation publishes exact typed progress without regression", "[
     CHECK(progress.progress.Fraction() == 0.4);
 
     CHECK(controller.PublishProgress(SaveOperationStage::CapturingSnapshot, {1, 5}) == SaveOperationTransitionResult::InvalidTransition);
+    CHECK(controller.PublishProgress(SaveOperationStage::CapturingSnapshot, {0, 0}) == SaveOperationTransitionResult::InvalidTransition);
     CHECK(controller.PublishProgress(SaveOperationStage::Serializing, {6, 5}) == SaveOperationTransitionResult::InvalidTransition);
     CHECK(controller.PublishProgress(SaveOperationStage::Serializing, {0, 0}) == SaveOperationTransitionResult::InvalidTransition);
     CHECK(controller.PublishProgress(SaveOperationStage::PreparingRestore, {0, 1}) == SaveOperationTransitionResult::InvalidTransition);
@@ -124,12 +134,19 @@ TEST_CASE("Cancellation before commit wins and publishes one immutable terminal 
 TEST_CASE("Commit gate makes late cancellation too late", "[unit][runtime][save][operation]") {
     auto controller = Operation(SaveOperationKind::Load);
     const auto handle = controller.Handle();
+    std::atomic<int> callbacks{};
+    REQUIRE(handle
+                .OnCompletion([&callbacks](const SaveOperationSnapshot &) {
+        ++callbacks;
+    }).HasValue());
     CHECK(controller.PublishProgress(SaveOperationStage::ReadyToCommit, {1, 1}) == SaveOperationTransitionResult::Applied);
     CHECK(controller.BeginCommit() == SaveCommitGateResult::Entered);
     CHECK(Snapshot(handle).stage == SaveOperationStage::ApplyingState);
     CHECK(handle.RequestCancellation() == SaveCancellationRequestResult::TooLate);
     CHECK(controller.RequestShutdownCancellation() == SaveCancellationRequestResult::TooLate);
+    CHECK(callbacks.load() == 0);
     CHECK(controller.Complete(SaveOperationCommitOutcome::Committed) == SaveOperationTransitionResult::Applied);
+    CHECK(callbacks.load() == 1);
 
     const auto terminal = Snapshot(handle);
     CHECK(terminal.state == SaveOperationState::Completed);
@@ -437,12 +454,8 @@ TEST_CASE("Producer release terminalizes an abandoned operation", "[unit][runtim
 TEST_CASE("Cancellation and completion races produce exactly one terminal callback", "[unit][runtime][save][operation]") {
     for (int iteration = 0; iteration < 64; ++iteration) {
         auto controller = Operation(SaveOperationKind::RefreshCatalog, static_cast<OperationId>(iteration + 1));
-        const auto handle = controller.Handle();
         std::atomic<int> callbacks{};
-        REQUIRE(handle
-                    .OnCompletion([&callbacks](const SaveOperationSnapshot &) {
-            ++callbacks;
-        }).HasValue());
+        const SaveOperationHandle handle = CountCompletions(controller, callbacks);
         std::barrier start{2};
         std::thread cancellation([&] {
             start.arrive_and_wait();
@@ -463,12 +476,8 @@ TEST_CASE("Cancellation and completion races produce exactly one terminal callba
 TEST_CASE("Cancellation and commit gate races have one atomic winner", "[unit][runtime][save][operation]") {
     for (int iteration = 0; iteration < 64; ++iteration) {
         auto controller = Operation(SaveOperationKind::Delete, static_cast<OperationId>(iteration + 200));
-        const auto handle = controller.Handle();
         std::atomic<int> callbacks{};
-        REQUIRE(handle
-                    .OnCompletion([&callbacks](const SaveOperationSnapshot &) {
-            ++callbacks;
-        }).HasValue());
+        const SaveOperationHandle handle = CountCompletions(controller, callbacks);
         REQUIRE(controller.PublishProgress(SaveOperationStage::Deleting, {1, 1}) == SaveOperationTransitionResult::Applied);
         std::barrier start{2};
         SaveCancellationRequestResult cancellation = SaveCancellationRequestResult::InvalidHandle;

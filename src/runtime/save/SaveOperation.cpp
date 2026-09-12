@@ -2,7 +2,6 @@
 
 #include "Horo/Runtime/Save/SaveErrors.h"
 
-#include <algorithm>
 #include <array>
 #include <exception>
 #include <mutex>
@@ -106,9 +105,8 @@ namespace Horo::Runtime {
 
         [[nodiscard]] bool IsReadyForCommit(const SharedState &state) noexcept {
             const StagePolicy &policy = PolicyFor(state.snapshot.kind);
-            return std::tuple{policy.requiresCommit, state.snapshot.stage,
-                              state.snapshot.progress.completedUnits == state.snapshot.progress.totalUnits} ==
-                   std::tuple{true, policy.readyStage, true};
+            return policy.requiresCommit && state.snapshot.stage == policy.readyStage &&
+                   state.snapshot.progress.completedUnits == state.snapshot.progress.totalUnits;
         }
 
         [[nodiscard]] bool IsAllowedProgressStage(const SharedState &state, const SaveOperationStage stage) noexcept {
@@ -122,7 +120,7 @@ namespace Horo::Runtime {
                 return stage == policy.commitStage;
             const std::uint8_t currentRank =
                 state.snapshot.stage == SaveOperationStage::Queued ? 0 : policy.ranks[static_cast<std::uint8_t>(state.snapshot.stage)];
-            return std::pair{stage != policy.commitStage, nextRank >= currentRank} == std::pair{true, true};
+            return stage != policy.commitStage && nextRank >= currentRank;
         }
 
         [[nodiscard]] SaveCancellationReason PendingCancellation(SharedState &state,
@@ -149,8 +147,6 @@ namespace Horo::Runtime {
             state->snapshot.commit = outcome;
             state->snapshot.cancellable = false;
             state->snapshot.terminalError = std::move(error);
-            if (terminalState == SaveOperationState::Completed)
-                state->snapshot.progress = {.completedUnits = 1, .totalUnits = 1};
             ++state->snapshot.revision;
             state->terminalSnapshot.emplace(std::move(state->snapshot));
             return CompletionDispatch{state, std::move(state->completionCallbacks)};
@@ -194,44 +190,39 @@ namespace Horo::Runtime {
         }
 
         [[nodiscard]] bool IsValidProgress(const SaveOperationProgress progress) noexcept {
-            return std::pair{progress.totalUnits != 0, progress.completedUnits <= progress.totalUnits} == std::pair{true, true};
+            return progress.totalUnits != 0 && progress.completedUnits <= progress.totalUnits;
         }
 
-        [[nodiscard]] int CompareFractions(std::uint64_t leftNumerator, std::uint64_t leftDenominator, std::uint64_t rightNumerator,
-                                           std::uint64_t rightDenominator) noexcept {
-            int direction = 1;
-            while (true) {
-                const std::uint64_t leftQuotient = leftNumerator / leftDenominator;
-                const std::uint64_t rightQuotient = rightNumerator / rightDenominator;
-                if (leftQuotient != rightQuotient)
-                    return direction * (leftQuotient < rightQuotient ? -1 : 1);
+        struct WideProduct final {
+            std::uint64_t high{};
+            std::uint64_t low{};
+        };
 
-                const std::uint64_t leftRemainder = leftNumerator % leftDenominator;
-                const std::uint64_t rightRemainder = rightNumerator % rightDenominator;
-                if (leftRemainder == 0 || rightRemainder == 0) {
-                    if (leftRemainder == rightRemainder)
-                        return 0;
-                    return direction * (leftRemainder == 0 ? -1 : 1);
-                }
-                leftNumerator = leftDenominator;
-                leftDenominator = leftRemainder;
-                rightNumerator = rightDenominator;
-                rightDenominator = rightRemainder;
-                direction = -direction;
-            }
+        [[nodiscard]] constexpr WideProduct MultiplyWide(const std::uint64_t left, const std::uint64_t right) noexcept {
+            constexpr std::uint64_t lowerMask = 0xffffffffULL;
+            const std::uint64_t leftLow = left & lowerMask;
+            const std::uint64_t leftHigh = left >> 32U;
+            const std::uint64_t rightLow = right & lowerMask;
+            const std::uint64_t rightHigh = right >> 32U;
+            const std::uint64_t lowProduct = leftLow * rightLow;
+            const std::uint64_t firstCross = leftHigh * rightLow + (lowProduct >> 32U);
+            const std::uint64_t secondCross = leftLow * rightHigh + (firstCross & lowerMask);
+            return {.high = leftHigh * rightHigh + (firstCross >> 32U) + (secondCross >> 32U),
+                    .low = (secondCross << 32U) + (lowProduct & lowerMask)};
         }
 
         [[nodiscard]] bool IsProgressRegression(const SaveOperationSnapshot &snapshot, const SaveOperationStage stage,
                                                 const SaveOperationProgress progress) noexcept {
             if (snapshot.stage != stage)
                 return false;
-            return CompareFractions(progress.completedUnits, progress.totalUnits, snapshot.progress.completedUnits,
-                                    snapshot.progress.totalUnits) < 0;
+            const WideProduct next = MultiplyWide(progress.completedUnits, snapshot.progress.totalUnits);
+            const WideProduct current = MultiplyWide(snapshot.progress.completedUnits, progress.totalUnits);
+            return std::tie(next.high, next.low) < std::tie(current.high, current.low);
         }
 
         [[nodiscard]] bool IsValidProgressTransition(const SharedState &state, const TransitionRequest &request) noexcept {
-            return std::array{IsAllowedProgressStage(state, request.stage), IsValidProgress(request.progress),
-                              !IsProgressRegression(state.snapshot, request.stage, request.progress)} == std::array{true, true, true};
+            return IsAllowedProgressStage(state, request.stage) && IsValidProgress(request.progress) &&
+                   !IsProgressRegression(state.snapshot, request.stage, request.progress);
         }
 
         [[nodiscard]] SaveOperationTransitionResult PublishProgressLocked(const std::shared_ptr<SharedState> &state,
@@ -248,26 +239,22 @@ namespace Horo::Runtime {
         [[nodiscard]] SaveOperationTransitionResult CompleteLocked(const std::shared_ptr<SharedState> &state,
                                                                    const TransitionRequest &request,
                                                                    CompletionDispatch &dispatch) noexcept {
-            constexpr std::array validCompletions{
-                std::tuple{true, true, SaveOperationCommitOutcome::Committed},
-                std::tuple{false, false, SaveOperationCommitOutcome::NotCommitted},
-            };
-            const auto transition = std::tuple{RequiresCommit(state->snapshot.kind), state->commitStarted, request.outcome};
-            if (std::ranges::find(validCompletions, transition) == validCompletions.end())
+            const bool validMutation =
+                RequiresCommit(state->snapshot.kind) && state->commitStarted && request.outcome == SaveOperationCommitOutcome::Committed;
+            const bool validQuery = !RequiresCommit(state->snapshot.kind) && !state->commitStarted &&
+                                    request.outcome == SaveOperationCommitOutcome::NotCommitted;
+            if (!validMutation && !validQuery)
                 return SaveOperationTransitionResult::InvalidTransition;
+            state->snapshot.progress = {.completedUnits = 1, .totalUnits = 1};
             dispatch = TerminalizeLocked(state, SaveOperationState::Completed, request.outcome);
             return SaveOperationTransitionResult::Applied;
         }
 
         [[nodiscard]] SaveOperationTransitionResult FailLocked(const std::shared_ptr<SharedState> &state, TransitionRequest &request,
                                                                CompletionDispatch &dispatch) noexcept {
-            constexpr std::array validFailures{
-                std::pair{false, SaveOperationCommitOutcome::NotCommitted},
-                std::pair{true, SaveOperationCommitOutcome::NotCommitted},
-                std::pair{true, SaveOperationCommitOutcome::Unknown},
-            };
-            const auto transition = std::pair{state->commitStarted, request.outcome};
-            if (std::ranges::find(validFailures, transition) == validFailures.end())
+            const bool validOutcome = request.outcome == SaveOperationCommitOutcome::NotCommitted ||
+                                      (state->commitStarted && request.outcome == SaveOperationCommitOutcome::Unknown);
+            if (!validOutcome)
                 return SaveOperationTransitionResult::InvalidTransition;
             dispatch = TerminalizeLocked(state, SaveOperationState::Failed, request.outcome, std::move(request.error));
             return SaveOperationTransitionResult::Applied;
@@ -328,8 +315,7 @@ namespace Horo::Runtime {
 
     /** @copydoc SaveOperationSnapshot::IsTerminal */
     bool SaveOperationSnapshot::IsTerminal() const noexcept {
-        constexpr std::array terminalStates{SaveOperationState::Completed, SaveOperationState::Failed, SaveOperationState::Cancelled};
-        return std::ranges::find(terminalStates, state) != terminalStates.end();
+        return state == SaveOperationState::Completed || state == SaveOperationState::Failed || state == SaveOperationState::Cancelled;
     }
 
     SaveOperationHandle::SaveOperationHandle(std::shared_ptr<SaveOperationDetail::SharedState> state) noexcept : state_(std::move(state)) {}
@@ -503,10 +489,9 @@ namespace Horo::Runtime {
 
     /** @copydoc CreateSaveOperation */
     Result<SaveOperationController> CreateSaveOperation(SaveOperationDescriptor descriptor) {
-        const std::array invalidDescriptor{descriptor.operation == 0, descriptor.maximumCompletionCallbacks == 0,
-                                           descriptor.maximumCompletionCallbacks > MaximumSaveOperationCompletionCallbacks,
-                                           !IsKnown(descriptor.kind, SaveOperationKind::Delete)};
-        if (std::ranges::find(invalidDescriptor, true) != invalidDescriptor.end())
+        if (descriptor.operation == 0 || descriptor.maximumCompletionCallbacks == 0 ||
+            descriptor.maximumCompletionCallbacks > MaximumSaveOperationCompletionCallbacks ||
+            !IsKnown(descriptor.kind, SaveOperationKind::Delete))
             return Result<SaveOperationController>::Failure(MakeError(SaveErrors::OperationInvalid));
         try {
             auto state = std::make_shared<SaveOperationDetail::SharedState>();
