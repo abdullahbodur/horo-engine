@@ -19,6 +19,8 @@ namespace Horo::WorldStreaming {
         struct WorldLayerRevisionTag;
         struct WorldLayerControlOwnerIdTag;
         struct WorldLayerControlOwnerGenerationTag;
+        struct WorldLayerControlHandoffIdTag;
+        struct WorldLayerControlHandoffGenerationTag;
     }  // namespace Detail
 
     /** @brief Monotonic revision of one stable world-layer publication. */
@@ -29,6 +31,12 @@ namespace Horo::WorldStreaming {
     /** @brief Generation fence for one non-streaming layer-control authority lifetime. */
     using WorldLayerControlOwnerGeneration =
         Foundation::Detail::NonZeroId64<Detail::WorldLayerControlOwnerGenerationTag, WorldStreamingErrors::IdentityInvalid>;
+    /** @brief Stable identity of one explicit layer-control handoff authorization. */
+    using WorldLayerControlHandoffId =
+        Foundation::Detail::NonZeroId64<Detail::WorldLayerControlHandoffIdTag, WorldStreamingErrors::IdentityInvalid>;
+    /** @brief Generation fence preventing replay of a superseded handoff authorization. */
+    using WorldLayerControlHandoffGeneration =
+        Foundation::Detail::NonZeroId64<Detail::WorldLayerControlHandoffGenerationTag, WorldStreamingErrors::IdentityInvalid>;
 
     /** @brief Whether layer content is addressed through partition cells. */
     enum class WorldLayerPlacement : std::uint8_t {
@@ -69,6 +77,19 @@ namespace Horo::WorldStreaming {
         [[nodiscard]] constexpr auto operator<=>(const WorldLayerControlOwner &) const noexcept = default;
     };
 
+    /** @brief Exact current-owner authorization for one target authority lifetime and ownership revision. */
+    struct WorldLayerControlHandoffReceipt final {
+        WorldLayerControlHandoffId id{};                 /**< Stable authorization identity. */
+        WorldLayerControlHandoffGeneration generation{}; /**< Exact non-replayable authorization generation. */
+        WorldLayerControlOwner currentOwner{};           /**< Exact authority granting the handoff. */
+        WorldLayerControlOwner targetOwner{};            /**< Exact target authority lifetime being admitted. */
+        WorldLayerRevision expectedRevision{};           /**< Exact ownership publication authorized to hand off. */
+
+        /** @brief Checks receipt identity and exact source/target owner coherence. @return True when structurally usable. */
+        [[nodiscard]] bool IsValid() const noexcept;
+        [[nodiscard]] constexpr auto operator<=>(const WorldLayerControlHandoffReceipt &) const noexcept = default;
+    };
+
     /** @brief Immutable classification and control-ownership fact for one stable layer identity. */
     struct WorldLayerOwnershipDescriptor final {
         StreamingLayerId layer{};              /**< Stable world.index layer identity. */
@@ -92,16 +113,19 @@ namespace Horo::WorldStreaming {
 
     /** @brief Immutable insert, replacement, or runtime-control handoff request. */
     struct WorldLayerOwnershipRequest final {
-        WorldLayerOwnershipDescriptor candidate{};            /**< Complete proposed ownership fact. */
-        std::optional<WorldLayerRevision> expectedRevision{}; /**< Required current revision for replacement. */
+        WorldLayerOwnershipDescriptor candidate{};                /**< Complete proposed ownership fact. */
+        std::optional<WorldLayerRevision> expectedRevision{};     /**< Required current revision for replacement. */
+        std::optional<WorldLayerControlHandoffReceipt> handoff{}; /**< Exact authorization presented for an owner change. */
     };
 
     /** @brief Immutable bounded owner snapshot consumed by pure admission validation. */
     struct WorldLayerOwnershipAdmissionContext final {
-        StreamingRuntimeOwnerToken expectedWorld{};             /**< Exact active mounted-world authority. */
-        std::optional<WorldLayerOwnershipDescriptor> current{}; /**< Current fact for the candidate identity, if any. */
-        std::size_t layerCount{};                               /**< Distinct layer facts currently charged. */
-        std::size_t layerCapacity{};                            /**< Maximum admitted layer facts. */
+        StreamingRuntimeOwnerToken expectedWorld{};                         /**< Exact active mounted-world authority. */
+        std::optional<WorldLayerOwnershipDescriptor> current{};             /**< Current fact for the candidate identity, if any. */
+        std::optional<WorldLayerControlHandoffReceipt> authorizedHandoff{}; /**< Current authorization, if handoff is allowed. */
+        std::optional<WorldLayerControlOwner> validatedHandoffTarget{};     /**< Fresh target lifetime proven by the composition owner. */
+        std::size_t layerCount{};                                           /**< Distinct layer facts currently charged. */
+        std::size_t layerCapacity{};                                        /**< Maximum admitted layer facts. */
         WorldLayerOwnershipAuthorityState state{WorldLayerOwnershipAuthorityState::Closed}; /**< Current lifecycle gate. */
     };
 
@@ -121,8 +145,8 @@ namespace Horo::WorldStreaming {
 
     /**
      * @brief Validates bounded insertion, replacement, or runtime-control handoff without mutation.
-     * @param request Complete candidate and optional compare-and-swap revision.
-     * @param context Exact world lifetime, current fact, capacity, and lifecycle snapshot.
+     * @param request Complete candidate, optional compare-and-swap revision, and exact handoff receipt when ownership changes.
+     * @param context Exact world lifetime, current fact, current handoff authorization/target evidence, capacity, and lifecycle snapshot.
      * @return Authorized mutation kind or a typed invalid, stale, conflict, capacity, or lifecycle error.
      * @post Failure does not modify the supplied immutable context.
      */

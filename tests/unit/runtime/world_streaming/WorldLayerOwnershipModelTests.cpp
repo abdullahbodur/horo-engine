@@ -42,6 +42,30 @@ namespace Horo::WorldStreaming {
                     .state = WorldLayerOwnershipAuthorityState::Active};
         }
 
+        WorldLayerOwnershipAdmissionContext RuntimeControlledContext(const std::uint64_t ownerGeneration = 3,
+                                                                     const std::uint64_t revision = 4) {
+            auto context = Context();
+            context.current =
+                Descriptor(WorldLayerPlacement::NonSpatial, WorldLayerResidencyPolicy::RuntimeControlled, WorldLayerAudience::Runtime,
+                           ExplicitOwner(WorldLayerControlOwnerKind::GameplayScript, 9, ownerGeneration), revision);
+            return context;
+        }
+
+        WorldLayerControlHandoffReceipt AuthorizeHandoff(WorldLayerOwnershipAdmissionContext &context, const WorldLayerControlOwner &target,
+                                                         const std::uint64_t authorizationGeneration = 1) {
+            REQUIRE(context.current.has_value());
+            const WorldLayerControlHandoffReceipt receipt{
+                .id = IdentityFrom<WorldLayerControlHandoffId>(21),
+                .generation = IdentityFrom<WorldLayerControlHandoffGeneration>(authorizationGeneration),
+                .currentOwner = context.current->owner,
+                .targetOwner = target,
+                .expectedRevision = context.current->revision,
+            };
+            context.authorizedHandoff = receipt;
+            context.validatedHandoffTarget = target;
+            return receipt;
+        }
+
         TEST_CASE("Layer classification keeps placement residency audience and owner orthogonal",
                   "[unit][world_streaming][layer_ownership]") {
             const auto persistent = Descriptor(WorldLayerPlacement::Spatial, WorldLayerResidencyPolicy::Persistent,
@@ -99,9 +123,7 @@ namespace Horo::WorldStreaming {
 
         TEST_CASE("Layer replacement and runtime-control handoff are exact revision fenced",
                   "[unit][world_streaming][layer_ownership][replacement]") {
-            auto context = Context();
-            context.current = Descriptor(WorldLayerPlacement::NonSpatial, WorldLayerResidencyPolicy::RuntimeControlled,
-                                         WorldLayerAudience::Runtime, ExplicitOwner(WorldLayerControlOwnerKind::GameplayScript), 4);
+            auto context = RuntimeControlledContext(1);
 
             auto replacement = *context.current;
             replacement.revision = IdentityFrom<WorldLayerRevision>(5);
@@ -110,15 +132,73 @@ namespace Horo::WorldStreaming {
 
             auto handoff = replacement;
             handoff.owner = ExplicitOwner(WorldLayerControlOwnerKind::NetworkReplication, 12, 3);
-            REQUIRE(ValidateWorldLayerOwnershipAdmission({handoff, IdentityFrom<WorldLayerRevision>(4)}, context).Value() ==
+            const auto authorization = AuthorizeHandoff(context, handoff.owner);
+            REQUIRE(ValidateWorldLayerOwnershipAdmission({handoff, IdentityFrom<WorldLayerRevision>(4), authorization}, context).Value() ==
                     WorldLayerOwnershipAdmissionKind::Handoff);
 
             auto stale = handoff;
             stale.revision = IdentityFrom<WorldLayerRevision>(6);
-            RequireError(ValidateWorldLayerOwnershipAdmission({stale, IdentityFrom<WorldLayerRevision>(4)}, context),
+            RequireError(ValidateWorldLayerOwnershipAdmission({stale, IdentityFrom<WorldLayerRevision>(4), authorization}, context),
                          WorldStreamingErrors::LayerOwnershipRevisionStale);
-            RequireError(ValidateWorldLayerOwnershipAdmission({handoff, IdentityFrom<WorldLayerRevision>(3)}, context),
+            RequireError(ValidateWorldLayerOwnershipAdmission({handoff, IdentityFrom<WorldLayerRevision>(3), authorization}, context),
                          WorldStreamingErrors::LayerOwnershipRevisionStale);
+        }
+
+        TEST_CASE("Runtime-control handoff requires exact current-owner authorization",
+                  "[unit][world_streaming][layer_ownership][handoff]") {
+            auto context = RuntimeControlledContext();
+
+            auto crossRole = *context.current;
+            crossRole.revision = IdentityFrom<WorldLayerRevision>(5);
+            crossRole.owner = ExplicitOwner(WorldLayerControlOwnerKind::NetworkReplication, 12, 1);
+            RequireError(ValidateWorldLayerOwnershipAdmission({crossRole, context.current->revision}, context),
+                         WorldStreamingErrors::LayerOwnershipOwnerStale);
+            auto wrongCurrentAuthorization = AuthorizeHandoff(context, crossRole.owner);
+            wrongCurrentAuthorization.currentOwner = ExplicitOwner(WorldLayerControlOwnerKind::GameplayScript, 8, 3);
+            RequireError(ValidateWorldLayerOwnershipAdmission({crossRole, context.current->revision, wrongCurrentAuthorization}, context),
+                         WorldStreamingErrors::LayerOwnershipOwnerStale);
+
+            auto crossOwner = crossRole;
+            crossOwner.owner = ExplicitOwner(WorldLayerControlOwnerKind::GameplayScript, 10, 1);
+            const auto crossOwnerAuthorization = AuthorizeHandoff(context, crossOwner.owner);
+            REQUIRE(
+                ValidateWorldLayerOwnershipAdmission({crossOwner, context.current->revision, crossOwnerAuthorization}, context).Value() ==
+                WorldLayerOwnershipAdmissionKind::Handoff);
+        }
+
+        TEST_CASE("Same-owner lifetime handoff advances generation and rejects rewind",
+                  "[unit][world_streaming][layer_ownership][handoff][generation]") {
+            auto context = RuntimeControlledContext();
+
+            auto successor = *context.current;
+            successor.revision = IdentityFrom<WorldLayerRevision>(5);
+            successor.owner = ExplicitOwner(WorldLayerControlOwnerKind::GameplayScript, 9, 4);
+            auto authorization = AuthorizeHandoff(context, successor.owner);
+            REQUIRE(ValidateWorldLayerOwnershipAdmission({successor, context.current->revision, authorization}, context).Value() ==
+                    WorldLayerOwnershipAdmissionKind::Handoff);
+
+            successor.owner = ExplicitOwner(WorldLayerControlOwnerKind::GameplayScript, 9, 2);
+            authorization = AuthorizeHandoff(context, successor.owner, 2);
+            RequireError(ValidateWorldLayerOwnershipAdmission({successor, context.current->revision, authorization}, context),
+                         WorldStreamingErrors::LayerOwnershipOwnerStale);
+        }
+
+        TEST_CASE("Handoff rejects stale authorization and expired target lifetime",
+                  "[unit][world_streaming][layer_ownership][handoff][stale]") {
+            auto context = RuntimeControlledContext();
+            auto candidate = *context.current;
+            candidate.revision = IdentityFrom<WorldLayerRevision>(5);
+            candidate.owner = ExplicitOwner(WorldLayerControlOwnerKind::NetworkReplication, 12, 1);
+
+            const auto authorization = AuthorizeHandoff(context, candidate.owner, 2);
+            auto staleAuthorization = authorization;
+            staleAuthorization.generation = IdentityFrom<WorldLayerControlHandoffGeneration>(1);
+            RequireError(ValidateWorldLayerOwnershipAdmission({candidate, context.current->revision, staleAuthorization}, context),
+                         WorldStreamingErrors::LayerOwnershipOwnerStale);
+
+            context.validatedHandoffTarget = ExplicitOwner(WorldLayerControlOwnerKind::NetworkReplication, 12, 2);
+            RequireError(ValidateWorldLayerOwnershipAdmission({candidate, context.current->revision, authorization}, context),
+                         WorldStreamingErrors::LayerOwnershipOwnerStale);
         }
 
         TEST_CASE("Stable layer identity and classification cannot change during replacement",
@@ -167,6 +247,13 @@ namespace Horo::WorldStreaming {
             context = Context();
             context.layerCount = context.layerCapacity + 1;
             RequireError(ValidateWorldLayerOwnershipAdmission({candidate, std::nullopt}, context),
+                         WorldStreamingErrors::LayerOwnershipInvalid);
+            context = Context();
+            context.current = candidate;
+            context.layerCount = 0;
+            auto replacement = candidate;
+            replacement.revision = IdentityFrom<WorldLayerRevision>(2);
+            RequireError(ValidateWorldLayerOwnershipAdmission({replacement, candidate.revision}, context),
                          WorldStreamingErrors::LayerOwnershipInvalid);
             context = Context();
             context.state = static_cast<WorldLayerOwnershipAuthorityState>(255);

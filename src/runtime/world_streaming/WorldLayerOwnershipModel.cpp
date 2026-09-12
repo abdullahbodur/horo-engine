@@ -81,18 +81,35 @@ namespace Horo::WorldStreaming {
                 context.layerCount > context.layerCapacity) {
                 return Failure<void>(WorldStreamingErrors::LayerOwnershipInvalid);
             }
-            if (!context.current.has_value())
+            if (!context.current.has_value()) {
+                if (context.authorizedHandoff.has_value() || context.validatedHandoffTarget.has_value())
+                    return Failure<void>(WorldStreamingErrors::LayerOwnershipInvalid);
                 return Result<void>::Success();
+            }
+            if (context.layerCount == 0)
+                return Failure<void>(WorldStreamingErrors::LayerOwnershipInvalid);
             if (const auto valid = ValidateWorldLayerOwnershipDescriptor(*context.current); valid.HasError())
                 return valid;
             if (context.current->owner.world != context.expectedWorld)
                 return Failure<void>(WorldStreamingErrors::LayerOwnershipOwnerStale);
+            if (context.authorizedHandoff.has_value() != context.validatedHandoffTarget.has_value())
+                return Failure<void>(WorldStreamingErrors::LayerOwnershipInvalid);
+            if (!context.authorizedHandoff.has_value())
+                return Result<void>::Success();
+            if (!context.authorizedHandoff->IsValid() || !context.validatedHandoffTarget->IsValid())
+                return Failure<void>(WorldStreamingErrors::LayerOwnershipInvalid);
+            if (context.authorizedHandoff->currentOwner != context.current->owner ||
+                context.authorizedHandoff->expectedRevision != context.current->revision ||
+                context.authorizedHandoff->targetOwner != *context.validatedHandoffTarget ||
+                context.validatedHandoffTarget->world != context.expectedWorld) {
+                return Failure<void>(WorldStreamingErrors::LayerOwnershipOwnerStale);
+            }
             return Result<void>::Success();
         }
 
         [[nodiscard]] Result<WorldLayerOwnershipAdmissionKind> ValidateInsert(const WorldLayerOwnershipRequest &request,
                                                                               const WorldLayerOwnershipAdmissionContext &context) {
-            if (request.expectedRevision.has_value())
+            if (request.expectedRevision.has_value() || request.handoff.has_value())
                 return Failure<WorldLayerOwnershipAdmissionKind>(WorldStreamingErrors::LayerOwnershipRevisionStale);
             if (context.layerCount == context.layerCapacity)
                 return Failure<WorldLayerOwnershipAdmissionKind>(WorldStreamingErrors::LayerOwnershipCapacityExceeded);
@@ -104,7 +121,35 @@ namespace Horo::WorldStreaming {
             return left.placement == right.placement && left.residency == right.residency && left.audience == right.audience;
         }
 
+        /** @brief Identify two lifetimes of the same typed non-streaming authority. */
+        [[nodiscard]] bool SameOwnerLineage(const WorldLayerControlOwner &left, const WorldLayerControlOwner &right) noexcept {
+            return left.kind == right.kind && left.authority == right.authority;
+        }
+
+        /** @brief Validate exact source authorization and independently fresh target-lifetime evidence. */
+        [[nodiscard]] Result<void> ValidateHandoff(const WorldLayerOwnershipRequest &request,
+                                                   const WorldLayerOwnershipAdmissionContext &context,
+                                                   const WorldLayerOwnershipDescriptor &current) {
+            if (!request.handoff.has_value() || !context.authorizedHandoff.has_value() || !context.validatedHandoffTarget.has_value()) {
+                return Failure<void>(WorldStreamingErrors::LayerOwnershipOwnerStale);
+            }
+            const auto &receipt = *request.handoff;
+            if (!receipt.IsValid())
+                return Failure<void>(WorldStreamingErrors::LayerOwnershipInvalid);
+            if (receipt != *context.authorizedHandoff || receipt.currentOwner != current.owner ||
+                receipt.targetOwner != request.candidate.owner || receipt.expectedRevision != current.revision ||
+                receipt.targetOwner != *context.validatedHandoffTarget) {
+                return Failure<void>(WorldStreamingErrors::LayerOwnershipOwnerStale);
+            }
+            if (SameOwnerLineage(current.owner, request.candidate.owner) &&
+                request.candidate.owner.generation <= current.owner.generation) {
+                return Failure<void>(WorldStreamingErrors::LayerOwnershipOwnerStale);
+            }
+            return Result<void>::Success();
+        }
+
         [[nodiscard]] Result<WorldLayerOwnershipAdmissionKind> ValidateReplacement(const WorldLayerOwnershipRequest &request,
+                                                                                   const WorldLayerOwnershipAdmissionContext &context,
                                                                                    const WorldLayerOwnershipDescriptor &current) {
             if (request.candidate.layer != current.layer)
                 return Failure<WorldLayerOwnershipAdmissionKind>(WorldStreamingErrors::LayerOwnershipIdentityConflict);
@@ -121,6 +166,12 @@ namespace Horo::WorldStreaming {
             const bool ownerChanged = current.owner != request.candidate.owner;
             if (ownerChanged && current.residency != WorldLayerResidencyPolicy::RuntimeControlled)
                 return Failure<WorldLayerOwnershipAdmissionKind>(WorldStreamingErrors::LayerOwnershipUnsupported);
+            if (!ownerChanged && request.handoff.has_value())
+                return Failure<WorldLayerOwnershipAdmissionKind>(WorldStreamingErrors::LayerOwnershipInvalid);
+            if (ownerChanged) {
+                if (const auto handoff = ValidateHandoff(request, context, current); handoff.HasError())
+                    return Result<WorldLayerOwnershipAdmissionKind>::Failure(handoff.ErrorValue());
+            }
             return Result<WorldLayerOwnershipAdmissionKind>::Success(ownerChanged ? WorldLayerOwnershipAdmissionKind::Handoff
                                                                                   : WorldLayerOwnershipAdmissionKind::Replace);
         }
@@ -133,6 +184,12 @@ namespace Horo::WorldStreaming {
         if (kind == WorldLayerControlOwnerKind::WorldStreaming)
             return !authority.IsValid() && !generation.IsValid();
         return authority.IsValid() && generation.IsValid();
+    }
+
+    /** @copydoc WorldLayerControlHandoffReceipt::IsValid */
+    bool WorldLayerControlHandoffReceipt::IsValid() const noexcept {
+        return id.IsValid() && generation.IsValid() && currentOwner.IsValid() && targetOwner.IsValid() && expectedRevision.IsValid() &&
+               currentOwner.world == targetOwner.world && currentOwner != targetOwner;
     }
 
     /** @copydoc WorldLayerOwnershipDescriptor::IsValid */
@@ -161,6 +218,8 @@ namespace Horo::WorldStreaming {
             return Result<WorldLayerOwnershipAdmissionKind>::Failure(valid.ErrorValue());
         if (request.expectedRevision.has_value() && !request.expectedRevision->IsValid())
             return Failure<WorldLayerOwnershipAdmissionKind>(WorldStreamingErrors::LayerOwnershipInvalid);
+        if (request.handoff.has_value() && !request.handoff->IsValid())
+            return Failure<WorldLayerOwnershipAdmissionKind>(WorldStreamingErrors::LayerOwnershipInvalid);
         if (const auto valid = ValidateContext(context); valid.HasError())
             return Result<WorldLayerOwnershipAdmissionKind>::Failure(valid.ErrorValue());
         if (request.candidate.owner.world != context.expectedWorld)
@@ -169,7 +228,7 @@ namespace Horo::WorldStreaming {
             return Failure<WorldLayerOwnershipAdmissionKind>(WorldStreamingErrors::LayerOwnershipLifecycleUnavailable);
         if (!context.current.has_value())
             return ValidateInsert(request, context);
-        return ValidateReplacement(request, *context.current);
+        return ValidateReplacement(request, context, *context.current);
     }
 
     /** @copydoc NextWorldLayerRevision */

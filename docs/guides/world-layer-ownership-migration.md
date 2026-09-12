@@ -26,6 +26,11 @@ control.
    Publish only the returned `Insert`, `Replace` or `Handoff` decision.
 6. Use the exact current revision and non-wrapping successor for replacement. Treat
    every typed failure as a no-mutation result.
+7. For a runtime-control owner change, obtain a current handoff receipt from the
+   composition owner. Present its exact source owner, target owner lifetime,
+   authorization identity/generation and ownership revision against the matching
+   validated target-lifetime snapshot. Do not reuse a receipt after either authority
+   lifetime changes, and never rewind a same-owner generation.
 
 ## Troubleshooting
 
@@ -34,7 +39,8 @@ control.
 - `world_streaming.layer_ownership.unsupported` means classification and control
   authority contradict one another or immutable classification changed.
 - `world_streaming.layer_ownership.owner_stale` means the fact belongs to another
-  mounted-world lifetime.
+  mounted-world lifetime, the handoff authorization is stale, the validated target
+  lifetime expired or a same-owner generation was rewound.
 - `world_streaming.layer_ownership.revision_stale` means compare-and-swap evidence or
   the successor revision is incorrect.
 
@@ -47,8 +53,9 @@ residency. WST-006.2 owns layer state and WST-006.3 owns target filtering.
 
 The focused world-streaming coverage exercises each placement/residency/audience
 class, exclusive owner representation, insertion, replacement, runtime-control
-handoff, stale identity and world fences, capacity, cancellation, shutdown,
-unsupported combinations and revision exhaustion.
+handoff across roles and identities, generation advance/rewind, authorization replay,
+target expiry, stale identity and world fences, bounded-context consistency, capacity,
+cancellation, shutdown, unsupported combinations and revision exhaustion.
 
 ## References
 

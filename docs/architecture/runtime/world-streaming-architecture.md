@@ -876,12 +876,18 @@ neither authority may mutate cell residency or bypass the World Streaming ledger
 Admission is pure and bounded. Insert requires available capacity, while replacement
 requires the exact current revision and its non-wrapping successor. Placement,
 residency, audience and stable layer identity cannot change during replacement.
-Only a runtime-controlled layer may change its explicit control owner, and that
-decision is reported as a handoff. Invalid, contradictory, stale-world, stale-revision,
-identity-conflicting, over-capacity, cancelling and closed requests fail without
-partial publication. The contract owns no editor document, cell state, gameplay
-script, network session or service pointer and performs no registration or lifecycle
-callback.
+Only a runtime-controlled layer may change its explicit control owner. Such a change
+requires a `WorldLayerControlHandoffReceipt` that binds the exact current owner,
+ownership revision, target owner lifetime, authorization identity and authorization
+generation. Admission compares that receipt with the authority snapshot's current
+authorization and separately validated target lifetime. Same-lineage owner generations
+must advance; replay, rewind, expired targets and unauthorized cross-role or cross-owner
+changes fail closed. A successful change is reported as a handoff. A context containing
+a current record must charge at least one layer. Invalid, contradictory, stale-world,
+stale-owner, stale-revision, identity-conflicting, over-capacity, cancelling and closed
+requests fail without partial publication. The contract owns no editor document, cell
+state, gameplay script, network session or service pointer and performs no registration
+or lifecycle callback.
 
 ### Persistent, non-spatial and dynamic ownership policy
 
