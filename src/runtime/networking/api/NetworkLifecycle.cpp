@@ -142,8 +142,7 @@ namespace Horo::Network {
 
         template <typename Snapshot, typename Slots, typename Handle, typename Project>
         [[nodiscard]] Result<Snapshot> ProjectSnapshot(const Slots &slots, const Handle handle, Project &&project) {
-            const std::size_t index = handle.Slot();
-            if (index < slots.size()) {
+            if (const std::size_t index = handle.Slot(); index < slots.size()) {
                 const auto &slot = slots[index];
                 if (slot.has_value() && slot->handle == handle)
                     return Result<Snapshot>::Success(project(*slot));
@@ -166,18 +165,17 @@ namespace Horo::Network {
     /** @copydoc NetworkLifecycleTerminal::Create */
     Result<NetworkLifecycleTerminal> NetworkLifecycleTerminal::Create(const NetworkLifecycleTerminalKind kind,
                                                                       std::optional<NetworkTerminalRecord> failure) {
-        if (kind >= NetworkLifecycleTerminalKind::Count)
+        using enum NetworkLifecycleTerminalKind;
+        if (kind >= Count)
             return Fail<NetworkLifecycleTerminal>(NetworkErrors::NetworkLifecycleInvalid);
-        if ((kind == NetworkLifecycleTerminalKind::Closed) == failure.has_value())
+        if ((kind == Closed) == failure.has_value())
             return Fail<NetworkLifecycleTerminal>(NetworkErrors::NetworkLifecycleInvalid);
         if (failure.has_value()) {
+            using enum NetworkFailureKind;
             const NetworkFailureKind observed = failure->Kind();
-            if ((kind == NetworkLifecycleTerminalKind::Cancelled && observed != NetworkFailureKind::SessionCancelled) ||
-                (kind == NetworkLifecycleTerminalKind::TimedOut && observed != NetworkFailureKind::SessionTimedOut) ||
-                (kind == NetworkLifecycleTerminalKind::Shutdown && observed != NetworkFailureKind::SessionShutdown) ||
-                (kind == NetworkLifecycleTerminalKind::Failed &&
-                 (observed == NetworkFailureKind::SessionCancelled || observed == NetworkFailureKind::SessionTimedOut ||
-                  observed == NetworkFailureKind::SessionShutdown)))
+            if ((kind == Cancelled && observed != SessionCancelled) || (kind == TimedOut && observed != SessionTimedOut) ||
+                (kind == Shutdown && observed != SessionShutdown) ||
+                (kind == Failed && (observed == SessionCancelled || observed == SessionTimedOut || observed == SessionShutdown)))
                 return Fail<NetworkLifecycleTerminal>(NetworkErrors::NetworkLifecycleInvalid);
         }
         return Result<NetworkLifecycleTerminal>::Success(NetworkLifecycleTerminal{kind, std::move(failure)});
@@ -212,7 +210,7 @@ namespace Horo::Network {
         if (!handle.IsValid() || !operation.IsValid())
             return Fail<void>(NetworkErrors::NetworkLifecycleInvalid);
 
-        return AdmitPreparedSlot(listeners_, handle, [=] {
+        return AdmitPreparedSlot(listeners_, handle, [handle, operation] {
             return ListenerEntry{handle, operation, NetworkListenerState::Binding, {}};
         });
     }
@@ -252,7 +250,7 @@ namespace Horo::Network {
 
     /** @copydoc NetworkLifecycleRegistry::CancelListener */
     Result<void> NetworkLifecycleRegistry::CancelListener(const ListenerHandle handle, const NetworkOperationGeneration operation) {
-        return PublishCancellation([&](NetworkLifecycleTerminal terminal) {
+        return PublishCancellation([this, handle, operation](NetworkLifecycleTerminal terminal) {
             return CompleteListener(handle, operation, std::move(terminal));
         });
     }
@@ -266,7 +264,7 @@ namespace Horo::Network {
             return Fail<void>(NetworkErrors::NetworkLifecycleInvalid);
         const NetworkConnectionState initial = requiresResolution ? NetworkConnectionState::Resolving : NetworkConnectionState::Created;
 
-        return AdmitPreparedSlot(connections_, handle, [=] {
+        return AdmitPreparedSlot(connections_, handle, [handle, operation, initial, deadlineTick] {
             return ConnectionEntry{handle, operation, initial, deadlineTick, {}};
         });
     }
@@ -279,13 +277,13 @@ namespace Horo::Network {
             return Fail<void>(NetworkErrors::NetworkLifecycleOperationStale);
         if (entry->terminal.has_value())
             return Fail<void>(NetworkErrors::NetworkLifecycleTransitionInvalid);
-        const bool legal = ((entry->state == NetworkConnectionState::Created || entry->state == NetworkConnectionState::Resolving) &&
-                            next == NetworkConnectionState::Connecting) ||
-                           (entry->state == NetworkConnectionState::Connecting && next == NetworkConnectionState::AuthenticationReady);
-        if (!legal)
+        using enum NetworkConnectionState;
+        if (const bool legal = ((entry->state == Created || entry->state == Resolving) && next == Connecting) ||
+                               (entry->state == Connecting && next == AuthenticationReady);
+            !legal)
             return Fail<void>(NetworkErrors::NetworkLifecycleTransitionInvalid);
         entry->state = next;
-        if (next == NetworkConnectionState::AuthenticationReady)
+        if (next == AuthenticationReady)
             entry->deadlineTick = 0;
         return Result<void>::Success();
     }
@@ -318,7 +316,7 @@ namespace Horo::Network {
 
     /** @copydoc NetworkLifecycleRegistry::CancelConnection */
     Result<void> NetworkLifecycleRegistry::CancelConnection(const ConnectionHandle handle, const NetworkOperationGeneration operation) {
-        return PublishCancellation([&](NetworkLifecycleTerminal terminal) {
+        return PublishCancellation([this, handle, operation](NetworkLifecycleTerminal terminal) {
             return CompleteConnection(handle, operation, std::move(terminal));
         });
     }
