@@ -200,6 +200,7 @@ target_compile_features(HoroNetworkTransportNullTests PRIVATE cxx_std_20)
 target_link_libraries(HoroNetworkTransportNullTests PRIVATE HoroEngine::NetworkTransportNull)
 horo_register_catch_test(HoroNetworkTransportNullTests LABELS "unit;network;headless")
 add_executable(HoroNetworkRuntimeTests
+        unit/runtime/networking/HandshakeNegotiationTests.cpp
         unit/runtime/networking/NetworkObjectMappingTests.cpp
 )
 target_compile_features(HoroNetworkRuntimeTests PRIVATE cxx_std_20)
@@ -469,6 +470,7 @@ add_executable(HoroWorldStreamingTests
         unit/runtime/world_streaming/StreamingSourceRangeTests.cpp
         unit/runtime/world_streaming/WorldCellQuantizationTests.cpp
         unit/runtime/world_streaming/WorldPartitionDescriptorTests.cpp
+        unit/runtime/world_streaming/WorldLayerOwnershipModelTests.cpp
         unit/runtime/world_streaming/WorldObjectOwnershipTests.cpp
         unit/runtime/world_streaming/WorldPartitionCapabilityProfileTests.cpp
         unit/runtime/world_streaming/WorldPartitionRegistryTests.cpp
