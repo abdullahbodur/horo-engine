@@ -80,11 +80,12 @@ namespace Horo::WorldStreaming {
                 return Failure<void>(WorldStreamingErrors::LayerOwnershipOwnerStale);
             if (!context.handoff.has_value())
                 return Result<void>::Success();
-            if (!context.handoff->IsValid())
+            if (!context.handoff->authorization.IsValid() || !context.handoff->validatedTarget.IsValid())
                 return Failure<void>(WorldStreamingErrors::LayerOwnershipInvalid);
             if (!All(std::array{context.handoff->authorization.currentOwner == context.current->owner,
                                 context.handoff->authorization.layer == context.current->layer,
                                 context.handoff->authorization.expectedRevision == context.current->revision,
+                                context.handoff->authorization.targetOwner == context.handoff->validatedTarget,
                                 context.handoff->validatedTarget.world == context.expectedWorld})) {
                 return Failure<void>(WorldStreamingErrors::LayerOwnershipOwnerStale);
             }
