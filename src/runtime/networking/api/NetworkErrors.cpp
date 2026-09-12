@@ -268,6 +268,78 @@ namespace Horo::Network::NetworkErrors {
         .retryable = false,
         .userActionable = false,
     };
+    const ErrorCodeDescriptor NetworkIoServiceInvalid{
+        .domain = NetworkDomain,
+        .code = ErrorCode{"network.io.service_invalid"},
+        .defaultSeverity = ErrorSeverity::Error,
+        .summary = "The network I/O service or one of its work bounds is invalid.",
+        .remediationHint = "Inject one backend and use positive finite queue, poll, and owner-drain limits.",
+        .retryable = false,
+        .userActionable = true,
+    };
+    const ErrorCodeDescriptor NetworkIoServiceCapacityExceeded{
+        .domain = NetworkDomain,
+        .code = ErrorCode{"network.io.service_capacity_exceeded"},
+        .defaultSeverity = ErrorSeverity::Error,
+        .summary = "The network I/O service could not reserve its declared finite storage.",
+        .remediationHint = "Reduce the prepared completion capacity or release host memory before composing the service.",
+        .retryable = true,
+        .userActionable = false,
+    };
+    const ErrorCodeDescriptor NetworkIoCompletionInvalid{
+        .domain = NetworkDomain,
+        .code = ErrorCode{"network.io.completion_invalid"},
+        .defaultSeverity = ErrorSeverity::Error,
+        .summary = "A network I/O completion violates its typed handoff contract.",
+        .remediationHint = "Publish a valid connection generation and the exact payload or terminal evidence required by its kind.",
+        .retryable = false,
+        .userActionable = false,
+    };
+    const ErrorCodeDescriptor NetworkIoCompletionQueueFull{
+        .domain = NetworkDomain,
+        .code = ErrorCode{"network.io.completion_queue_full"},
+        .defaultSeverity = ErrorSeverity::Error,
+        .summary = "The bounded network I/O completion handoff rejected publication.",
+        .remediationHint = "Drain at the owner-thread safe point or apply explicit transport overload policy.",
+        .retryable = true,
+        .userActionable = false,
+    };
+    const ErrorCodeDescriptor NetworkIoPollBusy{
+        .domain = NetworkDomain,
+        .code = ErrorCode{"network.io.poll_busy"},
+        .defaultSeverity = ErrorSeverity::Error,
+        .summary = "The network I/O service already has an active backend poll.",
+        .remediationHint = "Use exactly one transport-owned polling thread for each host-scoped service.",
+        .retryable = true,
+        .userActionable = false,
+    };
+    const ErrorCodeDescriptor NetworkIoPollStale{
+        .domain = NetworkDomain,
+        .code = ErrorCode{"network.io.poll_stale"},
+        .defaultSeverity = ErrorSeverity::Error,
+        .summary = "A completion producer outlived the bounded backend poll that issued it.",
+        .remediationHint = "Publish normalized completions synchronously during the current Poll call only.",
+        .retryable = false,
+        .userActionable = false,
+    };
+    const ErrorCodeDescriptor NetworkIoWrongThread{
+        .domain = NetworkDomain,
+        .code = ErrorCode{"network.io.wrong_thread"},
+        .defaultSeverity = ErrorSeverity::Error,
+        .summary = "Network I/O completions were drained from the wrong owner thread.",
+        .remediationHint = "Drain only during the declared owner-thread network poll phase.",
+        .retryable = false,
+        .userActionable = false,
+    };
+    const ErrorCodeDescriptor NetworkIoSequenceExhausted{
+        .domain = NetworkDomain,
+        .code = ErrorCode{"network.io.sequence_exhausted"},
+        .defaultSeverity = ErrorSeverity::Error,
+        .summary = "The network I/O service sequence cannot advance without wrapping.",
+        .remediationHint = "Retire this host-scoped service and compose a fresh generation.",
+        .retryable = false,
+        .userActionable = false,
+    };
     const ErrorCodeDescriptor ProtocolIdentityDescriptorInvalid{
         .domain = NetworkDomain,
         .code = ErrorCode{"network.protocol.identity_descriptor_invalid"},
