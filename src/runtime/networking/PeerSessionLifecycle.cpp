@@ -91,12 +91,11 @@ namespace Horo::Network {
 
     Result<NetworkTerminalRecord> PeerSessionLifecycle::SessionFailure(const NetworkFailureKind kind) const {
         using enum NetworkFailureKind;
-        using enum NetworkFailureLayer;
-        NetworkFailureLayer layer = Session;
+        NetworkFailureLayer layer = NetworkFailureLayer::Session;
         if (kind == ProtocolMalformed || kind == ProtocolIncompatible)
-            layer = Protocol;
+            layer = NetworkFailureLayer::Protocol;
         else if (kind == NameResolutionFailed || kind == TransportUnavailable || kind == TransportSaturated)
-            layer = Transport;
+            layer = NetworkFailureLayer::Transport;
         return MakeNetworkTerminalRecord(layer, kind);
     }
 
