@@ -74,7 +74,7 @@ namespace Horo::Gameplay {
     }
 
     /** @copydoc LoadedGameModule::PrepareReload */
-    Result<GameModuleReloadSnapshot> LoadedGameModule::PrepareReload() {
+    Result<GameModuleReloadSnapshot> LoadedGameModule::PrepareReload() {  // NOSONAR(cpp:S5817) Mutates generation lifecycle.
         impl_->runtimeLeaseAdmission.store(false, std::memory_order_release);
         if (impl_.use_count() != 1)
             return Result<GameModuleReloadSnapshot>::Failure(
@@ -83,7 +83,8 @@ namespace Horo::Gameplay {
     }
 
     /** @copydoc LoadedGameModule::RestoreReload */
-    Result<void> LoadedGameModule::RestoreReload(const GameModuleReloadSnapshot &snapshot) {
+    Result<void> LoadedGameModule::RestoreReload(  // NOSONAR(cpp:S5817) Mutates generation lifecycle.
+        const GameModuleReloadSnapshot &snapshot) {
         return impl_->RestoreReload(snapshot);
     }
 

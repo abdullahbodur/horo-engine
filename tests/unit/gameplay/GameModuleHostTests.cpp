@@ -1,4 +1,5 @@
 #include "GameplayModuleTestSupport.h"
+#include "GameplayRuntimeTestSupport.h"
 #include "Horo/Gameplay/BehaviorRuntime.h"
 #include "Horo/Gameplay/ComponentRegistry.h"
 #include "Horo/Gameplay/GameModuleHost.h"
@@ -76,13 +77,32 @@ namespace {
     };
 
     RuntimeSceneDefinition Definition() {
-        RuntimeComponentSet components;
-        components.behaviors.push_back({BehaviorInstanceId{1}, BehaviorTypeId::Parse("game.tests.dynamic_mover").Value(), 1, true, {}});
-        SceneDefinitionBuilder builder{SceneDefinitionId{3}, SceneDefinitionRevision{1}};
-        builder.Add({SceneObjectId{1}, std::nullopt, {}, std::nullopt, std::move(components)});
-        auto built = std::move(builder).Build();
-        REQUIRE(built.HasValue());
-        return std::move(built).Value();
+        return Tests::SingleBehaviorSceneDefinition(SceneDefinitionId{3}, SceneDefinitionRevision{1}, SceneObjectId{1},
+                                                    BehaviorInstanceId{1}, BehaviorTypeId::Parse("game.tests.dynamic_mover").Value());
+    }
+
+    template <typename Value> void RequireRestartRequired(const Result<Value> &result) {
+        REQUIRE(result.HasError());
+        CHECK(result.ErrorValue().code.Value() == GameplayErrors::GameplayReloadRestartRequired.code.Value());
+    }
+
+    template <typename CreateRuntime, typename ExerciseRuntime>
+    void CheckGenerationLease(CreateRuntime createRuntime, ExerciseRuntime exerciseRuntime) {
+        GameModuleHost host;
+        auto loadedResult = host.Load(HORO_TEST_GAME_MODULE_PATH, Expectation());
+        REQUIRE(loadedResult.HasValue());
+        std::unique_ptr<LoadedGameModule> loaded = std::move(loadedResult).Value();
+        auto created = createRuntime(*loaded);
+        REQUIRE(created.HasValue());
+        auto runtime = std::move(created).Value();
+
+        RequireRestartRequired(loaded->PrepareReload());
+        const auto rejected = createRuntime(*loaded);
+        RequireRestartRequired(rejected);
+
+        loaded.reset();
+        CHECK(exerciseRuntime(*runtime).HasValue());
+        runtime->Shutdown();
     }
 }  // namespace
 
@@ -119,19 +139,11 @@ TEST_CASE("game module host validates fingerprint and keeps factories alive thro
         systems.Value()->Shutdown();
     }
 
-    auto scene = RuntimeScene::Create(Definition(), SceneRuntimeId{7});
-    REQUIRE(scene.HasValue());
     {
-        auto runtime = BehaviorRuntime::Create(*scene.Value(), loaded.Value()->Registry());
-        REQUIRE(runtime.HasValue());
+        Tests::ActiveBehaviorRuntime active = Tests::ActivateBehaviorRuntime(Definition(), SceneRuntimeId{7}, loaded.Value()->Registry());
         const GameplayInputAction move{GameplayActionId{"game.tests.move"}, 3.0F, 0.0F, true, true, false};
-        REQUIRE(runtime.Value()->FixedUpdate({&move, 1}, FixedDeltaTime{1.0 / 60.0}).HasValue());
-        const auto entity = scene.Value()->View().Find(SceneObjectId{1});
-        REQUIRE(entity.has_value());
-        const auto view = scene.Value()->View().Get(*entity);
-        REQUIRE(view.HasValue());
-        REQUIRE(view.Value().localTransform->translation.x == 3.0F);
-        runtime.Value()->Shutdown();
+        REQUIRE(Tests::FixedUpdateAndReadPosition(*active.scene, *active.runtime, SceneObjectId{1}, {&move, 1}).x == 3.0F);
+        active.runtime->Shutdown();
     }
 
     std::unique_ptr<LoadedGameModule> active = std::move(loaded).Value();
@@ -158,41 +170,23 @@ TEST_CASE("default game module reload contract requires a restart") {
 }
 
 TEST_CASE("game module generation remains pinned by external behavior and system runtimes") {
-    GameModuleHost host;
-    auto loadedResult = host.Load(HORO_TEST_GAME_MODULE_PATH, Expectation());
-    REQUIRE(loadedResult.HasValue());
-    std::unique_ptr<LoadedGameModule> loaded = std::move(loadedResult).Value();
-
     SECTION("behavior runtime") {
-        auto scene = RuntimeScene::Create(Definition(), SceneRuntimeId{18});
-        REQUIRE(scene.HasValue());
-        auto runtime = BehaviorRuntime::Create(*scene.Value(), loaded->Registry());
-        REQUIRE(runtime.HasValue());
-        const auto blocked = loaded->PrepareReload();
-        REQUIRE(blocked.HasError());
-        CHECK(blocked.ErrorValue().code.Value() == GameplayErrors::GameplayReloadRestartRequired.code.Value());
-        const auto rejected = BehaviorRuntime::Create(*scene.Value(), loaded->Registry());
-        REQUIRE(rejected.HasError());
-        CHECK(rejected.ErrorValue().code.Value() == GameplayErrors::GameplayReloadRestartRequired.code.Value());
-        loaded.reset();
-        CHECK(runtime.Value()->FixedUpdate({}, FixedDeltaTime{1.0 / 60.0}).HasValue());
-        runtime.Value()->Shutdown();
+        auto createdScene = RuntimeScene::Create(Definition(), SceneRuntimeId{18});
+        REQUIRE(createdScene.HasValue());
+        std::unique_ptr<RuntimeScene> scene = std::move(createdScene).Value();
+        CheckGenerationLease([&scene](LoadedGameModule &loaded) {
+            return BehaviorRuntime::Create(*scene, loaded.Registry());
+        }, [](BehaviorRuntime &runtime) {
+            return runtime.FixedUpdate({}, FixedDeltaTime{1.0 / 60.0});
+        });
     }
 
     SECTION("system runtime") {
-        auto runtime =
-            GameplaySystemRuntime::Create(loaded->Systems(), loaded->ActiveServices(), loaded->Capabilities(), loaded->Cancellation());
-        REQUIRE(runtime.HasValue());
-        const auto blocked = loaded->PrepareReload();
-        REQUIRE(blocked.HasError());
-        CHECK(blocked.ErrorValue().code.Value() == GameplayErrors::GameplayReloadRestartRequired.code.Value());
-        const auto rejected =
-            GameplaySystemRuntime::Create(loaded->Systems(), loaded->ActiveServices(), loaded->Capabilities(), loaded->Cancellation());
-        REQUIRE(rejected.HasError());
-        CHECK(rejected.ErrorValue().code.Value() == GameplayErrors::GameplayReloadRestartRequired.code.Value());
-        loaded.reset();
-        CHECK(runtime.Value()->Execute(GameplaySystemPhase::Gameplay, GameplayThreadAffinity::RuntimeOwner, 1.0 / 60.0).HasValue());
-        runtime.Value()->Shutdown();
+        CheckGenerationLease([](LoadedGameModule &loaded) {
+            return GameplaySystemRuntime::Create(loaded.Systems(), loaded.ActiveServices(), loaded.Capabilities(), loaded.Cancellation());
+        }, [](GameplaySystemRuntime &runtime) {
+            return runtime.Execute(GameplaySystemPhase::Gameplay, GameplayThreadAffinity::RuntimeOwner, 1.0 / 60.0);
+        });
     }
 }
 

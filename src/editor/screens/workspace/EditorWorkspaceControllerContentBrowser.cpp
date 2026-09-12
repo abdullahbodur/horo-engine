@@ -785,7 +785,7 @@ namespace Horo::Editor {
     }
 
     Result<EditorWorkspaceController::NativeGameplayReloadTransaction> EditorWorkspaceController::BeginNativeGameplayReload(
-        const std::filesystem::path &projectRoot) {
+        const std::filesystem::path &projectRoot) const {
         auto preserved =
             m_gameplayRegistry->PreserveNativeArtifactForRollback(projectRoot / ".horo" / "local" / "gameplay_module_rollback");
         if (preserved.HasError())
@@ -839,7 +839,7 @@ namespace Horo::Editor {
     }
 
     void EditorWorkspaceController::RollbackNativeGameplayReload(const std::filesystem::path &projectRoot,
-                                                                 NativeGameplayReloadTransaction transaction, Error candidateError) {
+                                                                 NativeGameplayReloadTransaction transaction, const Error &candidateError) {
         std::unique_ptr<ProjectGameplayRegistry> rollback =
             ProjectGameplayRegistry::DiscoverRollback(projectRoot, transaction.rollbackArtifact, transaction.luaGeneration);
         Error rollbackError = NativeGenerationError(*rollback, "The previous native gameplay generation could not be loaded.");

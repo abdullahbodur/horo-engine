@@ -1,4 +1,5 @@
 #include "GameplayModuleTestSupport.h"
+#include "GameplayRuntimeTestSupport.h"
 #include "Horo/Gameplay/BehaviorRuntime.h"
 #include "Horo/Gameplay/GameplayErrors.h"
 #include "editor/gameplay/ProjectGameplayRegistry.h"
@@ -8,6 +9,7 @@
 #include <filesystem>
 #include <fstream>
 #include <memory>
+#include <string_view>
 
 namespace {
     using namespace Horo;
@@ -43,30 +45,23 @@ namespace {
                std::to_string(amount) + ",y,z) end }";
     }
 
-    Runtime::RuntimeSceneDefinition WatchedDefinition() {
-        Runtime::RuntimeComponentSet components;
-        components.behaviors.push_back(
-            {Gameplay::BehaviorInstanceId{1}, Gameplay::BehaviorTypeId::Parse("game.tests.watched").Value(), 1, true, {}});
-        Runtime::SceneDefinitionBuilder builder{Runtime::SceneDefinitionId{1}, Runtime::SceneDefinitionRevision{1}};
-        builder.Add({Runtime::SceneObjectId{1}, std::nullopt, {}, std::nullopt, std::move(components)});
-        return std::move(builder).Build().Value();
-    }
-
-    Runtime::RuntimeSceneDefinition NativeDefinition() {
-        Runtime::RuntimeComponentSet components;
-        components.behaviors.push_back(
-            {Gameplay::BehaviorInstanceId{1}, Gameplay::BehaviorTypeId::Parse("game.tests.dynamic_mover").Value(), 1, true, {}});
-        Runtime::SceneDefinitionBuilder builder{Runtime::SceneDefinitionId{2}, Runtime::SceneDefinitionRevision{1}};
-        builder.Add({Runtime::SceneObjectId{1}, std::nullopt, {}, std::nullopt, std::move(components)});
-        return std::move(builder).Build().Value();
+    Runtime::RuntimeSceneDefinition Definition(const Runtime::SceneDefinitionId id, const std::string_view behaviorType) {
+        return Tests::SingleBehaviorSceneDefinition(id, Runtime::SceneDefinitionRevision{1}, Runtime::SceneObjectId{1},
+                                                    Gameplay::BehaviorInstanceId{1}, Gameplay::BehaviorTypeId::Parse(behaviorType).Value());
     }
 
     void WriteNativeManifest(const TemporaryProject &project) {
-        const std::string manifest = "{\n  \"schemaVersion\": 1,\n  \"moduleId\": \"game.tests\",\n  \"buildFingerprint\": \"" +
-                                     std::string{Gameplay::CurrentGameplayBuildFingerprint()} + "\",\n  \"descriptorRevision\": " +
-                                     std::to_string(Tests::ReadDescriptorRevision(HORO_TEST_GAME_MODULE_REVISION_PATH)) +
-                                     ",\n  \"artifactPath\": \"" + std::filesystem::path{HORO_TEST_GAME_MODULE_PATH}.string() + "\"\n}\n";
-        Write(project.root / ".horo" / "local" / "gameplay_module.json", manifest);
+        Tests::WriteGameplayModuleManifest(project.root, HORO_TEST_GAME_MODULE_PATH, "game.tests",
+                                           Gameplay::CurrentGameplayBuildFingerprint(),
+                                           Tests::ReadDescriptorRevision(HORO_TEST_GAME_MODULE_REVISION_PATH));
+    }
+
+    std::filesystem::path PrepareNativeLuaProject(const TemporaryProject &project) {
+        const std::filesystem::path source = project.root / "assets" / "scripts" / "Watched.horo_script";
+        Write(source, Source(1));
+        Write(source.string() + ".meta", R"({"schemaVersion":1,"runtime":"lua","behaviorTypeId":"game.tests.watched"})");
+        WriteNativeManifest(project);
+        return source;
     }
 }  // namespace
 
@@ -78,11 +73,9 @@ TEST_CASE("project gameplay registry discovers and safely reloads compatible Lua
 
     auto registry = Editor::ProjectGameplayRegistry::Discover(project.root);
     REQUIRE_FALSE(registry->HasBlockingDiagnostics());
-    auto scene = Runtime::RuntimeScene::Create(WatchedDefinition(), Runtime::SceneRuntimeId{1});
-    REQUIRE(scene.HasValue());
-    auto runtime = Gameplay::BehaviorRuntime::Create(*scene.Value(), registry->Registry());
-    REQUIRE(runtime.HasValue());
-    REQUIRE(runtime.Value()->FixedUpdate({}, Gameplay::FixedDeltaTime{1.0 / 60.0}).HasValue());
+    Tests::ActiveBehaviorRuntime active = Tests::ActivateBehaviorRuntime(Definition(Runtime::SceneDefinitionId{1}, "game.tests.watched"),
+                                                                         Runtime::SceneRuntimeId{1}, registry->Registry());
+    REQUIRE(Tests::FixedUpdateAndReadPosition(*active.scene, *active.runtime, Runtime::SceneObjectId{1}).x == 1.0F);
 
     Write(source, Source(3));
     std::error_code timeError;
@@ -91,19 +84,12 @@ TEST_CASE("project gameplay registry discovers and safely reloads compatible Lua
     std::filesystem::last_write_time(source, newer, timeError);
     REQUIRE_FALSE(timeError);
     REQUIRE(registry->ReloadChangedLuaSources().empty());
-    REQUIRE(runtime.Value()->FixedUpdate({}, Gameplay::FixedDeltaTime{1.0 / 60.0}).HasValue());
-
-    const auto entity = scene.Value()->View().Find(Runtime::SceneObjectId{1});
-    REQUIRE(entity.has_value());
-    REQUIRE(scene.Value()->View().Get(*entity).Value().localTransform->translation.x == 4.0F);
+    REQUIRE(Tests::FixedUpdateAndReadPosition(*active.scene, *active.runtime, Runtime::SceneObjectId{1}).x == 4.0F);
 }
 
 TEST_CASE("project gameplay registry merges a fingerprinted native module with Lua behaviors") {
     TemporaryProject project;
-    const std::filesystem::path source = project.root / "assets" / "scripts" / "Watched.horo_script";
-    Write(source, Source(1));
-    Write(source.string() + ".meta", R"({"schemaVersion":1,"runtime":"lua","behaviorTypeId":"game.tests.watched"})");
-    WriteNativeManifest(project);
+    PrepareNativeLuaProject(project);
 
     auto registry = Editor::ProjectGameplayRegistry::Discover(project.root);
     REQUIRE_FALSE(registry->HasBlockingDiagnostics());
@@ -118,18 +104,16 @@ TEST_CASE("project gameplay registry merges a fingerprinted native module with L
     REQUIRE(registry->ConsumeNativeArtifactChange());
     REQUIRE_FALSE(registry->ConsumeNativeArtifactChange());
 
-    auto scene = Runtime::RuntimeScene::Create(NativeDefinition(), Runtime::SceneRuntimeId{2});
-    REQUIRE(scene.HasValue());
-    auto created = Gameplay::BehaviorRuntime::Create(*scene.Value(), registry->Registry());
-    REQUIRE(created.HasValue());
-    std::unique_ptr<Gameplay::BehaviorRuntime> runtime = std::move(created).Value();
+    Tests::ActiveBehaviorRuntime active =
+        Tests::ActivateBehaviorRuntime(Definition(Runtime::SceneDefinitionId{2}, "game.tests.dynamic_mover"), Runtime::SceneRuntimeId{2},
+                                       registry->Registry());
     const auto blocked = registry->PrepareNativeReload();
     REQUIRE(blocked.HasError());
     CHECK(blocked.ErrorValue().code.Value() == Gameplay::GameplayErrors::GameplayReloadRestartRequired.code.Value());
-    const auto rejected = Gameplay::BehaviorRuntime::Create(*scene.Value(), registry->Registry());
+    const auto rejected = Gameplay::BehaviorRuntime::Create(*active.scene, registry->Registry());
     REQUIRE(rejected.HasError());
     CHECK(rejected.ErrorValue().code.Value() == Gameplay::GameplayErrors::GameplayReloadRestartRequired.code.Value());
-    runtime.reset();
+    active.runtime.reset();
     CHECK(registry->PrepareNativeReload().HasValue());
 }
 
@@ -143,10 +127,7 @@ TEST_CASE("project gameplay registry reports native sources without a published 
 
 TEST_CASE("project gameplay registry preserves and restores an unloaded native generation") {
     TemporaryProject project;
-    const std::filesystem::path source = project.root / "assets" / "scripts" / "Watched.horo_script";
-    Write(source, Source(1));
-    Write(source.string() + ".meta", R"({"schemaVersion":1,"runtime":"lua","behaviorTypeId":"game.tests.watched"})");
-    WriteNativeManifest(project);
+    const std::filesystem::path source = PrepareNativeLuaProject(project);
 
     auto registry = Editor::ProjectGameplayRegistry::Discover(project.root);
     REQUIRE_FALSE(registry->HasBlockingDiagnostics());
@@ -164,14 +145,9 @@ TEST_CASE("project gameplay registry preserves and restores an unloaded native g
     REQUIRE_FALSE(rollback->HasBlockingDiagnostics());
     REQUIRE(rollback->HasNativeModule());
     REQUIRE(rollback->RestoreNativeReload(snapshot.Value()).HasValue());
-    auto scene = Runtime::RuntimeScene::Create(WatchedDefinition(), Runtime::SceneRuntimeId{19});
-    REQUIRE(scene.HasValue());
-    auto runtime = Gameplay::BehaviorRuntime::Create(*scene.Value(), rollback->Registry());
-    REQUIRE(runtime.HasValue());
-    REQUIRE(runtime.Value()->FixedUpdate({}, Gameplay::FixedDeltaTime{1.0 / 60.0}).HasValue());
-    const auto entity = scene.Value()->View().Find(Runtime::SceneObjectId{1});
-    REQUIRE(entity.has_value());
-    CHECK(scene.Value()->View().Get(*entity).Value().localTransform->translation.x == 1.0F);
+    Tests::ActiveBehaviorRuntime active = Tests::ActivateBehaviorRuntime(Definition(Runtime::SceneDefinitionId{1}, "game.tests.watched"),
+                                                                         Runtime::SceneRuntimeId{19}, rollback->Registry());
+    CHECK(Tests::FixedUpdateAndReadPosition(*active.scene, *active.runtime, Runtime::SceneObjectId{1}).x == 1.0F);
 }
 
 TEST_CASE("native gameplay rollback artifact cleanup ownership follows moves") {
@@ -186,7 +162,8 @@ TEST_CASE("native gameplay rollback artifact cleanup ownership follows moves") {
         REQUIRE(preserved.HasValue());
         artifactPath = preserved.Value().path;
         Editor::NativeGameplayRollbackArtifact firstOwner = std::move(preserved).Value();
-        Editor::NativeGameplayRollbackArtifact finalOwner = std::move(firstOwner);
+        Editor::NativeGameplayRollbackArtifact finalOwner;
+        finalOwner = std::move(firstOwner);
         CHECK(std::filesystem::is_regular_file(artifactPath));
     }
     CHECK_FALSE(std::filesystem::exists(artifactPath));

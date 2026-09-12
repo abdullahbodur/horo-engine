@@ -503,6 +503,7 @@ add_dependencies(HoroGameModuleHostTests HoroTestGameModule)
 add_executable(HoroLuaBehaviorTests
         unit/gameplay/LuaBehaviorTests.cpp
 )
+target_include_directories(HoroLuaBehaviorTests PRIVATE "${PROJECT_SOURCE_DIR}/tests/helpers")
 target_compile_features(HoroLuaBehaviorTests PRIVATE cxx_std_20)
 target_link_libraries(HoroLuaBehaviorTests PRIVATE HoroEngine::GameplayLua)
 add_executable(HoroEditorPlaySessionControllerTests
@@ -785,8 +786,14 @@ if (HORO_BUILD_EDITOR_GUI)
             unit/editor/EditorWorkspaceControllerTests.cpp
     )
 
+    target_include_directories(HoroEditorWorkspaceControllerTests PRIVATE "${PROJECT_SOURCE_DIR}/tests/helpers")
     target_compile_features(HoroEditorWorkspaceControllerTests PRIVATE cxx_std_20)
+    target_compile_definitions(HoroEditorWorkspaceControllerTests PRIVATE
+            HORO_TEST_GAME_MODULE_PATH="$<TARGET_FILE:HoroTestGameModule>"
+            HORO_TEST_GAME_MODULE_REVISION_PATH="${HORO_TEST_GAME_MODULE_REVISION_FILE}"
+    )
     target_link_libraries(HoroEditorWorkspaceControllerTests PRIVATE HoroEngine::Gui nlohmann_json::nlohmann_json)
+    add_dependencies(HoroEditorWorkspaceControllerTests HoroTestGameModule)
 endif ()
 
 add_executable(HoroGameplayBehaviorFilenameModalStateTests

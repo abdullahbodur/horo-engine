@@ -159,14 +159,14 @@ namespace Horo::Gameplay {
                 instance.created = true;
                 try {
                     instance.implementation->OnCreate(context);
-                } catch (...) {
+                } catch (...) {  // NOSONAR(cpp:S2738) Native project callbacks may throw arbitrary exception types.
                     return Result<void>::Failure(MakeError(GameplayErrors::GameplayFactoryFailed, "Behavior OnCreate threw an exception."));
                 }
                 if (instance.component.enabled) {
                     instance.enabledCallbackActive = true;
                     try {
                         instance.implementation->OnEnable(context);
-                    } catch (...) {
+                    } catch (...) {  // NOSONAR(cpp:S2738) Native project callbacks may throw arbitrary exception types.
                         return Result<void>::Failure(
                             MakeError(GameplayErrors::GameplayFactoryFailed, "Behavior OnEnable threw an exception."));
                     }
@@ -303,13 +303,13 @@ namespace Horo::Gameplay {
             found->enabledCallbackActive = true;
             try {
                 found->implementation->OnEnable(context);
-            } catch (...) {
+            } catch (...) {  // NOSONAR(cpp:S2738) Native project callbacks may throw arbitrary exception types.
                 return Result<void>::Failure(MakeError(GameplayErrors::GameplayFactoryFailed, "Behavior OnEnable threw an exception."));
             }
         } else {
             try {
                 found->implementation->OnDisable(context);
-            } catch (...) {
+            } catch (...) {  // NOSONAR(cpp:S2738) Native project callbacks may throw arbitrary exception types.
                 return Result<void>::Failure(MakeError(GameplayErrors::GameplayFactoryFailed, "Behavior OnDisable threw an exception."));
             }
             found->enabledCallbackActive = false;
@@ -329,7 +329,7 @@ namespace Horo::Gameplay {
             Result<std::vector<std::byte>> captured = Result<std::vector<std::byte>>::Success({});
             try {
                 captured = instance.implementation->CaptureReloadState();
-            } catch (...) {
+            } catch (...) {  // NOSONAR(cpp:S2738) Native project callbacks may throw arbitrary exception types.
                 return Result<BehaviorRuntimeReloadSnapshot>::Failure(
                     MakeError(GameplayErrors::GameplayReloadSnapshotInvalid, "Behavior reload capture threw an exception."));
             }
@@ -339,7 +339,7 @@ namespace Horo::Gameplay {
             if (payload.size() > MaximumBehaviorReloadStateBytes || totalBytes > MaximumBehaviorReloadSnapshotBytes - payload.size())
                 return Result<BehaviorRuntimeReloadSnapshot>::Failure(MakeError(GameplayErrors::GameplayReloadSnapshotInvalid));
             totalBytes += payload.size();
-            snapshot.instances.push_back({instance.component.instanceId, instance.component.typeId, std::move(payload), instance.started});
+            snapshot.instances.emplace_back(instance.component.instanceId, instance.component.typeId, std::move(payload), instance.started);
         }
         return Result<BehaviorRuntimeReloadSnapshot>::Success(std::move(snapshot));
     }
@@ -365,7 +365,7 @@ namespace Horo::Gameplay {
             try {
                 if (Result<void> restored = instance.implementation->RestoreReloadState(found->second->payload); restored.HasError())
                     return restored;
-            } catch (...) {
+            } catch (...) {  // NOSONAR(cpp:S2738) Native project callbacks may throw arbitrary exception types.
                 return Result<void>::Failure(
                     MakeError(GameplayErrors::GameplayReloadRestoreFailed, "Behavior reload restore threw an exception."));
             }

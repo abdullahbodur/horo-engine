@@ -323,13 +323,13 @@ namespace Horo::Editor {
         void RefreshAvailableBehaviorProjection();
         void ApplyPendingGameplayRegistry();
         void ApplyNativeGameplayReload();
-        [[nodiscard]] Result<NativeGameplayReloadTransaction> BeginNativeGameplayReload(const std::filesystem::path &projectRoot);
+        [[nodiscard]] Result<NativeGameplayReloadTransaction> BeginNativeGameplayReload(const std::filesystem::path &projectRoot) const;
         [[nodiscard]] Result<void> RetireNativeGameplayGeneration(NativeGameplayReloadTransaction &transaction);
         [[nodiscard]] Result<std::unique_ptr<ProjectGameplayRegistry>> TryActivateNativeGameplayGeneration(
             const std::filesystem::path &projectRoot, NativeGameplayReloadTransaction &transaction);
         void CommitNativeGameplayReload(std::unique_ptr<ProjectGameplayRegistry> generation, NativeGameplayReloadTransaction &transaction);
         void RollbackNativeGameplayReload(const std::filesystem::path &projectRoot, NativeGameplayReloadTransaction transaction,
-                                          Error candidateError);
+                                          const Error &candidateError);
         void DegradeNativeGameplayReload(NativeGameplayReloadTransaction &transaction, Error error);
         void ReimportContentBrowserAsset(const std::filesystem::path &absolutePath);
         void RevealContentBrowserEntry(const std::filesystem::path &absolutePath);

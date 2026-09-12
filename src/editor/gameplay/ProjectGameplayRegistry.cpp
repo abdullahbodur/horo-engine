@@ -4,6 +4,7 @@
 
 #include <algorithm>
 #include <array>
+#include <format>
 #include <fstream>
 #include <nlohmann/json.hpp>
 #include <ranges>
@@ -136,8 +137,7 @@ namespace Horo::Editor {
                                                                                        const ProjectLuaGenerationSnapshot &luaGeneration) {
         auto result = std::make_unique<ProjectGameplayRegistry>(ConstructionToken{});
         result->nativeManifestPath_ = projectRoot / ".horo" / "local" / "gameplay_module.json";
-        std::error_code manifestError;
-        if (std::filesystem::is_regular_file(result->nativeManifestPath_, manifestError)) {
+        if (std::error_code manifestError; std::filesystem::is_regular_file(result->nativeManifestPath_, manifestError)) {
             const auto writeTime = std::filesystem::last_write_time(result->nativeManifestPath_, manifestError);
             if (!manifestError)
                 result->nativeManifestWriteTime_ = writeTime;
@@ -289,8 +289,8 @@ namespace Horo::Editor {
                 continue;
             }
             luaPrograms_.emplace_back(std::move(program));
-            luaSources_.push_back(entry.source);
-            luaSourceStats_.push_back({entry.sourceWriteTime, entry.metadataWriteTime, entry.sourceSize, entry.metadataSize});
+            luaSources_.emplace_back(entry.source);
+            luaSourceStats_.emplace_back(entry.sourceWriteTime, entry.metadataWriteTime, entry.sourceSize, entry.metadataSize);
         }
         if (Result<void> frozen = registry_.Freeze(); frozen.HasError())
             diagnostics_.emplace_back(std::filesystem::path{}, frozen.ErrorValue());
@@ -364,8 +364,8 @@ namespace Horo::Editor {
         std::filesystem::create_directories(destination, error);
         if (error)
             return Result<NativeGameplayRollbackArtifact>::Failure(ManifestError(error.message()));
-        const std::filesystem::path preserved = destination / ("rollback-" + std::to_string(nativeDescriptorRevision_) + "-" +
-                                                               nativeModule_->LoadedArtifactPath().filename().string());
+        const std::filesystem::path preserved =
+            destination / std::format("rollback-{}-{}", nativeDescriptorRevision_, nativeModule_->LoadedArtifactPath().filename().string());
         std::filesystem::copy_file(nativeModule_->LoadedArtifactPath(), preserved, std::filesystem::copy_options::overwrite_existing,
                                    error);
         if (error)
@@ -383,8 +383,8 @@ namespace Horo::Editor {
             if (cloned.HasError())
                 return Result<ProjectLuaGenerationSnapshot>::Failure(cloned.ErrorValue());
             const LuaSourceStat &stat = luaSourceStats_[index];
-            snapshot.programs.push_back({std::move(cloned).Value(), luaSources_[index], stat.sourceWriteTime, stat.metadataWriteTime,
-                                         stat.sourceSize, stat.metadataSize});
+            snapshot.programs.emplace_back(std::move(cloned).Value(), luaSources_[index], stat.sourceWriteTime, stat.metadataWriteTime,
+                                           stat.sourceSize, stat.metadataSize);
         }
         return Result<ProjectLuaGenerationSnapshot>::Success(std::move(snapshot));
     }

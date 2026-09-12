@@ -142,13 +142,14 @@ namespace Horo::Editor {
 
     /** @copydoc EditorPlaySessionController::QuiesceForReload */
     Result<EditorPlayReloadSnapshot> EditorPlaySessionController::QuiesceForReload() {
-        if (!scene_ || !behaviors_ || (state_ != EditorPlaySessionState::Playing && state_ != EditorPlaySessionState::Paused))
+        using enum EditorPlaySessionState;
+        if (!scene_ || !behaviors_ || (state_ != Playing && state_ != Paused))
             return Result<EditorPlayReloadSnapshot>::Failure(InvalidTransition("Native reload requires an active play session."));
         auto captured = behaviors_->CaptureReloadSnapshot();
         if (captured.HasError())
             return Result<EditorPlayReloadSnapshot>::Failure(captured.ErrorValue());
         EditorPlayReloadSnapshot snapshot{std::move(captured).Value(), state_};
-        state_ = EditorPlaySessionState::Reloading;
+        state_ = Reloading;
         behaviors_->Shutdown();
         behaviors_.reset();
         return Result<EditorPlayReloadSnapshot>::Success(std::move(snapshot));
