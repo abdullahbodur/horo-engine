@@ -58,6 +58,10 @@ namespace Horo::Runtime {
                 return false;
             if (components.uiCanvas && Ui::ValidateUiCanvasAssetReference(components.uiCanvas->canvas).HasError())
                 return false;
+            if (components.navigationSurface && ValidateNavigationSurfaceComponent(*components.navigationSurface).HasError())
+                return false;
+            if (components.navigationRegion && ValidateNavigationRegionComponent(*components.navigationRegion).HasError())
+                return false;
             std::vector<Gameplay::BehaviorInstanceId> behaviorIds;
             behaviorIds.reserve(components.behaviors.size());
             for (const Gameplay::BehaviorComponent &behavior : components.behaviors) {
@@ -189,6 +193,17 @@ namespace Horo::Runtime {
         std::ranges::sort(assetDependencies_, {}, [](const SceneAssetDependency &dependency) {
             return dependency.id;
         });
+        std::vector<NavigationSurfaceComponent> navigationSurfaces;
+        std::vector<NavigationRegionComponent> navigationRegions;
+        for (const RuntimeEntityDefinition &entity : entities_) {
+            if (entity.components.navigationSurface)
+                navigationSurfaces.push_back(*entity.components.navigationSurface);
+            if (entity.components.navigationRegion)
+                navigationRegions.push_back(*entity.components.navigationRegion);
+        }
+        if (Result<void> navigation = ValidateNavigationSceneComponents(navigationSurfaces, navigationRegions); navigation.HasError())
+            return Result<RuntimeSceneDefinition>::Failure(navigation.ErrorValue());
+
         return Result<RuntimeSceneDefinition>::Success(
             RuntimeSceneDefinition{id_, revision_, std::move(entities_), std::move(assetDependencies_)});
     }

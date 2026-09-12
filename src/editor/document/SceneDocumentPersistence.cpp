@@ -425,6 +425,40 @@ namespace Horo::Editor {
                     {"enabled", audio.enabled},
                 };
             }
+            if (components.navigationSurface) {
+                const Runtime::NavigationSurfaceComponent &surface = *components.navigationSurface;
+                Json profiles = Json::array();
+                for (const Navigation::NavigationAgentProfileId profile : surface.profiles)
+                    profiles.push_back(profile.Value());
+                value["navigationSurface"] = {
+                    {"id", surface.id.Value()},
+                    {"definition", surface.definition.ToString()},
+                    {"schemaVersion", surface.schemaVersion},
+                    {"generation", surface.generation},
+                    {"bakeScope", surface.bakeScope == Runtime::NavigationBakeScope::ObjectSubtree ? "object_subtree" : "local_bounds"},
+                    {"localBounds", surface.localBounds ? Json{{"center", Vec3Json(surface.localBounds->center)},
+                                                               {"halfExtents", Vec3Json(surface.localBounds->halfExtents)}}
+                                                        : Json(nullptr)},
+                    {"profiles", std::move(profiles)},
+                    {"enabled", surface.enabled},
+                };
+            }
+            if (components.navigationRegion) {
+                const Runtime::NavigationRegionComponent &region = *components.navigationRegion;
+                value["navigationRegion"] = {
+                    {"id", region.id.Value()},
+                    {"surface", region.surface.Value()},
+                    {"schemaVersion", region.schemaVersion},
+                    {"generation", region.generation},
+                    {"localBounds",
+                     {{"center", Vec3Json(region.localBounds.center)}, {"halfExtents", Vec3Json(region.localBounds.halfExtents)}}},
+                    {"sourceSelection", region.sourceSelection == Runtime::NavigationRegionSourceSelection::ExplicitContributors
+                                            ? "explicit_contributors"
+                                            : "static_collision_in_bounds"},
+                    {"mode", region.mode == Runtime::NavigationRegionMode::Include ? "include" : "exclude"},
+                    {"enabled", region.enabled},
+                };
+            }
             if (!components.behaviors.empty()) {
                 Json behaviors = Json::array();
                 for (const Gameplay::BehaviorComponent &behavior : components.behaviors) {
@@ -511,6 +545,102 @@ namespace Horo::Editor {
             });
         }
 
+        [[nodiscard]] Result<Runtime::NavigationLocalBounds> ParseNavigationBounds(const Json &value) {
+            if (!value.is_object() || !value.contains("center") || !value.contains("halfExtents"))
+                return Result<Runtime::NavigationLocalBounds>::Failure(PersistenceError(SceneInvalid, "Navigation bounds are invalid."));
+            auto center = ParseVec3(value["center"]);
+            auto halfExtents = ParseVec3(value["halfExtents"]);
+            if (center.HasError() || halfExtents.HasError())
+                return Result<Runtime::NavigationLocalBounds>::Failure(PersistenceError(SceneInvalid, "Navigation bounds are invalid."));
+            return Result<Runtime::NavigationLocalBounds>::Success({center.Value(), halfExtents.Value()});
+        }
+
+        [[nodiscard]] Result<Runtime::NavigationSurfaceComponent> ParseNavigationSurface(const Json &value) {
+            if (!value.is_object() || !value.contains("id") || !value["id"].is_number_unsigned() || !value.contains("definition") ||
+                !value["definition"].is_string() || !value.contains("schemaVersion") || !value["schemaVersion"].is_number_unsigned() ||
+                !value.contains("generation") || !value["generation"].is_number_unsigned() || !value.contains("bakeScope") ||
+                !value["bakeScope"].is_string() || !value.contains("localBounds") || !value.contains("profiles") ||
+                !value["profiles"].is_array()) {
+                return Result<Runtime::NavigationSurfaceComponent>::Failure(
+                    PersistenceError(SceneInvalid, "Navigation surface schema is incomplete."));
+            }
+            auto id = Navigation::SurfaceId::Create(value["id"].get<std::uint64_t>());
+            auto definition = Assets::AssetId::Parse(value["definition"].get<std::string>());
+            const std::string scope = value["bakeScope"].get<std::string>();
+            if (id.HasError() || definition.HasError() || (scope != "object_subtree" && scope != "local_bounds"))
+                return Result<Runtime::NavigationSurfaceComponent>::Failure(
+                    PersistenceError(SceneInvalid, "Navigation surface identities or scope are invalid."));
+
+            std::optional<Runtime::NavigationLocalBounds> bounds;
+            if (!value["localBounds"].is_null()) {
+                auto parsedBounds = ParseNavigationBounds(value["localBounds"]);
+                if (parsedBounds.HasError())
+                    return Result<Runtime::NavigationSurfaceComponent>::Failure(parsedBounds.ErrorValue());
+                bounds = parsedBounds.Value();
+            }
+            Runtime::NavigationSurfaceComponent surface{
+                .id = id.Value(),
+                .definition = definition.Value(),
+                .schemaVersion = value["schemaVersion"].get<std::uint32_t>(),
+                .generation = value["generation"].get<std::uint64_t>(),
+                .bakeScope =
+                    scope == "object_subtree" ? Runtime::NavigationBakeScope::ObjectSubtree : Runtime::NavigationBakeScope::LocalBounds,
+                .localBounds = bounds,
+                .enabled = value.value("enabled", true),
+            };
+            surface.profiles.reserve(value["profiles"].size());
+            for (const Json &profileValue : value["profiles"]) {
+                if (!profileValue.is_number_unsigned())
+                    return Result<Runtime::NavigationSurfaceComponent>::Failure(
+                        PersistenceError(SceneInvalid, "Navigation surface profile identity is invalid."));
+                auto profile = Navigation::NavigationAgentProfileId::Create(profileValue.get<std::uint64_t>());
+                if (profile.HasError())
+                    return Result<Runtime::NavigationSurfaceComponent>::Failure(
+                        PersistenceError(SceneInvalid, "Navigation surface profile identity is invalid."));
+                surface.profiles.push_back(profile.Value());
+            }
+            if (Runtime::ValidateNavigationSurfaceComponent(surface).HasError())
+                return Result<Runtime::NavigationSurfaceComponent>::Failure(
+                    PersistenceError(SceneInvalid, "Navigation surface payload is invalid."));
+            return Result<Runtime::NavigationSurfaceComponent>::Success(std::move(surface));
+        }
+
+        [[nodiscard]] Result<Runtime::NavigationRegionComponent> ParseNavigationRegion(const Json &value) {
+            if (!value.is_object() || !value.contains("id") || !value["id"].is_number_unsigned() || !value.contains("surface") ||
+                !value["surface"].is_number_unsigned() || !value.contains("schemaVersion") ||
+                !value["schemaVersion"].is_number_unsigned() || !value.contains("generation") ||
+                !value["generation"].is_number_unsigned() || !value.contains("localBounds") || !value.contains("sourceSelection") ||
+                !value["sourceSelection"].is_string() || !value.contains("mode") || !value["mode"].is_string()) {
+                return Result<Runtime::NavigationRegionComponent>::Failure(
+                    PersistenceError(SceneInvalid, "Navigation region schema is incomplete."));
+            }
+            auto id = Navigation::NavigationRegionId::Create(value["id"].get<std::uint64_t>());
+            auto surface = Navigation::SurfaceId::Create(value["surface"].get<std::uint64_t>());
+            auto bounds = ParseNavigationBounds(value["localBounds"]);
+            const std::string source = value["sourceSelection"].get<std::string>();
+            const std::string mode = value["mode"].get<std::string>();
+            if (id.HasError() || surface.HasError() || bounds.HasError() ||
+                (source != "explicit_contributors" && source != "static_collision_in_bounds") || (mode != "include" && mode != "exclude")) {
+                return Result<Runtime::NavigationRegionComponent>::Failure(
+                    PersistenceError(SceneInvalid, "Navigation region identity, bounds, or policy is invalid."));
+            }
+            Runtime::NavigationRegionComponent region{
+                .id = id.Value(),
+                .surface = surface.Value(),
+                .schemaVersion = value["schemaVersion"].get<std::uint32_t>(),
+                .generation = value["generation"].get<std::uint64_t>(),
+                .localBounds = bounds.Value(),
+                .sourceSelection = source == "explicit_contributors" ? Runtime::NavigationRegionSourceSelection::ExplicitContributors
+                                                                     : Runtime::NavigationRegionSourceSelection::StaticCollisionInBounds,
+                .mode = mode == "include" ? Runtime::NavigationRegionMode::Include : Runtime::NavigationRegionMode::Exclude,
+                .enabled = value.value("enabled", true),
+            };
+            if (Runtime::ValidateNavigationRegionComponent(region).HasError())
+                return Result<Runtime::NavigationRegionComponent>::Failure(
+                    PersistenceError(SceneInvalid, "Navigation region payload is invalid."));
+            return Result<Runtime::NavigationRegionComponent>::Success(region);
+        }
+
         [[nodiscard]] Result<Gameplay::BehaviorComponent> ParseSingleBehavior(const Json &behavior) {
             if (!behavior.is_object() || !behavior.contains("instanceId") || !behavior["instanceId"].is_number_unsigned() ||
                 !behavior.contains("typeId") || !behavior["typeId"].is_string() || !behavior.contains("schemaVersion") ||
@@ -595,6 +725,18 @@ namespace Horo::Editor {
                     return Result<SceneObjectComponentSet>::Failure(audio.ErrorValue());
                 }
                 components.audioSource = std::move(audio).Value();
+            }
+            if (value.contains("navigationSurface")) {
+                auto surface = ParseNavigationSurface(value["navigationSurface"]);
+                if (surface.HasError())
+                    return Result<SceneObjectComponentSet>::Failure(surface.ErrorValue());
+                components.navigationSurface = std::move(surface).Value();
+            }
+            if (value.contains("navigationRegion")) {
+                auto region = ParseNavigationRegion(value["navigationRegion"]);
+                if (region.HasError())
+                    return Result<SceneObjectComponentSet>::Failure(region.ErrorValue());
+                components.navigationRegion = std::move(region).Value();
             }
             if (value.contains("behaviors")) {
                 auto behaviors = ParseBehaviors(value["behaviors"]);

@@ -10,6 +10,7 @@
 #include "Horo/Gameplay/BehaviorTypes.h"
 #include "Horo/Math/SceneMath.h"
 #include "Horo/Prefab/PrefabIdentity.h"
+#include "Horo/Runtime/Scene/NavigationSceneComponents.h"
 #include "Horo/Runtime/Scene/PrimitiveMeshDescriptor.h"
 
 #include <memory>
@@ -106,6 +107,8 @@ namespace Horo::Editor {
         std::optional<Runtime::LightComponent> light;
         std::optional<Runtime::TriggerVolumeComponent> triggerVolume;
         std::optional<Runtime::AudioSourceComponent> audioSource;
+        std::optional<Runtime::NavigationSurfaceComponent> navigationSurface;
+        std::optional<Runtime::NavigationRegionComponent> navigationRegion;
         std::vector<Gameplay::BehaviorComponent> behaviors;
 
         [[nodiscard]] bool operator==(const SceneObjectComponentSet &) const noexcept = default;
@@ -261,6 +264,18 @@ namespace Horo::Editor {
     struct SetSceneObjectAudioSourceCommand {
         SceneObjectId object;
         Runtime::AudioSourceComponent audioSource;
+    };
+
+    /** @brief Undoable replacement, attachment, or removal of one authored navigation surface. */
+    struct SetSceneNavigationSurfaceCommand {
+        SceneObjectId object;
+        std::optional<Runtime::NavigationSurfaceComponent> surface;
+    };
+
+    /** @brief Undoable replacement, attachment, or removal of one authored navigation region. */
+    struct SetSceneNavigationRegionCommand {
+        SceneObjectId object;
+        std::optional<Runtime::NavigationRegionComponent> region;
     };
 
     /** @brief Undoable replacement of one object's local editor-only visibility and lock state. */
@@ -511,6 +526,12 @@ namespace Horo::Editor {
         /** @brief Validates and atomically commits an existing audio source component. */
         [[nodiscard]] Result<SceneCommandResult> Execute(const SetSceneObjectAudioSourceCommand &command);
 
+        /** @brief Validates Scene-wide identities/references and atomically commits a navigation surface value. */
+        [[nodiscard]] Result<SceneCommandResult> Execute(const SetSceneNavigationSurfaceCommand &command);
+
+        /** @brief Validates Scene-wide identities/references and atomically commits a navigation region value. */
+        [[nodiscard]] Result<SceneCommandResult> Execute(const SetSceneNavigationRegionCommand &command);
+
         /** @brief Atomically commits local editor visibility/lock state without changing runtime activation. */
         [[nodiscard]] Result<SceneCommandResult> Execute(const SetSceneObjectEditorStateCommand &command);
         [[nodiscard]] Result<SceneCommandResult> Execute(const AddSceneObjectComponentCommand &command);
@@ -554,6 +575,9 @@ namespace Horo::Editor {
 
     private:
         struct PrefabCommitContext;
+        [[nodiscard]] Result<SceneCommandResult> CommitNavigationComponents(SceneObjectId object,
+                                                                            std::optional<Runtime::NavigationSurfaceComponent> surface,
+                                                                            std::optional<Runtime::NavigationRegionComponent> region);
 
         /** @brief Commits one validated prefab delta through the shared document/history transition. */
         [[nodiscard]] Result<SceneCommandResult> CommitPrefab(PrefabCommitContext context);
