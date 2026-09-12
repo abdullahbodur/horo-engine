@@ -5,6 +5,7 @@
 #include <algorithm>
 #include <cmath>
 #include <string>
+#include <string_view>
 #include <unordered_map>
 #include <unordered_set>
 
@@ -56,72 +57,87 @@ namespace Horo::Runtime {
             return Result<void>::Success();
         }
 
-        [[nodiscard]] Result<void> ValidateRegions(const std::span<const NavigationSceneComponentView> components,
-                                                   const NavigationSurfaceMap &surfaces) {
-            std::unordered_set<std::uint64_t> identities;
-            identities.reserve(components.size());
-            for (const NavigationSceneComponentView component : components) {
-                if (component.region == nullptr)
-                    continue;
-                if (Result<void> valid = ValidateNavigationRegionComponent(*component.region); valid.HasError())
-                    return valid;
-                if (!identities.insert(component.region->id.Value()).second) {
-                    return Failure(Navigation::NavigationErrors::SceneComponentConflict,
-                                   "Navigation region identities must be unique within one committed Scene snapshot.");
-                }
-                if (!surfaces.contains(component.region->surface.Value())) {
-                    return Failure(Navigation::NavigationErrors::SceneSurfaceMissing,
-                                   "Navigation regions must reference an exact surface in the same committed Scene snapshot.");
-                }
+        [[nodiscard]] Result<void> ValidateUniqueIdentity(Result<void> componentValidation, const std::uint64_t identity,
+                                                          std::unordered_set<std::uint64_t> &identities,
+                                                          const std::string_view conflictMessage) {
+            if (componentValidation.HasError())
+                return componentValidation;
+            if (!identities.insert(identity).second)
+                return Failure(Navigation::NavigationErrors::SceneComponentConflict, std::string{conflictMessage});
+            return Result<void>::Success();
+        }
+
+        [[nodiscard]] Result<void> ValidateSurfaceReference(Result<void> componentValidation, const std::uint64_t identity,
+                                                            const Navigation::SurfaceId surface,
+                                                            std::unordered_set<std::uint64_t> &identities,
+                                                            const NavigationSurfaceMap &surfaces, const std::string_view conflictMessage,
+                                                            const std::string_view missingMessage) {
+            if (Result<void> valid = ValidateUniqueIdentity(std::move(componentValidation), identity, identities, conflictMessage);
+                valid.HasError())
+                return valid;
+            if (!surfaces.contains(surface.Value()))
+                return Failure(Navigation::NavigationErrors::SceneSurfaceMissing, std::string{missingMessage});
+            return Result<void>::Success();
+        }
+
+        [[nodiscard]] Result<void> ValidateRegion(const NavigationRegionComponent &component, const NavigationSurfaceMap &surfaces,
+                                                  std::unordered_set<std::uint64_t> &identities) {
+            return ValidateSurfaceReference(ValidateNavigationRegionComponent(component), component.id.Value(), component.surface,
+                                            identities, surfaces,
+                                            "Navigation region identities must be unique within one committed Scene snapshot.",
+                                            "Navigation regions must reference an exact surface in the same committed Scene snapshot.");
+        }
+
+        [[nodiscard]] Result<void> ValidateModifier(const NavigationModifierComponent &component, const NavigationSurfaceMap &surfaces,
+                                                    std::unordered_set<std::uint64_t> &identities) {
+            return ValidateSurfaceReference(ValidateNavigationModifierComponent(component), component.id.Value(), component.surface,
+                                            identities, surfaces,
+                                            "Navigation modifier identities must be unique within one committed Scene snapshot.",
+                                            "Navigation modifiers must reference an exact surface in the same committed Scene snapshot.");
+        }
+
+        [[nodiscard]] Result<void> ValidateLink(const NavigationLinkComponent &component, const NavigationSurfaceMap &surfaces,
+                                                std::unordered_set<std::uint64_t> &identities) {
+            if (Result<void> valid =
+                    ValidateUniqueIdentity(ValidateNavigationLinkComponent(component), component.id.Value(), identities,
+                                           "Navigation link identities must be unique within one committed Scene snapshot.");
+                valid.HasError())
+                return valid;
+            const auto start = surfaces.find(component.start.surface.Value());
+            const auto end = surfaces.find(component.end.surface.Value());
+            if (start == surfaces.end() || end == surfaces.end()) {
+                return Failure(Navigation::NavigationErrors::SceneSurfaceMissing,
+                               "Navigation link endpoints must reference exact surfaces in the same committed Scene snapshot.");
+            }
+            if (std::ranges::any_of(component.profiles, [&](const Navigation::NavigationAgentProfileId profile) {
+                return !HasProfile(*start->second, profile) || !HasProfile(*end->second, profile);
+            })) {
+                return Failure(Navigation::NavigationErrors::SceneProfileMismatch,
+                               "Navigation link profiles must be selected by both endpoint surfaces.");
             }
             return Result<void>::Success();
         }
 
-        [[nodiscard]] Result<void> ValidateModifiers(const std::span<const NavigationSceneComponentView> components,
-                                                     const NavigationSurfaceMap &surfaces) {
-            std::unordered_set<std::uint64_t> identities;
-            identities.reserve(components.size());
+        [[nodiscard]] Result<void> ValidateReferences(const std::span<const NavigationSceneComponentView> components,
+                                                      const NavigationSurfaceMap &surfaces) {
+            std::unordered_set<std::uint64_t> regionIds;
+            std::unordered_set<std::uint64_t> modifierIds;
+            std::unordered_set<std::uint64_t> linkIds;
+            regionIds.reserve(components.size());
+            modifierIds.reserve(components.size());
+            linkIds.reserve(components.size());
             for (const NavigationSceneComponentView component : components) {
-                if (component.modifier == nullptr)
-                    continue;
-                if (Result<void> valid = ValidateNavigationModifierComponent(*component.modifier); valid.HasError())
-                    return valid;
-                if (!identities.insert(component.modifier->id.Value()).second) {
-                    return Failure(Navigation::NavigationErrors::SceneComponentConflict,
-                                   "Navigation modifier identities must be unique within one committed Scene snapshot.");
+                if (component.region != nullptr) {
+                    if (Result<void> valid = ValidateRegion(*component.region, surfaces, regionIds); valid.HasError())
+                        return valid;
                 }
-                if (!surfaces.contains(component.modifier->surface.Value())) {
-                    return Failure(Navigation::NavigationErrors::SceneSurfaceMissing,
-                                   "Navigation modifiers must reference an exact surface in the same committed Scene snapshot.");
+                if (component.modifier != nullptr) {
+                    if (Result<void> valid = ValidateModifier(*component.modifier, surfaces, modifierIds); valid.HasError())
+                        return valid;
                 }
-            }
-            return Result<void>::Success();
-        }
-
-        [[nodiscard]] Result<void> ValidateLinks(const std::span<const NavigationSceneComponentView> components,
-                                                 const NavigationSurfaceMap &surfaces) {
-            std::unordered_set<std::uint64_t> identities;
-            identities.reserve(components.size());
-            for (const NavigationSceneComponentView component : components) {
-                if (component.link == nullptr)
-                    continue;
-                if (Result<void> valid = ValidateNavigationLinkComponent(*component.link); valid.HasError())
-                    return valid;
-                if (!identities.insert(component.link->id.Value()).second) {
-                    return Failure(Navigation::NavigationErrors::SceneComponentConflict,
-                                   "Navigation link identities must be unique within one committed Scene snapshot.");
-                }
-                const auto start = surfaces.find(component.link->start.surface.Value());
-                const auto end = surfaces.find(component.link->end.surface.Value());
-                if (start == surfaces.end() || end == surfaces.end()) {
-                    return Failure(Navigation::NavigationErrors::SceneSurfaceMissing,
-                                   "Navigation link endpoints must reference exact surfaces in the same committed Scene snapshot.");
-                }
-                if (std::ranges::any_of(component.link->profiles, [&](const Navigation::NavigationAgentProfileId profile) {
-                    return !HasProfile(*start->second, profile) || !HasProfile(*end->second, profile);
-                })) {
-                    return Failure(Navigation::NavigationErrors::SceneProfileMismatch,
-                                   "Navigation link profiles must be selected by both endpoint surfaces.");
+                if (component.link != nullptr) {
+                    if (Result<void> valid = ValidateLink(*component.link, surfaces, linkIds); valid.HasError())
+                        return valid;
                 }
             }
             return Result<void>::Success();
@@ -225,10 +241,6 @@ namespace Horo::Runtime {
         surfaces.reserve(components.size());
         if (Result<void> valid = ValidateSurfaces(components, surfaces); valid.HasError())
             return valid;
-        if (Result<void> valid = ValidateRegions(components, surfaces); valid.HasError())
-            return valid;
-        if (Result<void> valid = ValidateModifiers(components, surfaces); valid.HasError())
-            return valid;
-        return ValidateLinks(components, surfaces);
+        return ValidateReferences(components, surfaces);
     }
 }  // namespace Horo::Runtime

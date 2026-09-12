@@ -709,14 +709,14 @@ namespace Horo::Editor {
             Runtime::NavigationRegionComponent region{
                 .id = id.Value(),
                 .surface = surface.Value(),
-                .schemaVersion = value["schemaVersion"].get<std::uint32_t>(),
-                .generation = value["generation"].get<std::uint64_t>(),
                 .localBounds = bounds.Value(),
                 .sourceSelection = source == "explicit_contributors" ? Runtime::NavigationRegionSourceSelection::ExplicitContributors
                                                                      : Runtime::NavigationRegionSourceSelection::StaticCollisionInBounds,
                 .mode = mode == "include" ? Runtime::NavigationRegionMode::Include : Runtime::NavigationRegionMode::Exclude,
                 .enabled = value.value("enabled", true),
             };
+            region.schemaVersion = value["schemaVersion"].get<std::uint32_t>();
+            region.generation = value["generation"].get<std::uint64_t>();
             if (Runtime::ValidateNavigationRegionComponent(region).HasError())
                 return Result<Runtime::NavigationRegionComponent>::Failure(
                     PersistenceError(SceneInvalid, "Navigation region payload is invalid."));
@@ -807,14 +807,14 @@ namespace Horo::Editor {
             Runtime::NavigationModifierComponent modifier{
                 .id = id.Value(),
                 .surface = surface.Value(),
-                .schemaVersion = value["schemaVersion"].get<std::uint32_t>(),
-                .generation = value["generation"].get<std::uint64_t>(),
                 .volume = std::move(volume).Value(),
                 .operation = policy.Value().operation,
                 .area = policy.Value().area,
                 .traversalCost = policy.Value().traversalCost,
                 .enabled = value.value("enabled", true),
             };
+            modifier.schemaVersion = value["schemaVersion"].get<std::uint32_t>();
+            modifier.generation = value["generation"].get<std::uint64_t>();
             if (Runtime::ValidateNavigationModifierComponent(modifier).HasError())
                 return Result<Runtime::NavigationModifierComponent>::Failure(
                     PersistenceError(SceneInvalid, "Navigation modifier payload is invalid."));
