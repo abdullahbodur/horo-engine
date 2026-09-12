@@ -22,6 +22,8 @@ workflows.
   classify hard co-load and soft deferred references without mixed-policy ambiguity.
 - [World Object Ownership Migration](./world-object-ownership-migration.md): adopt explicit
   authored, persistent, cell-bound, and runtime-spawned ownership admission.
+- [World Layer Ownership Migration](./world-layer-ownership-migration.md): preserve stable
+  layer identity while separating placement, residency, audience, and control authority.
 - [World Partition Capability Profile Migration](./world-partition-capability-profile-migration.md):
   validate project grid, precision, capacity, and package settings without fallback.
 - [World Partition Registry Snapshot Migration](./world-partition-registry-migration.md):
@@ -67,6 +69,8 @@ workflows.
   enforce versioned connection, queue, byte, rate, and sustained-overload limits before backend mutation.
 - [Deterministic Network Transport Migration](./deterministic-network-transport-migration.md):
   compose explicit network-disabled, loopback, and seeded impairment modes with bounded caller-thread delivery.
+- [Handshake Negotiation Migration](./handshake-negotiation-migration.md):
+  replace transport-owned compatibility flags with one bounded generation-fenced session selection.
 
 ## Writing a Guide
 
