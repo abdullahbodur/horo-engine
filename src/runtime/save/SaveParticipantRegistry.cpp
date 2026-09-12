@@ -20,6 +20,12 @@ namespace Horo::Runtime {
     namespace {
         using ParticipantIndices = std::unordered_map<SaveParticipantId, std::size_t, SaveParticipantIdHash>;
 
+        struct PhasePlanGraph final {
+            std::vector<std::vector<std::size_t>> dependents;
+            std::vector<std::size_t> dependencyCounts;
+            std::size_t participantCount{0};
+        };
+
         /** @brief Reports whether the descriptor declares one supported semantic scope. */
         [[nodiscard]] bool IsValidScope(const SaveParticipantScope scope) noexcept {
             using enum SaveParticipantScope;
@@ -132,19 +138,16 @@ namespace Horo::Runtime {
             return indices;
         }
 
-        /** @brief Builds one stable topological phase plan with actionable dependency diagnostics. */
-        [[nodiscard]] Result<std::vector<SaveParticipantBinding>> BuildPhasePlan(const std::vector<SaveParticipantBinding> &bindings,
-                                                                                 const SaveParticipantRole role) {
+        /** @brief Builds and validates the dependency graph for one operation phase. */
+        [[nodiscard]] Result<PhasePlanGraph> BuildPhasePlanGraph(const std::vector<SaveParticipantBinding> &bindings,
+                                                                 const SaveParticipantRole role) {
             const ParticipantIndices indices = BuildParticipantIndices(bindings);
-            std::vector<std::vector<std::size_t>> dependents(bindings.size());
-            std::vector<std::size_t> dependencyCounts(bindings.size());
-            std::size_t phaseParticipantCount = 0;
-
+            PhasePlanGraph graph{std::vector<std::vector<std::size_t>>(bindings.size()), std::vector<std::size_t>(bindings.size()), 0};
             for (std::size_t index = 0; index < bindings.size(); ++index) {
                 const CanonicalStateParticipantDescriptor &descriptor = bindings[index].Descriptor();
                 if (!HasSaveParticipantRole(descriptor.roles, role))
                     continue;
-                ++phaseParticipantCount;
+                ++graph.participantCount;
                 for (const SaveParticipantDependency &dependency : descriptor.dependencies) {
                     if (!AppliesTo(dependency.phase, role))
                         continue;
@@ -152,50 +155,64 @@ namespace Horo::Runtime {
                     if (found == indices.end()) {
                         if (dependency.requirement == SaveParticipantDependencyRequirement::Optional)
                             continue;
-                        return Result<std::vector<SaveParticipantBinding>>::Failure(
-                            MakeError(SaveErrors::ParticipantDependencyMissing,
-                                      "Participant '" + descriptor.participant.Value() + "' requires missing " +
-                                          std::string{PhaseName(role)} + " dependency '" + dependency.participant.Value() + "'."));
+                        return Result<PhasePlanGraph>::Failure(MakeError(SaveErrors::ParticipantDependencyMissing,
+                                                                         "Participant '" + descriptor.participant.Value() +
+                                                                             "' requires missing " + std::string{PhaseName(role)} +
+                                                                             " dependency '" + dependency.participant.Value() + "'."));
                     }
                     const CanonicalStateParticipantDescriptor &provider = bindings[found->second].Descriptor();
                     if (!HasSaveParticipantRole(provider.roles, role)) {
-                        return Result<std::vector<SaveParticipantBinding>>::Failure(
-                            MakeError(SaveErrors::ParticipantDependencyPhaseIncompatible,
-                                      "Participant '" + descriptor.participant.Value() + "' depends on '" + provider.participant.Value() +
-                                          "' during " + std::string{PhaseName(role)} +
-                                          ", but the dependency does not support that phase."));
+                        return Result<PhasePlanGraph>::Failure(MakeError(SaveErrors::ParticipantDependencyPhaseIncompatible,
+                                                                         "Participant '" + descriptor.participant.Value() +
+                                                                             "' depends on '" + provider.participant.Value() + "' during " +
+                                                                             std::string{PhaseName(role)} +
+                                                                             ", but the dependency does not support that phase."));
                     }
-                    dependents[found->second].push_back(index);
-                    ++dependencyCounts[index];
+                    graph.dependents[found->second].push_back(index);
+                    ++graph.dependencyCounts[index];
                 }
             }
+            return Result<PhasePlanGraph>::Success(std::move(graph));
+        }
+
+        /** @brief Creates an actionable diagnostic for participants remaining in a dependency cycle. */
+        [[nodiscard]] Error MakeDependencyCycleError(const std::vector<SaveParticipantBinding> &bindings, const std::vector<bool> &emitted,
+                                                     const SaveParticipantRole role) {
+            std::string message = std::string{PhaseName(role)} + " participant dependency cycle involves";
+            for (std::size_t index = 0; index < bindings.size(); ++index) {
+                if (!emitted[index] && HasSaveParticipantRole(bindings[index].Descriptor().roles, role))
+                    message += " '" + bindings[index].Descriptor().participant.Value() + "'";
+            }
+            message += ".";
+            return MakeError(SaveErrors::ParticipantDependencyCycle, std::move(message));
+        }
+
+        /** @brief Builds one stable topological phase plan with actionable dependency diagnostics. */
+        [[nodiscard]] Result<std::vector<SaveParticipantBinding>> BuildPhasePlan(const std::vector<SaveParticipantBinding> &bindings,
+                                                                                 const SaveParticipantRole role) {
+            auto graphResult = BuildPhasePlanGraph(bindings, role);
+            if (graphResult.HasError())
+                return Result<std::vector<SaveParticipantBinding>>::Failure(graphResult.ErrorValue());
+            PhasePlanGraph graph = std::move(graphResult).Value();
 
             std::vector<bool> emitted(bindings.size());
             std::vector<SaveParticipantBinding> plan;
-            plan.reserve(phaseParticipantCount);
-            while (plan.size() < phaseParticipantCount) {
+            plan.reserve(graph.participantCount);
+            while (plan.size() < graph.participantCount) {
                 std::size_t selected = bindings.size();
                 for (std::size_t index = 0; index < bindings.size(); ++index) {
-                    if (!emitted[index] && dependencyCounts[index] == 0 &&
+                    if (!emitted[index] && graph.dependencyCounts[index] == 0 &&
                         HasSaveParticipantRole(bindings[index].Descriptor().roles, role)) {
                         selected = index;
                         break;
                     }
                 }
-                if (selected == bindings.size()) {
-                    std::string message = std::string{PhaseName(role)} + " participant dependency cycle involves";
-                    for (std::size_t index = 0; index < bindings.size(); ++index) {
-                        if (!emitted[index] && HasSaveParticipantRole(bindings[index].Descriptor().roles, role))
-                            message += " '" + bindings[index].Descriptor().participant.Value() + "'";
-                    }
-                    message += ".";
-                    return Result<std::vector<SaveParticipantBinding>>::Failure(
-                        MakeError(SaveErrors::ParticipantDependencyCycle, std::move(message)));
-                }
+                if (selected == bindings.size())
+                    return Result<std::vector<SaveParticipantBinding>>::Failure(MakeDependencyCycleError(bindings, emitted, role));
                 emitted[selected] = true;
                 plan.push_back(bindings[selected]);
-                for (const std::size_t dependent : dependents[selected])
-                    --dependencyCounts[dependent];
+                for (const std::size_t dependent : graph.dependents[selected])
+                    --graph.dependencyCounts[dependent];
             }
             return Result<std::vector<SaveParticipantBinding>>::Success(std::move(plan));
         }
