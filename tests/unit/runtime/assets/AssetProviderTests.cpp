@@ -101,6 +101,9 @@ namespace {
         REQUIRE((result.Value().sourceRegistryRevision == submittedSnapshot.Revision()));
         REQUIRE((result.Value().bytes == std::vector<std::uint8_t>({4, 5, 6})));
         REQUIRE((handle.TakeResult().ErrorValue().code.Value() == "asset.load.consumed"));
+        CancellationSource cancelledParent;
+        cancelledParent.RequestCancellation();
+        REQUIRE((service.LoadAsync(submittedSnapshot, id, cancelledParent.Token()).ErrorValue().code.Value() == "asset.load.cancelled"));
         service.Shutdown();
         REQUIRE((service.LoadAsync(registry.Snapshot(), id).ErrorValue().code.Value() == "asset.load.shutdown"));
         jobs.Shutdown(ShutdownPolicy::Drain);
