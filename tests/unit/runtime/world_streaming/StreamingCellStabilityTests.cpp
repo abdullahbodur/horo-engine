@@ -42,45 +42,46 @@ namespace Horo::WorldStreaming {
                     .signedBoundaryDistanceMillimeters = boundaryDistance};
         }
 
+        StreamingCellStabilityDecision Decision(const StreamingCellStabilityPolicy &policy, const StreamingCellStabilityContext &context,
+                                                const StreamingCellStabilityObservation &observation,
+                                                const std::optional<StreamingCellStabilitySnapshot> &previous = std::nullopt) {
+            return EvaluateStreamingCellStability(policy, context, observation, previous).Value();
+        }
+
         TEST_CASE("Cell stability applies inclusive enter and exit hysteresis boundaries",
                   "[unit][world_streaming][stability][hysteresis]") {
             const auto policy = Policy();
-            const auto beforeEnter = EvaluateStreamingCellStability(policy, Context(), Observation(99), std::nullopt).Value();
+            const auto beforeEnter = Decision(policy, Context(), Observation(99));
             REQUIRE(beforeEnter.snapshot.phase == StreamingCellStabilityPhase::Unloaded);
 
-            const auto admitted = EvaluateStreamingCellStability(policy, Context(), Observation(100), std::nullopt).Value();
+            const auto admitted = Decision(policy, Context(), Observation(100));
             REQUIRE(admitted.snapshot.phase == StreamingCellStabilityPhase::Resident);
             REQUIRE(admitted.snapshot.retainedResidency == StreamingDesiredResidency::Activated);
 
-            const auto held = EvaluateStreamingCellStability(policy, Context(1'001, 1), Observation(-200), admitted.snapshot).Value();
+            const auto held = Decision(policy, Context(1'001, 1), Observation(-200), admitted.snapshot);
             REQUIRE(held.snapshot.phase == StreamingCellStabilityPhase::Resident);
             REQUIRE(held.boundaryHeld);
 
-            const auto exited = EvaluateStreamingCellStability(policy, Context(1'002, 1), Observation(-201), held.snapshot).Value();
+            const auto exited = Decision(policy, Context(1'002, 1), Observation(-201), held.snapshot);
             REQUIRE(exited.snapshot.phase == StreamingCellStabilityPhase::Lingering);
             REQUIRE(exited.snapshot.lingerStartedAtServiceMilliseconds == 1'002);
         }
 
         TEST_CASE("Cell stability expires linger exactly and reentry cancels it", "[unit][world_streaming][stability][linger]") {
             const auto policy = Policy();
-            const auto admitted = EvaluateStreamingCellStability(policy, Context(), Observation(100), std::nullopt).Value();
-            const auto lingering = EvaluateStreamingCellStability(policy, Context(2'000, 1),
-                                                                  Observation(-500, StreamingDesiredResidency::Unloaded), admitted.snapshot)
-                                       .Value();
+            const auto admitted = Decision(policy, Context(), Observation(100));
+            const auto lingering =
+                Decision(policy, Context(2'000, 1), Observation(-500, StreamingDesiredResidency::Unloaded), admitted.snapshot);
             REQUIRE(lingering.snapshot.phase == StreamingCellStabilityPhase::Lingering);
 
-            const auto resumed = EvaluateStreamingCellStability(policy, Context(6'999, 1), Observation(-100), lingering.snapshot).Value();
+            const auto resumed = Decision(policy, Context(6'999, 1), Observation(-100), lingering.snapshot);
             REQUIRE(resumed.snapshot.phase == StreamingCellStabilityPhase::Resident);
             REQUIRE(resumed.snapshot.lingerStartedAtServiceMilliseconds == 0);
 
             const auto secondLinger =
-                EvaluateStreamingCellStability(policy, Context(7'000, 1), Observation(-500, StreamingDesiredResidency::Unloaded),
-                                               resumed.snapshot)
-                    .Value();
+                Decision(policy, Context(7'000, 1), Observation(-500, StreamingDesiredResidency::Unloaded), resumed.snapshot);
             const auto expired =
-                EvaluateStreamingCellStability(policy, Context(12'000, 1), Observation(-500, StreamingDesiredResidency::Unloaded),
-                                               secondLinger.snapshot)
-                    .Value();
+                Decision(policy, Context(12'000, 1), Observation(-500, StreamingDesiredResidency::Unloaded), secondLinger.snapshot);
             REQUIRE(expired.snapshot.phase == StreamingCellStabilityPhase::Unloaded);
             REQUIRE(expired.lingerExpired);
         }
@@ -90,18 +91,15 @@ namespace Horo::WorldStreaming {
             const auto policy = Policy(1, 1);
             auto pinned = Observation(-10'000, StreamingDesiredResidency::Activated);
             pinned.pinnedResidencyFloor = StreamingDesiredResidency::Loaded;
-            REQUIRE(EvaluateStreamingCellStability(policy, Context(), pinned, std::nullopt).Value().snapshot.phase ==
-                    StreamingCellStabilityPhase::Resident);
+            REQUIRE(Decision(policy, Context(), pinned).snapshot.phase == StreamingCellStabilityPhase::Resident);
             RequireError(EvaluateStreamingCellStability(policy, Context(1'000, 1), pinned, std::nullopt),
                          WorldStreamingErrors::CellStabilityCapacityExceeded);
             RequireError(EvaluateStreamingCellStability(policy, Context(1'000, 2), Observation(100), std::nullopt),
                          WorldStreamingErrors::CellStabilityCapacityExceeded);
 
-            const auto tracked = EvaluateStreamingCellStability(policy, Context(), pinned, std::nullopt).Value();
+            const auto tracked = Decision(policy, Context(), pinned);
             const auto retiring =
-                EvaluateStreamingCellStability(policy, Context(2'000, 2), Observation(-10'000, StreamingDesiredResidency::Unloaded),
-                                               tracked.snapshot)
-                    .Value();
+                Decision(policy, Context(2'000, 2), Observation(-10'000, StreamingDesiredResidency::Unloaded), tracked.snapshot);
             REQUIRE(retiring.snapshot.phase == StreamingCellStabilityPhase::Lingering);
         }
 
@@ -127,7 +125,7 @@ namespace Horo::WorldStreaming {
             RequireError(EvaluateStreamingCellStability(policy, closed, Observation(100), std::nullopt),
                          WorldStreamingErrors::CellStabilityLifecycleUnavailable);
 
-            const auto admitted = EvaluateStreamingCellStability(policy, Context(), Observation(100), std::nullopt).Value();
+            const auto admitted = Decision(policy, Context(), Observation(100));
             RequireError(EvaluateStreamingCellStability(policy, Context(999, 1), Observation(100), admitted.snapshot),
                          WorldStreamingErrors::CellStabilityStale);
 
@@ -140,15 +138,12 @@ namespace Horo::WorldStreaming {
         TEST_CASE("Zero linger releases on first loss while no-demand cells consume no record",
                   "[unit][world_streaming][stability][boundary]") {
             const auto policy = Policy(1, 1, 0);
-            const auto absent = EvaluateStreamingCellStability(policy, Context(1'000, 1),
-                                                               Observation(-500, StreamingDesiredResidency::Unloaded), std::nullopt)
-                                    .Value();
+            const auto absent = Decision(policy, Context(1'000, 1), Observation(-500, StreamingDesiredResidency::Unloaded));
             REQUIRE(absent.snapshot.phase == StreamingCellStabilityPhase::Unloaded);
 
-            const auto admitted = EvaluateStreamingCellStability(policy, Context(), Observation(100), std::nullopt).Value();
-            const auto released = EvaluateStreamingCellStability(policy, Context(1'001, 1),
-                                                                 Observation(-500, StreamingDesiredResidency::Unloaded), admitted.snapshot)
-                                      .Value();
+            const auto admitted = Decision(policy, Context(), Observation(100));
+            const auto released =
+                Decision(policy, Context(1'001, 1), Observation(-500, StreamingDesiredResidency::Unloaded), admitted.snapshot);
             REQUIRE(released.snapshot.phase == StreamingCellStabilityPhase::Unloaded);
             REQUIRE(released.lingerExpired);
         }
