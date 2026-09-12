@@ -193,7 +193,7 @@ namespace Horo::Navigation {
 
     TEST_CASE("Queue operations allocate no storage after preparation", "[unit][navigation][queue][allocation]") {
         auto queues = std::move(NavigationRuntimeQueues::Create(QueueDescriptor())).Value();
-        NavigationRuntimeCommand command{NavigationSubmitPathCommand{.sequence = 1, .request = Request()}};
+        NavigationRuntimeCommand command{NavigationCancelRequestCommand{.sequence = 1, .handle = RequestHandle(), .world = World()}};
         const auto allocationsBefore = Tests::AllocationProbe::Count();
         const auto enqueueResult = queues.TryEnqueueCommand(command);
         auto dequeued = queues.TryDequeueCommand();
