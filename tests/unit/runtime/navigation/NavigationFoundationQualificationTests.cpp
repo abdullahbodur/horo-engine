@@ -99,12 +99,13 @@ namespace Horo::Navigation {
         const auto lease = std::move(lifecycle.Acquire(activation.world)).Value();
 
         const std::size_t allocationsBefore = Tests::AllocationProbe::Count();
+        bool allOperationsSucceeded = true;
         for (std::uint32_t sequence = 1; sequence <= descriptor.commandSlots; ++sequence) {
             NavigationRuntimeCommand command{NavigationSubmitPathCommand{.sequence = sequence, .request = Request(activation)}};
-            REQUIRE(queues.TryEnqueueCommand(command) == NavigationQueueEnqueueResult::Enqueued);
+            allOperationsSucceeded &= queues.TryEnqueueCommand(command) == NavigationQueueEnqueueResult::Enqueued;
         }
         for (std::uint32_t sequence = 1; sequence <= descriptor.commandSlots; ++sequence)
-            REQUIRE(queues.TryDequeueCommand().has_value());
+            allOperationsSucceeded &= queues.TryDequeueCommand().has_value();
         for (std::uint32_t sequence = 1; sequence <= descriptor.querySlots; ++sequence) {
             NavigationQueuedQuery query{
                 .acceptedSequence = sequence,
@@ -112,17 +113,19 @@ namespace Horo::Navigation {
                 .request = Request(activation),
                 .worldLease = lease,
             };
-            REQUIRE(queues.TryEnqueueQuery(query) == NavigationQueueEnqueueResult::Enqueued);
+            allOperationsSucceeded &= queues.TryEnqueueQuery(query) == NavigationQueueEnqueueResult::Enqueued;
         }
         for (std::uint32_t sequence = 1; sequence <= descriptor.querySlots; ++sequence)
-            REQUIRE(queues.TryDequeueQuery().has_value());
+            allOperationsSucceeded &= queues.TryDequeueQuery().has_value();
         for (std::uint32_t sequence = 1; sequence <= descriptor.completionSlots; ++sequence) {
             auto completion = TestSupport::CancelledCompletion(activation, sequence, RequestHandle(activation.world, sequence));
-            REQUIRE(queues.TryEnqueueCompletion(completion) == NavigationQueueEnqueueResult::Enqueued);
+            allOperationsSucceeded &= queues.TryEnqueueCompletion(completion) == NavigationQueueEnqueueResult::Enqueued;
         }
         for (std::uint32_t sequence = 1; sequence <= descriptor.completionSlots; ++sequence)
-            REQUIRE(queues.TryDequeueCompletion().has_value());
-        REQUIRE(Tests::AllocationProbe::Count() == allocationsBefore);
+            allOperationsSucceeded &= queues.TryDequeueCompletion().has_value();
+        const std::size_t allocationsAfter = Tests::AllocationProbe::Count();
+        REQUIRE(allOperationsSucceeded);
+        REQUIRE(allocationsAfter == allocationsBefore);
         REQUIRE(queues.Stats().commands.enqueued == descriptor.commandSlots);
         REQUIRE(queues.Stats().queries.enqueued == descriptor.querySlots);
         REQUIRE(queues.Stats().completions.enqueued == descriptor.completionSlots);
