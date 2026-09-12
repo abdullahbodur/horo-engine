@@ -2,41 +2,46 @@
 applyTo: "**/*"
 ---
 
-These are some guidelines when using the SonarQube MCP server.
+# SonarQube local-analysis policy
 
-# Important Tool Guidelines
+The SonarQube CLI (`sonar`) is the single supported local-analysis workflow for
+this repository. The former VS Code SonarQube for IDE bridge and SonarQube MCP
+IDE tools are not local-analysis fallbacks.
 
-## Basic usage
-- **IMPORTANT**: After you finish generating or modifying any code files at the very end of the task, you MUST call the `analyze_file_list` tool (if it exists) to analyze the files you created or modified.
-- **IMPORTANT**: When starting a new task, you MUST disable automatic analysis with the `toggle_automatic_analysis` tool if it exists.
-- **IMPORTANT**: When you are done generating code at the very end of the task, you MUST re-enable automatic analysis with the `toggle_automatic_analysis` tool if it exists.
+## Required workflow
 
-## Project Keys
-- When a user mentions a project key, use `search_my_sonarqube_projects` first to find the exact project key
-- Don't guess project keys - always look them up
+- Run from the worktree being inspected:
+  `sonar analyze --project <project-key> --format json --depth STANDARD`.
+- With no selector, the CLI analyzes staged, unstaged, and untracked changes.
+  Use `--staged`, `--base <ref>`, or repeated `--file <path>` only for an
+  intentional narrower scope.
+- Resolve the exact project key with `sonar list projects --query <name>`;
+  never invent a key.
+- Prefer `SONARQUBE_CLI_TOKEN`, `SONARQUBE_CLI_ORG`, and
+  `SONARQUBE_CLI_SERVER` environment variables for ephemeral runs. Do not put
+  credentials in the repository or command output.
+- Report `secrets` and `agentic` results separately. A clean secrets result is
+  not a clean quality result when `agentic` contains skipped files, failures, or
+  `globalError`.
+- For C/C++, verify that the intended files appear in `agentic.files` and that a
+  long-lived branch has a successful CI analysis supplying Vortex build context.
 
-## Code Language Detection
-- When analyzing code snippets, try to detect the programming language from the code syntax
-- If unclear, ask the user or make an educated guess based on syntax
+## Entitlement and failure handling
 
-## Branch and Pull Request Context
-- Many operations support branch-specific analysis
-- If user mentions working on a feature branch, include the branch parameter
+`403 Forbidden` or `Vortex analysis is not available on this connection` means
+the account or project lacks the required Agentic/Vortex entitlement. Report it
+as a failed quality validation; do not silently fall back to VS Code, MCP, or
+`sonar-scanner`.
 
-## Code Issues and Violations
-- After fixing issues, do not attempt to verify them using `search_sonar_issues_in_projects`, as the server will not yet reflect the updates
+Do not repeatedly retry an unchanged authorization or entitlement failure. Local
+secrets scanning may still be reported, but it must remain clearly separate from
+Agentic/Vortex quality findings.
 
-# Common Troubleshooting
+## Prohibited substitutions
 
-## Authentication Issues
-- SonarQube requires USER tokens (not project tokens)
-- When the error `SonarQube answered with Not authorized` occurs, verify the token type
-
-## Project Not Found
-- Use `search_my_sonarqube_projects` to find available projects
-- Verify project key spelling and format
-
-## Code Analysis Issues
-- Ensure programming language is correctly specified
-- Remind users that snippet analysis doesn't replace full project scans
-- Provide full file content for better analysis results
+- Do not call `analyze_file_list`, `toggle_automatic_analysis`, or
+  `analyze_code_snippet` for repository validation.
+- Do not run `sonar-scanner` for local uncommitted-change feedback; it is the
+  full-project CI scanner.
+- Do not claim success from an empty issue list unless the intended files were
+  analyzed and no skips, failures, or global errors were returned.
