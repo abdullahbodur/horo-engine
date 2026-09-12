@@ -2,6 +2,7 @@
 
 #include "Horo/Gameplay/BehaviorRegistry.h"
 #include "Horo/Gameplay/ComponentRegistry.h"
+#include "Horo/Gameplay/GameAssetTypeRegistry.h"
 #include "Horo/Gameplay/GameModuleHost.h"
 #include "Horo/Gameplay/GameServiceRegistry.h"
 #include "Horo/Gameplay/GameplayRegistrationRuntime.h"
@@ -22,6 +23,7 @@ namespace Horo::Gameplay {
         std::unique_ptr<Platform::DynamicLibrary> library;
         std::unique_ptr<BehaviorRegistry> registry;
         std::unique_ptr<ComponentRegistry> components;
+        std::unique_ptr<GameAssetTypeRegistry> assetTypes;
         std::unique_ptr<GameServiceRegistry> services;
         std::unique_ptr<SystemRegistry> systems;
         std::unique_ptr<GameplayServiceRuntime> projectServices;

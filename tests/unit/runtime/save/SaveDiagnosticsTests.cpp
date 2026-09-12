@@ -69,6 +69,7 @@ namespace Horo::Runtime {
                 std::pair{&SaveErrors::CompositionCancelled, SaveFailureCategory::Cancellation},
                 std::pair{&SaveErrors::CaptureBudgetExceeded, SaveFailureCategory::Quota},
                 std::pair{&SaveErrors::ParticipantRegistryAllocationFailed, SaveFailureCategory::Quota},
+                std::pair{&SaveErrors::OperationAllocationFailed, SaveFailureCategory::Quota},
                 std::pair{&SaveErrors::ArchiveChunkHashMismatch, SaveFailureCategory::Corruption},
                 std::pair{&SaveErrors::ParticipantDependencyMissing, SaveFailureCategory::Participant},
                 std::pair{&SaveErrors::ParticipantDependencyPhaseIncompatible, SaveFailureCategory::Participant},

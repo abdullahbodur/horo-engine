@@ -6,6 +6,7 @@
  */
 
 #include "Horo/Assets/AssetRegistry.h"
+#include "Horo/Foundation/AssetCookTargetId.h"
 #include "Horo/Foundation/Result.h"
 #include "Horo/Foundation/Sha256.h"
 
@@ -17,29 +18,7 @@
 #include <vector>
 
 namespace Horo::Assets {
-    /**
-     * @brief Validated stable cook-target identifier such as `headless-null`.
-     * @details Target IDs are lowercase, hyphen-separated, and contain at least two segments.
-     * Each segment starts with a letter and continues with lowercase letters, digits, or hyphens.
-     */
-    class AssetCookTargetId final {
-    public:
-        AssetCookTargetId() = default; /**< Constructs an empty target ID for struct initialization. */
-        /** @brief Parses a canonical lowercase hyphen-separated target identifier.
-         * @param text Text to validate.
-         * @return Validated target ID or a typed format error. */
-        [[nodiscard]] static Result<AssetCookTargetId> Parse(std::string_view text);
-        /** @brief Returns the canonical identifier text.
-         * @return Borrowed text owned by this value. */
-        [[nodiscard]] const std::string &Value() const noexcept;
-        [[nodiscard]] auto operator<=>(const AssetCookTargetId &) const noexcept = default;
-
-    private:
-        explicit AssetCookTargetId(std::string value) : value_(std::move(value)) {}
-
-        friend struct AssetCookArtifact;
-        std::string value_;
-    };
+    using ::Horo::AssetCookTargetId;
 
     /** @brief Bounded limits applied to cook operations and artifact sizes. */
     struct AssetCookLimits {

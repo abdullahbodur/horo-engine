@@ -1570,6 +1570,7 @@
     "workspace.asset_drop.unsupported": {"text": "Bu asset türü sahne nesnesi olarak oluşturulamıyor."},
     "workspace.asset_drop.parent_missing": {"text": "Hierarchy hedefi artık mevcut değil."},
     "workspace.asset_drop.success": {"text": "Asset sahneye eklendi."},
+    "workspace.game_asset.category.missing": {"text": "Eksik Oynanış Asset Türü"},
     "welcome.project.compatibility.current": {"text": "Güncel"},
     "welcome.project.compatibility.compatible": {"text": "Uyumlu"},
     "welcome.project.compatibility.will_upgrade": {"text": "Yükseltilecek"},
