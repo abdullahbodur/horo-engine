@@ -44,6 +44,20 @@ namespace Horo::WorldStreaming {
             Assets::AssetRegistrySnapshot registry{Registry(ids)};
         };
 
+        class LoadHarness final {
+        public:
+            LoadHarness(const Assets::IAssetProvider &provider, const std::size_t workers, const std::size_t maximumOutstanding = 128)
+                : jobs_{JobSystemConfig{workers, 8}}, service_{jobs_, provider, maximumOutstanding} {}
+
+            Assets::AssetLoadService &Service() noexcept {
+                return service_;
+            }
+
+        private:
+            JobSystem jobs_;
+            Assets::AssetLoadService service_;
+        };
+
         void WaitTerminal(StreamingCellAssetRequest &request) {
             while (request.State() == StreamingCellAssetRequestState::Loading ||
                    request.State() == StreamingCellAssetRequestState::Cancelling)
@@ -74,9 +88,8 @@ namespace Horo::WorldStreaming {
         provider.Insert(Asset(4), {4});
         provider.Insert(Asset(5), {5});
         provider.Insert(Asset(6), {6});
-        JobSystem jobs{{2, 8}};
-        Assets::AssetLoadService service{jobs, provider};
-        auto result = RequestStreamingCellAssets(service, fixture.registry, fixture.manifest, fixture.candidate, Context());
+        LoadHarness loads{provider, 2};
+        auto result = RequestStreamingCellAssets(loads.Service(), fixture.registry, fixture.manifest, fixture.candidate, Context());
         REQUIRE(result.HasValue());
         auto request = std::move(result).Value();
         WaitTerminal(request);
@@ -99,23 +112,22 @@ namespace Horo::WorldStreaming {
               "[unit][world_streaming][asset_request][failure]") {
         RequestFixture fixture;
         Assets::MemoryAssetProvider provider;
-        JobSystem jobs{{1, 8}};
-        Assets::AssetLoadService service{jobs, provider};
+        LoadHarness loads{provider, 1};
         auto context = Context();
         context.maximumRequests = 2;
-        RequireError(RequestStreamingCellAssets(service, fixture.registry, fixture.manifest, fixture.candidate, context),
+        RequireError(RequestStreamingCellAssets(loads.Service(), fixture.registry, fixture.manifest, fixture.candidate, context),
                      WorldStreamingErrors::CellAssetRequestCapacityExceeded);
         context = Context();
         context.operation = Operation(IdentityFrom<StreamingGeneration>(2));
-        RequireError(RequestStreamingCellAssets(service, fixture.registry, fixture.manifest, fixture.candidate, context),
+        RequireError(RequestStreamingCellAssets(loads.Service(), fixture.registry, fixture.manifest, fixture.candidate, context),
                      WorldStreamingErrors::CellAssetRequestStale);
         const std::array missing{Asset(4), Asset(5)};
         fixture.registry = Registry(missing);
         context = Context();
-        RequireError(RequestStreamingCellAssets(service, fixture.registry, fixture.manifest, fixture.candidate, context),
+        RequireError(RequestStreamingCellAssets(loads.Service(), fixture.registry, fixture.manifest, fixture.candidate, context),
                      WorldStreamingErrors::CellAssetRequestUnavailable);
         context.lifecycle = StreamingCellAssetRequestLifecycle::Closed;
-        RequireError(RequestStreamingCellAssets(service, fixture.registry, fixture.manifest, fixture.candidate, context),
+        RequireError(RequestStreamingCellAssets(loads.Service(), fixture.registry, fixture.manifest, fixture.candidate, context),
                      WorldStreamingErrors::CellAssetRequestLifecycleUnavailable);
     }
 
@@ -123,9 +135,8 @@ namespace Horo::WorldStreaming {
               "[unit][world_streaming][asset_request][capacity][cancellation]") {
         RequestFixture fixture;
         BlockingProvider provider;
-        JobSystem jobs{{1, 8}};
-        Assets::AssetLoadService service{jobs, provider, 2};
-        auto result = RequestStreamingCellAssets(service, fixture.registry, fixture.manifest, fixture.candidate, Context());
+        LoadHarness loads{provider, 1, 2};
+        auto result = RequestStreamingCellAssets(loads.Service(), fixture.registry, fixture.manifest, fixture.candidate, Context());
         REQUIRE(result.HasError());
         REQUIRE(result.ErrorValue().code.Value() == "asset.load.queue_full");
     }
@@ -133,9 +144,8 @@ namespace Horo::WorldStreaming {
     TEST_CASE("Cell asset request propagates cancellation to every child", "[unit][world_streaming][asset_request][cancellation]") {
         RequestFixture fixture;
         BlockingProvider provider;
-        JobSystem jobs{{1, 8}};
-        Assets::AssetLoadService service{jobs, provider};
-        auto result = RequestStreamingCellAssets(service, fixture.registry, fixture.manifest, fixture.candidate, Context());
+        LoadHarness loads{provider, 1};
+        auto result = RequestStreamingCellAssets(loads.Service(), fixture.registry, fixture.manifest, fixture.candidate, Context());
         REQUIRE(result.HasValue());
         auto request = std::move(result).Value();
         while (!provider.entered.load())
