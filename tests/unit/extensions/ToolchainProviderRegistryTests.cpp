@@ -127,9 +127,18 @@ namespace Horo::Extensions::Tests {
         };
 
         template <typename T> void RequireError(const Result<T> &result, const std::string &code) {
-            REQUIRE(result.HasError());
-            CHECK(result.ErrorValue().domain.Value() == "horo.extensions");
-            CHECK(result.ErrorValue().code.Value() == code);
+            INFO("expected toolchain error: " << code);
+            REQUIRE_FALSE(result.HasValue());
+            const Error &error = result.ErrorValue();
+            CHECK(error.domain.Value() == "horo.extensions");
+            CHECK(error.code.Value() == code);
+        }
+
+        [[nodiscard]] Result<ToolchainInvocationResult> InvokeRegistered(TestPolicy &policy, TestRunner &runner) {
+            ToolchainProviderRegistry registry{policy, runner};
+            auto registration = registry.Register(Provider());
+            REQUIRE(registration.HasValue());
+            return registry.Invoke(registration.Value().Authority(), {{"tool.compiler"}, {}}, {});
         }
     }  // namespace
 
@@ -191,10 +200,7 @@ namespace Horo::Extensions::Tests {
         TestPolicy policy;
         policy.reject = true;
         TestRunner runner;
-        ToolchainProviderRegistry registry{policy, runner};
-        auto registration = registry.Register(Provider());
-        REQUIRE(registration.HasValue());
-        const auto result = registry.Invoke(registration.Value().Authority(), {{"tool.compiler"}, {}}, {});
+        const auto result = InvokeRegistered(policy, runner);
         RequireError(result, "toolchain_policy_rejected");
         REQUIRE(result.ErrorValue().cause.Get() != nullptr);
         CHECK(result.ErrorValue().cause.Get()->code.Value() == "invocation_failed");
@@ -205,10 +211,7 @@ namespace Horo::Extensions::Tests {
         TestPolicy policy;
         TestRunner runner;
         runner.fail = true;
-        ToolchainProviderRegistry registry{policy, runner};
-        auto registration = registry.Register(Provider());
-        REQUIRE(registration.HasValue());
-        const auto result = registry.Invoke(registration.Value().Authority(), {{"tool.compiler"}, {}}, {});
+        const auto result = InvokeRegistered(policy, runner);
         RequireError(result, "toolchain_invocation_failed");
         REQUIRE(result.ErrorValue().cause.Get() != nullptr);
         CHECK(result.ErrorValue().cause.Get()->code.Value() == "invocation_failed");
@@ -218,10 +221,7 @@ namespace Horo::Extensions::Tests {
         TestPolicy policy;
         policy.throwException = true;
         TestRunner runner;
-        ToolchainProviderRegistry registry{policy, runner};
-        auto registration = registry.Register(Provider());
-        REQUIRE(registration.HasValue());
-        RequireError(registry.Invoke(registration.Value().Authority(), {{"tool.compiler"}, {}}, {}), "toolchain_policy_rejected");
+        RequireError(InvokeRegistered(policy, runner), "toolchain_policy_rejected");
         CHECK(runner.calls == 0U);
     }
 
@@ -229,10 +229,7 @@ namespace Horo::Extensions::Tests {
         TestPolicy policy;
         TestRunner runner;
         runner.throwException = true;
-        ToolchainProviderRegistry registry{policy, runner};
-        auto registration = registry.Register(Provider());
-        REQUIRE(registration.HasValue());
-        const auto result = registry.Invoke(registration.Value().Authority(), {{"tool.compiler"}, {}}, {});
+        const auto result = InvokeRegistered(policy, runner);
         RequireError(result, "toolchain_invocation_failed");
         CHECK(result.ErrorValue().cause.Get() == nullptr);
     }
@@ -241,10 +238,7 @@ namespace Horo::Extensions::Tests {
         TestPolicy policy;
         policy.request.executable = "  ";
         TestRunner runner;
-        ToolchainProviderRegistry registry{policy, runner};
-        auto registration = registry.Register(Provider());
-        REQUIRE(registration.HasValue());
-        RequireError(registry.Invoke(registration.Value().Authority(), {{"tool.compiler"}, {}}, {}), "toolchain_provider_registry_invalid");
+        RequireError(InvokeRegistered(policy, runner), "toolchain_provider_registry_invalid");
         CHECK(runner.calls == 0U);
     }
 
