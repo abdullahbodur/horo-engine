@@ -33,7 +33,7 @@ namespace Horo::WorldStreaming {
             return registry.Snapshot();
         }
 
-        StreamingCellAssetRequestContext Context() {
+        StreamingCellAssetRequestContext AssetRequestContext() {
             return {IdentityFrom<StreamingCellAssetRequestId>(3), Operation(), 3, StreamingCellAssetRequestLifecycle::Active};
         }
 
@@ -89,13 +89,14 @@ namespace Horo::WorldStreaming {
         provider.Insert(Asset(5), {5});
         provider.Insert(Asset(6), {6});
         LoadHarness loads{provider, 2};
-        auto result = RequestStreamingCellAssets(loads.Service(), fixture.registry, fixture.manifest, fixture.candidate, Context());
+        auto result =
+            RequestStreamingCellAssets(loads.Service(), fixture.registry, fixture.manifest, fixture.candidate, AssetRequestContext());
         REQUIRE(result.HasValue());
         auto request = std::move(result).Value();
         WaitTerminal(request);
         auto batch = request.TakeResult();
         REQUIRE(batch.HasValue());
-        REQUIRE(batch.Value().request == Context().request);
+        REQUIRE(batch.Value().request == AssetRequestContext().request);
         REQUIRE(batch.Value().operation == Operation());
         REQUIRE(batch.Value().registryRevision == fixture.registry.Revision());
         REQUIRE(batch.Value().assets.size() == 3);
@@ -113,17 +114,17 @@ namespace Horo::WorldStreaming {
         RequestFixture fixture;
         Assets::MemoryAssetProvider provider;
         LoadHarness loads{provider, 1};
-        auto context = Context();
+        auto context = AssetRequestContext();
         context.maximumRequests = 2;
         RequireError(RequestStreamingCellAssets(loads.Service(), fixture.registry, fixture.manifest, fixture.candidate, context),
                      WorldStreamingErrors::CellAssetRequestCapacityExceeded);
-        context = Context();
+        context = AssetRequestContext();
         context.operation = Operation(IdentityFrom<StreamingGeneration>(2));
         RequireError(RequestStreamingCellAssets(loads.Service(), fixture.registry, fixture.manifest, fixture.candidate, context),
                      WorldStreamingErrors::CellAssetRequestStale);
         const std::array missing{Asset(4), Asset(5)};
         fixture.registry = Registry(missing);
-        context = Context();
+        context = AssetRequestContext();
         RequireError(RequestStreamingCellAssets(loads.Service(), fixture.registry, fixture.manifest, fixture.candidate, context),
                      WorldStreamingErrors::CellAssetRequestUnavailable);
         context.lifecycle = StreamingCellAssetRequestLifecycle::Closed;
@@ -136,7 +137,8 @@ namespace Horo::WorldStreaming {
         RequestFixture fixture;
         BlockingProvider provider;
         LoadHarness loads{provider, 1, 2};
-        auto result = RequestStreamingCellAssets(loads.Service(), fixture.registry, fixture.manifest, fixture.candidate, Context());
+        auto result =
+            RequestStreamingCellAssets(loads.Service(), fixture.registry, fixture.manifest, fixture.candidate, AssetRequestContext());
         REQUIRE(result.HasError());
         REQUIRE(result.ErrorValue().code.Value() == "asset.load.queue_full");
     }
@@ -145,7 +147,8 @@ namespace Horo::WorldStreaming {
         RequestFixture fixture;
         BlockingProvider provider;
         LoadHarness loads{provider, 1};
-        auto result = RequestStreamingCellAssets(loads.Service(), fixture.registry, fixture.manifest, fixture.candidate, Context());
+        auto result =
+            RequestStreamingCellAssets(loads.Service(), fixture.registry, fixture.manifest, fixture.candidate, AssetRequestContext());
         REQUIRE(result.HasValue());
         auto request = std::move(result).Value();
         while (!provider.entered.load())
