@@ -198,7 +198,8 @@ namespace {
         CHECK_FALSE(std::filesystem::exists(path));
         const auto quarantineRoot = fixture.temporary.Path() / "quarantine" / "corrupt-cache-entry";
         REQUIRE(std::filesystem::is_directory(quarantineRoot));
-        const auto recordDirectory = std::filesystem::directory_iterator{quarantineRoot}->path();
+        const std::filesystem::directory_iterator records{quarantineRoot};
+        const auto recordDirectory = records->path();
         CHECK(std::filesystem::is_regular_file(recordDirectory / "artifact.horopkg"));
         std::ifstream diagnostic{recordDirectory / "diagnostic.json"};
         const nlohmann::json document = nlohmann::json::parse(diagnostic);
