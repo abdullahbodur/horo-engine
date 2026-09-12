@@ -499,6 +499,7 @@ horo_configure_target_header_boundary(HoroGui PUBLIC_HEADERS
 
 horo_configure_target_header_boundary(HoroExtensions PUBLIC_HEADERS
     Horo/Extensions/ApplicationCapabilityRegistry.h
+    Horo/Extensions/BackendServiceRegistry.h
     Horo/Extensions/ExtensionAbi.h
     Horo/Extensions/ExtensionCapabilityAdmission.h
     Horo/Extensions/ExtensionActivationState.h

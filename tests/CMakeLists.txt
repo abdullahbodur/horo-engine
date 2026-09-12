@@ -1464,6 +1464,20 @@ target_compile_features(HoroProjectValidatorRegistryTests PRIVATE cxx_std_20)
 target_link_libraries(HoroProjectValidatorRegistryTests PRIVATE HoroEngine::Extensions Catch2::Catch2WithMain)
 add_test(NAME HoroProjectValidatorRegistryTests COMMAND HoroProjectValidatorRegistryTests)
 
+add_library(HoroBackendServiceReference STATIC
+        fixtures/extensions/BackendServiceReference.cpp
+)
+target_compile_features(HoroBackendServiceReference PUBLIC cxx_std_20)
+target_include_directories(HoroBackendServiceReference PUBLIC ${PROJECT_SOURCE_DIR}/tests/fixtures/extensions)
+target_link_libraries(HoroBackendServiceReference PUBLIC HoroEngine::Extensions)
+
+add_executable(HoroBackendServiceRegistryTests
+        unit/extensions/BackendServiceRegistryTests.cpp
+)
+target_compile_features(HoroBackendServiceRegistryTests PRIVATE cxx_std_20)
+target_link_libraries(HoroBackendServiceRegistryTests PRIVATE HoroBackendServiceReference Catch2::Catch2WithMain)
+add_test(NAME HoroBackendServiceRegistryTests COMMAND HoroBackendServiceRegistryTests)
+
 add_executable(HoroSecurityBaselineTests unit/security/SecurityBaselineTests.cpp)
 target_compile_features(HoroSecurityBaselineTests PRIVATE cxx_std_20)
 target_link_libraries(HoroSecurityBaselineTests PRIVATE

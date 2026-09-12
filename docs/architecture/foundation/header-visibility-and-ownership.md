@@ -20,6 +20,18 @@ Public placement is a compatibility commitment, not merely a convenient include
 path. Moving a source header into `include/Horo/` requires a stable owner, a narrow
 contract, Doxygen documentation, migration notes, and consumer coverage.
 
+## EXT-002.11 Migration Notes
+
+`HoroEngine::Extensions` owns the new
+`Horo/Extensions/BackendServiceRegistry.h` public contract. Backend-only service
+adapters link Extensions directly and publish typed service implementations only
+from an application composition root. This is the first callable backend-service
+registry, so no existing caller signature changes. Future callers replace direct
+provider pointers or reusable factories with one-shot calls resolved through an
+exact `ApplicationCapabilityProviderLease`; provider-native ABI tables remain
+private to their host adapter. The generated Extensions public-header consumer
+compiles the new header through its sole owning target.
+
 `Horo/Vfx/VfxQualityPolicy.h` is owned by `HoroVfxApi`. It adds backend-neutral
 immutable capability/policy evidence and pure admission decisions; consumers keep
 linking `HoroEngine::VfxApi`, and no include spelling or existing caller migrates.
