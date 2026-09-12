@@ -36,9 +36,9 @@ namespace Horo::WorldStreaming {
         }
 
         [[nodiscard]] constexpr bool IsKnownProvider(const StreamingCellProvider provider) noexcept {
+            using enum StreamingCellProvider;
             const auto value = ProviderValue(provider);
-            return (value >= ProviderValue(StreamingCellProvider::CoreEcs) && value <= ProviderValue(StreamingCellProvider::Destruction)) ||
-                   value >= ProviderValue(StreamingCellProvider::FirstCustom);
+            return (value >= ProviderValue(CoreEcs) && value <= ProviderValue(Destruction)) || value >= ProviderValue(FirstCustom);
         }
 
         [[nodiscard]] bool CheckedAdd(const std::uint64_t left, const std::uint64_t right, std::uint64_t &sum) noexcept {
@@ -145,9 +145,8 @@ namespace Horo::WorldStreaming {
             if (!CheckedAdd(StreamingCellHeaderView::FixedHeaderBytes, header.compressedSize, artifactEnd))
                 return Failure<void>(WorldStreamingErrors::CellCandidateCapacityExceeded);
             const auto &lastPayload = header.payloads.back();
-            std::uint64_t lastPayloadEnd{};
-            if (!CheckedAdd(lastPayload.offset, lastPayload.compressedSize, lastPayloadEnd) || lastPayloadEnd != artifactEnd ||
-                decodedBytes != header.uncompressedSize)
+            if (std::uint64_t lastPayloadEnd{}; !CheckedAdd(lastPayload.offset, lastPayload.compressedSize, lastPayloadEnd) ||
+                                                lastPayloadEnd != artifactEnd || decodedBytes != header.uncompressedSize)
                 return Failure<void>(WorldStreamingErrors::CellCandidateInvalid);
             return Result<void>::Success();
         }
