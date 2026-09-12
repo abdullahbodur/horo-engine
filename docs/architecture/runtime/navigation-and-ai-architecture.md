@@ -694,6 +694,25 @@ remember entirely within the simulation layer.
 
 ### Senses, Authorities, And Query Seams
 
+Sense implementations, typed stimulus payloads, and listener configurations are
+composed through the immutable `PerceptionDescriptorRegistry` contract before a
+`SceneRuntime` begins sensing work. `SenseTypeId`, `StimulusTypeId`, and
+`PerceptionListenerTypeId` are the only save/wire identities; localized display
+names and contribution order never determine identity. Native, script, and package
+origins carry a stable `PerceptionProviderId` plus a non-zero descriptor version.
+Duplicate identities conflict across all origins instead of introducing implicit
+source precedence.
+
+Registry capture resolves every listener against the identity-sorted sense and
+stimulus sets and against product-supplied, backend-neutral capability bits. A
+missing dependency, incompatible declared version interval, or capability rejects
+a required listener. The same condition
+records a typed unavailable state for an optional listener without disabling
+unrelated listeners. The captured registry owns all descriptor data and exposes
+only const spans, so a sensing job may borrow one frozen snapshot for its full
+bounded execution window. Descriptor capture is inert: it does not install
+services, select a backend, or touch ambient runtime state.
+
 Every built-in sense has an explicit authority, timing owner, and underlying
 query seam:
 

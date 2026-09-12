@@ -28,6 +28,10 @@ namespace Horo::AI {
     struct TaskIdentityTag;
     struct BlackboardSchemaIdentityTag;
     struct BlackboardKeyIdentityTag;
+    struct SenseTypeIdentityTag;
+    struct StimulusTypeIdentityTag;
+    struct PerceptionListenerTypeIdentityTag;
+    struct PerceptionProviderIdentityTag;
 
     /** @brief Persistent authored identity of an AI agent, independent of display name and runtime instance. */
     using AgentId = AiStableIdentity<AgentIdentityTag>;
@@ -39,6 +43,14 @@ namespace Horo::AI {
     using BlackboardSchemaId = AiStableIdentity<BlackboardSchemaIdentityTag>;
     /** @brief Persistent identity of a key within its authored blackboard identity domain. */
     using BlackboardKeyId = AiStableIdentity<BlackboardKeyIdentityTag>;
+    /** @brief Persistent identity of a perception sense type, independent of display name. */
+    using SenseTypeId = AiStableIdentity<SenseTypeIdentityTag>;
+    /** @brief Persistent identity of a typed perception stimulus payload. */
+    using StimulusTypeId = AiStableIdentity<StimulusTypeIdentityTag>;
+    /** @brief Persistent identity of a listener descriptor type. */
+    using PerceptionListenerTypeId = AiStableIdentity<PerceptionListenerTypeIdentityTag>;
+    /** @brief Persistent identity of a native, script, or package descriptor provider. */
+    using PerceptionProviderId = AiStableIdentity<PerceptionProviderIdentityTag>;
 
     /**
      * @brief Encodes a persistent AI identity in canonical network byte order.
@@ -88,11 +100,15 @@ namespace Horo::AI {
 
     /** @brief Borrowed persistent identity domains validated together before runtime activation. */
     struct AiIdentityDescriptorSet {
-        std::span<const AgentId> agents;                       /**< Authored agent identities. */
-        std::span<const ControllerTypeId> controllerTypes;     /**< Controller type identities. */
-        std::span<const TaskId> tasks;                         /**< Authored task identities. */
-        std::span<const BlackboardSchemaId> blackboardSchemas; /**< Blackboard schema identities. */
-        std::span<const BlackboardKeyId> blackboardKeys;       /**< Blackboard key identities. */
+        std::span<const AgentId> agents;                           /**< Authored agent identities. */
+        std::span<const ControllerTypeId> controllerTypes;         /**< Controller type identities. */
+        std::span<const TaskId> tasks;                             /**< Authored task identities. */
+        std::span<const BlackboardSchemaId> blackboardSchemas;     /**< Blackboard schema identities. */
+        std::span<const BlackboardKeyId> blackboardKeys;           /**< Blackboard key identities. */
+        std::span<const SenseTypeId> senseTypes;                   /**< Perception sense type identities. */
+        std::span<const StimulusTypeId> stimulusTypes;             /**< Perception stimulus type identities. */
+        std::span<const PerceptionListenerTypeId> listenerTypes;   /**< Perception listener type identities. */
+        std::span<const PerceptionProviderId> perceptionProviders; /**< Perception descriptor provider identities. */
     };
 
     /**

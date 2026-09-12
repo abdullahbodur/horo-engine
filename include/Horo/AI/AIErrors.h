@@ -44,4 +44,18 @@ namespace Horo::AI::AIErrors {
     extern const ErrorCodeDescriptor BlackboardObserverLimitExceeded;
     /** @brief A publication callback attempted to mutate its blackboard or observer registry. */
     extern const ErrorCodeDescriptor BlackboardReentrantMutation;
+    /** @brief A perception descriptor, source, capability set, or listener dependency policy is malformed. */
+    extern const ErrorCodeDescriptor PerceptionDescriptorInvalid;
+    /** @brief A perception descriptor registry exceeds a configured hard-bounded capacity. */
+    extern const ErrorCodeDescriptor PerceptionDescriptorLimitExceeded;
+    /** @brief A stable perception type identity is contributed more than once. */
+    extern const ErrorCodeDescriptor PerceptionDescriptorConflict;
+    /** @brief A required sense or stimulus descriptor is not registered. */
+    extern const ErrorCodeDescriptor PerceptionDependencyMissing;
+    /** @brief A registered perception descriptor falls outside a listener's declared version interval. */
+    extern const ErrorCodeDescriptor PerceptionDescriptorIncompatible;
+    /** @brief Explicit host capabilities cannot satisfy a required listener. */
+    extern const ErrorCodeDescriptor PerceptionCapabilityUnavailable;
+    /** @brief Storage for an immutable perception descriptor snapshot is unavailable. */
+    extern const ErrorCodeDescriptor PerceptionRegistryStorageUnavailable;
 }  // namespace Horo::AI::AIErrors

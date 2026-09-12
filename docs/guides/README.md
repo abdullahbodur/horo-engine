@@ -50,6 +50,9 @@ workflows.
   requirements without fixed stereo arrays or native image types.
 - [XR Loader Preflight Migration](./xr-loader-preflight-migration.md):
   preserve exact loader/runtime/system states, selection policy, and generation fences.
+- [Perception Descriptor Registry Migration](./perception-descriptor-registry-migration.md):
+  compose stable sense, stimulus, and listener descriptors into an immutable
+  capability-resolved sensing-job snapshot.
 
 ## Writing a Guide
 
