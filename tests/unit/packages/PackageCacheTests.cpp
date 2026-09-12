@@ -80,6 +80,13 @@ namespace {
         return root / "by-hash" / "sha256" / DigestHex(digest) / "archive.horopkg";
     }
 
+    void CheckOwnerReadOnly(const std::filesystem::path &path) {
+        const auto permissions = std::filesystem::status(path).permissions();
+        CHECK((permissions & std::filesystem::perms::owner_read) != std::filesystem::perms::none);
+        CHECK((permissions & (std::filesystem::perms::owner_write | std::filesystem::perms::group_all |
+                              std::filesystem::perms::others_all)) == std::filesystem::perms::none);
+    }
+
     const Horo::ErrorCodeDescriptor InjectedPermissionFailure{
         .domain = Horo::ErrorDomainId{"test.package-cache"},
         .code = Horo::ErrorCode{"test.permission_denied"},
@@ -159,10 +166,7 @@ namespace {
         REQUIRE(first.HasValue());
         CHECK_FALSE(first.Value().alreadyPresent);
         CHECK(first.Value().digest == digest);
-        const auto permissions = std::filesystem::status(ActivePath(fixture.temporary.Path(), digest)).permissions();
-        CHECK((permissions & std::filesystem::perms::owner_read) != std::filesystem::perms::none);
-        CHECK((permissions & (std::filesystem::perms::owner_write | std::filesystem::perms::group_all |
-                              std::filesystem::perms::others_all)) == std::filesystem::perms::none);
+        CheckOwnerReadOnly(ActivePath(fixture.temporary.Path(), digest));
 
         const auto second = fixture.store.Publish(archive);
         REQUIRE(second.HasValue());
@@ -223,10 +227,7 @@ namespace {
         CHECK_FALSE(std::filesystem::exists(ActivePath(fixture.temporary.Path(), expected)));
         const auto artifact = fixture.temporary.Path() / "quarantine" / "hash-mismatch" / result.Value().quarantineId / "artifact.horopkg";
         CHECK(std::filesystem::is_regular_file(artifact));
-        const auto permissions = std::filesystem::status(artifact).permissions();
-        CHECK((permissions & std::filesystem::perms::owner_read) != std::filesystem::perms::none);
-        CHECK((permissions & (std::filesystem::perms::owner_write | std::filesystem::perms::group_all |
-                              std::filesystem::perms::others_all)) == std::filesystem::perms::none);
+        CheckOwnerReadOnly(artifact);
     }
 
     TEST_CASE("Package cache returns busy while publication or cleanup owns the digest lock", "[packages][cache][concurrency]") {
