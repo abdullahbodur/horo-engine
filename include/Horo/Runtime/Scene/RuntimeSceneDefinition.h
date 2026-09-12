@@ -9,6 +9,7 @@
 #include "Horo/Foundation/Result.h"
 #include "Horo/Gameplay/BehaviorTypes.h"
 #include "Horo/Math/SceneMath.h"
+#include "Horo/Runtime/Scene/NavigationSceneComponents.h"
 #include "Horo/Runtime/Scene/PrimitiveMeshDescriptor.h"
 #include "Horo/Runtime/Scene/SceneComponents.h"
 
@@ -53,6 +54,8 @@ namespace Horo::Runtime {
         std::optional<TriggerVolumeComponent> triggerVolume;
         std::optional<AudioSourceComponent> audioSource;
         std::optional<UiCanvasComponent> uiCanvas; /**< Optional canvas asset instantiated by the Runtime UI owner. */
+        std::optional<NavigationSurfaceComponent> navigationSurface;
+        std::optional<NavigationRegionComponent> navigationRegion;
         std::vector<Gameplay::BehaviorComponent> behaviors;
         [[nodiscard]] bool operator==(const RuntimeComponentSet &) const noexcept = default;
     };
