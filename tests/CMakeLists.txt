@@ -1311,9 +1311,11 @@ add_executable(HoroRuntimeSaveNamespaceTests
 target_compile_features(HoroRuntimeSaveNamespaceTests PRIVATE cxx_std_20)
 target_link_libraries(HoroRuntimeSaveNamespaceTests PRIVATE HoroEngine::Runtime)
 add_executable(HoroRuntimeSaveParticipantRegistryTests
+        support/AllocationProbe.cpp
         unit/runtime/save/SaveParticipantRegistryTests.cpp
 )
 target_compile_features(HoroRuntimeSaveParticipantRegistryTests PRIVATE cxx_std_20)
+target_include_directories(HoroRuntimeSaveParticipantRegistryTests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/support)
 target_link_libraries(HoroRuntimeSaveParticipantRegistryTests PRIVATE HoroEngine::Runtime)
 add_executable(HoroRuntimeSaveCaptureSnapshotTests
         unit/runtime/save/SaveCaptureSnapshotTests.cpp

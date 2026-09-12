@@ -41,12 +41,23 @@ namespace Horo::Runtime::SaveErrors {
     const ErrorCodeDescriptor ParticipantRegistryCapacityExceeded{kDomain, ErrorCode{"save.participant.registry_capacity_exceeded"}, kError,
                                                                   "The save participant registry reached its bounded capacity.",
                                                                   "Reduce participant count or revise the explicit product limit."};
+    const ErrorCodeDescriptor ParticipantRegistryAllocationFailed{kDomain,
+                                                                  ErrorCode{"save.participant.registry_allocation_failed"},
+                                                                  kError,
+                                                                  "Save participant registry storage could not be allocated.",
+                                                                  "Release memory and retry composition before admitting save work.",
+                                                                  true};
     const ErrorCodeDescriptor ParticipantDependencyMissing{kDomain, ErrorCode{"save.participant.dependency_missing"}, kError,
                                                            "A required save participant dependency is absent.",
                                                            "Register every declared dependency before publishing a snapshot."};
     const ErrorCodeDescriptor ParticipantDependencyCycle{kDomain, ErrorCode{"save.participant.dependency_cycle"}, kError,
                                                          "Save participant dependencies contain a cycle.",
                                                          "Remove the cycle so semantic ownership has an acyclic dependency graph."};
+    const ErrorCodeDescriptor ParticipantDependencyPhaseIncompatible{kDomain, ErrorCode{"save.participant.dependency_phase_incompatible"},
+                                                                     kError,
+                                                                     "A save participant dependency names an unsupported operation phase.",
+                                                                     "Give both participants the required phase capability or correct the "
+                                                                     "typed dependency phase."};
     const ErrorCodeDescriptor ParticipantRegistryGenerationExhausted{kDomain, ErrorCode{"save.participant.registry_generation_exhausted"},
                                                                      ErrorSeverity::Critical,
                                                                      "The save participant registry generation is exhausted.",

@@ -673,3 +673,20 @@ an exact completed predecessor for `BeginCommit`; pre-commit stages cannot be pu
 after the gate. Handles retain shared state across user callbacks, and producer
 replacement detaches prior state before abandonment dispatch so reentrant release or
 move assignment cannot invalidate callback evidence or orphan the installed operation.
+
+## Runtime Save Participant Ordering Boundary
+
+`[SAV-001.8]` extends the existing `SaveParticipantRegistry.h` contract without
+changing target ownership. Dependency edges now carry required/optional policy and
+an exact capture, restore or combined phase. Registry snapshots retain their
+identity-sorted canonical binding view and additionally publish stable topological
+capture and restore plans. Equivalent participant sets therefore produce the same
+orders regardless of registration timing, addresses or unordered-container order.
+Non-overlapping capture and restore edges to one provider remain distinct, while
+overlapping declarations are invalid. Registry allocation failures are typed and do
+not advance the published generation without the corresponding membership change.
+
+Existing `SaveParticipantId` dependency initializers retain their required-both
+meaning; callers that intended optional or phase-specific behavior must migrate to
+an explicit `SaveParticipantDependency` value. The generated Runtime public-header
+consumer continues to cover the extended Foundation-only surface.

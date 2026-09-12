@@ -95,6 +95,20 @@ namespace Horo::Runtime {
             REQUIRE(snapshot.Participants().front().records == std::vector{record});
         }
 
+        TEST_CASE("Capture adapters run in the registry dependency plan", "[unit][save][capture]") {
+            auto destructionCount = std::make_shared<int>();
+            auto order = std::make_shared<std::vector<std::string>>();
+            CanonicalStateParticipantRegistry registry;
+            auto consumer = Descriptor("project.capture.a_consumer", {Test::Id<SaveRecordId>(26)}, false);
+            consumer.dependencies = {{Participant("project.capture.z_provider"), SaveParticipantDependencyRequirement::Required,
+                                      SaveParticipantDependencyPhase::Capture}};
+            Register(registry, std::move(consumer), OrderRecordingAdapter(order, destructionCount));
+            Register(registry, Descriptor("project.capture.z_provider", {Test::Id<SaveRecordId>(27)}, false),
+                     OrderRecordingAdapter(order, destructionCount));
+            static_cast<void>(CaptureRegisteredParticipants(registry));
+            CHECK(*order == std::vector<std::string>{"project.capture.z_provider", "project.capture.a_consumer"});
+        }
+
         TEST_CASE("Large captures retain segmented immutable leases and destroy payload before module adapter", "[unit][save][capture]") {
             auto events = std::make_shared<std::vector<std::string>>();
             CanonicalStateParticipantRegistry registry;
@@ -140,9 +154,7 @@ namespace Horo::Runtime {
                      std::make_shared<CallbackCaptureAdapter>([](const CanonicalCaptureContext &, ICanonicalCaptureSink &) {
                 return Result<CanonicalCaptureDisposition>::Success(CanonicalCaptureDisposition::Omitted);
             }, destructionCount));
-            const SaveParticipantRegistrySnapshot participants = registry.Snapshot().Value();
-            auto builder = RuntimeSaveCaptureBuilder::Create(Provenance(participants), participants).Value();
-            REQUIRE(builder.CaptureParticipants().HasValue());
+            auto builder = CaptureRegisteredParticipants(registry);
 
             const RuntimeSaveSnapshot snapshot = builder.Seal().Value();
             REQUIRE(snapshot.Participants().size() == 2);

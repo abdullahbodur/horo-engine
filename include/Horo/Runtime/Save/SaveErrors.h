@@ -32,10 +32,14 @@ namespace Horo::Runtime::SaveErrors {
     extern const ErrorCodeDescriptor ParticipantRegistryClosed;
     /** @brief The bounded participant registry has no remaining capacity. */
     extern const ErrorCodeDescriptor ParticipantRegistryCapacityExceeded;
+    /** @brief Participant registry binding or immutable snapshot storage could not be allocated. */
+    extern const ErrorCodeDescriptor ParticipantRegistryAllocationFailed;
     /** @brief A participant declares a dependency absent from the registry snapshot. */
     extern const ErrorCodeDescriptor ParticipantDependencyMissing;
     /** @brief Participant dependencies contain a cycle. */
     extern const ErrorCodeDescriptor ParticipantDependencyCycle;
+    /** @brief A dependency names a capture/restore phase unsupported by either participant. */
+    extern const ErrorCodeDescriptor ParticipantDependencyPhaseIncompatible;
     /** @brief The registry generation cannot advance without reusing a value. */
     extern const ErrorCodeDescriptor ParticipantRegistryGenerationExhausted;
     /** @brief Capture evidence or operation bounds are missing, zero, or outside qualified maxima. */
