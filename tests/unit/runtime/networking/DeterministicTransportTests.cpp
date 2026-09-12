@@ -64,7 +64,7 @@ namespace Horo::Network {
             return std::move(created).Value();
         }
 
-        struct ReadyLoopback final {
+        struct ReadyLoopback {
             ReadyLoopback() {
                 REQUIRE(transport.Open(connection).HasValue());
                 std::array<DeterministicTransportEvent, 1> none{};
