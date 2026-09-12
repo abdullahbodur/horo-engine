@@ -442,6 +442,7 @@ add_library(HoroAudioCommands STATIC
         audio/commands/AudioCommandBuffer.cpp
         audio/commands/AudioCommandStaging.cpp
         audio/commands/AudioEventQueue.cpp
+        audio/commands/AudioLifecycleReconciler.cpp
         audio/commands/ScheduledAudioCommandBatch.cpp
 )
 add_library(HoroEngine::AudioCommands ALIAS HoroAudioCommands)
@@ -453,6 +454,7 @@ add_library(HoroPhysics STATIC
         physics/CharacterErrors.cpp
         physics/CharacterWorldSettings.cpp
         physics/PhysicsBodyDescriptor.cpp
+        physics/PhysicsBodyDynamics.cpp
         physics/PhysicsCapabilities.cpp
         physics/PhysicsCollisionSchema.cpp
         physics/PhysicsConstraintDescriptor.cpp
@@ -495,8 +497,10 @@ endif()
 add_library(HoroAI STATIC
         runtime/ai/api/AIErrors.cpp
         runtime/ai/api/AIIdentity.cpp
+        runtime/ai/api/AITaskLifecycle.cpp
         runtime/ai/api/BlackboardInstance.cpp
         runtime/ai/api/BlackboardSchema.cpp
+        runtime/ai/api/NullAIRuntime.cpp
         runtime/ai/api/PerceptionDescriptorRegistry.cpp
 )
 add_library(HoroEngine::AI ALIAS HoroAI)
@@ -664,6 +668,7 @@ add_library(HoroWorldStreaming STATIC
         runtime/world_streaming/StreamingCellOperation.cpp
         runtime/world_streaming/StreamingCellCandidate.cpp
         runtime/world_streaming/StreamingCellAssetRequest.cpp
+        runtime/world_streaming/StreamingCellActivation.cpp
         runtime/world_streaming/StreamingCellStability.cpp
         runtime/world_streaming/StreamingCellState.cpp
         runtime/world_streaming/StreamingSchedulerAdmission.cpp

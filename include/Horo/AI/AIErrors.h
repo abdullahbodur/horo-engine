@@ -18,6 +18,16 @@ namespace Horo::AI::AIErrors {
     extern const ErrorCodeDescriptor HandleInvalid;
     /** @brief A runtime slot generation cannot advance without wrapping. */
     extern const ErrorCodeDescriptor GenerationExhausted;
+    /** @brief AI task operation context is malformed or crosses runtime/agent generations. */
+    extern const ErrorCodeDescriptor TaskContextInvalid;
+    /** @brief An AI task lifecycle operation is illegal for its current state. */
+    extern const ErrorCodeDescriptor TaskTransitionInvalid;
+    /** @brief A failed AI task omitted a valid typed failure family or cause. */
+    extern const ErrorCodeDescriptor TaskFailureInvalid;
+    /** @brief The selected composition deliberately provides no gameplay-AI runtime. */
+    extern const ErrorCodeDescriptor RuntimeUnavailable;
+    /** @brief A gameplay-AI runtime or deterministic harness exhausted its declared capacity. */
+    extern const ErrorCodeDescriptor TaskCapacityExceeded;
     /** @brief A blackboard schema or key descriptor has an invalid representation. */
     extern const ErrorCodeDescriptor BlackboardSchemaInvalid;
     /** @brief A blackboard schema or collection exceeds its fixed contract capacity. */

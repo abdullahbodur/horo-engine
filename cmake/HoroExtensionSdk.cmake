@@ -7,6 +7,7 @@ function(horo_configure_extension_sdk)
         "${package_root}/lib/cmake/HoroEngineExtensionSdk")
 
     file(MAKE_DIRECTORY
+        "${package_root}/bin"
         "${package_root}/include/Horo/Extensions"
         "${package_root}/share/horo/extension-sdk"
         "${package_cmake_dir}")
@@ -18,6 +19,10 @@ function(horo_configure_extension_sdk)
     configure_file(
         "${PROJECT_SOURCE_DIR}/LICENSE"
         "${package_root}/LICENSE"
+        COPYONLY)
+    configure_file(
+        "${PROJECT_SOURCE_DIR}/scripts/scaffold_extension.py"
+        "${package_root}/bin/horo-scaffold-extension.py"
         COPYONLY)
     configure_file(
         "${PROJECT_SOURCE_DIR}/sdk/extension-sdk.json.in"

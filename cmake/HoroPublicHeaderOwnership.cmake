@@ -231,6 +231,7 @@ horo_configure_target_header_boundary(HoroAudioCommands PUBLIC_HEADERS
     Horo/Audio/AudioCommandBuffer.h
     Horo/Audio/AudioCommandStaging.h
     Horo/Audio/AudioEventQueue.h
+    Horo/Audio/AudioLifecycleReconciler.h
     Horo/Audio/ScheduledAudioCommandBatch.h
 )
 horo_configure_target_header_boundary(HoroInput PUBLIC_HEADERS
@@ -241,6 +242,7 @@ horo_configure_target_header_boundary(HoroPhysics PUBLIC_HEADERS
     Horo/Physics/CharacterErrors.h
     Horo/Physics/CharacterWorldSettings.h
     Horo/Physics/PhysicsBodyDescriptor.h
+    Horo/Physics/PhysicsBodyDynamics.h
     Horo/Physics/PhysicsCapabilities.h
     Horo/Physics/PhysicsCollisionSchema.h
     Horo/Physics/PhysicsConstraintDescriptor.h
@@ -264,8 +266,10 @@ horo_configure_target_header_boundary(HoroPhysics PUBLIC_HEADERS
 horo_configure_target_header_boundary(HoroAI PUBLIC_HEADERS
     Horo/AI/AIErrors.h
     Horo/AI/AIIdentity.h
+    Horo/AI/AITaskLifecycle.h
     Horo/AI/BlackboardInstance.h
     Horo/AI/BlackboardSchema.h
+    Horo/AI/NullAIRuntime.h
     Horo/AI/PerceptionDescriptorRegistry.h
 )
 horo_configure_target_header_boundary(HoroAnimationApi PUBLIC_HEADERS
@@ -364,6 +368,7 @@ horo_configure_target_header_boundary(HoroWorldStreaming PUBLIC_HEADERS
     Horo/WorldStreaming/StreamingCellOperation.h
     Horo/WorldStreaming/StreamingCellCandidate.h
     Horo/WorldStreaming/StreamingCellAssetRequest.h
+    Horo/WorldStreaming/StreamingCellActivation.h
     Horo/WorldStreaming/StreamingCellState.h
     Horo/WorldStreaming/StreamingCellStability.h
     Horo/WorldStreaming/StreamingSchedulerAdmission.h

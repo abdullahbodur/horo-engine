@@ -182,6 +182,15 @@ normalization, and completion reconciliation. A selected backend owns native
 device objects and callback registration. The callback owns only its currently
 published preallocated render-core epoch and bounded acknowledgements/events.
 
+Implementation status on 12 September 2026: `AudioLifecycleReconciler` is the
+bounded control-owner record for accepted operations and callback-visible voice/
+resource generations. Scene unload closes its exact context until the ordered
+barrier is acknowledged. Device reset and shutdown close global admission and
+require matching callback-quiesced evidence plus native-detachment proof before
+releasing tracked references. Pending operations receive retained typed terminal
+outcomes before scene/runtime ownership disappears; partial startup and repeated
+shutdown follow the same state machine without invoking a device from destruction.
+
 Scene, gameplay, cinematic, editor, asset, and streaming systems are typed
 producers. They submit owned value snapshots and commands through Audio API or an
 application audio capability; Audio Runtime does not include/query editor, GUI,
