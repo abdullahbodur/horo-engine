@@ -182,9 +182,11 @@ namespace Horo::Runtime {
         CanonicalValueWriter(CanonicalCodecLimits limits, std::vector<CanonicalFieldId> path);
         [[nodiscard]] Result<void> Append(std::span<const std::byte> value);
         [[nodiscard]] Result<void> AppendLengthDelimited(std::span<const std::byte> value);
+        [[nodiscard]] Result<void> CommitStaged(CanonicalValueWriter &&staging);
         [[nodiscard]] Result<void> AdmitComposite(std::size_t childDepth);
         [[nodiscard]] Result<void> Fail(Error error);
         [[nodiscard]] Error ErrorAt(const ErrorCodeDescriptor &descriptor) const;
+        [[nodiscard]] Result<void> WriteFloatComponents(std::span<const float> components);
         template <typename Unsigned> [[nodiscard]] Result<void> WriteUnsigned(Unsigned value);
         template <typename Signed> [[nodiscard]] Result<void> WriteSigned(Signed value);
         CanonicalCodecLimits limits_;
@@ -267,6 +269,7 @@ namespace Horo::Runtime {
         [[nodiscard]] Result<void> Charge(std::size_t bytes);
         [[nodiscard]] Result<void> ChargeElements(std::size_t count, std::size_t elementSize);
         [[nodiscard]] Error ErrorAt(const ErrorCodeDescriptor &descriptor) const;
+        [[nodiscard]] Result<void> ReadFloatComponents(std::span<float> components);
         template <typename Unsigned> [[nodiscard]] Result<Unsigned> ReadUnsigned();
         template <typename Signed> [[nodiscard]] Result<Signed> ReadSigned();
         std::span<const std::byte> bytes_;
