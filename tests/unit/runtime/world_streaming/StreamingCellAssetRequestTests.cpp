@@ -119,6 +119,17 @@ namespace Horo::WorldStreaming {
                      WorldStreamingErrors::CellAssetRequestLifecycleUnavailable);
     }
 
+    TEST_CASE("Cell asset request cancels partial admission when provider capacity rejects a child",
+              "[unit][world_streaming][asset_request][capacity][cancellation]") {
+        RequestFixture fixture;
+        BlockingProvider provider;
+        JobSystem jobs{{1, 8}};
+        Assets::AssetLoadService service{jobs, provider, 2};
+        auto result = RequestStreamingCellAssets(service, fixture.registry, fixture.manifest, fixture.candidate, Context());
+        REQUIRE(result.HasError());
+        REQUIRE(result.ErrorValue().code.Value() == "asset.load.queue_full");
+    }
+
     TEST_CASE("Cell asset request propagates cancellation to every child", "[unit][world_streaming][asset_request][cancellation]") {
         RequestFixture fixture;
         BlockingProvider provider;

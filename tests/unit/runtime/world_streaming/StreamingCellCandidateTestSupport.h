@@ -4,6 +4,7 @@
 #include "WorldStreamingTestUtils.h"
 
 #include <array>
+#include <utility>
 
 namespace Horo::WorldStreaming::CandidateTestSupport {
     inline StreamingCellId Cell(const std::int32_t x = 0) {
