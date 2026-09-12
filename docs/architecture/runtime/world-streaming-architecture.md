@@ -889,6 +889,36 @@ requests fail without partial publication. The contract owns no editor document,
 state, gameplay script, network session or service pointer and performs no registration
 or lifecycle callback.
 
+### Editor, runtime and platform layer filtering
+
+`WorldLayerFilterPolicy` and `FilterWorldLayers` form the inert WST-006.3 target
+projection boundary. One policy selects Editor, client runtime or dedicated-server
+runtime and explicitly includes or excludes layers marked Optional. The input is a
+canonical immutable sequence of WST-006.1 ownership facts plus the corresponding
+version-one manifest flags. The result and every decision repeat the exact mounted
+`StreamingRuntimeOwnerToken`, source `StreamingLayerId` and ownership revision;
+filtering never renumbers, hashes, aliases or otherwise replaces a source identity,
+and a cached decision cannot be reused across owner, partition or epoch replacement.
+
+Editor includes editor-only, server-only and client-only authored layers so those
+sources remain inspectable. Runtime targets exclude editor-only content. Client
+runtime additionally excludes ServerOnly layers, while dedicated-server runtime
+excludes ClientOnly layers. Optional exclusion applies after audience and target-role
+filtering so each omitted layer has one stable observable reason. Persistent manifest
+flags must agree with the WST-006.1 residency policy, and ServerOnly plus ClientOnly
+is contradictory. A default-constructed decision is explicitly Unresolved and is
+never interpreted as included content.
+
+The caller supplies storage for every decision and a mandatory candidate ceiling.
+The function validates the complete strictly identity-ordered input, exact mounted
+world, filter-policy identity/revision, known flags and output capacity before writing
+the first row. Duplicate, unsorted, invalid, unsupported, stale, over-capacity,
+cancelling and closed requests therefore leave output untouched. The filter performs
+no I/O, package mutation, cell scheduling, layer-state transition or fallback to a
+different target policy. A later policy or world replacement makes old evidence stale
+for new passes; already owned immutable decisions retain their captured meaning.
+Policy replacement preserves stable policy identity, requires its exact non-wrapping
+revision successor and is rejected during cancellation or after shutdown.
 ### Layer Loaded and Activated state
 
 `WorldLayerStateRecord` is the inert WST-006.2 state-machine publication for one

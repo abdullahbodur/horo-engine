@@ -398,6 +398,7 @@ horo_configure_target_header_boundary(HoroWorldStreaming PUBLIC_HEADERS
     Horo/WorldStreaming/StreamingSourceRange.h
     Horo/WorldStreaming/WorldCellQuantization.h
     Horo/WorldStreaming/WorldPartitionDescriptor.h
+    Horo/WorldStreaming/WorldLayerFiltering.h
     Horo/WorldStreaming/WorldLayerOwnershipModel.h
     Horo/WorldStreaming/WorldLayerState.h
     Horo/WorldStreaming/WorldObjectOwnership.h
