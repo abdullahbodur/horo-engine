@@ -1,11 +1,21 @@
 #include "Horo/Runtime/Ui/UiLayout.h"
 
+#include <algorithm>
+#include <cmath>
+
 namespace Horo::Runtime::Ui {
     namespace {
         [[nodiscard]] bool SameOwner(const RuntimeUiInstanceId instance, const UiCanvasInstanceId canvas) noexcept {
             return instance.IsValid() && canvas.IsValid() && instance.ownership == canvas.ownership;
         }
     }  // namespace
+
+    /** @copydoc UiLogicalTransform::IsValid */
+    bool UiLogicalTransform::IsValid() const noexcept {
+        return std::ranges::all_of(values, [](const float value) {
+            return std::isfinite(value);
+        });
+    }
 
     /** @copydoc UiLogicalExtent::IsValid */
     bool UiLogicalExtent::IsValid() const noexcept {

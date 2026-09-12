@@ -124,6 +124,7 @@ horo_configure_target_header_boundary(HoroRuntimeUi PUBLIC_HEADERS
     Horo/Runtime/Ui/UiDiagnostics.h
     Horo/Runtime/Ui/UiElementTree.h
     Horo/Runtime/Ui/UiLayout.h
+    Horo/Runtime/Ui/UiHitTesting.h
     Horo/Runtime/Ui/UiRenderSnapshot.h
     Horo/Runtime/Ui/UiPresentationReceipt.h
 )
@@ -144,6 +145,7 @@ horo_configure_target_header_boundary(HoroNetworkApi PUBLIC_HEADERS
     Horo/Network/ReplicationDescriptor.h
     Horo/Network/ReplicationDescriptorRegistry.h
     Horo/Network/ReplicationIdentity.h
+    Horo/Network/ReplicationRoles.h
     Horo/Network/TransportCapabilities.h
     Horo/Network/TransportBudget.h
 )
@@ -530,6 +532,7 @@ horo_configure_target_header_boundary(HoroExtensions PUBLIC_HEADERS
     Horo/Extensions/ExtensionMarketplace.h
     Horo/Extensions/PipelineStepRegistry.h
     Horo/Extensions/ProjectValidatorRegistry.h
+    Horo/Extensions/ToolchainProviderRegistry.h
 )
 
 horo_verify_public_header_inventory()

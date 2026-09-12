@@ -218,6 +218,7 @@ add_library(HoroNetworkApi STATIC
         runtime/networking/api/ProtocolIdentityRegistry.cpp
         runtime/networking/api/ReplicationDescriptor.cpp
         runtime/networking/api/ReplicationDescriptorRegistry.cpp
+        runtime/networking/api/ReplicationRoles.cpp
         runtime/networking/api/TransportCapabilities.cpp
         runtime/networking/api/TransportBudget.cpp
 )
@@ -241,6 +242,7 @@ add_library(HoroRuntimeUi STATIC
         runtime/ui/UiElementTree.cpp
         runtime/ui/UiLayout.cpp
         runtime/ui/UiLayoutTypes.cpp
+        runtime/ui/UiHitTesting.cpp
         runtime/ui/UiRenderSnapshot.cpp
         runtime/ui/UiPresentationReceipt.cpp
 )
@@ -1215,6 +1217,7 @@ add_library(HoroExtensions STATIC
         extensions/capabilities/asset_pipeline_points/ExternalAssetImporter.cpp
         extensions/capabilities/project_validator/ProjectValidatorRegistry.cpp
         extensions/capabilities/pipeline_step/PipelineStepRegistry.cpp
+        extensions/capabilities/toolchain_provider/ToolchainProviderRegistry.cpp
 )
 
 add_library(HoroEngine::Extensions ALIAS HoroExtensions)
