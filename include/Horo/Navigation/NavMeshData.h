@@ -310,11 +310,7 @@ namespace Horo::Navigation {
             NavMeshTileKey tile, const NavMeshProviderPayloadCompatibility &compatibility) const;
 
     private:
-        NavMeshData(NavMeshArtifactHeader header, std::vector<NavMeshTileDescriptor> tiles, std::vector<Math::Vec3> vertices,
-                    std::vector<NavMeshPolygon> polygons, std::vector<std::uint32_t> polygonVertexIndices,
-                    std::vector<std::uint32_t> polygonAdjacencies, std::vector<NavMeshOffMeshLink> offMeshLinks,
-                    std::vector<NavMeshSourceProvenance> provenance, std::vector<NavMeshProviderPayloadDescriptor> providerPayloads,
-                    std::vector<std::byte> providerPayloadBytes) noexcept;
+        explicit NavMeshData(const NavMeshArtifactView &artifact);
 
         NavMeshArtifactHeader header_;
         std::vector<NavMeshTileDescriptor> tiles_;

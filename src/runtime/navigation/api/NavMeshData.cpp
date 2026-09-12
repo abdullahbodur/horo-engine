@@ -402,10 +402,7 @@ namespace Horo::Navigation {
         if (const auto partitions = ValidatePartitions(artifact, limits); partitions.HasError())
             return Result<NavMeshData>::Failure(partitions.ErrorValue());
 
-        return Result<NavMeshData>::Success(
-            NavMeshData{artifact.header, Own(artifact.tiles), Own(artifact.vertices), Own(artifact.polygons),
-                        Own(artifact.polygonVertexIndices), Own(artifact.polygonAdjacencies), Own(artifact.offMeshLinks),
-                        Own(artifact.provenance), Own(artifact.providerPayloads), Own(artifact.providerPayloadBytes)});
+        return Result<NavMeshData>::Success(NavMeshData{artifact});
     }
 
     /** @copydoc NavMeshData::Header */
@@ -460,14 +457,9 @@ namespace Horo::Navigation {
         return Failure<NavMeshProviderPayloadView>(NavigationErrors::NavMeshProviderPayloadUnavailable);
     }
 
-    NavMeshData::NavMeshData(NavMeshArtifactHeader header, std::vector<NavMeshTileDescriptor> tiles, std::vector<Math::Vec3> vertices,
-                             std::vector<NavMeshPolygon> polygons, std::vector<std::uint32_t> polygonVertexIndices,
-                             std::vector<std::uint32_t> polygonAdjacencies, std::vector<NavMeshOffMeshLink> offMeshLinks,
-                             std::vector<NavMeshSourceProvenance> provenance,
-                             std::vector<NavMeshProviderPayloadDescriptor> providerPayloads,
-                             std::vector<std::byte> providerPayloadBytes) noexcept
-        : header_(std::move(header)), tiles_(std::move(tiles)), vertices_(std::move(vertices)), polygons_(std::move(polygons)),
-          polygonVertexIndices_(std::move(polygonVertexIndices)), polygonAdjacencies_(std::move(polygonAdjacencies)),
-          offMeshLinks_(std::move(offMeshLinks)), provenance_(std::move(provenance)), providerPayloads_(std::move(providerPayloads)),
-          providerPayloadBytes_(std::move(providerPayloadBytes)) {}
+    NavMeshData::NavMeshData(const NavMeshArtifactView &artifact)
+        : header_(artifact.header), tiles_(Own(artifact.tiles)), vertices_(Own(artifact.vertices)), polygons_(Own(artifact.polygons)),
+          polygonVertexIndices_(Own(artifact.polygonVertexIndices)), polygonAdjacencies_(Own(artifact.polygonAdjacencies)),
+          offMeshLinks_(Own(artifact.offMeshLinks)), provenance_(Own(artifact.provenance)),
+          providerPayloads_(Own(artifact.providerPayloads)), providerPayloadBytes_(Own(artifact.providerPayloadBytes)) {}
 }  // namespace Horo::Navigation
