@@ -335,6 +335,30 @@ namespace Horo::WorldStreaming::WorldStreamingErrors {
         Describe("world_streaming.cell_candidate.lifecycle_unavailable", ErrorSeverity::Warning,
                  "Candidate preparation is closed by cancellation or shutdown.",
                  "Retire the submitted operation or prepare under a new active owner lifetime.", false);
+    const ErrorCodeDescriptor CellActivationInvalid =
+        Describe("world_streaming.cell_activation.invalid", ErrorSeverity::Error,
+                 "A cell activation identity, operation, requirement, or prepared receipt is malformed.",
+                 "Submit one valid Activating operation and a canonical complete receipt set.", true);
+    const ErrorCodeDescriptor CellActivationStale =
+        Describe("world_streaming.cell_activation.stale", ErrorSeverity::Warning,
+                 "A prepared receipt or commit command names another operation, generation, or service revision.",
+                 "Roll back the stale receipts and prepare again for the current cell attempt.", false);
+    const ErrorCodeDescriptor CellActivationIncomplete =
+        Describe("world_streaming.cell_activation.incomplete", ErrorSeverity::Error,
+                 "The required Scene and provider receipt set is incomplete or mismatched.",
+                 "Acquire exactly one matching prepared receipt for every required participant.", true);
+    const ErrorCodeDescriptor CellActivationCapacityExceeded =
+        Describe("world_streaming.cell_activation.capacity_exceeded", ErrorSeverity::Error,
+                 "A required activation receipt set exceeds its mandatory admission ceiling.",
+                 "Reduce required providers or explicitly admit a larger supported receipt ceiling.", true);
+    const ErrorCodeDescriptor CellActivationLifecycleUnavailable =
+        Describe("world_streaming.cell_activation.lifecycle_unavailable", ErrorSeverity::Warning,
+                 "Cell activation is cancelled, closed, already terminal, or unavailable during shutdown.",
+                 "Retire the prepared attempt or create a fresh activation under an active owner lifetime.", false);
+    const ErrorCodeDescriptor CellActivationSafePointUnavailable =
+        Describe("world_streaming.cell_activation.safe_point_unavailable", ErrorSeverity::Warning,
+                 "Prepared cell publication was requested outside CommitDeferredLifecycleChanges.",
+                 "Defer the complete transaction to the Scene structural commit phase.", false);
     const ErrorCodeDescriptor SpatialAssignmentInvalid =
         Describe("world_streaming.spatial_assignment.invalid", ErrorSeverity::Error,
                  "A spatial-assignment request is empty, malformed, or outside the partition content bounds.",
@@ -639,4 +663,30 @@ namespace Horo::WorldStreaming::WorldStreamingErrors {
         Describe("world_streaming.partition_settings.lifecycle_unavailable", ErrorSeverity::Warning,
                  "Partition settings admission is cancelling or closed.",
                  "Wait for a new active project settings owner before admitting dependent work.", false);
+    const ErrorCodeDescriptor CellAssetRequestInvalid =
+        Describe("world_streaming.cell_asset_request.invalid", ErrorSeverity::Error,
+                 "A cell asset request identity, fence, or mandatory limit is malformed.",
+                 "Provide a valid request identity, exact operation fence, and positive bounded request ceiling.", true);
+    const ErrorCodeDescriptor CellAssetRequestStale =
+        Describe("world_streaming.cell_asset_request.stale", ErrorSeverity::Warning,
+                 "A cell asset request names a replaced candidate or mounted partition.",
+                 "Discard it and submit from the current generation-pinned candidate.", false);
+    const ErrorCodeDescriptor CellAssetRequestUnavailable =
+        Describe("world_streaming.cell_asset_request.unavailable", ErrorSeverity::Error,
+                 "A manifest dependency or registered cooked asset cannot be resolved.",
+                 "Rebuild the manifest and registry so every hard dependency has one exact cooked package.", false);
+    const ErrorCodeDescriptor CellAssetRequestCapacityExceeded =
+        Describe("world_streaming.cell_asset_request.capacity_exceeded", ErrorSeverity::Error,
+                 "The candidate dependency tree exceeds its explicit request ceiling.",
+                 "Raise the supported ceiling or reduce the canonical hard-dependency set before admission.", false);
+    const ErrorCodeDescriptor CellAssetRequestLifecycleUnavailable =
+        Describe("world_streaming.cell_asset_request.lifecycle_unavailable", ErrorSeverity::Warning,
+                 "Asset request admission is cancelling, closed, or no longer controllable.",
+                 "Wait for retirement or submit through a new active request owner.", false);
+    const ErrorCodeDescriptor CellAssetRequestNotReady =
+        Describe("world_streaming.cell_asset_request.not_ready", ErrorSeverity::Info, "The aggregate still has provider work in flight.",
+                 "Poll without blocking and consume only after the request reaches a terminal state.", true);
+    const ErrorCodeDescriptor CellAssetRequestConsumed =
+        Describe("world_streaming.cell_asset_request.consumed", ErrorSeverity::Error, "The terminal aggregate result was already consumed.",
+                 "Retain the owned batch returned by the first successful terminal take.", false);
 }  // namespace Horo::WorldStreaming::WorldStreamingErrors

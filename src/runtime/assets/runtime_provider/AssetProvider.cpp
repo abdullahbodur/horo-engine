@@ -252,6 +252,14 @@ namespace Horo::Assets {
 
     /** @copydoc AssetLoadService::LoadAsync */
     Result<AssetLoadHandle> AssetLoadService::LoadAsync(const AssetRegistrySnapshot &snapshot, const AssetId id) {
+        return LoadAsync(snapshot, id, {});
+    }
+
+    /** @copydoc AssetLoadService::LoadAsync */
+    Result<AssetLoadHandle> AssetLoadService::LoadAsync(const AssetRegistrySnapshot &snapshot, const AssetId id,
+                                                        const CancellationToken &parentCancellation) {
+        if (parentCancellation.IsCancellationRequested())
+            return Failure<AssetLoadHandle>(AssetErrors::LoadCancelled);
         const AssetRecord *record = snapshot.Find(id);
         if (!record)
             return Failure<AssetLoadHandle>(AssetErrors::ProviderNotFound,
@@ -271,8 +279,8 @@ namespace Horo::Assets {
         request->revision = snapshot.Revision();
         request->record = *record;
         request->control = state_->control;
-        Result<JobHandle> submitted =
-            state_->jobs.Submit(JobDescriptor{}, [request, provider = &state_->provider](const CancellationToken &cancellation) {
+        Result<JobHandle> submitted = state_->jobs.Submit(JobDescriptor{.parentCancellation = parentCancellation},
+                                                          [request, provider = &state_->provider](const CancellationToken &cancellation) {
             using enum AssetLoadState;
             if (AssetLoadState expected = Queued; !request->state.compare_exchange_strong(expected, Running))
                 return;
