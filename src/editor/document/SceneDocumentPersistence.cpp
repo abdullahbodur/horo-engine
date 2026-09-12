@@ -623,19 +623,46 @@ namespace Horo::Editor {
             return Result<Runtime::NavigationLocalBounds>::Success({center.Value(), halfExtents.Value()});
         }
 
+        [[nodiscard]] bool HasNavigationComponentHeader(const Json &value) {
+            return value.is_object() && value.contains("id") && value["id"].is_number_unsigned() && value.contains("schemaVersion") &&
+                   value["schemaVersion"].is_number_unsigned() && value.contains("generation") && value["generation"].is_number_unsigned();
+        }
+
+        [[nodiscard]] bool HasNavigationSurfaceReference(const Json &value) {
+            return HasNavigationComponentHeader(value) && value.contains("surface") && value["surface"].is_number_unsigned();
+        }
+
+        [[nodiscard]] Result<std::vector<Navigation::NavigationAgentProfileId>> ParseNavigationProfiles(const Json &values) {
+            if (!values.is_array())
+                return Result<std::vector<Navigation::NavigationAgentProfileId>>::Failure(
+                    PersistenceError(SceneInvalid, "Navigation profiles must be an array."));
+            std::vector<Navigation::NavigationAgentProfileId> profiles;
+            profiles.reserve(values.size());
+            for (const Json &value : values) {
+                if (!value.is_number_unsigned())
+                    return Result<std::vector<Navigation::NavigationAgentProfileId>>::Failure(
+                        PersistenceError(SceneInvalid, "Navigation profile identity is invalid."));
+                auto profile = Navigation::NavigationAgentProfileId::Create(value.get<std::uint64_t>());
+                if (profile.HasError())
+                    return Result<std::vector<Navigation::NavigationAgentProfileId>>::Failure(
+                        PersistenceError(SceneInvalid, "Navigation profile identity is invalid."));
+                profiles.push_back(profile.Value());
+            }
+            return Result<std::vector<Navigation::NavigationAgentProfileId>>::Success(std::move(profiles));
+        }
+
         [[nodiscard]] Result<Runtime::NavigationSurfaceComponent> ParseNavigationSurface(const Json &value) {
-            if (!value.is_object() || !value.contains("id") || !value["id"].is_number_unsigned() || !value.contains("definition") ||
-                !value["definition"].is_string() || !value.contains("schemaVersion") || !value["schemaVersion"].is_number_unsigned() ||
-                !value.contains("generation") || !value["generation"].is_number_unsigned() || !value.contains("bakeScope") ||
-                !value["bakeScope"].is_string() || !value.contains("localBounds") || !value.contains("profiles") ||
-                !value["profiles"].is_array()) {
+            if (!HasNavigationComponentHeader(value) || !value.contains("definition") || !value["definition"].is_string() ||
+                !value.contains("bakeScope") || !value["bakeScope"].is_string() || !value.contains("localBounds") ||
+                !value.contains("profiles")) {
                 return Result<Runtime::NavigationSurfaceComponent>::Failure(
                     PersistenceError(SceneInvalid, "Navigation surface schema is incomplete."));
             }
             auto id = Navigation::SurfaceId::Create(value["id"].get<std::uint64_t>());
             auto definition = Assets::AssetId::Parse(value["definition"].get<std::string>());
+            auto profiles = ParseNavigationProfiles(value["profiles"]);
             const std::string scope = value["bakeScope"].get<std::string>();
-            if (id.HasError() || definition.HasError() || (scope != "object_subtree" && scope != "local_bounds"))
+            if (id.HasError() || definition.HasError() || profiles.HasError() || (scope != "object_subtree" && scope != "local_bounds"))
                 return Result<Runtime::NavigationSurfaceComponent>::Failure(
                     PersistenceError(SceneInvalid, "Navigation surface identities or scope are invalid."));
 
@@ -654,19 +681,9 @@ namespace Horo::Editor {
                 .bakeScope =
                     scope == "object_subtree" ? Runtime::NavigationBakeScope::ObjectSubtree : Runtime::NavigationBakeScope::LocalBounds,
                 .localBounds = bounds,
+                .profiles = std::move(profiles).Value(),
                 .enabled = value.value("enabled", true),
             };
-            surface.profiles.reserve(value["profiles"].size());
-            for (const Json &profileValue : value["profiles"]) {
-                if (!profileValue.is_number_unsigned())
-                    return Result<Runtime::NavigationSurfaceComponent>::Failure(
-                        PersistenceError(SceneInvalid, "Navigation surface profile identity is invalid."));
-                auto profile = Navigation::NavigationAgentProfileId::Create(profileValue.get<std::uint64_t>());
-                if (profile.HasError())
-                    return Result<Runtime::NavigationSurfaceComponent>::Failure(
-                        PersistenceError(SceneInvalid, "Navigation surface profile identity is invalid."));
-                surface.profiles.push_back(profile.Value());
-            }
             if (Runtime::ValidateNavigationSurfaceComponent(surface).HasError())
                 return Result<Runtime::NavigationSurfaceComponent>::Failure(
                     PersistenceError(SceneInvalid, "Navigation surface payload is invalid."));
@@ -674,10 +691,7 @@ namespace Horo::Editor {
         }
 
         [[nodiscard]] Result<Runtime::NavigationRegionComponent> ParseNavigationRegion(const Json &value) {
-            if (!value.is_object() || !value.contains("id") || !value["id"].is_number_unsigned() || !value.contains("surface") ||
-                !value["surface"].is_number_unsigned() || !value.contains("schemaVersion") ||
-                !value["schemaVersion"].is_number_unsigned() || !value.contains("generation") ||
-                !value["generation"].is_number_unsigned() || !value.contains("localBounds") || !value.contains("sourceSelection") ||
+            if (!HasNavigationSurfaceReference(value) || !value.contains("localBounds") || !value.contains("sourceSelection") ||
                 !value["sourceSelection"].is_string() || !value.contains("mode") || !value["mode"].is_string()) {
                 return Result<Runtime::NavigationRegionComponent>::Failure(
                     PersistenceError(SceneInvalid, "Navigation region schema is incomplete."));
@@ -774,10 +788,7 @@ namespace Horo::Editor {
         }
 
         [[nodiscard]] Result<Runtime::NavigationModifierComponent> ParseNavigationModifier(const Json &value) {
-            if (!value.is_object() || !value.contains("id") || !value["id"].is_number_unsigned() || !value.contains("surface") ||
-                !value["surface"].is_number_unsigned() || !value.contains("schemaVersion") ||
-                !value["schemaVersion"].is_number_unsigned() || !value.contains("generation") ||
-                !value["generation"].is_number_unsigned() || !value.contains("volume") || !value["volume"].is_object() ||
+            if (!HasNavigationSurfaceReference(value) || !value.contains("volume") || !value["volume"].is_object() ||
                 !value.contains("operation") || !value["operation"].is_string() || !value.contains("area") ||
                 !value.contains("traversalCost"))
                 return Result<Runtime::NavigationModifierComponent>::Failure(
@@ -848,29 +859,10 @@ namespace Horo::Editor {
                 PersistenceError(SceneInvalid, "Navigation link direction is invalid."));
         }
 
-        [[nodiscard]] Result<std::vector<Navigation::NavigationAgentProfileId>> ParseNavigationLinkProfiles(const Json &values) {
-            std::vector<Navigation::NavigationAgentProfileId> profiles;
-            profiles.reserve(values.size());
-            for (const Json &value : values) {
-                if (!value.is_number_unsigned())
-                    return Result<std::vector<Navigation::NavigationAgentProfileId>>::Failure(
-                        PersistenceError(SceneInvalid, "Navigation link profile identity is invalid."));
-                auto profile = Navigation::NavigationAgentProfileId::Create(value.get<std::uint64_t>());
-                if (profile.HasError())
-                    return Result<std::vector<Navigation::NavigationAgentProfileId>>::Failure(
-                        PersistenceError(SceneInvalid, "Navigation link profile identity is invalid."));
-                profiles.push_back(profile.Value());
-            }
-            return Result<std::vector<Navigation::NavigationAgentProfileId>>::Success(std::move(profiles));
-        }
-
         [[nodiscard]] Result<Runtime::NavigationLinkComponent> ParseNavigationLink(const Json &value) {
-            if (!value.is_object() || !value.contains("id") || !value["id"].is_number_unsigned() || !value.contains("schemaVersion") ||
-                !value["schemaVersion"].is_number_unsigned() || !value.contains("generation") ||
-                !value["generation"].is_number_unsigned() || !value.contains("start") || !value.contains("end") ||
-                !value.contains("kind") || !value["kind"].is_string() || !value.contains("direction") || !value["direction"].is_string() ||
-                !value.contains("profiles") || !value["profiles"].is_array() || !value.contains("traversalCost") ||
-                !value["traversalCost"].is_number()) {
+            if (!HasNavigationComponentHeader(value) || !value.contains("start") || !value.contains("end") || !value.contains("kind") ||
+                !value["kind"].is_string() || !value.contains("direction") || !value["direction"].is_string() ||
+                !value.contains("profiles") || !value.contains("traversalCost") || !value["traversalCost"].is_number()) {
                 return Result<Runtime::NavigationLinkComponent>::Failure(
                     PersistenceError(SceneInvalid, "Navigation link schema is incomplete."));
             }
@@ -879,7 +871,7 @@ namespace Horo::Editor {
             auto end = ParseNavigationLinkEndpoint(value["end"]);
             auto kind = ParseNavigationLinkKind(value["kind"].get<std::string>());
             auto direction = ParseNavigationLinkDirection(value["direction"].get<std::string>());
-            auto profiles = ParseNavigationLinkProfiles(value["profiles"]);
+            auto profiles = ParseNavigationProfiles(value["profiles"]);
             if (id.HasError())
                 return Result<Runtime::NavigationLinkComponent>::Failure(
                     PersistenceError(SceneInvalid, "Navigation link identity is invalid."));
