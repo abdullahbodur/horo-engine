@@ -49,6 +49,45 @@ namespace Horo::WorldStreaming {
             return Result<void>::Success();
         }
 
+        /** @brief Validates filter authority, identity, policy, and output capacity before projection. */
+        [[nodiscard]] Result<void> ValidateFilterRequest(const WorldLayerFilterPolicy &policy,
+                                                         const std::span<const WorldLayerFilterCandidate> candidates,
+                                                         const WorldLayerFilterContext &context,
+                                                         const std::span<WorldLayerFilterDecision> decisions) {
+            if (!policy.id.IsValid() || !policy.revision.IsValid() || !context.expectedWorld.IsValid() ||
+                !context.expectedPolicy.IsValid() || !context.expectedPolicyRevision.IsValid() || context.maximumCandidates == 0 ||
+                !IsKnown(context.authorityState)) {
+                return Failure<void>(WorldStreamingErrors::LayerFilterInvalid);
+            }
+            if (!IsKnown(policy.target) || !IsKnown(policy.optional))
+                return Failure<void>(WorldStreamingErrors::LayerFilterUnsupported);
+            if (policy.id != context.expectedPolicy || policy.revision != context.expectedPolicyRevision)
+                return Failure<void>(WorldStreamingErrors::LayerFilterStale);
+            if (context.authorityState != WorldLayerFilterAuthorityState::Active)
+                return Failure<void>(WorldStreamingErrors::LayerFilterLifecycleUnavailable);
+            if (candidates.size() > context.maximumCandidates || decisions.size() < candidates.size())
+                return Failure<void>(WorldStreamingErrors::LayerFilterCapacityExceeded);
+            return Result<void>::Success();
+        }
+
+        /** @brief Validates candidate ownership plus the required unique ascending layer order. */
+        [[nodiscard]] Result<void> ValidateCandidateSequence(const std::span<const WorldLayerFilterCandidate> candidates,
+                                                             const StreamingRuntimeOwnerToken &expectedWorld) {
+            for (std::size_t index = 0; index < candidates.size(); ++index) {
+                if (const auto valid = ValidateCandidate(candidates[index], expectedWorld); valid.HasError())
+                    return valid;
+                if (index == 0)
+                    continue;
+                const auto previous = candidates[index - 1].ownership.layer;
+                const auto current = candidates[index].ownership.layer;
+                if (current == previous)
+                    return Failure<void>(WorldStreamingErrors::LayerFilterIdentityConflict);
+                if (current < previous)
+                    return Failure<void>(WorldStreamingErrors::LayerFilterInvalid);
+            }
+            return Result<void>::Success();
+        }
+
         [[nodiscard]] WorldLayerFilterDisposition Decide(const WorldLayerFilterPolicy &policy,
                                                          const WorldLayerFilterCandidate &candidate) noexcept {
             using enum WorldLayerExecutionTarget;
@@ -74,31 +113,10 @@ namespace Horo::WorldStreaming {
                                                      const std::span<const WorldLayerFilterCandidate> candidates,
                                                      const WorldLayerFilterContext &context,
                                                      const std::span<WorldLayerFilterDecision> decisions) {
-        if (!policy.id.IsValid() || !policy.revision.IsValid() || !context.expectedWorld.IsValid() || !context.expectedPolicy.IsValid() ||
-            !context.expectedPolicyRevision.IsValid() || context.maximumCandidates == 0 || !IsKnown(context.authorityState)) {
-            return Failure<WorldLayerFilterResult>(WorldStreamingErrors::LayerFilterInvalid);
-        }
-        if (!IsKnown(policy.target) || !IsKnown(policy.optional))
-            return Failure<WorldLayerFilterResult>(WorldStreamingErrors::LayerFilterUnsupported);
-        if (policy.id != context.expectedPolicy || policy.revision != context.expectedPolicyRevision)
-            return Failure<WorldLayerFilterResult>(WorldStreamingErrors::LayerFilterStale);
-        if (context.authorityState != WorldLayerFilterAuthorityState::Active)
-            return Failure<WorldLayerFilterResult>(WorldStreamingErrors::LayerFilterLifecycleUnavailable);
-        if (candidates.size() > context.maximumCandidates || decisions.size() < candidates.size())
-            return Failure<WorldLayerFilterResult>(WorldStreamingErrors::LayerFilterCapacityExceeded);
-
-        for (std::size_t index = 0; index < candidates.size(); ++index) {
-            if (const auto valid = ValidateCandidate(candidates[index], context.expectedWorld); valid.HasError())
-                return Result<WorldLayerFilterResult>::Failure(valid.ErrorValue());
-            if (index == 0)
-                continue;
-            const auto previous = candidates[index - 1].ownership.layer;
-            const auto current = candidates[index].ownership.layer;
-            if (current == previous)
-                return Failure<WorldLayerFilterResult>(WorldStreamingErrors::LayerFilterIdentityConflict);
-            if (current < previous)
-                return Failure<WorldLayerFilterResult>(WorldStreamingErrors::LayerFilterInvalid);
-        }
+        if (const auto valid = ValidateFilterRequest(policy, candidates, context, decisions); valid.HasError())
+            return Result<WorldLayerFilterResult>::Failure(valid.ErrorValue());
+        if (const auto valid = ValidateCandidateSequence(candidates, context.expectedWorld); valid.HasError())
+            return Result<WorldLayerFilterResult>::Failure(valid.ErrorValue());
 
         std::size_t includedCount{};
         for (std::size_t index = 0; index < candidates.size(); ++index) {
