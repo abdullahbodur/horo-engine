@@ -44,8 +44,7 @@ namespace {
         Options options;
         std::size_t index = 1;
         while (index < arguments.size()) {
-            const std::string_view argument{arguments[index]};
-            if (argument == "--json") {
+            if (const std::string_view argument{arguments[index]}; argument == "--json") {
                 options.json = true;
             } else if (argument == "--schema-version") {
                 ++index;
