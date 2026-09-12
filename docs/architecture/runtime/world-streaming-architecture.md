@@ -1336,6 +1336,17 @@ cannot publish an older candidate. This boundary performs no I/O, decompression,
 provider invocation, owner-thread transition or partial publication. The owner revalidates the exact
 operation fence before the later atomic commit.
 
+`StreamingCellAssetRequest` is the WST-005.4 asynchronous ownership boundary. It
+resolves the candidate package followed by canonical hard-dependency packages against
+the same immutable manifest and asset-registry revision, validates the complete bounded
+request set and exact canonical dependency slice before submission, and forwards one
+explicit parent cancellation token to every `AssetLoadService` child. The move-only
+aggregate controller never blocks while polling, requests cancellation on drop, and
+publishes owned bytes only after every child reaches success. Partial admission, provider
+failure, cancellation, replacement, and shutdown publish no batch; callers must revalidate
+the retained operation fence before commit. World Streaming does not discover a provider,
+retry with another backend, or translate a missing hard dependency into an optional result.
+
 ```text
 Admitted I/O -> Integrity checks -> Independent bounded block decode
             -> Resident: detached CoreEcs plus async provider stages
