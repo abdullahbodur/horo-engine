@@ -419,6 +419,16 @@ never protocol identity.
 messages on the reserved control channel. Early gameplay, RPC, replication, voice,
 console and extension messages are rejected and never buffered for later dispatch.
 
+`HandshakeNegotiator` is the owner-thread, backend-neutral compatibility seam. Its
+construction copies a host-owned local policy into fixed-capacity storage. One peer
+offer is then validated synchronously against the exact connection and admission
+generation, deadline, protocol/version interval, schema fingerprint, mandatory
+features, compression policy and immutable transport-capability revision. Acceptance
+publishes one immutable `HandshakeSelection`; rejection, timeout, cancellation and
+shutdown are terminal and late or replacement-generation calls cannot alter the
+result. The seam does not parse native packets, authenticate principals, select a
+transport, activate gameplay or retain borrowed offer storage.
+
 The canonical hello exchange includes:
 
 - Product/protocol family identity and minimum/maximum wire versions.
