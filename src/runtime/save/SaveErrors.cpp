@@ -143,6 +143,12 @@ namespace Horo::Runtime::SaveErrors {
     const ErrorCodeDescriptor OperationInvalid{kDomain, ErrorCode{"save.operation.invalid"}, kError,
                                                "An asynchronous save operation descriptor or handle is invalid.",
                                                "Use a non-zero application operation identity and finite callback capacity."};
+    const ErrorCodeDescriptor OperationAllocationFailed{kDomain,
+                                                        ErrorCode{"save.operation.allocation_failed"},
+                                                        kError,
+                                                        "Asynchronous save operation state could not be allocated.",
+                                                        "Release admitted operation memory and retry later.",
+                                                        true};
     const ErrorCodeDescriptor OperationTransitionInvalid{kDomain, ErrorCode{"save.operation.transition_invalid"}, kError,
                                                          "An asynchronous save operation transition is invalid.",
                                                          "Publish bounded monotonic progress and enter the commit gate before success."};

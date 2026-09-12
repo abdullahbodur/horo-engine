@@ -1292,6 +1292,7 @@ add_executable(HoroRuntimeSaveSlotMetadataTests
 target_compile_features(HoroRuntimeSaveSlotMetadataTests PRIVATE cxx_std_20)
 target_link_libraries(HoroRuntimeSaveSlotMetadataTests PRIVATE HoroEngine::Runtime)
 add_executable(HoroRuntimeSaveOperationTests
+        support/AllocationProbe.cpp
         unit/runtime/save/SaveOperationTests.cpp
 )
 target_compile_features(HoroRuntimeSaveOperationTests PRIVATE cxx_std_20)

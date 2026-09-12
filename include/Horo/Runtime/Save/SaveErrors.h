@@ -94,6 +94,8 @@ namespace Horo::Runtime::SaveErrors {
     extern const ErrorCodeDescriptor SlotGenerationConflict;
     /** @brief An asynchronous save operation descriptor or handle is invalid. */
     extern const ErrorCodeDescriptor OperationInvalid;
+    /** @brief Asynchronous save operation state or callback storage could not be allocated. */
+    extern const ErrorCodeDescriptor OperationAllocationFailed;
     /** @brief An asynchronous save operation progress or terminal transition is invalid. */
     extern const ErrorCodeDescriptor OperationTransitionInvalid;
     /** @brief The bounded completion callback capacity is exhausted. */

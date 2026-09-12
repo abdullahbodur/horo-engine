@@ -94,6 +94,7 @@ namespace Horo::Runtime {
         Entered,
         CancellationWon,
         AlreadyEntered,
+        NotReady,
         NotRequired,
         AlreadyTerminal
     };
@@ -182,7 +183,7 @@ namespace Horo::Runtime {
         ~SaveOperationController();
         /** @brief Transfers the sole producer capability without changing operation state. */
         SaveOperationController(SaveOperationController &&other) noexcept;
-        /** @brief Abandons this producer's current operation, then transfers the replacement capability. */
+        /** @brief Installs the replacement capability, then abandons the detached prior operation. */
         SaveOperationController &operator=(SaveOperationController &&other) noexcept;
         SaveOperationController(const SaveOperationController &) = delete;
         SaveOperationController &operator=(const SaveOperationController &) = delete;
@@ -194,6 +195,7 @@ namespace Horo::Runtime {
          * @param progress Exact stage-local progress.
          * @param now Current monotonic time used to observe the deadline.
          * @return Atomic transition disposition.
+         * @pre Pre-commit stages do not regress; after commit only the kind's commit stage is accepted.
          */
         [[nodiscard]] SaveOperationTransitionResult PublishProgress(
             SaveOperationStage stage, SaveOperationProgress progress,
@@ -207,6 +209,7 @@ namespace Horo::Runtime {
         /** @brief Atomically enters the non-cancellable commit window or lets prior cancellation win.
          * @param now Current monotonic time used to observe the deadline.
          * @return Commit-gate disposition.
+         * @pre The kind-specific ready stage has published complete progress.
          */
         [[nodiscard]] SaveCommitGateResult BeginCommit(std::chrono::steady_clock::time_point now = std::chrono::steady_clock::now());
         /** @brief Requests cancellation on behalf of owning-session shutdown without waiting. @return Atomic disposition. */
@@ -237,7 +240,7 @@ namespace Horo::Runtime {
 
     /** @brief Creates producer/consumer state for one already-admitted application operation.
      * @param descriptor Non-zero OperationStore identity, kind, deadline, parent token, and callback capacity.
-     * @return Move-only producer or a stable descriptor/allocation error.
+     * @return Move-only producer, OperationInvalid, or OperationAllocationFailed.
      */
     [[nodiscard]] Result<SaveOperationController> CreateSaveOperation(SaveOperationDescriptor descriptor);
 }  // namespace Horo::Runtime

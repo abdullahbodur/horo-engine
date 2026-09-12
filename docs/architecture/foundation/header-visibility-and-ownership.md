@@ -626,4 +626,9 @@ registering or terminalizing thread and must remain non-blocking. Admission also
 preallocates cancellation and abandonment failures plus callback storage. A terminal
 transition moves the final snapshot into retained immutable in-state storage before
 releasing observers, so destructor-driven abandonment and callback dispatch cannot
-lose terminal publication to a later allocation failure.
+lose terminal publication to a later allocation failure. Admission allocation failure
+has its own typed identity. Each operation kind has a closed monotonic stage order and
+an exact completed predecessor for `BeginCommit`; pre-commit stages cannot be published
+after the gate. Handles retain shared state across user callbacks, and producer
+replacement detaches prior state before abandonment dispatch so reentrant release or
+move assignment cannot invalidate callback evidence or orphan the installed operation.

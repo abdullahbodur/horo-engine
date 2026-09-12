@@ -1,6 +1,8 @@
 #include "Horo/Runtime/Save/SaveErrors.h"
 #include "Horo/Runtime/Save/SaveOperation.h"
+#include "support/AllocationProbe.h"
 
+#include <array>
 #include <atomic>
 #include <barrier>
 #include <catch2/catch_test_macros.hpp>
@@ -136,6 +138,45 @@ TEST_CASE("Commit gate makes late cancellation too late", "[unit][runtime][save]
     CHECK_FALSE(terminal.terminalError.has_value());
 }
 
+TEST_CASE("Operation stages advance monotonically through per-kind commit predecessors", "[unit][runtime][save][operation]") {
+    struct MutationStages final {
+        SaveOperationKind kind;
+        SaveOperationStage first;
+        SaveOperationStage ready;
+        SaveOperationStage committed;
+    };
+
+    constexpr std::array cases{
+        MutationStages{SaveOperationKind::Save, SaveOperationStage::CapturingSnapshot, SaveOperationStage::WritingTemporary,
+                       SaveOperationStage::CommitStarted},
+        MutationStages{SaveOperationKind::Load, SaveOperationStage::VerifyingArchive, SaveOperationStage::ReadyToCommit,
+                       SaveOperationStage::ApplyingState},
+        MutationStages{SaveOperationKind::Delete, SaveOperationStage::Deleting, SaveOperationStage::Deleting,
+                       SaveOperationStage::CommitStarted},
+    };
+    OperationId operation = 100;
+    for (const auto &stages : cases) {
+        auto controller = Operation(stages.kind, operation++);
+        CHECK(controller.BeginCommit() == SaveCommitGateResult::NotReady);
+        CHECK(controller.PublishProgress(stages.first, {0, 1}) == SaveOperationTransitionResult::Applied);
+        CHECK(controller.PublishProgress(stages.committed, {0, 1}) == SaveOperationTransitionResult::InvalidTransition);
+        CHECK(controller.PublishProgress(stages.ready, {1, 2}) == SaveOperationTransitionResult::Applied);
+        CHECK(controller.BeginCommit() == SaveCommitGateResult::NotReady);
+        CHECK(controller.PublishProgress(stages.ready, {2, 2}) == SaveOperationTransitionResult::Applied);
+        if (stages.first != stages.ready)
+            CHECK(controller.PublishProgress(stages.first, {1, 1}) == SaveOperationTransitionResult::InvalidTransition);
+        CHECK(controller.BeginCommit() == SaveCommitGateResult::Entered);
+        CHECK(controller.PublishProgress(stages.first, {1, 1}) == SaveOperationTransitionResult::InvalidTransition);
+        CHECK(controller.PublishProgress(stages.committed, {1, 1}) == SaveOperationTransitionResult::Applied);
+        CHECK(controller.Complete(SaveOperationCommitOutcome::Committed) == SaveOperationTransitionResult::Applied);
+    }
+
+    auto query = Operation(SaveOperationKind::RefreshCatalog, operation);
+    CHECK(query.BeginCommit() == SaveCommitGateResult::NotRequired);
+    CHECK(query.PublishProgress(SaveOperationStage::RefreshingCatalog, {1, 1}) == SaveOperationTransitionResult::Applied);
+    CHECK(query.Complete(SaveOperationCommitOutcome::NotCommitted) == SaveOperationTransitionResult::Applied);
+}
+
 TEST_CASE("Deadlines and parent cancellation are observed before commit", "[unit][runtime][save][operation]") {
     const auto now = std::chrono::steady_clock::now();
     auto expired = Operation(SaveOperationKind::Save, 41, 2, now);
@@ -187,6 +228,56 @@ TEST_CASE("Completion callbacks are bounded reentrant and immediate after termin
     CHECK(handle.RequestCancellation() == SaveCancellationRequestResult::AlreadyTerminal);
 }
 
+TEST_CASE("Late callback retains terminal state across self-release", "[unit][runtime][save][operation]") {
+    auto controller = Operation(SaveOperationKind::RefreshCatalog, 45);
+    SaveOperationHandle handle = controller.Handle();
+    CHECK(controller.Complete(SaveOperationCommitOutcome::NotCommitted) == SaveOperationTransitionResult::Applied);
+    std::atomic<bool> observed{};
+    REQUIRE(handle
+                .OnCompletion([&handle, &observed](const SaveOperationSnapshot &terminal) {
+        handle = {};
+        observed = terminal.IsTerminal() && terminal.operation == 45;
+    }).HasValue());
+    CHECK(observed.load());
+    CHECK_FALSE(handle.IsValid());
+}
+
+TEST_CASE("Completion callback exceptions do not suppress later observers", "[unit][runtime][save][operation]") {
+    auto controller = Operation(SaveOperationKind::RefreshCatalog, 46, 2);
+    const auto handle = controller.Handle();
+    std::atomic<int> calls{};
+    REQUIRE(handle
+                .OnCompletion([](const SaveOperationSnapshot &) {
+        throw 7;
+    }).HasValue());
+    REQUIRE(handle
+                .OnCompletion([&calls](const SaveOperationSnapshot &) {
+        ++calls;
+    }).HasValue());
+    CHECK(controller.Complete(SaveOperationCommitOutcome::NotCommitted) == SaveOperationTransitionResult::Applied);
+    CHECK(calls.load() == 1);
+}
+
+TEST_CASE("Controller move assignment installs replacement before abandonment callbacks", "[unit][runtime][save][operation]") {
+    auto target = Operation(SaveOperationKind::RefreshCatalog, 47);
+    auto source = Operation(SaveOperationKind::RefreshCatalog, 48);
+    const auto abandoned = target.Handle();
+    const auto replaced = source.Handle();
+    SaveOperationHandle reentrant;
+    REQUIRE(abandoned
+                .OnCompletion([&target, &reentrant](const SaveOperationSnapshot &) {
+        auto nested = Operation(SaveOperationKind::RefreshCatalog, 49);
+        reentrant = nested.Handle();
+        target = std::move(nested);
+    }).HasValue());
+
+    target = std::move(source);
+    CHECK(Snapshot(abandoned).state == SaveOperationState::Failed);
+    CHECK(Snapshot(replaced).state == SaveOperationState::Failed);
+    CHECK(target.Handle().Id() == 49);
+    CHECK(reentrant.Id() == 49);
+}
+
 TEST_CASE("Observer registration racing completion dispatches every accepted callback exactly once", "[unit][runtime][save][operation]") {
     constexpr int observerCount = 32;
     auto controller = Operation(SaveOperationKind::RefreshCatalog, 44, observerCount);
@@ -223,7 +314,7 @@ TEST_CASE("Observer registration racing completion dispatches every accepted cal
 TEST_CASE("Post-gate failure preserves unknown publication evidence and the original cause", "[unit][runtime][save][operation]") {
     auto controller = Operation(SaveOperationKind::Delete);
     const auto handle = controller.Handle();
-    CHECK(controller.PublishProgress(SaveOperationStage::Deleting, {1, 2}) == SaveOperationTransitionResult::Applied);
+    CHECK(controller.PublishProgress(SaveOperationStage::Deleting, {1, 1}) == SaveOperationTransitionResult::Applied);
     CHECK(controller.BeginCommit() == SaveCommitGateResult::Entered);
     CHECK(controller.Fail(MakeError(SaveErrors::CompositionInjectedFailure), SaveOperationCommitOutcome::Unknown) ==
           SaveOperationTransitionResult::Applied);
@@ -236,6 +327,24 @@ TEST_CASE("Post-gate failure preserves unknown publication evidence and the orig
     auto preCommit = Operation(SaveOperationKind::Save, 42);
     CHECK(preCommit.Fail(MakeError(SaveErrors::CompositionInjectedFailure), SaveOperationCommitOutcome::Unknown) ==
           SaveOperationTransitionResult::InvalidTransition);
+}
+
+TEST_CASE("Invalid commit outcome representations never publish terminal state", "[unit][runtime][save][operation]") {
+    constexpr auto invalidOutcome = static_cast<SaveOperationCommitOutcome>(0xffU);
+    auto query = Operation(SaveOperationKind::RefreshCatalog, 50);
+    const auto queryHandle = query.Handle();
+    CHECK(query.Complete(invalidOutcome) == SaveOperationTransitionResult::InvalidTransition);
+    CHECK(query.Fail(MakeError(SaveErrors::CompositionInjectedFailure), invalidOutcome) ==
+          SaveOperationTransitionResult::InvalidTransition);
+    CHECK_FALSE(Snapshot(queryHandle).IsTerminal());
+}
+
+TEST_CASE("Operation admission reports typed allocation failure", "[unit][runtime][save][operation]") {
+    const SaveOperationDescriptor descriptor{.operation = 51, .kind = SaveOperationKind::Save, .maximumCompletionCallbacks = 1};
+    Tests::AllocationProbe::ScopedFailure failure;
+    const auto created = CreateSaveOperation(descriptor);
+    REQUIRE(created.HasError());
+    CHECK(created.ErrorValue().code.Value() == SaveErrors::OperationAllocationFailed.code.Value());
 }
 
 TEST_CASE("Producer release terminalizes an abandoned operation", "[unit][runtime][save][operation]") {
@@ -289,14 +398,39 @@ TEST_CASE("Cancellation and completion races produce exactly one terminal callba
     }
 }
 
+TEST_CASE("Cancellation and commit gate races have one atomic winner", "[unit][runtime][save][operation]") {
+    for (int iteration = 0; iteration < 64; ++iteration) {
+        auto controller = Operation(SaveOperationKind::Delete, static_cast<OperationId>(iteration + 200));
+        const auto handle = controller.Handle();
+        REQUIRE(controller.PublishProgress(SaveOperationStage::Deleting, {1, 1}) == SaveOperationTransitionResult::Applied);
+        std::barrier start{2};
+        SaveCancellationRequestResult cancellation = SaveCancellationRequestResult::InvalidHandle;
+        std::thread requester([&] {
+            start.arrive_and_wait();
+            cancellation = handle.RequestCancellation();
+        });
+        start.arrive_and_wait();
+        const SaveCommitGateResult gate = controller.BeginCommit();
+        requester.join();
+
+        if (gate == SaveCommitGateResult::Entered) {
+            CHECK(cancellation == SaveCancellationRequestResult::TooLate);
+            CHECK_FALSE(Snapshot(handle).cancellable);
+            CHECK(controller.Fail(MakeError(SaveErrors::CompositionInjectedFailure), SaveOperationCommitOutcome::Unknown) ==
+                  SaveOperationTransitionResult::Applied);
+        } else {
+            CHECK(gate == SaveCommitGateResult::CancellationWon);
+            CHECK(cancellation == SaveCancellationRequestResult::Requested);
+            CHECK(Snapshot(handle).state == SaveOperationState::Cancelled);
+        }
+    }
+}
+
 TEST_CASE("Operation errors expose stable actionable descriptors", "[unit][runtime][save][operation]") {
-    const ErrorCodeDescriptor *descriptors[]{&SaveErrors::OperationInvalid,
-                                             &SaveErrors::OperationTransitionInvalid,
-                                             &SaveErrors::OperationCallbackCapacityExceeded,
-                                             &SaveErrors::OperationCallbackInvalid,
-                                             &SaveErrors::OperationCancelled,
-                                             &SaveErrors::OperationDeadlineExceeded,
-                                             &SaveErrors::OperationAbandoned};
+    const ErrorCodeDescriptor *descriptors[]{&SaveErrors::OperationInvalid,           &SaveErrors::OperationAllocationFailed,
+                                             &SaveErrors::OperationTransitionInvalid, &SaveErrors::OperationCallbackCapacityExceeded,
+                                             &SaveErrors::OperationCallbackInvalid,   &SaveErrors::OperationCancelled,
+                                             &SaveErrors::OperationDeadlineExceeded,  &SaveErrors::OperationAbandoned};
     for (const auto *descriptor : descriptors) {
         CHECK(descriptor->domain.Value() == "horo.save");
         CHECK_FALSE(descriptor->code.Value().empty());
