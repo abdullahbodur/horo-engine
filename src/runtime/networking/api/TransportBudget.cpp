@@ -161,10 +161,18 @@ namespace Horo::Network {
         if (connection != nullptr) {
             --connection->queuedMessages;
             connection->queuedBytes -= entry.bytes;
+            if (entry.previousForConnection == InvalidQueueSlot)
+                connection->queueHead = entry.nextForConnection;
+            else
+                queue_[entry.previousForConnection].nextForConnection = entry.nextForConnection;
+            if (entry.nextForConnection != InvalidQueueSlot)
+                queue_[entry.nextForConnection].previousForConnection = entry.previousForConnection;
         }
         --queuedMessages_;
         queuedBytes_ -= entry.bytes;
         entry.occupied = false;
+        entry.nextForConnection = InvalidQueueSlot;
+        entry.previousForConnection = InvalidQueueSlot;
         if (entry.generation == std::numeric_limits<std::uint32_t>::max())
             return;
         ++entry.generation;
@@ -181,11 +189,9 @@ namespace Horo::Network {
         if (!owned.active)
             return Result<std::size_t>::Success(0);
         std::size_t discarded{};
-        for (auto &record : queue_) {
-            if (record.occupied && record.connection == connection) {
-                Release(record);
-                ++discarded;
-            }
+        while (owned.queueHead != InvalidQueueSlot) {
+            Release(queue_[owned.queueHead]);
+            ++discarded;
         }
         owned.active = false;
         owned.saturationTicks = 0;
@@ -195,11 +201,13 @@ namespace Horo::Network {
     }
 
     TransportBudgetController::QueueEntry *TransportBudgetController::FindReplaceable(
-        const TransportBudgetSubmission &submission) noexcept {
-        for (auto &entry : queue_) {
-            if (entry.occupied && entry.traffic == TransportTrafficClass::ReplaceableState && entry.connection == submission.connection &&
-                entry.replaceableKey == submission.replaceableKey)
+        ConnectionEntry &connection, const TransportBudgetSubmission &submission) noexcept {
+        auto slot = connection.queueHead;
+        while (slot != InvalidQueueSlot) {
+            auto &entry = queue_[slot];
+            if (entry.traffic == TransportTrafficClass::ReplaceableState && entry.replaceableKey == submission.replaceableKey)
                 return &entry;
+            slot = entry.nextForConnection;
         }
         return nullptr;
     }
@@ -282,6 +290,11 @@ namespace Horo::Network {
         record.traffic = submission.traffic;
         record.replaceableKey = submission.replaceableKey;
         record.bytes = submission.bytes;
+        record.nextForConnection = connection.queueHead;
+        record.previousForConnection = InvalidQueueSlot;
+        if (connection.queueHead != InvalidQueueSlot)
+            queue_[connection.queueHead].previousForConnection = ticket.Slot();
+        connection.queueHead = ticket.Slot();
         record.occupied = true;
         ++queuedMessages_;
         queuedBytes_ += submission.bytes;
@@ -313,7 +326,7 @@ namespace Horo::Network {
             return Fail<TransportBudgetDecision>(NetworkErrors::TransportBudgetCapacityExceeded);
 
         if (submission.traffic == TransportTrafficClass::ReplaceableState) {
-            if (auto *record = FindReplaceable(submission); record != nullptr)
+            if (auto *record = FindReplaceable(*connection, submission); record != nullptr)
                 return AdmitReplacement(*connection, *record, submission);
         }
         return AdmitNew(*connection, submission);

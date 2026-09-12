@@ -189,6 +189,8 @@ namespace Horo::Network {
         TransportBudgetController &operator=(const TransportBudgetController &) = delete;
 
     private:
+        static constexpr std::uint32_t InvalidQueueSlot = static_cast<std::uint32_t>(-1);
+
         struct ConnectionEntry final {
             ConnectionHandle handle{};
             std::size_t queuedMessages{};
@@ -197,6 +199,7 @@ namespace Horo::Network {
             std::size_t tickBytes{};
             std::uint32_t saturationTicks{};
             std::uint64_t lastSaturationTick{};
+            std::uint32_t queueHead{InvalidQueueSlot};
             bool initialized{};
             bool active{};
         };
@@ -207,6 +210,8 @@ namespace Horo::Network {
             std::uint64_t replaceableKey{};
             std::size_t bytes{};
             std::uint32_t generation{1};
+            std::uint32_t nextForConnection{InvalidQueueSlot};
+            std::uint32_t previousForConnection{InvalidQueueSlot};
             bool occupied{};
         };
 
@@ -214,7 +219,7 @@ namespace Horo::Network {
                                   std::vector<QueueEntry> queue, std::vector<std::uint32_t> freeSlots) noexcept;
         [[nodiscard]] bool PolicyFitsUsage(const TransportLimitPolicyV1 &candidate) const noexcept;
         [[nodiscard]] ConnectionEntry *FindConnection(ConnectionHandle connection) noexcept;
-        [[nodiscard]] QueueEntry *FindReplaceable(const TransportBudgetSubmission &submission) noexcept;
+        [[nodiscard]] QueueEntry *FindReplaceable(ConnectionEntry &connection, const TransportBudgetSubmission &submission) noexcept;
         [[nodiscard]] bool FitsNew(const ConnectionEntry &connection, std::size_t bytes) const noexcept;
         [[nodiscard]] bool FitsReplacement(const ConnectionEntry &connection, const QueueEntry &record, std::size_t bytes) const noexcept;
         [[nodiscard]] TransportBudgetDecision Overload(ConnectionEntry &connection, TransportTrafficClass traffic) noexcept;

@@ -51,7 +51,7 @@ namespace Horo::Network {
             return std::move(created).Value();
         }
 
-        struct BudgetFixture final {
+        struct BudgetFixture {
             BudgetFixture() {
                 REQUIRE(controller.OpenConnection(connection).HasValue());
                 REQUIRE(controller.BeginTick(1).HasValue());
@@ -89,8 +89,14 @@ namespace Horo::Network {
         RequireError(controller.OpenConnection(Connection(0, 2)), NetworkErrors::NetworkLifecycleOperationStale);
         REQUIRE(controller.OpenConnection(Connection(1)).HasValue());
         RequireError(controller.OpenConnection(ConnectionHandle::Create(2, 1).Value()), NetworkErrors::TransportHandleInvalid);
+        REQUIRE(controller.BeginTick(1).HasValue());
+        REQUIRE(controller.Admit(Reliable(Connection(0), 1)).HasValue());
+        const auto retained = controller.Admit(Reliable(Connection(1), 1));
+        REQUIRE(retained.HasValue());
 
-        REQUIRE(controller.CloseConnection(Connection(0)).Value() == 0);
+        REQUIRE(controller.CloseConnection(Connection(0)).Value() == 1);
+        REQUIRE(controller.Snapshot().queuedMessages == 1);
+        REQUIRE(controller.Complete(retained.Value().ticket).HasValue());
         REQUIRE(controller.CloseConnection(Connection(0)).Value() == 0);
         RequireError(controller.OpenConnection(Connection(0, 3)), NetworkErrors::NetworkLifecycleOperationStale);
         REQUIRE(controller.OpenConnection(Connection(0, 2)).HasValue());
