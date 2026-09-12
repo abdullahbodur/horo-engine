@@ -242,7 +242,8 @@ namespace Horo::Packages {
         const Sha256Digest digest = archive.Digest();
         if (auto compatible = VerifyExpected(archive.Bytes(), digest, limits_); compatible.HasError())
             return Result<PackageCacheEntry>::Failure(compatible.ErrorValue());
-        auto lock = Acquire(files_, root_, digest);  // NOSONAR: the lock must span the complete publication transaction.
+        // The lock must span the complete publication transaction.
+        auto lock = Acquire(files_, root_, digest);  // NOSONAR
         if (lock.HasError())
             return Result<PackageCacheEntry>::Failure(lock.ErrorValue());
         const std::filesystem::path destination = ArchivePath(root_, digest);
@@ -285,7 +286,8 @@ namespace Horo::Packages {
 
     /** @copydoc PackageCacheStore::Load */
     Result<std::optional<ValidatedPackageArchive>> PackageCacheStore::Load(const Sha256Digest &digest) {
-        auto lock = Acquire(files_, root_, digest);  // NOSONAR: the lock must span the complete load and quarantine transaction.
+        // The lock must span the complete load and quarantine transaction.
+        auto lock = Acquire(files_, root_, digest);  // NOSONAR
         if (lock.HasError())
             return Result<std::optional<ValidatedPackageArchive>>::Failure(lock.ErrorValue());
         const std::filesystem::path path = ArchivePath(root_, digest);
@@ -314,7 +316,8 @@ namespace Horo::Packages {
         if (ReasonName(reason) == nullptr)
             return Result<PackageQuarantineRecord>::Failure(MakeError(InvalidReason));
         const Sha256Digest identity = expectedDigest.value_or(ComputeSha256(bytes));
-        auto lock = Acquire(files_, root_, identity);  // NOSONAR: the lock must span the complete quarantine transaction.
+        // The lock must span the complete quarantine transaction.
+        auto lock = Acquire(files_, root_, identity);  // NOSONAR
         if (lock.HasError())
             return Result<PackageQuarantineRecord>::Failure(lock.ErrorValue());
         return QuarantineLocked(files_, root_, bytes, reason, expectedDigest);
@@ -322,7 +325,8 @@ namespace Horo::Packages {
 
     /** @copydoc PackageCacheStore::Remove */
     Result<bool> PackageCacheStore::Remove(const Sha256Digest &digest) {
-        auto lock = Acquire(files_, root_, digest);  // NOSONAR: the lock must span the complete removal transaction.
+        // The lock must span the complete removal transaction.
+        auto lock = Acquire(files_, root_, digest);  // NOSONAR
         if (lock.HasError())
             return Result<bool>::Failure(lock.ErrorValue());
         const std::filesystem::path path = ArchivePath(root_, digest);
