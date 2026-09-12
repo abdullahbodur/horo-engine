@@ -69,10 +69,56 @@ namespace Horo::Extensions {
             return true;
         }
 
+        [[nodiscard]] Result<ExternalProcessRequest> ResolveAndValidateRequest(const IToolchainInvocationPolicy &policy,
+                                                                               const ToolchainProviderDescriptor &provider,
+                                                                               const ToolchainInvocationIntent &intent) {
+            Result<ExternalProcessRequest> resolved = [&]() {
+                try {
+                    return policy.Resolve(provider, intent);
+                } catch (...) {  // NOSONAR(cpp:S1181) Host policy boundary must contain exceptions.
+                    return Result<ExternalProcessRequest>::Failure(
+                        MakeError(ExtensionErrors::ToolchainPolicyRejected, "Host toolchain policy threw an exception."));
+                }
+            }();
+            if (resolved.HasError())
+                return Result<ExternalProcessRequest>::Failure(
+                    WrapError(ExtensionErrors::ToolchainPolicyRejected, resolved.ErrorValue(),
+                              std::format("Host policy rejected tool '{}' for {}@{}.", intent.tool.value, provider.providerId,
+                                          provider.providerGeneration)));
+            if (!ValidProcessRequest(resolved.Value()))
+                return Result<ExternalProcessRequest>::Failure(MakeError(ExtensionErrors::ToolchainProviderRegistryInvalid));
+            return resolved;
+        }
+
+        [[nodiscard]] Result<ExternalProcessResult> RunProcess(IExternalProcessRunner &processes, const ExternalProcessRequest &request,
+                                                               const CancellationToken &cancellation) {
+            try {
+                return processes.Run(request, cancellation);
+            } catch (...) {  // NOSONAR(cpp:S1181) Platform adapter boundary must contain exceptions.
+                return Result<ExternalProcessResult>::Failure(
+                    MakeError(ExtensionErrors::ToolchainInvocationFailed, "Platform process runner threw an exception."));
+            }
+        }
+
         [[nodiscard]] Error ProviderUnavailable(const ToolchainInvocationAuthority &authority) {
             return MakeError(ExtensionErrors::ToolchainProviderUnavailable,
                              std::format("Toolchain provider is unavailable: {}@{}.", authority.contributionId,
                                          authority.providerGeneration));
+        }
+
+        [[nodiscard]] Result<std::shared_ptr<ToolchainProviderState>> FindProvider(
+            const std::shared_ptr<ToolchainProviderRegistryState> &state, const ToolchainInvocationAuthority &authority) {
+            std::scoped_lock lock{state->mutex};
+            if (state->shutdown)
+                return Result<std::shared_ptr<ToolchainProviderState>>::Failure(
+                    MakeError(ExtensionErrors::ToolchainProviderRegistryShutdown));
+            const auto found = std::ranges::lower_bound(state->providers, authority.contributionId, {}, [](const auto &candidate) {
+                return candidate->descriptor.contributionId;
+            });
+            if (found == state->providers.end() || (*found)->descriptor.contributionId != authority.contributionId ||
+                (*found)->descriptor.providerGeneration != authority.providerGeneration)
+                return Result<std::shared_ptr<ToolchainProviderState>>::Failure(ProviderUnavailable(authority));
+            return Result<std::shared_ptr<ToolchainProviderState>>::Success(*found);
         }
 
         void CancelInvocations(const std::shared_ptr<ToolchainProviderState> &provider) noexcept {
@@ -97,6 +143,22 @@ namespace Horo::Extensions {
             } catch (...) {
                 invocation->RequestCancellation();
             }
+        }
+
+        [[nodiscard]] Result<std::shared_ptr<CancellationSource>> AdmitInvocation(
+            const std::shared_ptr<ToolchainProviderRegistryState> &state, const std::shared_ptr<ToolchainProviderState> &provider,
+            const ToolchainInvocationAuthority &authority, const CancellationToken &cancellation) {
+            auto invocation = std::make_shared<CancellationSource>(cancellation);
+            std::scoped_lock lock{state->mutex};
+            if (state->shutdown)
+                return Result<std::shared_ptr<CancellationSource>>::Failure(MakeError(ExtensionErrors::ToolchainProviderRegistryShutdown));
+            if (!provider->registered.load(std::memory_order_acquire))
+                return Result<std::shared_ptr<CancellationSource>>::Failure(ProviderUnavailable(authority));
+            if (provider->activeInvocations.size() >= ToolchainProviderRegistry::MaximumActiveInvocationsPerProvider)
+                return Result<std::shared_ptr<CancellationSource>>::Failure(
+                    MakeError(ExtensionErrors::ToolchainProviderRegistryCapacityExceeded));
+            provider->activeInvocations.push_back(invocation);
+            return Result<std::shared_ptr<CancellationSource>>::Success(std::move(invocation));
         }
     }  // namespace
 
@@ -210,63 +272,35 @@ namespace Horo::Extensions {
         if (state == nullptr)
             return Result<ToolchainInvocationResult>::Failure(MakeError(ExtensionErrors::ToolchainProviderRegistryShutdown));
 
-        std::shared_ptr<ToolchainProviderState> provider;
-        {
-            std::scoped_lock lock{state->mutex};
-            if (state->shutdown)
-                return Result<ToolchainInvocationResult>::Failure(MakeError(ExtensionErrors::ToolchainProviderRegistryShutdown));
-            const auto found = std::ranges::lower_bound(state->providers, authority.contributionId, {}, [](const auto &candidate) {
-                return candidate->descriptor.contributionId;
-            });
-            if (found == state->providers.end() || (*found)->descriptor.contributionId != authority.contributionId ||
-                (*found)->descriptor.providerGeneration != authority.providerGeneration)
-                return Result<ToolchainInvocationResult>::Failure(ProviderUnavailable(authority));
-            provider = *found;
-        }
+        auto providerResult = FindProvider(state, authority);
+        if (providerResult.HasError())
+            return Result<ToolchainInvocationResult>::Failure(providerResult.ErrorValue());
+        const auto provider = std::move(providerResult).Value();
         if (!std::ranges::binary_search(provider->descriptor.tools, intent.tool.value, {}, &ToolchainToolId::value))
             return Result<ToolchainInvocationResult>::Failure(MakeError(ExtensionErrors::ToolchainProviderRegistryInvalid));
 
-        Result<ExternalProcessRequest> resolved = [&]() {
-            try {
-                return state->policy->Resolve(provider->descriptor, intent);
-            } catch (...) {  // NOSONAR(cpp:S1181) Host policy boundary must contain exceptions.
-                return Result<ExternalProcessRequest>::Failure(
-                    MakeError(ExtensionErrors::ToolchainPolicyRejected, "Host toolchain policy threw an exception."));
-            }
-        }();
+        Result<ExternalProcessRequest> resolved = ResolveAndValidateRequest(*state->policy, provider->descriptor, intent);
         if (resolved.HasError())
-            return Result<ToolchainInvocationResult>::Failure(
-                WrapError(ExtensionErrors::ToolchainPolicyRejected, resolved.ErrorValue(),
-                          std::format("Host policy rejected tool '{}' for {}@{}.", intent.tool.value, provider->descriptor.providerId,
-                                      provider->descriptor.providerGeneration)));
-        if (!ValidProcessRequest(resolved.Value()))
-            return Result<ToolchainInvocationResult>::Failure(MakeError(ExtensionErrors::ToolchainProviderRegistryInvalid));
+            return Result<ToolchainInvocationResult>::Failure(resolved.ErrorValue());
 
-        auto invocation = std::make_shared<CancellationSource>(cancellation);
-        {
-            std::scoped_lock lock{state->mutex};
-            if (state->shutdown || !provider->registered.load(std::memory_order_acquire))
-                return Result<ToolchainInvocationResult>::Failure(ProviderUnavailable(authority));
-            if (provider->activeInvocations.size() >= MaximumActiveInvocationsPerProvider)
-                return Result<ToolchainInvocationResult>::Failure(MakeError(ExtensionErrors::ToolchainProviderRegistryCapacityExceeded));
-            provider->activeInvocations.push_back(invocation);
-        }
+        auto admitted = AdmitInvocation(state, provider, authority, cancellation);
+        if (admitted.HasError())
+            return Result<ToolchainInvocationResult>::Failure(admitted.ErrorValue());
+        const auto invocation = std::move(admitted).Value();
 
-        Result<ExternalProcessResult> process = [&]() {
-            try {
-                return state->processes->Run(resolved.Value(), invocation->Token());
-            } catch (...) {  // NOSONAR(cpp:S1181) Platform adapter boundary must contain exceptions.
-                return Result<ExternalProcessResult>::Failure(
-                    MakeError(ExtensionErrors::InvocationFailed, "Platform process runner threw an exception."));
-            }
-        }();
+        Result<ExternalProcessResult> process = RunProcess(*state->processes, resolved.Value(), invocation->Token());
         RemoveInvocation(state, provider, invocation);
+        if (process.HasError() && process.ErrorValue().code.Value() == ExtensionErrors::ToolchainInvocationFailed.code.Value())
+            return Result<ToolchainInvocationResult>::Failure(process.ErrorValue());
         if (process.HasError())
             return Result<ToolchainInvocationResult>::Failure(
                 WrapError(ExtensionErrors::ToolchainInvocationFailed, process.ErrorValue(),
                           std::format("Tool '{}' failed for {}@{}.", intent.tool.value, provider->descriptor.providerId,
                                       provider->descriptor.providerGeneration)));
-        return Result<ToolchainInvocationResult>::Success({provider->descriptor, intent.tool, std::move(process).Value()});
+        return Result<ToolchainInvocationResult>::Success({{provider->descriptor.contributionId, provider->descriptor.providerGeneration},
+                                                           provider->descriptor.providerId,
+                                                           intent.tool,
+                                                           std::move(process).Value()});
     }
 
     /** @copydoc ToolchainProviderRegistry::BeginShutdown */

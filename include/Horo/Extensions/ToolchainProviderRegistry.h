@@ -87,19 +87,20 @@ namespace Horo::Extensions {
 
     /** @brief Terminal platform result attributed to the exact provider generation and logical tool. */
     struct ToolchainInvocationResult final {
-        ToolchainProviderDescriptor provider; /**< Exact provider publication used for resolution. */
-        ToolchainToolId tool;                 /**< Logical tool requested by the provider. */
-        ExternalProcessResult process;        /**< Terminal result returned by the platform boundary. */
+        ToolchainInvocationAuthority authority; /**< Exact contribution and generation used for resolution. */
+        std::string providerId;                 /**< Exact module/provider identity used for resolution. */
+        ToolchainToolId tool;                   /**< Logical tool requested by the provider. */
+        ExternalProcessResult process;          /**< Terminal result returned by the platform boundary. */
     };
 
     /** @brief Explicit host-owned registry and policy-enforcing platform process gateway. */
     class ToolchainProviderRegistry final {
     public:
-        static constexpr std::size_t MaximumProviders = 256;                    /**< Hard publication bound. */
-        static constexpr std::size_t MaximumToolsPerProvider = 256;             /**< Hard declared-tool bound. */
-        static constexpr std::size_t MaximumActiveInvocationsPerProvider = 256; /**< Hard concurrent-call bound. */
-        static constexpr std::size_t MaximumArguments = 4096;                   /**< Hard requested-argument bound. */
-        static constexpr std::size_t MaximumArgumentBytes = 1U << 20U;          /**< Hard requested-byte bound. */
+        static constexpr std::size_t MaximumProviders = 256;                   /**< Hard publication bound. */
+        static constexpr std::size_t MaximumToolsPerProvider = 256;            /**< Hard declared-tool bound. */
+        static constexpr std::size_t MaximumActiveInvocationsPerProvider = 16; /**< Hard concurrent-call bound. */
+        static constexpr std::size_t MaximumArguments = 4096;                  /**< Hard requested-argument bound. */
+        static constexpr std::size_t MaximumArgumentBytes = 1U << 20U;         /**< Hard requested-byte bound. */
 
         /**
          * @brief Creates a registry borrowing host policy and platform process authorities.

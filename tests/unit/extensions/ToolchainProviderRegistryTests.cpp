@@ -99,7 +99,7 @@ namespace Horo::Extensions::Tests {
             Result<ExternalProcessResult> Run(const ExternalProcessRequest &, const CancellationToken &cancellation) override {
                 {
                     std::scoped_lock lock{mutex_};
-                    entered_ = true;
+                    ++entered_;
                 }
                 condition_.notify_all();
                 while (!cancellation.IsCancellationRequested())
@@ -108,10 +108,10 @@ namespace Horo::Extensions::Tests {
                 return Result<ExternalProcessResult>::Success({ProcessTerminationReason::Cancelled, 0});
             }
 
-            void WaitUntilEntered() {
+            void WaitUntilEntered(const std::size_t expected = 1U) {
                 std::unique_lock lock{mutex_};
-                condition_.wait(lock, [this] {
-                    return entered_;
+                condition_.wait(lock, [this, expected] {
+                    return entered_ >= expected;
                 });
             }
 
@@ -122,7 +122,7 @@ namespace Horo::Extensions::Tests {
         private:
             std::mutex mutex_;
             std::condition_variable condition_;
-            bool entered_{};
+            std::size_t entered_{};
             std::atomic_bool cancelled_{};
         };
 
@@ -150,9 +150,9 @@ namespace Horo::Extensions::Tests {
         const ToolchainInvocationIntent intent{{"tool.compiler"}, {"--provider-request", "input.cpp"}};
         const auto invoked = registry.Invoke(registration.Value().Authority(), intent, {});
         REQUIRE(invoked.HasValue());
-        CHECK(invoked.Value().provider.contributionId == "toolchain.example");
-        CHECK(invoked.Value().provider.providerId == "com.example.toolchain");
-        CHECK(invoked.Value().provider.providerGeneration == 7U);
+        CHECK(invoked.Value().authority.contributionId == "toolchain.example");
+        CHECK(invoked.Value().authority.providerGeneration == 7U);
+        CHECK(invoked.Value().providerId == "com.example.toolchain");
         CHECK(invoked.Value().tool.value == "tool.compiler");
         CHECK(invoked.Value().process.reason == ProcessTerminationReason::Exited);
         CHECK(policy.calls == 1U);
@@ -187,70 +187,65 @@ namespace Horo::Extensions::Tests {
         CHECK(runner.calls == 0U);
     }
 
-    TEST_CASE("Toolchain provider contains policy and platform failures with typed causes",
-              "[unit][extensions][toolchain-provider][headless]") {
-        SECTION("policy rejection") {
-            TestPolicy policy;
-            policy.reject = true;
-            TestRunner runner;
-            ToolchainProviderRegistry registry{policy, runner};
-            auto registration = registry.Register(Provider());
-            REQUIRE(registration.HasValue());
-            const auto result = registry.Invoke(registration.Value().Authority(), {{"tool.compiler"}, {}}, {});
-            RequireError(result, "toolchain_policy_rejected");
-            REQUIRE(result.ErrorValue().cause.Get() != nullptr);
-            CHECK(result.ErrorValue().cause.Get()->code.Value() == "invocation_failed");
-            CHECK(runner.calls == 0U);
-        }
+    TEST_CASE("Toolchain provider preserves host policy rejection causes", "[unit][extensions][toolchain-provider][headless]") {
+        TestPolicy policy;
+        policy.reject = true;
+        TestRunner runner;
+        ToolchainProviderRegistry registry{policy, runner};
+        auto registration = registry.Register(Provider());
+        REQUIRE(registration.HasValue());
+        const auto result = registry.Invoke(registration.Value().Authority(), {{"tool.compiler"}, {}}, {});
+        RequireError(result, "toolchain_policy_rejected");
+        REQUIRE(result.ErrorValue().cause.Get() != nullptr);
+        CHECK(result.ErrorValue().cause.Get()->code.Value() == "invocation_failed");
+        CHECK(runner.calls == 0U);
+    }
 
-        SECTION("platform failure") {
-            TestPolicy policy;
-            TestRunner runner;
-            runner.fail = true;
-            ToolchainProviderRegistry registry{policy, runner};
-            auto registration = registry.Register(Provider());
-            REQUIRE(registration.HasValue());
-            const auto result = registry.Invoke(registration.Value().Authority(), {{"tool.compiler"}, {}}, {});
-            RequireError(result, "toolchain_invocation_failed");
-            REQUIRE(result.ErrorValue().cause.Get() != nullptr);
-            CHECK(result.ErrorValue().cause.Get()->code.Value() == "invocation_failed");
-        }
+    TEST_CASE("Toolchain provider preserves platform failure causes", "[unit][extensions][toolchain-provider][headless]") {
+        TestPolicy policy;
+        TestRunner runner;
+        runner.fail = true;
+        ToolchainProviderRegistry registry{policy, runner};
+        auto registration = registry.Register(Provider());
+        REQUIRE(registration.HasValue());
+        const auto result = registry.Invoke(registration.Value().Authority(), {{"tool.compiler"}, {}}, {});
+        RequireError(result, "toolchain_invocation_failed");
+        REQUIRE(result.ErrorValue().cause.Get() != nullptr);
+        CHECK(result.ErrorValue().cause.Get()->code.Value() == "invocation_failed");
+    }
 
-        SECTION("policy exception") {
-            TestPolicy policy;
-            policy.throwException = true;
-            TestRunner runner;
-            ToolchainProviderRegistry registry{policy, runner};
-            auto registration = registry.Register(Provider());
-            REQUIRE(registration.HasValue());
-            RequireError(registry.Invoke(registration.Value().Authority(), {{"tool.compiler"}, {}}, {}), "toolchain_policy_rejected");
-            CHECK(runner.calls == 0U);
-        }
+    TEST_CASE("Toolchain provider contains host policy exceptions", "[unit][extensions][toolchain-provider][headless]") {
+        TestPolicy policy;
+        policy.throwException = true;
+        TestRunner runner;
+        ToolchainProviderRegistry registry{policy, runner};
+        auto registration = registry.Register(Provider());
+        REQUIRE(registration.HasValue());
+        RequireError(registry.Invoke(registration.Value().Authority(), {{"tool.compiler"}, {}}, {}), "toolchain_policy_rejected");
+        CHECK(runner.calls == 0U);
+    }
 
-        SECTION("platform exception") {
-            TestPolicy policy;
-            TestRunner runner;
-            runner.throwException = true;
-            ToolchainProviderRegistry registry{policy, runner};
-            auto registration = registry.Register(Provider());
-            REQUIRE(registration.HasValue());
-            const auto result = registry.Invoke(registration.Value().Authority(), {{"tool.compiler"}, {}}, {});
-            RequireError(result, "toolchain_invocation_failed");
-            REQUIRE(result.ErrorValue().cause.Get() != nullptr);
-            CHECK(result.ErrorValue().cause.Get()->code.Value() == "invocation_failed");
-        }
+    TEST_CASE("Toolchain provider contains platform runner exceptions", "[unit][extensions][toolchain-provider][headless]") {
+        TestPolicy policy;
+        TestRunner runner;
+        runner.throwException = true;
+        ToolchainProviderRegistry registry{policy, runner};
+        auto registration = registry.Register(Provider());
+        REQUIRE(registration.HasValue());
+        const auto result = registry.Invoke(registration.Value().Authority(), {{"tool.compiler"}, {}}, {});
+        RequireError(result, "toolchain_invocation_failed");
+        CHECK(result.ErrorValue().cause.Get() == nullptr);
+    }
 
-        SECTION("invalid host resolution") {
-            TestPolicy policy;
-            policy.request.executable = "  ";
-            TestRunner runner;
-            ToolchainProviderRegistry registry{policy, runner};
-            auto registration = registry.Register(Provider());
-            REQUIRE(registration.HasValue());
-            RequireError(registry.Invoke(registration.Value().Authority(), {{"tool.compiler"}, {}}, {}),
-                         "toolchain_provider_registry_invalid");
-            CHECK(runner.calls == 0U);
-        }
+    TEST_CASE("Toolchain provider rejects invalid host process resolution", "[unit][extensions][toolchain-provider][headless]") {
+        TestPolicy policy;
+        policy.request.executable = "  ";
+        TestRunner runner;
+        ToolchainProviderRegistry registry{policy, runner};
+        auto registration = registry.Register(Provider());
+        REQUIRE(registration.HasValue());
+        RequireError(registry.Invoke(registration.Value().Authority(), {{"tool.compiler"}, {}}, {}), "toolchain_provider_registry_invalid");
+        CHECK(runner.calls == 0U);
     }
 
     TEST_CASE("Toolchain provider revocation cancels admitted work and rejects stale authorities",
@@ -300,6 +295,33 @@ namespace Horo::Extensions::Tests {
         CHECK_FALSE(first.Value().IsRegistered());
         RequireError(registry.Register(Provider("toolchain.after-shutdown")), "toolchain_provider_registry_shutdown");
         RequireError(registry.Invoke(first.Value().Authority(), {{"tool.compiler"}, {}}, {}), "toolchain_provider_registry_shutdown");
+    }
+
+    TEST_CASE("Toolchain provider bounds concurrent invocations and shutdown cancels every admitted process",
+              "[unit][extensions][toolchain-provider][headless]") {
+        TestPolicy policy;
+        BlockingRunner runner;
+        ToolchainProviderRegistry registry{policy, runner};
+        auto registration = registry.Register(Provider());
+        REQUIRE(registration.HasValue());
+        const auto authority = registration.Value().Authority();
+        std::vector<std::future<Result<ToolchainInvocationResult>>> invocations;
+        invocations.reserve(ToolchainProviderRegistry::MaximumActiveInvocationsPerProvider);
+        for (std::size_t index = 0; index < ToolchainProviderRegistry::MaximumActiveInvocationsPerProvider; ++index) {
+            invocations.push_back(std::async(std::launch::async, [&] {
+                return registry.Invoke(authority, {{"tool.compiler"}, {}}, {});
+            }));
+        }
+        runner.WaitUntilEntered(ToolchainProviderRegistry::MaximumActiveInvocationsPerProvider);
+        RequireError(registry.Invoke(authority, {{"tool.compiler"}, {}}, {}), "toolchain_provider_registry_capacity_exceeded");
+
+        registry.BeginShutdown();
+        for (auto &invocation : invocations) {
+            const auto completed = invocation.get();
+            REQUIRE(completed.HasValue());
+            CHECK(completed.Value().process.reason == ProcessTerminationReason::Cancelled);
+        }
+        CHECK(runner.Cancelled());
     }
 
     TEST_CASE("Toolchain provider registry enforces its hard publication bound", "[unit][extensions][toolchain-provider][headless]") {
