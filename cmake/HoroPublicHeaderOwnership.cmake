@@ -168,6 +168,7 @@ horo_configure_target_header_boundary(HoroGameplayApi PUBLIC_HEADERS
     Horo/Gameplay/SystemRegistry.h
 )
 horo_configure_target_header_boundary(HoroRuntimeScene PUBLIC_HEADERS
+    Horo/Runtime/Scene/NavigationSceneComponents.h
     Horo/Runtime/Scene/RuntimeScene.h
     Horo/Runtime/Scene/RuntimeSceneDefinition.h
     Horo/Runtime/Scene/SavedSceneBootstrap.h
@@ -361,6 +362,7 @@ horo_configure_target_header_boundary(HoroNavigationRecastDetour PUBLIC_HEADERS
 horo_configure_target_header_boundary(HoroWorldStreaming PUBLIC_HEADERS
     Horo/WorldStreaming/NetworkStreamingAuthority.h
     Horo/WorldStreaming/OriginFrame.h
+    Horo/WorldStreaming/RuntimeEntityCellExitOperation.h
     Horo/WorldStreaming/CookedWorldIndexManifest.h
     Horo/WorldStreaming/FallbackStreamingProvider.h
     Horo/WorldStreaming/StreamingBudgetModel.h
