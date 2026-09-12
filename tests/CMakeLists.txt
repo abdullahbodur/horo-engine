@@ -1549,6 +1549,13 @@ target_compile_features(HoroPipelineStepRegistryTests PRIVATE cxx_std_20)
 target_link_libraries(HoroPipelineStepRegistryTests PRIVATE HoroEngine::Extensions Catch2::Catch2WithMain)
 add_test(NAME HoroPipelineStepRegistryTests COMMAND HoroPipelineStepRegistryTests)
 
+add_executable(HoroToolchainProviderRegistryTests
+        unit/extensions/ToolchainProviderRegistryTests.cpp
+)
+target_compile_features(HoroToolchainProviderRegistryTests PRIVATE cxx_std_20)
+target_link_libraries(HoroToolchainProviderRegistryTests PRIVATE HoroEngine::Extensions Catch2::Catch2WithMain)
+add_test(NAME HoroToolchainProviderRegistryTests COMMAND HoroToolchainProviderRegistryTests)
+
 add_executable(HoroSecurityBaselineTests unit/security/SecurityBaselineTests.cpp)
 target_compile_features(HoroSecurityBaselineTests PRIVATE cxx_std_20)
 target_link_libraries(HoroSecurityBaselineTests PRIVATE

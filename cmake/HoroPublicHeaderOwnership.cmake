@@ -533,6 +533,7 @@ horo_configure_target_header_boundary(HoroExtensions PUBLIC_HEADERS
     Horo/Extensions/ExtensionMarketplace.h
     Horo/Extensions/PipelineStepRegistry.h
     Horo/Extensions/ProjectValidatorRegistry.h
+    Horo/Extensions/ToolchainProviderRegistry.h
 )
 
 horo_verify_public_header_inventory()
