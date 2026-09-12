@@ -110,8 +110,8 @@ namespace Horo::Navigation {
                                                                            const NavigationBakeSurfaceInput &surface) noexcept {
             const auto contributions = geometry.Contributions();
             const auto target = std::tuple{surface.producer.Value(), surface.contribution.Value()};
-            const auto found = std::ranges::lower_bound(contributions, target, [](const auto &candidate, const auto key) {
-                return std::tuple{candidate.producer.Value(), candidate.contribution.Value()} < key;
+            const auto found = std::ranges::lower_bound(contributions, target, {}, [](const auto &candidate) {
+                return std::tuple{candidate.producer.Value(), candidate.contribution.Value()};
             });
             if (found == contributions.end() || found->producer != surface.producer || found->contribution != surface.contribution)
                 return nullptr;
@@ -120,8 +120,8 @@ namespace Horo::Navigation {
 
         [[nodiscard]] const NavigationResolvedBakeProfile *FindProfile(const std::vector<NavigationResolvedBakeProfile> &profiles,
                                                                        const NavigationAgentProfileId id) noexcept {
-            const auto found = std::ranges::lower_bound(profiles, id.Value(), [](const auto &candidate, const auto value) {
-                return candidate.id.Value() < value;
+            const auto found = std::ranges::lower_bound(profiles, id.Value(), {}, [](const auto &candidate) {
+                return candidate.id.Value();
             });
             return found != profiles.end() && found->id == id ? std::to_address(found) : nullptr;
         }
@@ -130,8 +130,8 @@ namespace Horo::Navigation {
                                                                         const NavigationAgentProfileId profile,
                                                                         const SurfaceId surface) noexcept {
             const auto target = std::tuple{profile.Value(), surface.Value()};
-            const auto found = std::ranges::lower_bound(partitions, target, [](const auto &candidate, const auto key) {
-                return PartitionKey(candidate) < key;
+            const auto found = std::ranges::lower_bound(partitions, target, {}, [](const auto &candidate) {
+                return PartitionKey(candidate);
             });
             return found != partitions.end() && found->profile == profile && found->surface == surface ? std::to_address(found) : nullptr;
         }
@@ -147,8 +147,8 @@ namespace Horo::Navigation {
 
         [[nodiscard]] bool RememberArea(std::vector<NavigationResolvedBakeArea> &areas, const NavigationAreaDescriptor &area,
                                         const std::size_t maximumAreas) {
-            const auto found = std::ranges::lower_bound(areas, area.id.Value(), [](const auto &candidate, const auto value) {
-                return candidate.id.Value() < value;
+            const auto found = std::ranges::lower_bound(areas, area.id.Value(), {}, [](const auto &candidate) {
+                return candidate.id.Value();
             });
             if (found != areas.end() && found->id == area.id)
                 return true;
@@ -405,9 +405,8 @@ namespace Horo::Navigation {
 
         void BindModifierRanges(CanonicalBakeStorage &storage) noexcept {
             for (auto &partition : storage.partitions) {
-                const auto first =
-                    std::ranges::lower_bound(storage.modifiers, PartitionKey(partition), [](const auto &modifier, const auto key) {
-                    return std::tuple{modifier.profile.Value(), modifier.surface.Value()} < key;
+                const auto first = std::ranges::lower_bound(storage.modifiers, PartitionKey(partition), {}, [](const auto &modifier) {
+                    return std::tuple{modifier.profile.Value(), modifier.surface.Value()};
                 });
                 const auto last =
                     std::upper_bound(first, storage.modifiers.end(), PartitionKey(partition), [](const auto key, const auto &modifier) {
