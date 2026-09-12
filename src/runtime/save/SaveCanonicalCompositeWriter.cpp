@@ -50,7 +50,7 @@ namespace Horo::Runtime {
             admitted.HasError()) {
             return admitted;
         }
-        return WriteStaged([this, values](CanonicalValueWriter &staging) {
+        return WriteStaged([values](CanonicalValueWriter &staging) {
             auto written = staging.WriteUInt32(static_cast<std::uint32_t>(values.size()));
             for (const auto &value : values) {
                 if (written.HasError())
@@ -65,7 +65,7 @@ namespace Horo::Runtime {
     Result<void> CanonicalValueWriter::WriteOptional(const std::optional<CanonicalEncodedValue> &value) {
         if (auto admitted = AdmitComposite(value ? value->StructuralDepth() : 0); admitted.HasError())
             return admitted;
-        return WriteStaged([this, &value](CanonicalValueWriter &staging) {
+        return WriteStaged([&value](CanonicalValueWriter &staging) {
             auto written = staging.WriteBool(value.has_value());
             if (written.HasValue() && value)
                 written = staging.AppendLengthDelimited(value->Bytes());
@@ -80,7 +80,7 @@ namespace Horo::Runtime {
             return admitted;
         if (!alternativeCount || index >= alternativeCount)
             return Fail(ErrorAt(SaveErrors::CanonicalCodecInvalid));
-        return WriteStaged([this, index, &value](CanonicalValueWriter &staging) {
+        return WriteStaged([index, &value](CanonicalValueWriter &staging) {
             auto written = staging.WriteUInt32(index);
             if (written.HasValue())
                 written = staging.AppendLengthDelimited(value.Bytes());
