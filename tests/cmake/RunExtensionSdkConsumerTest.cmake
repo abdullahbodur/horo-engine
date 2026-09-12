@@ -9,8 +9,14 @@ file(MAKE_DIRECTORY "${HORO_TEST_BINARY_DIR}")
 file(COPY "${HORO_EXTENSION_SDK_PACKAGE_DIR}/"
     DESTINATION "${HORO_TEST_BINARY_DIR}/sdk")
 
-file(GLOB_RECURSE sdk_files LIST_DIRECTORIES FALSE "${HORO_TEST_BINARY_DIR}/sdk/*")
-foreach(sdk_file IN LISTS sdk_files)
+file(GLOB_RECURSE sdk_text_files LIST_DIRECTORIES FALSE
+    "${HORO_TEST_BINARY_DIR}/sdk/*.cmake"
+    "${HORO_TEST_BINARY_DIR}/sdk/*.h"
+    "${HORO_TEST_BINARY_DIR}/sdk/*.json"
+    "${HORO_TEST_BINARY_DIR}/sdk/*.md"
+    "${HORO_TEST_BINARY_DIR}/sdk/*.py")
+list(APPEND sdk_text_files "${HORO_TEST_BINARY_DIR}/sdk/LICENSE")
+foreach(sdk_file IN LISTS sdk_text_files)
     file(READ "${sdk_file}" sdk_contents)
     string(FIND "${sdk_contents}" "${HORO_ENGINE_SOURCE_DIR}" source_path_index)
     if(NOT source_path_index EQUAL -1)
