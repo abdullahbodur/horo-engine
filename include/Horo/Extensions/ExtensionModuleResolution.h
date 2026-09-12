@@ -104,9 +104,20 @@ namespace Horo::Extensions {
     private:
         friend Result<ExtensionModulePlan> ResolveExtensionModules(const ExtensionManifest &manifest, const ExtensionHostEnvironment &host);
 
-        ResolvedExtensionServiceImport(std::string consumerExtensionId, std::string consumerModuleId, std::string importId,
-                                       std::string serviceId, std::string contractId, std::string providerModuleId,
-                                       std::string providerVersion, ExtensionServiceImportStatus status, bool required);
+        /** @brief Complete construction payload produced only by the validated module resolver. */
+        struct Fields {
+            std::string consumerExtensionId;
+            std::string consumerModuleId;
+            std::string importId;
+            std::string serviceId;
+            std::string contractId;
+            std::string providerModuleId;
+            std::string providerVersion;
+            ExtensionServiceImportStatus status;
+            bool required;
+        };
+
+        explicit ResolvedExtensionServiceImport(Fields fields);
 
         std::string consumerExtensionId_;
         std::string consumerModuleId_;

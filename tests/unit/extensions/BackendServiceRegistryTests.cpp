@@ -224,6 +224,13 @@ namespace Horo::Extensions::Tests {
                     .abiMajor = 1};
         }
 
+        [[nodiscard]] ResolvedExtensionServiceImport ResolveSingleImport(ExtensionManifest manifest) {
+            auto resolved = ResolveExtensionModules(manifest, HeadlessHost());
+            REQUIRE(resolved.HasValue());
+            REQUIRE(resolved.Value().serviceImports.size() == 1);
+            return resolved.Value().serviceImports.front();
+        }
+
         [[nodiscard]] ResolvedExtensionServiceImport ResolvedImport(const std::string &providerVersion = "1.0.0") {
             ExtensionModuleManifest provider{.id = "com.example.math-module",
                                              .version = "1.0.0",
@@ -235,20 +242,14 @@ namespace Horo::Extensions::Tests {
             ExtensionManifest manifest;
             manifest.id = "com.example.consumer";
             manifest.modules = {ImportConsumer(), std::move(provider)};
-            auto resolved = ResolveExtensionModules(manifest, HeadlessHost());
-            REQUIRE(resolved.HasValue());
-            REQUIRE(resolved.Value().serviceImports.size() == 1);
-            return resolved.Value().serviceImports.front();
+            return ResolveSingleImport(std::move(manifest));
         }
 
         [[nodiscard]] ResolvedExtensionServiceImport UnavailableImport() {
             ExtensionManifest manifest;
             manifest.id = "com.example.consumer";
             manifest.modules = {ImportConsumer(false)};
-            auto resolved = ResolveExtensionModules(manifest, HeadlessHost());
-            REQUIRE(resolved.HasValue());
-            REQUIRE(resolved.Value().serviceImports.size() == 1);
-            return resolved.Value().serviceImports.front();
+            return ResolveSingleImport(std::move(manifest));
         }
 
         [[nodiscard]] ExtensionCapabilityAdmission Admission(std::string extensionId = "com.example.consumer",
@@ -335,6 +336,16 @@ namespace Horo::Extensions::Tests {
             ExtensionCapabilityAdmission admission = Admission();
             BackendServiceRegistry services;
         };
+
+        template <typename ConfigureDescriptor>
+        void RequireProviderIdentityMismatch(Fixture &fixture, ConfigureDescriptor configureDescriptor) {
+            BackendServiceDescriptor descriptor = Descriptor();
+            configureDescriptor(descriptor);
+            auto registration = RegisterService(fixture.services, std::move(descriptor),
+                                                std::make_unique<ArithmeticService>(std::make_shared<ArithmeticServiceAudit>()));
+            const auto rejected = fixture.services.BindImport(CapabilityLease(fixture.capabilities, fixture.admission), ResolvedImport());
+            RequireAttributedImportError(rejected, "backend_service_contract_mismatch");
+        }
     }  // namespace
 
     TEST_CASE("Backend-only service performs typed attributed calls without presentation dependencies", "[Extensions][BackendService]") {
@@ -423,21 +434,15 @@ namespace Horo::Extensions::Tests {
         }
 
         SECTION("provider module mapping") {
-            auto descriptor = Descriptor();
-            descriptor.provider.moduleId = "com.example.other-module";
-            auto registration = RegisterService(fixture.services, std::move(descriptor),
-                                                std::make_unique<ArithmeticService>(std::make_shared<ArithmeticServiceAudit>()));
-            const auto rejected = fixture.services.BindImport(CapabilityLease(fixture.capabilities, fixture.admission), ResolvedImport());
-            RequireAttributedImportError(rejected, "backend_service_contract_mismatch");
+            RequireProviderIdentityMismatch(fixture, [](BackendServiceDescriptor &descriptor) {
+                descriptor.provider.moduleId = "com.example.other-module";
+            });
         }
 
         SECTION("provider generation") {
-            auto descriptor = Descriptor();
-            descriptor.provider.generation = 8;
-            auto registration = RegisterService(fixture.services, std::move(descriptor),
-                                                std::make_unique<ArithmeticService>(std::make_shared<ArithmeticServiceAudit>()));
-            const auto rejected = fixture.services.BindImport(CapabilityLease(fixture.capabilities, fixture.admission), ResolvedImport());
-            RequireAttributedImportError(rejected, "backend_service_contract_mismatch");
+            RequireProviderIdentityMismatch(fixture, [](BackendServiceDescriptor &descriptor) {
+                descriptor.provider.generation = 8;
+            });
         }
     }
 

@@ -16,14 +16,11 @@
 #include <utility>
 
 namespace Horo::Extensions {
-    ResolvedExtensionServiceImport::ResolvedExtensionServiceImport(std::string consumerExtensionId, std::string consumerModuleId,
-                                                                   std::string importId, std::string serviceId, std::string contractId,
-                                                                   std::string providerModuleId, std::string providerVersion,
-                                                                   const ExtensionServiceImportStatus status, const bool required)
-        : consumerExtensionId_(std::move(consumerExtensionId)), consumerModuleId_(std::move(consumerModuleId)),
-          importId_(std::move(importId)), serviceId_(std::move(serviceId)), contractId_(std::move(contractId)),
-          providerModuleId_(std::move(providerModuleId)), providerVersion_(std::move(providerVersion)), status_(status),
-          required_(required) {}
+    ResolvedExtensionServiceImport::ResolvedExtensionServiceImport(Fields fields)
+        : consumerExtensionId_(std::move(fields.consumerExtensionId)), consumerModuleId_(std::move(fields.consumerModuleId)),
+          importId_(std::move(fields.importId)), serviceId_(std::move(fields.serviceId)), contractId_(std::move(fields.contractId)),
+          providerModuleId_(std::move(fields.providerModuleId)), providerVersion_(std::move(fields.providerVersion)),
+          status_(fields.status), required_(fields.required) {}
 
     /** @copydoc ResolvedExtensionServiceImport::ConsumerExtensionId */
     const std::string &ResolvedExtensionServiceImport::ConsumerExtensionId() const noexcept {
@@ -553,15 +550,17 @@ namespace Horo::Extensions {
         const auto makeResolvedImport = [](std::string consumerExtensionId, std::string consumerModuleId, std::string importId,
                                            std::string serviceId, std::string contractId, std::string providerModuleId,
                                            std::string providerVersion, const ExtensionServiceImportStatus status, const bool required) {
-            return ResolvedExtensionServiceImport{std::move(consumerExtensionId),
-                                                  std::move(consumerModuleId),
-                                                  std::move(importId),
-                                                  std::move(serviceId),
-                                                  std::move(contractId),
-                                                  std::move(providerModuleId),
-                                                  std::move(providerVersion),
-                                                  status,
-                                                  required};
+            return ResolvedExtensionServiceImport{ResolvedExtensionServiceImport::Fields{
+                .consumerExtensionId = std::move(consumerExtensionId),
+                .consumerModuleId = std::move(consumerModuleId),
+                .importId = std::move(importId),
+                .serviceId = std::move(serviceId),
+                .contractId = std::move(contractId),
+                .providerModuleId = std::move(providerModuleId),
+                .providerVersion = std::move(providerVersion),
+                .status = status,
+                .required = required,
+            }};
         };
         auto modulesResult = ValidateAndIndexModules(manifest);
         if (modulesResult.HasError())
