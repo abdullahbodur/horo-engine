@@ -188,6 +188,15 @@ last-known value. `QueryXRTrackedPose` performs bounded binary lookup without
 allocation and distinguishes unsupported pose purposes, temporary unavailability,
 device replacement, snapshot replacement, shutdown, and origin replacement.
 
+`XRViewRenderPlan` owns the implemented bounded runtime-ordered view/configuration and
+external-target contract. It uses one representation for mono simulator, primary stereo,
+and future N-view evidence; the first production admission remains exact opaque primary
+stereo. View poses retain presentation-prediction time, while color/depth targets carry
+distinct generation-safe runtime image identity plus Horo RenderApi format, usage,
+extent, rectangle, array-layer, and sample requirements. Creation and pre-Renderer
+revalidation are allocation-free and fence session, configuration, origin, and current
+acquired-image generations without exposing native handles.
+
 The descriptor set returned by `XRErrors::Descriptors()` is the complete bounded
 `horo.xr` contribution for later host module registration. XRRuntime and XROpenXR
 must extend this Horo-owned vocabulary through their owning module descriptors;

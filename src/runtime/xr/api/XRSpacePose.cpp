@@ -12,30 +12,20 @@ namespace Horo::XR {
             return Result<T>::Failure(MakeError(descriptor));
         }
 
-        /** @brief Validates a semantic space against current session and origin ownership. */
-        [[nodiscard]] bool ValidSpace(const XRCoordinateSpace &space, const XRSessionId &activeSession,
-                                      const XRWorldOriginRevision activeOriginRevision, Error &failure) {
-            if (auto identity = ValidateXRSessionObject(space.id, activeSession); identity.HasError()) {
-                failure = identity.ErrorValue();
-                return false;
-            }
-            if (space.kind >= XRSpaceKind::Count || space.convention >= XRCoordinateConvention::Count) {
-                failure = MakeError(XRErrors::OperationInvalid);
-                return false;
-            }
-            if (space.convention != XRCoordinateConvention::RightHandedYUpNegativeZForward) {
-                failure = MakeError(XRErrors::OperationUnsupported);
-                return false;
-            }
-            if (!space.worldOriginRevision.IsValid() || !activeOriginRevision.IsValid()) {
-                failure = MakeError(XRErrors::OperationInvalid);
-                return false;
-            }
-            if (space.worldOriginRevision != activeOriginRevision) {
-                failure = MakeError(XRErrors::OriginRevisionStale);
-                return false;
-            }
-            return true;
+        /** @brief Validates a semantic space without constructing heavyweight failure state on success. */
+        [[nodiscard]] Result<void> ValidateSpace(const XRCoordinateSpace &space, const XRSessionId &activeSession,
+                                                 const XRWorldOriginRevision activeOriginRevision) {
+            if (auto identity = ValidateXRSessionObject(space.id, activeSession); identity.HasError())
+                return identity;
+            if (space.kind >= XRSpaceKind::Count || space.convention >= XRCoordinateConvention::Count)
+                return Reject<void>(XRErrors::OperationInvalid);
+            if (space.convention != XRCoordinateConvention::RightHandedYUpNegativeZForward)
+                return Reject<void>(XRErrors::OperationUnsupported);
+            if (!space.worldOriginRevision.IsValid() || !activeOriginRevision.IsValid())
+                return Reject<void>(XRErrors::OperationInvalid);
+            if (space.worldOriginRevision != activeOriginRevision)
+                return Reject<void>(XRErrors::OriginRevisionStale);
+            return Result<void>::Success();
         }
 
         /** @brief Validates the presence and representation of one independently tagged component. */
@@ -217,10 +207,10 @@ namespace Horo::XR {
                                               const XRWorldOriginRevision activeOriginRevision) {
         if (auto session = ValidateXRSession(descriptor.session, activeSession); session.HasError())
             return Result<XRPoseSample>::Failure(session.ErrorValue());
-        if (Error spaceFailure; !ValidSpace(descriptor.source, activeSession, activeOriginRevision, spaceFailure) ||
-                                !ValidSpace(descriptor.target, activeSession, activeOriginRevision, spaceFailure)) {
-            return Result<XRPoseSample>::Failure(std::move(spaceFailure));
-        }
+        if (auto source = ValidateSpace(descriptor.source, activeSession, activeOriginRevision); source.HasError())
+            return Result<XRPoseSample>::Failure(source.ErrorValue());
+        if (auto target = ValidateSpace(descriptor.target, activeSession, activeOriginRevision); target.HasError())
+            return Result<XRPoseSample>::Failure(target.ErrorValue());
         if (descriptor.source.id == descriptor.target.id && descriptor.source != descriptor.target)
             return Reject<XRPoseSample>(XRErrors::CoordinateSpaceIncompatible);
         if (!ValidTime(descriptor))

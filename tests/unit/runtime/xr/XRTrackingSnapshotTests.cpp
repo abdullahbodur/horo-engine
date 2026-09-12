@@ -1,6 +1,7 @@
 #include "Horo/XR/XRErrors.h"
 #include "Horo/XR/XRTrackingSnapshot.h"
 #include "support/AllocationProbe.h"
+#include "support/TypedIdentityTestSupport.h"
 
 #include <array>
 #include <catch2/catch_test_macros.hpp>
@@ -9,18 +10,12 @@
 
 namespace Horo::XR {
     namespace {
-        template <typename Generation> [[nodiscard]] Generation GenerationValue(const std::uint64_t value) {
-            auto result = Generation::Create(value);
-            REQUIRE(result.HasValue());
-            return result.Value();
-        }
-
         [[nodiscard]] XRSessionId ActiveSession(const std::uint32_t generation = 5) {
-            return {{GenerationValue<XRRuntimeGeneration>(1), {2, 3}}, {4, generation}};
+            return {{Horo::Tests::IdentityValue<XRRuntimeGeneration>(1), {2, 3}}, {4, generation}};
         }
 
         [[nodiscard]] XRCoordinateSpace TrackingSpace(const XRSessionId &session, const XRSpaceKind kind, const std::uint32_t index) {
-            return {.id = {session, {index, 1}}, .kind = kind, .worldOriginRevision = GenerationValue<XRWorldOriginRevision>(9)};
+            return {.id = {session, {index, 1}}, .kind = kind, .worldOriginRevision = Horo::Tests::IdentityValue<XRWorldOriginRevision>(9)};
         }
 
         [[nodiscard]] XRPoseSample PoseSample(const XRSessionId &session, const XRRuntimeTime sampledAt) {
@@ -28,16 +23,17 @@ namespace Horo::XR {
                 XRPoseComponent<Math::Vec3>{.value = Math::Vec3{1.0F, 2.0F, 3.0F}, .validity = XRPoseComponentValidity::Tracked};
             const auto trackedOrientation =
                 XRPoseComponent<Math::Quaternion>{.value = Math::Quaternion::Identity(), .validity = XRPoseComponentValidity::Tracked};
-            auto result = XRPoseSample::Create({.session = session,
-                                                .source = TrackingSpace(session, XRSpaceKind::View, 11),
-                                                .target = TrackingSpace(session, XRSpaceKind::Local, 12),
-                                                .purpose = XRPosePurpose::SimulationInput,
-                                                .time = {.runtimeSample = sampledAt, .simulation = GenerationValue<XRSimulationTime>(80)},
-                                                .components = {.positionMeters = trackedPosition,
-                                                               .orientation = trackedOrientation,
-                                                               .confidence = XRTrackingConfidence::High,
-                                                               .loss = XRTrackingLossState::None}},
-                                               session, GenerationValue<XRWorldOriginRevision>(9));
+            auto result =
+                XRPoseSample::Create({.session = session,
+                                      .source = TrackingSpace(session, XRSpaceKind::View, 11),
+                                      .target = TrackingSpace(session, XRSpaceKind::Local, 12),
+                                      .purpose = XRPosePurpose::SimulationInput,
+                                      .time = {.runtimeSample = sampledAt, .simulation = Horo::Tests::IdentityValue<XRSimulationTime>(80)},
+                                      .components = {.positionMeters = trackedPosition,
+                                                     .orientation = trackedOrientation,
+                                                     .confidence = XRTrackingConfidence::High,
+                                                     .loss = XRTrackingLossState::None}},
+                                     session, Horo::Tests::IdentityValue<XRWorldOriginRevision>(9));
             REQUIRE(result.HasValue());
             return std::move(result).Value();
         }
@@ -52,8 +48,9 @@ namespace Horo::XR {
         class TrackingFixture final {
         public:
             TrackingFixture()
-                : session(ActiveSession()), sampledAt(GenerationValue<XRRuntimeTime>(100)),
-                  origin(GenerationValue<XRWorldOriginRevision>(9)), revision(GenerationValue<XRTrackingSnapshotRevision>(7)),
+                : session(ActiveSession()), sampledAt(Horo::Tests::IdentityValue<XRRuntimeTime>(100)),
+                  origin(Horo::Tests::IdentityValue<XRWorldOriginRevision>(9)),
+                  revision(Horo::Tests::IdentityValue<XRTrackingSnapshotRevision>(7)),
                   head{.id = {session, {20, 1}},
                        .role = XRTrackedDeviceRole::Head,
                        .state = XRTrackedDeviceState::Tracked,
@@ -197,8 +194,8 @@ namespace Horo::XR {
         REQUIRE(
             HasErrorIdentity(XRTrackingSnapshot::Create(descriptor, fixture.session, fixture.origin), XRErrors::TrackingSnapshotInvalid));
 
-        fixture.poses[0] =
-            XRTrackedPoseRecord{fixture.head.id, XRTrackedPoseKind::Head, PoseSample(fixture.session, GenerationValue<XRRuntimeTime>(101))};
+        fixture.poses[0] = XRTrackedPoseRecord{fixture.head.id, XRTrackedPoseKind::Head,
+                                               PoseSample(fixture.session, Horo::Tests::IdentityValue<XRRuntimeTime>(101))};
         descriptor = fixture.Descriptor();
         REQUIRE(
             HasErrorIdentity(XRTrackingSnapshot::Create(descriptor, fixture.session, fixture.origin), XRErrors::TrackingSnapshotInvalid));
@@ -233,11 +230,11 @@ namespace Horo::XR {
         REQUIRE(HasErrorIdentity(ValidateXRTrackingSnapshot(snapshot, ActiveSession(6), fixture.revision, fixture.origin),
                                  XRErrors::IdentityStale));
         REQUIRE(HasErrorIdentity(ValidateXRTrackingSnapshot(snapshot, {}, fixture.revision, fixture.origin), XRErrors::IdentityInvalid));
-        REQUIRE(HasErrorIdentity(ValidateXRTrackingSnapshot(snapshot, fixture.session, GenerationValue<XRTrackingSnapshotRevision>(8),
-                                                            fixture.origin),
+        REQUIRE(HasErrorIdentity(ValidateXRTrackingSnapshot(snapshot, fixture.session,
+                                                            Horo::Tests::IdentityValue<XRTrackingSnapshotRevision>(8), fixture.origin),
                                  XRErrors::TrackingSnapshotStale));
         REQUIRE(HasErrorIdentity(ValidateXRTrackingSnapshot(snapshot, fixture.session, fixture.revision,
-                                                            GenerationValue<XRWorldOriginRevision>(10)),
+                                                            Horo::Tests::IdentityValue<XRWorldOriginRevision>(10)),
                                  XRErrors::OriginRevisionStale));
 
         auto replacedDevice = fixture.controller.id;

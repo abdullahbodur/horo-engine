@@ -592,10 +592,11 @@ add_library(HoroXRApi STATIC
         runtime/xr/api/XRIdentity.cpp
         runtime/xr/api/XRSpacePose.cpp
         runtime/xr/api/XRTrackingSnapshot.cpp
+        runtime/xr/api/XRViewRenderPlan.cpp
 )
 add_library(HoroEngine::XRApi ALIAS HoroXRApi)
 target_compile_features(HoroXRApi PUBLIC cxx_std_20)
-target_link_libraries(HoroXRApi PUBLIC HoroEngine::Foundation)
+target_link_libraries(HoroXRApi PUBLIC HoroEngine::Foundation HoroEngine::RenderApi)
 
 add_library(HoroTerrainApi STATIC
         runtime/terrain/api/FoliageDefinition.cpp

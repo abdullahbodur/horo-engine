@@ -59,6 +59,9 @@ namespace Horo::XR {
     struct XRSessionSlotTag;
     struct XRSpaceSlotTag;
     struct XRViewSlotTag;
+    struct XRViewConfigurationSlotTag;
+    struct XRSwapchainTargetSlotTag;
+    struct XRSwapchainImageSlotTag;
     struct XRActionSlotTag;
     struct XRDeviceSlotTag;
 
@@ -105,10 +108,27 @@ namespace Horo::XR {
     using XRSpaceId = XRSessionObjectId<XRSpaceSlotTag>;
     /** @brief Live view identity scoped to one XR session and never assumed to be a stereo eye index. */
     using XRViewId = XRSessionObjectId<XRViewSlotTag>;
+    /** @brief Active view-configuration identity scoped to one exact XR session. */
+    using XRViewConfigurationId = XRSessionObjectId<XRViewConfigurationSlotTag>;
+    /** @brief Runtime-owned swapchain target identity scoped to one exact XR session. */
+    using XRSwapchainTargetId = XRSessionObjectId<XRSwapchainTargetSlotTag>;
     /** @brief Live Horo action identity scoped to one XR session; native paths remain backend-private. */
     using XRActionId = XRSessionObjectId<XRActionSlotTag>;
     /** @brief Live input/tracking device identity scoped to one XR session. */
     using XRDeviceId = XRSessionObjectId<XRDeviceSlotTag>;
+
+    /** @brief Runtime-owned image identity nested under one exact swapchain target generation. */
+    struct XRSwapchainImageId final {
+        XRSwapchainTargetId target;                 /**< Exact runtime-owned target incarnation. */
+        Horo::Handle<XRSwapchainImageSlotTag> slot; /**< Target-private image slot and non-zero generation. */
+
+        /** @brief Checks representation only. @return True when the target and image slot are valid. */
+        [[nodiscard]] constexpr bool IsValid() const noexcept {
+            return target.IsValid() && slot.IsValid() && slot.generation != 0;
+        }
+
+        constexpr auto operator<=>(const XRSwapchainImageId &) const noexcept = default;
+    };
 
     /**
      * @brief Validates a system before runtime-owned registry access.
