@@ -1355,6 +1355,7 @@ add_executable(HoroRuntimeSaveOperationTests
         unit/runtime/save/SaveOperationTests.cpp
 )
 target_compile_features(HoroRuntimeSaveOperationTests PRIVATE cxx_std_20)
+target_include_directories(HoroRuntimeSaveOperationTests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
 target_link_libraries(HoroRuntimeSaveOperationTests PRIVATE HoroEngine::Runtime)
 add_executable(HoroRuntimeSaveTestCompositionsTests
         unit/runtime/save/SaveTestCompositionsTests.cpp
