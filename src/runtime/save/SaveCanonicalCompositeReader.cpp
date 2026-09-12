@@ -17,8 +17,8 @@ namespace Horo::Runtime {
         return Result<CanonicalDecodedValue>::Success(CanonicalDecodedValue{bytes.Value(), limits_, state_, depth_ + 1, std::move(path)});
     }
 
-    /** @copydoc CanonicalValueReader::ReadSequence */
-    Result<std::vector<CanonicalDecodedValue>> CanonicalValueReader::ReadSequence() {
+    /** @copydoc CanonicalValueReader::ReadValueCollection */
+    Result<std::vector<CanonicalDecodedValue>> CanonicalValueReader::ReadValueCollection(const ValueCollectionOrder order) {
         auto admitted = AdmitComposite();
         if (admitted.HasError())
             return Result<std::vector<CanonicalDecodedValue>>::Failure(admitted.ErrorValue());
@@ -36,12 +36,20 @@ namespace Horo::Runtime {
                 auto value = ReadChild(path_);
                 if (value.HasError())
                     return Result<std::vector<CanonicalDecodedValue>>::Failure(value.ErrorValue());
-                values.push_back(std::move(value).Value());
+                if (order == ValueCollectionOrder::RequireCanonical && !values.empty() &&
+                    !CanonicalCodecDetail::BytesLess(values.back().bytes_, value.Value().bytes_))
+                    return Result<std::vector<CanonicalDecodedValue>>::Failure(ErrorAt(SaveErrors::CanonicalCodecCorrupt));
+                values.emplace_back(std::move(value).Value());
             }
             return Result<std::vector<CanonicalDecodedValue>>::Success(std::move(values));
         } catch (const std::bad_alloc &) {
             return Result<std::vector<CanonicalDecodedValue>>::Failure(std::move(allocationFailure));
         }
+    }
+
+    /** @copydoc CanonicalValueReader::ReadSequence */
+    Result<std::vector<CanonicalDecodedValue>> CanonicalValueReader::ReadSequence() {
+        return ReadValueCollection(ValueCollectionOrder::Preserve);
     }
 
     /** @copydoc CanonicalValueReader::ReadOptional */
@@ -119,31 +127,7 @@ namespace Horo::Runtime {
 
     /** @copydoc CanonicalValueReader::ReadSet */
     Result<std::vector<CanonicalDecodedValue>> CanonicalValueReader::ReadSet() {
-        auto admitted = AdmitComposite();
-        if (admitted.HasError())
-            return Result<std::vector<CanonicalDecodedValue>>::Failure(admitted.ErrorValue());
-        auto count = ReadLength(limits_.maximumCollectionElements);
-        if (count.HasError())
-            return Result<std::vector<CanonicalDecodedValue>>::Failure(count.ErrorValue());
-        auto charged = AdmitElements(count.Value(), sizeof(CanonicalDecodedValue), sizeof(std::uint32_t));
-        if (charged.HasError())
-            return Result<std::vector<CanonicalDecodedValue>>::Failure(charged.ErrorValue());
-        Error allocationFailure = ErrorAt(SaveErrors::CanonicalCodecAllocationFailed);
-        try {
-            std::vector<CanonicalDecodedValue> values;
-            values.reserve(count.Value());
-            for (std::size_t index = 0; index < count.Value(); ++index) {
-                auto value = ReadChild(path_);
-                if (value.HasError())
-                    return Result<std::vector<CanonicalDecodedValue>>::Failure(value.ErrorValue());
-                if (!values.empty() && !CanonicalCodecDetail::BytesLess(values.back().bytes_, value.Value().bytes_))
-                    return Result<std::vector<CanonicalDecodedValue>>::Failure(ErrorAt(SaveErrors::CanonicalCodecCorrupt));
-                values.push_back(std::move(value).Value());
-            }
-            return Result<std::vector<CanonicalDecodedValue>>::Success(std::move(values));
-        } catch (const std::bad_alloc &) {
-            return Result<std::vector<CanonicalDecodedValue>>::Failure(std::move(allocationFailure));
-        }
+        return ReadValueCollection(ValueCollectionOrder::RequireCanonical);
     }
 
     /** @copydoc CanonicalValueReader::ReadRecord */

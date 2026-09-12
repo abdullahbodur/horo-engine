@@ -185,9 +185,14 @@ namespace Horo::Runtime {
         [[nodiscard]] Result<void> AppendLengthDelimited(std::span<const std::byte> value);
         [[nodiscard]] Result<void> CommitStaged(CanonicalValueWriter &&staging);
         [[nodiscard]] Result<void> AdmitComposite(std::size_t childDepth);
+        [[nodiscard]] Result<void> AdmitCollection(std::size_t childDepth, std::size_t count, std::size_t maximum);
         [[nodiscard]] Result<void> Fail(Error error);
         [[nodiscard]] Error ErrorAt(const ErrorCodeDescriptor &descriptor) const;
         [[nodiscard]] Result<void> WriteFloatComponents(std::span<const float> components);
+        template <typename Float, typename Unsigned> [[nodiscard]] Result<void> WriteFloating(Float value);
+        template <typename WritePayload> [[nodiscard]] Result<void> WriteStaged(WritePayload writePayload);
+        template <typename Value, typename Less, typename Equal, typename WriteValue>
+        [[nodiscard]] Result<void> WriteOrderedCollection(std::span<const Value> values, Less less, Equal equal, WriteValue writeValue);
         template <typename Unsigned> [[nodiscard]] Result<void> WriteUnsigned(Unsigned value);
         template <typename Signed> [[nodiscard]] Result<void> WriteSigned(Signed value);
         CanonicalCodecLimits limits_;
@@ -262,10 +267,17 @@ namespace Horo::Runtime {
 
     private:
         friend class CanonicalDecodedValue;
+        /** @brief Ordering policy shared by sequence and set decoding. */
+        enum class ValueCollectionOrder : std::uint8_t {
+            Preserve,
+            RequireCanonical,
+        };
         CanonicalValueReader(std::span<const std::byte> bytes, CanonicalCodecLimits limits, std::shared_ptr<CanonicalReadState> state,
                              std::size_t depth, std::shared_ptr<const CanonicalPathNode> path);
         [[nodiscard]] Result<std::size_t> ReadLength(std::size_t maximum);
         [[nodiscard]] Result<CanonicalDecodedValue> ReadChild(std::shared_ptr<const CanonicalPathNode> path);
+        /** @brief Reads a bounded value collection with optional strict canonical ordering. */
+        [[nodiscard]] Result<std::vector<CanonicalDecodedValue>> ReadValueCollection(ValueCollectionOrder order);
         [[nodiscard]] Result<void> AdmitComposite() const;
         [[nodiscard]] Result<void> Charge(std::size_t bytes);
         [[nodiscard]] Result<void> ChargeElements(std::size_t count, std::size_t elementSize);

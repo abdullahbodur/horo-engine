@@ -25,6 +25,16 @@ namespace Horo::Runtime {
         return WriteUnsigned(std::bit_cast<std::make_unsigned_t<Signed>>(value));
     }
 
+    template <typename Float, typename Unsigned> Result<void> CanonicalValueWriter::WriteFloating(Float value) {
+        if (!CanonicalCodecDetail::ValidLimits(limits_))
+            return Fail(ErrorAt(SaveErrors::CanonicalCodecConfigurationInvalid));
+        if (!std::isfinite(value))
+            return Fail(ErrorAt(SaveErrors::CanonicalCodecNonFinite));
+        if (value == 0)
+            value = 0;
+        return WriteUnsigned(std::bit_cast<Unsigned>(value));
+    }
+
     /** @copydoc CanonicalValueWriter::WriteBool */
     Result<void> CanonicalValueWriter::WriteBool(const bool value) {
         return WriteUInt8(value ? 1 : 0);
@@ -72,24 +82,12 @@ namespace Horo::Runtime {
 
     /** @copydoc CanonicalValueWriter::WriteFloat32 */
     Result<void> CanonicalValueWriter::WriteFloat32(float value) {
-        if (!CanonicalCodecDetail::ValidLimits(limits_))
-            return Fail(ErrorAt(SaveErrors::CanonicalCodecConfigurationInvalid));
-        if (!std::isfinite(value))
-            return Fail(ErrorAt(SaveErrors::CanonicalCodecNonFinite));
-        if (value == 0)
-            value = 0;
-        return WriteUInt32(std::bit_cast<std::uint32_t>(value));
+        return WriteFloating<float, std::uint32_t>(value);
     }
 
     /** @copydoc CanonicalValueWriter::WriteFloat64 */
     Result<void> CanonicalValueWriter::WriteFloat64(double value) {
-        if (!CanonicalCodecDetail::ValidLimits(limits_))
-            return Fail(ErrorAt(SaveErrors::CanonicalCodecConfigurationInvalid));
-        if (!std::isfinite(value))
-            return Fail(ErrorAt(SaveErrors::CanonicalCodecNonFinite));
-        if (value == 0)
-            value = 0;
-        return WriteUInt64(std::bit_cast<std::uint64_t>(value));
+        return WriteFloating<double, std::uint64_t>(value);
     }
 
     /** @copydoc CanonicalValueWriter::WriteUtf8 */

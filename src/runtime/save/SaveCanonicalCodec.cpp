@@ -38,6 +38,20 @@ namespace Horo::Runtime {
             }
             return SaveErrors::CanonicalCodecInvalid;
         }
+
+        [[nodiscard]] Error CanonicalErrorAt(const ErrorCodeDescriptor &descriptor, const CanonicalPathNode *path,
+                                             const std::size_t offset) {
+            Error error = MakeError(descriptor);
+            std::string source{"canonical"};
+            AppendPath(source, path);
+            error.diagnostics.push_back(
+                {DiagnosticCode{"save.canonical_codec.location"},
+                 DiagnosticSeverity::Error,
+                 std::string{descriptor.summary},
+                 {std::move(source), 0,
+                  static_cast<std::uint32_t>(std::min(offset, static_cast<std::size_t>(std::numeric_limits<std::uint32_t>::max())))}});
+            return error;
+        }
     }  // namespace
 
     /** @copydoc CanonicalFieldId::Create */
@@ -69,16 +83,7 @@ namespace Horo::Runtime {
     }
 
     Error CanonicalValueWriter::ErrorAt(const ErrorCodeDescriptor &descriptor) const {
-        Error error = MakeError(descriptor);
-        std::string source{"canonical"};
-        AppendPath(source, path_.get());
-        error.diagnostics.push_back(
-            {DiagnosticCode{"save.canonical_codec.location"},
-             DiagnosticSeverity::Error,
-             std::string{descriptor.summary},
-             {std::move(source), 0,
-              static_cast<std::uint32_t>(std::min(bytes_.size(), static_cast<std::size_t>(std::numeric_limits<std::uint32_t>::max())))}});
-        return error;
+        return CanonicalErrorAt(descriptor, path_.get(), bytes_.size());
     }
 
     Result<void> CanonicalValueWriter::Fail(Error error) {
@@ -126,6 +131,12 @@ namespace Horo::Runtime {
         return Result<void>::Success();
     }
 
+    Result<void> CanonicalValueWriter::AdmitCollection(const std::size_t childDepth, const std::size_t count, const std::size_t maximum) {
+        if (Result<void> admitted = AdmitComposite(childDepth); admitted.HasError())
+            return admitted;
+        return count <= maximum ? Result<void>::Success() : Fail(ErrorAt(SaveErrors::CanonicalCodecLimitExceeded));
+    }
+
     /** @copydoc CanonicalValueWriter::Finalize */
     Result<CanonicalEncodedValue> CanonicalValueWriter::Finalize() && {
         if (failure_)
@@ -161,16 +172,7 @@ namespace Horo::Runtime {
     }
 
     Error CanonicalValueReader::ErrorAt(const ErrorCodeDescriptor &descriptor) const {
-        Error error = MakeError(descriptor);
-        std::string source{"canonical"};
-        AppendPath(source, path_.get());
-        error.diagnostics.push_back(
-            {DiagnosticCode{"save.canonical_codec.location"},
-             DiagnosticSeverity::Error,
-             std::string{descriptor.summary},
-             {std::move(source), 0,
-              static_cast<std::uint32_t>(std::min(offset_, static_cast<std::size_t>(std::numeric_limits<std::uint32_t>::max())))}});
-        return error;
+        return CanonicalErrorAt(descriptor, path_.get(), offset_);
     }
 
     Result<void> CanonicalValueReader::Charge(const std::size_t bytes) {

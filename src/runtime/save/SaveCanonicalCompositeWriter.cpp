@@ -13,26 +13,48 @@ namespace Horo::Runtime {
         return sealed.HasError() ? Fail(std::move(sealed).ErrorValue()) : Append(sealed.Value().Bytes());
     }
 
-    /** @copydoc CanonicalValueWriter::WriteSequence */
-    Result<void> CanonicalValueWriter::WriteSequence(const std::span<const CanonicalEncodedValue> values) {
-        auto admitted = AdmitComposite(CanonicalCodecDetail::MaximumDepth(values));
-        if (admitted.HasError())
-            return admitted;
-        if (values.size() > limits_.maximumCollectionElements)
-            return Fail(ErrorAt(SaveErrors::CanonicalCodecLimitExceeded));
+    template <typename WritePayload> Result<void> CanonicalValueWriter::WriteStaged(WritePayload writePayload) {
         Error allocationFailure = ErrorAt(SaveErrors::CanonicalCodecAllocationFailed);
         try {
             CanonicalValueWriter staging{limits_, path_};
-            auto written = staging.WriteUInt32(static_cast<std::uint32_t>(values.size()));
-            for (const auto &value : values) {
-                if (written.HasError())
-                    return Fail(std::move(written).ErrorValue());
-                written = staging.AppendLengthDelimited(value.Bytes());
-            }
+            auto written = writePayload(staging);
             return written.HasError() ? Fail(std::move(written).ErrorValue()) : CommitStaged(std::move(staging));
         } catch (const std::bad_alloc &) {
             return Fail(std::move(allocationFailure));
         }
+    }
+
+    template <typename Value, typename Less, typename Equal, typename WriteValue>
+    Result<void> CanonicalValueWriter::WriteOrderedCollection(const std::span<const Value> values, Less less, Equal equal,
+                                                              WriteValue writeValue) {
+        return WriteStaged([&](CanonicalValueWriter &staging) {
+            bool duplicate{};
+            const auto ordered = CanonicalCodecDetail::OrderedUnique(values, less, equal, duplicate);
+            if (duplicate)
+                return Result<void>::Failure(ErrorAt(SaveErrors::CanonicalCodecDuplicate));
+
+            auto written = staging.WriteUInt32(static_cast<std::uint32_t>(ordered.size()));
+            for (const auto *value : ordered) {
+                if (written.HasError())
+                    break;
+                written = writeValue(staging, *value);
+            }
+            return written;
+        });
+    }
+
+    /** @copydoc CanonicalValueWriter::WriteSequence */
+    Result<void> CanonicalValueWriter::WriteSequence(const std::span<const CanonicalEncodedValue> values) {
+        auto admitted = AdmitCollection(CanonicalCodecDetail::MaximumDepth(values), values.size(), limits_.maximumCollectionElements);
+        return admitted.HasError() ? admitted : WriteStaged([&](CanonicalValueWriter &staging) {
+            auto written = staging.WriteUInt32(static_cast<std::uint32_t>(values.size()));
+            for (const auto &value : values) {
+                if (written.HasError())
+                    break;
+                written = staging.AppendLengthDelimited(value.Bytes());
+            }
+            return written;
+        });
     }
 
     /** @copydoc CanonicalValueWriter::WriteOptional */
@@ -40,16 +62,12 @@ namespace Horo::Runtime {
         auto admitted = AdmitComposite(value ? value->StructuralDepth() : 0);
         if (admitted.HasError())
             return admitted;
-        Error allocationFailure = ErrorAt(SaveErrors::CanonicalCodecAllocationFailed);
-        try {
-            CanonicalValueWriter staging{limits_, path_};
+        return WriteStaged([&](CanonicalValueWriter &staging) {
             auto written = staging.WriteBool(value.has_value());
             if (written.HasValue() && value)
                 written = staging.AppendLengthDelimited(value->Bytes());
-            return written.HasError() ? Fail(std::move(written).ErrorValue()) : CommitStaged(std::move(staging));
-        } catch (const std::bad_alloc &) {
-            return Fail(std::move(allocationFailure));
-        }
+            return written;
+        });
     }
 
     /** @copydoc CanonicalValueWriter::WriteVariant */
@@ -60,16 +78,12 @@ namespace Horo::Runtime {
             return admitted;
         if (!alternativeCount || index >= alternativeCount)
             return Fail(ErrorAt(SaveErrors::CanonicalCodecInvalid));
-        Error allocationFailure = ErrorAt(SaveErrors::CanonicalCodecAllocationFailed);
-        try {
-            CanonicalValueWriter staging{limits_, path_};
+        return WriteStaged([&](CanonicalValueWriter &staging) {
             auto written = staging.WriteUInt32(index);
             if (written.HasValue())
                 written = staging.AppendLengthDelimited(value.Bytes());
-            return written.HasError() ? Fail(std::move(written).ErrorValue()) : CommitStaged(std::move(staging));
-        } catch (const std::bad_alloc &) {
-            return Fail(std::move(allocationFailure));
-        }
+            return written;
+        });
     }
 
     /** @copydoc CanonicalValueWriter::WriteMap */
@@ -77,62 +91,27 @@ namespace Horo::Runtime {
         std::size_t childDepth{};
         for (const auto &entry : entries)
             childDepth = std::max({childDepth, entry.key.StructuralDepth(), entry.value.StructuralDepth()});
-        auto admitted = AdmitComposite(childDepth);
-        if (admitted.HasError())
-            return admitted;
-        if (entries.size() > limits_.maximumCollectionElements)
-            return Fail(ErrorAt(SaveErrors::CanonicalCodecLimitExceeded));
-        Error allocationFailure = ErrorAt(SaveErrors::CanonicalCodecAllocationFailed);
-        try {
-            bool duplicate{};
-            const auto ordered = CanonicalCodecDetail::OrderedUnique(entries, [](const auto *left, const auto *right) {
-                return CanonicalCodecDetail::BytesLess(left->key.Bytes(), right->key.Bytes());
-            }, [](const auto &left, const auto &right) {
-                return CanonicalCodecDetail::BytesEqual(left.key.Bytes(), right.key.Bytes());
-            }, duplicate);
-            if (duplicate)
-                return Fail(ErrorAt(SaveErrors::CanonicalCodecDuplicate));
-            CanonicalValueWriter staging{limits_, path_};
-            auto written = staging.WriteUInt32(static_cast<std::uint32_t>(ordered.size()));
-            for (const auto *entry : ordered) {
-                if (written.HasValue())
-                    written = staging.AppendLengthDelimited(entry->key.Bytes());
-                if (written.HasValue())
-                    written = staging.AppendLengthDelimited(entry->value.Bytes());
-            }
-            return written.HasError() ? Fail(std::move(written).ErrorValue()) : CommitStaged(std::move(staging));
-        } catch (const std::bad_alloc &) {
-            return Fail(std::move(allocationFailure));
-        }
+        auto admitted = AdmitCollection(childDepth, entries.size(), limits_.maximumCollectionElements);
+        return admitted.HasError() ? admitted : WriteOrderedCollection(entries, [](const auto *left, const auto *right) {
+            return CanonicalCodecDetail::BytesLess(left->key.Bytes(), right->key.Bytes());
+        }, [](const auto &left, const auto &right) {
+            return CanonicalCodecDetail::BytesEqual(left.key.Bytes(), right.key.Bytes());
+        }, [](CanonicalValueWriter &staging, const auto &entry) {
+            auto written = staging.AppendLengthDelimited(entry.key.Bytes());
+            return written.HasError() ? written : staging.AppendLengthDelimited(entry.value.Bytes());
+        });
     }
 
     /** @copydoc CanonicalValueWriter::WriteSet */
     Result<void> CanonicalValueWriter::WriteSet(const std::span<const CanonicalEncodedValue> values) {
-        auto admitted = AdmitComposite(CanonicalCodecDetail::MaximumDepth(values));
-        if (admitted.HasError())
-            return admitted;
-        if (values.size() > limits_.maximumCollectionElements)
-            return Fail(ErrorAt(SaveErrors::CanonicalCodecLimitExceeded));
-        Error allocationFailure = ErrorAt(SaveErrors::CanonicalCodecAllocationFailed);
-        try {
-            bool duplicate{};
-            const auto ordered = CanonicalCodecDetail::OrderedUnique(values, [](const auto *left, const auto *right) {
-                return CanonicalCodecDetail::BytesLess(left->Bytes(), right->Bytes());
-            }, [](const auto &left, const auto &right) {
-                return CanonicalCodecDetail::BytesEqual(left.Bytes(), right.Bytes());
-            }, duplicate);
-            if (duplicate)
-                return Fail(ErrorAt(SaveErrors::CanonicalCodecDuplicate));
-            CanonicalValueWriter staging{limits_, path_};
-            auto written = staging.WriteUInt32(static_cast<std::uint32_t>(ordered.size()));
-            for (const auto *value : ordered) {
-                if (written.HasValue())
-                    written = staging.AppendLengthDelimited(value->Bytes());
-            }
-            return written.HasError() ? Fail(std::move(written).ErrorValue()) : CommitStaged(std::move(staging));
-        } catch (const std::bad_alloc &) {
-            return Fail(std::move(allocationFailure));
-        }
+        auto admitted = AdmitCollection(CanonicalCodecDetail::MaximumDepth(values), values.size(), limits_.maximumCollectionElements);
+        return admitted.HasError() ? admitted : WriteOrderedCollection(values, [](const auto *left, const auto *right) {
+            return CanonicalCodecDetail::BytesLess(left->Bytes(), right->Bytes());
+        }, [](const auto &left, const auto &right) {
+            return CanonicalCodecDetail::BytesEqual(left.Bytes(), right.Bytes());
+        }, [](CanonicalValueWriter &staging, const auto &value) {
+            return staging.AppendLengthDelimited(value.Bytes());
+        });
     }
 
     /** @copydoc CanonicalValueWriter::WriteRecord */
@@ -140,32 +119,14 @@ namespace Horo::Runtime {
         std::size_t childDepth{};
         for (const auto &field : fields)
             childDepth = std::max(childDepth, field.value.StructuralDepth());
-        auto admitted = AdmitComposite(childDepth);
-        if (admitted.HasError())
-            return admitted;
-        if (fields.size() > limits_.maximumFields)
-            return Fail(ErrorAt(SaveErrors::CanonicalCodecLimitExceeded));
-        Error allocationFailure = ErrorAt(SaveErrors::CanonicalCodecAllocationFailed);
-        try {
-            bool duplicate{};
-            const auto ordered = CanonicalCodecDetail::OrderedUnique(fields, [](const auto *left, const auto *right) {
-                return left->id < right->id;
-            }, [](const auto &left, const auto &right) {
-                return left.id == right.id;
-            }, duplicate);
-            if (duplicate)
-                return Fail(ErrorAt(SaveErrors::CanonicalCodecDuplicate));
-            CanonicalValueWriter staging{limits_, path_};
-            auto written = staging.WriteUInt32(static_cast<std::uint32_t>(ordered.size()));
-            for (const auto *field : ordered) {
-                if (written.HasValue())
-                    written = staging.WriteUInt32(field->id.Value());
-                if (written.HasValue())
-                    written = staging.AppendLengthDelimited(field->value.Bytes());
-            }
-            return written.HasError() ? Fail(std::move(written).ErrorValue()) : CommitStaged(std::move(staging));
-        } catch (const std::bad_alloc &) {
-            return Fail(std::move(allocationFailure));
-        }
+        auto admitted = AdmitCollection(childDepth, fields.size(), limits_.maximumFields);
+        return admitted.HasError() ? admitted : WriteOrderedCollection(fields, [](const auto *left, const auto *right) {
+            return left->id < right->id;
+        }, [](const auto &left, const auto &right) {
+            return left.id == right.id;
+        }, [](CanonicalValueWriter &staging, const auto &field) {
+            auto written = staging.WriteUInt32(field.id.Value());
+            return written.HasError() ? written : staging.AppendLengthDelimited(field.value.Bytes());
+        });
     }
 }  // namespace Horo::Runtime
