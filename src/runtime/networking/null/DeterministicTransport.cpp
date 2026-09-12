@@ -17,19 +17,25 @@ namespace Horo::Network {
             return value <= 10'000;
         }
 
-        [[nodiscard]] bool ValidDescriptor(const DeterministicTransportDescriptor &descriptor) noexcept {
+        [[nodiscard]] bool ValidScenario(const DeterministicTransportDescriptor &descriptor) noexcept {
             const auto &scenario = descriptor.scenario;
-            return descriptor.mode < DeterministicTransportMode::Count && descriptor.maximumScheduledDeliveries != 0 &&
-                   descriptor.maximumPayloadBytes != 0 && descriptor.maximumChannels != 0 && scenario.contractVersion == 1 &&
-                   scenario.revision != 0 && scenario.seed != 0 && scenario.maximumFragmentBytes != 0 &&
+            return scenario.contractVersion == 1 && scenario.revision != 0 && scenario.seed != 0 && scenario.maximumFragmentBytes != 0 &&
                    scenario.maximumFragmentBytes <= descriptor.maximumPayloadBytes && ValidRate(scenario.lossPerTenThousand) &&
                    ValidRate(scenario.duplicatePerTenThousand) && ValidRate(scenario.reorderPerTenThousand) &&
-                   scenario.latencyTicks <= std::numeric_limits<std::uint32_t>::max() - scenario.jitterTicks &&
+                   scenario.latencyTicks <= std::numeric_limits<std::uint32_t>::max() - scenario.jitterTicks;
+        }
+
+        [[nodiscard]] bool ValidCapacity(const DeterministicTransportDescriptor &descriptor) noexcept {
+            return descriptor.maximumScheduledDeliveries != 0 && descriptor.maximumPayloadBytes != 0 && descriptor.maximumChannels != 0 &&
                    descriptor.maximumScheduledDeliveries <= std::numeric_limits<std::uint32_t>::max() &&
                    descriptor.budgetCapacity.maximumConnections <=
                        std::numeric_limits<std::size_t>::max() - descriptor.maximumScheduledDeliveries &&
                    descriptor.maximumScheduledDeliveries + descriptor.budgetCapacity.maximumConnections <=
-                       std::numeric_limits<std::size_t>::max() / scenario.maximumFragmentBytes;
+                       std::numeric_limits<std::size_t>::max() / descriptor.scenario.maximumFragmentBytes;
+        }
+
+        [[nodiscard]] bool ValidDescriptor(const DeterministicTransportDescriptor &descriptor) noexcept {
+            return descriptor.mode < DeterministicTransportMode::Count && ValidScenario(descriptor) && ValidCapacity(descriptor);
         }
 
         [[nodiscard]] DeterministicSendOutcome MapAdmission(const TransportBudgetAdmission admission) noexcept {
@@ -139,14 +145,23 @@ namespace Horo::Network {
         }
     }
 
+    void DeterministicTransport::DiscardTicket(const TransportQueueTicket ticket) noexcept {
+        for (std::size_t index = 0; index < descriptor_.maximumScheduledDeliveries; ++index) {
+            if (deliveries_[index].occupied && deliveries_[index].ticket == ticket)
+                deliveries_[index].occupied = false;
+        }
+    }
+
     Result<void> DeterministicTransport::ScheduleCopy(const ConnectionHandle connection, const ChannelId channel,
                                                       const TransportQueueTicket ticket, const std::uint64_t replaceableKey,
                                                       const std::span<const std::byte> payload, const std::size_t fragmentCount) {
         std::size_t sourceOffset{};
         for (std::size_t fragment = 0; fragment < fragmentCount; ++fragment) {
             std::size_t slot{};
-            while (deliveries_[slot].occupied)
+            while (slot < descriptor_.maximumScheduledDeliveries && deliveries_[slot].occupied)
                 ++slot;
+            if (slot == descriptor_.maximumScheduledDeliveries)
+                return Fail<void>(NetworkErrors::TransportBudgetCapacityExceeded);
             const auto bytes = std::min(descriptor_.scenario.maximumFragmentBytes, payload.size() - sourceOffset);
             auto *destination = payloadStorage_.get() + slot * descriptor_.scenario.maximumFragmentBytes;
             std::copy_n(payload.data() + sourceOffset, bytes, destination);
@@ -210,8 +225,14 @@ namespace Horo::Network {
             return Result<DeterministicSendResult>::Success({DeterministicSendOutcome::SimulatedLoss, 0, 0});
         }
 
-        for (std::size_t copy = 0; copy < plan.copyCount; ++copy)
-            static_cast<void>(ScheduleCopy(connection, channel, decision.ticket, replaceableKey, payload, plan.fragmentCount));
+        for (std::size_t copy = 0; copy < plan.copyCount; ++copy) {
+            if (auto scheduled = ScheduleCopy(connection, channel, decision.ticket, replaceableKey, payload, plan.fragmentCount);
+                scheduled.HasError()) {
+                DiscardTicket(decision.ticket);
+                static_cast<void>(budget_.Complete(decision.ticket));
+                return Result<DeterministicSendResult>::Failure(scheduled.ErrorValue());
+            }
+        }
         const auto outcome = plan.copyCount == 2              ? DeterministicSendOutcome::ScheduledWithDuplicate
                              : decision.admission == Replaced ? DeterministicSendOutcome::Replaced
                                                               : DeterministicSendOutcome::Scheduled;

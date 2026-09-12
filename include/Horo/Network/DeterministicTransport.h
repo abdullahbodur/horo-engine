@@ -165,6 +165,7 @@ namespace Horo::Network {
         [[nodiscard]] std::size_t FreeDeliveries() const noexcept;
         [[nodiscard]] std::size_t MatchingDeliveries(ConnectionHandle connection, std::uint64_t replaceableKey) const noexcept;
         void DiscardMatching(ConnectionHandle connection, std::uint64_t replaceableKey) noexcept;
+        void DiscardTicket(TransportQueueTicket ticket) noexcept;
         [[nodiscard]] Result<ImpairmentPlan> PlanSend(ConnectionHandle connection, TransportTrafficClass traffic,
                                                       std::uint64_t replaceableKey, std::size_t payloadBytes);
         [[nodiscard]] Result<DeterministicSendResult> ScheduleAdmitted(ConnectionHandle connection, ChannelId channel,
