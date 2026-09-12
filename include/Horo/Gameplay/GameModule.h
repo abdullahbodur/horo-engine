@@ -27,6 +27,7 @@ namespace Horo::Gameplay {
 
     inline constexpr std::uint32_t GameplaySdkBoundaryVersion = 5;
     inline constexpr std::uint32_t GameplayDescriptorBundleSchemaVersion = 1;
+    inline constexpr std::uint32_t GameModuleReloadSnapshotSchemaVersion = 1;
     inline constexpr std::size_t MaximumGeneratedBehaviorDescriptors = 4096;
     inline constexpr std::size_t MaximumGeneratedDescriptorDiagnostics = 256;
     inline constexpr std::size_t MaximumGeneratedDiagnosticCodeBytes = 160;
@@ -57,7 +58,7 @@ namespace Horo::Gameplay {
 
     /** @brief Module-global state captured only after owned work and callbacks are quiescent. */
     struct GameModuleReloadSnapshot {
-        std::uint32_t schemaVersion{1};
+        std::uint32_t schemaVersion{GameModuleReloadSnapshotSchemaVersion};
         std::vector<std::byte> payload;
     };
 

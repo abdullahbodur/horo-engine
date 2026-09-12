@@ -17,7 +17,7 @@ namespace Horo::Gameplay {
 
     /** @copydoc IGameModule::RestoreReload */
     Result<void> IGameModule::RestoreReload(const GameModuleReloadSnapshot &snapshot, GameRuntimeContext &) {
-        if (snapshot.schemaVersion != 1 || !snapshot.payload.empty())
+        if (snapshot.schemaVersion != GameModuleReloadSnapshotSchemaVersion || !snapshot.payload.empty())
             return Result<void>::Failure(MakeError(GameplayErrors::GameplayReloadRestoreFailed));
         return Result<void>::Success();
     }
