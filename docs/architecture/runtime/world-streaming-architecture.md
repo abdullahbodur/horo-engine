@@ -849,6 +849,40 @@ Replacement and shutdown never rewrite or delete an already published page in pl
 Provider integration, merge UI and Editor persistence remain application/Editor
 responsibilities layered over this contract rather than alternate sources of truth.
 
+### World layer type and control ownership
+
+`WorldLayerOwnershipDescriptor` is the inert WST-006.1 contract for the stable
+identity, classification and control authority of one world layer. It reuses the
+manifest-issued `StreamingLayerId`; a runtime publication never renames a layer or
+creates a replacement identity from its display name, array position, target filter
+or current state. `WorldLayerRevision` is a separate non-wrapping compare-and-swap
+revision and is not a partition epoch or cell residency generation.
+
+Placement, residency and audience are orthogonal typed dimensions. Placement is
+`Spatial` or `NonSpatial`; residency is `Persistent`, `Streamed` or
+`RuntimeControlled`; audience is `Runtime` or `EditorOnly`. Consequently a persistent
+spatial layer, demand-loaded non-spatial layer or editor-only spatial layer can be
+represented without overloaded flags. Loaded/Activated state remains independent
+from physical cell residency and is owned by WST-006.2. Target filtering consumes the
+audience and stable identity in WST-006.3 without rewriting source identities.
+
+Every fact carries the exact mounted `StreamingRuntimeOwnerToken` plus one exclusive
+control authority. World Streaming controls runtime-visible persistent and streamed
+layers without a second authority token. Editor-only layers carry an explicit editor
+document authority identity and generation. Runtime-controlled layers carry an
+explicit gameplay-script or network-replication authority identity and generation;
+neither authority may mutate cell residency or bypass the World Streaming ledger.
+
+Admission is pure and bounded. Insert requires available capacity, while replacement
+requires the exact current revision and its non-wrapping successor. Placement,
+residency, audience and stable layer identity cannot change during replacement.
+Only a runtime-controlled layer may change its explicit control owner, and that
+decision is reported as a handoff. Invalid, contradictory, stale-world, stale-revision,
+identity-conflicting, over-capacity, cancelling and closed requests fail without
+partial publication. The contract owns no editor document, cell state, gameplay
+script, network session or service pointer and performs no registration or lifecycle
+callback.
+
 ### Persistent, non-spatial and dynamic ownership policy
 
 `WorldObjectOwnershipDescriptor` is the inert WST-001.7 policy fact that separates
