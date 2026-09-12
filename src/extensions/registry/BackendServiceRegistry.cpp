@@ -90,6 +90,31 @@ namespace Horo::Extensions {
             return std::ranges::find(allowed, true) != allowed.end();
         }
 
+        /** @brief Runs provider shutdown outside its state lock, then releases service ownership before its executable-code lease. */
+        [[nodiscard]] BackendServiceRetirementDisposition FinalizeProvider(const std::shared_ptr<BackendServiceRegistryState> &registry,
+                                                                           const std::shared_ptr<BackendServiceProviderState> &provider,
+                                                                           std::unique_lock<std::mutex> &lock) noexcept {
+            provider->lifecycle = BackendServiceProviderLifecycle::Finalizing;
+            std::shared_ptr<void> service = provider->implementation.service;
+            const auto shutdown = provider->shutdown;
+            lock.unlock();
+            shutdown(service.get());
+            lock.lock();
+            if (registry->restartRequired.load(std::memory_order_acquire)) {
+                provider->lifecycle = BackendServiceProviderLifecycle::RetainedRestartRequired;
+                lock.unlock();
+                provider->drained.notify_all();
+                return BackendServiceRetirementDisposition::RestartRequired;
+            }
+            service.reset();
+            Detail::BackendServiceOwnedImplementation retired = std::move(provider->implementation);
+            provider->lifecycle = BackendServiceProviderLifecycle::Shutdown;
+            lock.unlock();
+            provider->drained.notify_all();
+            retired.service.reset();
+            return BackendServiceRetirementDisposition::ShutdownComplete;
+        }
+
         [[nodiscard]] BackendServiceRetirementDisposition StopProvider(const std::shared_ptr<BackendServiceRegistryState> &registry,
                                                                        const std::shared_ptr<BackendServiceProviderState> &provider,
                                                                        const std::chrono::steady_clock::time_point deadline,
@@ -130,26 +155,7 @@ namespace Horo::Extensions {
                 provider->lifecycle = BackendServiceProviderLifecycle::AwaitingOwnerFinalization;
                 return BackendServiceRetirementDisposition::OwnerThreadFinalizationRequired;
             }
-
-            provider->lifecycle = BackendServiceProviderLifecycle::Finalizing;
-            std::shared_ptr<void> service = provider->implementation.service;
-            const auto shutdown = provider->shutdown;
-            lock.unlock();
-            shutdown(service.get());
-            lock.lock();
-            if (registry->restartRequired.load(std::memory_order_acquire)) {
-                provider->lifecycle = BackendServiceProviderLifecycle::RetainedRestartRequired;
-                lock.unlock();
-                provider->drained.notify_all();
-                return BackendServiceRetirementDisposition::RestartRequired;
-            }
-            service.reset();
-            Detail::BackendServiceOwnedImplementation retired = std::move(provider->implementation);
-            provider->lifecycle = BackendServiceProviderLifecycle::Shutdown;
-            lock.unlock();
-            provider->drained.notify_all();
-            retired.service.reset();
-            return BackendServiceRetirementDisposition::ShutdownComplete;
+            return FinalizeProvider(registry, provider, lock);
         }
 
         void RequestRetirement(const std::shared_ptr<BackendServiceProviderState> &provider) noexcept {
