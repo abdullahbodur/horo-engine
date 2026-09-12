@@ -68,4 +68,10 @@ namespace Horo::Navigation::NavigationErrors {
     extern const ErrorCodeDescriptor ProjectProfileStale;
     /** @brief A profile aggregate, provider or usage exceeds an authoritative finite capacity. */
     extern const ErrorCodeDescriptor ProjectProfileCapacityExceeded;
+    /** @brief A Scene navigation surface or region payload is malformed or exceeds its authored bounds. */
+    extern const ErrorCodeDescriptor SceneComponentInvalid;
+    /** @brief Stable surface or region identities collide in one committed Scene snapshot. */
+    extern const ErrorCodeDescriptor SceneComponentConflict;
+    /** @brief A Scene navigation region references a surface absent from the same committed snapshot. */
+    extern const ErrorCodeDescriptor SceneSurfaceMissing;
 }  // namespace Horo::Navigation::NavigationErrors
