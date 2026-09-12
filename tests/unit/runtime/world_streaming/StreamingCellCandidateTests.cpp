@@ -1,5 +1,6 @@
 #include "Horo/WorldStreaming/StreamingCellCandidate.h"
 #include "Horo/WorldStreaming/WorldStreamingErrors.h"
+#include "StreamingCellCandidateTestSupport.h"
 #include "WorldStreamingTestUtils.h"
 
 #include <array>
@@ -10,73 +11,10 @@
 
 namespace Horo::WorldStreaming {
     namespace {
+        using namespace CandidateTestSupport;
         using TestSupport::Asset;
         using TestSupport::IdentityFrom;
         using TestSupport::RequireError;
-        using TestSupport::World;
-
-        StreamingCellId Cell(const std::int32_t x = 0) {
-            return {x, 0, 0, 0, TestSupport::Layer()};
-        }
-
-        Sha256Digest Hash(const std::uint8_t value = 7) {
-            Sha256Digest hash{};
-            hash.bytes.front() = value;
-            return hash;
-        }
-
-        CookedWorldIndexManifest Manifest() {
-            const auto grid = WorldCellQuantizationPolicy::Create({}, 100, {-1, 3, -1, 1, -1, 1}, 1).Value();
-            const std::array layers{
-                WorldLayerDescriptor{TestSupport::Layer(), "base", WorldLayerOwnership::WorldStreaming, WorldLayerFlags::Persistent, 1.0F}};
-            const std::array cells{WorldPartitionCellDescriptor{Cell(), {Asset(4)}}, WorldPartitionCellDescriptor{Cell(1), {Asset(5)}},
-                                   WorldPartitionCellDescriptor{Cell(2), {Asset(6)}}};
-            auto descriptor = WorldPartitionDescriptor::Create({}, World(),
-                                                               {Math::WorldCoordinate64::FromMillimeters(-100, -100, -100),
-                                                                Math::WorldCoordinate64::FromMillimeters(399, 199, 199)},
-                                                               grid, layers, cells, {2, 4, 16})
-                                  .Value();
-            const std::array dependency{Cell(1), Cell(2)};
-            const std::array cooked{CookedWorldCellManifestCandidate{Cell(), 48, 128, 99, Hash(), dependency},
-                                    CookedWorldCellManifestCandidate{Cell(1), 1, 1, 1, Hash(8), {}},
-                                    CookedWorldCellManifestCandidate{Cell(2), 1, 1, 2, Hash(9), {}}};
-            auto result = CookedWorldIndexManifest::Create(std::move(descriptor), cooked, {4, 4, 4, 256, 256});
-            return std::move(result).Value();
-        }
-
-        StreamingCellOperationHandle Operation(const StreamingGeneration generation = IdentityFrom<StreamingGeneration>(1),
-                                               const StreamingCellId cell = Cell()) {
-            return {.operation = IdentityFrom<StreamingCellOperationId>(9),
-                    .fence = {.partition = World(), .epoch = IdentityFrom<PartitionEpoch>(1), .cell = cell, .generation = generation}};
-        }
-
-        StreamingCellCandidateContext Context() {
-            return {.operation = Operation(),
-                    .operationKind = StreamingCellOperationKind::Load,
-                    .operationState = StreamingCellOperationState::Preparing,
-                    .maximumPayloads = 4,
-                    .maximumDependencies = 4,
-                    .maximumCompressedBytes = 256,
-                    .maximumUncompressedBytes = 256,
-                    .lifecycle = StreamingCellCandidateLifecycle::Active};
-        }
-
-        std::array<StreamingCellPayloadHeader, 2> Payloads() {
-            return {{{StreamingCellProvider::CoreEcs, StreamingCellPayloadRequirement::Required, 1, 176, 16, 16, 11},
-                     {StreamingCellProvider::Terrain, StreamingCellPayloadRequirement::Optional, 3, 192, 32, 32, 22}}};
-        }
-
-        StreamingCellHeaderView Header(const std::span<const StreamingCellPayloadHeader> payloads) {
-            return {.majorVersion = StreamingCellHeaderView::CurrentMajorVersion,
-                    .minorVersion = StreamingCellHeaderView::CurrentMinorVersion,
-                    .cell = Cell(),
-                    .compression = StreamingCellCompression::None,
-                    .compressedSize = 128,
-                    .uncompressedSize = 48,
-                    .payloadCrc32 = 99,
-                    .artifactHash = Hash(),
-                    .payloads = payloads};
-        }
     }  // namespace
 
     TEST_CASE("Cell candidate resolves manifest metadata and owns canonical payload headers", "[unit][world_streaming][cell_candidate]") {

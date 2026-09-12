@@ -2,6 +2,7 @@
 
 #include "Horo/Assets/AssetProvider.h"
 #include "Horo/WorldStreaming/WorldStreamingErrors.h"
+#include "WorldStreamingInternal.h"
 
 #include <algorithm>
 #include <mutex>
@@ -10,10 +11,6 @@
 
 namespace Horo::WorldStreaming {
     namespace {
-        template <typename T> [[nodiscard]] Result<T> Failure(const ErrorCodeDescriptor &descriptor) {
-            return Result<T>::Failure(MakeError(descriptor));
-        }
-
         [[nodiscard]] bool IsKnown(const StreamingCellAssetRequestLifecycle value) noexcept {
             return value < StreamingCellAssetRequestLifecycle::Count;
         }
@@ -120,7 +117,7 @@ namespace Horo::WorldStreaming {
     /** @copydoc StreamingCellAssetRequest::RequestCancel */
     Result<void> StreamingCellAssetRequest::RequestCancel() {
         if (!state_)
-            return Failure<void>(WorldStreamingErrors::CellAssetRequestLifecycleUnavailable);
+            return Internal::Failure<void>(WorldStreamingErrors::CellAssetRequestLifecycleUnavailable);
         std::scoped_lock lock{state_->mutex};
         state_->CancelChildren();
         return Result<void>::Success();
@@ -129,13 +126,13 @@ namespace Horo::WorldStreaming {
     /** @copydoc StreamingCellAssetRequest::TakeResult */
     Result<StreamingCellAssetBatch> StreamingCellAssetRequest::TakeResult() {
         if (!state_)
-            return Failure<StreamingCellAssetBatch>(WorldStreamingErrors::CellAssetRequestLifecycleUnavailable);
+            return Internal::Failure<StreamingCellAssetBatch>(WorldStreamingErrors::CellAssetRequestLifecycleUnavailable);
         std::scoped_lock lock{state_->mutex};
         const auto state = state_->RefreshState();
         if (state == StreamingCellAssetRequestState::Loading || state == StreamingCellAssetRequestState::Cancelling)
-            return Failure<StreamingCellAssetBatch>(WorldStreamingErrors::CellAssetRequestNotReady);
+            return Internal::Failure<StreamingCellAssetBatch>(WorldStreamingErrors::CellAssetRequestNotReady);
         if (state_->consumed)
-            return Failure<StreamingCellAssetBatch>(WorldStreamingErrors::CellAssetRequestConsumed);
+            return Internal::Failure<StreamingCellAssetBatch>(WorldStreamingErrors::CellAssetRequestConsumed);
         state_->consumed = true;
 
         StreamingCellAssetBatch batch{state_->request, state_->operation, state_->registryRevision, {}};
@@ -157,18 +154,18 @@ namespace Horo::WorldStreaming {
                                                                  const StreamingCellCandidate &candidate,
                                                                  const StreamingCellAssetRequestContext &context) {
         if (!IsKnown(context.lifecycle) || !context.request.IsValid() || !context.operation.IsValid() || context.maximumRequests == 0)
-            return Failure<StreamingCellAssetRequest>(WorldStreamingErrors::CellAssetRequestInvalid);
+            return Internal::Failure<StreamingCellAssetRequest>(WorldStreamingErrors::CellAssetRequestInvalid);
         if (context.lifecycle != StreamingCellAssetRequestLifecycle::Active)
-            return Failure<StreamingCellAssetRequest>(WorldStreamingErrors::CellAssetRequestLifecycleUnavailable);
+            return Internal::Failure<StreamingCellAssetRequest>(WorldStreamingErrors::CellAssetRequestLifecycleUnavailable);
         if (context.operation != candidate.Operation() || context.operation.fence.partition != manifest.Descriptor().Partition())
-            return Failure<StreamingCellAssetRequest>(WorldStreamingErrors::CellAssetRequestStale);
+            return Internal::Failure<StreamingCellAssetRequest>(WorldStreamingErrors::CellAssetRequestStale);
         const auto *manifestCell = FindManifestCell(manifest, context.operation.fence.cell);
         const auto *descriptorCell = FindCell(manifest, context.operation.fence.cell);
         if (!manifestCell || !descriptorCell || !Matches(*manifestCell, candidate.ManifestEntry()) ||
             descriptorCell->package.chunkAsset != candidate.ChunkAsset())
-            return Failure<StreamingCellAssetRequest>(WorldStreamingErrors::CellAssetRequestStale);
+            return Internal::Failure<StreamingCellAssetRequest>(WorldStreamingErrors::CellAssetRequestStale);
         if (candidate.HardDependencies().size() >= context.maximumRequests)
-            return Failure<StreamingCellAssetRequest>(WorldStreamingErrors::CellAssetRequestCapacityExceeded);
+            return Internal::Failure<StreamingCellAssetRequest>(WorldStreamingErrors::CellAssetRequestCapacityExceeded);
 
         auto state = std::make_shared<StreamingCellAssetRequest::StateData>();
         state->request = context.request;
@@ -180,12 +177,12 @@ namespace Horo::WorldStreaming {
         for (const auto &dependency : candidate.HardDependencies()) {
             const auto *cell = FindCell(manifest, dependency);
             if (!cell)
-                return Failure<StreamingCellAssetRequest>(WorldStreamingErrors::CellAssetRequestUnavailable);
+                return Internal::Failure<StreamingCellAssetRequest>(WorldStreamingErrors::CellAssetRequestUnavailable);
             state->assets.push_back(cell->package.chunkAsset);
         }
         for (const auto &asset : state->assets)
             if (!registry.Find(asset))
-                return Failure<StreamingCellAssetRequest>(WorldStreamingErrors::CellAssetRequestUnavailable);
+                return Internal::Failure<StreamingCellAssetRequest>(WorldStreamingErrors::CellAssetRequestUnavailable);
 
         const auto cancellation = state->cancellation.Token();
         for (const auto &asset : state->assets) {
