@@ -225,6 +225,13 @@ add_library(HoroEngine::NetworkApi ALIAS HoroNetworkApi)
 target_compile_features(HoroNetworkApi PUBLIC cxx_std_20)
 target_link_libraries(HoroNetworkApi PUBLIC HoroEngine::Foundation)
 
+add_library(HoroNetworkTransportNull STATIC
+        runtime/networking/null/DeterministicTransport.cpp
+)
+add_library(HoroEngine::NetworkTransportNull ALIAS HoroNetworkTransportNull)
+target_compile_features(HoroNetworkTransportNull PUBLIC cxx_std_20)
+target_link_libraries(HoroNetworkTransportNull PUBLIC HoroEngine::NetworkApi)
+
 add_library(HoroRuntimeUi STATIC
         runtime/ui/UiErrors.cpp
         runtime/ui/UiIdentity.cpp

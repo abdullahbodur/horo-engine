@@ -150,6 +150,9 @@ horo_configure_target_header_boundary(HoroNetworkApi PUBLIC_HEADERS
 horo_configure_target_header_boundary(HoroNetworkRuntime PUBLIC_HEADERS
     Horo/Network/NetworkObjectMapping.h
 )
+horo_configure_target_header_boundary(HoroNetworkTransportNull PUBLIC_HEADERS
+    Horo/Network/DeterministicTransport.h
+)
 
 horo_configure_target_header_boundary(HoroGameplayApi PUBLIC_HEADERS
     Horo/Gameplay/Behavior.h
