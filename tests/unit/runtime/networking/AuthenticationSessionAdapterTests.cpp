@@ -12,7 +12,9 @@
 #include <vector>
 
 namespace Horo::Network {
+    using TestSupport::Connection;
     using TestSupport::RequireError;
+    using TestSupport::Session;
 
     namespace {
         template <typename Identity> [[nodiscard]] Identity Id(const std::uint64_t value) {
@@ -24,14 +26,6 @@ namespace Horo::Network {
             for (std::size_t index = 0; index < Size; ++index)
                 bytes[index] = static_cast<std::byte>(first + static_cast<std::uint8_t>(index));
             return bytes;
-        }
-
-        [[nodiscard]] ConnectionHandle Connection(const std::uint32_t generation = 3) {
-            return ConnectionHandle::Create(2, generation).Value();
-        }
-
-        [[nodiscard]] NetworkOperationGeneration Session(const std::uint64_t generation = 7) {
-            return NetworkOperationGeneration::Create(generation).Value();
         }
 
         [[nodiscard]] AuthenticationAuthorityStamp Stamp(const std::uint64_t authorityGeneration) {
