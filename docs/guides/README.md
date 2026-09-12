@@ -46,6 +46,8 @@ workflows.
 - [XR View and External Render-Target Contract Migration](./xr-view-render-plan-migration.md):
   publish bounded runtime-ordered views and generation-fenced Horo external target
   requirements without fixed stereo arrays or native image types.
+- [XR Loader Preflight Migration](./xr-loader-preflight-migration.md):
+  preserve exact loader/runtime/system states, selection policy, and generation fences.
 
 ## Writing a Guide
 

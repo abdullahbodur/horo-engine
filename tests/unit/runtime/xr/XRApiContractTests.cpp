@@ -1,5 +1,6 @@
 #include "Horo/XR/XRCapabilities.h"
 #include "Horo/XR/XRErrors.h"
+#include "support/TypedIdentityTestSupport.h"
 
 #include <array>
 #include <catch2/catch_test_macros.hpp>
@@ -9,6 +10,8 @@
 
 namespace Horo::XR {
     namespace {
+        using Horo::Tests::RequireFailureIdentity;
+
         template <typename Generation> Generation MakeGeneration(const std::uint64_t value) {
             const auto result = Generation::Create(value);
             REQUIRE(result.HasValue());
@@ -37,13 +40,6 @@ namespace Horo::XR {
             const auto result = XRCapabilitySnapshot::Create(MakeDescriptor(initial));
             REQUIRE(result.HasValue());
             return result.Value();
-        }
-
-        template <typename Value> void RequireFailureIdentity(const Result<Value> &result, const ErrorCodeDescriptor &expected) {
-            REQUIRE_FALSE(result.HasValue());
-            const auto &actual = result.ErrorValue();
-            CHECK(actual.domain.Value() == expected.domain.Value());
-            CHECK(actual.code.Value() == expected.code.Value());
         }
 
         template <typename Identity> void VerifySessionObjectIdentity(const XRSessionId &activeSession) {
@@ -231,7 +227,7 @@ namespace Horo::XR {
 
         TEST_CASE("XR error registry contribution is complete unique and actionable", "[unit][xr][errors]") {
             const auto descriptors = XRErrors::Descriptors();
-            REQUIRE(descriptors.size() == 20);
+            REQUIRE(descriptors.size() == 31);
             std::set<std::string_view> codes;
             for (const auto *descriptor : descriptors) {
                 REQUIRE(descriptor != nullptr);

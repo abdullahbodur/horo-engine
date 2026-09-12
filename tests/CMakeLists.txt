@@ -379,6 +379,7 @@ endif()
 add_executable(HoroXRApiTests
         support/AllocationProbe.cpp
         unit/runtime/xr/XRApiContractTests.cpp
+        unit/runtime/xr/XRLoaderPreflightTests.cpp
         unit/runtime/xr/XRSpacePoseTests.cpp
         unit/runtime/xr/XRTrackingSnapshotTests.cpp
         unit/runtime/xr/XRViewRenderPlanTests.cpp

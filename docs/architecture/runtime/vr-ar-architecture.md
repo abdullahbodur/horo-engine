@@ -137,6 +137,16 @@ environment-provided paths or vendor-runtime libraries as fallback. Development 
 overrides and API layers require a typed non-shipping policy and mark evidence as
 non-release-qualified.
 
+Loader discovery and active-runtime selection cross this boundary as one immutable
+`XRLoaderPreflightSnapshot`. The application supplies one stable backend, verified
+install record, product profile, exact loader source and owner-issued attempt. The
+private adapter supplies bounded redacted loader/runtime/system evidence for that same
+attempt. Validation neither probes nor publishes: it rejects malformed or contradictory
+evidence, unapproved developer overrides, version drift, cancellation and every failed
+discovery layer with distinct stable error identities. Successful evidence is rechecked
+against the current attempt and composition identities immediately before native
+activation, so replacement and shutdown cannot reuse a retained preflight snapshot.
+
 The layers report distinct typed states:
 
 ```text
