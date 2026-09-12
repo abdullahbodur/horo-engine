@@ -6,8 +6,10 @@
 #include <algorithm>
 #include <array>
 #include <cmath>
+#include <format>
 #include <iterator>
 #include <limits>
+#include <memory>
 #include <new>
 #include <string>
 #include <string_view>
@@ -79,14 +81,13 @@ namespace Horo::Navigation {
         }
 
         [[nodiscard]] std::string SurfaceContext(const NavigationBakeSurfaceInput &surface, const std::string_view reason) {
-            return "Navigation surface " + std::to_string(surface.surface.Value()) + ", profile " +
-                   std::to_string(surface.profile.Value()) + ", producer " + std::to_string(surface.producer.Value()) + ", contribution " +
-                   std::to_string(surface.contribution.Value()) + ": " + std::string(reason);
+            return std::format("Navigation surface {}, profile {}, producer {}, contribution {}: {}", surface.surface.Value(),
+                               surface.profile.Value(), surface.producer.Value(), surface.contribution.Value(), reason);
         }
 
         [[nodiscard]] std::string ModifierContext(const NavigationBakeModifierInput &modifier, const std::string_view reason) {
-            return "Navigation modifier " + std::to_string(modifier.id.Value()) + ", surface " + std::to_string(modifier.surface.Value()) +
-                   ", profile " + std::to_string(modifier.profile.Value()) + ": " + std::string(reason);
+            return std::format("Navigation modifier {}, surface {}, profile {}: {}", modifier.id.Value(), modifier.surface.Value(),
+                               modifier.profile.Value(), reason);
         }
 
         [[nodiscard]] constexpr auto SurfaceBindingKey(const NavigationBakeSurfaceInput &surface) noexcept {
@@ -109,31 +110,30 @@ namespace Horo::Navigation {
                                                                            const NavigationBakeSurfaceInput &surface) noexcept {
             const auto contributions = geometry.Contributions();
             const auto target = std::tuple{surface.producer.Value(), surface.contribution.Value()};
-            const auto found =
-                std::lower_bound(contributions.begin(), contributions.end(), target, [](const auto &candidate, const auto key) {
+            const auto found = std::ranges::lower_bound(contributions, target, [](const auto &candidate, const auto key) {
                 return std::tuple{candidate.producer.Value(), candidate.contribution.Value()} < key;
             });
             if (found == contributions.end() || found->producer != surface.producer || found->contribution != surface.contribution)
                 return nullptr;
-            return &*found;
+            return std::to_address(found);
         }
 
         [[nodiscard]] const NavigationResolvedBakeProfile *FindProfile(const std::vector<NavigationResolvedBakeProfile> &profiles,
                                                                        const NavigationAgentProfileId id) noexcept {
-            const auto found = std::lower_bound(profiles.begin(), profiles.end(), id.Value(), [](const auto &candidate, const auto value) {
+            const auto found = std::ranges::lower_bound(profiles, id.Value(), [](const auto &candidate, const auto value) {
                 return candidate.id.Value() < value;
             });
-            return found != profiles.end() && found->id == id ? &*found : nullptr;
+            return found != profiles.end() && found->id == id ? std::to_address(found) : nullptr;
         }
 
         [[nodiscard]] const NavigationTileBuildPartition *FindPartition(const std::vector<NavigationTileBuildPartition> &partitions,
                                                                         const NavigationAgentProfileId profile,
                                                                         const SurfaceId surface) noexcept {
             const auto target = std::tuple{profile.Value(), surface.Value()};
-            const auto found = std::lower_bound(partitions.begin(), partitions.end(), target, [](const auto &candidate, const auto key) {
+            const auto found = std::ranges::lower_bound(partitions, target, [](const auto &candidate, const auto key) {
                 return PartitionKey(candidate) < key;
             });
-            return found != partitions.end() && found->profile == profile && found->surface == surface ? &*found : nullptr;
+            return found != partitions.end() && found->profile == profile && found->surface == surface ? std::to_address(found) : nullptr;
         }
 
         [[nodiscard]] Result<NavigationAreaDescriptor> ResolveArea(const NavigationAreaRegistry &registry, const NavigationAreaId id,
@@ -147,7 +147,7 @@ namespace Horo::Navigation {
 
         [[nodiscard]] bool RememberArea(std::vector<NavigationResolvedBakeArea> &areas, const NavigationAreaDescriptor &area,
                                         const std::size_t maximumAreas) {
-            const auto found = std::lower_bound(areas.begin(), areas.end(), area.id.Value(), [](const auto &candidate, const auto value) {
+            const auto found = std::ranges::lower_bound(areas, area.id.Value(), [](const auto &candidate, const auto value) {
                 return candidate.id.Value() < value;
             });
             if (found != areas.end() && found->id == area.id)
@@ -184,8 +184,8 @@ namespace Horo::Navigation {
             if (storage.triangles.size() > limits.maxTileTriangles || storage.workUnits > limits.maxWorkUnits)
                 return Failure<void>(NavigationErrors::BakeInputCapacityExceeded);
 
-            std::uint64_t ownedBytes{};
-            if (!AddStorage(geometry.Contributions().size(), sizeof(NavigationSourceContribution), ownedBytes) ||
+            if (std::uint64_t ownedBytes{};
+                !AddStorage(geometry.Contributions().size(), sizeof(NavigationSourceContribution), ownedBytes) ||
                 !AddStorage(geometry.Vertices().size(), sizeof(Math::Vec3), ownedBytes) ||
                 !AddStorage(geometry.Triangles().size(), sizeof(NavigationSourceTriangle), ownedBytes) ||
                 !AddStorage(storage.profiles.capacity(), sizeof(NavigationResolvedBakeProfile), ownedBytes) ||
@@ -204,8 +204,8 @@ namespace Horo::Navigation {
                                                                     const std::size_t profileCount, const std::size_t surfaceCount,
                                                                     const std::size_t modifierCount) {
             std::uint64_t fixedBytes{};
-            const auto reservedAreaCount = std::min<std::size_t>(areaRegistry.Areas().size(), limits.maxAreas);
-            if (!AddStorage(geometry.Contributions().size(), sizeof(NavigationSourceContribution), fixedBytes) ||
+            if (const auto reservedAreaCount = std::min<std::size_t>(areaRegistry.Areas().size(), limits.maxAreas);
+                !AddStorage(geometry.Contributions().size(), sizeof(NavigationSourceContribution), fixedBytes) ||
                 !AddStorage(geometry.Vertices().size(), sizeof(Math::Vec3), fixedBytes) ||
                 !AddStorage(geometry.Triangles().size(), sizeof(NavigationSourceTriangle), fixedBytes) ||
                 !AddStorage(profileCount, sizeof(NavigationResolvedBakeProfile), fixedBytes) ||
@@ -297,9 +297,9 @@ namespace Horo::Navigation {
                                                            CanonicalBakeStorage &storage) {
             if (!TryAdd(storage.workUnits, 1, storage.workUnits) || storage.workUnits > limits.maxWorkUnits)
                 return Failure<void>(NavigationErrors::BakeInputCapacityExceeded);
-            auto area = ResolveAndRememberArea(areaRegistry, sourceTriangle.area, SurfaceContext(surface, "a triangle area is missing"),
-                                               storage.areas, limits.maxAreas);
-            if (area.HasError())
+            if (auto area = ResolveAndRememberArea(areaRegistry, sourceTriangle.area, SurfaceContext(surface, "a triangle area is missing"),
+                                                   storage.areas, limits.maxAreas);
+                area.HasError())
                 return Result<void>::Failure(area.ErrorValue());
             auto traversal = areaRegistry.ResolveTraversal(surface.filter, sourceTriangle.area);
             if (traversal.HasError())
@@ -382,9 +382,10 @@ namespace Horo::Navigation {
                 return Failure<void>(NavigationErrors::DescriptorConflict);
 
             for (const auto *modifier : ordered) {
-                auto area = ResolveAndRememberArea(areaRegistry, modifier->area, ModifierContext(*modifier, "the assigned area is missing"),
-                                                   storage.areas, limits.maxAreas);
-                if (area.HasError())
+                if (auto area =
+                        ResolveAndRememberArea(areaRegistry, modifier->area, ModifierContext(*modifier, "the assigned area is missing"),
+                                               storage.areas, limits.maxAreas);
+                    area.HasError())
                     return Result<void>::Failure(area.ErrorValue());
                 auto bounds = Math::TransformAabb(modifier->localBounds, modifier->localToCanonicalMeters.TryToMatrix().Value());
                 if (bounds.HasError() || !IsNonDegenerate(bounds.Value()))
@@ -404,8 +405,8 @@ namespace Horo::Navigation {
 
         void BindModifierRanges(CanonicalBakeStorage &storage) noexcept {
             for (auto &partition : storage.partitions) {
-                const auto first = std::lower_bound(storage.modifiers.begin(), storage.modifiers.end(), PartitionKey(partition),
-                                                    [](const auto &modifier, const auto key) {
+                const auto first =
+                    std::ranges::lower_bound(storage.modifiers, PartitionKey(partition), [](const auto &modifier, const auto key) {
                     return std::tuple{modifier.profile.Value(), modifier.surface.Value()} < key;
                 });
                 const auto last =
@@ -509,24 +510,24 @@ namespace Horo::Navigation {
                                                                   const NavigationBakePublicationState state) const {
         if (!expectedRequestGeneration.IsValid() || !IsValid(currentRevisions) || !IsKnown(state))
             return Failure<void>(NavigationErrors::BakeInputInvalid);
+        using enum NavigationBakePublicationState;
         switch (state) {
-            case NavigationBakePublicationState::Ready:
+            case Ready:
                 break;
-            case NavigationBakePublicationState::Cancelled:
+            case Cancelled:
                 return Failure<void>(NavigationErrors::BakeInputCancelled);
-            case NavigationBakePublicationState::Failed:
+            case Failed:
                 return Failure<void>(NavigationErrors::BakeInputFailed);
-            case NavigationBakePublicationState::Superseded:
+            case Superseded:
                 return Failure<void>(NavigationErrors::BakeInputStale);
-            case NavigationBakePublicationState::ShuttingDown:
+            case ShuttingDown:
                 return Failure<void>(NavigationErrors::BakeInputShuttingDown);
-            case NavigationBakePublicationState::Count:
+            case Count:
                 return Failure<void>(NavigationErrors::BakeInputInvalid);
         }
         if (expectedRequestGeneration != revisions_.requestGeneration || currentRevisions != revisions_)
             return Failure<void>(NavigationErrors::BakeInputStale);
-        auto sourceValidation = geometry_.ValidateCurrent(revisions_.geometry, currentSources);
-        if (sourceValidation.HasError())
+        if (auto sourceValidation = geometry_.ValidateCurrent(revisions_.geometry, currentSources); sourceValidation.HasError())
             return Result<void>::Failure(WrapError(NavigationErrors::BakeInputStale, sourceValidation.ErrorValue(),
                                                    "Navigation bake input source provenance changed before publication."));
         return Result<void>::Success();

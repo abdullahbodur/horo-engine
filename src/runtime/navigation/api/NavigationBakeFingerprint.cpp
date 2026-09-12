@@ -52,7 +52,7 @@ namespace Horo::Navigation::Internal {
                 std::array<std::byte, 64> input{};
                 for (std::size_t index = 0; index < digest_.bytes.size(); ++index)
                     input[index] = static_cast<std::byte>(digest_.bytes[index]);
-                std::copy(value.begin(), value.end(), input.begin() + static_cast<std::ptrdiff_t>(digest_.bytes.size()));
+                std::ranges::copy(value, input.begin() + static_cast<std::ptrdiff_t>(digest_.bytes.size()));
                 digest_ = ComputeSha256(std::span{input}.first(digest_.bytes.size() + value.size()));
             }
 

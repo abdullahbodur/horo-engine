@@ -4,6 +4,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <format>
 #include <limits>
 #include <string>
 #include <string_view>
@@ -25,8 +26,8 @@ namespace Horo::Navigation {
         }
 
         [[nodiscard]] std::string SourceContext(const NavigationSourceContributionInput &input, const std::string_view reason) {
-            return "Navigation source producer " + std::to_string(input.producer.Value()) + ", contribution " +
-                   std::to_string(input.contribution.Value()) + ": " + std::string(reason);
+            return std::format("Navigation source producer {}, contribution {}: {}", input.producer.Value(), input.contribution.Value(),
+                               reason);
         }
 
         template <typename T>
@@ -125,14 +126,15 @@ namespace Horo::Navigation {
 
         [[nodiscard]] Math::Vec3 ToCanonicalAxes(const Math::Vec3 vertex, const NavigationSourceCoordinateConvention coordinates) noexcept {
             const auto scaled = vertex * coordinates.metersPerUnit;
+            using enum NavigationSourceCoordinateSystem;
             switch (coordinates.system) {
-                case NavigationSourceCoordinateSystem::RightHandedYUp:
+                case RightHandedYUp:
                     return scaled;
-                case NavigationSourceCoordinateSystem::RightHandedZUp:
+                case RightHandedZUp:
                     return {scaled.x, scaled.z, -scaled.y};
-                case NavigationSourceCoordinateSystem::LeftHandedYUp:
+                case LeftHandedYUp:
                     return {scaled.x, scaled.y, -scaled.z};
-                case NavigationSourceCoordinateSystem::Count:
+                case Count:
                     break;
             }
             return {};
