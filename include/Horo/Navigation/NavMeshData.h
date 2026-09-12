@@ -213,12 +213,8 @@ namespace Horo::Navigation {
         Sha256Digest payloadDigest{}; /**< Digest of this exact encoded neutral tile payload. */
     };
 
-    /** @brief Borrowed decoded tables and parser-observed digests submitted for bounded validation and ownership. */
-    struct NavMeshArtifactView final {
-        NavMeshArtifactHeader header;
-        Sha256Digest observedPayloadDigest{}; /**< Digest computed from exact encoded bytes before decode. */
-        std::span<const NavMeshTileDescriptor> tiles;
-        std::span<const Sha256Digest> observedTilePayloadDigests; /**< Actual encoded digest for every tile row. */
+    /** @brief Borrowed provider-neutral decoded tables shared by artifact and exact-tile views. */
+    struct NavMeshDecodedTablesView final {
         std::span<const Math::Vec3> vertices;
         std::span<const NavMeshPolygon> polygons;
         std::span<const std::uint32_t> polygonVertexIndices;
@@ -226,6 +222,15 @@ namespace Horo::Navigation {
         std::span<const NavMeshOffMeshLink> offMeshLinks;
         std::span<const NavMeshSourceProvenance> provenance;
         std::span<const NavMeshProviderPayloadDescriptor> providerPayloads;
+    };
+
+    /** @brief Borrowed decoded tables and parser-observed digests submitted for bounded validation and ownership. */
+    struct NavMeshArtifactView final {
+        NavMeshArtifactHeader header;
+        Sha256Digest observedPayloadDigest{}; /**< Digest computed from exact encoded bytes before decode. */
+        std::span<const NavMeshTileDescriptor> tiles;
+        std::span<const Sha256Digest> observedTilePayloadDigests; /**< Actual encoded digest for every tile row. */
+        NavMeshDecodedTablesView tables;
         std::span<const std::byte> providerPayloadBytes;
     };
 
@@ -242,13 +247,7 @@ namespace Horo::Navigation {
     /** @brief Borrowed independently addressable neutral tile tables. */
     struct NavMeshTileView final {
         const NavMeshTileDescriptor *descriptor{};
-        std::span<const Math::Vec3> vertices;
-        std::span<const NavMeshPolygon> polygons;
-        std::span<const std::uint32_t> polygonVertexIndices;
-        std::span<const std::uint32_t> polygonAdjacencies;
-        std::span<const NavMeshOffMeshLink> offMeshLinks;
-        std::span<const NavMeshSourceProvenance> provenance;
-        std::span<const NavMeshProviderPayloadDescriptor> providerPayloads;
+        NavMeshDecodedTablesView tables;
     };
 
     /** @brief Borrowed opaque provider bytes paired with their validated portable descriptor. */

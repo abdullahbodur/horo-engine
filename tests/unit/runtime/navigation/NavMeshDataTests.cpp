@@ -89,13 +89,16 @@ namespace Horo::Navigation {
                     .observedPayloadDigest = header.payloadDigest,
                     .tiles = tiles,
                     .observedTilePayloadDigests = observedTileDigests,
-                    .vertices = vertices,
-                    .polygons = polygons,
-                    .polygonVertexIndices = polygonVertexIndices,
-                    .polygonAdjacencies = polygonAdjacencies,
-                    .offMeshLinks = offMeshLinks,
-                    .provenance = provenance,
-                    .providerPayloads = providerPayloads,
+                    .tables =
+                        {
+                            .vertices = vertices,
+                            .polygons = polygons,
+                            .polygonVertexIndices = polygonVertexIndices,
+                            .polygonAdjacencies = polygonAdjacencies,
+                            .offMeshLinks = offMeshLinks,
+                            .provenance = provenance,
+                            .providerPayloads = providerPayloads,
+                        },
                     .providerPayloadBytes = providerPayloadBytes,
                 };
             }
@@ -133,8 +136,8 @@ namespace Horo::Navigation {
         REQUIRE(moved.Header().coordinateFrame.origin == Math::WorldCoordinate64::FromMillimeters(12'000, 0, -8'000));
         const auto tile = moved.ResolveTile({.x = -2, .z = 4, .layer = 1});
         REQUIRE(tile.HasValue());
-        REQUIRE(tile.Value().vertices.front() == Math::Vec3{-64.0F, 0.0F, 128.0F});
-        REQUIRE(tile.Value().polygons.front().area == Id<NavigationAreaId>(11));
+        REQUIRE(tile.Value().tables.vertices.front() == Math::Vec3{-64.0F, 0.0F, 128.0F});
+        REQUIRE(tile.Value().tables.polygons.front().area == Id<NavigationAreaId>(11));
         RequireError(moved.ResolveTile({.x = -2, .z = 4, .layer = 2}), NavigationErrors::NavMeshTileUnknown);
     }
 

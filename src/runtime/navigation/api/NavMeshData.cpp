@@ -153,11 +153,13 @@ namespace Horo::Navigation {
         [[nodiscard]] Result<void> ValidateViewShape(const NavMeshArtifactView &artifact) {
             const auto &header = artifact.header;
             if (artifact.observedPayloadDigest != header.payloadDigest || artifact.tiles.size() != header.tileCount ||
-                artifact.observedTilePayloadDigests.size() != header.tileCount || artifact.vertices.size() != header.vertexCount ||
-                artifact.polygons.size() != header.polygonCount || artifact.polygonVertexIndices.size() != header.polygonVertexIndexCount ||
-                artifact.polygonAdjacencies.size() != header.polygonAdjacencyCount ||
-                artifact.offMeshLinks.size() != header.offMeshLinkCount || artifact.provenance.size() != header.provenanceCount ||
-                artifact.providerPayloads.size() != header.providerPayloadCount ||
+                artifact.observedTilePayloadDigests.size() != header.tileCount || artifact.tables.vertices.size() != header.vertexCount ||
+                artifact.tables.polygons.size() != header.polygonCount ||
+                artifact.tables.polygonVertexIndices.size() != header.polygonVertexIndexCount ||
+                artifact.tables.polygonAdjacencies.size() != header.polygonAdjacencyCount ||
+                artifact.tables.offMeshLinks.size() != header.offMeshLinkCount ||
+                artifact.tables.provenance.size() != header.provenanceCount ||
+                artifact.tables.providerPayloads.size() != header.providerPayloadCount ||
                 artifact.providerPayloadBytes.size() != header.providerEncodedBytes)
                 return Failure<void>(NavigationErrors::NavMeshArtifactCorrupt);
             return Result<void>::Success();
@@ -166,24 +168,24 @@ namespace Horo::Navigation {
         [[nodiscard]] Result<void> ValidatePolygon(const NavMeshArtifactView &artifact, const NavMeshTileDescriptor &tile,
                                                    const std::uint32_t polygonIndex, const NavMeshArtifactLimits &limits,
                                                    std::uint64_t &expectedVertexIndex, std::uint64_t &expectedAdjacency) {
-            const auto &polygon = artifact.polygons[polygonIndex];
+            const auto &polygon = artifact.tables.polygons[polygonIndex];
             if (!polygon.area.IsValid() || polygon.vertexIndices.count < 3 || polygon.vertexIndices.count > limits.maxVerticesPerPolygon ||
                 polygon.vertexIndices.first != expectedVertexIndex || polygon.adjacencies.first != expectedAdjacency ||
-                !FitsRange(polygon.vertexIndices, artifact.polygonVertexIndices.size()) ||
-                !FitsRange(polygon.adjacencies, artifact.polygonAdjacencies.size()) ||
+                !FitsRange(polygon.vertexIndices, artifact.tables.polygonVertexIndices.size()) ||
+                !FitsRange(polygon.adjacencies, artifact.tables.polygonAdjacencies.size()) ||
                 RangeEnd(polygon.vertexIndices) > RangeEnd(tile.polygonVertexIndices) ||
                 RangeEnd(polygon.adjacencies) > RangeEnd(tile.polygonAdjacencies))
                 return Failure<void>(NavigationErrors::NavMeshArtifactCorrupt);
 
-            const auto indices = Slice(artifact.polygonVertexIndices, polygon.vertexIndices);
+            const auto indices = Slice(artifact.tables.polygonVertexIndices, polygon.vertexIndices);
             for (std::size_t index = 0; index < indices.size(); ++index) {
                 if (!Contains(tile.vertices, indices[index]) ||
                     std::find(indices.begin(), indices.begin() + static_cast<std::ptrdiff_t>(index), indices[index]) !=
                         indices.begin() + static_cast<std::ptrdiff_t>(index))
                     return Failure<void>(NavigationErrors::NavMeshArtifactCorrupt);
             }
-            for (const auto neighbor : Slice(artifact.polygonAdjacencies, polygon.adjacencies)) {
-                if (neighbor != NavMeshBoundaryAdjacency && (neighbor >= artifact.polygons.size() || neighbor == polygonIndex))
+            for (const auto neighbor : Slice(artifact.tables.polygonAdjacencies, polygon.adjacencies)) {
+                if (neighbor != NavMeshBoundaryAdjacency && (neighbor >= artifact.tables.polygons.size() || neighbor == polygonIndex))
                     return Failure<void>(NavigationErrors::NavMeshArtifactCorrupt);
             }
             expectedVertexIndex = RangeEnd(polygon.vertexIndices);
@@ -208,10 +210,10 @@ namespace Horo::Navigation {
         }
 
         [[nodiscard]] Result<void> ValidateLinks(const NavMeshArtifactView &artifact, const NavMeshTileDescriptor &tile) {
-            for (const auto &link : Slice(artifact.offMeshLinks, tile.offMeshLinks)) {
+            for (const auto &link : Slice(artifact.tables.offMeshLinks, tile.offMeshLinks)) {
                 if (!Math::IsFinite(link.start) || !Math::IsFinite(link.end) || !std::isfinite(link.radiusMeters) ||
                     link.radiusMeters <= 0.0F || !link.area.IsValid() || !Contains(tile.polygons, link.startPolygon) ||
-                    link.endPolygon >= artifact.polygons.size() || !IsInside(link.start, tile.bounds))
+                    link.endPolygon >= artifact.tables.polygons.size() || !IsInside(link.start, tile.bounds))
                     return Failure<void>(NavigationErrors::NavMeshArtifactCorrupt);
             }
             return Result<void>::Success();
@@ -219,10 +221,10 @@ namespace Horo::Navigation {
 
         [[nodiscard]] Result<void> ValidateProvenance(const NavMeshArtifactView &artifact, const NavMeshTileDescriptor &tile) {
             std::uint64_t expectedPolygon = tile.polygons.first;
-            for (const auto &provenance : Slice(artifact.provenance, tile.provenance)) {
+            for (const auto &provenance : Slice(artifact.tables.provenance, tile.provenance)) {
                 if (!IsKnown(provenance.kind) || !provenance.producer.IsValid() || !provenance.contribution.IsValid() ||
                     !provenance.revision.IsValid() || !IsPresent(provenance.sourceDigest) || provenance.polygons.count == 0 ||
-                    provenance.polygons.first != expectedPolygon || !FitsRange(provenance.polygons, artifact.polygons.size()) ||
+                    provenance.polygons.first != expectedPolygon || !FitsRange(provenance.polygons, artifact.tables.polygons.size()) ||
                     RangeEnd(provenance.polygons) > RangeEnd(tile.polygons))
                     return Failure<void>(NavigationErrors::NavMeshArtifactCorrupt);
                 expectedPolygon = RangeEnd(provenance.polygons);
@@ -235,7 +237,7 @@ namespace Horo::Navigation {
         [[nodiscard]] Result<void> ValidateProviderPayloads(const NavMeshArtifactView &artifact, const NavMeshTileDescriptor &tile,
                                                             const NavMeshArtifactLimits &limits) {
             const NavMeshProviderPayloadDescriptor *previous{};
-            for (const auto &payload : Slice(artifact.providerPayloads, tile.providerPayloads)) {
+            for (const auto &payload : Slice(artifact.tables.providerPayloads, tile.providerPayloads)) {
                 if (!IsPresent(payload.providerFingerprint) || !IsPresent(payload.payloadDigest) || payload.formatVersion == 0 ||
                     !IsKnown(payload.byteOrder) || !IsKnown(payload.compression))
                     return Failure<void>(NavigationErrors::NavMeshProviderPayloadIncompatible);
@@ -268,15 +270,16 @@ namespace Horo::Navigation {
                 tile.polygons.count > limits.maxPolygons || tile.polygonVertexIndices.count > limits.maxPolygonVertexIndices ||
                 tile.polygonAdjacencies.count > limits.maxPolygonAdjacencies || tile.offMeshLinks.count > limits.maxOffMeshLinks ||
                 tile.provenance.count > limits.maxProvenanceRows || tile.providerPayloads.count > limits.maxProviderPayloads ||
-                !FitsRange(tile.vertices, artifact.vertices.size()) || !FitsRange(tile.polygons, artifact.polygons.size()) ||
-                !FitsRange(tile.polygonVertexIndices, artifact.polygonVertexIndices.size()) ||
-                !FitsRange(tile.polygonAdjacencies, artifact.polygonAdjacencies.size()) ||
-                !FitsRange(tile.offMeshLinks, artifact.offMeshLinks.size()) || !FitsRange(tile.provenance, artifact.provenance.size()) ||
-                !FitsRange(tile.providerPayloads, artifact.providerPayloads.size()) || !IsPresent(tile.payloadDigest) ||
+                !FitsRange(tile.vertices, artifact.tables.vertices.size()) || !FitsRange(tile.polygons, artifact.tables.polygons.size()) ||
+                !FitsRange(tile.polygonVertexIndices, artifact.tables.polygonVertexIndices.size()) ||
+                !FitsRange(tile.polygonAdjacencies, artifact.tables.polygonAdjacencies.size()) ||
+                !FitsRange(tile.offMeshLinks, artifact.tables.offMeshLinks.size()) ||
+                !FitsRange(tile.provenance, artifact.tables.provenance.size()) ||
+                !FitsRange(tile.providerPayloads, artifact.tables.providerPayloads.size()) || !IsPresent(tile.payloadDigest) ||
                 tile.payloadDigest != artifact.observedTilePayloadDigests[tileIndex])
                 return Failure<void>(NavigationErrors::NavMeshArtifactCorrupt);
 
-            for (const auto vertex : Slice(artifact.vertices, tile.vertices)) {
+            for (const auto vertex : Slice(artifact.tables.vertices, tile.vertices)) {
                 if (!Math::IsFinite(vertex) || !IsInside(vertex, tile.bounds))
                     return Failure<void>(NavigationErrors::NavMeshArtifactCorrupt);
             }
@@ -316,7 +319,7 @@ namespace Horo::Navigation {
                 !Advance(tile.provenance, cursors.provenance) || !Advance(tile.providerPayloads, cursors.providerPayloads))
                 return Failure<void>(NavigationErrors::NavMeshArtifactCorrupt);
 
-            for (const auto &payload : Slice(artifact.providerPayloads, tile.providerPayloads)) {
+            for (const auto &payload : Slice(artifact.tables.providerPayloads, tile.providerPayloads)) {
                 if (payload.byteOffset != cursors.providerBytes ||
                     !CheckedAdd(cursors.providerBytes, payload.encodedBytes, cursors.providerBytes) ||
                     !CheckedAdd(cursors.providerDecodedBytes, payload.decodedBytes, cursors.providerDecodedBytes))
@@ -419,13 +422,17 @@ namespace Horo::Navigation {
             return Failure<NavMeshTileView>(NavigationErrors::NavMeshTileUnknown);
         return Result<NavMeshTileView>::Success({
             .descriptor = &*found,
-            .vertices = Slice(std::span<const Math::Vec3>{vertices_}, found->vertices),
-            .polygons = Slice(std::span<const NavMeshPolygon>{polygons_}, found->polygons),
-            .polygonVertexIndices = Slice(std::span<const std::uint32_t>{polygonVertexIndices_}, found->polygonVertexIndices),
-            .polygonAdjacencies = Slice(std::span<const std::uint32_t>{polygonAdjacencies_}, found->polygonAdjacencies),
-            .offMeshLinks = Slice(std::span<const NavMeshOffMeshLink>{offMeshLinks_}, found->offMeshLinks),
-            .provenance = Slice(std::span<const NavMeshSourceProvenance>{provenance_}, found->provenance),
-            .providerPayloads = Slice(std::span<const NavMeshProviderPayloadDescriptor>{providerPayloads_}, found->providerPayloads),
+            .tables =
+                {
+                    .vertices = Slice(std::span<const Math::Vec3>{vertices_}, found->vertices),
+                    .polygons = Slice(std::span<const NavMeshPolygon>{polygons_}, found->polygons),
+                    .polygonVertexIndices = Slice(std::span<const std::uint32_t>{polygonVertexIndices_}, found->polygonVertexIndices),
+                    .polygonAdjacencies = Slice(std::span<const std::uint32_t>{polygonAdjacencies_}, found->polygonAdjacencies),
+                    .offMeshLinks = Slice(std::span<const NavMeshOffMeshLink>{offMeshLinks_}, found->offMeshLinks),
+                    .provenance = Slice(std::span<const NavMeshSourceProvenance>{provenance_}, found->provenance),
+                    .providerPayloads =
+                        Slice(std::span<const NavMeshProviderPayloadDescriptor>{providerPayloads_}, found->providerPayloads),
+                },
         });
     }
 
@@ -440,7 +447,7 @@ namespace Horo::Navigation {
             return Result<NavMeshProviderPayloadView>::Failure(resolved.ErrorValue());
 
         bool matchingProviderFound{};
-        for (const auto &payload : resolved.Value().providerPayloads) {
+        for (const auto &payload : resolved.Value().tables.providerPayloads) {
             if (payload.providerFingerprint != compatibility.providerFingerprint)
                 continue;
             matchingProviderFound = true;
@@ -458,8 +465,9 @@ namespace Horo::Navigation {
     }
 
     NavMeshData::NavMeshData(const NavMeshArtifactView &artifact)
-        : header_(artifact.header), tiles_(Own(artifact.tiles)), vertices_(Own(artifact.vertices)), polygons_(Own(artifact.polygons)),
-          polygonVertexIndices_(Own(artifact.polygonVertexIndices)), polygonAdjacencies_(Own(artifact.polygonAdjacencies)),
-          offMeshLinks_(Own(artifact.offMeshLinks)), provenance_(Own(artifact.provenance)),
-          providerPayloads_(Own(artifact.providerPayloads)), providerPayloadBytes_(Own(artifact.providerPayloadBytes)) {}
+        : header_(artifact.header), tiles_(Own(artifact.tiles)), vertices_(Own(artifact.tables.vertices)),
+          polygons_(Own(artifact.tables.polygons)), polygonVertexIndices_(Own(artifact.tables.polygonVertexIndices)),
+          polygonAdjacencies_(Own(artifact.tables.polygonAdjacencies)), offMeshLinks_(Own(artifact.tables.offMeshLinks)),
+          provenance_(Own(artifact.tables.provenance)), providerPayloads_(Own(artifact.tables.providerPayloads)),
+          providerPayloadBytes_(Own(artifact.providerPayloadBytes)) {}
 }  // namespace Horo::Navigation
