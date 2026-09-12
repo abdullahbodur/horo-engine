@@ -636,6 +636,35 @@ configured runtime policy.
 
 ## Testing
 
+### Physics Foundation Qualification Matrix
+
+The Physics foundation contract is qualified in headless CI on Ubuntu 24.04
+x86_64/GCC, macOS 14+ arm64 or x86_64/Clang, and Windows 11 x86_64/MSVC. Both
+`Canonical` and explicit `Null` compositions build on every supported platform;
+Canonical solver execution runs wherever the pinned native solver target is enabled,
+while Null fixtures prove omitted-capability behavior without a graphics or window
+dependency.
+
+Qualification evidence is split by invariant rather than duplicated in one monolithic
+fixture:
+
+- `PhysicsFoundationQualificationTests` exercises two-world isolation, interleaved
+  stepping and destruction, repeated reset/unload/shutdown, fatal joined-job cleanup,
+  terminal diagnostics and explicit headless Null behavior.
+- `PhysicsWorldTests` covers render-rate variation, fixed-phase ordering,
+  deferred-command canonicalization, stale world/scene rejection, bounded command
+  overflow, thread affinity and coherent publication. `FrameSchedulerTests` owns the
+  shared fixed-tick catch-up limit exercised by the Physics participant.
+- `PhysicsHandleRegistryTests` covers stale and cross-world handles plus terminal
+  generation retirement.
+- `CanonicalPhysicsRuntimeTests` injects every supported partial process/world
+  initialization failure and proves reverse-order native resource rollback.
+
+All supported platform jobs execute the public fixtures. The native lifecycle fixture
+also checks process-global allocator/factory release and per-world scratch, job-system
+and solver counts; no successful test may leave native ownership live at process
+teardown.
+
 Required tests cover:
 
 - fixed-step independence from render frame rate
