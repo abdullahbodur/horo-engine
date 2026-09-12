@@ -85,7 +85,7 @@ namespace Horo::WorldStreaming {
                                                                       const StreamingPrefetchEvaluationContext &context,
                                                                       const StreamingVelocityPrefetchObservation &observation) {
         if (!IsKnown(context.lifecycle))
-            return Internal::Failure<StreamingPrefetchResult>(WorldStreamingErrors::PrefetchUnsupported);
+            return Internal::Failure<StreamingPrefetchResult>(WorldStreamingErrors::PrefetchInvalid);
         if (!context.policy.IsValid() || !context.policyRevision.IsValid() || !context.partition.IsValid() || !context.epoch.IsValid())
             return Internal::Failure<StreamingPrefetchResult>(WorldStreamingErrors::PrefetchInvalid);
         if (const auto validSource = ValidateStreamingSourceDescriptor(observation.source); validSource.HasError())

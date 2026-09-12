@@ -144,6 +144,11 @@ namespace Horo::WorldStreaming {
             RequireError(EvaluateStreamingVelocityPrefetch(Policy(), cancelling, Observation()),
                          WorldStreamingErrors::PrefetchLifecycleUnavailable);
 
+            auto invalidLifecycle = Context();
+            invalidLifecycle.lifecycle = static_cast<StreamingPrefetchLifecycle>(255);
+            RequireError(EvaluateStreamingVelocityPrefetch(Policy(), invalidLifecycle, Observation()),
+                         WorldStreamingErrors::PrefetchInvalid);
+
             auto sourceCancelling = Context();
             sourceCancelling.sourceAdmission.ownerState = StreamingSourceOwnerState::Cancelling;
             RequireError(EvaluateStreamingVelocityPrefetch(Policy(), sourceCancelling, Observation()),
