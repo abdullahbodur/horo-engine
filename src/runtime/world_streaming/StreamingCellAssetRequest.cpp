@@ -39,6 +39,43 @@ namespace Horo::WorldStreaming {
             using enum Assets::AssetLoadState;
             return state == Succeeded || state == Failed || state == Cancelled;
         }
+
+        [[nodiscard]] Result<void> ValidateAdmissionContext(const CookedWorldIndexManifest &manifest,
+                                                            const StreamingCellCandidate &candidate,
+                                                            const StreamingCellAssetRequestContext &context) {
+            if (!IsKnown(context.lifecycle) || !context.request.IsValid() || !context.operation.IsValid() || context.maximumRequests == 0)
+                return Internal::Failure<void>(WorldStreamingErrors::CellAssetRequestInvalid);
+            if (context.lifecycle != StreamingCellAssetRequestLifecycle::Active)
+                return Internal::Failure<void>(WorldStreamingErrors::CellAssetRequestLifecycleUnavailable);
+            if (context.operation != candidate.Operation() || context.operation.fence.partition != manifest.Descriptor().Partition())
+                return Internal::Failure<void>(WorldStreamingErrors::CellAssetRequestStale);
+            const auto *manifestCell = FindManifestCell(manifest, context.operation.fence.cell);
+            const auto *descriptorCell = FindCell(manifest, context.operation.fence.cell);
+            if (!manifestCell || !descriptorCell || !Matches(*manifestCell, candidate.ManifestEntry()) ||
+                descriptorCell->package.chunkAsset != candidate.ChunkAsset())
+                return Internal::Failure<void>(WorldStreamingErrors::CellAssetRequestStale);
+            if (candidate.HardDependencies().size() >= context.maximumRequests)
+                return Internal::Failure<void>(WorldStreamingErrors::CellAssetRequestCapacityExceeded);
+            return Result<void>::Success();
+        }
+
+        [[nodiscard]] Result<std::vector<Assets::AssetId>> ResolveRequestAssets(const CookedWorldIndexManifest &manifest,
+                                                                                const StreamingCellCandidate &candidate,
+                                                                                const Assets::AssetRegistrySnapshot &registry) {
+            std::vector<Assets::AssetId> assets;
+            assets.reserve(candidate.HardDependencies().size() + 1U);
+            assets.push_back(candidate.ChunkAsset());
+            for (const auto &dependency : candidate.HardDependencies()) {
+                const auto *cell = FindCell(manifest, dependency);
+                if (!cell)
+                    return Internal::Failure<std::vector<Assets::AssetId>>(WorldStreamingErrors::CellAssetRequestUnavailable);
+                assets.push_back(cell->package.chunkAsset);
+            }
+            for (const auto &asset : assets)
+                if (!registry.Find(asset))
+                    return Internal::Failure<std::vector<Assets::AssetId>>(WorldStreamingErrors::CellAssetRequestUnavailable);
+            return Result<std::vector<Assets::AssetId>>::Success(std::move(assets));
+        }
     }  // namespace
 
     struct StreamingCellAssetRequest::StateData final {
@@ -64,7 +101,7 @@ namespace Horo::WorldStreaming {
                 anyCancelled = anyCancelled || state == Cancelled;
             }
             if (anyLoading) {
-                if (anyFailed || anyCancelled)
+                if ((anyFailed || anyCancelled) && !cancellationRequested)
                     CancelChildren();
                 return cancellationRequested ? StreamingCellAssetRequestState::Cancelling : StreamingCellAssetRequestState::Loading;
             }
@@ -153,36 +190,18 @@ namespace Horo::WorldStreaming {
                                                                  const CookedWorldIndexManifest &manifest,
                                                                  const StreamingCellCandidate &candidate,
                                                                  const StreamingCellAssetRequestContext &context) {
-        if (!IsKnown(context.lifecycle) || !context.request.IsValid() || !context.operation.IsValid() || context.maximumRequests == 0)
-            return Internal::Failure<StreamingCellAssetRequest>(WorldStreamingErrors::CellAssetRequestInvalid);
-        if (context.lifecycle != StreamingCellAssetRequestLifecycle::Active)
-            return Internal::Failure<StreamingCellAssetRequest>(WorldStreamingErrors::CellAssetRequestLifecycleUnavailable);
-        if (context.operation != candidate.Operation() || context.operation.fence.partition != manifest.Descriptor().Partition())
-            return Internal::Failure<StreamingCellAssetRequest>(WorldStreamingErrors::CellAssetRequestStale);
-        const auto *manifestCell = FindManifestCell(manifest, context.operation.fence.cell);
-        const auto *descriptorCell = FindCell(manifest, context.operation.fence.cell);
-        if (!manifestCell || !descriptorCell || !Matches(*manifestCell, candidate.ManifestEntry()) ||
-            descriptorCell->package.chunkAsset != candidate.ChunkAsset())
-            return Internal::Failure<StreamingCellAssetRequest>(WorldStreamingErrors::CellAssetRequestStale);
-        if (candidate.HardDependencies().size() >= context.maximumRequests)
-            return Internal::Failure<StreamingCellAssetRequest>(WorldStreamingErrors::CellAssetRequestCapacityExceeded);
+        if (const auto valid = ValidateAdmissionContext(manifest, candidate, context); valid.HasError())
+            return Result<StreamingCellAssetRequest>::Failure(valid.ErrorValue());
+        auto resolvedAssets = ResolveRequestAssets(manifest, candidate, registry);
+        if (resolvedAssets.HasError())
+            return Result<StreamingCellAssetRequest>::Failure(resolvedAssets.ErrorValue());
 
         auto state = std::make_shared<StreamingCellAssetRequest::StateData>();
         state->request = context.request;
         state->operation = context.operation;
         state->registryRevision = registry.Revision();
-        state->assets.reserve(candidate.HardDependencies().size() + 1U);
-        state->handles.reserve(candidate.HardDependencies().size() + 1U);
-        state->assets.push_back(candidate.ChunkAsset());
-        for (const auto &dependency : candidate.HardDependencies()) {
-            const auto *cell = FindCell(manifest, dependency);
-            if (!cell)
-                return Internal::Failure<StreamingCellAssetRequest>(WorldStreamingErrors::CellAssetRequestUnavailable);
-            state->assets.push_back(cell->package.chunkAsset);
-        }
-        for (const auto &asset : state->assets)
-            if (!registry.Find(asset))
-                return Internal::Failure<StreamingCellAssetRequest>(WorldStreamingErrors::CellAssetRequestUnavailable);
+        state->assets = std::move(resolvedAssets).Value();
+        state->handles.reserve(state->assets.size());
 
         const auto cancellation = state->cancellation.Token();
         for (const auto &asset : state->assets) {
