@@ -103,6 +103,21 @@ namespace Horo::Runtime::SaveErrors {
     const ErrorCodeDescriptor ArchiveChunkHashMismatch{kDomain, ErrorCode{"save.archive.chunk_hash_mismatch"}, kError,
                                                        "Decoded save chunk bytes do not match their declared digest.",
                                                        "Reject the archive and retain it for corruption diagnostics."};
+    const ErrorCodeDescriptor CanonicalCodecInvalid{kDomain, ErrorCode{"save.canonical_codec.invalid"}, kError,
+                                                    "Canonical save value bytes are invalid.",
+                                                    "Reject malformed, truncated, noncanonical, or trailing value bytes."};
+    const ErrorCodeDescriptor CanonicalCodecLimitExceeded{kDomain, ErrorCode{"save.canonical_codec.limit_exceeded"}, kError,
+                                                          "A canonical save value exceeds an admission bound.",
+                                                          "Reduce the value or revise the trusted participant codec limits."};
+    const ErrorCodeDescriptor CanonicalCodecDuplicate{kDomain, ErrorCode{"save.canonical_codec.duplicate"}, kError,
+                                                      "A canonical collection contains a duplicate encoded identity.",
+                                                      "Provide unique map keys, set values, and record field identities."};
+    const ErrorCodeDescriptor CanonicalCodecNonFinite{kDomain, ErrorCode{"save.canonical_codec.non_finite"}, kError,
+                                                      "A canonical floating-point value is not finite.",
+                                                      "Map special values explicitly in the versioned participant adapter."};
+    const ErrorCodeDescriptor CanonicalCodecUtf8Invalid{kDomain, ErrorCode{"save.canonical_codec.utf8_invalid"}, kError,
+                                                        "Canonical string bytes are not valid UTF-8 scalar values.",
+                                                        "Supply validated UTF-8 without implicit codec normalization."};
     const ErrorCodeDescriptor SaveRootConfigurationInvalid{kDomain, ErrorCode{"save.root.configuration_invalid"}, kError,
                                                            "The platform save-root configuration is invalid.",
                                                            "Provide the required absolute platform state directory."};
