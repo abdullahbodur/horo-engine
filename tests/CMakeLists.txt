@@ -403,6 +403,7 @@ target_link_libraries(HoroCinematicCurveSamplingBenchmark PRIVATE HoroEngine::Ci
 
 add_executable(HoroNavigationApiTests
         support/navigation/DeterministicNavigationProvider.cpp
+        unit/runtime/navigation/NavMeshDataTests.cpp
         unit/runtime/navigation/NavigationAreaRegistryTests.cpp
         unit/runtime/navigation/NavigationAgentProfileTests.cpp
         unit/runtime/navigation/NavigationCapabilitiesTests.cpp

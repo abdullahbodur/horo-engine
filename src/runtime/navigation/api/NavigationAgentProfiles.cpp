@@ -29,7 +29,7 @@ namespace Horo::Navigation {
         }
 
         /** @brief Validates scalar domains and grounded-agent relationships independently of runtime movement settings. */
-        bool IsValid(const NavigationAgentBuildGeometry &geometry) noexcept {
+        bool HasValidGeometry(const NavigationAgentBuildGeometry &geometry) noexcept {
             const std::array positive{geometry.radiusMeters, geometry.heightMeters, geometry.cellSizeMeters, geometry.cellHeightMeters};
             const std::array nonNegative{geometry.maxSlopeDegrees, geometry.stepHeightMeters, geometry.minimumRegionSizeMeters};
             return std::ranges::all_of(positive, IsPositiveFinite) && std::ranges::all_of(nonNegative, IsNonNegativeFinite) &&
@@ -37,9 +37,17 @@ namespace Horo::Navigation {
         }
     }  // namespace
 
+    /** @copydoc ValidateNavigationAgentBuildGeometry */
+    Result<void> ValidateNavigationAgentBuildGeometry(const NavigationAgentBuildGeometry &geometry) {
+        if (!HasValidGeometry(geometry))
+            return Result<void>::Failure(MakeError(NavigationErrors::AgentProfileInvalid));
+        return Result<void>::Success();
+    }
+
     /** @copydoc ValidateNavigationAgentProfile */
     Result<void> ValidateNavigationAgentProfile(const NavigationAgentProfileDescriptor &profile) {
-        if (!profile.id.IsValid() || !HasDisplayName(profile.displayName) || !IsValid(profile.buildGeometry))
+        if (!profile.id.IsValid() || !HasDisplayName(profile.displayName) ||
+            ValidateNavigationAgentBuildGeometry(profile.buildGeometry).HasError())
             return Result<void>::Failure(MakeError(NavigationErrors::AgentProfileInvalid));
         return Result<void>::Success();
     }

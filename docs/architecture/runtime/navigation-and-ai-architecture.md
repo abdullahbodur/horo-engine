@@ -63,6 +63,24 @@ requires the ADR-104 upgrade/recook/qualification process.
 Crowd types belong here because gameplay consumers need them to request agent creation
 and movement. Scheduler queues, logical agent storage, and vendor crowd state do not.
 
+`NavMeshData` is the version-one immutable cooked grounded-surface contract. Its
+fixed header declares the exact neutral format, little-endian byte order, compression,
+profile identity/build geometry/digest, global-origin coordinate frame, metric tile grid, table counts, encoded
+and decoded byte sizes, and payload checksum before any decoded-table allocation.
+Project limits may lower but never exceed compiled ceilings. Every tile has one stable
+`(x, z, layer)` key, finite bounds, contiguous vertex/polygon/adjacency/link/provenance
+ranges and its own checksum, so a streaming adapter can validate and address a tile
+without accepting neighboring tiles. Complete artifact publication additionally requires
+strictly ordered unique keys and an exact gap-free partition of every declared table.
+
+Portable vertices, polygons, adjacency, traversal areas, off-mesh links and source
+provenance remain the semantic authority. Optional provider payload bytes occupy a
+separate opaque byte table with independent fingerprint, format version, endian,
+compression, decoded-size bound and checksum metadata. A provider receives those bytes
+only on an exact compatibility match; mismatch is a typed cooked-version failure and
+absence is distinct from corruption. Provider payloads can always be discarded without
+changing portable topology meaning.
+
 Separate provider capabilities in `NavigationBackend.h`:
 
 - `INavigationQueryBackend`: bounded spatial queries over pinned immutable topology.

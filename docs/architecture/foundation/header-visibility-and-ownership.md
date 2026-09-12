@@ -622,6 +622,22 @@ revalidate generation/state/capability revisions before live operations. Ad-hoc 
 registries, mutable record exposure, native handles and silently widened queries have no
 compatibility path.
 
+## NAV-002.7 Migration Notes
+
+`HoroEngine::NavigationApi` additionally owns `Horo/Navigation/NavMeshData.h`.
+The public contract depends only on existing Foundation, SceneMath and NavigationApi
+types; it exposes no Recast/Detour header, handle, flag, allocator, codec or filesystem
+type. The generated staged public-header consumer therefore continues to enforce the
+backend-neutral boundary.
+
+Earlier borrowed polygon topology remains a provider activation seam and is not a
+persisted format. Cook, cache, cell-packaging and runtime-loading work must migrate to
+the versioned `NavMeshData` contract rather than serialize that activation descriptor.
+There is no byte-level legacy migration: unsupported or corrupt derived output is
+invalidated and recooked from authoritative navigation source. Provider-private payloads
+are optional exact-match accelerators and never replace portable metadata as semantic
+authority.
+
 ## PCG-2.2 Migration Notes
 
 `HoroEngine::PCG` additionally owns `Horo/PCG/PCGGraphAsset.h`; the target remains
