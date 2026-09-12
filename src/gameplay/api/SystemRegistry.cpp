@@ -10,10 +10,10 @@ namespace Horo::Gameplay {
     Result<std::shared_ptr<void>> SystemRegistry::AcquireGenerationLease() const {
         if (generationLeaseAdmission_ != nullptr) {
             std::shared_ptr<void> lease = generationLease_.lock();
-            if (lease == nullptr || !generationLeaseAdmission_->load(std::memory_order_acquire))
-                return Result<std::shared_ptr<void>>::Failure(
-                    MakeError(GameplayErrors::GameplayReloadRestartRequired, "The native module generation is closed to new runtimes."));
-            return Result<std::shared_ptr<void>>::Success(std::move(lease));
+            const bool admitted = lease != nullptr && generationLeaseAdmission_->load(std::memory_order_acquire);
+            return admitted ? Result<std::shared_ptr<void>>::Success(std::move(lease))
+                            : Result<std::shared_ptr<void>>::Failure(MakeError(GameplayErrors::GameplayReloadRestartRequired,
+                                                                               "The native module generation is closed to new runtimes."));
         }
         return Result<std::shared_ptr<void>>::Success({});
     }
