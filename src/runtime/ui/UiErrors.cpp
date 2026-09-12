@@ -236,6 +236,50 @@ namespace Horo::Runtime::Ui::UiErrors {
                                                          "Create a new engine for the active runtime canvas before submitting layout work.",
                                                          false,
                                                          false};
+    /** @copydoc HitTestInvalid */
+    const ErrorCodeDescriptor
+        HitTestInvalid{UiDomain,
+                       ErrorCode{"runtime_ui.hit_test.invalid"},
+                       ErrorSeverity::Error,
+                       "The Runtime UI hit-test request or projection is invalid.",
+                       "Provide finite bounded geometry, exact element records, and a valid pointer or ray projection.",
+                       false,
+                       false};
+    /** @copydoc HitTestSourceStale */
+    const ErrorCodeDescriptor HitTestSourceStale{UiDomain,
+                                                 ErrorCode{"runtime_ui.hit_test.source_stale"},
+                                                 ErrorSeverity::Error,
+                                                 "The Runtime UI hit-test source belongs to another owner or generation.",
+                                                 "Publish from the exact active layout instance, canvas, document, and retained tree.",
+                                                 true,
+                                                 false};
+    /** @copydoc HitTestNotPresented */
+    const ErrorCodeDescriptor
+        HitTestNotPresented{UiDomain,
+                            ErrorCode{"runtime_ui.hit_test.not_presented"},
+                            ErrorSeverity::Error,
+                            "The Runtime UI interaction generation was not the last successfully presented generation.",
+                            "Route input through the immutable generation adopted by successful presentation evidence.",
+                            true,
+                            false};
+    /** @copydoc HitTestSnapshotStorageExhausted */
+    const ErrorCodeDescriptor
+        HitTestSnapshotStorageExhausted{UiDomain,
+                                        ErrorCode{"runtime_ui.hit_test_snapshot.storage_exhausted"},
+                                        ErrorSeverity::Error,
+                                        "Every bounded Runtime UI hit-test snapshot slot is still leased.",
+                                        "Retire an in-flight hit-test snapshot before retrying; never allocate fallback storage.",
+                                        true,
+                                        false};
+    /** @copydoc HitTestLifecycleUnavailable */
+    const ErrorCodeDescriptor
+        HitTestLifecycleUnavailable{UiDomain,
+                                    ErrorCode{"runtime_ui.hit_test.lifecycle_unavailable"},
+                                    ErrorSeverity::Error,
+                                    "The Runtime UI hit-test store is closed.",
+                                    "Create a new store for the active runtime canvas before publishing interaction geometry.",
+                                    false,
+                                    false};
     /** @copydoc RenderSnapshotInvalid */
     const ErrorCodeDescriptor RenderSnapshotInvalid{UiDomain,
                                                     ErrorCode{"runtime_ui.render_snapshot.invalid"},
