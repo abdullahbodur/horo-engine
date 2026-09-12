@@ -889,6 +889,38 @@ requests fail without partial publication. The contract owns no editor document,
 state, gameplay script, network session or service pointer and performs no registration
 or lifecycle callback.
 
+### Layer Loaded and Activated state
+
+`WorldLayerStateRecord` is the inert WST-006.2 state-machine publication for one
+exact layer ownership revision. It retains the stable `StreamingLayerId`, mounted
+world lifetime and ownership revision from WST-006.1 plus a separate non-wrapping
+`WorldLayerStateRevision`. It deliberately carries no `StreamingCellId`, cell
+generation, provider handle or entity pointer: a layer can be Loaded or Activated
+independently from the current physical residency of any particular cell.
+
+The ordered normal path is `Unloaded -> Loading -> Loaded -> Activating ->
+Activated`. Teardown reverses the published guarantees through `Deactivating ->
+Loaded -> Unloading -> Unloaded`. Loaded means the layer's non-cell state and
+control contract are prepared; Activated means its behavior is published. Neither
+state proves that all spatial cells are resident, and cell residency cannot imply
+layer activation.
+
+Every command compares the exact world, stable layer identity, ownership revision
+and state revision before producing a new immutable record. Cancellation of Loading
+enters Unloading; cancellation of Activating enters Deactivating. The corresponding
+completion is still required before the last stable Unloaded or Loaded state is
+reported. Repeated cancellation during those rollback states is idempotent. Failure
+from an in-flight state is explicit. A cancelling authority rejects new load or
+activation work but permits the deactivation/unload path to drain. Closed rejects all
+transitions and never fabricates cleanup acknowledgement.
+
+Initial state admission is bounded and starts at Unloaded even for a Persistent
+layer; the owner must still publish real load completion. Ownership replacement is
+allowed only while the state is Unloaded or Failed and must pass the WST-006.1 exact
+successor validation. Invalid, unsupported, stale, over-capacity, illegal-transition,
+cancelling and closed inputs return typed results without modifying the current
+record.
+
 ### Persistent, non-spatial and dynamic ownership policy
 
 `WorldObjectOwnershipDescriptor` is the inert WST-001.7 policy fact that separates

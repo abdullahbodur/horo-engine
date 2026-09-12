@@ -624,6 +624,30 @@ namespace Horo::WorldStreaming::WorldStreamingErrors {
         Describe("world_streaming.layer_ownership.lifecycle_unavailable", ErrorSeverity::Warning,
                  "The layer-ownership authority is cancelling or closed to publication.",
                  "Finish retirement or publish to a new active mounted-world authority.", false);
+    const ErrorCodeDescriptor LayerStateInvalid =
+        Describe("world_streaming.layer_state.invalid", ErrorSeverity::Error,
+                 "A layer-state record, fence, or authority snapshot is malformed.",
+                 "Provide exact world, layer, ownership and state revisions with positive bounded capacity.", true);
+    const ErrorCodeDescriptor LayerStateUnsupported =
+        Describe("world_streaming.layer_state.unsupported", ErrorSeverity::Error,
+                 "A layer-state value or transition command is unsupported.",
+                 "Use the closed load, activation, deactivation, unload, cancellation, and failure transition contract.", true);
+    const ErrorCodeDescriptor LayerStateStale =
+        Describe("world_streaming.layer_state.stale", ErrorSeverity::Warning,
+                 "A layer-state command no longer names the current world, layer, ownership revision, or state revision.",
+                 "Capture the current layer-state fence before retrying the command.", false);
+    const ErrorCodeDescriptor LayerStateCapacityExceeded =
+        Describe("world_streaming.layer_state.capacity_exceeded", ErrorSeverity::Error,
+                 "The bounded layer-state authority cannot admit another stable layer.",
+                 "Retire an existing layer record or increase the host-configured capacity.", false);
+    const ErrorCodeDescriptor LayerStateTransitionInvalid =
+        Describe("world_streaming.layer_state.transition_invalid", ErrorSeverity::Error,
+                 "The requested layer-state transition is illegal from the current ordered state.",
+                 "Reload the current state and request the next legal load, activation, deactivation, or unload edge.", false);
+    const ErrorCodeDescriptor LayerStateLifecycleUnavailable =
+        Describe("world_streaming.layer_state.lifecycle_unavailable", ErrorSeverity::Warning,
+                 "Layer-state admission or forward progress is unavailable during cancellation or after shutdown.",
+                 "Drain admitted work to Unloaded or create a state record under a new active owner lifetime.", false);
     const ErrorCodeDescriptor PartitionSettingsInvalid =
         Describe("world_streaming.partition_settings.invalid", ErrorSeverity::Error,
                  "A partition capability snapshot or project-settings request is malformed.",
