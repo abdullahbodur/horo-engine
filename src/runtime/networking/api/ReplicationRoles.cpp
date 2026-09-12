@@ -27,20 +27,21 @@ namespace Horo::Network {
 
     /** @copydoc ReplicationRoleBinding::IsValid */
     bool ReplicationRoleBinding::IsValid() const noexcept {
+        using enum ReplicationExecutionRole;
         if (!revision.IsValid() || !session.IsValid() || !object.IsValid() || !schema.IsValid() || !schemaVersion.IsValid() ||
-            !IsKnown(role) || role == ReplicationExecutionRole::Standalone)
+            !IsKnown(role) || role == Standalone)
             return false;
         if ((localPeer && !localPeer->IsValid()) || (autonomousOwner && !autonomousOwner->IsValid()))
             return false;
         switch (role) {
-            case ReplicationExecutionRole::AuthorityServer:
+            case AuthorityServer:
                 return !localPeer.has_value();
-            case ReplicationExecutionRole::AutonomousClient:
+            case AutonomousClient:
                 return localPeer.has_value() && autonomousOwner.has_value() && localPeer == autonomousOwner;
-            case ReplicationExecutionRole::SimulatedClient:
+            case SimulatedClient:
                 return localPeer.has_value() && (!autonomousOwner || localPeer != autonomousOwner);
-            case ReplicationExecutionRole::Standalone:
-            case ReplicationExecutionRole::Count:
+            case Standalone:
+            case Count:
                 return false;
         }
         return false;
